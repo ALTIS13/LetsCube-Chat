@@ -33,11 +33,18 @@ test("the shapes production actually holds are judged correctly", () => {
   // A 1080x2341 screenshot: 591x1280 under the old rule. This is the row the
   // owner is looking at when they say old and new pictures differ.
   assert.equal(isPreviewBackfillCandidate(591, 1280), true, "the thin screenshot must be picked up");
-  assert.equal(isPreviewBackfillCandidate(1280, 591), true, "and the same picture lying down");
+  assert.equal(
+    isPreviewBackfillCandidate(1280, 591),
+    false,
+    "the same picture lying down is already right: the floor applies to the width, and a landscape picture fills the bubble with its long side",
+  );
 
   // An ordinary photograph never changed size, so there is nothing to redo.
   assert.equal(isPreviewBackfillCandidate(1280, 960), false, "4:3 is untouched by the new rule");
-  assert.equal(isPreviewBackfillCandidate(1280, 720), false, "16:9 is exactly the break-even");
+  assert.equal(isPreviewBackfillCandidate(1280, 720), false, "16:9 lying down is the cap's business, not the floor's");
+  assert.equal(isPreviewBackfillCandidate(720, 1280), true, "16:9 stood up is floored, and was not before");
+  assert.equal(isPreviewBackfillCandidate(960, 1280), false, "4:3 stood up already clears the floor");
+  assert.equal(isPreviewBackfillCandidate(1280, 1280), false, "square is not floored either");
 
   // Never scaled in the first place: the source was smaller than the cap.
   assert.equal(isPreviewBackfillCandidate(1000, 800), false, "under the cap, so it is its own size");
@@ -114,21 +121,21 @@ test("the cheap filter never misses a preview the real rule would resize", () =>
 });
 
 test("the one false positive is a decision, not an accident", () => {
-  // A source whose long side is already exactly the cap and whose short side is
-  // under the floor: 1280x600. The old rule stored it unscaled, and the new
-  // rule also leaves it alone, because the floor only promises the short side
-  // 720 "when the source has it" — this one has 600.
+  // An upright source whose long side is already exactly the cap and whose
+  // width is under the floor: 600x1280. The old rule stored it unscaled, and the
+  // new rule also leaves it alone, because the floor only promises the width
+  // 930 "when the source has it" — this one has 600.
   //
-  // The row-only filter cannot tell this apart from a 2000x938 that genuinely
-  // needs redoing, because both are stored as a 1280-long, sub-720 preview. So
+  // The row-only filter cannot tell this apart from a 938x2000 that genuinely
+  // needs redoing, because both are stored as a 1280-tall, sub-930 preview. So
   // it is selected, the worker recomputes the same size, and writes the bytes
   // it already had. Wasteful for a handful of rows; the alternative is
   // downloading every original just to ask.
-  const stored = legacyPreviewSize(1280, 600);
-  assert.deepEqual(stored, { width: 1280, height: 600 });
+  const stored = legacyPreviewSize(600, 1280);
+  assert.deepEqual(stored, { width: 600, height: 1280 });
   assert.equal(isPreviewBackfillCandidate(stored.width, stored.height), true, "it is selected");
   assert.equal(
-    previewNeedsRegeneration(stored, { width: 1280, height: 600 }, originalPreviewDimensions),
+    previewNeedsRegeneration(stored, { width: 600, height: 1280 }, originalPreviewDimensions),
     false,
     "and it did not need to be: the rewrite is a no-op, not a change",
   );
@@ -138,12 +145,14 @@ test("running the backfill twice finds nothing the second time", () => {
   // Idempotence, which is what makes the tool safe to stop half way and safe to
   // re-run. Whatever the new rule produces must fall outside the filter, or the
   // backfill would keep selecting the rows it just fixed, forever.
+  // All upright: a lying-down picture is never selected now, so it has nothing
+  // to be idempotent about.
   for (const [width, height] of [
     [1080, 2341],
     [1290, 2796],
-    [2000, 1000],
+    [1080, 1920],
     [1080, 20000],
-    [3000, 1000],
+    [1000, 3000],
   ]) {
     const stored = legacyPreviewSize(width, height);
     assert.equal(
@@ -196,12 +205,11 @@ test("the floor the selection reads is the floor the product draws to", () => {
   // rows it exists for — and every row it already fixed is at the wrong size
   // again and has to be found a second time.
   //
-  // This is not hypothetical. The floor is derived from the bubble's box, and
-  // the bubble's height changed at the tip of this branch, which is why
-  // `tests/unit/media-compression.test.mts` is currently red on
-  // `MEDIA_BUBBLE_MAX_HEIGHT_PX * 3 === ORIGINAL_PREVIEW_MIN_SHORT_SIDE * 2`.
-  // Whoever settles that number has to come back through here, and this is
-  // what tells them so.
+  // This is not hypothetical: it has already happened once. The floor is derived
+  // from the bubble's box, the owner asked for the bubble taller on 2026-09-12,
+  // and the assertion tying the two went red — which is how the floor came to
+  // move from 720 to 930 and the selection here with it, rather than the
+  // backfill quietly running against a number the product had left behind.
   assert.equal(PREVIEW_BACKFILL_MIN_SHORT_SIDE, ORIGINAL_PREVIEW_MIN_SHORT_SIDE);
 });
 
