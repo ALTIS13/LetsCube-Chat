@@ -1,5 +1,52 @@
 # QA Results
 
+## 2026-09-12 - Backups: two faults on production, fixed and verified, and media no longer re-archived nightly
+
+The owner asked for the backups to be rebuilt so that unchanged files are not copied afresh every day. Reading
+the system first turned up two faults that mattered more than the copying, and neither had ever been reported:
+the nightly run was failing, and nothing had left the machine since 31 August.
+
+- **The nightly run was dying on `tar`.** GNU tar exits 1 when a file changes while it is being read, which is
+  routine for the mail volumes a running service writes to. The script runs under `set -Eeuo pipefail`, so that
+  exit killed it before `MANIFEST.txt`, `SHA256SUMS` and the prune. The sets of 1, 4, 7 and 11 September are
+  incomplete for this reason - 10 files instead of 16, missing the last mail volumes as well as the manifest.
+- **The offsite copy had been dead for twelve days.** On the days the set was complete the upload was refused by
+  the remote outright: `remote: fatal: pack exceeds maximum allowed size (2.00 GiB)`. The last successful
+  offsite copy was `20260831-035046`, on 31 August. The cause is the same date the sets jumped from 571 MB to
+  2.7 GB: the config archive took `/srv/letscube/ops` whole, and from 31 August that held 2.5 GB of
+  `bot-platform-rollout` rehearsal data. The rehearsal leftovers did not merely fill the disk; they broke the
+  only working offsite path.
+- **Both fixed in `letscube-backup.sh`,** each installed over a kept copy of the original. `run_tar` tolerates exit 1
+  and names it in the log while exit 2 and above still stop the run; the rehearsal directories are excluded from
+  the config archive, which fell from 1.7 GB to 282 KB.
+- **Verified by running it.** A manual run finished in 53 s with all 16 files, `sha256sum -c` matching every one,
+  0 members matching `bot-platform-rollout` in the config archive, the set at 987 MB against 2.7 GB, and the prune
+  running for the first time in days (24 sets to 22). systemd then made a set on its own, unattended, with
+  `Result=success`. The encrypted upload to GitHub completed at 04:02:32 - the first since 31 August.
+- **The tolerated exit was proven directly,** not assumed: with `tar` shimmed, exit 1 returns 0 and logs, exit 2
+  returns 2 and still aborts, exit 0 returns 0. A live attempt to make tar catch a file changing under it did not
+  reproduce the race in that run, so the shim is what the proof rests on.
+- **Media are no longer re-archived nightly.** Measured first: 1254 files and 978 MB, of which 22 files and 9 MB
+  changed in a day and 146 files and 37 MB in a week - against a 955 MB archive rebuilt every night. They now go
+  into a restic repository, which stores each block once, and the set records the snapshot id in
+  `storage/RESTIC-SNAPSHOT.txt` instead of carrying a copy. A full archive is still written into the set once a
+  week, on Sunday, so the offsite copy keeps carrying the media themselves.
+- **What that produced.** The set fell from 987 MB to 33 MB. A second run minutes later, with nothing changed,
+  grew the repository by 0 KiB where a full archive would have written 955 MB. The repository holds the whole
+  978 MB tree in 473 MB. The forced weekly branch produced a 987 MB set carrying both the snapshot record and the
+  full archive, checksums matching, so Sunday does not ship unproven.
+- **Restore test.** `restic check --read-data-subset=5%` found no errors. One stored file of 51,215,994 bytes was
+  restored and its sha256 is identical to the original; a whole-tree restore returned 1254 files of 1254 live,
+  967 MiB. Retention in the repository is `--keep-within 14d --keep-weekly 8 --keep-monthly 6`, not `--keep-daily`,
+  so that every snapshot a set on disk still names stays restorable - including two runs on one day, which is
+  exactly what a caught-up timer produced this morning.
+- **The runbook was corrected** on the server: two of its statements would have sent a restore looking for a tar
+  file that no longer exists on six days out of seven.
+- **Still open, for the owner.** Twelve `letscube-bot-rehearsal-*` containers have been running for 11 days and hold
+  the 2.5 GB directory; removing them and it is his decision, not taken. Nothing is copied off the machine except
+  to the private GitHub repository, and `letscube-offsite-backup.timer` - the restic or rclone path to a real
+  remote - has never run: its `BACKUP_REMOTE_TYPE` is empty and its target is a two-character placeholder.
+
 ## 2026-09-12 - The media send path merged onto the working branch, and checked there
 
 The fixes of `fix/media-send-path` for D-113, D-114 and D-116, merged in `584a38f`; not deployed.
