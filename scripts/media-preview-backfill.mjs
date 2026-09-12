@@ -74,11 +74,19 @@ async function run() {
 
   // Only the geometry is read. No path, no message id, nothing that identifies
   // a person or a conversation leaves the database.
+  //
+  // A deleted message is skipped, and that filter was learned the hard way: on
+  // 2026-09-12 a first run marked one such row stale, and the worker will never
+  // take it — it scans live messages only — so the row sat stale for good.
+  // Nothing rendered it, but nothing would ever have cleared it either. The
+  // embedded filter reads the deletion flag and nothing else, so the promise
+  // above still holds.
   const { data, error } = await client
     .from("media_variants")
-    .select("id, variant_kind, status, width, height, size_bytes")
+    .select("id, variant_kind, status, width, height, size_bytes, messages!inner(deleted_at)")
     .eq("variant_kind", "image_preview")
-    .eq("status", "ready");
+    .eq("status", "ready")
+    .is("messages.deleted_at", null);
 
   if (error) {
     console.error("media_preview_backfill_select_failed");

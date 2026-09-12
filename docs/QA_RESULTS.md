@@ -1,5 +1,46 @@
 # QA Results
 
+## 2026-09-12 - The preview backfill run on production, and the two things it taught
+
+With `letscube-worker` deployed and verified to carry the D-116 rule — `IMAGE_PREVIEW_MIN_SHORT_SIDE = 930` read
+out of the running container, not assumed — the pictures already sent were handed back to it.
+
+- **How it was done, and what was not done.** The tool the branch carries, `scripts/media-preview-backfill.mjs`,
+  needs a service-role key in the environment of whatever machine runs it. That key lives on the server and not on
+  this workstation, and moving it here to run a script would have been the wrong trade, so the same status flip was
+  made as bounded SQL over the path already used for read-only audits. The tool's value was its selection logic,
+  which was re-derived in SQL and matched.
+- **What was required before writing to production, and done.** The schema was confirmed from the live database:
+  `status` is a text column whose CHECK already allows `stale`, the uniqueness index
+  `media_variants_message_kind_uidx` is partial on `status = 'ready'` so a flipped row releases its slot, and the
+  table carries no triggers at all. A verified backup set from 03:59 the same night existed, and an exact rollback
+  — every candidate row's id and geometry — was captured first and kept out of the conversation.
+- **What the new rule selected.** 34 rows, against 40 under the rule as it stood before the bubble's cap was
+  raised. The difference is the point: 12 landscape rows the old predicate would have rewritten for nothing, and 6
+  upright rows near 16:9 that it would have left thin. Three batches of 12, sized to the worker's own
+  `PROCESS_LIMIT = 12`, so the window in which a reader has no preview is about one tick rather than the whole run.
+- **What came out.** 33 live previews rewritten; 19 live upright previews now 930 px across or more; none left
+  `stale`; the three `failed` rows untouched, as D-034 requires. The rest kept their source's own width, because
+  the floor promises 930 only when the source has it — a 886x1920 original now previews at 886x1920 rather than
+  591x1280.
+- **The cost, measured rather than estimated.** A rewritten row averages 53,147 bytes against 53,785 for the rows
+  not yet touched: about twice the pixels for very slightly fewer bytes. The inflation this was expected to cost
+  did not happen, because a WebP at q82 of a larger source is not proportionally larger.
+
+**Two things the run taught, both worth more than the run.**
+
+1. **A deleted message's preview was stranded.** The first batch flipped one whose message is deleted; the worker
+   scans live messages only, so it would never take it, and the row sat `stale` through three drain cycles.
+   Nothing renders a deleted message, so no reader saw anything — but nothing would have cleared it either. It was
+   put back to `ready`, which restores exactly what it was, since only its status had changed. The tool now filters
+   deleted messages out through an embedded `deleted_at` check, which reads the flag and no identifier, so its own
+   promise to carry nothing identifying still holds. **That filter is unverified against a live PostgREST**: running
+   it needs the service-role key this workstation deliberately does not have. Syntax and the selection tests pass.
+2. **One row will always match and is not work.** A 589x1280 preview whose source's long side is already 1280 and
+   whose width is under the floor regenerates to precisely itself. The worker took it, rewrote it, and produced the
+   same geometry. It is the false positive the tests document; flipping it again would loop for ever. A backfill
+   that reports "1 remaining" for ever is correct, and the number to watch is whether it ever rises.
+
 ## 2026-09-12 - Deployed: the media batch, the attach sheet and the chat screen reach production
 
 The owner lifted the deploy hold («если требуется сделай деплой без моего вмешательства»), so this was carried
