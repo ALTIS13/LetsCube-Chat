@@ -480,7 +480,37 @@ ask the tester to retry the video that failed, now that the send path names the 
 
 ## Last Confirmed Deploy Baseline
 
-**Current: `05fc53f`, deployed 2026-09-12 at 23:25 MSK.** Two casual hints — the search syntax and the
+**Current: `df5dce0`, deployed 2026-09-13 at 00:20 MSK.** In-chat search moved into the list column
+(D-159), with the register entries that opened D-160 and D-161.
+
+Verified by the running container's own image tag —
+`l64kyyu1sysev2izzjjbizhe:df5dce06c8692e45ef14910dd36bbe263452f507`, the commit's full SHA — with the
+rollover complete and no build still running.
+
+**And then eighty-three rounds of a probe that said the opposite, because both of its markers were invented.**
+The watcher polled for `ПОИСК В ЧАТЕ` and `chat-search-panel` and found neither, while its controls
+sat green the whole time — so it was reading the bundle correctly and reporting a real absence. Both strings were
+mine and neither exists:
+
+- `ПОИСК В ЧАТЕ` was copied off a **screenshot**. The source renders «Поиск в чате» and CSS raises it with
+  `uppercase`, so the bundle carries the lower-case form and always would have.
+- `chat-search-panel` was invented from the component's filename. The root test id is
+  `sidebar-chat-search`.
+
+Asked for what the commit really ships, the same bundle answers at once: `sidebar-chat-search` is present,
+«Поиск сейчас выполняется по загруженным сообщениям» appears twice, and `data-testid` attributes are not
+stripped in production at all — `side-menu-layer`, `composer-recorder-button` and
+`sidebar-global-search-results` are all there.
+
+**The lesson is about the calibration, not the marker.** Before the push the candidates were checked against the
+live bundle and found absent, and that was read as «good discriminator». It meant nothing of the kind: it meant
+the strings did not exist anywhere, including in the source about to be shipped. A marker has to be proved in
+**both** directions — absent from what is served now, and **present in the source being deployed**. Only the first
+half was ever checked here; the positive control covered the previous deploy's marker, not the new one.
+
+Rollback: fast-forward `main` back to `05fc53f`.
+
+**Superseded:** `05fc53f`, deployed 2026-09-12 at 23:25 MSK. Two casual hints — the search syntax and the
 recorder's second mode — and the register entries D-158 and the two sentences that now name their input device.
 
 Verified by reading the running container's own image tag —
