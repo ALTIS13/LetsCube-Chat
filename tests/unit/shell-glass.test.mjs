@@ -7,8 +7,8 @@ import test from "node:test";
  * neither is written out by hand.
  *
  * `tests/unit/overlay-glass.test.mjs` holds this line for `components/ui`. This
- * file holds it for the shell: the top bar, the sidebar column, the bottom
- * navigation, the chat header and the composer. They are the surfaces content
+ * file holds it for the shell: the sidebar column, the bottom navigation, the
+ * chat header and the composer. They are the surfaces content
  * *sits on*, so they take `kub-glass`; the menus that open over that content
  * take `kub-glass-strong`.
  *
@@ -36,8 +36,20 @@ const read = (file) => readFileSync(new URL(file, root), "utf8");
  * material on the element itself. `-strong` here would be a heavier panel than
  * the job needs.
  */
+/*
+ * `components/layout/AppTopBar.tsx` was the first row of this table until
+ * 2026-09-12, when the owner had the application's top bar removed: it pushed
+ * the folder rail below the window's top edge and drew the LETSCUBE mark a
+ * second time beside the one in the list's top row.
+ *
+ * The entry is not moved anywhere, and that is the point. What replaced the bar
+ * is `DesktopWindowChrome`, which is deliberately NOT this material — it is a
+ * transparent overlay strip carrying the window's own buttons, so frosting it
+ * would put a band of glass over the rail this change exists to expose. There
+ * is no surface left for this row to protect, so it goes rather than being
+ * pointed at something that would then have to be wrong to satisfy it.
+ */
 const panels = [
-  ["components/layout/AppTopBar.tsx", "kub-app-topbar-height", "kub-glass"],
   ["components/layout/BottomNav.tsx", "justify-around", "kub-glass"],
   ["components/kub/KubHeader.tsx", "border-b border-[color:var(--kub-border-color)]", "kub-glass"],
   // The tasks page's two chrome bars. Neither is sticky, so what they blur is
@@ -220,10 +232,21 @@ const raised = [
 
 /** [file, how many hovers it carries]. Leftover elevation fills must be zero. */
 const veiled = [
-  ["components/sidebar/ChatListItem.tsx", 2],
+  // One since 2026-09-12. The row keeps its own hover; the second belonged to
+  // the pinned drag handle, which stood before the avatar on pinned rows only
+  // and pushed them out of line with every other row — «они сдвигают
+  // аватарки». The row is the grip now, and it is already on the veil.
+  ["components/sidebar/ChatListItem.tsx", 1],
   ["components/sidebar/ChatList.tsx", 1],
   ["components/sidebar/SidebarHeader.tsx", 4],
   ["components/sidebar/FolderTabs.tsx", 1],
+  // The computer's left region, 2026-09-12. The rail hovers its menu button,
+  // its folder buttons and «+»; the side list hovers its rows. The resizer has
+  // none: it is a separator, and its grip shows itself with an opacity, not
+  // with a step of material.
+  ["components/sidebar/FolderRail.tsx", 3],
+  ["components/sidebar/SideMenuLayer.tsx", 1],
+  ["components/sidebar/ChatListResizer.tsx", 0],
   ["components/sidebar/NotificationBell.tsx", 6],
   ["components/sidebar/SettingsModal.tsx", 2],
   ["components/sidebar/FolderEditModal.tsx", 2],
@@ -231,7 +254,11 @@ const veiled = [
   ["components/sidebar/AudioSettingsSection.tsx", 1],
   ["components/sidebar/NewGroupModal.tsx", 1],
   ["components/sidebar/NewChatModal.tsx", 1],
-  ["components/layout/AppTopBar.tsx", 1],
+  // `components/layout/AppTopBar.tsx` was here at 1 until 2026-09-12. Its hover
+  // was the window buttons', and those buttons are `DesktopWindowChrome`'s now
+  // — the row below, which carries the same single veil on the same three
+  // controls. The protection survives the bar; it did not need moving, because
+  // the component that took the job was already in this table.
   ["components/layout/DesktopWindowChrome.tsx", 1],
   ["components/kub/KubModal.tsx", 1],
   // One, not two: the secondary variant now RESTS on the veil (`kub-raise`) and

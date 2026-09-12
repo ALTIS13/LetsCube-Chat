@@ -1975,7 +1975,10 @@ bump, rebuilding the shell at 0.2.12 and reproducing the identical failure on th
 version already in production. Fixed in `52abfdb` by racing a `desktop-app-shell`
 fallback alongside the role query. `app-top-bar` was rejected as the fallback:
 `PublicPreviewCapturePage` renders `AppTopBar` on a public route, so it can be on
-screen with no session behind it.
+screen with no session behind it. (The application's top bar was removed on
+2026-09-12 and that testid no longer exists anywhere, so `desktop-app-shell` is
+now the only one of the two there is; the reasoning above is why it was picked
+before it was the only option.)
 
 Two things worth recording rather than rediscovering:
 

@@ -648,6 +648,15 @@ shell and nothing where `AppTopBar` is already present, so the messenger keeps
 exactly one title bar. Its glyphs mirror `AppTopBar`'s so the two cannot drift
 apart.
 
+**Simplified on 2026-09-12.** `AppTopBar` was removed — the owner had it taken
+out because it pushed the folder rail below the window's top edge and drew the
+LETSCUBE mark a second time — so there is no surface left to suppress this one
+on, and `DesktopWindowChrome` is now the whole product's only window chrome. The
+`suppressed` prop went with the bar. What the bar also did, which this one
+cannot, was hold the panes clear of the buttons by taking 44px of height: this
+is an overlay and takes none, so the panes reserve `--kub-window-caption`
+themselves through `pt-window-top`. See D-112.
+
 ## The rest of the Windows shell
 
 The updater surface behaves: with an update available the pill reads
@@ -6346,6 +6355,39 @@ a click at the centre of every capsule and of every window button reaches its ta
 The page the owner photographed, «Задачи», and any other page with controls in that
 corner are not yet checked; they are the navigation work's part of this entry, which
 stays open until they are.
+
+**Re-measured on 2026-09-12, after the application's top bar was removed**, because
+that bar was the 44px the paragraph above credits. It is gone; the buttons are
+`DesktopWindowChrome`, a 2rem overlay strip that takes no height from the page, and
+the panes reserve it themselves — `--kub-window-caption` under
+`data-desktop-shell="windows"`, padded out of each pane's own top by `pt-window-top`,
+so the folder rail's sheet reaches the window's top edge while its first control does
+not. The mechanism changed; the corner did not get worse.
+
+Measured with the desktop bridge stubbed, at both widths, in the messenger:
+
+| frame | buttons' zone | page controls inside it |
+| --- | --- | --- |
+| 1440×900, at rest | 132×32 at 1308,0 | none |
+| 1440×900, chat open | 132×32 at 1308,0 | none |
+| 1440×900, side list open | 132×32 at 1308,0 | none |
+| 1024×720, at rest | 132×32 at 892,0 | none |
+| 1024×720, chat open | 132×32 at 892,0 | none |
+| 1024×720, side list open | 132×32 at 892,0 | none |
+| 1440×900, «Задачи» | 132×32 at 1308,0 | «Новая» 64% |
+
+The chat-open rows are the ones that were at risk: the chat header's «⋯» is at the
+right of its row and that row is the top of the pane now that nothing stands above
+it. The rail starts at 0 and the chat's control row at exactly 32 — the reservation,
+not a gap.
+
+**«Задачи» is unchanged at 64%**, deliberately. This stage owns the messenger's
+shell; the page's own «+ Новая» sat under the buttons before this branch and still
+does, because the reservation is applied by the messenger's panes and not by the
+pages. Applying `pt-window-top` to the page shells is the navigation work's part of
+this entry, and the mechanism it needs now exists. `tests/e2e/desktop-shell.spec.ts`
+asserts the messenger's corner as an empty set and «Задачи» as the named set
+`["Новая"]`, so it stays a ratchet in both directions.
 
 ## D-113 `[ ]` A video does not send
 

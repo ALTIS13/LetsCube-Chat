@@ -18,6 +18,31 @@ export function getDesktopBridge(): NonNullable<Window["letscubeDesktop"]> | nul
   return isDesktopApp() ? window.letscubeDesktop ?? null : null;
 }
 
+/**
+ * Marks the document as the Windows shell, which is how CSS learns that the
+ * top of the window belongs to the window's own buttons.
+ *
+ * The Tauri window has `decorations: false`, so the application draws its own
+ * minimise, maximise and close — `DesktopWindowChrome`, a 2rem strip pinned
+ * over the top right. `--kub-window-caption` in `index.css` is that strip's
+ * height under this attribute and `0px` without it, and every surface that is
+ * the top of the window pads it out of itself through `pt-window-top`.
+ *
+ * Set at boot rather than from an effect: an effect runs after the first paint,
+ * and one frame of the chat header's capsules sitting under the window buttons
+ * is exactly the defect the reservation exists to prevent. The bridge is
+ * injected by Tauri before the page's modules run, which is the same guarantee
+ * `DesktopWindowChrome` already relies on to decide whether to render at all.
+ */
+export const DESKTOP_SHELL_ATTRIBUTE = "data-desktop-shell";
+
+export function applyDesktopShellAttribute(): void {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  if (isDesktopApp()) root.setAttribute(DESKTOP_SHELL_ATTRIBUTE, "windows");
+  else root.removeAttribute(DESKTOP_SHELL_ATTRIBUTE);
+}
+
 function parseDesktopRuntimeInfo(value: unknown): DesktopRuntimeInfo | null {
   const candidate = value as Partial<DesktopRuntimeInfo> | null | undefined;
   const version = candidate?.version;

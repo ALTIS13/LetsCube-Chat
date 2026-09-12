@@ -218,11 +218,13 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
         // ancestor would lay it out against the header instead of the screen
         // (rule 3).
         //
-        // Below `md` the header is the top of the screen, so it pads the status
-        // bar's inset out of its own top: the capsules start below the status
-        // bar and the Dynamic Island, and the list underneath measures the
-        // taller header like any other height.
-        className="relative flex flex-shrink-0 flex-col pt-safe md:pt-0"
+        // The header is the top of the window at every width since 2026-09-12,
+        // so it pads that edge out of its own top: the status bar and the
+        // Dynamic Island on a phone, and the Windows app's own caption buttons
+        // on a computer, where the application's top bar used to hold the pane
+        // clear of them. The list underneath measures the taller header like
+        // any other height, and the conversation still runs underneath.
+        className="relative flex flex-shrink-0 flex-col pt-window-top"
         data-testid="chat-header-shell"
       >
         <div

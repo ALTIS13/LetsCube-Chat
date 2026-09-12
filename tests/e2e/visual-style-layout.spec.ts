@@ -35,7 +35,9 @@ test.describe("LETSCUBE visual style and layout", () => {
     await gotoOrSkip(page, "/");
     await loginAsRoleOrSkip(page, role);
 
-    await expect(page.getByTestId("authenticated-shell-brand").locator("img")).toHaveCount(1);
+    // One LETSCUBE mark, in the list's top row. The application's top bar that
+    // carried a second one was removed on 2026-09-12.
+    await expect(page.getByTestId("sidebar-control-row").locator('img[alt="LETSCUBE"]')).toHaveCount(1);
 
     await page.getByTestId("notification-bell-button").click();
     const panel = page.getByTestId("notification-panel");
@@ -215,7 +217,7 @@ test.describe("LETSCUBE visual style and layout", () => {
     await expect(page.getByTestId("reaction-emoji-grid").getByRole("button", { name: "Выбрать 🦄" })).toBeVisible();
   });
 
-  test("authenticated shell brand stays readable in light theme", async ({ page }, testInfo) => {
+  test("authenticated shell brand stays readable in light theme", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
     const role = findFirstAvailableQaRole(
       ["owner", "tech_admin", "location_admin", "location_staff", "client"],
@@ -228,15 +230,13 @@ test.describe("LETSCUBE visual style and layout", () => {
     await page.evaluate(() => window.localStorage.setItem("kub-theme", "light"));
     await page.reload({ waitUntil: "domcontentloaded" });
 
-    const viewport = testInfo.project.use.viewport;
-    const isMobile = Boolean(viewport && "width" in viewport && viewport.width < 768);
-    const brand = isMobile
-      ? page.getByTestId("sidebar-control-row").locator('img[src*="letscube-mark"]')
-      : page.getByTestId("authenticated-shell-brand");
+    // One mark at every width since 2026-09-12. The horizontal wordmark lived
+    // in the application's top bar, which was removed because it pushed the
+    // folder rail below the window's top edge and drew the brand a second time
+    // beside this one. The cube does not change with the theme — it is the one
+    // asset of the set drawn to sit on either ground.
+    const brand = page.getByTestId("sidebar-control-row").locator('img[src*="letscube-mark"]');
     await expect(brand).toBeVisible();
-    if (!isMobile) {
-      await expect(brand.locator('img[src*="letscube-wordmark-horizontal-dark"]')).toBeVisible();
-    }
     await assertNoHorizontalOverflow(brand, "light theme sidebar brand has horizontal overflow");
 
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);

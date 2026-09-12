@@ -361,17 +361,37 @@ test("the rule guarantee fails when a divider takes the edge colour back", () =>
   assert.equal(ruleWearingTheEdgeColour(file.rel, broken).length, 1);
 });
 
+/**
+ * The negative control for the checker's own exemption, and the reason it
+ * outlives the surface it was written against.
+ *
+ * The specimen was `components/layout/AppTopBar.tsx` until 2026-09-12, when the
+ * owner had the application's top bar removed. Nothing this test protects was
+ * about that file. What it holds is that `ruleWearingTheEdgeColour` lets a
+ * single-side line in the sheet-edge colour through because **the element says
+ * it is chrome** — `CHROME` or `GLASS` in its own class list — and not because
+ * its file appears on a list. Without that half proved, any failure above could
+ * be "fixed" by adding a file to `EDGE_BY_HAND`, the exemption would quietly
+ * become file-shaped, and the ratchet would stay green while dividers went back
+ * to wearing an edge's weight.
+ *
+ * So it keeps its shape and takes a new specimen. The chat list's header is the
+ * top of the column now that no bar sits above it, and its single chrome marker
+ * is `flex-shrink-0` — one token to remove, which is what makes it a clean
+ * control. `mutate` refuses a non-unique anchor, so the substitution cannot
+ * land somewhere else in the file.
+ */
 test("the rule guarantee does not fire on chrome, which keeps the edge", () => {
-  const file = FILES.find((f) => f.rel === "components/layout/AppTopBar.tsx");
+  const file = FILES.find((f) => f.rel === "components/sidebar/SidebarHeader.tsx");
   const text = read(file);
   assert.equal(ruleWearingTheEdgeColour(file.rel, text).length, 0);
   // The same line without the marker that makes it chrome is a rule again, and
   // is then reported: the exemption is the class list, not the file.
-  const broken = text.replace(
-    /kub-glass relative hidden h-\[calc\(var\(--kub-app-topbar-height\)\+var\(--kub-safe-top\)\)\] shrink-0/,
-    "relative hidden",
+  const broken = mutate(
+    text,
+    '"flex-shrink-0 border-b border-[color:var(--kub-border-color)] pt-window-top"',
+    '"border-b border-[color:var(--kub-border-color)] pt-window-top"',
   );
-  assert.notEqual(broken, text, "the AppTopBar anchor moved");
   assert.equal(ruleWearingTheEdgeColour(file.rel, broken).length, 1);
 });
 

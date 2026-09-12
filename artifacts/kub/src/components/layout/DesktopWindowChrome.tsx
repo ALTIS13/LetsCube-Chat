@@ -7,19 +7,27 @@ import { getDesktopBridge, isDesktopApp } from "@/lib/platform/desktop";
 import { cn } from "@/lib/utils";
 
 /**
- * Window chrome for the surfaces the messenger shell does not cover.
+ * The window's own chrome, on every surface of the Windows app.
  *
  * The Tauri window is built with `decorations: false`, so the application draws
- * its own title bar. That bar lives in `AppTopBar`, which is rendered only by
- * `MainLayout` — the authenticated messenger. Every other surface therefore had
- * no window controls and, worse, no drag region: on the login screen the window
- * could not be minimised, closed, or even moved. Confirmed by dragging it and
- * watching it stay put. See D-016.
+ * its own minimise, maximise and close. This used to be the second of two: the
+ * authenticated messenger drew a title bar of its own in `AppTopBar` and
+ * suppressed this one underneath it, and every other surface — login, register,
+ * loading, the retryable error, the ban screen — had neither controls nor a
+ * drag region, so the window could not be minimised, closed or even moved
+ * (D-016). `AppTopBar` was removed on 2026-09-12 and this is now the only one.
  *
- * This renders nothing outside the Windows shell, and nothing where `AppTopBar`
- * is already present, so the messenger keeps exactly one title bar.
+ * It is an overlay rather than a band: 2rem pinned across the top, transparent,
+ * with the buttons at the right and the rest of the strip a drag region. So it
+ * takes no height from the page, and the page has to keep its own controls out
+ * of it. That is `--kub-window-caption` in index.css — this strip's height
+ * under `data-desktop-shell="windows"`, which `applyDesktopShellAttribute()`
+ * sets at boot — read by every surface that is the top of the window through
+ * `pt-window-top`. The two heights are held equal by
+ * `tests/unit/window-caption.test.mjs`: a strip taller than the reservation
+ * puts the page's controls back under the buttons, which is D-112.
  */
-export function DesktopWindowChrome({ suppressed = false }: { suppressed?: boolean }) {
+export function DesktopWindowChrome() {
   const desktop = isDesktopApp();
   const [maximized, setMaximized] = useState(false);
 
@@ -34,13 +42,13 @@ export function DesktopWindowChrome({ suppressed = false }: { suppressed?: boole
   }, []);
 
   useEffect(() => {
-    if (!desktop || suppressed) return;
+    if (!desktop) return;
     void refreshMaximized();
     window.addEventListener("resize", refreshMaximized);
     return () => window.removeEventListener("resize", refreshMaximized);
-  }, [desktop, suppressed, refreshMaximized]);
+  }, [desktop, refreshMaximized]);
 
-  if (!desktop || suppressed) return null;
+  if (!desktop) return null;
 
   const run = (action: (bridge: NonNullable<Window["letscubeDesktop"]>) => Promise<unknown>) => {
     const bridge = getDesktopBridge();
@@ -68,7 +76,6 @@ export function DesktopWindowChrome({ suppressed = false }: { suppressed?: boole
       onMouseDown={startDrag}
       onDoubleClick={toggleMaximize}
     >
-      {/* The glyphs mirror AppTopBar's so the two bars cannot drift apart. */}
       <Control label="Свернуть" onClick={() => run((bridge) => bridge.minimize())}>
         <span className="h-px w-3 bg-current" aria-hidden="true" />
       </Control>

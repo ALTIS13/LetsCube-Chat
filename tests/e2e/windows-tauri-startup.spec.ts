@@ -315,13 +315,11 @@ async function assertBuiltInterfaceHonoursNativeState(
         cause: error,
       });
     }
-    await expect(
-      page.locator('[data-testid="app-top-bar"], [data-testid="sidebar-brand-strip"]'),
-    ).toBeVisible({ timeout: 20_000 });
-    const appTopBar = page.getByTestId("app-top-bar");
-    if (await appTopBar.isVisible().catch(() => false)) {
-      await expect(page.getByTestId("desktop-window-controls")).toBeVisible();
-    }
+    // The application's top bar was removed on 2026-09-12, and with it the
+    // conditional above: there is one window chrome now, drawn on every
+    // surface of the Windows app, so it is asserted outright.
+    await expect(page.getByTestId("sidebar-control-row")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("desktop-window-chrome")).toBeVisible();
 
     if (mode === "normal_update") {
       expect(snapshot.mandatory, "normal_update must not report a mandatory update").toBe(false);

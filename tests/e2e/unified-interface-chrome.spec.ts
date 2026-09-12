@@ -12,13 +12,18 @@ test.describe("LETSCUBE unified interface chrome", () => {
     test.skip(Boolean(viewport && "width" in viewport && viewport.width < 768), "Desktop-only shell contract");
     await openFirstChatOrSkip(page);
 
-    const topBar = page.getByTestId("app-top-bar");
     const sidebarControls = page.getByTestId("sidebar-control-row");
     const chatControls = page.getByTestId("chat-control-row");
 
-    await expect(topBar).toBeVisible();
-    await expect(page.getByTestId("authenticated-shell-brand")).toHaveCount(1);
+    // One brand bar, and since 2026-09-12 it is not a bar: the application's
+    // top bar was removed, so the window begins with the folder rail and the
+    // LETSCUBE mark appears exactly once, in the list's top row. The two
+    // control rows still have to line up — they are now both the top of the
+    // window rather than both hanging off the bar's foot.
+    await expect(page.getByTestId("app-top-bar")).toHaveCount(0);
     await expect(page.getByTestId("sidebar-brand-strip")).toHaveCount(0);
+    await expect(page.locator('img[alt="LETSCUBE"]')).toHaveCount(1);
+    await expect(sidebarControls.locator('img[alt="LETSCUBE"]')).toHaveCount(1);
     await expect(sidebarControls).toBeVisible();
     await expect(chatControls).toBeVisible();
 

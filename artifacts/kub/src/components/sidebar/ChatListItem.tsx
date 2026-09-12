@@ -101,6 +101,9 @@ export const ChatListItem = memo(function ChatListItem({
   const hasUnread = (chat.unread_count ?? 0) > 0;
   const isMuted = isMutedProp ?? chat.is_muted;
   const isPinned = chat.is_pinned;
+  // The row is what a person drags, so the row is what has to say so. Named
+  // per chat because every pinned row carries its own copy.
+  const reorderHintId = isReorderable ? `pinned-reorder-${chat.id}` : undefined;
   const isOtherOnline = isOtherOnlineProp
     ?? (chat.type === "private" && isUserOnline(chat.other_user, presenceNow ?? Date.now()));
 
@@ -142,6 +145,13 @@ export const ChatListItem = memo(function ChatListItem({
         onContextMenuOpen(chat.id, { x: event.clientX, y: event.clientY });
       }}
       onPointerDown={(event) => {
+        // A fresh press is a fresh interaction, so whatever suppressed the last
+        // click — a drag that began here, a long press — must not swallow this
+        // one. The flag used to live until some later click consumed it, which
+        // was invisible while only the 16px handle could start a drag; now the
+        // row itself starts it, and the click it would have eaten is the one
+        // that opens the chat.
+        suppressClickRef.current = false;
         if (event.pointerType !== "touch" || !onLongPressOpen) return;
         lastTouchAtRef.current = Date.now();
         clearLongPressTimer();
@@ -159,6 +169,33 @@ export const ChatListItem = memo(function ChatListItem({
       }}
       onPointerUp={clearLongPressTimer}
       onPointerCancel={clearLongPressTimer}
+      // The whole row is the grip. It used to be a 16px handle standing before
+      // the avatar, which shifted every pinned row against every other one and
+      // kept its width while the narrowing column faded everything else — so in
+      // the strip of avatars the pinned pictures sat off the axis the rest were
+      // on. The drop side was always on the row; only these two were not.
+      draggable={isReorderable}
+      aria-describedby={reorderHintId}
+      onDragStart={(event) => {
+        if (!isReorderable) return;
+        // A computer's affordance, exactly as the handle was: it was drawn only
+        // from `sm` up. A coarse pointer reorders through the long-press
+        // sheet's «Переместить выше»/«Переместить ниже» instead, and a drag
+        // begun by a thumb would race that sheet's own timer. The same question
+        // the context menu above asks, asked the same way.
+        if (typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches) {
+          event.preventDefault();
+          return;
+        }
+        suppressClickRef.current = true;
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", chat.id);
+        onPinnedDragStart?.(chat.id);
+      }}
+      onDragEnd={() => {
+        if (!isReorderable) return;
+        onPinnedDragEnd?.();
+      }}
       onDragEnter={(event) => {
         if (!isReorderable) return;
         event.preventDefault();
@@ -178,7 +215,12 @@ export const ChatListItem = memo(function ChatListItem({
       data-unread-count={chat.unread_count ?? 0}
       data-has-messages={lastMsg ? "true" : "false"}
       className={cn(
-        "w-full flex items-center gap-3 px-3 py-2.5 transition-colors relative group",
+        // The gap and the horizontal padding are `.kub-chat-list-row`, not
+        // `gap-3 px-3`. A utility beats a class in `@layer components` (rule
+        // 10), so the utilities silently won over the narrowing interpolation
+        // and the row kept its full padding at every width of the drag. On a
+        // phone, and on a computer at rest, the class computes the same 12px.
+        "kub-chat-list-row w-full flex items-center py-2.5 transition-colors relative group",
         "kub-raise-hover",
         isSelected && "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] hover:bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]",
         isDragging && "opacity-55",
@@ -190,37 +232,21 @@ export const ChatListItem = memo(function ChatListItem({
         <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-[var(--kub-cyan)]" />
       )}
 
+      {/* What the three stripes used to say, said without taking any width.
+          `aria-hidden` keeps it out of the row's own name — a button is named
+          by its contents, and this is a description of the row, not part of
+          what the row is called — while a node referenced straight by
+          `aria-describedby` is still read out even when it is hidden. */}
       {isReorderable && (
-        <span
-          draggable
-          data-pinned-drag-handle="true"
-          className="hidden h-8 w-4 shrink-0 cursor-grab items-center justify-center rounded-md text-[color:var(--kub-muted)] opacity-45 transition-opacity kub-raise-hover hover:text-[color:var(--kub-cyan)] active:cursor-grabbing group-hover:opacity-100 sm:inline-flex"
-          title="Перетащить закреплённый чат"
-          aria-label="Перетащить закреплённый чат"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
-          onMouseDown={(event) => {
-            event.stopPropagation();
-          }}
-          onDragStart={(event) => {
-            suppressClickRef.current = true;
-            event.stopPropagation();
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("text/plain", chat.id);
-            onPinnedDragStart?.(chat.id);
-          }}
-          onDragEnd={(event) => {
-            event.stopPropagation();
-            onPinnedDragEnd?.();
-          }}
-        >
-          <KubIcon name="menu" size={13} />
+        <span id={reorderHintId} aria-hidden="true" className="sr-only">
+          Закреплённый чат: перетащите или измените порядок через контекстное меню
         </span>
       )}
 
-      <div className="flex-shrink-0 relative">
+      {/* The one thing the strip of avatars keeps. See `.kub-chat-list-column`
+          in index.css: as the column narrows the row's gap and padding
+          interpolate towards Telegram's 66px and everything beside this fades. */}
+      <div className="flex-shrink-0 relative" data-chat-avatar="">
         <ChatAvatar
           chat={chat}
           size="md"
@@ -241,7 +267,7 @@ export const ChatListItem = memo(function ChatListItem({
         )}
       </div>
 
-      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+      <div className="flex-1 min-w-0 flex flex-col gap-0.5" data-chat-row-body="">
         <div className="flex min-w-0 items-center justify-between gap-2">
           <div className="flex items-center gap-1 min-w-0">
             {display.isSaved ? (

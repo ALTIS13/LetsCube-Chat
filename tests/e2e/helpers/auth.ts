@@ -140,8 +140,11 @@ export async function gotoOrSkip(page: Page, pathName: string) {
  * positive proof: `MainLayout` is the only thing that renders it, and `App.tsx`
  * sends anyone without a session to `/login` before `MainLayout` can mount, so
  * it cannot be on screen for a guest. `app-top-bar` was rejected for exactly
- * the property this one has to keep — `PublicPreviewCapturePage` renders
- * `AppTopBar` on a public route, so it can appear with no session behind it.
+ * the property this one has to keep — `PublicPreviewCapturePage` rendered the
+ * application's top bar on a public route, so it could appear with no session
+ * behind it. That bar was removed on 2026-09-12 and its testid went with it;
+ * the argument for `desktop-app-shell` is unchanged, and it is now the only
+ * one of the two that exists at all.
  */
 async function waitForAuthenticatedShell(page: Page, timeout = 15_000): Promise<boolean> {
   const onScreen = (locator: Locator) => locator.first().waitFor({ state: "visible", timeout });

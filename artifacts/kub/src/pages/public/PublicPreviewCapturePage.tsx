@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { AppTopBar } from "@/components/layout/AppTopBar";
 import { ChatHeader } from "@/components/chat/ChatHeader";
 import { ChatSelectionBar } from "@/components/chat/ChatSelectionBar";
 import { ForwardModal } from "@/components/chat/ForwardModal";
@@ -39,18 +38,20 @@ import {
 /**
  * DEV-only capture surface for the public product previews.
  *
- * Every surface here is a shipping component: `AppTopBar`, `SidebarHeader`,
- * `FolderTabs`, `ChatListItem`, `ChatHeader`, `PinnedMessage`, `MessageList`
- * and `MessageInput`. An earlier revision redrew four of them as static markup,
+ * Every surface here is a shipping component: `SidebarHeader`, `FolderTabs`,
+ * `ChatListItem`, `ChatHeader`, `PinnedMessage`, `MessageList` and
+ * `MessageInput`. An earlier revision redrew four of them as static markup,
  * and the published images ended up showing states the product cannot produce:
  * a send button on an empty composer, a mobile conversation with no way back, a
  * members subtitle with the wrong plural, and the authentication backdrop behind
  * the chat. Using the real components is what keeps the previews from drifting
  * at all.
  *
- * The layout mirrors `MainLayout`: the top bar spans both panes, the sidebar
- * appears from `md` at the same widths, and a narrow viewport with a chat open
- * shows the conversation alone.
+ * The layout mirrors `MainLayout`: no bar above the panes, the sidebar appears
+ * from `md`, and a narrow viewport with a chat open shows the conversation
+ * alone. Its column is still the fixed 360/380/400 the shell had before the
+ * folder rail landed (`c31e5ab`); bringing the capture surface up to the rail
+ * is the preview stage's work, not the shell's.
  *
  * Only the data is fictional, and it arrives by injection rather than by
  * import, so nothing here can carry demo content into a production bundle.
@@ -220,8 +221,8 @@ export default function PublicPreviewCapturePage() {
       {...{ [PUBLIC_PREVIEW_READY_ATTRIBUTE]: "true" }}
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <AppTopBar />
-
+        {/* No application top bar, as `MainLayout` has none since 2026-09-12.
+            The panes are the top of the window and pad that edge themselves. */}
         <div className="flex flex-1 overflow-hidden">
           <div
             className={cn(

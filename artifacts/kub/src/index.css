@@ -158,7 +158,24 @@
 
   --tracking-normal: 0em;
   --spacing: 0.25rem;
-  --kub-app-topbar-height: 2.75rem;
+  /* What the window's own frame takes out of the top edge, the way
+     `--kub-safe-top` is what the phone's hardware takes.
+
+     Zero everywhere but the Windows app. There the Tauri window is built with
+     `decorations: false` and the application draws its own minimise, maximise
+     and close in `DesktopWindowChrome`, a 2rem strip pinned over the top right
+     — so on that shell alone the top 2rem of the window belongs to the frame
+     and not to the page. Every surface that is the top of the window reads it
+     through `pt-window-top`, which adds it to the hardware's inset.
+
+     It is NOT folded into `--kub-safe-top`. Those four are the device's own
+     insets, declared once from `env()` and held there by
+     `tests/unit/safe-area-insets.test.mjs`; and the light theme paints an
+     opaque band of exactly `--kub-safe-top` under the iPhone's status bar, so
+     a Windows branch in that token would put a blue bar across the Windows
+     light theme. Two different things that happen to share an edge. */
+  --kub-window-caption: 0px;
+
   --kub-control-row-height: 3.5rem;
 
   /* The unsafe areas: the status bar and the Dynamic Island along the top of a
@@ -194,10 +211,36 @@
      it passes under the capsules. Half the panel's blur — the edge's own fill
      does most of the work, and it spans the whole width. */
   --kub-chat-edge-blur: blur(10px);
+
+  /* The computer's chat list, before anyone drags it. `ChatListResizer` writes
+     both of these onto `document.documentElement` from the stored state, so
+     these are the values a first-ever visit paints with — and they have to
+     agree with `CHAT_LIST_DEFAULT_WIDTH` in `lib/desktopChatList.ts`, which
+     `tests/unit/desktop-chat-list.test.mts` holds. The same shape as the
+     bootstrap colour in rule 8: a value the script writes, declared here so the
+     first frame is not the wrong one.
+
+     `--kub-chat-list-narrow` is Telegram's `setNarrowRatio(float64)`: 0 at the
+     normal narrowest, 1 at the strip of avatars. */
+  --kub-chat-list-width: 360px;
+  --kub-chat-list-narrow: 0;
 }
 
 html[data-ios-standalone] {
   --kub-app-height: 100vh;
+}
+
+/* The Windows app, and nothing else. `applyDesktopShellAttribute()` sets this
+   at boot from the same `window.letscubeDesktop` check that decides whether
+   `DesktopWindowChrome` renders at all, so the reservation exists exactly when
+   the buttons do.
+
+   2rem is that strip's own height (`h-8` on its header). The two are one fact
+   and drift apart silently — a strip taller than the reservation puts the
+   page's controls back under the window buttons, which is D-112 — so
+   `tests/unit/window-caption.test.mjs` reads both and compares them. */
+:root[data-desktop-shell="windows"] {
+  --kub-window-caption: 2rem;
 }
 
 .dark {
@@ -1950,10 +1993,12 @@ textarea::placeholder, input::placeholder {
 @layer components {
   .desktop-update-pill {
     position: fixed;
-    /* Below the top bar, which now carries the status bar's inset in its own
-       height; on the Windows shell, with no inset, this is the 44px + 12px it
-       always was. */
-    top: calc(var(--kub-app-topbar-height) + var(--kub-safe-top) + 0.75rem);
+    /* Below whatever takes the top edge: the phone's status bar, and the
+       window's own caption buttons in the Windows app. There was an
+       application top bar above this until 2026-09-12 and the 44px of it were
+       in this sum; with the bar gone the pill sits 12px under the 32px strip
+       `DesktopWindowChrome` draws, which is the only shell it appears on. */
+    top: calc(var(--kub-safe-top) + var(--kub-window-caption) + 0.75rem);
     right: 0.75rem;
     z-index: 30;
     display: flex;
@@ -2152,6 +2197,22 @@ textarea::placeholder, input::placeholder {
   padding-top: var(--kub-safe-top);
 }
 
+/* The top of the window, for the surfaces that are it: the phone's hardware
+   inset plus whatever the window's own frame takes (`--kub-window-caption`).
+
+   A sum rather than a `max()`, because the two are stacked rather than
+   alternative — an iPad has a status bar and no caption buttons, the Windows
+   app has caption buttons and no status bar, and on a screen with neither this
+   is exactly the `0px` the surfaces had before.
+
+   The material still runs underneath: this is padding on a box whose glass is
+   an `absolute inset-0` layer, so the sheet reaches the window's top edge and
+   only the controls start below it. That is rule 13 of
+   docs/operations/interface-material.md applied to a second kind of edge. */
+@utility pt-window-top {
+  padding-top: calc(var(--kub-safe-top) + var(--kub-window-caption));
+}
+
 @utility pb-safe {
   padding-bottom: var(--kub-safe-bottom);
 }
@@ -2175,4 +2236,82 @@ textarea::placeholder, input::placeholder {
   padding-right: max(var(--kub-safe-gap, 0px), var(--kub-safe-right));
   padding-bottom: max(var(--kub-safe-gap, 0px), var(--kub-safe-bottom));
   padding-left: max(var(--kub-safe-gap, 0px), var(--kub-safe-left));
+}
+
+/* ── The computer's left region ────────────────────────────────────────────
+   A fixed folder rail and a chat list the person drags as narrow as a strip of
+   avatars. The numbers are Telegram Desktop's, quoted in
+   output/audits/2026-09-12-telegram-windows-ios/assessment.md and held by
+   tests/unit/desktop-chat-list.test.mts.
+
+   Two custom properties carry it, both written straight onto the document by
+   `ChatListResizer` and never held in React state: a width in the store would
+   re-render every row on every frame of a drag, and those render counts are a
+   contract (tests/e2e/chat-list-event-cost.spec.ts).
+
+     --kub-chat-list-width   the column's width
+     --kub-chat-list-narrow  Telegram's setNarrowRatio(float64): 0 at 260px,
+                             1 at the strip, interpolated between
+
+   From `md` only. A phone has one pane, the bottom capsule and the horizontal
+   folder strip, and none of that is this stage's to change. */
+@layer components {
+  /* Below `md` the left region is the whole screen. Written here rather than as
+     `w-full` in the markup, because a utility beats a class in this layer
+     (rule 10) and `w-full` silently won over the width below — measured, the
+     column stayed 1367px wide through every drag. */
+  .kub-left-region {
+    width: 100%;
+  }
+
+  /* The row's own geometry, for the same reason: `gap-3 px-3` on the element
+     outranked the interpolation and the row never narrowed. At rest, and on a
+     phone, this computes the 12px the utilities used to give it. */
+  .kub-chat-list-row {
+    gap: 0.75rem;
+    padding-inline: 0.75rem;
+  }
+
+  @media (min-width: 48rem) {
+    /* Telegram's `windowFiltersWidth` (72) plus the width the person chose.
+       This replaced the 360/380/400 breakpoint triple in `MainLayout`: the
+       width is a decision now, not a function of the window. */
+    .kub-left-region {
+      flex: none;
+      /* Plus the region's own right border. Boxes are border-box, so without
+         that 1px the sheet edge comes out of the list instead of standing
+         beside it and the strip of avatars measures 65 rather than Telegram's
+         66 — measured, on the first run of the drag. The rail's 72 already
+         contains its own hairline the same way. */
+      width: calc(72px + var(--kub-chat-list-width) + 1px);
+    }
+
+    /* At 66px a search field and a row of folder tabs have nowhere to be, and
+       the rail carries the folders anyway. Telegram swaps its field for a
+       button (`_searchForNarrowLayout`); ours lets the chrome close and keeps
+       the rail. `max-height` interpolates with the opacity so the rows take
+       the space back rather than waiting for an empty band to disappear. */
+    .kub-chat-list-column [data-kub-list-chrome] {
+      overflow: hidden;
+      opacity: calc(1 - var(--kub-chat-list-narrow, 0) * 1.6);
+      max-height: calc(20rem * (1 - var(--kub-chat-list-narrow, 0)));
+    }
+
+    /* The row narrows by a ratio and never switches mode, which is the point
+       of `setNarrowRatio` being a float: the gap closes, the padding goes from
+       12 to 9, and everything beside the avatar fades. At ratio 1 the row
+       measures 9 + 48 + 9 = 66px — Telegram's own `dialogsSmallColumnWidth()`.
+       It spends those 66 differently: 10 + 46 + 10, because its avatar is 46.
+       Ours is 48 everywhere in the product and stays 48 here, so the padding
+       is what gives way. */
+    .kub-chat-list-row {
+      overflow: hidden;
+      gap: calc(0.75rem * (1 - var(--kub-chat-list-narrow)));
+      padding-inline: calc(0.75rem - 3px * var(--kub-chat-list-narrow));
+    }
+
+    .kub-chat-list-column [data-chat-row-body] {
+      opacity: calc(1 - var(--kub-chat-list-narrow) * 1.6);
+    }
+  }
 }

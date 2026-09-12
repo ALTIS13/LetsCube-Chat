@@ -17,7 +17,8 @@
  * Chromium draws no status bar, Dynamic Island or home indicator, so those are
  * drawn over the iPhone frames after everything is measured, and the sheets say
  * so. The Windows app is the same page with the desktop bridge stubbed, which
- * is what makes `AppTopBar` draw the window's minimise, maximise and close.
+ * is what makes `DesktopWindowChrome` draw the window's minimise, maximise and
+ * close.
  *
  * It launches the full Chromium build, not Playwright's headless shell: the
  * shell does not paint `backdrop-filter` over the contents of a scrolling
@@ -315,7 +316,11 @@ async function assertConditions(page, frame) {
       pattern: scroller ? getComputedStyle(scroller).backgroundImage.includes("data:image/svg+xml") : false,
       capsuleRow: row ? getComputedStyle(row).display === "grid" : false,
       backShown: back ? back.getBoundingClientRect().width > 0 : false,
-      windowControls: Boolean(document.querySelector('[data-testid="desktop-window-controls"]')),
+      // `desktop-window-chrome`: the buttons moved out of the application's
+      // top bar when that bar was removed on 2026-09-12, and the old testid
+      // went with it — this read would have reported "no window controls" on
+      // every Windows frame from then on.
+      windowControls: Boolean(document.querySelector('[data-testid="desktop-window-chrome"]')),
     };
   });
   const problems = [];
@@ -542,11 +547,15 @@ async function swatchRects(page) {
       if (row && info) {
         const infoBox = info.getBoundingClientRect();
         rects.header = { x: infoBox.left + infoBox.width / 2 - 8, y: infoBox.top + 2, width: 16, height: 2 };
-        // Only where the chat header is the top of the screen and pads a status
-        // bar's inset out of itself; on a desktop the app's own top bar is there.
-        const topBar = document.querySelector('[data-testid="app-top-bar"]');
+        // Only where a status bar's inset is what pushed the row down. The
+        // application's top bar was removed on 2026-09-12, so on a computer
+        // nothing is above the chat pane; what can push the row down there is
+        // the Windows app's own caption buttons, which are not a status bar.
+        const caption = parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue("--kub-window-caption"),
+        ) || 0;
         const rowBox = row.getBoundingClientRect();
-        if (rowBox.top >= 30 && !(topBar instanceof HTMLElement && topBar.offsetHeight > 0)) {
+        if (rowBox.top - caption >= 30) {
           rects["status-bar"] = { x: 12, y: 18, width: 24, height: 8 };
         }
       }
@@ -643,9 +652,11 @@ async function measureWindowsClearance(page) {
       const rect = node.getBoundingClientRect();
       return { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
     };
-    const controls = document.querySelector('[data-testid="desktop-window-controls"]');
-    const topBar = document.querySelector('[data-testid="app-top-bar"]');
-    if (!controls || !topBar) return null;
+    // `desktop-window-chrome` since 2026-09-12: the application's top bar that
+    // used to carry these buttons is gone, and the overlay strip every other
+    // surface already used draws them on the messenger too.
+    const controls = document.querySelector('[data-testid="desktop-window-chrome"]');
+    if (!controls) return null;
     const zone = rectOf(controls);
     const capsules = [
       ["title", '[data-testid="chat-header-info-button"]'],
@@ -791,7 +802,7 @@ async function openPage(browser, deviceId, theme) {
       }
       if (windows) {
         // What the Tauri shell hands the page: enough of the bridge for
-        // `AppTopBar` to draw the window's own buttons, none of which does
+        // `DesktopWindowChrome` to draw the window's own buttons, none of which does
         // anything here.
         const idle = async () => undefined;
         Object.defineProperty(window, "letscubeDesktop", {
