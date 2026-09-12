@@ -6899,6 +6899,90 @@ voice and round video to the microphone button.
 **Audit rows:** chat-functions R4, R6, R7 (R5, R9 and R10 follow from them); top-10
 item 2.
 
+### The gap, stated before anything was edited (2026-09-12)
+
+Telegram's mechanics, from the audit's own sources — T19 (the recording hints,
+«Slide to cancel» among them), T20 («Video messages and Telescope»: hold, release
+sends, swipe up to lock) and T21 (Telegram Desktop's record bar: release outside
+the field cancels, and a locked recording plays back) — against what we had:
+
+| Telegram | Ours, before | Gap |
+| --- | --- | --- |
+| Hold to record | Hold to record | none |
+| Slide left cancels | the sideways slide was not read at all | the whole gesture |
+| Release sends | release staged it in the tray behind «Отправить» | the point of releasing |
+| Swipe up locks | swipe up locked | none |
+| Locked: pause, listen, delete, send | «Остановить», which staged it | no preview, no delete |
+| A short press hints by the button | three modal alerts | the interruption |
+
+Only two of the six matched. The three the owner named — slide to cancel,
+release to send, and a lock with a pause and a preview — were the three missing.
+
+### Implemented on `feat/recording-gesture`, not deployed
+
+- `artifacts/kub/src/lib/recordingGesture.ts` holds the rules as pure functions
+  that import nothing, so `tests/unit/recording-gesture.test.mts` reads them
+  without a browser, a microphone or a pointer. Eight mutations of those rules
+  each turn the suite red.
+- `ComposerRecordingRow.tsx` is the composer's row while recording, in the chat
+  screen's own glass capsule: held, locked and paused.
+- Releasing sends. `ChatWindow`'s two handlers stage and send in one step, the
+  way the attach sheet sends what it picked, so the tray carries a recording only
+  while it is on its way.
+- Crossing the cancel threshold discards at once rather than waiting for the
+  release, which is Telegram's mechanic and makes the slide something a person
+  feels their way through.
+- The three modal alerts are gone: a press too short to be a recording leaves a
+  hint beside the button, and the «one recording at a time» rules went with the
+  tray they existed for.
+
+**One defect found in our own new code, by the renders rather than by reading.**
+The gesture was tracked through `setPointerCapture` on the record button, and the
+button is re-parented the moment the recording row replaces the field beside it —
+the capture goes with it. Measured on the DEV preview route: the lock rail filled
+to 0.28, the last move still over the button's own 44 points, and then did not
+move again across a 96-point drag, so the recording never locked and the release
+sent it. The gesture is now tracked on the window, which sees the whole drag
+whatever the composer does to its children.
+
+### Rendered for the owner, 2026-09-12 — his choice, not settled
+
+`scripts/render-recording-frames.mjs`, twenty frames in
+`output/renders/2026-09-12-recording-gesture/`: five states — held, slid part of
+the way to the cancel, locked, stopped for a listen, and the short-press hint —
+on an iPhone 430×932 and a desktop 1440×900, in both themes, over the checked-in
+fictional conversation, with Chromium's fake microphone. Each frame measures what
+it shows before it is photographed and refuses itself if a camera was opened, if
+more than one microphone was, or if anything was left waiting in the tray.
+
+Three things are for the owner to judge, and none of them is decided here:
+
+1. **The lock rail is very quiet** — a small glyph and a hairline above the
+   microphone. It is the weakest thing on the sheet, and Telegram's is a clear
+   pill with a chevron.
+2. **The row follows the finger left and the timer goes with it.** That is what
+   makes the slide readable, and on the sheet the half-slid state looks clipped.
+   Telegram keeps the timer still and moves only the hint.
+3. **On a desktop the row follows the mouse left as well**, although sliding is
+   not the desktop's cancel — releasing outside the field is. It may be that the
+   desktop row should not move at all.
+
+### The rectangular video, decided here as D-122 asked
+
+Removed rather than rehoused. Telegram has no rectangular recorder anywhere: its
+attach sheet has no such item, its composer button records voice and round video,
+and Telegram Desktop has no in-app video recorder at all. `videoRecorderVariant`
+is set to `"round"` at every call site, so `VideoMessageRecorderModal`'s `regular`
+branch has been unreachable since D-122 retired «Записать видео» — it is dead
+code, not a missing entry point. On a phone the gallery's «Камера» still reaches
+video through the system camera; on a desktop a video is attached as a file. The
+two permanently skipped cases in `video-message.spec.ts` are deleted, because a
+test that can never run is a reminder rather than coverage. The modal's own
+`regular` branch is left in place for now and should be removed with its status
+copy in a separate change, so the glass counts in
+`tests/unit/product-overlay-glass.test.mjs` and `shell-glass.test.mjs` move in a
+commit that is about exactly that.
+
 ## D-131 `[ ]` «Местоположение» sends exact coordinates on one tap, with no map and no confirmation
 
 **Severity:** high, for privacy: a mistaken tap tells the chat where a person is. Found by
