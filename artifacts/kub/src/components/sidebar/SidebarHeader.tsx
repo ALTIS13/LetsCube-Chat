@@ -72,6 +72,34 @@ export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSear
     setMobileSection("chats");
   }, [mobileSection, setMobileSection]);
 
+  // Ctrl/Cmd+K, which belongs to this field rather than to any panel.
+  //
+  // It lived in `GlobalSearchPalette` until 2026-09-12 and was already written
+  // to prefer this field: the handler called `focusSidebarSearchInput()` first
+  // and only opened the palette when that returned false. The palette was
+  // deleted with the phone's «Поиск» tab, so the half that ran on a computer
+  // moved here and the fallback has nothing left to fall back to.
+  //
+  // The guards are the ones that half carried, kept rather than reasoned about
+  // again: below 768 it does nothing, and it clears the query before focusing.
+  // `preventDefault` now happens only once the field is actually reachable, so
+  // where the shortcut does nothing the browser keeps its own Ctrl+K.
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "k") return;
+      if (window.innerWidth < 768) return;
+      const input = searchInputRef.current;
+      if (!input || input.offsetParent === null) return;
+      event.preventDefault();
+      setSearchQuery("");
+      input.focus();
+      input.select();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [setSearchQuery]);
+
   useEffect(() => {
     if (!menuOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {

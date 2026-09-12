@@ -96,13 +96,15 @@ test.describe("portrait", () => {
     });
   }
 
-  test("the search palette", async ({ page }) => {
-    await signIn(page);
-    await page.getByRole("button", { name: "Поиск", exact: true }).click();
-    await expect(page.getByTestId("global-search-palette")).toBeVisible();
-    await page.waitForTimeout(600);
-    await expectClearOfHardware(page, insets, "signed-in portrait, search palette", quietly);
-  });
+  // «the search palette» stood here until 2026-09-12. It opened
+  // `GlobalSearchPalette` from a button named «Поиск» and photographed the
+  // sheet; the palette was deleted and that button now exists only while the
+  // list has scrolled and the search row has tucked away, so the test had no
+  // subject and no stable way in. Search on a phone is the chat list column
+  // itself, whose geometry «the chat list and the tab bar» above already
+  // covers. Nothing replaces it here: summoning the results column needs a
+  // typed query, and this file photographs real accounts and so reveals no
+  // text on purpose.
 
   test("the sidebar menu and the docked support window", async ({ page }) => {
     await signIn(page);

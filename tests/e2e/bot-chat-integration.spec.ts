@@ -84,14 +84,12 @@ test.describe("bot chat integration", () => {
     await expect(dialog.getByRole("checkbox"), "a bot's message offered deleting it for everyone").toHaveCount(0);
   });
 
-  test("keeps bots in a separate RPC-only search group and excludes phone queries", async ({ page }, testInfo) => {
+  test("keeps bots in a separate RPC-only search group and excludes phone queries", async ({ page }) => {
     await page.goto("/");
-    const input = await openSearch(page, testInfo.project.name.includes("mobile"));
+    const input = await openSearch(page);
 
     await input.fill("AutomationProbe");
-    const resultRoot = testInfo.project.name.includes("mobile")
-      ? page.getByTestId("global-search-palette")
-      : page.getByTestId("sidebar-global-search-results");
+    const resultRoot = page.getByTestId("sidebar-global-search-results");
     const botSection = resultRoot.locator('section[data-search-section="bot"]');
     await expect(botSection).toBeVisible();
     await expect(botSection).toContainText("Боты");
@@ -139,13 +137,14 @@ async function openFixtureChat(page: Page) {
   await expect(page.locator(`[data-message-id="${BOT_MESSAGE_ID}"]`)).toBeVisible();
 }
 
-async function openSearch(page: Page, mobile: boolean) {
-  if (mobile) {
-    await page.getByRole("button", { name: /^Поиск$/i }).click();
-    const input = page.getByTestId("global-search-input");
-    await expect(input).toBeFocused();
-    return input;
-  }
+/**
+ * The header's search field, which is the one search surface at every width
+ * since the phone's «Поиск» tab and `GlobalSearchPalette` were removed — the
+ * tab first, the palette on 2026-09-12. The mobile branch here used to click
+ * that tab and type into the palette's own input; there is no width-dependent
+ * way into search left, so this takes no width.
+ */
+async function openSearch(page: Page) {
   const input = page.getByTestId("sidebar-search-input");
   await expect(input).toBeVisible();
   await input.click();

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip, QA_ROLES } from "./helpers/auth";
 
 test.describe("KUB global search", () => {
-  test("uses the sidebar search on desktop and the sheet on mobile", async ({ page }, testInfo) => {
+  test("uses the header's search field at every width", async ({ page }, testInfo) => {
     const consoleErrors: string[] = [];
     let expectedMissingRpcResponses = 0;
     const phoneQueries: Array<{ p_query?: string; p_limit?: number }> = [];
@@ -82,77 +82,75 @@ test.describe("KUB global search", () => {
 
     const isMobile = testInfo.project.name.includes("mobile");
 
+    // One surface at both widths. The mobile branch used to click a «Поиск»
+    // tab and type into `GlobalSearchPalette`; the tab went first and the
+    // palette followed on 2026-09-12, so what a phone and a computer now share
+    // is the header's field. Every assertion the mobile branch made is kept
+    // below, against that field's results column.
+    //
+    // Only the way in still differs, and deliberately: a computer has Ctrl+K,
+    // which is the shortcut the palette used to own and `SidebarHeader` now
+    // carries. A phone has no keyboard, so it taps the field.
+    const input = page.getByTestId("sidebar-search-input");
+    const results = page.getByTestId("sidebar-global-search-results");
     if (isMobile) {
-      await page.getByRole("button", { name: /^Поиск$/i }).click();
-      const palette = page.getByTestId("global-search-palette");
-      await expect(palette).toBeVisible();
-      const input = page.getByTestId("global-search-input");
-      await expect(input).toBeFocused();
-      await input.fill("@te");
-      await expect(input).toHaveValue("@te");
-      await input.fill("SectionProbe");
-      await expect
-        .poll(() => palette.locator("section[data-search-section]").evaluateAll((nodes) =>
-          nodes.map((node) => node.getAttribute("data-search-section")),
-        ))
-        .toEqual(["chat", "user", "message", "location"]);
-      await input.fill("from:@te has:image after:2026-05-01");
-      await expect(page.getByTestId("search-filter-chip-from")).toBeVisible();
-      await expect(page.getByTestId("search-filter-chip-has")).toBeVisible();
-      await expect(page.getByTestId("search-filter-chip-after")).toBeVisible();
-      await input.fill("+7 (999) 123-45-67");
-      await expect(palette.getByText("Тестовый профиль по номеру")).toBeVisible();
-      await expect(palette).not.toContainText("+79991234567");
-      await page.keyboard.press("Escape");
-      await expect(palette).toHaveCount(0);
+      await expect(input).toBeVisible();
+      await input.click();
     } else {
       await page.keyboard.press("Control+K");
-      const input = page.getByTestId("sidebar-search-input");
-      await expect(input).toBeFocused();
-      await input.fill("@te");
-      await expect(page.getByTestId("sidebar-global-search-results")).toBeVisible();
-      await expect(
-        page
-          .getByTestId("sidebar-global-search-results")
-          .getByText(/Люди|Чаты|Сообщения|Задачи|Локации/i)
-          .first(),
-      ).toBeVisible();
-      await input.fill("SectionProbe");
-      await expect
-        .poll(() => page
-          .getByTestId("sidebar-global-search-results")
-          .locator("section[data-search-section]")
-          .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-search-section"))))
-        .toEqual(["chat", "user", "message", "location"]);
-      await input.fill("type:task after:2026-05-01 TestLocationCodex");
-      await expect(page.getByTestId("search-filter-chip-type")).toBeVisible();
-      await expect(page.getByTestId("search-filter-chip-after")).toBeVisible();
-      await page.getByTestId("search-filter-chip-after").click();
-      await expect(input).not.toHaveValue(/after:2026-05-01/);
-      await input.fill("@te");
-      await expect(page.getByTestId("sidebar-global-search-results").getByText("Пользователь probe")).toHaveCount(0);
-      const userResult = page.getByTestId("sidebar-search-result-user").filter({ hasText: "@" }).first();
-      await userResult.waitFor({ state: "visible", timeout: 5_000 }).catch(() => null);
-      if (await userResult.isVisible().catch(() => false)) {
-        await userResult.click();
-        const copyUsername = page.getByTestId("search-profile-copy-username");
-        await expect(copyUsername).toBeVisible();
-        await expect(copyUsername).toHaveAttribute("aria-label", "Скопировать никнейм");
-        await expect(copyUsername).toHaveAttribute("title", "Скопировать никнейм");
-        await expect(page.getByRole("button", { name: /^Скопировать$/ })).toHaveCount(0);
-        await page.getByTestId("global-search-profile-back").click();
-      }
-      await input.fill("+7 (999) 123-45-67");
-      await expect(
-        page.getByTestId("sidebar-global-search-results").getByText("Тестовый профиль по номеру"),
-      ).toBeVisible();
-      await expect(page.getByTestId("sidebar-global-search-results")).not.toContainText(
-        "+79991234567",
-      );
-      await input.click();
-      await page.keyboard.press("Escape");
-      await expect(input).toHaveValue("");
     }
+    await expect(input).toBeFocused();
+
+    await input.fill("@te");
+    await expect(input).toHaveValue("@te");
+    await expect(results).toBeVisible();
+    await expect(
+      results.getByText(/Люди|Чаты|Сообщения|Задачи|Локации/i).first(),
+    ).toBeVisible();
+
+    await input.fill("SectionProbe");
+    await expect
+      .poll(() => results
+        .locator("section[data-search-section]")
+        .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-search-section"))))
+      .toEqual(["chat", "user", "message", "location"]);
+
+    await input.fill("from:@te has:image after:2026-05-01");
+    await expect(page.getByTestId("search-filter-chip-from")).toBeVisible();
+    await expect(page.getByTestId("search-filter-chip-has")).toBeVisible();
+    await expect(page.getByTestId("search-filter-chip-after")).toBeVisible();
+
+    await input.fill("type:task after:2026-05-01 TestLocationCodex");
+    await expect(page.getByTestId("search-filter-chip-type")).toBeVisible();
+    await expect(page.getByTestId("search-filter-chip-after")).toBeVisible();
+    await page.getByTestId("search-filter-chip-after").click();
+    await expect(input).not.toHaveValue(/after:2026-05-01/);
+
+    await input.fill("@te");
+    await expect(results.getByText("Пользователь probe")).toHaveCount(0);
+    const userResult = page.getByTestId("sidebar-search-result-user").filter({ hasText: "@" }).first();
+    await userResult.waitFor({ state: "visible", timeout: 5_000 }).catch(() => null);
+    if (await userResult.isVisible().catch(() => false)) {
+      await userResult.click();
+      const copyUsername = page.getByTestId("search-profile-copy-username");
+      await expect(copyUsername).toBeVisible();
+      await expect(copyUsername).toHaveAttribute("aria-label", "Скопировать никнейм");
+      await expect(copyUsername).toHaveAttribute("title", "Скопировать никнейм");
+      await expect(page.getByRole("button", { name: /^Скопировать$/ })).toHaveCount(0);
+      await page.getByTestId("global-search-profile-back").click();
+    }
+
+    await input.fill("+7 (999) 123-45-67");
+    await expect(results.getByText("Тестовый профиль по номеру")).toBeVisible();
+    await expect(results).not.toContainText("+79991234567");
+
+    await input.click();
+    await page.keyboard.press("Escape");
+    await expect(input).toHaveValue("");
+    // The mobile branch asserted the palette was gone after Escape. On this
+    // surface the equivalent is the results column going with the query:
+    // `Sidebar` mounts it only while one is typed.
+    await expect(results).toHaveCount(0);
 
     expect(phoneQueries.length).toBeGreaterThan(0);
     expect(phoneQueries.at(-1)).toEqual({ p_query: "+79991234567", p_limit: 10 });

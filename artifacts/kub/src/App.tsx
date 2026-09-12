@@ -17,7 +17,6 @@ import { IframeAuthBanner } from "@/components/IframeAuthBanner";
 import { AppUpdateBanner } from "@/components/AppUpdateBanner";
 import { PwaRuntime } from "@/components/PwaRuntime";
 import { AppDialogs } from "@/components/AppDialogs";
-import { GlobalSearchPalette } from "@/components/search/GlobalSearchPalette";
 import { BannedScreen } from "@/components/BannedScreen";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { TasksPage } from "@/pages/tasks/TasksPage";
@@ -456,7 +455,6 @@ function AppRoutes() {
 
   return (
     <>
-      {user && <GlobalSearchPalette />}
       {/* The support desk travels with the person instead of sending them to a
           route: a question is usually about what is on screen right now. */}
       {user && <SupportWindow />}

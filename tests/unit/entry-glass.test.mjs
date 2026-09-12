@@ -8,9 +8,11 @@ import test from "node:test";
  *
  * `shell-glass` holds the frame, `overlay-glass` the shadcn primitives and
  * `product-overlay-glass` the dialogs the product builds itself. This file
- * holds the rest: the two auth screens, the search palette and its shared
- * parts, the support window's insides, the Windows update gate, the ban screen
- * and the two standalone banners.
+ * holds the rest: the two auth screens, the search surfaces' shared parts, the
+ * support window's insides, the Windows update gate, the ban screen and the
+ * two standalone banners. `GlobalSearchPalette` was one of these until
+ * 2026-09-12, when it was deleted as a second presentation of what the sidebar
+ * column already does; its field was the one well this file lost with it.
  *
  * Four things are asserted, and each of them was a real defect in this zone
  * before the pass:
@@ -96,7 +98,6 @@ for (const [file, needle] of covers) {
 const zone = [
   "components/auth/LoginForm.tsx",
   "components/auth/RegisterForm.tsx",
-  "components/search/GlobalSearchPalette.tsx",
   "components/search/SearchShared.tsx",
   "components/search/SidebarSearchResults.tsx",
   "components/security/HumanVerificationCaptcha.tsx",
@@ -153,7 +154,6 @@ test("every hover in this zone is the veil, unprefixed", () => {
 
 /** Fields, wells and read-back blocks are cut in, not raised. */
 const wells = [
-  ["components/search/GlobalSearchPalette.tsx", "flex h-11 items-center gap-2 rounded-xl", "the palette's search field"],
   ["components/auth/LoginForm.tsx", "px-3 py-2 border-b", "the login card's title band"],
   ["components/auth/RegisterForm.tsx", "break-all rounded-xl", "the register card's read-back address"],
   ["components/security/HumanVerificationCaptcha.tsx", "min-h-[65px] overflow-hidden", "the captcha plate"],
@@ -203,7 +203,7 @@ test("every field in the support window is cut into it", () => {
  * already moved past.
  */
 test("the tinted states composite over their surface instead of replacing it", () => {
-  for (const file of ["components/search/SearchShared.tsx", "components/search/GlobalSearchPalette.tsx", "components/support/SupportWindow.tsx"]) {
+  for (const file of ["components/search/SearchShared.tsx", "components/support/SupportWindow.tsx"]) {
     const source = withoutComments(read(file));
     for (const mix of source.match(/color-mix\(in_srgb,[^)]*\)_\d+%,[^)]*\)/g) ?? []) {
       assert.match(mix, /,\s*transparent\)/, `${file} mixes a state into a surface: ${mix}`);

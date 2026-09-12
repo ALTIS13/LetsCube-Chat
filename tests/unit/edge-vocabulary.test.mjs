@@ -83,7 +83,6 @@ const EDGE_BY_HAND = [
   ["components/sidebar/SettingsModal.tsx", "kub-settings-panel border-t"],
   ["pages/public/GuestSupportChat.tsx", "px-4 py-4 sm:px-6"],
   ["pages/public/GuestSupportChat.tsx", "p-3 sm:p-4"],
-  ["components/search/GlobalSearchPalette.tsx", "border-b"],
   ["components/search/SearchShared.tsx", "border-b"],
   ["components/search/SidebarSearchResults.tsx", "border-b"],
   ["pages/admin/AdminLayout.tsx", "h-14 border-b"],
