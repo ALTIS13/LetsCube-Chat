@@ -1,5 +1,71 @@
 # QA Results
 
+## 2026-09-12 - Telegram Desktop for structure, Telegram iOS 26 for the material, and why the answer is neither A nor B
+
+The owner asked for an assessment of Telegram on Windows «для понимания строения большей части функционала» and of
+Telegram on iOS 26 with Liquid Glass «для лучшего понимания дизайна», and offered his own Telegram to be examined.
+It lives, untracked as every audit does, at `output/audits/2026-09-12-telegram-windows-ios/` - the reasoning in
+English, a summary for him in Russian.
+
+**What it was built from.** His eight screenshots of Telegram Desktop as the primary evidence; Telegram Desktop's
+own source for the numbers; Apple's words on Liquid Glass from their talk and newsroom; Telegram's changelog. His
+live Telegram was declined: it holds real conversations with real people, and the screenshots and public sources
+answer the same questions without reading anyone's messages. Telegram Desktop was never run or measured here, the
+source read was the development branch and may be ahead of his build, Apple's guideline pages would not fetch, and
+nothing was checked on a device.
+
+**The window, from their source.** Four columns whose widths come from a remembered ratio rather than breakpoints:
+a 72-point folder rail, a chat list of 260 to 540 dragged by hand, a conversation of at least 380, and a profile
+of 292 to 392 that appears only when 932 points are there to hold it. The collapsed list the owner singled out is
+exactly 66 points - padding 10, avatar 46, padding 10 - and it interpolates by ratio, so it narrows smoothly
+rather than snapping. The side menu is a layer and costs nothing while closed, which is why a long list of
+destinations fits in it. In-chat search is the chat-list widget in a second state, not a second feature. And the
+profile is one component that re-dresses itself by width, where we build a person's profile three separate ways.
+
+**Neither A nor B.** Both were drawn before his corrections, and B's edge rail wants the same 72 points as
+Telegram's folder rail, so the two cannot both stand. The recommendation is **A with corrections**: on a phone,
+option A with administration kept in the capsule - «Чаты», «Задачи», «Управление», «Настройки» by right, with the
+round search button beside them - and on a computer, Telegram Desktop's own structure instead of a tab bar: no
+bottom capsule at all, the folder rail with the side-menu button on top of it, the side list as a layer holding
+«Управление», a chat list draggable down to the avatar strip, settings in the left column, the profile as a right
+column that becomes a layer when it does not fit, and in-chat search taking the list column. From B it keeps one
+thing: the LETSCUBE mark in the list's top row, or the logo appears nowhere on a computer.
+
+**His per-platform correction turns out to be what Telegram itself did.** Their changelog has them removing the
+hamburger on Android for a bottom bar of four tabs while keeping the side menu on Desktop. His «админку в капсуле
+внизу на телефоне, а на Windows — в боковом списке» is not a compromise between two platforms; it is their answer.
+
+**What it changes in the 22 answers he took at the recommendation.** Four move, two standing decisions go, one
+needs measuring, fourteen are untouched.
+
+- **4** - the avatar stays in the header's right circle, but on a computer it opens the profile **column**, not a
+  window, and chat search does not go in the header capsule: it takes the left column.
+- **11** - confirmed and extended rather than contradicted. Settings in the left column gain a search of their own,
+  and the profile column and the profile popup must be one component. It also **reverses D-050**, which turned that
+  right-hand profile column into a popup; re-opening a closed decision is worth doing knowingly, so it is recorded
+  here rather than done quietly.
+- **12** - confirmed and extended: a camera picker with a live preview, a separate calls block with its own two
+  devices, «Приём звонков на этом устройстве», a link into the system sound settings, and a level that is always
+  live under the row rather than hidden behind a «Проверка микрофона» button.
+- **18** - the owner overrode this himself. The rights stay as 18a has them; the **entry** is the bottom capsule on
+  a phone and the side list on Windows. Settings are not the way in on either.
+- **Reversed**: «"Админка" уходит из нижней панели; вход в управление — строкой в "Настройках"». It stays in the
+  capsule.
+- **21 stands except in one place it did not foresee**: «Управление» is ten characters where «Админка»'s seven fit
+  an 11px tab label, in a capsule of four tabs beside a round button on a narrow phone. Being measured now rather
+  than judged by eye.
+- **22's order stands**, with two dependencies it did not name: the collapsible column and the side list are
+  navigation work and therefore phase 0, not later; and settings-as-a-column cannot start until phase 0 closes.
+
+**Claimed, not yet established:** that on a computer we lay glass on glass - the chat header's capsules over a
+panel that is itself the material, which Apple's own guidance forbids - and that the contrast of that composite has
+never been measured. On a phone the panel's material is off, so the question is desktop-only. A measurement is
+running; a defect entry will come from its numbers rather than from this summary of them.
+
+**The cheapest thing in the document, and it is not in the 22:** a search inside Settings. `settingsRows.ts` is
+already an ordered data structure, so it is a filter over data we hold, and it answers «настройки лежат не там,
+где их ищут» without moving a single setting.
+
 ## 2026-09-12 - The owner answered all 22 questions, and his own screenshots corrected three of them
 
 He replied «По рекомендации», which takes every one of the 22 questions in
