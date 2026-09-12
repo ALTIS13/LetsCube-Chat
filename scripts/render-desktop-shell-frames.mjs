@@ -950,6 +950,37 @@ async function renderFrame(browser, frame) {
     await page.locator('[data-testid="chat-list-item"]').nth(CHATS.length - 1).waitFor({ state: "attached", timeout: 30_000 });
     await page.locator('[data-testid="folder-rail-item"]').nth(FOLDERS.length).waitFor({ state: "attached", timeout: 15_000 });
   }
+  // The phone's resting frame is where the administration hint lives now, and
+  // a fresh context has empty storage, so it must be in its first-run state.
+  // A frame that quietly lost it would be filed as a picture of the feature.
+  if (frame.device === "phone" && frame.scene === "rest") {
+    const hint = page.locator('[data-testid="kub-hint"]');
+    await hint.first().waitFor({ state: "visible", timeout: 10_000 }).catch(() => undefined);
+    if ((await hint.count()) === 0) {
+      throw new Error(
+        "the administration hint is not on the main screen, so this frame would not show it",
+      );
+    }
+    // And it has to clear the header block. The plate's offset is a measured
+    // constant (88 at 390), which rots the moment a row is added above or
+    // below it; this is what stops that happening quietly.
+    const clears = await page.evaluate(() => {
+      const box = (selector) => {
+        const node = document.querySelector(selector);
+        return node ? node.getBoundingClientRect() : null;
+      };
+      const plate = box('[data-testid="kub-hint"]');
+      const chrome = box('[data-kub-list-chrome]');
+      if (!plate || !chrome) return null;
+      return { plateTop: Math.round(plate.top * 100) / 100, chromeBottom: Math.round(chrome.bottom * 100) / 100 };
+    });
+    if (clears && clears.plateTop < clears.chromeBottom) {
+      throw new Error(
+        "the hint opens at " + clears.plateTop + ", above the header block's foot at " + clears.chromeBottom + ", so it covers the search field or the filters",
+      );
+    }
+  }
+
   await page.evaluate(() => document.fonts.ready);
   // document.fonts.check is not usable here: with the font hosts blocked it
   // answers true for a family that never loaded, while document.fonts is
@@ -990,13 +1021,14 @@ async function renderFrame(browser, frame) {
     await row.waitFor({ state: "visible", timeout: 15_000 });
     await row.scrollIntoViewIfNeeded();
     await page.waitForTimeout(700);
-    // What this frame exists to show. A new context means empty storage, so
-    // the hint must be in its first-run state; if it is not on screen the
-    // frame would be a picture of nothing in particular.
+    // Inverted on 2026-09-12, when the owner moved administration to the main
+    // screen because it did not sit well in the profile. This frame now shows
+    // the row back to being a plain row, and the hint being here again would
+    // mean two doors with two hints — which is what the move was to avoid.
     const hint = page.locator('[data-testid="kub-hint"]');
-    if ((await hint.count()) === 0) {
+    if ((await hint.count()) !== 0) {
       throw new Error(
-        "the administration hint is not on screen, so this frame would not show what it is for",
+        "the administration hint is still inside settings; it belongs on the main screen now",
       );
     }
   }
@@ -1047,6 +1079,29 @@ async function renderFrame(browser, frame) {
 
   const result = { id: frame.id, inter, errors, geometry: null, zone: null, text: null };
   if (frame.scene !== "tasks") result.geometry = await readGeometry(page);
+  // The phone's header block, box by box. The administration hint hangs off
+  // the shield and must not come down over the search field or the folder
+  // strip, and «must not» is only checkable against numbers: the offset that
+  // clears them is the distance from the shield's foot to the block's.
+  if (frame.device === "phone") {
+    result.header = await page.evaluate(() => {
+      const rect = (node) => {
+        if (!node) return null;
+        const box = node.getBoundingClientRect();
+        if (box.width === 0 && box.height === 0) return null;
+        const round = (value) => Math.round(value * 100) / 100;
+        return { top: round(box.top), bottom: round(box.bottom), left: round(box.left), right: round(box.right) };
+      };
+      return {
+        shield: rect(document.querySelector('[aria-label="Управление"]')),
+        search: rect(document.querySelector('[data-testid="sidebar-search-input"]')),
+        controlRow: rect(document.querySelector('[data-testid="sidebar-control-row"]')),
+        listChrome: rect(document.querySelector('[data-kub-list-chrome]')),
+        firstRow: rect(document.querySelector('[data-testid="chat-list-item"]')),
+        hint: rect(document.querySelector('[data-testid="kub-hint"]')),
+      };
+    });
+  }
   if (device.windows) result.zone = await windowControlsZone(page);
   if (measuresText(frame)) {
     result.text = [];

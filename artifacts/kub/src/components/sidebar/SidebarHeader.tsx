@@ -7,8 +7,10 @@ import { useSignOut } from "@/hooks/useUser";
 import { useTheme } from "@/hooks/useTheme";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
 import { useTaskAccessGate } from "@/hooks/useTaskAccess";
+import { useHint } from "@/hooks/useHint";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
-import { KubBrandLogo, KubIcon, KubTooltip, type KubIconName } from "@/components/kub";
+import { KubBrandLogo, KubHint, KubIcon, KubTooltip, type KubIconName } from "@/components/kub";
 import { SettingsModal } from "./SettingsModal";
 import { NewGroupModal } from "./NewGroupModal";
 import { NotificationBell } from "./NotificationBell";
@@ -49,6 +51,17 @@ export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSear
   // Never while a person is searching: the field may not go out from under
   // the cursor, and a query has to keep the box it was typed into.
   const tuck = Boolean(searchTucked) && !searchQuery && !isSearchFocused;
+  // Administration on the main screen, for whoever has just been given it.
+  // Phone only: on a computer it is a row in the side list already.
+  //
+  // The width belongs in the condition, not only in the button's class. With
+  // `md:hidden` alone the button vanished but the popover still opened,
+  // anchored to a `display: none` box, and radix portalled the plate over the
+  // chat list where it swallowed the pointer — a drag retried twenty times
+  // and timed out against it on 2026-09-12. `useIsMobile` is the product's
+  // own signal and matches the same 768 the class does.
+  const isPhone = useIsMobile();
+  const adminHint = useHint("admin-entry", { enabled: isStaff && isPhone });
   const iconButtonClass =
     "kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]";
 
@@ -306,6 +319,44 @@ export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSear
 
         {!isSearchFocused && !searchQuery && (
           <>
+            {/* Administration, on the main screen and marked while the hint
+                that introduces it is unread. A 36px button, which is what the
+                ring needs: the same ring around an 18px glyph in the settings
+                row could not be seen in either theme. `md:hidden`, because a
+                computer keeps administration in the side list and a second
+                entry beside it would be one more thing drawn twice. */}
+            {isStaff && (
+              <KubHint
+                open={adminHint.visible}
+                onDismiss={adminHint.dismiss}
+                side="bottom"
+                align="end"
+                // Below the whole header block, not just below the shield.
+                // Measured at 390 on 2026-09-12: the shield's foot is at 36
+                // and the block — title line, search row, folder strip —
+                // ends at 124, so 88 is what clears it. At 8 the plate came
+                // down over the search field and the filters. Where it lands
+                // instead is the list, which is content; Telegram overlays
+                // content too, and never a field.
+                sideOffset={88}
+                text="Управление сообществом живёт здесь: пользователи, баны и мьюты."
+              >
+                <button
+                  type="button"
+                  onClick={() => setLocation("/admin")}
+                  aria-label="Управление"
+                  className={cn(
+                    iconButtonClass,
+                    "md:hidden",
+                    adminHint.visible
+                      ? "kub-glow-pink bg-[color-mix(in_srgb,var(--kub-pink)_18%,transparent)] text-[color:var(--kub-pink)]"
+                      : "text-[color:var(--kub-muted)]",
+                  )}
+                >
+                  <KubIcon name="shield" size={18} />
+                </button>
+              </KubHint>
+            )}
             <NotificationBell />
             <KubTooltip label="Новый чат" side="bottom">
               <button

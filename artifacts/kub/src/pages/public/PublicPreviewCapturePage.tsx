@@ -4,6 +4,7 @@ import { ChatHeader } from "@/components/chat/ChatHeader";
 import { ChatSelectionBar } from "@/components/chat/ChatSelectionBar";
 import { ForwardModal } from "@/components/chat/ForwardModal";
 import { ChatListItem } from "@/components/sidebar/ChatListItem";
+import { FolderRail, type FolderRailTab } from "@/components/sidebar/FolderRail";
 import { FolderTabs } from "@/components/sidebar/FolderTabs";
 import { MediaViewer, type MediaViewerItem } from "@/components/chat/MediaViewer";
 import { useIncomingMediaFiles } from "@/hooks/useIncomingMediaFiles";
@@ -15,6 +16,7 @@ import {
   useChatMessageSelection,
 } from "@/components/chat/MessageSelectionChrome";
 import { PinnedMessage } from "@/components/chat/PinnedMessage";
+import { SideMenuLayer } from "@/components/sidebar/SideMenuLayer";
 import { SidebarHeader } from "@/components/sidebar/SidebarHeader";
 import { KubGlassLayer } from "@/components/kub";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
@@ -49,9 +51,12 @@ import {
  *
  * The layout mirrors `MainLayout`: no bar above the panes, the sidebar appears
  * from `md`, and a narrow viewport with a chat open shows the conversation
- * alone. Its column is still the fixed 360/380/400 the shell had before the
- * folder rail landed (`c31e5ab`); bringing the capture surface up to the rail
- * is the preview stage's work, not the shell's.
+ * alone. It mounts `FolderRail` from `md` as `Sidebar` does, so the side-menu
+ * button — which moved onto the rail on 2026-09-12 — exists here at desktop
+ * widths too; without it an iPhone held sideways (852pt, above `md`) had no way
+ * into the side list at all. What this page still does not copy is the
+ * resizable column: it stays the fixed 360/380/400 the shell had before the
+ * rail landed (`c31e5ab`), with no `ChatListResizer` and no narrowing.
  *
  * Only the data is fictional, and it arrives by injection rather than by
  * import, so nothing here can carry demo content into a production bundle.
@@ -75,6 +80,14 @@ function sendNothing() {
   return undefined;
 }
 
+/**
+ * The one folder set this page shows, handed to both folder surfaces — the rail
+ * on a computer and the strip on a phone — so the two can never disagree about
+ * what folders exist. `Sidebar` hands its own `tabs` to both for the same
+ * reason.
+ */
+const previewFolders: FolderRailTab[] = [{ id: null, name: "Все", emoji: null }];
+
 export default function PublicPreviewCapturePage() {
   const [fixture, setFixture] = useState<PublicPreviewFixture | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +107,9 @@ export default function PublicPreviewCapturePage() {
   // QA specs that zoom a photo inject one.
   const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
   const [replyTo, setReplyTo] = useState<MessageWithSender | null>(null);
+  // The computer's side list, owned here for the reason `Sidebar` owns it: from
+  // `md` the button that opens it is on the folder rail, not in the header.
+  const [sideMenuOpen, setSideMenuOpen] = useState(false);
   const [messages, setMessages] = useState<MessageWithSender[]>([]);
   const { ref: chromeRef, height: chromeHeight } = useMeasuredHeight<HTMLDivElement>();
   const { ref: composerRef, height: composerHeight } = useMeasuredHeight<HTMLDivElement>();
@@ -238,24 +254,47 @@ export default function PublicPreviewCapturePage() {
             )}
           >
             <KubGlassLayer />
-            {/* Positioned, like `Sidebar`'s body wrapper: the layer is
-                positioned too, and two positioned boxes paint in tree order. */}
-            <div className="relative flex min-h-0 flex-1 flex-col">
-              <SidebarHeader />
-              <FolderTabs
-                folders={[{ id: null, name: "Все", emoji: null }]}
+            {/* A row, as `Sidebar`'s body wrapper is: the rail and the list are
+                two blocks of this column's one sheet. Positioned, because the
+                glass layer is positioned too and two positioned boxes paint in
+                tree order. */}
+            <div className="relative flex min-h-0 flex-1">
+              {/* From `md`, exactly as `Sidebar` mounts it. Without it the
+                  side-menu button existed nowhere on this page at desktop
+                  widths: it moved out of `SidebarHeader` onto the rail on
+                  2026-09-12 and is `md:hidden` in the header now, so an iPhone
+                  held sideways — 852pt, above `md` — had no way into the side
+                  list at all. */}
+              <FolderRail
+                folders={previewFolders}
                 activeFolder={null}
                 onFolderChange={() => undefined}
+                onCreate={() => undefined}
+                onOpenSideMenu={() => setSideMenuOpen(true)}
+                sideMenuOpen={sideMenuOpen}
               />
-              <div className="flex-1 overflow-hidden">
-                {chats.map((chat) => (
-                  <ChatListItem
-                    key={chat.id}
-                    chat={chat}
-                    isSelected={chat.id === activeChat.id}
-                    onClick={() => undefined}
-                  />
-                ))}
+
+              <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                <SidebarHeader />
+                {/* Ungated, unlike `Sidebar`, which wraps this in `md:hidden`:
+                    the product previews are captured from this page at 1280pt
+                    and the strip is part of those images. See the note at the
+                    mount site in `Sidebar.tsx`. */}
+                <FolderTabs
+                  folders={previewFolders}
+                  activeFolder={null}
+                  onFolderChange={() => undefined}
+                />
+                <div className="flex-1 overflow-hidden">
+                  {chats.map((chat) => (
+                    <ChatListItem
+                      key={chat.id}
+                      chat={chat}
+                      isSelected={chat.id === activeChat.id}
+                      onClick={() => undefined}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -371,6 +410,17 @@ export default function PublicPreviewCapturePage() {
         currentUserId={currentUserId}
         onDelete={deleteLocally}
       />
+      {/* The side list the rail's button opens, as `Sidebar` mounts it: a layer
+          over the window rather than a column. Its rows lead nowhere from a
+          capture page, so they get the same no-ops the rest of this page uses. */}
+      {sideMenuOpen && (
+        <SideMenuLayer
+          onClose={() => setSideMenuOpen(false)}
+          onOpenSettings={() => undefined}
+          onOpenNewGroup={() => undefined}
+          onOpenSaved={() => undefined}
+        />
+      )}
       <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
     </div>
   );

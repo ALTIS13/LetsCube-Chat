@@ -24,6 +24,64 @@ Legend:
 - `[ ]` pending.
 - `[!]` blocked or deferred by an external dependency.
 
+## Open after the navigation and hints work of 2026-09-12
+
+Everything below is on `integration/message-actions`, pushed, and **not** on `main`. `origin/main` is still
+at `245e4d9`, the commit deployed earlier that day.
+
+**Two decisions belong to the owner and are not to be taken for him.**
+
+1. **Where the administration hint's plate sits.** Measured at 390: the shield's foot is at 36, the header block
+   ends at 124, so the plate opens 88px below the shield and its top lands exactly on 124 — clear of the search
+   field and the folder strip, which it used to cover. Where it lands instead is the **first chat row**, of which
+   only the timestamp shows until the hint is dismissed. That is the least-bad of three positions tried and it
+   overlays content rather than a control, which is what Telegram's own hints do. The alternative offered: render
+   the plate **in flow** so it pushes the list down instead, at the cost of the list shifting as the hint comes and
+   goes. Both frames were sent. Do not pick one silently.
+2. **Whether `GlobalSearchPalette` is deleted.** 283 lines, and dead since the «Поиск» tab went: nothing dispatches
+   its open event any more. It is a second presentation of machinery `SidebarSearchResults` already has —
+   the same commands, chips and profile preview, and the sidebar adds local chat results the palette lacks. Ctrl+K
+   focuses the header field, not the palette, so it had no desktop role either. Recommended for deletion, with the
+   two signed-in specs that navigate by a button named «Поиск» repointed; not done without a word.
+
+**One defect found and delegated, and it turned into two — both now closed.**
+
+`tests/e2e/ios-standalone-safe-area.spec.ts` fails its **landscape** case on `webkit-ios-standalone`: a click
+timeout on the «Меню» button. The project's viewport is 393x852, so landscape is 852 wide — above `md`.
+`openFixtureChat` opens the DEV capture route, and `PublicPreviewCapturePage` renders `SidebarHeader` and
+`FolderTabs` but, by its own comment, «stands in for the `Sidebar` root, which this page does not» — so no
+`FolderRail`. The shell rework of 2026-09-12 moved that button from the header to the rail, so at 852 the
+header's copy is `md:hidden` and the rail that owns it is absent from that page: there is no «Меню» button at
+all. Portrait passes because below `md` the header still shows its own. The page's stated contract is that every
+surface on it is a shipping component, so the fix is to make it mirror the shell again rather than to relax the
+spec.
+
+**Closed the same day, and the second half is the part worth reading.** The page now mounts `FolderRail` from
+`md` as `Sidebar` does (**D-152**, fixed). That moved the failure exactly one line on, to `getByRole("menu")`:
+a role that belongs to the header's dropdown, which is `md:hidden`, while from `md` the shell opens the side
+list as a `role="dialog"` layer. The assertion had been describing the product as it stood before the shell
+rework and had matched nothing since; it was repointed at the surface the shell actually opens, knowingly and
+without weakening.
+
+Only then did the test reach `expectClearOfHardware` — and it reported, on the first run that ever got there,
+that the side list's first row stood 59px wide at x=0 inside a 59pt landscape notch. «Мой профиль» had been
+entirely under the hardware. That is **D-153**, fixed with `px-safe` on the layer's root: `MainLayout` pads the
+application for the notch, and a `fixed` box escapes an ancestor's padding, so every fixed surface has to take
+the inset itself.
+
+The lesson outlasts both: a guard that fails early is not checking anything after it, and the longer it has been
+red the more has accumulated behind it.
+
+**Still unverified, and it needs a real Tauri window**: that the desktop shell's window dragging, minimise,
+maximise, close-to-tray and non-100% DPI still behave after the application's top bar was removed. `windows:tauri:qa`
+refuses a loopback, unconfigured bundle, which is exactly what the validation build produces, so this cannot be
+closed from here.
+
+**Promises narrower than they sound, recorded so nobody widens them by accident.** A hint's «never again once
+read» is a promise about **one device**: the decision lives in that browser's storage, and keeping it per account
+means a database column with its own approval and migration. «A couple of hours of real use» is accumulated time
+while the hint was offered **and the page was visible**, not wall clock since it first appeared.
+
 ## Current Execution Order
 
 1. `[x]` Priority 1 - Auth and anti-abuse baseline.

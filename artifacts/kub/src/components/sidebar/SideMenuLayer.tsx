@@ -132,7 +132,14 @@ export function SideMenuLayer({ onClose, onOpenSettings, onOpenNewGroup, onOpenS
         // stand between this and (rule 13). It is a strip at the left, so it
         // never reaches those buttons; what it would otherwise reach is the
         // drag region beside them.
-        className="fixed inset-y-0 left-0 z-50 flex w-[19rem] max-w-[85vw] flex-col border-r border-[color:var(--kub-border-color)] outline-none"
+        //
+        // And the sides, which this comment used to leave out. `MainLayout`
+        // wraps the application in `px-safe` for the notch held sideways, but a
+        // `fixed` box escapes an ancestor's padding, so this one has to take
+        // the inset itself. Measured on 2026-09-12 before it did: «Мой профиль»
+        // stood 59x40 at x=0 inside a landscape left inset of 59pt — the first
+        // row of the side list entirely under the hardware.
+        className="fixed inset-y-0 left-0 z-50 flex w-[19rem] max-w-[85vw] flex-col border-r border-[color:var(--kub-border-color)] px-safe outline-none"
       >
         <KubGlassLayer strong />
         <div className="relative flex min-h-0 flex-1 flex-col pt-window-top pb-safe">

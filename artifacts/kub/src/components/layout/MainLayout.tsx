@@ -99,12 +99,13 @@ export function MainLayout() {
             `--kub-window-caption`, padded out of each pane's own top through
             `pt-window-top`. See `DesktopWindowChrome`. */}
         <div
-          // Room for the floating capsule below `md`, so the last row of a
-          // list can still be scrolled clear of it. The bar used to take this
-          // space by standing in the flow; it floats now, and what it no
-          // longer occupies it has to reserve. The gap is counted twice on
-          // purpose: once under the capsule and once above it.
-          className="flex flex-1 overflow-hidden pb-[calc(var(--kub-bottom-nav)+var(--kub-bottom-nav-gap)*2)] md:pb-0"
+          // No reservation here, deliberately. Padding on this box shrinks the
+          // panes and leaves a band of the application's own ground under the
+          // capsule — the bar gone and its hole still there, in the shape of
+          // the bar. The owner saw exactly that on 2026-09-12. The room
+          // belongs INSIDE the scroller instead, as end padding, so content
+          // passes under the capsule and is seen around it.
+          className="flex flex-1 overflow-hidden"
           data-kub-panes=""
         >
           <div

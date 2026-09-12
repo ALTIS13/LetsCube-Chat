@@ -520,7 +520,15 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto" data-testid="chat-list-scroller" onScroll={handleListScroll}>
+      <div
+        // End padding, not a shorter box: the list runs under the floating
+        // capsule and is visible around it, and this is what lets the last
+        // row be carried clear of it. From `md` there is no capsule, so none
+        // of it applies. See `--kub-bottom-nav` in index.css.
+        className="flex-1 overflow-y-auto pb-[calc(var(--kub-bottom-nav)+var(--kub-bottom-nav-gap)*2)] md:pb-0"
+        data-testid="chat-list-scroller"
+        onScroll={handleListScroll}
+      >
         {chats.map((chat) => (
           <ChatListItem
             key={chat.id}

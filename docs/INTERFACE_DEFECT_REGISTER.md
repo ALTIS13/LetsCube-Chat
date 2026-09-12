@@ -7714,3 +7714,95 @@ validated against the option's own photographed geometry at 430 (strip 340×58 a
 x=12, round button 58×58 at x=360, as
 `output/renders/2026-09-12-navigation-ios/measurements.md` recorded) and refuses
 to report if it does not reproduce it. `frames/capsule-360.png` is the picture.
+
+---
+
+## D-152 `[x]` The preview capture page has no folder rail, so from `md` it has no side-menu button
+
+**Severity:** medium. It breaks no shipped surface — the page is DEV-only and behind both
+`import.meta.env.DEV` and `VITE_PUBLIC_PREVIEW_FIXTURE=1` — but it is the page the product's own
+screenshots and several safe-area contracts are measured on, and it no longer matches the shell it stands in for.
+
+**Reproduction:** run `tests/e2e/ios-standalone-safe-area.spec.ts` on project `webkit-ios-standalone`. The
+**landscape** case at `tests/e2e/ios-standalone-safe-area.spec.ts:394` fails at `:398` with
+`TimeoutError: locator.click: Timeout 10000ms exceeded` and the call log
+`waiting for getByRole('button', { name: 'Меню' })`. The portrait case of the same describe block passes.
+
+**Surface:** `artifacts/kub/src/pages/public/PublicPreviewCapturePage.tsx:244` mounts `<SidebarHeader />` and
+`:245` mounts `<FolderTabs`, and the comment at `:229` says the page «stands in for the `Sidebar` root,
+which this page does not» render — so there is no `FolderRail` on it at any width.
+
+**Defect:** the shell rework of 2026-09-12 moved the side-menu button out of the list header and onto the folder
+rail. In `artifacts/kub/src/components/sidebar/SidebarHeader.tsx:143` that button now sits inside
+`<div className="relative shrink-0 md:hidden">` with its label at `:160`, and the rail carries the same
+`aria-label="Меню"` at `artifacts/kub/src/components/sidebar/FolderRail.tsx:94`. The Playwright project's
+viewport is 393x852 (`playwright.config.ts:105`), so **landscape is 852 wide — above `md`**: the header's copy
+is `display: none` and therefore out of the accessibility tree, and the rail that owns the button does not exist
+on this page. There is no «Меню» button at all. Portrait passes only because below `md` the header still shows
+its own.
+
+**Consequence:** any contract measured on the capture page at a desktop width is measured against a shell the
+product no longer has. Today that is one landscape safe-area case; tomorrow it is whatever else is added to that
+page's eleven checks. The page's own stated contract — «every surface here is a shipping component» — is the thing
+that has been broken, so relaxing the spec would hide the drift rather than close it.
+
+**Fixed on 2026-09-12.** `PublicPreviewCapturePage` now mounts `FolderRail` from `md` exactly as
+`Sidebar` does, with one folder set handed to both the rail and the strip so the two cannot disagree about
+what folders exist, and `SideMenuLayer` behind the rail's button so it is not a dead control. The column
+became a row, as `Sidebar`'s body is.
+
+**What the fix then revealed, which is the part worth keeping.** With the button present, the landscape case
+advanced exactly one line and failed on `getByRole("menu")`: that role belongs to the header's dropdown,
+which is `md:hidden`, while from `md` the shell opens `SideMenuLayer` — a `role="dialog"` layer. The
+assertion had been describing the product as it stood before the shell rework and had matched nothing since. It
+was repointed at `data-testid="side-menu-layer"`, knowingly and without weakening: the check still asserts the
+thing the button opens is on screen and clear of the hardware.
+
+That let the test reach `expectClearOfHardware` for the first time, where it reported **D-153** immediately. A
+guard that fails early hides everything behind it, and this one had been failing early for long enough to hide a
+real defect.
+
+**Regression test:** `tests/e2e/ios-standalone-safe-area.spec.ts:394`, landscape, on `webkit-ios-standalone`.
+Green afterwards: `1 passed (6.8s)`.
+
+**Left open deliberately, and it needs a product decision rather than a patch:** `FolderTabs` on that page is
+not gated at `md`, so now that the rail is there the same folder is drawn twice above `md` — the very
+duplication the owner had removed from the shipped sidebar that morning. It was left because the product's own
+screenshots are captured from this page at 1280 and 1440 and the strip is part of those images: closing it changes
+published imagery. Put to the owner on 2026-09-12.
+
+---
+
+## D-153 `[x]` The side list's rows sit under the notch when a phone is held sideways
+
+**Severity:** high while it lasted. Every row of the side list on an installed iPhone in landscape, including the
+first one — the way into a person's own profile.
+
+**Reproduction:** `tests/e2e/ios-standalone-safe-area.spec.ts:394` on `webkit-ios-standalone`, landscape,
+after the assertion at `:399` was repointed at the layer the shell actually opens (see D-152). The checker
+reported, in its own words:
+
+```
+landscape, side list: under the hardware
+  left   control button[data-testid="side-menu-row"] "Мой профиль" inside [data-testid="side-menu-layer"] (59x40 at 0,85)
+```
+
+59 points wide at x=0, inside a landscape left inset of 59: the row was entirely under the hardware.
+
+**Surface:** `artifacts/kub/src/components/sidebar/SideMenuLayer.tsx:142` — the layer's root, which read
+`fixed inset-y-0 left-0 z-50 flex w-[19rem] …` with `pt-window-top` and `pb-safe` on its body and no
+horizontal inset anywhere.
+
+**Defect, and it is the general case rather than a detail of this layer:** `MainLayout` wraps the whole
+application in `px-safe` precisely for the notch held sideways, and a `position: fixed` box escapes an
+ancestor's padding entirely. So every fixed surface has to take the inset itself. This layer's own comment
+reasoned carefully about the top edge — the iPad's status bar, the Windows caption buttons, rule 13 — and never
+about the sides.
+
+**Fix:** `px-safe` on the layer's root. Not a left-only utility: `index.css` declares `pt-safe`,
+`pb-safe` and `px-safe` and nothing else, and `safe-area-insets.test.mjs` fails on «index.css declares an
+inset utility this test does not know about», so inventing `pl-safe` would trip that guard for a real reason.
+The right-hand inset costs nothing: it is zero on the edge the notch is not on.
+
+**Regression test:** the same landscape case, which now passes — `1 passed (5.5s)` — and which fails again if
+the inset is removed, because the checker measures the rows rather than the class.

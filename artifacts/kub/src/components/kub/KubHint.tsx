@@ -20,6 +20,13 @@ interface KubHintProps {
   onDismiss: () => void;
   side?: "top" | "bottom" | "left" | "right";
   align?: "start" | "center" | "end";
+  /**
+   * How far from the anchor the plate opens. The default is the small gap a
+   * control wants; a caller whose anchor sits inside a block of other
+   * controls has to clear that block, and only the caller knows how tall it
+   * is.
+   */
+  sideOffset?: number;
   className?: string;
 }
 
@@ -43,6 +50,7 @@ export function KubHint({
   onDismiss,
   side = "bottom",
   align = "start",
+  sideOffset = 8,
   className,
 }: KubHintProps) {
   return (
@@ -51,7 +59,7 @@ export function KubHint({
       <PopoverContent
         side={side}
         align={align}
-        sideOffset={8}
+        sideOffset={sideOffset}
         // Never wedged against an edge. Without this a hint anchored near the
         // foot of a panel is flipped and shifted until it sits over whatever
         // lives there — on 2026-09-12 that was the settings modal's «Сохранить»,

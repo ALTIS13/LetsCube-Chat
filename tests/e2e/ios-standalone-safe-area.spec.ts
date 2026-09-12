@@ -396,8 +396,15 @@ test.describe("installed iPhone app — WebKit, insets through the tokens", () =
           await expect(page.getByTestId("sidebar-control-row")).toBeVisible();
 
           await page.getByRole("button", { name: "Меню" }).click();
-          await expect(page.getByRole("menu")).toBeVisible();
-          await expectClearOfHardware(page, insets, "landscape, sidebar menu");
+          // The side list, not a menu. `role="menu"` belongs to the header's
+          // dropdown, which is `md:hidden`; from `md` the button lives on the
+          // folder rail and opens `SideMenuLayer`, a `role="dialog"` layer over
+          // the window. Landscape here is 852 wide, so this is the `md` shell —
+          // the old assertion described the product as it was before
+          // 2026-09-12 and matched nothing afterwards. Portrait still meets the
+          // header's own dropdown, and its own case covers that.
+          await expect(page.getByTestId("side-menu-layer")).toBeVisible();
+          await expectClearOfHardware(page, insets, "landscape, side list");
           await page.keyboard.press("Escape");
 
           await page.getByTestId("notification-bell-button").click();

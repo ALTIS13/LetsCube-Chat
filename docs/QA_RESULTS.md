@@ -1,5 +1,74 @@
 # QA Results
 
+## 2026-09-12 - The floating capsule, administration moved to the main screen, and a hole shaped like the bar that left it
+
+Two corrections came from the owner looking at rendered frames, and neither would have been caught by a gate.
+**«Админку если ещё не перенёс, то перенеси на главную, в профиле не смотрится»** and, about the new capsule,
+**«Что за фон на нижней капсуле? В референсах она висит в воздухе сама по себе, а то что ниже и сбоку видно
+нормально. Сверься что точно не сбился с курса Telegram.»** He was right both times.
+
+**The bar became a capsule with measured geometry**, not guessed: about 53dp tall and clear of each side by about
+40dp on a 393dp screen, fully rounded, labels under every icon, no hiding on scroll — all read off his own Android
+screenshots. The chosen tab is a filled rounded capsule behind icon and label; the dot beneath is gone, because two
+marks for one state is one too many.
+
+**The background he saw was a hole in the shape of the bar that had just left.** Making the capsule float and then
+reserving its room by **shrinking the panes container** stops content above the capsule and shows the application's
+own ground in the freed strip. Telegram's arrangement is the other one: the list runs UNDER the capsule and is seen
+around it, and the room lives INSIDE the scroller as end padding so the last row can still be carried clear. One
+line in a different place, and the difference between a floating capsule and a capsule-shaped hole. Verified on
+frames afterwards: the next row now shows below the capsule with its own timestamp.
+
+**The capsule's border stays, and rule 11 is why.** It names this case outright: a covering surface — a menu, a
+toast, a floating pill — stands on a backdrop nobody chose, so it cannot be separated by a step of material and it
+keeps its perimeter. Removing the outline to look more like the reference would have been a departure from a
+measured contract dressed up as fidelity to it.
+
+**Administration moved, and the move fixed two things that had failed in the profile.** The mark failed three times
+there, each for a different reason: `kub-glow-soft` is a wide downward shadow built for a panel and renders as
+nothing at 16px; `kub-glow-pink` does draw a 1px ring but every user of these classes in this product puts them
+on a filled, sized, rounded surface and none on a bare glyph; and a circle the width of the settings row's
+1.125rem icon column reads faintly in the light theme and barely in the dark. In the list's header it is a real
+36px button, and the ring reads in both themes at once. The plate had nowhere to open in a dense settings list
+either — downwards it covered «Сохранить», upwards «Обновления».
+
+**The plate's offset is a measurement, after three placements that were not.** Measured at 390 on the phone frame:
+the shield's foot is at 36, the search field occupies 43-77, and the whole header block — title line, search row,
+folder strip — ends at 124. At the default 8px the plate opened at 44 and ended at 105.75, covering the field and
+the filters both. 124 minus 36 is 88, and at 88 its top lands exactly on 124. The renderer now proves it: the
+phone's resting frame throws if the plate's top is above the header block's foot, because 88 is this header at this
+width and it rots the moment a row is added. A measured constant with a guard is this project's idiom; a measured
+constant alone is folklore.
+
+**Open, and the owner's to decide:** at 88 the plate covers the first chat row — only its timestamp shows. That is
+the least-bad of the three positions and it overlays content rather than a control, which is what Telegram's own
+hints do; the alternative is to render the plate in flow so it pushes the list down instead, at the cost of the
+list shifting as the hint comes and goes. Put to him with both frames.
+
+**A defect found on the way, diagnosed and delegated rather than folded in.** `ios-standalone-safe-area.spec.ts`
+fails its **landscape** case on `webkit-ios-standalone` with a click timeout on the «Меню» button. The project's
+viewport is 393x852, so landscape is 852 wide — above `md`. `openFixtureChat` opens the DEV capture route, whose
+page renders `SidebarHeader` and `FolderTabs` and, by its own comment, «stands in for the `Sidebar` root, which
+this page does not» — so there is no `FolderRail`. Tonight's shell rework moved that button from the header onto
+the rail, so at 852 the header's copy is `md:hidden` and the rail that owns it does not exist on that page:
+there is no «Меню» button at all. Portrait passes because below `md` the header still shows its own. The page's
+stated purpose is that every surface on it is a shipping component, and it has drifted from the shipped shell.
+
+**Both closed the same day, and the second was hiding behind the first.** The page took the rail (D-152), and the
+failure moved one line on: `getByRole("menu")` matches the header's dropdown, which is `md:hidden`, while
+from `md` the shell opens `SideMenuLayer` as a dialog. Repointed at that layer — knowingly, with the reason
+in the file — the test reached `expectClearOfHardware` for the first time and immediately reported the side
+list's first row at 59x40, x=0, inside a 59pt landscape inset: «Мой профиль» entirely under the hardware. D-153,
+fixed with `px-safe` on the layer, because a `fixed` box escapes the `px-safe` `MainLayout` puts on the
+application. Both landscape and the drag case are green afterwards.
+
+**And one instrument fault, of the family this day kept producing.** A bespoke probe written to measure the header
+returned «absent» for all six selectors in both themes. Not a product fault: a guest at `/` is sent to the public
+home by the routing contract, so the probe measured the marketing page. The renderer already plants a session,
+answers the backend with route mocks, stubs realtime and waits for the list — so the boxes were asked of it
+instead, and they now travel in the JSON beside the picture they describe. Building a second harness next to a
+working one is how two harnesses come to disagree.
+
 ## 2026-09-12 - Four tabs, folders once, Telegram's search, and a hint that found the wrong home
 
 The owner sent two fresh sets of Telegram screenshots - the new Android build and the web client - and four
