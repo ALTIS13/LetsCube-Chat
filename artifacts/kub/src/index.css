@@ -177,6 +177,15 @@
   --kub-window-caption: 0px;
 
   --kub-control-row-height: 3.5rem;
+  /* The phone's floating navigation capsule, and the room the panes leave
+     for it. It carries the home indicator's inset for the same reason the
+     bar always did: border-box means a flat height beside `pb-safe` takes
+     the inset out of the row rather than adding it below. Written once,
+     because the bar's height and the reservation under it have to be the
+     same number or the last row of a list ends up under the capsule. */
+  --kub-bottom-nav: calc(3.5rem + var(--kub-safe-bottom));
+  /* How far the capsule floats clear of the screen's bottom edge. */
+  --kub-bottom-nav-gap: 0.5rem;
 
   /* The unsafe areas: the status bar and the Dynamic Island along the top of a
      phone, the home indicator along the bottom, and the notch on both long

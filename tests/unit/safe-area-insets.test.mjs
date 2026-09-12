@@ -189,12 +189,43 @@ test("the bottom tab bar adds the home-indicator inset to its height", () => {
   // Tailwind boxes are border-box, so a flat `height: 56px` beside `pb-safe`
   // takes the inset out of the tabs instead of adding it underneath: on a 34px
   // indicator that leaves six labels and their icons 22px of row.
+  //
+  // Changed on 2026-09-12, knowingly and upwards. The bar became a floating
+  // capsule and its height moved into `--kub-bottom-nav`, because the panes
+  // reserve the same number below themselves and two copies of one number
+  // drift apart the first time either is touched. Reading the spelling failed
+  // that indirection while the property was intact — and, worse, the same
+  // check would have passed a height that SUBTRACTED the inset, because all
+  // it asked was that the token appear somewhere in the text. So the value is
+  // resolved through index.css, which this file already reads, and both
+  // mistakes are caught.
   const height = /height:\s*"([^"]+)"/.exec(nav);
   assert.ok(height, "the tab bar no longer sets an explicit height — re-read this test before deleting it");
+
+  const resolve = (expression, depth = 0) => {
+    const text = String(expression).trim();
+    if (!text.startsWith("var(") || !text.endsWith(")")) return text;
+    const name = text.slice(4, -1).trim();
+    if (!name.startsWith("--")) return text;
+    assert.ok(depth < 4, `"${text}" resolves through more tokens than this test will follow`);
+    const at = cssSource.indexOf(name + ":");
+    assert.ok(at >= 0, `the tab bar's height is "${text}" and index.css declares no such token`);
+    const end = cssSource.indexOf(";", at);
+    assert.ok(end > at, `the declaration of \`${name}\` in index.css never ends`);
+    return resolve(cssSource.slice(at + name.length + 1, end), depth + 1);
+  };
+
+  const resolved = resolve(height[1]);
   assert.ok(
-    height[1].includes("var(--kub-safe-bottom)"),
-    `the tab bar's height is "${height[1]}", so its safe-area padding comes out of the row rather than being added below it`,
+    resolved.includes("var(--kub-safe-bottom)"),
+    `the tab bar's height resolves to "${resolved}", which never reaches the home indicator's inset`,
   );
+  for (const subtraction of ["- var(--kub-safe-bottom)", "-var(--kub-safe-bottom)"]) {
+    assert.ok(
+      !resolved.includes(subtraction),
+      `the tab bar's height resolves to "${resolved}", which takes the inset away instead of adding it`,
+    );
+  }
 });
 
 test("the composer takes the larger of the keyboard and the home indicator, never their sum", () => {

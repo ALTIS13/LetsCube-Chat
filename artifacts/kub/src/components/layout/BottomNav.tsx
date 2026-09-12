@@ -42,7 +42,18 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Навигация"
-      className="kub-glass relative md:hidden flex items-center justify-around flex-shrink-0 px-2 pb-safe border-t border-[color:var(--kub-border-color)]"
+      // A capsule that floats over the list rather than a bar the list sits
+      // on. Telegram's, measured: about 53dp tall and clear of each side by
+      // about 40dp, fully rounded, with the content visible past its edges.
+      //
+      // `absolute`, not `fixed`: a fixed child would be laid out against the
+      // viewport and escape the pane column, and on a computer this element
+      // still exists in the markup while `md:hidden` keeps it off screen.
+      //
+      // `justify-around` and `kub-glass` stay on the element. `shell-glass`
+      // pins that pair, and its reason holds: this is chrome that content
+      // sits on and that opens nothing.
+      className="kub-glass absolute inset-x-10 bottom-[var(--kub-bottom-nav-gap)] z-20 md:hidden flex items-center justify-around px-2 pb-safe rounded-full border border-[color:var(--kub-border-color)]"
       // The row is 56px and the home indicator is extra, not a share of it.
       // Tailwind boxes are `border-box`, so with a flat `height: 56px` the
       // safe-area padding this bar asks for would have been taken out of the
@@ -51,7 +62,10 @@ export function BottomNav() {
       // somewhere to go; both read the `--kub-safe-bottom` token, which is 0px
       // on a phone without an inset, on Android and in the desktop shell, so
       // there this is the same 56px bar it was.
-      style={{ height: "calc(56px + var(--kub-safe-bottom))" }}
+      //
+      // The number now lives in `--kub-bottom-nav` because the panes reserve
+      // the same height below themselves, and two copies of one number drift.
+      style={{ height: "var(--kub-bottom-nav)" }}
     >
       {tabs.map(({ id, label, icon }) => {
         const isActive =
@@ -78,15 +92,18 @@ export function BottomNav() {
               // against 344px of row. The padding and the 11px size stay
               // anyway: they are the floor under the gap, and a longer word or
               // a fifth tab would walk back towards the same edge.
-              "relative flex flex-col items-center gap-0.5 min-w-[44px] min-h-[44px] px-1 py-1 rounded-xl transition-colors",
-              isActive ? "text-[color:var(--kub-accent-text)]" : "text-[color:var(--kub-muted)]"
+              "relative flex flex-col items-center gap-0.5 min-w-[44px] min-h-[44px] px-1 py-1 rounded-full transition-colors",
+              // Telegram marks the chosen tab with a filled rounded capsule
+              // behind the icon and its label, not with a dot beneath them.
+              isActive
+                ? "bg-[color-mix(in_srgb,var(--kub-cyan)_16%,transparent)] text-[color:var(--kub-accent-text)]"
+                : "text-[color:var(--kub-muted)]"
             )}
           >
             <KubIcon name={icon} size={22} />
             <span className="text-[11px] font-semibold uppercase">{label}</span>
-            {isActive && (
-              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[var(--kub-cyan)] kub-glow-soft" />
-            )}
+            {/* The dot is gone: the filled capsule above says the same thing
+                once, and two marks for one state is one too many. */}
           </button>
         );
       })}

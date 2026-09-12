@@ -98,7 +98,15 @@ export function MainLayout() {
             the 44px it held the panes clear of those buttons by is now
             `--kub-window-caption`, padded out of each pane's own top through
             `pt-window-top`. See `DesktopWindowChrome`. */}
-        <div className="flex flex-1 overflow-hidden" data-kub-panes="">
+        <div
+          // Room for the floating capsule below `md`, so the last row of a
+          // list can still be scrolled clear of it. The bar used to take this
+          // space by standing in the flow; it floats now, and what it no
+          // longer occupies it has to reserve. The gap is counted twice on
+          // purpose: once under the capsule and once above it.
+          className="flex flex-1 overflow-hidden pb-[calc(var(--kub-bottom-nav)+var(--kub-bottom-nav-gap)*2)] md:pb-0"
+          data-kub-panes=""
+        >
           <div
             // The whole left region: the 72pt folder rail and the chat list
             // beside it, both inside the one sheet of glass `Sidebar` paints.
@@ -147,6 +155,10 @@ export function MainLayout() {
           </div>
         </div>
 
+        {/* Absolutely placed against this column, which is why the column is
+            `relative`. Not against the viewport: a `fixed` capsule would
+            ignore the column entirely, and this product has already been
+            bitten by a stacking context clamping what a pane opens. */}
         {!isMobileChatOpen && <BottomNav />}
       </div>
     </div>
