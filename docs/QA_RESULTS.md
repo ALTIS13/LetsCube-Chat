@@ -1,5 +1,42 @@
 # QA Results
 
+## 2026-09-12 - Two casual hints, and two sentences that were each true and neither of which said of what
+
+The owner asked for hints in Telegram's manner — «невзначай говорит что эта кнопка может то-то если сделать
+так-то», never intercepting control. Two shipped, both on the mechanism built earlier the same day rather than a
+second one beside it.
+
+**The search syntax**, under the pill row: «Прямо в строке работают уточнения: from:@anna, has:image,
+after:2026-09-01.» It earns its place by the audit of that morning — the pills cover the common case and
+everything else the parser accepts has no control anywhere. The examples are kept as **data** in
+`searchQuery.ts` and the sentence is built from them, so the copy cannot teach syntax the parser rejects;
+the test runs every example through `parseAdvancedSearchQuery` and requires a chip back. `from:@anna` is
+latin because `normalizeUsername` strips everything outside `[A-Za-z0-9_.]`, so a Cyrillic handle would
+have been an example that can never match an account.
+
+**The recorder's second mode**, on the composer's round button: «Коротко нажмите на микрофон, чтобы записать не
+голосовое, а видеосообщение.» The button has a second mode and nothing on screen says so — its `aria-label`
+names the mode it is **in**, and «Режим: видеосообщение» arrives only after the switch, which is feedback rather
+than discovery.
+
+**Evidence, checked rather than accepted.** Seven mutations, each requiring its named guard to pass and select
+exactly one test before mutating: every one CAUGHT, 0 passed / 1 failed, every source restored byte for byte by a
+`finally` block with a verification pass after it. Typecheck clean; the unit suite **1879 to 1896**, the +17
+exactly the new file. Frames at 390 and 1440 in both themes, and the composer hint proved absent at 1440 — the
+gate shown in both directions, which is the half usually skipped.
+
+**And a correction I owed the agent that found it.** It reported that `recordingGesture.ts` «contains a
+statement that is wrong as written», because its comment says the tap already switches while the register says a
+plain click switches nothing. Reading both: the comment is true of a **finger**, the register is true of a
+**mouse's left button**, and the mouse's switch is the right one. Neither sentence is wrong; neither named its
+device, and side by side they read as a contradiction. Both now say which they mean. The distinction matters
+because «fix the false sentence» and «say which device you meant» are different repairs, and only the second one
+is true here.
+
+Five things left undone on purpose are recorded as D-158, including one of mine: the recorder button's markup is
+now written twice in mutually exclusive branches, and the two copies have already drifted on how they compute the
+accessible name.
+
 ## 2026-09-12 - Deployed 84963d1, and a probe that refused to give a verdict it could not support
 
 The filter row's arrows shipped: the mechanism lifted out of `FolderTabs` into a shared hook, the arrows

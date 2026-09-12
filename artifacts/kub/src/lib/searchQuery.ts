@@ -165,6 +165,46 @@ export function clearTypeSyntax(parsed: ParsedSearchQuery): string {
     .reduce((query, chip) => removeSearchChip(query, chip), parsed.raw);
 }
 
+/**
+ * The hint that says this line takes more than the pills can express.
+ *
+ * The row of type pills covers the common case — «Сообщения», «Чаты», «Люди» —
+ * and it is the whole of what the interface offers. Everything else this parser
+ * accepts (a sender, a kind of attachment, a date) has no control anywhere and
+ * is announced nowhere, which is the same shape of defect the pill row itself
+ * was filed as: a capability that exists, works, and cannot be found.
+ *
+ * The examples are kept as data rather than written into the sentence, and the
+ * sentence is built from them, because the failure worth preventing is a hint
+ * that teaches syntax this parser does not accept. `tests/unit/interface-hints`
+ * runs every example through `parseAdvancedSearchQuery` and requires a chip
+ * back, so the copy cannot drift from the grammar it describes.
+ *
+ * `from:@anna` is latin on purpose. `normalizeUsername` in `profileValidation`
+ * strips everything outside `[A-Za-z0-9_.]`, so a Cyrillic handle in this
+ * sentence would be an example that cannot match an account.
+ */
+export const SEARCH_SYNTAX_HINT_ID = "search-syntax";
+
+export const SEARCH_SYNTAX_HINT_EXAMPLES = ["from:@anna", "has:image", "after:2026-09-01"] as const;
+
+export const SEARCH_SYNTAX_HINT_TEXT = `Прямо в строке работают уточнения: ${SEARCH_SYNTAX_HINT_EXAMPLES.join(", ")}.`;
+
+/**
+ * Whether the hint belongs on screen for this parse.
+ *
+ * Two conditions, and the second is the one that matters. A query has to have
+ * been typed — an empty field is not a person searching — and the parse must
+ * have produced **no chips**, because a chip is proof the person already knows
+ * the syntax. Withdrawing rather than dismissing is deliberate: `withdraw`
+ * spends no budget and makes no permanent decision, so someone who uses
+ * `from:` once and goes back to plain queries is neither charged for the hint
+ * nor robbed of it.
+ */
+export function shouldOfferSearchSyntaxHint(parsed: ParsedSearchQuery): boolean {
+  return parsed.raw.trim().length > 0 && parsed.chips.length === 0;
+}
+
 export function searchFiltersToRpc(filters: ParsedSearchFilters): Json {
   return {
     type: filters.type === "all" ? null : filters.type,

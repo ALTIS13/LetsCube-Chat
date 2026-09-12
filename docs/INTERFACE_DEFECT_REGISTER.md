@@ -7061,7 +7061,10 @@ at 0px off on all eight frames that have one.
 
 **Locking with a mouse is the same gesture as with a thumb**: press the button,
 pull the pointer up onto the capsule, release. Nothing new was invented for it.
-A plain click on the record button still switches nothing and starts nothing —
+A plain **left** click with a mouse still switches nothing and starts nothing — the mouse's way into the other
+mode is the **right** button, which `handleRecorderContextMenu` carries and `video-message.spec.ts` covers
+by name; under a finger it is a tap shorter than 320ms with no travel. Neither sentence used to say which device
+it meant, and read side by side they looked like a contradiction (D-158). Here it means the mouse —
 Telegram Desktop's click-to-start-a-locked-recording was **not** copied, because
 it collides with our tap-to-switch-mode and the short-press hint.
 
@@ -7955,3 +7958,39 @@ finding — a sweep that selects by class cannot see a control that wears none.
 **3. No end-to-end spec references the type-filter row at all.** Its only automated coverage is the unit file
 above, which reads source rather than a rendered page. The row ships with its behaviour proved by rendered frames
 and measurements taken by hand; that is evidence, but it is not a guard that runs again tomorrow.
+
+---
+
+## D-158 `[ ]` Five things the casual hints left behind, each deliberately not acted on
+
+Found while adding the search-syntax and recorder-mode hints. None is a defect in what shipped; each is a place
+where the next hint, or the next reader, will pay for something not done.
+
+**1. The hint store does not enforce «one at a time»; the interface does.** `getSnapshot()` returns every
+eligible offer, and nothing stops two plates being visible together. Today they cannot be: the recorder hint is
+gated to a coarse pointer **and** below `md`, where `MainLayout` shows a single pane, and the search hint
+withdraws when its column is hidden. That is structural, not enforced. Centralising it in `hints.ts` was
+considered and refused for a stated reason: a single-visible rule breaks the existing test «a rebuild that changes
+nothing keeps the snapshot and wakes nobody», and would need `spend` fixed in the same breath, or a
+suppressed hint burns its two hours unseen.
+
+**2. `useHint` charges the budget while the store says «visible», and the store is never told whether the
+anchor is still mounted.** When the composer swaps the microphone for the send button the plate vanishes and the
+budget would keep draining. Worked around by passing `buttonOnScreen` and `paneOnScreen` into each
+caller's predicate — which means every future hint must remember to do the same. The fix belongs in the hook; it
+is not made here because the hook also feeds the shipped administration hint.
+
+**3. The mouse's way into the recorder's second mode stays undiscoverable.** The hint names the finger's gesture,
+because it is offered only where that gesture works. The right-click switch has no announcement anywhere, and
+giving it one needs a second anchor on a screen where the search hint can also be — which is the very thing
+finding 1 says nothing prevents.
+
+**4. The same syntax is live in `ChatSearchBar` with no pill row at all**, so there it is the only way to
+narrow — and there is deliberately no plate there. The same sentence twice is noise, and on a computer that bar
+and the sidebar can be on screen together.
+
+**5. The recorder button's markup is written twice.** `MessageInput.tsx` holds an extracted
+`recorderButton` const for the held-recording branch and an inline copy for the resting branch, the latter
+wrapped in the hint. They are mutually exclusive, so no screen ever shows both and no test id is ambiguous — but
+they have **already drifted**: one takes its accessible name from `recordingButtonLabel(recorderMode)`, the
+other from an inline ternary. Identical output today. That is how two copies begin.

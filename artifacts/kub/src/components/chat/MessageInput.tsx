@@ -24,7 +24,10 @@ import { VideoMessageRecorderModal } from "./VideoMessageRecorderModal";
 import { useChatMediaPlayback, VideoCircleProgressRing, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 import { useAppStore } from "@/store/app.store";
 import { useMuteState } from "@/hooks/useMuteState";
-import { KubGlassLayer, KubIcon } from "@/components/kub";
+import { useHint } from "@/hooks/useHint";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { coarsePointer } from "@/lib/pointer";
+import { KubGlassLayer, KubHint, KubIcon } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
@@ -60,10 +63,13 @@ import {
   lockProgress,
   overCancelButton,
   readRecordingHold,
+  RECORDER_MODE_HINT_ID,
+  RECORDER_MODE_HINT_TEXT,
   recordingButtonLabel,
   recordingMinimumMs,
   releaseRecording,
   shortPressHint,
+  shouldOfferRecorderModeHint,
   type RecordingMode,
   type RecordingPhase,
 } from "@/lib/recordingGesture";
@@ -992,6 +998,24 @@ export function MessageInput({
 
   const recording = holdRecorderState !== null;
 
+  // The round button has a second mode and nothing on screen says so. Its
+  // `aria-label` and `title` name the mode it is **in** — «Голосовое» — and
+  // «Режим: видеосообщение» arrives only after the switch, which is feedback
+  // rather than discovery. `shouldOfferRecorderModeHint` holds every condition,
+  // including the two device ones that keep this plate from ever sharing a
+  // screen with the sidebar's search hint.
+  const isPhoneWidth = useIsMobile();
+  const modeHint = useHint(RECORDER_MODE_HINT_ID, {
+    enabled: shouldOfferRecorderModeHint({
+      mode: recorderMode,
+      recording,
+      feedbackVisible: Boolean(modeFeedback || shortHint),
+      coarsePointer: coarsePointer(),
+      phoneWidth: isPhoneWidth,
+      buttonOnScreen: !(hasText || hasAttachments || hasForwardDraft),
+    }),
+  });
+
   /**
    * The round button, held in one place.
    *
@@ -1332,36 +1356,50 @@ export function MessageInput({
               )}
             </button>
           ) : (
-            <button
-              type="button"
-              data-testid="composer-recorder-button"
-              data-recorder-mode={recorderMode}
-              onContextMenu={handleRecorderContextMenu}
-              onPointerDown={handleRecorderPointerDown}
-              onPointerMove={handleRecorderPointerMove}
-              onPointerUp={handleRecorderPointerUp}
-              onPointerCancel={handleRecorderPointerCancel}
-              disabled={isAttachmentBusy}
-              className={cn(
-                "kub-interactive group/capsule relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-all select-none touch-none",
-                FOCUS_RING,
-                isAttachmentBusy
-                  ? "text-[color:var(--kub-muted)] opacity-60 cursor-not-allowed"
-                  : recorderMode === "video"
-                  ? "bg-[color-mix(in_srgb,var(--kub-pink)_18%,transparent)] text-[color:var(--kub-pink)] hover:bg-[color-mix(in_srgb,var(--kub-pink)_26%,transparent)]"
-                  : "text-[color:var(--kub-text)]"
-              )}
-              aria-label={recorderMode === "video" ? "Видеосообщение" : "Голосовое"}
-              title={recorderMode === "video" ? "Видеосообщение" : "Голосовое"}
+            // The plate stands above the button and leaves it working: the
+            // anchor adds a ref and nothing else, so the press, the hold and
+            // the tap that switches the mode all still reach the button while
+            // the hint is up. `side="top"` because the composer is the foot of
+            // the screen; `align="end"` because this button is its right edge.
+            <KubHint
+              open={modeHint.visible}
+              onDismiss={modeHint.dismiss}
+              side="top"
+              align="end"
+              sideOffset={12}
+              text={RECORDER_MODE_HINT_TEXT}
             >
-              {/* The video mode keeps its pink wash, which a glass layer would cover. */}
-              {recorderMode !== "video" && <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />}
-              <KubIcon
-                name={recorderMode === "video" ? "video" : "microphone"}
-                size={22}
-                className="relative"
-              />
-            </button>
+              <button
+                type="button"
+                data-testid="composer-recorder-button"
+                data-recorder-mode={recorderMode}
+                onContextMenu={handleRecorderContextMenu}
+                onPointerDown={handleRecorderPointerDown}
+                onPointerMove={handleRecorderPointerMove}
+                onPointerUp={handleRecorderPointerUp}
+                onPointerCancel={handleRecorderPointerCancel}
+                disabled={isAttachmentBusy}
+                className={cn(
+                  "kub-interactive group/capsule relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-all select-none touch-none",
+                  FOCUS_RING,
+                  isAttachmentBusy
+                    ? "text-[color:var(--kub-muted)] opacity-60 cursor-not-allowed"
+                    : recorderMode === "video"
+                    ? "bg-[color-mix(in_srgb,var(--kub-pink)_18%,transparent)] text-[color:var(--kub-pink)] hover:bg-[color-mix(in_srgb,var(--kub-pink)_26%,transparent)]"
+                    : "text-[color:var(--kub-text)]"
+                )}
+                aria-label={recorderMode === "video" ? "Видеосообщение" : "Голосовое"}
+                title={recorderMode === "video" ? "Видеосообщение" : "Голосовое"}
+              >
+                {/* The video mode keeps its pink wash, which a glass layer would cover. */}
+                {recorderMode !== "video" && <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />}
+                <KubIcon
+                  name={recorderMode === "video" ? "video" : "microphone"}
+                  size={22}
+                  className="relative"
+                />
+              </button>
+            </KubHint>
           )}
         </div>
       </div>

@@ -309,7 +309,11 @@ export function recordingStateLabel(phase: RecordingPhase, mode: RecordingMode):
  * It replaces the modal «Запись слишком короткая или пустая.», which stopped the
  * whole interface to report a slip of the thumb (R7). Telegram's own wording for
  * the same moment is «Hold to record audio. Tap to switch to video.» (T19); ours
- * says the half that is true here, because the tap already switches.
+ * says the half that is true here, because a tap of the **finger** already
+ * switches — see `shouldOfferRecorderModeHint` below for why the device has
+ * to be named: under a mouse the switch is the right button, and a sentence
+ * that says «the tap» without saying whose reads as a contradiction of the
+ * register's «a plain click switches nothing», which is about the mouse.
  */
 export function shortPressHint(mode: RecordingMode): string {
   return mode === "video"
@@ -320,4 +324,76 @@ export function shortPressHint(mode: RecordingMode): string {
 /** The button's accessible name, which says what a hold will record. */
 export function recordingButtonLabel(mode: RecordingMode): string {
   return mode === "video" ? "Видеосообщение" : "Голосовое";
+}
+
+/**
+ * The hint that says the round button has a second mode at all.
+ *
+ * `shortPressHint` above says «ours says the half that is true here, because
+ * the tap already switches» — and the tap really does, but only under a finger:
+ * `handleRecorderPointerUp` returns immediately unless `pointerType` is
+ * `"touch"`, and a press shorter than 320ms with no travel is what calls
+ * `toggleRecorderMode`. Under a mouse the same switch is on `onContextMenu`,
+ * the right button, which `tests/e2e/video-message.spec.ts` covers by name.
+ *
+ * Neither is stated anywhere a person can read. The button's `aria-label` and
+ * `title` name the mode it is **in** — «Голосовое» — not the gesture that
+ * changes it, and «Режим: видеосообщение» appears only after the switch has
+ * already happened, which is feedback rather than discovery.
+ *
+ * The copy names the finger's gesture because the hint is offered only where
+ * the finger's gesture is the one that works; the mouse's right-click is left
+ * undiscovered on purpose rather than by oversight. See the note on
+ * `shouldOfferRecorderModeHint`.
+ */
+export const RECORDER_MODE_HINT_ID = "recorder-mode";
+
+export const RECORDER_MODE_HINT_TEXT =
+  "Коротко нажмите на микрофон, чтобы записать не голосовое, а видеосообщение.";
+
+export interface RecorderModeHintInput {
+  /** Which mode the button is in. Once it is `video` the switch is discovered. */
+  mode: RecordingMode;
+  /** A recording is running, held or locked; the button is not a switch now. */
+  recording: boolean;
+  /**
+   * The round button is the one the composer is rendering.
+   *
+   * With text typed, an attachment staged or a forward drafted, the composer
+   * shows **send** in that slot and the record button is not on screen. This is
+   * not cosmetic: `useHint` charges the budget for as long as the hint is
+   * *visible*, and visibility is the store's answer, not the anchor's — so a
+   * hint left offered behind a control that has been swapped out would spend
+   * its whole two hours teaching nobody.
+   */
+  buttonOnScreen: boolean;
+  /** «Режим: …» or the short-press hint is already on screen under the composer. */
+  feedbackVisible: boolean;
+  /** The primary pointer is a finger, from `lib/pointer.ts`. */
+  coarsePointer: boolean;
+  /** Below `md`, where the shell shows one pane. See the note below. */
+  phoneWidth: boolean;
+}
+
+/**
+ * Whether the mode hint belongs on screen.
+ *
+ * Both device conditions are load-bearing and neither is a proxy for the other.
+ * **Coarse** because the gesture the sentence describes is the touch one; on a
+ * mouse that sentence would be false. **Below `md`** because that is the width
+ * at which `MainLayout` shows a single pane, and a single pane is what keeps
+ * this hint from sharing a screen with the search-syntax hint in the sidebar —
+ * the shell hides that column rather than unmounting it, so nothing else
+ * guarantees the two are never up together. A tablet is coarse and shows two
+ * panes, which is exactly the case the width test excludes.
+ *
+ * The rest is ordinary courtesy: not while something is recording, not on top
+ * of the composer's own feedback plate, and not once the person has reached
+ * `video`, which is proof they found it.
+ */
+export function shouldOfferRecorderModeHint(input: RecorderModeHintInput): boolean {
+  if (!input.coarsePointer || !input.phoneWidth) return false;
+  if (!input.buttonOnScreen) return false;
+  if (input.recording || input.feedbackVisible) return false;
+  return input.mode === "voice";
 }

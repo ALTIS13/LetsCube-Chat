@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { KubIcon } from "@/components/kub";
+import { KubHint, KubIcon } from "@/components/kub";
 import {
   buildCommandResults,
   groupSearchResults,
@@ -16,9 +16,17 @@ import {
   type SearchTypeFilter,
 } from "@/components/search/SearchShared";
 import { getLocalChatSearchResults, useGlobalSearch } from "@/hooks/useGlobalSearch";
+import { useHint } from "@/hooks/useHint";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useRoleAccess } from "@/hooks/useRole";
 import { useTaskAccessGate } from "@/hooks/useTaskAccess";
-import { clearTypeSyntax, typeFilterToDataType } from "@/lib/searchQuery";
+import {
+  clearTypeSyntax,
+  SEARCH_SYNTAX_HINT_ID,
+  SEARCH_SYNTAX_HINT_TEXT,
+  shouldOfferSearchSyntaxHint,
+  typeFilterToDataType,
+} from "@/lib/searchQuery";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app.store";
 
@@ -26,6 +34,7 @@ export function SidebarSearchResults({ query }: { query: string }) {
   const trimmedQuery = query.trim();
   const currentUser = useAppStore((s) => s.currentUser);
   const chats = useAppStore((s) => s.chats);
+  const selectedChatId = useAppStore((s) => s.selectedChatId);
   const setSearchQuery = useAppStore((s) => s.setSearchQuery);
   const [activeIndex, setActiveIndex] = useState(0);
   const { canAccessTasks } = useTaskAccessGate({ enabled: trimmedQuery.length > 0 });
@@ -47,6 +56,22 @@ export function SidebarSearchResults({ query }: { query: string }) {
   // it, which is «Все» again on the way back in.
   const [selectedType, setSelectedType] = useState<SearchTypeFilter>("all");
   const parsed = useMemo(() => parseSearchTypeSyntax(trimmedQuery, selectedType), [selectedType, trimmedQuery]);
+
+  // The pills cover the types; nothing covers the rest of the grammar. See
+  // `shouldOfferSearchSyntaxHint` for when it is offered and why using the
+  // syntax withdraws it rather than dismissing it.
+  //
+  // The pane gate is not belt-and-braces. Below `md` the shell **hides** this
+  // column — `isMobileChatOpen ? "hidden" : "flex"` in `MainLayout` — rather
+  // than unmounting it, so with a chat open this surface is still mounted with
+  // its query, and a popover anchored here would portal over the conversation.
+  // That is the same `display:none` anchor that put the administration hint's
+  // plate over the chat list on 2026-09-12, where it swallowed the pointer.
+  const isPhone = useIsMobile();
+  const paneOnScreen = !(isPhone && Boolean(selectedChatId));
+  const syntaxHint = useHint(SEARCH_SYNTAX_HINT_ID, {
+    enabled: paneOnScreen && shouldOfferSearchSyntaxHint(parsed),
+  });
   const localChatResults = useMemo(
     () => getLocalChatSearchResults({
       query: parsed.query,
@@ -131,7 +156,21 @@ export function SidebarSearchResults({ query }: { query: string }) {
           `active` is the *effective* type rather than the pill state, so a typed
           `type:chat` lights «Чаты» up and the control can never disagree with the
           text about what is being filtered. */}
-      <SearchTypeFilters active={parsed.filters.type} counts={typeCounts} onSelect={chooseType} compact />
+      {/* The plate hangs under the row and lands on the results, which are
+          content — never on the field, which is where a person is typing.
+          `SearchTypeFilters` is a function component and cannot take a ref, so
+          the anchor is this wrapper rather than the row itself. */}
+      <KubHint
+        open={syntaxHint.visible}
+        onDismiss={syntaxHint.dismiss}
+        side="bottom"
+        align="start"
+        text={SEARCH_SYNTAX_HINT_TEXT}
+      >
+        <div>
+          <SearchTypeFilters active={parsed.filters.type} counts={typeCounts} onSelect={chooseType} compact />
+        </div>
+      </KubHint>
 
       <div className="flex items-center justify-between gap-2 border-b border-[color:var(--kub-border-color)] px-3 py-2">
         <div className="min-w-0 text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--kub-muted)]">
