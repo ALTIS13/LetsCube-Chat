@@ -7518,3 +7518,83 @@ sentence (audit source T50). The audit put this to the owner; the owner summary 
 as the default under the standing rule.
 
 **Audit rows:** chat-functions B14; top-10 item 7.
+
+## D-151 `[ ]` «Управление» does not fit the proposed bottom capsule, and «Настройки» does not fit it either below 375
+
+**Severity:** medium, and on unbuilt work. It lands in the product the moment the
+approved A+ capsule is built as drawn, at 360 and 390 — the two phone widths the
+release matrix actually covers.
+
+**Surface:** the proposal, on `design/navigation-ios`:
+`artifacts/kub/src/components/layout/FloatingTabBar.tsx:98` (the tab button,
+`flex-1 min-w-[44px] px-1`) and `:120` (the label, `text-[11px] font-semibold
+leading-[13px]`, sentence case, no `truncate` and no `whitespace-nowrap`), with
+the geometry in `artifacts/kub/src/styles/navigationOptions.css:26-27` (gutter
+`0.75rem`, height `3.625rem`), `:209-217` (the bar, `gap: 0.5rem`), `:239-241`
+(the strip, `padding: 0.25rem`) and `:260-263` (the round search button, the
+bar's height square). Not in `integration/message-actions`, where
+`components/layout/BottomNav.tsx` is still the docked six-tab bar.
+
+**Defect:** the width one tab gives its label is `(viewport − 98) ÷ 4 − 8`. The
+owner's two accepted answers together put «Чаты», «Задачи», «Управление»,
+«Настройки» in that capsule, and two of the four words are wider than the box:
+
+| Viewport | Label box | «Управление» 66.22 | «Настройки» 59.78 | Narrowest gap between two labels |
+| --- | --- | --- | --- | --- |
+| 320 | 47.50 | over by 18.72 | over by 12.28 | **−7.50** — the words overlap |
+| 360 | 57.50 | over by 8.72 | over by 2.28 | **2.50** = 0.90 of a space |
+| 375 | 61.25 | over by 4.97 | fits by 1.47 | 6.25 = 2.25 spaces |
+| 390 | 65.00 | over by 1.22 | fits by 5.22 | 10.00 = 3.60 spaces |
+| 430 | 75.00 | fits by 8.78 | fits by 14.72 | 20.00 = 7.19 spaces |
+
+Widths measured with a `Range` over the rendered glyphs in the product's own
+font, at 600 weight and 11px, on a dev server with Inter confirmed loaded — not
+estimated from character counts. A space in that font at that size is 2.78px,
+measured by difference («Чаты Чаты» less «ЧатыЧаты»); the same method gives
+3.02px at 12px, which is the figure D-061 recorded for this font.
+
+**It neither truncates nor wraps.** The label declares no `truncate` and no
+`whitespace-nowrap`, «Управление» is one word with no break opportunity, and the
+button does not clip — so the word paints past its own padding into its
+neighbour. At 360 the two labels sit 2.50px apart in a font whose space is
+2.78px, which is D-061 exactly: the register's figure there was 3.18px against a
+3.02px space, and the words read as one phrase.
+
+**The administration word is not the whole of it.** With «Админка» kept (49.91)
+the binding label becomes **«Настройки»**, which still overflows at 320 by 12.28
+and at 360 by 2.28. The four-tab capsule with a round search button beside it
+does not fit the low end whatever the third tab is called — the round button and
+the gutters take 90px, a quarter of a 360px row. The other accepted decision,
+that the fourth tab is «Настройки» rather than «Профиль», costs 10.15px of label
+by itself.
+
+**Measured alternatives**, same method, ✗ = at least one label overflows:
+
+| Option | 320 | 360 | 375 | 390 | 430 |
+| --- | --- | --- | --- | --- | --- |
+| As proposed, 11px, 4 tabs + round button | ✗ | ✗ | ✗ | ✗ | ok |
+| **Round search button dropped, strip full width** | ✗ by 2.22 | **ok by 7.78** | ok | ok | ok |
+| 10px labels, round button kept | ✗ | ✗ by 2.69 | ok by 1.06 | ok | ok |
+| 9px labels, round button kept | ✗ | ok by 3.33 | ok | ok | ok |
+| Short admin word («Панель», «Доступ», «Админ») | ✗ | ✗ | ok | ok | ok |
+| Search as a fifth tab, no round button | ✗ | ✗ | ✗ | ✗ by 2.62 | ok |
+| Icon-only tabs | ok | ok | ok | ok | ok |
+
+320 is below the narrowest width we test — the matrix's narrowest is
+`chromium-mobile-360` and `scripts/interface-audit.mjs` carries `360×800` — so
+360 is the width that has to hold.
+
+**Proposed:** drop the round search button and give the tab strip the full
+width, keeping «Управление» unshortened everywhere. That is 7.78px of slack and
+a 15.78px gap at 360, and it removes a control that duplicates the search field
+the list column already has. If the round button is kept, the honest second
+choice is an icon-only tab below 430, not a smaller type: 11px is the floor
+D-061 set after measuring on a device. A short word on the tab with the full
+word elsewhere is the one option to avoid — it costs answer 21's plainness and
+does not fix 360 anyway, because «Настройки» overflows there regardless.
+
+**Evidence:** `output/audits/2026-09-12-capsule-and-glass/` — the rebuild is
+validated against the option's own photographed geometry at 430 (strip 340×58 at
+x=12, round button 58×58 at x=360, as
+`output/renders/2026-09-12-navigation-ios/measurements.md` recorded) and refuses
+to report if it does not reproduce it. `frames/capsule-360.png` is the picture.
