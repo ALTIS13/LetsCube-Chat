@@ -7994,3 +7994,70 @@ and the sidebar can be on screen together.
 wrapped in the hint. They are mutually exclusive, so no screen ever shows both and no test id is ambiguous — but
 they have **already drifted**: one takes its accessible name from `recordingButtonLabel(recorderMode)`, the
 other from an inline ternary. Identical output today. That is how two copies begin.
+
+---
+
+## D-159 `[x]` In-chat search was a phone overlay dropped on the conversation at desktop widths
+
+**Found by the web audit of 2026-09-12**, which the owner asked for in his own words: the web client «выглядит как
+помесь телефона и десктопа».
+
+**Measured before:** the panel was 969x214 at 1440 and 1449x214 at 1920 — it grew sideways, never downward. Its
+results well was `max-h-36` (144px) holding about 320px of content, and it rendered `results.slice(0, 6)`,
+so one match was never drawn at all and five more sat behind a scroll inside a 144px window. Two rows were whole;
+the third was sliced through its own text. The card covered **23.0%** of the conversation at 1440 and 19.4% at
+1920, while the list column beside it — 360x900 — showed fourteen chats irrelevant to the search.
+
+**Fixed for `md` and up on 2026-09-13.** In-chat search is now a state of the list column, following
+`SidebarSearchResults` as the precedent rather than inventing a second pattern. The engine moved to
+`lib/chatMessageSearch.ts` — verbatim, filter for filter — and `hooks/useChatMessageSearch.ts` holds the
+stateful half, so the counter, the match order and the loaded-message fallback cannot drift between the two
+forms. Only one form is ever **mounted**, by a JS breakpoint rather than a CSS `hidden`: two mounted copies
+would each run the query and each jump the conversation.
+
+**Measured after:** panel 360x843 at 1440 and 360x1023 at 1920, the well 680px showing 680px, every match drawn
+whole, no row sliced, and **0%** of the conversation covered.
+
+**Left open, and it is the phone half:** below `md` there is no column to move into, so the overlay survives
+there byte for byte — `max-h-36` and `slice(0, 6)` are still in `ChatSearchBar.tsx`. Measured on the
+phone after the change: 6 of 7 rendered, **2 whole**, one sliced. Its own defect, not a regression of this one.
+
+**A caution about the evidence, because the tables in the agent's report do not compare like with like.** Its
+«before» frames were shot with `смет` in the field and its «after» frames with `смета`, so the counters
+read 1/13 and 1/7 for arithmetic reasons and not because anything was lost: of the fourteen seeded lines, thirteen
+contain the stem and seven contain the exact query. Both numbers are correct for their own query. The geometry —
+144px well showing 320px against 680 showing 680, and 23.0% coverage against 0% — is the comparison that holds.
+
+---
+
+## D-160 `[ ]` Settings is a fixed 896px dialog that blurs the whole application
+
+`SettingsModal.tsx` opens at `KubModal`'s `xl` size — `sm:max-w-4xl`, 896px — on every screen,
+with `backdrop-blur-sm` over everything behind it. That is **62.2%** of a 1440 screen and **46.7%** of a
+1920 one, leaving 272px and then 512px of dead margin each side, while about 332px of content stays below the
+fold at 1440. Rows are 822px wide and 44px tall, so a value is stranded up to 550px from its label («Оформление»
+against «Без оформления»). There is no search over the settings at all.
+
+A desktop client puts this in a column with its own search. `lib/settingsRows.ts` is already an ordered data
+structure, so the column has something to render and something to search.
+
+**Not a sheet, and the audit corrected me on that:** `mobileSheet` only applies below 640px. At 1440 this is
+a genuine centred desktop dialog. The phone pattern here is the **row list stretched to 822px**, not the container.
+
+---
+
+## D-161 `[ ]` The contact card is a draggable window sitting on the messages
+
+`ChatInfoPanel.tsx` renders `position: fixed` at `PROFILE_WINDOW_DEFAULT_SIZE` — 380x620 — with a
+`cursor: grab` header, because `floatingWindow.ts` only docks below its `DOCK_BREAKPOINT` of 640.
+It covers **26.2%** of the conversation at 1440 (four bubbles) and 14.7% at 1920, overlaps the composer, and
+scrolls inside itself (639px of content in 562px) while carrying its own tabs.
+
+There is 1007px of chat pane at 1440 and 1487px at 1920; a docked 380px column would leave 621px and 1101px of
+conversation, both far above the product's own 260px column minimum. One component that re-dresses itself — docked
+third column at these widths, the existing floating and sheet forms below — is the shape to aim for.
+
+**The audit corrected me here too:** at 1440 this is one card with internal tabs, not «several stacked sheets».
+The stacking is real but elsewhere — confirmations and `GroupInviteModal` open as separate modals over it —
+and the same person-profile content lives in three unrelated components (`ChatInfoPanel`,
+`SearchShared.tsx`'s «Мини-профиль», `UsersTab.tsx`).

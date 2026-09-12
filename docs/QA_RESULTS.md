@@ -1,5 +1,41 @@
 # QA Results
 
+## 2026-09-13 - In-chat search takes the list column, and three explanations in a row, and the pixels killed all three
+
+The owner's complaint about the web client — «выглядит как помесь телефона и десктопа» — was turned into an audit
+rather than a rebuild, as the project's own rule requires. Three findings came back, now D-159, D-160 and D-161.
+The first is fixed: in-chat search is a state of the list column from `md`, the conversation is no longer
+covered at all, and every match is drawn whole.
+
+**What took the time was a number that did not add up.** The agent's own measurement files said the counter read
+`1/13` before and `1/7` after, on what looked like identical seeded data. Six matches apparently gone,
+hidden behind a prettier frame. I refused to commit until I knew why, and I was wrong three times:
+
+1. **«Two different fixtures.»** Killed by reading both harnesses: the same `add()` loop, the same chat ids,
+   the same fourteen lines character for character.
+2. **«The new engine filters more.»** Killed by diffing it against `HEAD`: the filter is a verbatim move —
+   same deleted check, same topic check, same haystack, same `slice(0, 80)`.
+3. **«The counter was read mid-debounce.»** Killed by the harness itself: it waits 1400ms after typing and then
+   settles before reading.
+
+**The answer was in the picture.** The «before» frame has `смет` in the field, not `смета`. Of the
+fourteen seeded lines, thirteen contain the stem and seven contain the exact query, so 1/13 and 1/7 are both
+correct — for two different queries. Nothing was lost. The agent's before/after tables simply are not like for
+like, and the register says so beside them.
+
+**And the ninth instrument fault of this stretch, which is mine.** Counting those matches with
+`grep -ciE 'смета'` answered **1**, and `grep -ciE 'смет'` answered **7** — against the truth of 7 and 13.
+`grep -i` does not fold Cyrillic case in this shell, so it had been matching lowercase occurrences only. The
+product folds with `toLocaleLowerCase("ru-RU")`; a probe that means to imitate it has to fold the same way,
+which here meant counting in `node` rather than in `grep`.
+
+**Verified for the change itself, by my own runs rather than the report's:** the repointed contract test still
+asserts five cases and now reads the module where the resolver actually lives (the overlay no longer resolves
+names itself — it renders `result.senderName` and imports only `formatSearchDate`); the phone overlay is
+untouched, with `max-h-36` and `slice(0, 6`) still in place; the mutation went 2 failed then 3 passed;
+`desktop-shell.spec.ts` is 19 passed / 15 skipped before and after, identical; typecheck clean and the unit
+suite 1896 of 1896, unchanged on purpose because rendered geometry is not something a source-text test can see.
+
 ## 2026-09-12 - Deployed 05fc53f: the page and its assets can come from different replicas
 
 The two casual hints shipped. Verified as the two deploys before it — image tag carrying the full SHA, health,

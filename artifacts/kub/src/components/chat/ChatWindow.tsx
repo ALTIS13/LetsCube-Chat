@@ -6,6 +6,7 @@ import { PinnedMessage } from "./PinnedMessage";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { ChatSearchBar } from "./ChatSearchBar";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ChatInfoPanel } from "./ChatInfoPanel";
 import { ChatSelectionBar } from "./ChatSelectionBar";
 import { ForwardModal } from "./ForwardModal";
@@ -143,7 +144,17 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
   const [replyTo, setReplyTo] = useState<MessageWithSender | null>(null);
   const [replyFocusKey, setReplyFocusKey] = useState(0);
-  const [showSearch, setShowSearch] = useState(false);
+  // In-chat search is in the store since 2026-09-12, because from `md` it is a
+  // state of the LIST COLUMN (`ChatSearchPanel`, mounted by `Sidebar`) while
+  // the thing being searched is this pane. Below `md` that column is off screen
+  // and this pane keeps the floating capsule. Only ever one of the two is
+  // mounted — the gate is `useIsMobile()` rather than a CSS `hidden`, because
+  // two mounted copies would each run the query and each jump the conversation.
+  const chatSearch = useAppStore((s) => s.chatSearch);
+  const openChatSearch = useAppStore((s) => s.openChatSearch);
+  const closeChatSearch = useAppStore((s) => s.closeChatSearch);
+  const isPhone = useIsMobile();
+  const searchOpen = chatSearch?.chatId === chatId;
   const [showInfo, setShowInfo] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [pinError, setPinError] = useState<string | null>(null);
@@ -277,9 +288,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   useEffect(() => {
     if (!chatPanelRequest || chatPanelRequest.chatId !== chatId) return;
     if (chatPanelRequest.panel === "info") setShowInfo(true);
-    if (chatPanelRequest.panel === "search") setShowSearch(true);
+    if (chatPanelRequest.panel === "search") openChatSearch(chatId);
     clearChatPanelRequest(chatPanelRequest.key);
-  }, [chatId, chatPanelRequest, clearChatPanelRequest]);
+  }, [chatId, chatPanelRequest, clearChatPanelRequest, openChatSearch]);
 
   const myRole = (chat?.members?.find((m) => m.user_id === userId)?.role ?? null) as
     | "owner" | "admin" | "member" | null;
@@ -895,12 +906,22 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     const handleGlobalJump = (event: Event) => {
       const detail = (event as CustomEvent<ChatMessageJumpDetail>).detail;
       if (!detail || detail.chatId !== chatId) return;
+      // A jump that names a topic comes from outside this pane — the list
+      // column's in-chat search — and a forum has to switch topic before the
+      // message exists to scroll to. That handshake is `handleSearchJump`,
+      // which is what the phone's overlay already calls, so the column takes
+      // the same road rather than a second copy of it. Notifications, global
+      // search and push name no topic and keep the plain jump.
+      if (detail.topicId !== undefined) {
+        void handleSearchJump(detail.messageId, detail.topicId);
+        return;
+      }
       void handleJumpToReply(detail.messageId);
     };
 
     window.addEventListener(KUB_CHAT_MESSAGE_JUMP_EVENT, handleGlobalJump);
     return () => window.removeEventListener(KUB_CHAT_MESSAGE_JUMP_EVENT, handleGlobalJump);
-  }, [chatId, handleJumpToReply]);
+  }, [chatId, handleJumpToReply, handleSearchJump]);
 
   useEffect(() => {
     const pendingId = pendingJumpRef.current;
@@ -1140,7 +1161,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             <ChatHeader
               chatId={chatId}
               chat={chat}
-              onSearchOpen={() => setShowSearch(true)}
+              onSearchOpen={() => openChatSearch(chatId)}
               onInfoOpen={() => setShowInfo(true)}
               onClearForMe={clearChatForMe}
               mediaPlayback={<ChatMediaPlaybackBar compact />}
@@ -1155,13 +1176,16 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             />
           )}
 
-          {showSearch && (
+          {/* The phone's form only. From `md` this same search is the list
+              column's body — `ChatSearchPanel` — where it covers none of the
+              conversation and renders every match instead of the first six. */}
+          {searchOpen && isPhone && (
             <ChatSearchBar
               chatId={chatId}
               currentTopicId={messageTopicId}
               isForum={isForum}
               messages={conversation}
-              onClose={() => setShowSearch(false)}
+              onClose={closeChatSearch}
               onJumpTo={handleSearchJump}
             />
           )}

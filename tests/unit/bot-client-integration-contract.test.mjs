@@ -16,7 +16,13 @@ const messageList = read("artifacts/kub/src/components/chat/MessageList.tsx");
 const messageBubble = read("artifacts/kub/src/components/chat/MessageBubble.tsx");
 const pinned = read("artifacts/kub/src/components/chat/PinnedMessage.tsx");
 const forward = read("artifacts/kub/src/components/chat/ForwardModal.tsx");
-const chatSearch = read("artifacts/kub/src/components/chat/ChatSearchBar.tsx");
+// The engine behind in-chat search, which is where the sender's name is
+// resolved. It was inside `components/chat/ChatSearchBar.tsx` until
+// 2026-09-12, when the same search grew a second presentation in the list
+// column; the decision moved to a module both forms take it from, so the
+// contract follows the code rather than staying pointed at one of the two
+// surfaces that now only renders it.
+const chatSearch = read("artifacts/kub/src/lib/chatMessageSearch.ts");
 const messageInput = read("artifacts/kub/src/components/chat/MessageInput.tsx");
 const globalSearch = read("artifacts/kub/src/hooks/useGlobalSearch.ts");
 const searchShared = read("artifacts/kub/src/components/search/SearchShared.tsx");

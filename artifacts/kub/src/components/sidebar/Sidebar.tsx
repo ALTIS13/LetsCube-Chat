@@ -14,6 +14,8 @@ import { FolderListModal } from "./FolderListModal";
 import { SettingsModal } from "./SettingsModal";
 import { openSavedMessagesChat } from "@/lib/savedMessages";
 import { SidebarSearchResults } from "@/components/search/SidebarSearchResults";
+import { ChatSearchPanel } from "@/components/search/ChatSearchPanel";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useAppStore } from "@/store/app.store";
 import { useChats } from "@/hooks/useChats";
 import { useFolders } from "@/hooks/useFolders";
@@ -79,6 +81,20 @@ export function Sidebar() {
   };
 
   const hasSearchQuery = searchQuery.trim().length > 0;
+  // In-chat search, as a state of this column from `md`.
+  //
+  // Three conditions, each load-bearing. Not on a phone: below `md` this column
+  // is hidden rather than unmounted, so without the width the panel would be
+  // mounted behind the conversation, running its own query and jumping the
+  // chat — and the phone has its own form in the pane. Only for the chat that
+  // is actually open, so a search left behind in another chat cannot show its
+  // results beside a different conversation. And the typed global query wins,
+  // because that is the field the person is in the middle of using; clearing it
+  // comes back here.
+  const chatSearch = useAppStore((s) => s.chatSearch);
+  const isPhone = useIsMobile();
+  const chatSearchOpen =
+    !isPhone && chatSearch !== null && chatSearch.chatId === selectedChatId;
   const filtered = useMemo(() => chats.filter((chat) => {
     if (activeFolder === null) return true;
     return folderChats[activeFolder]?.has(chat.id) ?? false;
@@ -174,6 +190,8 @@ export function Sidebar() {
 
           {hasSearchQuery ? (
             <SidebarSearchResults query={searchQuery} />
+          ) : chatSearchOpen && chatSearch ? (
+            <ChatSearchPanel chatId={chatSearch.chatId} />
           ) : loading ? (
             <div className="flex-1 flex items-center justify-center">
               <KubIcon name="spinner" size={22} className="text-[color:var(--kub-cyan)]" />

@@ -101,6 +101,20 @@ interface AppState {
   chatPanelRequest: { chatId: string; panel: 'info' | 'search'; key: number } | null
   requestChatPanel: (chatId: string, panel: 'info' | 'search') => void
   clearChatPanelRequest: (key: number) => void
+
+  /**
+   * Which chat's in-chat search is open, if any.
+   *
+   * It lives here rather than in `ChatWindow` because from `md` the search is a
+   * state of the LIST COLUMN — `Sidebar` swaps its body to the results, the way
+   * it already does for a global query — while the thing being searched is the
+   * chat pane beside it. Two columns, one piece of state, so neither owns it.
+   * Below `md` the column is off screen entirely and the chat pane keeps the
+   * floating overlay; both forms read this same flag.
+   */
+  chatSearch: { chatId: string } | null
+  openChatSearch: (chatId: string) => void
+  closeChatSearch: () => void
 }
 
 
@@ -361,6 +375,11 @@ export const useAppStore = create<AppState>((set) => ({
     set((state) => (
       state.chatPanelRequest?.key === key ? { chatPanelRequest: null } : state
     )),
+
+  chatSearch: null,
+  openChatSearch: (chatId) =>
+    set((state) => (state.chatSearch?.chatId === chatId ? state : { chatSearch: { chatId } })),
+  closeChatSearch: () => set((state) => (state.chatSearch === null ? state : { chatSearch: null })),
 }))
 
 async function persistChatPushPreference(userId: string | null, chatId: string, muted: boolean) {
