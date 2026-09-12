@@ -107,3 +107,11 @@ windows-tauri/src-tauri/gen/
 
 # Local isolated implementation worktrees.
 .worktrees/
+
+# Playwright's HTML and blob reports. A signed-in spec looks at production
+# screens, and an HTML report embeds the screenshots of them; these paths were
+# untracked but not ignored, so one `git add -A` would have staged pictures of a
+# real account. Neither directory exists today — this closes the hole before it
+# is opened.
+playwright-report/
+blob-report/
