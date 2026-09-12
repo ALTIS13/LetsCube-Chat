@@ -203,7 +203,9 @@ test("a preview marked stale is regenerated at the new size, and the thumb is le
     wanted,
     "the backfilled preview must be the size the worker's own rule asks for",
   );
-  assert.deepEqual(wanted, { width: 720, height: 1561 }, "which is the D-116 size, not 591x1280");
+  // 720x1561 while the bubble's cap was 480; 930x2016 since the owner raised it
+  // to 550 on 2026-09-12 and the floor followed the box it is derived from.
+  assert.deepEqual(wanted, { width: 930, height: 2016 }, "which is the D-116 size, not 591x1280");
 
   // The thumb was already ready and its rule did not change, so re-doing it
   // would be pure cost. Only the preview is rewritten.

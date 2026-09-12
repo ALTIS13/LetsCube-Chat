@@ -170,7 +170,9 @@ test("running the backfill twice finds nothing the second time", () => {
 });
 
 test("only a ready image_preview is eligible to be replaced", () => {
-  const thin = { width: 1280, height: 591 };
+  // Upright on purpose. Lying down, this row would be excluded by its geometry
+  // and every case below would pass without the status filter doing anything.
+  const thin = { width: 591, height: 1280 };
   const rows = [
     { id: "a", variant_kind: "image_preview", status: "ready", ...thin },
     { id: "b", variant_kind: "image_preview", status: "failed", ...thin },
@@ -193,8 +195,10 @@ test("a failed row is left alone because it is the worker's only memory", () => 
   // keeps no queue, so reviving one as work would restore the retry loop that
   // produced 826 warnings in seven hours. Spelled out separately from the table
   // above because it is a safety property, not a filter detail.
+  // Upright, so that `status` is the only thing keeping it out: a lying-down row
+  // is not a candidate anyway, and this test would then prove nothing.
   const failed = [
-    { id: "gone", variant_kind: "image_preview", status: "failed", width: 1280, height: 591 },
+    { id: "gone", variant_kind: "image_preview", status: "failed", width: 591, height: 1280 },
   ];
   assert.deepEqual(selectPreviewBackfillRows(failed), []);
 });
