@@ -6491,6 +6491,43 @@ which never reaches them, so 390 px and 360 px both settle at 92%. A normal 4:3 
 for a shorter box at every width and are drawn exactly as before; video was deliberately left on the old 0.72 and
 320, since the choice was about pictures.
 
+**The preview floor moved with the cap**, and an assertion is what made it. The floor exists so a preview is not
+drawn stretched; it was 720, derived from the narrowest phone, and `media-compression.test.mts` tied it to the
+bubble's height so that neither could be tuned alone. Raising the cap to 550 turned that assertion red at once.
+The box on the phone the tester holds is 310x550 CSS, which is 930x1650 device pixels, so the floor is now 930 —
+and a tall preview was in fact being stretched there even while the cap was 480, which nobody had noticed.
+
+**It is also applied only to a picture taller than it is wide.** That is the axis which fills the bubble: a
+landscape picture fills it with its long side, which the 1280 cap already carries well past 930, so flooring its
+short side only bought height the bubble never draws. Had the floor simply been raised to 930 for everything, an
+ordinary 4:3 photograph would have gone from a 1280x960 preview to 1440x1080 and every 16:9 picture would have
+grown by two thirds, for nothing. As it stands 4:3, 16:9 and a panorama are sized exactly as they were, and
+1080x2341 goes to 930x2016 instead of 720x1561. The client and the worker carry the same rule, or a picture would
+change size under the reader when the worker catches up.
+
+**A rewritten preview could not have reached anyone who had already seen it.** Message variants keep their path
+when they are rewritten and the worker writes them `max-age=31536000, immutable`, and their URLs carried no version
+token — avatars have carried one for exactly this reason since they became cacheable. So the backfill below would
+have been invisible to the very people who complained. `useMediaVariants.ts` now reads `updated_at` and passes every
+message variant URL through `withVersionToken`, as the avatar paths already did.
+
+**The pictures already sent are being regenerated** (the owner, 2026-09-12: «Старые картинки тоже по возможности
+перегенерируй чтобы не было расхождений»). Measured read-only on production: 165 `image_preview` rows are ready, 40
+of them need regenerating, and the originals of all 40 are still in storage — none is lost. 30 of the 40 are about
+2.25:1, which is to say phone screenshots, exactly the complaint. It costs 11.3 MB of downloads and takes the
+previews from 1.3 MB to about 2.0 MB in all. The 191 live media messages sit inside the worker's 1200-row scan, so
+it already reaches every affected row.
+
+The method is deliberately narrow: mark those rows `stale` and let the worker regenerate them with its own rule,
+so that a backfilled picture cannot differ from a normally uploaded one — one writer of variant bytes is the whole
+point. The only write is a status flip, which makes it idempotent and safe to stop half way. A `failed` row is never
+revived: that is the worker's only memory of a dead end, and reviving one would restore D-034.
+
+**It cannot run yet.** `letscube-worker` has to be deployed with the D-116 rule first, or regeneration would faithfully
+reproduce the old size. Also worth knowing: no production message carries a sender's preview in its metadata, so
+the worker's `image_preview` is the only preview a reader ever gets, and the client's own rule reaches new uploads
+only.
+
 **One consequence worth knowing before it ships.** The worker deploys separately from the web application, and it
 does not regenerate variants that already exist, so larger previews would otherwise arrive only for new uploads
 and only after `letscube-worker` is deployed; until then the taller bubble stretches the existing 591x1280

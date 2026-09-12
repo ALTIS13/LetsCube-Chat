@@ -1,5 +1,27 @@
 # QA Results
 
+## 2026-09-12 - The media batch after the owner's answers: a taller bubble, a preview that matches it, and the old pictures
+
+Four answers came back from the owner and all four are done or designed; nothing is deployed.
+
+- **The bubble's cap is 550 px** (`e6a36c4`). He had approved «about 82%», which was the 390 px phone's figure; the
+  tester's iPhone is 430 px and would have seen 71%. At 550 that phone gets 82%, the narrow phones are held by the
+  0.5 clamp at 92%, and a desktop rises from 53% to 60%. Rendered on real code in both themes and sent to him; the
+  frames report what they measured rather than what was intended, and read 310x550 and 81.9%.
+- **The preview floor moved with it, to 930, and only for upright pictures** (`75aef2b`). The assertion tying the
+  floor to the bubble is what caught it. A landscape picture fills the bubble with its long side, which the cap
+  already carries past the floor, so flooring it would have grown every 4:3 and 16:9 preview for nothing.
+- **Message variant URLs now carry a version token.** Without it the rewritten previews would never have reached
+  anyone who had already opened the picture, because the worker writes them immutable for a year.
+- **The backfill is built and measured but not run**: 40 rows of 165, originals all present, +0.7 MB, and it waits
+  on a worker deploy. It flips rows to `stale` and lets the worker rewrite them, so a backfilled picture cannot
+  differ from a new one.
+
+Gates on the merged tree: typecheck of both packages clean; unit suite 1783 of 1783; production build clean,
+`sw.js` build `6c2b243be8c4b304`. Server tests 58 of 59, the one failure being `variant-upload-headers`, which
+asserts a `cacheControlSeconds` line that exists in neither the branch nor its base — checked here rather than taken
+on trust, and not this work's.
+
 ## 2026-09-12 - Tall pictures merged onto the working branch, and checked there
 
 D-116 option B and the preview floor, merged from `fix/tall-pictures`; not deployed.
