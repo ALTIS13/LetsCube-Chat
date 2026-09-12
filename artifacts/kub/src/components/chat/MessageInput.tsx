@@ -571,32 +571,6 @@ export function MessageInput({
     setHoldTravel({ dx: 0, dy: 0 });
   }, []);
 
-  /** A pointerup that escaped the button: a recording still being held ends and goes. */
-  const finishRecorderPointerGesture = useCallback((shouldStop: boolean) => {
-    const phase = holdRecorderStateRef.current?.phase;
-    resetRecorderPointer();
-    if (shouldStop && phase === "holding") stopRecorderHold();
-  }, [resetRecorderPointer, stopRecorderHold]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stopActiveTouchRecording = () => {
-      if (recorderPointerIdRef.current === null) return;
-      const hasActiveRecording =
-        voiceHoldActiveRef.current ||
-        videoHoldActiveRef.current ||
-        touchRecordingStartedRef.current ||
-        touchLongPressTriggeredRef.current;
-      if (!hasActiveRecording) return;
-      finishRecorderPointerGesture(true);
-    };
-    window.addEventListener("pointerup", stopActiveTouchRecording, true);
-    window.addEventListener("touchend", stopActiveTouchRecording, true);
-    return () => {
-      window.removeEventListener("pointerup", stopActiveTouchRecording, true);
-      window.removeEventListener("touchend", stopActiveTouchRecording, true);
-    };
-  }, [finishRecorderPointerGesture]);
 
   const handleRecorderContextMenu = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -641,21 +615,19 @@ export function MessageInput({
    * waiting for the release, which is what Telegram does: the slide is a gesture
    * a person feels their way through, not a command to be confirmed.
    */
+  /**
+   * Only whether a finger has moved far enough to stop being a tap. The gesture
+   * itself is tracked on the window, below, because this button cannot be relied
+   * on to still be holding the pointer.
+   */
   const handleRecorderPointerMove = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType !== "touch") return;
     const startPoint = recorderPointerStartRef.current;
     if (!startPoint) return;
-    const dx = event.clientX - startPoint.x;
-    const dy = event.clientY - startPoint.y;
-    if (event.pointerType === "touch" && Math.hypot(dx, dy) > RECORDER_TAP_MOVE_PX) {
+    if (Math.hypot(event.clientX - startPoint.x, event.clientY - startPoint.y) > RECORDER_TAP_MOVE_PX) {
       touchPointerMovedRef.current = true;
     }
-    if (!voiceHoldActiveRef.current && !videoHoldActiveRef.current) return;
-    if (holdRecorderStateRef.current?.phase !== "holding") return;
-    setHoldTravel({ dx, dy });
-    const verdict = readRecordingHold({ dx, dy });
-    if (verdict === "locking") lockActiveRecording();
-    else if (verdict === "cancelling") cancelRecorderHold();
-  }, [cancelRecorderHold, lockActiveRecording]);
+  }, []);
 
   /**
    * What letting go means, decided by `releaseRecording` rather than here (R6).
@@ -663,58 +635,25 @@ export function MessageInput({
    * A tap that never became a recording still switches the mode, which is the
    * one thing a release did before that has nothing to do with recording.
    */
+  /**
+   * Only the tap that never became a recording is answered here, and it switches
+   * the mode. Every release of a recording is decided on the window, below.
+   */
   const handleRecorderPointerUp = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    const state = holdRecorderStateRef.current;
-    if (event.pointerType === "touch") {
-      if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
-      touchHoldTimerRef.current = null;
-      const recordingGesture =
-        touchRecordingStartedRef.current ||
-        touchLongPressTriggeredRef.current ||
-        voiceHoldActiveRef.current ||
-        videoHoldActiveRef.current;
-      if (!recordingGesture) {
-        const elapsedMs = Date.now() - recorderPointerDownAtRef.current;
-        const shouldToggleMode = elapsedMs < MOBILE_RECORDER_LONG_PRESS_MS && !touchPointerMovedRef.current;
-        resetRecorderPointer();
-        if (shouldToggleMode) toggleRecorderMode();
-        return;
-      }
-    }
-    const startPoint = recorderPointerStartRef.current;
-    const travel = startPoint
-      ? { dx: event.clientX - startPoint.x, dy: event.clientY - startPoint.y }
-      : { dx: 0, dy: 0 };
-    const mode = state?.mode ?? recorderMode;
-    const verdict = releaseRecording({
-      hold: readRecordingHold(travel),
-      phase: state?.phase ?? "holding",
-      durationMs: Date.now() - recordingStartedAtRef.current,
-      mode,
-      pointerInsideComposer: pointerInsideComposer(event.clientX, event.clientY),
-      pointerType: recorderPointerTypeRef.current,
-    });
+    if (event.pointerType !== "touch") return;
+    if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
+    touchHoldTimerRef.current = null;
+    const recordingGesture =
+      touchRecordingStartedRef.current ||
+      touchLongPressTriggeredRef.current ||
+      voiceHoldActiveRef.current ||
+      videoHoldActiveRef.current;
+    if (recordingGesture) return;
+    const elapsedMs = Date.now() - recorderPointerDownAtRef.current;
+    const shouldToggleMode = elapsedMs < MOBILE_RECORDER_LONG_PRESS_MS && !touchPointerMovedRef.current;
     resetRecorderPointer();
-    if (verdict === "hold" || verdict === "lock") return;
-    if (verdict === "cancel") {
-      cancelRecorderHold();
-      return;
-    }
-    if (verdict === "too-short") {
-      cancelRecorderHold();
-      showShortPressHint(mode);
-      return;
-    }
-    stopRecorderHold();
-  }, [
-    cancelRecorderHold,
-    pointerInsideComposer,
-    recorderMode,
-    resetRecorderPointer,
-    showShortPressHint,
-    stopRecorderHold,
-    toggleRecorderMode,
-  ]);
+    if (shouldToggleMode) toggleRecorderMode();
+  }, [resetRecorderPointer, toggleRecorderMode]);
 
   const handleRecorderPointerCancel = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     const nativeActiveTouch =
@@ -738,6 +677,82 @@ export function MessageInput({
     recorderPointerIdRef.current = null;
     if (holdRecorderStateRef.current?.phase === "holding") stopRecorderHold();
   }, [stopRecorderHold]);
+
+  /**
+   * The gesture is tracked on the window, not on the button that started it.
+   *
+   * It was on the button, through `setPointerCapture`, and that is how the lock
+   * quietly stopped working: the recording row replaces the field beside the
+   * button, the button is re-parented in that re-render, and the capture goes
+   * with it — after which every pointermove outside the button's own 44 points
+   * is delivered somewhere else. Measured on the DEV preview route: the lock
+   * rail filled to 0.28, which is the last move still over the button, and then
+   * did not move again for a drag of 96 points, so the recording never locked
+   * and the release sent it instead. The window sees the whole drag whatever the
+   * composer does to its own children, and the release is decided in one place.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!holdRecorderState || holdRecorderState.phase !== "holding") return;
+
+    const travelFrom = (event: PointerEvent) => {
+      const start = recorderPointerStartRef.current;
+      if (!start) return null;
+      return { dx: event.clientX - start.x, dy: event.clientY - start.y };
+    };
+
+    const onMove = (event: PointerEvent) => {
+      const travel = travelFrom(event);
+      if (!travel) return;
+      setHoldTravel(travel);
+      const verdict = readRecordingHold(travel);
+      if (verdict === "locking") lockActiveRecording();
+      else if (verdict === "cancelling") cancelRecorderHold();
+    };
+
+    const onUp = (event: PointerEvent) => {
+      // A second release of the same gesture decides nothing: without this the
+      // stale start time would read as a long recording and send it twice.
+      const current = holdRecorderStateRef.current;
+      if (!current) return;
+      const travel = travelFrom(event) ?? { dx: 0, dy: 0 };
+      const verdict = releaseRecording({
+        hold: readRecordingHold(travel),
+        phase: current.phase,
+        durationMs: Date.now() - recordingStartedAtRef.current,
+        mode: current.mode,
+        pointerInsideComposer: pointerInsideComposer(event.clientX, event.clientY),
+        pointerType: recorderPointerTypeRef.current,
+      });
+      resetRecorderPointer();
+      if (verdict === "hold" || verdict === "lock") return;
+      if (verdict === "cancel") {
+        cancelRecorderHold();
+        return;
+      }
+      if (verdict === "too-short") {
+        cancelRecorderHold();
+        showShortPressHint(current.mode);
+        return;
+      }
+      stopRecorderHold();
+    };
+
+    window.addEventListener("pointermove", onMove, true);
+    window.addEventListener("pointerup", onUp, true);
+    return () => {
+      window.removeEventListener("pointermove", onMove, true);
+      window.removeEventListener("pointerup", onUp, true);
+    };
+  }, [
+    cancelRecorderHold,
+    holdRecorderState,
+    lockActiveRecording,
+    pointerInsideComposer,
+    resetRecorderPointer,
+    showShortPressHint,
+    stopRecorderHold,
+  ]);
 
   // ── the attach sheet (D-122) ──────────────────────────────────────────────
 
