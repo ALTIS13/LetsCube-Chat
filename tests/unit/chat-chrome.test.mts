@@ -189,3 +189,87 @@ test("nothing of the retired DEV switch is left in the application", () => {
     .map((file) => file.split(path.sep).join("/"));
   assert.deepEqual(offenders, [], "the options the owner chose between are back in the product");
 });
+
+/**
+ * The stopped recording's progress track (D-130, the owner's «Высветли» of
+ * 2026-09-12).
+ *
+ * The unplayed part was `--kub-inset`, and in the dark theme that put #081629
+ * on a capsule photographing at #0E1937 — 1.048:1, a step of eight values — so
+ * the bar the previous round's extra two points of height bought was still not
+ * visible. What is held here is the shape of the fix rather than its pixels;
+ * the pixels are held by scripts/render-recording-frames.mjs, which photographs
+ * the row.
+ */
+
+const rgbOf = (value: string): [number, number, number] => {
+  const hex = value.trim().replace("#", "");
+  assert.match(hex, /^[0-9a-fA-F]{6}$/, `${value} is not a six-digit hex colour`);
+  return [0, 2, 4].map((at) => Number.parseInt(hex.slice(at, at + 2), 16)) as [number, number, number];
+};
+const srgb = (value: number) => {
+  const c = value / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+};
+const luminanceOf = ([r, g, b]: [number, number, number]) => 0.2126 * srgb(r) + 0.7152 * srgb(g) + 0.0722 * srgb(b);
+const ratioOf = (a: [number, number, number], b: [number, number, number]) => {
+  const la = luminanceOf(a);
+  const lb = luminanceOf(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+};
+
+const RECORDING_ROW = "artifacts/kub/src/components/chat/ComposerRecordingRow.tsx";
+
+test("the stopped recording's track is the chat screen's own, not the product's well", () => {
+  const source = readFileSync(RECORDING_ROW, "utf8");
+  const bar = source.match(/data-testid="composer-recording-bar"[\s\S]{0,400}?className="([^"]*)"/)?.[1];
+  assert.ok(bar, "the stopped row's bar could not be found");
+
+  // The token it reads, and the one it must not go back to. `--kub-inset`
+  // serves fields across the whole product; on this capsule a well has nothing
+  // left to be cut into.
+  assert.match(bar, /bg-\[var\(--kub-chat-track\)\]/, "the bar no longer reads --kub-chat-track");
+  assert.doesNotMatch(bar, /--kub-inset/, "the bar is cut from --kub-inset again, which is the hairline");
+
+  // The played part and the playhead stay on the accent: this change was about
+  // the unplayed half only.
+  assert.match(source, /composer-recording-playhead[\s\S]{0,300}?bg-\[var\(--kub-cyan\)\]/, "the playhead left the accent");
+});
+
+test("both themes give the track a value, and the dark one is the lightened half", () => {
+  const darkTrack = rgbOf(themeToken("dark", "kub-chat-track"));
+  const lightTrack = rgbOf(themeToken("light", "kub-chat-track"));
+  const darkInset = rgbOf(themeToken("dark", "kub-inset"));
+
+  // The lightening, as the thing that would be undone rather than as a number
+  // copied from the render: on a dark ground a nearer surface is lighter
+  // (rule 8), and the track has to have moved up off the well it used to be.
+  assert.ok(
+    luminanceOf(darkTrack) > luminanceOf(darkInset),
+    `the dark track ${themeToken("dark", "kub-chat-track")} is no lighter than --kub-inset ${themeToken("dark", "kub-inset")}`,
+  );
+
+  // The light theme was already right and the owner said so, so its value is
+  // pinned to exactly what --kub-inset gave it: this half provably did not move.
+  assert.deepEqual(
+    lightTrack,
+    rgbOf(themeToken("light", "kub-inset")),
+    "the light theme's track moved; the owner approved the sheet it has",
+  );
+});
+
+test("the track cannot be lightened into the part that says what has played", () => {
+  // The floor that stops the next round of «ещё светлее» from deleting the
+  // control's meaning. 3:1 is what a graphical object has to clear to be
+  // tellable from what is beside it, and the played part is filled from the
+  // chat screen's accent in both themes.
+  for (const theme of ["dark", "light"] as const) {
+    const track = rgbOf(themeToken(theme, "kub-chat-track"));
+    const accent = rgbOf(themeToken(theme, "kub-chat-accent"));
+    const measured = ratioOf(accent, track);
+    assert.ok(
+      measured >= 3,
+      `${theme}: the played part is ${measured.toFixed(2)}:1 against the track, under the 3:1 that keeps them apart`,
+    );
+  }
+});

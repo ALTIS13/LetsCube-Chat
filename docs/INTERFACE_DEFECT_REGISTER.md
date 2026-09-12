@@ -7076,6 +7076,80 @@ copy in a separate change, so the glass counts in
 `tests/unit/product-overlay-glass.test.mjs` and `shell-glass.test.mjs` move in a
 commit that is about exactly that.
 
+### The stopped recording, corrected on the owner's second screenshot (2026-09-12)
+
+He sent Telegram Desktop's **stopped** state — a recording that has been ended
+and is waiting to be sent — and it corrects a decision made two paragraphs above
+this one. What it shows, left to right: **a bin at the left edge**, an outline
+icon and its own control; a **bar across the rest of the width** with a playhead
+part of the way along it; on that bar, roughly centred, **a small inline play
+control reading `▶ 0:03`** — the triangle and the elapsed time as one thing,
+sitting on the bar rather than beside it; and the **blue circular send at the
+right edge**. There is **no «Отмена» anywhere** in that state.
+
+So the sentence above — «One thing was removed rather than kept: the separate
+trash in the locked row, because «Отмена» is now that control and Telegram's own
+bar has one way out, not two» — was right about the count and wrong about which
+control it is. There is one way out per state. It is «Отмена» while the
+recording is still running, held or locked, and it is the bin once the recording
+has stopped. Removing the bin everywhere removed it from the one state Telegram
+keeps it in.
+
+What changed:
+
+- **`recordingRowControls(phase)`** in `lib/recordingGesture.ts` now answers
+  which controls the row carries, so this is a rule with a test rather than a
+  condition spread through the markup. `cancelButton` and `trash` are never both
+  true and never both false, which is the invariant the mistake broke, and
+  `tests/unit/recording-gesture.test.mts` holds it for all three phases.
+- **The stopped row is `auto 1fr auto`** — bin, bar, send — where the running
+  row stays the `1fr auto 1fr` the owner approved: the red dot and the running
+  time at the left, «Отмена» centred, pause and send at the right. Nothing about
+  the held and locked states moved.
+- **The play control and the length are one control, on the bar.** They were a
+  separate round button at the left and a separate duration at the far right,
+  with a hairline track between them. The pill stands on a `KubGlassLayer`
+  capsule of the panel material, as the lock rail does, because it crosses the
+  track it sits on and rule 1 says a fill comes from the material.
+- **`formatRecordingLength`** writes `0:03`, not `00:03`: minutes unpadded, no
+  tenths. A stopped recording has a length, and the running clock's tenths are
+  for a number a person is watching move.
+- One defect fixed in passing, in the code being replaced: the preview's effect
+  added four listeners and removed two, so `play` and `pause` went on setting
+  state after the row had gone.
+
+Measured on the twenty re-rendered frames, the four stopped ones among them:
+
+| | held | locked | stopped |
+| --- | --- | --- | --- |
+| «Отмена» | centred, −22px | centred, +4px | **absent** |
+| Bin | absent | absent | **present, 4px from the left edge** |
+| Send | absent (button under the thumb) | present | present, 4px from the right edge |
+| Bar's share of the row | — | — | **76% (iPhone), 90% (desktop)** |
+| Play control off the row's centre | — | — | **0px**, and on the bar |
+
+Still a progress bar rather than a waveform. Telegram draws the real envelope of
+the clip; ours draws how far through it the playhead is. Drawing the envelope
+means decoding the recorded blob, which is a change of a different size, and a
+waveform invented rather than measured would be a picture of an audio file that
+is not this one.
+
+### Not built: Telegram's play-once voice message
+
+Recorded here because the owner's screenshot contains it and we have no
+equivalent, **not** because anything was implemented. Above and to the right of
+Telegram Desktop's stopped row, outside the row itself, there is a circular «1»
+button beside the microphone, and its tooltip reads «Нажмите, чтобы сообщение
+исчезло после прослушивания». It arms the recording about to be sent so that it
+can be played once and then disappears for the listener.
+
+Worth considering later, and worth thinking about properly before it is:
+it is not a drawing job. It needs a per-message flag that survives delivery, a
+server-side rule that stops the media being fetched a second time, a decision
+about what the sender sees afterwards, and an answer for the Windows and Android
+shells. None of that exists today. No estimate, no place in the queue, and no
+part of the current change.
+
 ## D-131 `[ ]` «Местоположение» sends exact coordinates on one tap, with no map and no confirmation
 
 **Severity:** high, for privacy: a mistaken tap tells the chat where a person is. Found by

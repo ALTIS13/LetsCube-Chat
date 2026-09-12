@@ -239,8 +239,14 @@ const SERVED_MARKERS = [
   ["/src/components/chat/MessageInput.tsx", "readRecordingHold"],
   ["/src/components/chat/ComposerRecordingRow.tsx", "data-recording-phase"],
   ["/src/components/chat/ComposerRecordingRow.tsx", "composer-recording-cancel"],
+  // The stopped row's own controls, added with the correction of 2026-09-12: a
+  // server serving the version before it would photograph «Отмена» where the
+  // bin belongs and be reported as the version after it.
+  ["/src/components/chat/ComposerRecordingRow.tsx", "composer-recording-trash"],
+  ["/src/components/chat/ComposerRecordingRow.tsx", "composer-recording-bar"],
   ["/src/lib/recordingGesture.ts", "releaseRecording"],
   ["/src/lib/recordingGesture.ts", "overCancelButton"],
+  ["/src/lib/recordingGesture.ts", "recordingRowControls"],
 ];
 
 /**
@@ -285,6 +291,131 @@ async function assertFixtureServer() {
   if (!capture.ok) throw new Error(`The capture route answered ${capture.status}.`);
 }
 
+// ── the track, in photographed pixels ───────────────────────────────────────
+
+const srgb = (value) => {
+  const c = value / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+};
+const luminance = ([r, g, b]) => 0.2126 * srgb(r) + 0.7152 * srgb(g) + 0.0722 * srgb(b);
+const ratio = (a, b) => {
+  const la = luminance(a);
+  const lb = luminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+};
+const hex = ([r, g, b]) => `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+const commonest = (points) => {
+  const seen = points.filter(Boolean);
+  if (!seen.length) return null;
+  const tally = new Map();
+  for (const p of seen) tally.set(p.join(","), (tally.get(p.join(",")) ?? 0) + 1);
+  return [...tally.entries()].sort((a, b) => b[1] - a[1])[0][0].split(",").map(Number);
+};
+
+/**
+ * The unplayed track, the capsule it is cut into and the accent, read off the
+ * screen rather than off the tokens.
+ *
+ * A token value is not what a reader sees: this track is a fill on a
+ * translucent capsule whose glass samples a blurred, patterned wallpaper, and
+ * the whole reason the dark track had to be lightened is that the composite
+ * came out one and a half values from the capsule while the token looked like a
+ * well. Rule 7 of docs/operations/interface-material.md, pointed at a surface.
+ *
+ * Taken before the device chrome is drawn, so nothing painted for scale can be
+ * sampled by mistake.
+ */
+async function trackPixels(page, device) {
+  const plan = await page.evaluate(() => {
+    const box = (selector) => {
+      const el = document.querySelector(selector);
+      if (!el) return null;
+      const { left, top, right, bottom, width } = el.getBoundingClientRect();
+      return { left, top, right, bottom, width };
+    };
+    return {
+      row: box('[data-testid="composer-recording-lock-indicator"]'),
+      bar: box('[data-testid="composer-recording-bar"]'),
+      pill: box('[data-testid="composer-recording-preview-toggle"]'),
+      playhead: box('[data-testid="composer-recording-playhead"]'),
+    };
+  });
+  if (!plan.row || !plan.bar) return null;
+
+  const shot = await page.screenshot({ animations: "disabled" });
+  const { data, info } = await sharp(shot).raw().toBuffer({ resolveWithObject: true });
+  const read = (x, y) => {
+    const px = Math.round(x * device.scale);
+    const py = Math.round(y * device.scale);
+    if (px < 0 || py < 0 || px >= info.width || py >= info.height) return null;
+    const at = (py * info.width + px) * info.channels;
+    return [data[at], data[at + 1], data[at + 2]];
+  };
+
+  const barMidY = (plan.bar.top + plan.bar.bottom) / 2;
+  // Right of the play pill and right of the playhead, where the track is bare.
+  const from = Math.max(plan.pill ? plan.pill.right + 6 : plan.bar.left + 20, plan.bar.left + 20);
+  const to = plan.bar.right - 6;
+  const columns = [];
+  for (let i = 0; i <= 10; i += 1) columns.push(from + ((to - from) * i) / 10);
+
+  const track = commonest(columns.map((x) => read(x, barMidY)));
+  // The capsule's own fill at the same columns, above the bar and below it.
+  const sheet = commonest([
+    ...columns.map((x) => read(x, plan.row.top + 6)),
+    ...columns.map((x) => read(x, plan.row.bottom - 6)),
+  ]);
+  // The playhead is filled from the same token as the played part, so it is the
+  // played colour measured without having to play anything.
+  const accent = plan.playhead
+    ? commonest([read((plan.playhead.left + plan.playhead.right) / 2, (plan.playhead.top + plan.playhead.bottom) / 2)])
+    : null;
+  if (!track || !sheet) return null;
+
+  const step = Math.round((Math.abs(track[0] - sheet[0]) + Math.abs(track[1] - sheet[1]) + Math.abs(track[2] - sheet[2])) / 3);
+  return {
+    track: hex(track),
+    sheet: hex(sheet),
+    accent: accent ? hex(accent) : null,
+    trackVsSheet: Number(ratio(track, sheet).toFixed(3)),
+    accentVsTrack: accent ? Number(ratio(accent, track).toFixed(3)) : null,
+    step,
+    trackDarkerThanSheet: luminance(track) < luminance(sheet),
+  };
+}
+
+/**
+ * What the track has to be true of, on the owner's ruling of 2026-09-12: the
+ * unplayed part must read as a track, and it must not be lightened so far that
+ * it starts competing with the played part.
+ *
+ * The two floors are per theme because the themes are not each other's mirror
+ * here. The dark theme's number is the one that was just won — it stood at
+ * 1.048:1 and the bar was invisible — so a ratio floor catches a revert to
+ * --kub-inset. The light theme was already right and its step is carried by hue
+ * rather than by lightness, so a ratio floor there would fail a working sheet;
+ * what is pinned instead is the direction, that its well still goes down.
+ */
+function trackVerdict(frame, pixels) {
+  if (frame.state !== "4-paused") return [];
+  if (!pixels) return ["the track could not be photographed"];
+  const problems = [];
+  if (frame.theme === "dark") {
+    if (pixels.trackVsSheet < 1.5) {
+      problems.push(`the unplayed track is ${pixels.trackVsSheet}:1 against the capsule, which is a hairline again`);
+    }
+  } else if (!pixels.trackDarkerThanSheet) {
+    problems.push("the light theme's track is no longer a well in the capsule");
+  }
+  // Both themes: the played part has to stay tellable from the unplayed one,
+  // which is the whole meaning of a progress bar. 3:1 is the floor a graphical
+  // object has to clear to be distinguishable.
+  if (pixels.accentVsTrack !== null && pixels.accentVsTrack < 3) {
+    problems.push(`the played part is ${pixels.accentVsTrack}:1 against the track, so the bar stops reading as progress`);
+  }
+  return problems;
+}
+
 /** What the frame shows, read off the page rather than assumed. */
 async function measure(page, frame) {
   return page.evaluate(() => {
@@ -293,10 +424,20 @@ async function measure(page, frame) {
     const hint = document.querySelector('[data-testid="composer-short-press-hint"]');
     const rail = document.querySelector('[data-testid="composer-recording-lock-progress"]');
     const cancel = document.querySelector('[data-testid="composer-recording-cancel"]');
+    // The stopped row's own four: the bin at the left edge, the bar across the
+    // width, the play control on it, and the send at the right.
+    const trash = document.querySelector('[data-testid="composer-recording-trash"]');
+    const bar = document.querySelector('[data-testid="composer-recording-bar"]');
+    const playToggle = document.querySelector('[data-testid="composer-recording-preview-toggle"]');
+    const send = document.querySelector('[data-testid="composer-recording-send"]');
     const probe = window.__recordingProbe ?? { audio: -1, video: -1 };
     const rowBox = row?.getBoundingClientRect();
     const styles = row ? getComputedStyle(row) : null;
     const cancelBox = cancel?.getBoundingClientRect();
+    const trashBox = trash?.getBoundingClientRect();
+    const barBox = bar?.getBoundingClientRect();
+    const playBox = playToggle?.getBoundingClientRect();
+    const sendBox = send?.getBoundingClientRect();
     const railBox = document
       .querySelector('[data-testid="composer-recording-lock-rail"]')
       ?.getBoundingClientRect();
@@ -328,7 +469,18 @@ async function measure(page, frame) {
       railOnScreen: Boolean(railBox),
       preview: Boolean(document.querySelector('[data-testid="composer-recording-preview"]')),
       cancelControl: Boolean(cancel),
-      sendControl: Boolean(document.querySelector('[data-testid="composer-recording-send"]')),
+      sendControl: Boolean(send),
+      // The stopped row, measured rather than described: the bin against the
+      // row's left edge, the send against its right, how much of the row the
+      // bar takes, and whether the play control is on that bar near its middle.
+      trashControl: Boolean(trash),
+      trashOffRowLeftPx: trashBox && rowBox ? Math.round(trashBox.left - rowBox.left) : null,
+      sendOffRowRightPx: sendBox && rowBox ? Math.round(rowBox.right - sendBox.right) : null,
+      barShareOfRowPct:
+        barBox && rowBox && rowBox.width > 0 ? Math.round((barBox.width / rowBox.width) * 100) : null,
+      playOffRowCentrePx: playBox && rowBox ? Math.round(centreX(playBox) - centreX(rowBox)) : null,
+      playOnBar: playBox && barBox ? playBox.left >= barBox.left && playBox.right <= barBox.right : null,
+      length: document.querySelector('[data-testid="composer-recording-length"]')?.textContent?.trim() ?? null,
       hint: hint?.textContent?.trim() ?? null,
       // Nothing may be waiting in the tray: a released recording is sent, and a
       // cancelled one is gone.
@@ -369,15 +521,26 @@ function verdict(frame, found) {
   if (found.transform && found.transform !== "none") problems.push(`the row has moved: ${found.transform}`);
   if (found.opacity !== null && Number(found.opacity) < 1) problems.push(`the row is faded to ${found.opacity}`);
 
-  // «Отмена» stands in every state, near the middle of the composer. While the
-  // finger is down the row is 52 points narrower than the composer — the record
-  // button and its gap, which stay under the thumb — so the button sits about
-  // half of that to the left; locked and paused, the row is the whole composer.
-  if (!found.cancelControl) problems.push("the row has no «Отмена»");
-  const allowedOffCentre = frame.state === "3-locked" || frame.state === "4-paused" ? 8 : 28;
-  if (found.cancelOffCentrePx === null) problems.push("«Отмена» could not be measured");
-  else if (Math.abs(found.cancelOffCentrePx) > allowedOffCentre) {
-    problems.push(`«Отмена» is ${found.cancelOffCentrePx}px off the composer's centre`);
+  // One way out per state, and which control it is belongs to the state — the
+  // correction of 2026-09-12, from the owner's screenshot of Telegram Desktop's
+  // stopped recording. «Отмена» stands while the recording is still running,
+  // near the middle of the composer; the bin stands once it has stopped, and
+  // then «Отмена» must be gone. A row carrying both, or neither, fails here.
+  if (frame.state === "4-paused") {
+    if (found.cancelControl) problems.push("the stopped row still carries «Отмена»");
+    if (!found.trashControl) problems.push("the stopped row has no bin to throw the recording away with");
+  } else {
+    if (found.trashControl) problems.push("a running recording carries a bin as well as «Отмена»");
+    if (!found.cancelControl) problems.push("the row has no «Отмена»");
+    // While the finger is down the row is 52 points narrower than the composer
+    // — the record button and its gap, which stay under the thumb — so the
+    // button sits about half of that to the left; locked, the row is the whole
+    // composer.
+    const allowedOffCentre = frame.state === "3-locked" ? 8 : 28;
+    if (found.cancelOffCentrePx === null) problems.push("«Отмена» could not be measured");
+    else if (Math.abs(found.cancelOffCentrePx) > allowedOffCentre) {
+      problems.push(`«Отмена» is ${found.cancelOffCentrePx}px off the composer's centre`);
+    }
   }
 
   if (frame.state !== "4-paused") {
@@ -409,6 +572,26 @@ function verdict(frame, found) {
   if (frame.state === "4-paused") {
     if (!found.preview) problems.push("there is nothing to listen to");
     if (!found.sendControl) problems.push("the paused row has no send");
+    // Telegram's stopped row, as four measurements rather than four adjectives:
+    // the bin at the left edge, the send at the right, the bar taking the width
+    // between them, and the play control with the length **on** that bar rather
+    // than beside it.
+    if (found.trashOffRowLeftPx === null || found.trashOffRowLeftPx > 8) {
+      problems.push(`the bin is ${found.trashOffRowLeftPx}px from the row's left edge`);
+    }
+    if (found.sendOffRowRightPx === null || found.sendOffRowRightPx > 8) {
+      problems.push(`the send is ${found.sendOffRowRightPx}px from the row's right edge`);
+    }
+    if (found.barShareOfRowPct === null || found.barShareOfRowPct < 55) {
+      problems.push(`the bar takes ${found.barShareOfRowPct}% of the row, which is not "the width"`);
+    }
+    if (found.playOnBar !== true) problems.push("the play control is not on the bar");
+    if (found.playOffRowCentrePx === null || Math.abs(found.playOffRowCentrePx) > 24) {
+      problems.push(`the play control is ${found.playOffRowCentrePx}px off the row's centre`);
+    }
+    if (!/^[0-9]+:[0-9][0-9]$/.test(found.length ?? "")) {
+      problems.push(`the length reads ${JSON.stringify(found.length)}, which is not M:SS`);
+    }
   }
   return problems;
 }
@@ -502,10 +685,16 @@ async function renderFrame(browser, frame) {
   const problems = verdict(frame, found);
   if (problems.length) throw new Error(`${frame.id}: ${problems.join("; ")}`);
 
+  // The track, photographed before the device chrome goes on, so nothing drawn
+  // for scale can be sampled as if it were part of the row.
+  const pixels = await trackPixels(page, device);
+  const trackProblems = trackVerdict(frame, pixels);
+  if (trackProblems.length) throw new Error(`${frame.id}: ${trackProblems.join("; ")}`);
+
   if (device.touch) await drawDeviceChrome(page, frame.theme, device);
   await page.screenshot({ path: framePath(frame.id), animations: "disabled" });
   await context.close();
-  return { id: frame.id, inter, errors, ...found };
+  return { id: frame.id, inter, errors, ...found, track: pixels };
 }
 
 /** The status bar, the island and the home indicator, drawn over the page for scale. */
@@ -610,11 +799,13 @@ async function buildSheet({ file, title, subtitle, columns, rows, cell }) {
 
 const SHEET_NOTE =
   "Настоящие компоненты приложения на DEV-маршруте, вымышленная переписка, микрофон — тестовое устройство Chromium. " +
-  "Строка больше никуда не съезжает: «Отмена» стоит посередине, слева — точка и время, справа — отправка. " +
+  "Строка больше никуда не съезжает. Пока запись идёт: слева точка и время, посередине «Отмена», справа отправка. " +
   "Удержание записывает; запись отменяют, отпустив палец на «Отмена» (мышью — клик по ней); отпускание в любом " +
   "другом месте отправляет, а не кладёт во вложения. Сдвиг вверх за 72 точки закрепляет запись: рейка фиксации — " +
-  "капсула с замком и шевроном над кнопкой записи, теперь и на компьютере. Закреплённую запись можно остановить, " +
-  "прослушать и уже потом отправить или удалить. Время идёт с десятыми долями, как в Telegram Desktop. " +
+  "капсула с замком и шевроном над кнопкой записи, теперь и на компьютере. Закреплённую запись можно остановить — " +
+  "и остановленная строка собрана как в Telegram: слева корзина, дальше полоса на всю ширину с плеером «▶ 0:03» " +
+  "прямо на ней, справа синяя отправка, а «Отмена» в этом состоянии уже нет. " +
+  "Время идёт с десятыми долями, как в Telegram Desktop; у остановленной записи это длина, а не часы. " +
   "Слишком короткое нажатие оставляет подсказку у кнопки вместо модального окна. " +
   "Показан нижний край экрана — там, где находится строка ввода.";
 
@@ -702,6 +893,12 @@ async function main() {
               `armed=${result.cancelArmed ?? "-"} offCentre=${result.cancelOffCentrePx ?? "-"} ` +
               `rail=${result.railOffButtonPx ?? "-"}/${result.railHeight ?? "-"} ` +
               `said=${JSON.stringify(result.spoken ?? result.hint ?? "")} mic=${result.audioOpened} cam=${result.videoOpened}` +
+              `${
+                result.track
+                  ? ` track=${result.track.track} on ${result.track.sheet} ${result.track.trackVsSheet}:1 ` +
+                    `step=${result.track.step} played=${result.track.accentVsTrack}:1`
+                  : ""
+              }` +
               `${result.errors.length ? ` errors: ${JSON.stringify(result.errors)}` : ""}`,
           );
         } catch (error) {

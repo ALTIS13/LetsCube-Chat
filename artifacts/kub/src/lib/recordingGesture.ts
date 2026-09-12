@@ -183,6 +183,87 @@ export function releaseRecording(input: RecordingReleaseInput): RecordingRelease
 export const RECORDING_CANCEL_LABEL = "Отмена";
 
 /**
+ * What the bin at the left edge of a stopped recording is called.
+ *
+ * The control is an icon, so this is spoken rather than drawn — but it is the
+ * same promise «Отмена» makes in the states where the recording is still
+ * running, and it is worth reading the two names together: one row, one way
+ * out, named for what it does in the state it appears in.
+ */
+export const RECORDING_DELETE_LABEL = "Удалить запись";
+
+/**
+ * Which controls the row carries, phase by phase.
+ *
+ * This exists because the answer changed and the reason it changed is worth
+ * keeping next to the rule. The commit that put «Отмена» in the middle of the
+ * row also removed the separate bin from the states that had one, on the
+ * argument that Telegram's bar has one way out rather than two. The owner then
+ * sent Telegram Desktop's **stopped** recording — a bin at the left edge, the
+ * bar across the width with the play control and the elapsed time on it, the
+ * blue send at the right, and no «Отмена» anywhere — which says the argument
+ * was right and the conclusion was wrong. There is one way out per state; it is
+ * «Отмена» while the recording runs, and the bin once it has stopped.
+ *
+ * So `cancelButton` and `trash` are never both true and never both false. That
+ * is the invariant this file is here to hold, and it is the one a future edit
+ * is most likely to break by adding a control to a state rather than by moving
+ * one.
+ */
+export interface RecordingRowControls {
+  /** «Отмена», centred, which a finger releases over and a mouse clicks. */
+  cancelButton: boolean;
+  /** The bin at the left edge, which is the stopped row's way out. */
+  trash: boolean;
+  /** The bar across the row, with the play control and the length on it. */
+  playback: boolean;
+  /** The stop that ends a locked recording so it can be heard first. */
+  pause: boolean;
+  send: boolean;
+}
+
+export function recordingRowControls(phase: RecordingPhase): RecordingRowControls {
+  // Stopped: Telegram's own layout, bin to send, with nothing in the middle but
+  // what was recorded.
+  if (phase === "paused") {
+    return { cancelButton: false, trash: true, playback: true, pause: false, send: true };
+  }
+  // Running, held or locked: «Отмена» in the middle. A held recording has the
+  // record button still under the finger as a sibling of the row, so the row's
+  // right-hand column is empty; a locked one has the finger free and carries
+  // its own stop and send.
+  return {
+    cancelButton: true,
+    trash: false,
+    playback: false,
+    pause: phase === "locked",
+    send: phase === "locked",
+  };
+}
+
+/**
+ * The length of a recording that has stopped, as Telegram writes it: `0:03`.
+ *
+ * Not `formatRecordingElapsed`, and deliberately not the product's
+ * `formatVoiceDuration` either. Three differences, and each of them is the
+ * difference between a clock and a length:
+ *
+ * - no tenths, because nothing is running any more;
+ * - minutes are not padded, so a three-second recording reads `0:03` and not
+ *   `00:03` — which is what the owner's screenshot shows on the bar;
+ * - minutes still grow rather than wrapping.
+ *
+ * It is used for the length at rest and for the position while the recording is
+ * being played back, so the same field means the same kind of thing throughout.
+ */
+export function formatRecordingLength(ms: number): string {
+  const safe = Number.isFinite(ms) && ms > 0 ? ms : 0;
+  const seconds = Math.floor(safe / 1000);
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+/**
  * The elapsed time, with tenths, as Telegram Desktop writes it: `00:05,2`.
  *
  * Two decisions, and both are the owner's screenshot rather than a preference.

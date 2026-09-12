@@ -4,13 +4,16 @@ import test from "node:test";
 import {
   RECORDING_CANCEL_LABEL,
   RECORDING_CANCEL_TOUCH_PAD_PX,
+  RECORDING_DELETE_LABEL,
   RECORDING_LOCK_DRAG_PX,
   formatRecordingElapsed,
+  formatRecordingLength,
   lockProgress,
   overCancelButton,
   readRecordingHold,
   recordingButtonLabel,
   recordingMinimumMs,
+  recordingRowControls,
   recordingStateLabel,
   releaseRecording,
   shortPressHint,
@@ -192,4 +195,104 @@ test("a short press hints beside the button instead of raising a dialog", () => 
   assert.match(shortPressHint("video"), /видеосообщение/);
   assert.equal(recordingButtonLabel("voice"), "Голосовое");
   assert.equal(recordingButtonLabel("video"), "Видеосообщение");
+});
+
+/**
+ * The correction of 2026-09-12, after the owner sent Telegram Desktop's
+ * **stopped** recording: a bin at the left edge, the bar across the width with
+ * the play control and the length on it, the blue send at the right, and no
+ * «Отмена» anywhere. The commit before it had removed the bin on the argument
+ * that «Отмена» was now the single way out — right about the count, wrong about
+ * which control it is once the recording has stopped.
+ */
+
+test("the row's controls are the phase's own, and the stopped row is Telegram's", () => {
+  const holding = recordingRowControls("holding");
+  const locked = recordingRowControls("locked");
+  const stopped = recordingRowControls("paused");
+
+  // Held: «Отмена», and nothing else. The record button is still under the
+  // finger as a sibling of the row, so the row sends nothing itself.
+  assert.deepEqual(holding, {
+    cancelButton: true,
+    trash: false,
+    playback: false,
+    pause: false,
+    send: false,
+  });
+
+  // Locked: the finger is free, so the row grows the two controls it needs.
+  assert.deepEqual(locked, {
+    cancelButton: true,
+    trash: false,
+    playback: false,
+    pause: true,
+    send: true,
+  });
+
+  // Stopped: the bin replaces the word, and there is something to listen to.
+  assert.deepEqual(stopped, {
+    cancelButton: false,
+    trash: true,
+    playback: true,
+    pause: false,
+    send: true,
+  });
+});
+
+test("«Отмена» belongs to a running recording and the bin to a stopped one", () => {
+  // The two halves stated separately from the table above, because this is the
+  // thing that was wrong and it is the thing a future edit would get wrong
+  // again: not how many ways out there are, but which one goes where.
+  assert.equal(recordingRowControls("holding").cancelButton, true);
+  assert.equal(recordingRowControls("locked").cancelButton, true);
+  assert.equal(recordingRowControls("paused").cancelButton, false);
+  assert.equal(recordingRowControls("paused").trash, true);
+});
+
+test("no phase offers two ways out, and none offers none", () => {
+  for (const phase of ["holding", "locked", "paused"] as const) {
+    const controls = recordingRowControls(phase);
+    assert.notEqual(
+      controls.cancelButton,
+      controls.trash,
+      `${phase} offers ${controls.cancelButton ? "both a word and a bin" : "no way out at all"}`,
+    );
+  }
+});
+
+test("only a recording that has stopped can be listened to", () => {
+  // The bar, the playhead and the play control are the stopped row's, and a
+  // running recording has no preview to draw on them.
+  assert.equal(recordingRowControls("holding").playback, false);
+  assert.equal(recordingRowControls("locked").playback, false);
+  assert.equal(recordingRowControls("paused").playback, true);
+  // And the stop that produces the stopped row belongs to the locked one only.
+  assert.equal(recordingRowControls("locked").pause, true);
+  assert.equal(recordingRowControls("paused").pause, false);
+  assert.equal(recordingRowControls("holding").pause, false);
+});
+
+test("a stopped recording's length is a length, written as Telegram writes it", () => {
+  assert.equal(formatRecordingLength(3_000), "0:03");
+  assert.equal(formatRecordingLength(3_900), "0:03");
+  assert.equal(formatRecordingLength(59_999), "0:59");
+  assert.equal(formatRecordingLength(60_000), "1:00");
+  assert.equal(formatRecordingLength(603_500), "10:03");
+  // Minutes are not padded: `0:03`, which is what the screenshot shows, and not
+  // `00:03`, which is what the product's own formatVoiceDuration gives.
+  assert.doesNotMatch(formatRecordingLength(3_000), /^00:/);
+  // Nor is it the running clock: no tenths and no comma, because nothing is
+  // running any more.
+  assert.doesNotMatch(formatRecordingLength(3_000), /,/);
+  assert.notEqual(formatRecordingLength(5_200), formatRecordingElapsed(5_200));
+  // Minutes grow rather than wrapping, as the clock's do.
+  assert.equal(formatRecordingLength(3_600_000), "60:00");
+  assert.equal(formatRecordingLength(-5), "0:00");
+  assert.equal(formatRecordingLength(Number.NaN), "0:00");
+});
+
+test("the bin says what it does, and it does not say «Отмена»", () => {
+  assert.equal(RECORDING_DELETE_LABEL, "Удалить запись");
+  assert.notEqual(RECORDING_DELETE_LABEL, RECORDING_CANCEL_LABEL);
 });

@@ -165,10 +165,15 @@ test.describe("KUB video recorders", () => {
     await page.getByTestId("composer-locked-recording-stop").click();
     await expect(page.getByTestId("composer-recording-preview")).toBeVisible();
     await expect(page.getByTestId("composer-recording-preview-toggle")).toBeVisible();
+    // Once it has stopped the way out is the bin at the left edge, and «Отмена»
+    // is gone — the owner's screenshot of Telegram Desktop's stopped recording,
+    // 2026-09-12 (D-130).
+    await expect(page.getByTestId("composer-recording-trash")).toBeVisible();
+    await expect(page.getByTestId("composer-recording-cancel")).toHaveCount(0);
     // And nothing has been staged or sent by any of it.
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
 
-    await page.getByTestId("composer-recording-cancel").click();
+    await page.getByTestId("composer-recording-trash").click();
     await expect(page.getByTestId("composer-recording-lock-indicator")).toHaveCount(0);
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
   });
@@ -281,9 +286,11 @@ test.describe("KUB video recorders", () => {
     // it is what leaves without sending.
     await page.getByTestId("composer-locked-recording-stop").click();
     await expect(page.getByTestId("composer-recording-preview")).toBeVisible();
+    await expect(page.getByTestId("composer-recording-trash")).toBeVisible();
+    await expect(page.getByTestId("composer-recording-cancel")).toHaveCount(0);
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
 
-    await page.getByTestId("composer-recording-cancel").click();
+    await page.getByTestId("composer-recording-trash").click();
     await expect(page.getByTestId("composer-recording-lock-indicator")).toHaveCount(0);
   });
 
