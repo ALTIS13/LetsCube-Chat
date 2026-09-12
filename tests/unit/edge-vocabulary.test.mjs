@@ -79,8 +79,11 @@ const GLASS = /\bkub-glass(-strong)?\b/;
  * an exception has to be argued rather than added.
  */
 const EDGE_BY_HAND = [
-  ["components/sidebar/SettingsModal.tsx", "kub-grid-subtle"],
-  ["components/sidebar/SettingsModal.tsx", "kub-settings-panel border-t"],
+  // Both moved with the settings markup when D-160 gave the screen two forms:
+  // the identity banner and the disclosure panel are rendered by
+  // `SettingsScreen.tsx` for the column and the dialog alike.
+  ["components/settings/SettingsScreen.tsx", "kub-grid-subtle"],
+  ["components/settings/SettingsScreen.tsx", "kub-settings-panel border-t"],
   ["pages/public/GuestSupportChat.tsx", "px-4 py-4 sm:px-6"],
   ["pages/public/GuestSupportChat.tsx", "p-3 sm:p-4"],
   ["components/search/SearchShared.tsx", "border-b"],

@@ -228,3 +228,128 @@ export function visibleSettingsSections(flags: { isStaff: boolean }): readonly S
   if (!flags.isStaff) return ALWAYS_VISIBLE_SECTIONS;
   return [...ALWAYS_VISIBLE_SECTIONS, "service"];
 }
+
+/**
+ * The heading each section is drawn under.
+ *
+ * These were five string literals inside the modal's JSX, which is why nothing
+ * could search over them: the screen knew its own headings and no other module
+ * did. They live here now, so the column's search and the rendered heading are
+ * the same string rather than two that agree today.
+ */
+export const SETTINGS_SECTION_TITLES: Readonly<Record<SettingsSectionId, string>> = {
+  profile: "Профиль",
+  notifications: "Уведомления",
+  privacy: "Конфиденциальность",
+  application: "Приложение",
+  service: "Сервис",
+};
+
+export type SettingsRowId =
+  | "name"
+  | "username"
+  | "bio"
+  | "phone"
+  | "decoration"
+  | "push"
+  | "push-messages"
+  | "push-tasks"
+  | "push-invites"
+  | "presence"
+  | "theme"
+  | "audio"
+  | "updates"
+  | "admin";
+
+export interface SettingsRowMeta {
+  readonly id: SettingsRowId;
+  readonly section: SettingsSectionId;
+  /** Exactly the words the row prints on its left-hand side. */
+  readonly label: string;
+  /**
+   * What a person might type instead of the label. Not decoration: «микрофон»
+   * finds «Звук», «ник» finds «Никнейм» and «онлайн» finds «Статус «в сети»»,
+   * none of which share a letter with the row they belong to.
+   */
+  readonly keywords: readonly string[];
+}
+
+/**
+ * Every row the settings screen draws, in the order it draws them.
+ *
+ * This is the half `visibleSettingsSections` was missing. That function has
+ * always known which *sections* exist; nothing knew which rows they contain, so
+ * the screen could not be searched, only scrolled. The order here is the order
+ * on screen, and the screen renders its rows against these ids — a row with no
+ * entry here cannot be filtered, which is what `tests/e2e/settings-column.spec.ts`
+ * checks by counting the rendered rows against this list.
+ *
+ * Values are deliberately NOT searchable. They come from hooks — the push
+ * status, the resolved theme, the microphone's gain — and pulling them in here
+ * would cost this module its "no imports" property, which is the thing that
+ * lets `node --test` reach every branch of it.
+ */
+export const SETTINGS_ROWS: readonly SettingsRowMeta[] = [
+  { id: "name", section: "profile", label: "Имя", keywords: ["фио", "полное имя", "как зовут", "name"] },
+  { id: "username", section: "profile", label: "Никнейм", keywords: ["ник", "юзернейм", "username", "логин", "@"] },
+  { id: "bio", section: "profile", label: "О себе", keywords: ["био", "bio", "описание", "обо мне"] },
+  { id: "phone", section: "profile", label: "Телефон", keywords: ["номер", "phone", "смс", "sms", "подтверждение"] },
+  { id: "decoration", section: "profile", label: "Оформление", keywords: ["рамка", "фон", "украшение", "аватар"] },
+  { id: "push", section: "notifications", label: "Push-уведомления", keywords: ["пуш", "push", "оповещения"] },
+  { id: "push-messages", section: "notifications", label: "Сообщения", keywords: ["пуш", "push", "чаты"] },
+  { id: "push-tasks", section: "notifications", label: "Задачи", keywords: ["пуш", "push", "таски"] },
+  { id: "push-invites", section: "notifications", label: "Приглашения", keywords: ["пуш", "push", "инвайты"] },
+  { id: "presence", section: "privacy", label: "Статус «в сети»", keywords: ["онлайн", "presence", "последний вход", "видимость"] },
+  { id: "theme", section: "application", label: "Тема", keywords: ["тёмная", "темная", "светлая", "dark", "light", "внешний вид", "оформление"] },
+  { id: "audio", section: "application", label: "Звук", keywords: ["микрофон", "аудио", "голос", "громкость", "усиление"] },
+  { id: "updates", section: "application", label: "Обновления", keywords: ["версия", "update", "загрузка", "приложение"] },
+  { id: "admin", section: "service", label: "Админ-панель", keywords: ["управление", "модерация", "баны", "мьюты", "пользователи"] },
+];
+
+/** Matches `searchLoadedMessages` in `lib/chatMessageSearch.ts`: one locale, one direction. */
+function normalizeSettingsQuery(value: string): string {
+  return value.trim().toLocaleLowerCase("ru-RU");
+}
+
+/**
+ * The rows a query leaves standing, in screen order.
+ *
+ * An empty query leaves everything, which is what the screen looks like on
+ * arrival. A query matches a row by its own label or one of its synonyms, and
+ * it matches a *section* by that section's heading — typing «уведомления»
+ * should give the whole notifications block rather than the one row whose label
+ * happens to repeat the heading.
+ */
+export function matchSettingsRows(
+  query: string,
+  flags: { isStaff: boolean },
+): readonly SettingsRowMeta[] {
+  const sections = visibleSettingsSections(flags);
+  const available = SETTINGS_ROWS.filter((row) => sections.includes(row.section));
+  const needle = normalizeSettingsQuery(query);
+  if (!needle) return available;
+  return available.filter((row) => {
+    if (normalizeSettingsQuery(row.label).includes(needle)) return true;
+    if (normalizeSettingsQuery(SETTINGS_SECTION_TITLES[row.section]).includes(needle)) return true;
+    return row.keywords.some((keyword) => normalizeSettingsQuery(keyword).includes(needle));
+  });
+}
+
+/**
+ * The same answer, shaped the way the column renders: which rows survive, and
+ * which sections still have a row in them.
+ *
+ * The screen asks this once and reads both halves, so a section heading can
+ * never be drawn over an empty block — the defect that would otherwise arrive
+ * the first time a query matched a section title and nothing under it.
+ */
+export function settingsSearchResult(
+  query: string,
+  flags: { isStaff: boolean },
+): { rows: ReadonlySet<SettingsRowId>; sections: readonly SettingsSectionId[]; total: number } {
+  const matched = matchSettingsRows(query, flags);
+  const rows = new Set<SettingsRowId>(matched.map((row) => row.id));
+  const order = visibleSettingsSections(flags);
+  const sections = order.filter((section) => matched.some((row) => row.section === section));
+  return { rows, sections, total: matched.length };
+}

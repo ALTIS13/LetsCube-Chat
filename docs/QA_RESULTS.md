@@ -1,5 +1,28 @@
 # QA Results
 
+## 2026-09-13 - Settings becomes a column, and a marker proved absent is not a marker proved useful
+
+D-160 is fixed: settings is the list column's body from `md` — 360px instead of 896, the application no
+longer blurred behind it, a value 76px from its label instead of 570, and a search field it never had. Below
+`md` the sheet is untouched, and the phone frames are md5-identical either side of the change.
+
+**What cost the most here was a probe of mine that was wrong in a new way.** The deploy watcher for the previous
+commit ran eighty-three rounds, controls green throughout, and never found either of its markers. Both were mine
+and neither could ever have matched: `ПОИСК В ЧАТЕ` was read off a **screenshot**, where CSS had raised
+«Поиск в чате» to capitals, and `chat-search-panel` was invented from a filename when the real test id is
+`sidebar-chat-search`. Asked for what the commit actually ships, the same bundle answered immediately.
+
+The calibration before the push had checked that the candidates were **absent from the live build** and called
+them good. That test cannot distinguish «this string is new» from «this string does not exist». The missing half
+is the one that matters: a marker must also be shown **present in the source being deployed**. One grep of the
+working tree would have caught both.
+
+**Verified for the settings change itself, by my own runs rather than the report's:** typecheck clean and the unit
+suite **1908 of 1908**, the +12 accounted exactly (+10 the new file, +2 from `shell-glass`'s generated table);
+seven repointed guards with identical test counts on either side; two contract changes read line by line, one
+stricter than before and one softer but still numeric; and the phone frames compared by checksum rather than by
+eye.
+
 ## 2026-09-13 - In-chat search takes the list column, and three explanations in a row, and the pixels killed all three
 
 The owner's complaint about the web client — «выглядит как помесь телефона и десктопа» — was turned into an audit

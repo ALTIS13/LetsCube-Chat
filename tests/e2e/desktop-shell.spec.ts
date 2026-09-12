@@ -445,8 +445,13 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("chat-list-item")).toHaveCount(CHAT_COUNT);
 
+    // Since D-160 this destination is the list column's body rather than a
+    // centred dialog: on a computer the 896px sheet with 272px of dead margin
+    // each side is gone, and with it the blur over the whole application. The
+    // phone keeps the sheet, which `settings-column.spec.ts` asserts.
     await open("Настройки");
-    await expect(page.getByRole("dialog").first()).toBeVisible();
+    await expect(page.getByTestId("sidebar-settings")).toBeVisible();
+    await expect(page.locator('[role="dialog"]')).toHaveCount(0);
   });
 
   test("a computer has no bottom capsule at all", async ({ page }) => {

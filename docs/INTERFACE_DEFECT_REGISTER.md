@@ -8030,7 +8030,7 @@ contain the stem and seven contain the exact query. Both numbers are correct for
 
 ---
 
-## D-160 `[ ]` Settings is a fixed 896px dialog that blurs the whole application
+## D-160 `[x]` Settings is a fixed 896px dialog that blurs the whole application
 
 `SettingsModal.tsx` opens at `KubModal`'s `xl` size — `sm:max-w-4xl`, 896px — on every screen,
 with `backdrop-blur-sm` over everything behind it. That is **62.2%** of a 1440 screen and **46.7%** of a
@@ -8043,6 +8043,45 @@ structure, so the column has something to render and something to search.
 
 **Not a sheet, and the audit corrected me on that:** `mobileSheet` only applies below 640px. At 1440 this is
 a genuine centred desktop dialog. The phone pattern here is the **row list stretched to 822px**, not the container.
+
+**Fixed on 2026-09-13.** Settings is the list column's body from `md`, following the two precedents in the
+repository rather than a third shape: `SidebarSearchResults` and the `ChatSearchPanel` shipped hours
+earlier. `SettingsScreen.tsx` holds the rows and handlers for **both** forms, `SettingsPanel.tsx` is the
+column, and `SettingsModal.tsx` is reduced to the below-`md` wrapper. `settingsRows.ts` grew the row
+catalogue, the section titles and a pure matcher, and imports nothing, so the unit runner reaches every branch.
+
+**Measured, same fixture and same entry path on both sides, nothing typed in either:**
+
+| | 1440 before → after | 1920 before → after | 390 |
+| --- | --- | --- | --- |
+| surface width | 896 → **360** | 896 → **360** | 390, unchanged |
+| share of the viewport | 62.2% → **25.0%** | 46.7% → **18.8%** | 100% |
+| dead margin each side | 272 → **72** | 512 → **72** | 0 |
+| worst label-to-value gap | 570 → **76** | 570 → **76** | 122 |
+| below the fold | 248 → **204** | 95 → **24** | 285 |
+| application blurred | yes → **no** | yes → **no** | yes |
+
+The phone frames are **md5-identical** before and after in both themes, checked rather than claimed.
+
+**Three of the audit's numbers were wrong and are corrected here:** the worst label-to-value gap is 570px and it
+is «Статус «в сети»» → «Виден», not 550px on «Оформление»; below-the-fold at 1440 is 248px on a non-staff account
+rather than 332, which is probably a staff account's fifth section. Everything else reproduced exactly.
+
+**Two existing contracts were changed rather than bent, and both are named here.** `desktop-shell.spec.ts`
+asserted that settings opens a `role="dialog"` at desktop width; it now asserts the column **and** that no
+dialog exists, which is stricter. `settings-profile-layout.spec.ts` required an input at least **403px**
+wide inside that dialog — a premise a 360px column cannot satisfy and should not. It was replaced by a floor of
+**150px** on the field plus the username sitting under the name at the same left edge, and the phone row reachable
+through the search rather than by being 896px wide. A softer number, but still a number; the phone half of that
+file is untouched.
+
+**Seven unit guards were repointed at `SettingsScreen.tsx` and none was weakened** — test counts identical
+either side (12, 14, 17, 4, 7). `shell-glass` kept `SettingsModal.tsx` in its table at **zero** rather
+than dropping it, so the file's other checks keep running.
+
+**Left for its own entry:** the identity banner's `kub-grid-subtle` texture tiles visibly at 360px, clearest
+in the light theme. Untouched because that class is pinned by `edge-vocabulary` and the banner is shared
+with the phone sheet, where the frames are byte-identical by design.
 
 ---
 

@@ -115,6 +115,24 @@ interface AppState {
   chatSearch: { chatId: string } | null
   openChatSearch: (chatId: string) => void
   closeChatSearch: () => void
+
+  /**
+   * Whether the settings screen is open, wherever it is drawn.
+   *
+   * Here for the same reason `chatSearch` is: from `md` settings is a state of
+   * the LIST COLUMN — `Sidebar` swaps its body to it — while the two places
+   * that open it are the folder rail's side list and, below `md`, the header's
+   * avatar menu. Neither of those owns the surface, so neither can own the
+   * flag; it used to be a `useState` in each of them, which is why the screen
+   * could be mounted twice.
+   *
+   * The two openers clear each other deliberately: one column cannot show both
+   * the settings screen and an in-chat search, and whichever was asked for last
+   * is the one a person is looking for.
+   */
+  settingsOpen: boolean
+  openSettings: () => void
+  closeSettings: () => void
 }
 
 
@@ -378,8 +396,21 @@ export const useAppStore = create<AppState>((set) => ({
 
   chatSearch: null,
   openChatSearch: (chatId) =>
-    set((state) => (state.chatSearch?.chatId === chatId ? state : { chatSearch: { chatId } })),
+    set((state) => (
+      state.chatSearch?.chatId === chatId && !state.settingsOpen
+        ? state
+        : { chatSearch: { chatId }, settingsOpen: false }
+    )),
   closeChatSearch: () => set((state) => (state.chatSearch === null ? state : { chatSearch: null })),
+
+  settingsOpen: false,
+  openSettings: () =>
+    set((state) => (
+      state.settingsOpen && state.chatSearch === null
+        ? state
+        : { settingsOpen: true, chatSearch: null }
+    )),
+  closeSettings: () => set((state) => (state.settingsOpen ? { settingsOpen: false } : state)),
 }))
 
 async function persistChatPushPreference(userId: string | null, chatId: string, muted: boolean) {

@@ -7,24 +7,41 @@ import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip } from "./helpe
  * and a name, and the phone section pushed below the fold so it could only be
  * reached by scrolling inside the dialog. Widening the dialog and pairing the
  * two short fields fixed that; the settings rework then replaced the field
- * cards with rows, so the pair no longer shares a row — each field is one line
- * across the full width of the dialog, which is wider than either column was.
+ * cards with rows, so each field is one line across the dialog.
  *
- * What is asserted here is still the use of the space, not a pixel layout: a
- * field's input is wide enough to read what is typed into it at both widths,
- * and the phone section is reachable without scrolling the dialog.
+ * D-160 moved the screen again, and this file moved with it. From `md` the
+ * settings are the list column's body, so the old desktop assertion — an input
+ * at least 403px wide, inside a `role="dialog"` — is measuring a surface that
+ * no longer exists at that width. **The premise changed, not just the number:**
+ * a 360px column cannot and should not hold a 403px input. What replaced it is
+ * the contract that actually matters at this width, and it is the pair the
+ * dialog could not satisfy at once:
+ *
+ *  - an input still wide enough to read what is typed into it, and
+ *  - the phone section reachable **without scrolling**, which in the column is
+ *    what the search is for. In the dialog it was reachable only because the
+ *    dialog was 896px wide, and 332px of the screen still sat below the fold.
+ *
+ * The phone half of this file is untouched: below `md` the screen is the same
+ * full-screen sheet it has always been.
  */
-async function openProfileSettings(page: import("@playwright/test").Page) {
+async function openProfileSettingsSheet(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: "Меню" }).first().click();
   await page.getByText("Настройки", { exact: true }).first().click();
   await expect(page.locator('[role="dialog"]')).toBeVisible();
-  // One scroll, so the profile rows are there on arrival — there is no tab to
-  // select first.
+  await expect(page.getByRole("heading", { name: "Профиль", exact: true })).toBeVisible();
+}
+
+async function openProfileSettingsColumn(page: import("@playwright/test").Page) {
+  await page.getByTestId("side-menu-button").click();
+  await expect(page.getByTestId("side-menu-layer")).toBeVisible();
+  await page.getByTestId("side-menu-layer").getByRole("button", { name: "Настройки", exact: true }).click();
+  await expect(page.getByTestId("sidebar-settings")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Профиль", exact: true })).toBeVisible();
 }
 
 test.describe("LETSCUBE profile settings layout", () => {
-  test("on a desktop a field's input keeps the dialog's width and the phone is not below the fold", async ({ page }) => {
+  test("on a desktop the fields keep a readable width in the column, and the phone row is one query away", async ({ page }) => {
     test.skip(
       (page.viewportSize()?.width ?? 0) < 900,
       "this contract is about desktop width",
@@ -34,7 +51,7 @@ test.describe("LETSCUBE profile settings layout", () => {
 
     await gotoOrSkip(page, "/");
     await loginAsRoleOrSkip(page, role);
-    await openProfileSettings(page);
+    await openProfileSettingsColumn(page);
 
     const nameBox = await page.getByTestId("settings-field-name").boundingBox();
     const usernameBox = await page.getByTestId("settings-field-username").boundingBox();
@@ -42,21 +59,23 @@ test.describe("LETSCUBE profile settings layout", () => {
     expect(usernameBox, "the username field was not found").not.toBeNull();
 
     // One field per row: the caption column is fixed, so all three inputs start
-    // at the same x and each one gets the rest of the dialog.
+    // at the same x and each one gets the rest of the column.
     expect(
       usernameBox!.y,
       "the fields are sharing a row instead of taking one each",
     ).toBeGreaterThan(nameBox!.y + 20);
     expect(usernameBox!.x).toBe(nameBox!.x);
 
-    // The old two-column grid measured 403px per field. A row is worth having
-    // only if it beats that, which is the point of dropping the second column.
+    // The caption column costs 5.5rem. What is left has to be enough to read a
+    // name in — the same floor the phone half of this file holds.
     expect(
       Math.round(nameBox!.width),
-      "the input is narrower than the two-column grid it replaced",
-    ).toBeGreaterThanOrEqual(403);
+      "the caption column has eaten the input",
+    ).toBeGreaterThanOrEqual(150);
 
-    // And the phone row is on screen without scrolling the dialog.
+    // And the phone row is reachable without scrolling: in the column that is
+    // the search, which the dialog never had.
+    await page.getByTestId("settings-search-input").fill("телефон");
     await expect(page.getByTestId("settings-open-phone")).toBeInViewport();
   });
 
@@ -70,7 +89,7 @@ test.describe("LETSCUBE profile settings layout", () => {
 
     await gotoOrSkip(page, "/");
     await loginAsRoleOrSkip(page, role);
-    await openProfileSettings(page);
+    await openProfileSettingsSheet(page);
 
     const nameBox = await page.getByTestId("settings-field-name").boundingBox();
     const usernameBox = await page.getByTestId("settings-field-username").boundingBox();

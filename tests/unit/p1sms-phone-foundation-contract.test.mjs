@@ -34,8 +34,11 @@ const ADMIN_GATEWAY_MIGRATION = new URL(
   "../../.migration-backup/supabase/migrations/20260821101000_phone_gateway_admin_only.sql",
   import.meta.url,
 );
+// The settings rows live in `SettingsScreen.tsx` since D-160, which is where
+// `<PhoneSection />` is now mounted for both forms of the screen — the list
+// column's panel from `md` and the dialog below it.
 const SETTINGS_MODAL = new URL(
-  "../../artifacts/kub/src/components/sidebar/SettingsModal.tsx",
+  "../../artifacts/kub/src/components/settings/SettingsScreen.tsx",
   import.meta.url,
 );
 const ADMIN_USERS = new URL(

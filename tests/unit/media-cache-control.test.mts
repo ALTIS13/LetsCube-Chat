@@ -88,7 +88,9 @@ test("nothing to version leaves the url alone", () => {
 const CALL_SITES = [
   "artifacts/kub/src/components/chat/ChatWindow.tsx",
   "artifacts/kub/src/components/chat/ChatInfoPanel.tsx",
-  "artifacts/kub/src/components/sidebar/SettingsModal.tsx",
+  // The avatar upload moved here with the rest of the settings markup (D-160);
+  // `SettingsModal.tsx` is now the dialog wrapper and uploads nothing.
+  "artifacts/kub/src/components/settings/SettingsScreen.tsx",
   "artifacts/kub/src/pages/admin/UsersTab.tsx",
   "artifacts/kub/src/lib/botAvatar.ts",
   "artifacts/kub/src/lib/resumableStorageUpload.ts",

@@ -11,7 +11,6 @@ import { useHint } from "@/hooks/useHint";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { KubBrandLogo, KubHint, KubIcon, KubTooltip, type KubIconName } from "@/components/kub";
-import { SettingsModal } from "./SettingsModal";
 import { NewGroupModal } from "./NewGroupModal";
 import { NotificationBell } from "./NotificationBell";
 import { cn } from "@/lib/utils";
@@ -35,6 +34,9 @@ export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSear
   const setSelectedChatId = useAppStore((s) => s.setSelectedChatId);
   const mobileSection = useAppStore((s) => s.mobileSection);
   const setMobileSection = useAppStore((s) => s.setMobileSection);
+  // The flag, not a local `useState`: `Sidebar` owns the one mount of the
+  // settings screen since D-160, and this menu only asks for it.
+  const openSettings = useAppStore((s) => s.openSettings);
   // Облегчённый хук без эффектов: не дублируем подписку на сессию и
   // realtime-канал `profile-self` (Task #48). Полный `useUser()` смонтирован
   // один раз — в `App.tsx`.
@@ -45,7 +47,6 @@ export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSear
   const [, setLocation] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [showNewGroup, setShowNewGroup] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   // Never while a person is searching: the field may not go out from under
@@ -135,7 +136,7 @@ export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSear
     ...(canAccessTasks
       ? [{ icon: "tasks" as const, label: "Задачи", accent: true, action: () => { setMenuOpen(false); setLocation("/tasks"); } } satisfies MenuItem]
       : []),
-    { icon: "settings", label: "Настройки",    action: () => { setMenuOpen(false); setShowSettings(true); } },
+    { icon: "settings", label: "Настройки",    action: () => { setMenuOpen(false); openSettings(); } },
     ...(isStaff
       ? [{ icon: "shield" as const, label: "Админ-панель", accent: true, action: () => { setMenuOpen(false); setLocation("/admin"); } } satisfies MenuItem]
       : []),
@@ -157,7 +158,9 @@ export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSear
     // runs under all of it, because the glass is a layer on the column rather
     // than a fill on this box.
     <div className="flex-shrink-0 border-b border-[color:var(--kub-border-color)] pt-window-top">
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {/* No settings dialog here since D-160. `Sidebar` mounts the one copy of
+          the screen — the list column's panel from `md`, the full-screen sheet
+          below it — and two mounts meant two copies of its state. */}
       {showNewGroup && <NewGroupModal onClose={() => setShowNewGroup(false)} onRefetch={onRefetch} />}
 
       <div

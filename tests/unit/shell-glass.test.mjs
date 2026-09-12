@@ -248,7 +248,14 @@ const veiled = [
   ["components/sidebar/SideMenuLayer.tsx", 1],
   ["components/sidebar/ChatListResizer.tsx", 0],
   ["components/sidebar/NotificationBell.tsx", 6],
-  ["components/sidebar/SettingsModal.tsx", 2],
+  // None since D-160, and kept at zero so the leftover checks still run on it:
+  // `SettingsModal.tsx` is the dialog wrapper now, and the two hovers it used
+  // to own — the disclosure row and the staff entry — went to the screen both
+  // forms render. The column form has two of its own, its close and its
+  // clear-the-query.
+  ["components/sidebar/SettingsModal.tsx", 0],
+  ["components/settings/SettingsScreen.tsx", 2],
+  ["components/settings/SettingsPanel.tsx", 2],
   ["components/sidebar/FolderEditModal.tsx", 2],
   ["components/sidebar/FolderListModal.tsx", 1],
   ["components/sidebar/AudioSettingsSection.tsx", 1],

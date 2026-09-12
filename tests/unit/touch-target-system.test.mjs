@@ -226,17 +226,29 @@ const OPTED_IN = [
     expect: [/className="kub-icon-action kub-interactive flex-shrink-0 p-1\.5/],
   },
   {
-    file: "artifacts/kub/src/components/sidebar/SettingsModal.tsx",
+    // The settings screen's markup moved to `components/settings/SettingsScreen.tsx`
+    // when D-160 gave it a second form: the list column's panel from `md` and
+    // the dialog below it render the same rows from there, so this is where the
+    // opt-ins have to be. `SettingsModal.tsx` is now the dialog wrapper alone.
+    file: "artifacts/kub/src/components/settings/SettingsScreen.tsx",
     what: "the avatar's camera badge, which was 28x28 and is the only way to change the picture on a phone",
     expect: [/"kub-icon-action absolute -bottom-0\.5 -right-0\.5 h-7 w-7/],
   },
   {
-    file: "artifacts/kub/src/components/sidebar/SettingsModal.tsx",
+    // The settings screen's markup moved to `components/settings/SettingsScreen.tsx`
+    // when D-160 gave it a second form: the list column's panel from `md` and
+    // the dialog below it render the same rows from there, so this is where the
+    // opt-ins have to be. `SettingsModal.tsx` is now the dialog wrapper alone.
+    file: "artifacts/kub/src/components/settings/SettingsScreen.tsx",
     what: "the three theme radios, which were 36x32",
     expect: [/"kub-icon-action h-8 w-9 rounded-md/],
   },
   {
-    file: "artifacts/kub/src/components/sidebar/SettingsModal.tsx",
+    // The settings screen's markup moved to `components/settings/SettingsScreen.tsx`
+    // when D-160 gave it a second form: the list column's panel from `md` and
+    // the dialog below it render the same rows from there, so this is where the
+    // opt-ins have to be. `SettingsModal.tsx` is now the dialog wrapper alone.
+    file: "artifacts/kub/src/components/settings/SettingsScreen.tsx",
     what: "the name, nickname and bio fields, which were 232x36",
     expect: [/"kub-field h-9 w-full min-w-0 rounded-lg/],
   },
@@ -302,6 +314,9 @@ test("no control defeats its own touch class with a smaller min-height utility",
     "artifacts/kub/src/components/kub/KubHelpNotes.tsx",
     "artifacts/kub/src/components/settings/InfoHint.tsx",
     "artifacts/kub/src/components/sidebar/SettingsModal.tsx",
+    // The screen's own rows, and the column form that renders them (D-160).
+    "artifacts/kub/src/components/settings/SettingsScreen.tsx",
+    "artifacts/kub/src/components/settings/SettingsPanel.tsx",
     "artifacts/kub/src/components/sidebar/AudioSettingsSection.tsx",
   ];
   let checked = 0;

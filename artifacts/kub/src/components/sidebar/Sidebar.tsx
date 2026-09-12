@@ -12,6 +12,7 @@ import { NewGroupModal } from "./NewGroupModal";
 import { FolderEditModal } from "./FolderEditModal";
 import { FolderListModal } from "./FolderListModal";
 import { SettingsModal } from "./SettingsModal";
+import { SettingsPanel } from "@/components/settings/SettingsPanel";
 import { openSavedMessagesChat } from "@/lib/savedMessages";
 import { SidebarSearchResults } from "@/components/search/SidebarSearchResults";
 import { ChatSearchPanel } from "@/components/search/ChatSearchPanel";
@@ -52,11 +53,10 @@ export function Sidebar() {
   // Phone only in effect: the header keeps the field in its control row from
   // `md`, so this flag changes nothing on a computer.
   const [searchTucked, setSearchTucked] = useState(false);
-  // The computer's side list, and the two surfaces it opens. They are owned
-  // here rather than in `SidebarHeader` because from `md` the button that opens
-  // them lives on the folder rail, not in the list's header.
+  // The computer's side list, and the surface it opens. It is owned here rather
+  // than in `SidebarHeader` because from `md` the button that opens it lives on
+  // the folder rail, not in the list's header.
   const [sideMenuOpen, setSideMenuOpen] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [showNewGroup, setShowNewGroup] = useState(false);
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
 
@@ -76,10 +76,6 @@ export function Sidebar() {
     if (mobileSection === "folders") setMobileSection("chats");
   };
 
-  const closeSettings = () => {
-    if (mobileSection === "profile") setMobileSection("chats");
-  };
-
   const hasSearchQuery = searchQuery.trim().length > 0;
   // In-chat search, as a state of this column from `md`.
   //
@@ -95,6 +91,22 @@ export function Sidebar() {
   const isPhone = useIsMobile();
   const chatSearchOpen =
     !isPhone && chatSearch !== null && chatSearch.chatId === selectedChatId;
+
+  // Settings, the same way, since D-160. From `md` it is this column's body;
+  // below `md` there is no column on screen and it stays the full-screen sheet
+  // `SettingsModal` has always been. The phone's «Профиль» tab opens the same
+  // screen, which is why both flags are read here.
+  const settingsOpen = useAppStore((s) => s.settingsOpen);
+  const closeSettingsPanel = useAppStore((s) => s.closeSettings);
+  const openSettingsPanel = useAppStore((s) => s.openSettings);
+  const settingsColumnOpen = !isPhone && settingsOpen;
+  const settingsSheetOpen = isPhone && (settingsOpen || mobileSection === "profile");
+
+  const closeSettingsSheet = () => {
+    closeSettingsPanel();
+    if (mobileSection === "profile") setMobileSection("chats");
+  };
+
   const filtered = useMemo(() => chats.filter((chat) => {
     if (activeFolder === null) return true;
     return folderChats[activeFolder]?.has(chat.id) ?? false;
@@ -190,6 +202,8 @@ export function Sidebar() {
 
           {hasSearchQuery ? (
             <SidebarSearchResults query={searchQuery} />
+          ) : settingsColumnOpen ? (
+            <SettingsPanel />
           ) : chatSearchOpen && chatSearch ? (
             <ChatSearchPanel chatId={chatSearch.chatId} />
           ) : loading ? (
@@ -239,14 +253,9 @@ export function Sidebar() {
       {showNewGroup && (
         <NewGroupModal onClose={() => setShowNewGroup(false)} onRefetch={refetch} />
       )}
-      {(showSettings || mobileSection === "profile") && (
-        <SettingsModal
-          onClose={() => {
-            setShowSettings(false);
-            closeSettings();
-          }}
-        />
-      )}
+      {/* Below `md` only. From `md` the same screen is this column's body, and
+          mounting both would run two copies of the settings state side by side. */}
+      {settingsSheetOpen && <SettingsModal onClose={closeSettingsSheet} />}
 
       {/* `Ui::LayerWidget`, not a column and not a dropdown: it costs no width
           while it is closed, which is the whole of «удобно в боковом списке
@@ -254,7 +263,7 @@ export function Sidebar() {
       {sideMenuOpen && (
         <SideMenuLayer
           onClose={() => setSideMenuOpen(false)}
-          onOpenSettings={() => setShowSettings(true)}
+          onOpenSettings={openSettingsPanel}
           onOpenNewGroup={() => setShowNewGroup(true)}
           onOpenSaved={() => {
             void openSavedMessagesChat({ userId, setSelectedChatId, onRefetch: refetch });
