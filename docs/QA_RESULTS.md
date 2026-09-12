@@ -1,5 +1,35 @@
 # QA Results
 
+## 2026-09-12 - «A с поправками» approved, and the order the rebuild goes in
+
+The owner answered «А с поправками принято». Navigation is settled: option A on a phone with administration kept
+in the bottom capsule, and on a computer Telegram Desktop's own structure rather than a tab bar.
+
+**What that means, so nobody has to reconstruct it later.** On a phone the capsule carries «Чаты», «Задачи»,
+«Управление» and «Настройки» by right with the round search button beside them, and the «Профиль» tab goes - it
+only ever opened settings, which is what people complained about. On a computer there is no capsule at all: a
+72-point folder rail at the left edge with the counts we already compute and the side-menu button on top of it; the
+side list as a layer that costs nothing while closed and holds «Мой профиль», «Избранное», «Новая группа», «Мои
+боты», «Задачи», «Управление», «Настройки», the night-mode switch and a quiet version line - and that is where
+administration lives on Windows; a chat list dragged down to a 66-point strip of avatars, interpolating by ratio so
+it never snaps; settings in the left column; the profile as a right column that becomes a layer when it does not
+fit; in-chat search taking the list column. From option B one thing survives: the LETSCUBE mark in the list's top
+row, or the logo appears nowhere on a computer.
+
+**The order, and why.** The desktop shell goes first - the rail, the side list as a layer, the collapsible column
+and the mark - because it depends on neither of the two measurements still running and because everything else
+lives inside it. Settings as a column, the profile as one component and in-chat search in the list column follow,
+in that structure. The phone capsule waits on the measurement of whether «Управление» fits an 11-point tab label:
+building the word before the number is known would mean building it twice.
+
+**Two measurements are open and may adjust a detail, not the shape.** Whether «Управление» - ten characters where
+«Админка»'s seven fit - survives an 11px label in a capsule of four tabs beside a round button on a narrow phone.
+And whether the desktop really lays glass on glass, the chat header's capsules over a panel that is itself the
+material, which Apple's guidance forbids and whose composite contrast has never been measured here.
+
+**Recorded as a dependency the phase plan did not name:** the collapsible column and the side list are navigation
+work, so they belong to phase 0 rather than later, and settings-as-a-column cannot start until phase 0 closes.
+
 ## 2026-09-12 - Telegram Desktop for structure, Telegram iOS 26 for the material, and why the answer is neither A nor B
 
 The owner asked for an assessment of Telegram on Windows «для понимания строения большей части функционала» and of
