@@ -6383,6 +6383,16 @@ no longer strands the ones after it. Still open: the server's own limit, which i
 to the client's 250 MB or cap the client at 50 MB — and uploads while the installed app is in the background,
 which need an iPhone.
 
+**The owner's choice, what the server already does, and the tester's answers** (2026-09-12): the owner chose the
+client's 250 MB, and the storage service already runs at it — the running container's `FILE_SIZE_LIMIT` is
+262,144,000 bytes and the resumable endpoint advertises `Tus-Max-Size: 262144000`, while the base compose file
+still reads 52,428,800 and is overridden by an overlay. Nothing was changed on the server, and the 50 MiB ceiling
+among stored videos is what people happened to send, not a cap. The tester picked the video from the gallery; it
+failed while it was uploading, with the app in front the whole time, on iOS 26.6.1, and he read no file name on
+the tile. So the reason is still unknown. What will name it is the send path's new message, which carries the
+server's own status and the file's name, once a build with it reaches him — which is an argument for deploying
+this batch before hunting further.
+
 ## D-114 `[ ]` A 300 KB photo takes a very long time to upload
 
 **Severity:** medium. The same report; not yet reproduced.
@@ -6414,6 +6424,10 @@ and typed from what was written, HEIC converted where the engine decodes it, and
 resize sent as picked. Measured on the fixture, the first photo behind a video lands 1.5 s sooner, and a 12 MP
 camera JPEG through a Safari-style encoder goes as a 0.93–0.98 MB JPEG instead of 4.19 MB whole. Safari's
 encoder, the HEIC conversion's memory on large photos and the JPEG sizes need a real iPhone.
+
+**The tester's answers** (2026-09-12): the pick order did not matter to him, and he did not read the tile's file
+name, so what an iPhone hands the page is still unconfirmed from a device. The production measurement found no
+HEIC picked in 30 days.
 
 ## D-115 `[ ]` Photos sent together arrive as separate messages, not as one album
 
@@ -6452,6 +6466,11 @@ owner to choose from renders.
 1290×2796 screenshot is stored at 1080×2341 instead of 886×1920. Still open: the worker's 1280 px preview needs
 the same short-side rule; how a tall picture sits in its bubble waits on the owner's choice between four
 rendered crops; and the zoom of D-087 needs a real iPhone before it ships.
+
+**The owner's choice** (2026-09-12): of the four rendered crops he chose B — a taller bubble showing about 82% of
+a tall picture, instead of today's centre crop that hides about 42%. The previews take a short-side floor to
+match it, in the client and in the worker, so a tall picture is no longer drawn from a 591 px-wide copy. The
+tester confirmed the photo he could not zoom came from an iPhone, and that it did not zoom in the viewer.
 
 ## D-117 `[x]` In the light theme the time in your own message is under the contrast floor
 
@@ -6595,6 +6614,19 @@ iPhone app, and whether the Android app draws a real grid, are part of the asses
 **The owner's answers** (2026-09-11): the further functions Telegram's sheet carries — a poll, a checklist, a
 contact, music — are wanted. For now they are placeholder tabs, so that the scrolling row of attach functions
 can be judged without waiting for them; each is built for real later, in its turn.
+
+**The owner's choices** (2026-09-12), from the three looks rendered on real code:
+
+- **B «Стеклянная капсула»** is the sheet. The DEV switch and the other two looks go.
+- **The map** under «Геопозиция» is a static preview rendered from OpenStreetMap on LETSCUBE's own server, so
+  nothing about a person reaches a third party. Until that service exists the neutral preview stays.
+- **On Android** a person is asked, the first time, whether to give access to all media or only to items they
+  pick — the platform's own photo-permission dialog. That is native work in the Capacitor app, recorded for its
+  own turn, and Google Play's photo and video permissions policy has to be met before it ships.
+- **«Без сжатия» stays a photo** marked «Оригинал», not a document, as D-096 and D-119 have it.
+- **The desktop send dialog goes.** A pick, a paste and a drop all land in the sheet.
+- **The placeholders** are «Опрос», then «Список», then «Контакт». «Музыка» is not wanted and its tab goes.
+- **The recording follow-ups** of D-130 come next, after the sheet.
 
 ## D-123 `[ ]` A location administrator holds management grants for their location but has no screen to use them
 
