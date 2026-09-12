@@ -14,9 +14,11 @@ import {
   type PlacementStore,
   type WindowPlacement,
 } from "../../artifacts/kub/src/lib/floatingWindow.ts";
+import { CHAT_LIST_MIN_WIDTH } from "../../artifacts/kub/src/lib/desktopChatList.ts";
 import {
   PROFILE_WINDOW_DEFAULT_SIZE,
   PROFILE_WINDOW_STORAGE_KEY,
+  paneFitsProfileColumn,
   profileDragPosition,
   profileWindowFrame,
   readProfileWindowPlacement,
@@ -107,6 +109,117 @@ test("on a desktop the card is pinned to exactly where it was left", () => {
   assert.ok(
     frame.className.includes("min-h-0") && frame.className.includes("overflow-hidden"),
     "the media grid has to scroll inside a window that keeps its height",
+  );
+});
+
+/**
+ * D-161: on a computer the card docks as a third column, beside the
+ * conversation rather than on it.
+ *
+ * Measured on the fixture at 1440 before this, with the card open: a 380x620
+ * window covering 26.2% of the conversation and four of its fourteen bubbles,
+ * standing on the composer, and scrolling 639px of itself inside 562px — while
+ * the pane beside it measured 1001px and had 621 to spare. At 1920 it covered
+ * 14.7% and three bubbles. The owner's words about the web client: «выглядит
+ * как помесь телефона и десктопа … давай придерживаться скорее desktop
+ * варианта по большей части в web».
+ */
+
+test("the column appears only when the conversation keeps the product's own minimum", () => {
+  // The floor is not invented here. `CHAT_LIST_MIN_WIDTH` is Telegram's
+  // `columnMinimalWidthLeft`, already the narrowest this application lets a
+  // column be, so the rule moves with that decision instead of restating it.
+  assert.equal(PROFILE_WINDOW_DEFAULT_SIZE.width + CHAT_LIST_MIN_WIDTH, 640);
+  assert.equal(paneFitsProfileColumn(640), true);
+  assert.equal(paneFitsProfileColumn(639), false, "the conversation would be left under the minimum");
+
+  // The panes actually measured on the fixture, with the chat list at its
+  // default 360: 1001px at 1440, and 335px at 768.
+  assert.equal(paneFitsProfileColumn(1001), true, "1440 has 621px of conversation to spare");
+  assert.equal(paneFitsProfileColumn(335), false, "768 would be left with -45px of conversation");
+
+  // The pane, never the viewport: the chat list is dragged by hand, so at one
+  // window width the pane is a range. 1280 with the list at its maximum 540 is
+  // 1280 - (72 + 540 + 1) = 667, which still fits; the same window with a
+  // wider list would not, and only a measurement can tell the two apart.
+  assert.equal(paneFitsProfileColumn(667), true);
+  assert.equal(paneFitsProfileColumn(Number.NaN), false, "an unmeasured pane is not a wide one");
+});
+
+test("on a computer the card is a column beside the conversation, not a window on it", () => {
+  const frame = profileWindowFrame(placementAt(1036, 256), DESKTOP, { x: 0, y: 0 }, true);
+  assert.equal(frame.surface, "column");
+  assert.equal(frame.docked, false, "a column is not the phone's sheet");
+  assert.equal(frame.draggable, false);
+
+  // In the flow. This is the defect itself: `fixed` is how the card came to
+  // stand on four bubbles and on the composer while the pane had room for it.
+  assert.ok(!/\bfixed\b/.test(frame.className), "the column is lifted out of the row again");
+  assert.ok(!/\babsolute\b/.test(frame.className), "the column is laid over the conversation again");
+  assert.ok(/\brelative\b/.test(frame.className));
+  assert.ok(/\bh-full\b/.test(frame.className), "the column does not run the height of the pane");
+  assert.ok(/\bflex-shrink-0\b/.test(frame.className), "the conversation can squeeze the card");
+  assert.ok(
+    /\bmin-h-0\b/.test(frame.className) && /\boverflow-hidden\b/.test(frame.className),
+    "the media grid has to scroll inside a column that keeps its height",
+  );
+
+  // One card at one size in both shapes, taken from the one constant. The
+  // remembered position is not in it: a column is placed by its row.
+  assert.deepEqual(frame.style, { width: `${PROFILE_WINDOW_DEFAULT_SIZE.width}px` });
+});
+
+test("the column reserves the window's own buttons", () => {
+  // D-112, and rule 13 of the material contract. The column is flush to the
+  // right edge of the window, which is exactly where the Windows app draws
+  // minimise, maximise and close — so without the reservation this card's own
+  // close button would open underneath them.
+  const frame = profileWindowFrame(placementAt(0, 0), DESKTOP, { x: 0, y: 0 }, true);
+  assert.ok(/\bpt-window-top\b/.test(frame.className), "the column opens under the window buttons");
+});
+
+test("the column takes the fill of a surface that covers nothing", () => {
+  // The material's token table: `-strong` is for anything covering content it
+  // is not part of. A column covers nothing — it stands beside the
+  // conversation as the chat list does, on the page's own ambient.
+  const column = profileWindowFrame(placementAt(0, 0), DESKTOP, { x: 0, y: 0 }, true);
+  assert.ok(/\bkub-glass\b/.test(column.className), "the column carries none of the material");
+  assert.ok(!/\bkub-glass-strong\b/.test(column.className), "a column wears the covering fill");
+
+  // And the window it falls back to still covers the conversation, so it keeps
+  // the strong one.
+  const floating = profileWindowFrame(placementAt(0, 0), DESKTOP);
+  assert.ok(/\bkub-glass-strong\b/.test(floating.className));
+});
+
+test("a pane wide enough for a column does not change the phone", () => {
+  // Below the dock breakpoint the answer is the sheet whatever else is true.
+  // A phone's pane is its screen, so the two questions could otherwise be
+  // asked in either order and give different answers.
+  const frame = profileWindowFrame(placementAt(300, 200), PHONE, { x: 0, y: 0 }, true);
+  assert.equal(frame.surface, "docked");
+  assert.equal(frame.docked, true);
+  assert.equal(frame.style, undefined, "a docked panel is laid out, never positioned by hand");
+  assert.ok(frame.className.includes("absolute inset-0"));
+});
+
+test("without a measured pane the card is still the window it was", () => {
+  // The fallback is what every narrow pane gets, and it is also what the card
+  // gets for as long as nothing has measured the room: a card that has not
+  // been told how much space there is has not got any.
+  const frame = profileWindowFrame(placementAt(1036, 256), DESKTOP);
+  assert.equal(frame.surface, "floating");
+  assert.equal(frame.draggable, true);
+  assert.equal(frame.style?.left, "1036px");
+});
+
+test("a column is laid out, so there is nothing to drag", () => {
+  const target = elementInside("span", "div");
+  assert.equal(shouldStartProfileDrag({ docked: false, column: true, button: 0, target }), false);
+  assert.equal(
+    shouldStartProfileDrag({ docked: false, column: false, button: 0, target }),
+    true,
+    "the window form lost its handle",
   );
 });
 
@@ -258,8 +371,11 @@ test("the panel component takes its frame from the window rules, and announces i
   const panel = readFileSync("artifacts/kub/src/components/chat/ChatInfoPanel.tsx", "utf8");
   assert.ok(panel.includes('from "@/lib/profileWindow"'), "the panel no longer uses the window rules");
   // Drawn offset by the left and top insets: the placement is resolved in the
-  // part of the screen the notch and the home indicator leave alone.
-  assert.ok(panel.includes("profileWindowFrame(placement, viewport, { x: insets.left, y: insets.top })"));
+  // part of the screen the notch and the home indicator leave alone. The
+  // fourth argument is D-161's: whether the pane can hold the column.
+  assert.ok(
+    panel.includes("profileWindowFrame(placement, viewport, { x: insets.left, y: insets.top }, columnFits)"),
+  );
   assert.ok(panel.includes("style={frame.style}"), "the resolved position is not applied");
   assert.ok(panel.includes("cn(frame.className"), "the resolved frame classes are not applied");
   assert.ok(panel.includes('role="dialog"'), "the shell will keep closing the chat on Escape");
@@ -272,6 +388,42 @@ test("the panel component takes its frame from the window rules, and announces i
   assert.ok(
     shell.includes('[role="dialog"]'),
     "the shell stopped standing down for open dialogs, so Escape would close the chat under the card",
+  );
+});
+
+test("the panel measures the pane it sits in and wears the shape that answers", () => {
+  // A source contract, like the frame one above: there is no DOM in this
+  // suite. What it pins is the wiring D-161 added — that the pane is measured
+  // at all, that the verdict reaches the frame, and that the three places
+  // which used to read «not docked» now read «is it a window».
+  assert.ok(
+    panelSource.includes('closest("[data-kub-conversation-pane]")'),
+    "the card no longer finds the pane, so it can never become a column",
+  );
+  assert.ok(
+    panelSource.includes("paneFitsProfileColumn("),
+    "the card decides the shape itself instead of asking the rule",
+  );
+  assert.ok(
+    panelSource.includes('column: frame.surface === "column"'),
+    "a column can be dragged, which writes a placement that only shows up later on a narrower pane",
+  );
+  assert.ok(
+    panelSource.includes("data-surface={frame.surface}"),
+    "the shape is not on the element, so nothing outside can tell the three apart",
+  );
+  assert.ok(
+    panelSource.includes('frame.draggable ? "cursor-grab'),
+    "the column offers a grab cursor for a drag it will refuse",
+  );
+  // The row the column docks into has to say so; `closest` above is looking
+  // for exactly this attribute. Not `data-kub-chat-*`: that namespace belongs
+  // to the retired chat-chrome DEV switch and chat-chrome.test.mts keeps it
+  // empty, which is what caught the first spelling of this attribute.
+  const window = readFileSync("artifacts/kub/src/components/chat/ChatWindow.tsx", "utf8");
+  assert.ok(
+    window.includes("data-kub-conversation-pane"),
+    "the chat pane is unmarked, so the card measures nothing and stays a window",
   );
 });
 

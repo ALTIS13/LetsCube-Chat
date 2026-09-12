@@ -49,6 +49,8 @@ import {
 const SRC = fileURLToPath(new URL("../../artifacts/kub/src/", import.meta.url));
 const SEARCH_SURFACE = `${SRC}components/search/SidebarSearchResults.tsx`;
 const COMPOSER = `${SRC}components/chat/MessageInput.tsx`;
+const PLATE = `${SRC}components/kub/KubHint.tsx`;
+const SHEET = `${SRC}index.css`;
 
 const read = (file: string) => readFileSync(file, "utf8");
 
@@ -341,4 +343,116 @@ test("the input guarantee fails when the composer stops passing a condition", ()
     false,
     "the checker did not notice the width gate going missing from the call",
   );
+});
+
+/**
+ * The plate must not take the pointer, and its close button must take it back.
+ *
+ * This was live on production. A signed-in run at 390 as a staff account could
+ * not open a chat at all: Playwright named the culprit itself —
+ * «<span …>Управление сообществом живёт здесь…</span> from
+ * <div data-radix-popper-content-wrapper=. . .> subtree intercepts pointer
+ * events» — and retried the click twenty-odd times before timing out. The
+ * content refuses to close on an outside interaction (deliberately: a hint is
+ * budget-governed, not dismissed by a stray tap), so without
+ * `pointer-events-none` Radix's dismissable layer simply keeps every tap that
+ * lands on its rectangle.
+ *
+ * The owner's own words for what a hint may not be: «не такое которое
+ * перехватывает всё управление». Covering a control is allowed — he said so,
+ * and Telegram's own hints do it. Intercepting is not.
+ */
+function plateRefusesPointer(text: string): boolean {
+  return /"pointer-events-none[^"]*"/.test(blankComments(text));
+}
+
+/** The one part of the plate that must still answer a press. */
+function closeButtonTakesPointer(text: string): boolean {
+  return /pointer-events-auto/.test(blankComments(text));
+}
+
+test("the hint plate lets the pointer through, and only its close button catches it", () => {
+  const plate = read(PLATE);
+  assert.equal(
+    plateRefusesPointer(plate),
+    true,
+    "the plate no longer refuses the pointer. Defence in depth rather than the contract itself — the rule in index.css carries that — but deliberate, and not to be dropped in silence",
+  );
+  assert.equal(
+    closeButtonTakesPointer(plate),
+    true,
+    "nothing on the plate can be pressed, so the hint cannot be dismissed by hand",
+  );
+});
+
+/**
+ * The mutation that matters, and a second one that is about the checker rather
+ * than the component.
+ *
+ * The first is the defect returning. The second is the mistake made while
+ * fixing it: a script verified this very change by counting occurrences of
+ * the class name and counted its own explanatory comment as one of them, so
+ * it reported failure over a file it had just written correctly. A checker
+ * that reads prose as code is worth nothing here, and this proves it does not.
+ */
+test("the guarantee fails when the plate starts eating taps again", () => {
+  const plate = read(PLATE);
+  assert.equal(plateRefusesPointer(plate), true);
+  const broken = plate.replace("pointer-events-none flex", "flex");
+  assert.notEqual(broken, plate, "the substitution did not apply");
+  assert.equal(plateRefusesPointer(broken), false);
+});
+
+test("a mention in a comment does not satisfy the guarantee", () => {
+  const prose = [
+    "// Without pointer-events-none this layer ate every tap.",
+    "<div className={cn(`flex w-auto items-start`)} />",
+  ].join("\n");
+  assert.equal(plateRefusesPointer(prose), false);
+});
+
+/**
+ * The half that actually carries the contract, and how that was settled.
+ *
+ * `pointer-events` is an inherited property. Radix's positioning wrapper is the
+ * element that carries the content's dimensions, and the scoped rule in
+ * `index.css` sets it to `none`; the plate inside inherits that whether or not
+ * it carries the class of its own, and the close button takes the pointer back
+ * for itself.
+ *
+ * Measured by mutation on 2026-09-13 against `tests/e2e/hint-pointer.spec.ts`:
+ * neutering this rule turns that guard red, four times naming the wrapper as
+ * intercepting the press; stripping the class from the component does not,
+ * because the plate still computes `pointer-events: none` by inheritance. The
+ * production failure covers the other direction — the class alone left the
+ * wrapper intercepting. So this rule is necessary and, alone, sufficient.
+ *
+ * Pinned by substring rather than by pattern: this file has already been
+ * fooled once by a checker that read prose as code.
+ */
+const WRAPPER_SELECTOR =
+  '[data-radix-popper-content-wrapper]:has(> [data-testid="kub-hint"])';
+
+function sheetLiftsThePointerOffTheWrapper(text: string): boolean {
+  const at = text.indexOf(WRAPPER_SELECTOR);
+  if (at < 0) return false;
+  return text.slice(at, at + 110).includes('pointer-events: none;');
+}
+
+test("the stylesheet takes the pointer off the hint's popper wrapper", () => {
+  assert.equal(
+    sheetLiftsThePointerOffTheWrapper(read(SHEET)),
+    true,
+    "the wrapper keeps the pointer, so a tap on the hint's rectangle never reaches the control beneath — this is the half that was live in production",
+  );
+});
+
+test("the wrapper guarantee fails when the rule stops lifting the pointer", () => {
+  const sheet = read(SHEET);
+  assert.equal(sheetLiftsThePointerOffTheWrapper(sheet), true);
+  const at = sheet.indexOf(WRAPPER_SELECTOR);
+  const broken =
+    sheet.slice(0, at) + sheet.slice(at).replace('pointer-events: none;', 'pointer-events: auto;');
+  assert.notEqual(broken, sheet, "the substitution did not apply");
+  assert.equal(sheetLiftsThePointerOffTheWrapper(broken), false);
 });

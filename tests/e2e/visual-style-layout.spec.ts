@@ -284,8 +284,9 @@ test.describe("LETSCUBE visual style and layout", () => {
     const chatHeader = page.getByTestId("chat-header-shell");
     const viewport = testInfo.project.use.viewport;
     const floats = Boolean(viewport && "width" in viewport && viewport.width >= 640);
-    // What the conversation measured before the profile was opened. Above the
-    // dock breakpoint the profile is a movable window, so this must not change.
+    // What the conversation measured before the profile was opened. Which way
+    // this has to move is decided below by the shape the card actually took:
+    // a window leaves it alone, a column takes its own width out of it (D-161).
     const conversationWidthBefore = floats
       ? (await requiredBox(chatHeader, "chat header shell")).width
       : 0;
@@ -309,13 +310,31 @@ test.describe("LETSCUBE visual style and layout", () => {
     expect(summaryBox.x + summaryBox.width).toBeLessThanOrEqual(panelBox.x + panelBox.width + 1);
 
     if (floats && viewport && "width" in viewport) {
-      // The complaint this window answers: the docked panel took a permanent
-      // 320px column out of the conversation for as long as it was open.
+      // Never the phone's sheet above the dock breakpoint, whichever of the
+      // other two shapes the pane can afford.
       await expect(panel).toHaveAttribute("data-docked", "false");
+      const surface = await panel.getAttribute("data-surface");
       const conversationWidthAfter = (await requiredBox(chatHeader, "chat header shell")).width;
-      expect(Math.abs(conversationWidthAfter - conversationWidthBefore)).toBeLessThanOrEqual(1);
 
-      // And it opens fully inside the viewport, whatever was remembered.
+      if (surface === "column") {
+        // D-161. The card docks beside the conversation, so the conversation
+        // gives up exactly the column's width and keeps the rest — the point
+        // being that it REFLOWS rather than being covered.
+        expect(conversationWidthBefore - conversationWidthAfter).toBeGreaterThanOrEqual(
+          panelBox.width - 1,
+        );
+        expect(conversationWidthBefore - conversationWidthAfter).toBeLessThanOrEqual(
+          panelBox.width + 1,
+        );
+      } else {
+        // The narrow-pane fallback: still a window, and a window must cost the
+        // conversation nothing. This is the complaint the window answered —
+        // the old panel took a permanent 320px column out of the chat.
+        expect(surface).toBe("floating");
+        expect(Math.abs(conversationWidthAfter - conversationWidthBefore)).toBeLessThanOrEqual(1);
+      }
+
+      // Either way it opens fully inside the viewport, whatever was remembered.
       expect(panelBox.x).toBeGreaterThanOrEqual(-1);
       expect(panelBox.y).toBeGreaterThanOrEqual(-1);
       expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(viewport.width + 1);
@@ -323,6 +342,7 @@ test.describe("LETSCUBE visual style and layout", () => {
     } else {
       // On a phone it stays the panel it always was.
       await expect(panel).toHaveAttribute("data-docked", "true");
+      await expect(panel).toHaveAttribute("data-surface", "docked");
     }
 
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);

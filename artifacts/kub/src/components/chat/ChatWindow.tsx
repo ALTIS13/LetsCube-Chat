@@ -1030,7 +1030,25 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         // `kub-chat-screen` gives everything in the pane the chat screen's
         // text and accent tokens, which were measured over its wallpaper and
         // under its capsules (index.css).
+        //
+        // This box is already the row the contact card docks into: the
+        // conversation is the `flex-1` child below and `ChatInfoPanel` is its
+        // sibling, floating out of the flow today and a column beside it when
+        // the pane is wide enough (D-161). The attribute is how the card finds
+        // the row to measure — its own width is what decides the shape, and it
+        // is a stable number either way, because a floating card is out of flow
+        // and a column takes its width from inside this box rather than from
+        // outside it.
+        //
+        // Named for the conversation rather than for the chat, and that is not
+        // a preference: the attribute namespace the retired chat-chrome DEV
+        // switch used is kept empty by tests/unit/chat-chrome.test.mts, so the
+        // options the owner chose between cannot creep back. That guard reads
+        // raw file text, so the prefix fails it even inside a sentence — which
+        // is how both the first spelling of this attribute and the first
+        // attempt at this very comment were caught.
         className="kub-chat-screen relative flex h-full w-full min-w-0 overflow-hidden"
+        data-kub-conversation-pane=""
         style={{
           "--kub-keyboard-inset": `${keyboardInset}px`,
           // The keys cover the home indicator, so while they are up in the

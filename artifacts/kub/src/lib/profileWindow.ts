@@ -25,6 +25,7 @@ import {
   type Viewport,
   type WindowPlacement,
 } from "./floatingWindow.ts";
+import { CHAT_LIST_MIN_WIDTH } from "./desktopChatList.ts";
 
 /**
  * Its own key. Sharing the support window's would make moving one window move
@@ -85,18 +86,77 @@ const FLOATING_CLASS =
   // and two box-shadows on one element is a fight, not a stack.
   "kub-glass-strong fixed z-[60] flex min-h-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--kub-border-color)]";
 
+/**
+ * The card as a third column, beside the conversation rather than on it.
+ *
+ * D-161. Floating is what a card does when there is nowhere to put it; on a
+ * computer there is. Measured at 1440 the window covered 26.2% of the
+ * conversation — four bubbles — stood over the composer, and scrolled 639px of
+ * itself inside 562px while the pane beside it had 1007px to spare. A desktop
+ * client docks the contact card, and the owner asked the web client to stop
+ * reading as a phone wearing a desktop's screen.
+ *
+ * `kub-glass`, not `-strong`. The strong fill is for a surface covering content
+ * it is not part of; this one covers nothing — it stands beside the
+ * conversation the way the chat list does, on the page's own ambient, and that
+ * is the fill the left region already uses for the same job.
+ *
+ * `pt-window-top` is load-bearing and is the one thing here that is not
+ * cosmetic: the column is flush to the right edge of the window, which is
+ * exactly where the Windows app draws its own minimise, maximise and close.
+ * Without the reservation this card's title bar — its close button included —
+ * would open underneath them. That is D-112 restated, and rule 13 of
+ * docs/operations/interface-material.md. The material still runs to the top
+ * edge, because padding does not clip a background.
+ *
+ * No `z-index`. The floating shape needs one to stand on the conversation; a
+ * column is a sibling of it and overlaps nothing, and an index here would make
+ * a stacking context for no reason (rule 12).
+ */
+const COLUMN_CLASS =
+  "kub-glass relative flex h-full min-h-0 flex-shrink-0 flex-col overflow-hidden border-l border-[color:var(--kub-border-color)] pt-window-top";
+
+/**
+ * Left, top and height are the floating shape's; a column is laid out by the
+ * row it sits in and states only its width. They are optional rather than a
+ * second type so that `style` stays one thing to apply and one thing to assert.
+ */
 export interface FloatingFrameStyle {
-  left: string;
-  top: string;
+  left?: string;
+  top?: string;
   width: string;
-  height: string;
+  height?: string;
 }
 
+/** Which of the three shapes the card is wearing. */
+export type ProfileWindowSurface = "docked" | "column" | "floating";
+
 export interface ProfileWindowFrame {
+  surface: ProfileWindowSurface;
+  /** The phone's sheet, and only that. `data-docked` has meant this all along. */
   docked: boolean;
+  /** Only a floating window is placed by hand. */
+  draggable: boolean;
   className: string;
   /** Only a floating window is positioned by hand; a docked one is laid out. */
   style: FloatingFrameStyle | undefined;
+}
+
+/**
+ * Whether the chat pane can give the card a column and still leave a
+ * conversation worth reading.
+ *
+ * The floor is the product's own: `CHAT_LIST_MIN_WIDTH` is Telegram's
+ * `columnMinimalWidthLeft`, the width this application already treats as the
+ * narrowest a column may be, so the answer moves with that decision instead of
+ * restating it. Measured against the **pane**, never the viewport, because the
+ * chat list is dragged: at 1440 the pane is 1007px with the list at its default
+ * 360 and 787px with it at its maximum 540, and only one of those two numbers
+ * is a function of the window.
+ */
+export function paneFitsProfileColumn(paneWidth: number): boolean {
+  if (!Number.isFinite(paneWidth)) return false;
+  return paneWidth - PROFILE_WINDOW_DEFAULT_SIZE.width >= CHAT_LIST_MIN_WIDTH;
 }
 
 /**
@@ -115,12 +175,34 @@ export function profileWindowFrame(
    * drawn clear of the notch without the geometry knowing a notch exists.
    */
   origin: Point = { x: 0, y: 0 },
+  /**
+   * Whether the pane beside the conversation can afford the column —
+   * `paneFitsProfileColumn` of a measured pane. Absent it is `false`: a card
+   * that has not been told how much room there is has not got any.
+   */
+  columnFits = false,
 ): ProfileWindowFrame {
   if (isDocked(viewport)) {
-    return { docked: true, className: DOCKED_CLASS, style: undefined };
+    return { surface: "docked", docked: true, draggable: false, className: DOCKED_CLASS, style: undefined };
+  }
+  // Before floating, because floating is the fallback: a window is what the
+  // card is when the pane cannot hold a column, not what it prefers to be.
+  if (columnFits) {
+    return {
+      surface: "column",
+      docked: false,
+      draggable: false,
+      className: COLUMN_CLASS,
+      // The one number the row cannot work out for itself. It comes from the
+      // same constant as the floating card's width, so the two shapes are the
+      // same card and not two sizes of one.
+      style: { width: `${PROFILE_WINDOW_DEFAULT_SIZE.width}px` },
+    };
   }
   return {
+    surface: "floating",
     docked: false,
+    draggable: true,
     className: FLOATING_CLASS,
     style: {
       left: `${placement.position.x + origin.x}px`,
@@ -181,6 +263,12 @@ export interface DragStartTarget {
 
 export interface DragStartAttempt {
   docked: boolean;
+  /**
+   * A column is laid out by the row it sits in, so there is nowhere to drag it
+   * to. Dragging one would write a placement that only takes effect later, on
+   * a narrower pane — the card would appear to have moved on its own.
+   */
+  column?: boolean;
   /** `PointerEvent.button`; 0 is the primary one. */
   button: number;
   target: DragStartTarget | null;
@@ -188,6 +276,7 @@ export interface DragStartAttempt {
 
 export function shouldStartProfileDrag(attempt: DragStartAttempt): boolean {
   if (attempt.docked) return false;
+  if (attempt.column) return false;
   if (attempt.button !== 0) return false;
   if (attempt.target?.closest(PROFILE_WINDOW_DRAG_IGNORE_SELECTOR)) return false;
   return true;

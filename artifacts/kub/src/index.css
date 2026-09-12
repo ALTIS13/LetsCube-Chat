@@ -1297,6 +1297,33 @@ textarea::placeholder, input::placeholder {
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
+ * A casual hint may cover a control. It may not intercept one.
+ *
+ * The owner's own words for what these must not be: «не такое которое
+ * перехватывает всё управление». Telegram's hints sit over content too — that
+ * is allowed and was asked for. Swallowing the tap is not.
+ *
+ * `KubHint` renders through a Radix popover, and a popover is a dismissable
+ * layer: it keeps the pointer. Two elements had to give it up, and only one of
+ * them is reachable from the component. `pointer-events-none` on
+ * `PopoverContent` stopped the plate's own text being the hit target —
+ * measured on 2026-09-13, where Playwright first named the plate's <span> and
+ * then, after that change, named this wrapper instead. The wrapper is Radix's
+ * positioning box, it carries the content's dimensions, and the component
+ * cannot style it.
+ *
+ * Scoped by the hint's own test id deliberately: seven other surfaces here use
+ * a Radix popper — tooltips, dropdowns, the command palette, the chart, the
+ * sidebar, the settings info hint — and every one of them must keep receiving
+ * the pointer. The hint's close button keeps it too, by `pointer-events: auto`
+ * on itself, which beats this rule on its ancestor.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+[data-radix-popper-content-wrapper]:has(> [data-testid="kub-hint"]) {
+  pointer-events: none;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
  * LETSCUBE brand utilities
  * Blue #427fc2 / magenta #ed1e7a on deep navy. Used for hero backdrops,
  * panel surfaces, neon focus rings, and the Letscube mark.

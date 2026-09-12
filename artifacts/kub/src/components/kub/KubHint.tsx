@@ -75,7 +75,16 @@ export function KubHint({
         className={cn(
           // `w-auto` undoes the wrapper's `w-72`: a hint is as wide as its
           // sentence, up to the screen less a margin on both sides.
-          "flex w-auto max-w-[min(20rem,calc(100vw-2rem))] items-start gap-2 p-3",
+          //
+          // And it does not take the pointer. A casual hint may cover a control —
+          // the owner said so, and Telegram's own do — but covering is not the
+          // same as intercepting. Without `pointer-events-none` this layer ate
+          // every tap that landed on it: measured on 2026-09-13, a staff account
+          // on a phone could not open a chat at all while the administration hint
+          // was showing, because Radix's dismissable layer holds the pointer and
+          // this content refuses to close on an outside interaction. The close
+          // button takes the pointer back below.
+          "pointer-events-none flex w-auto max-w-[min(20rem,calc(100vw-2rem))] items-start gap-2 p-3",
           className,
         )}
       >
@@ -86,7 +95,7 @@ export function KubHint({
           type="button"
           onClick={onDismiss}
           aria-label="Понятно"
-          className="kub-icon-action kub-interactive -mr-1 -mt-1 shrink-0 rounded-full p-1 text-[color:var(--kub-muted)] kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+          className="kub-icon-action kub-interactive pointer-events-auto -mr-1 -mt-1 shrink-0 rounded-full p-1 text-[color:var(--kub-muted)] kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
         >
           <KubIcon name="close" size={14} />
         </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
@@ -34,6 +34,7 @@ import { cacheControlFor } from "@/lib/mediaCacheControl";
 import { currentViewport, type Point, type WindowPlacement } from "@/lib/floatingWindow";
 import { NO_SAFE_AREA_INSETS, readSafeAreaInsets, safeViewport, type SafeAreaInsets } from "@/lib/safeArea";
 import {
+  paneFitsProfileColumn,
   profileDragPosition,
   profileWindowFrame,
   readProfileWindowPlacement,
@@ -188,7 +189,36 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     placementRef.current = next;
     setPlacement(next);
   }, []);
-  const frame = profileWindowFrame(placement, viewport, { x: insets.left, y: insets.top });
+  // Whether the pane beside the conversation can hold the card as a column
+  // (D-161). Only the ANSWER is state, never the width: the chat list is
+  // dragged by hand and its width is written straight onto the document
+  // precisely so that a drag costs no React render (`ChatListResizer`, and
+  // tests/e2e/chat-list-event-cost.spec.ts holds those counts). Keeping the
+  // measurement here would put every frame of that drag back through this
+  // component and the message list beside it; keeping the verdict re-renders
+  // once, when the pane crosses the width at which the shape actually changes.
+  //
+  // `useLayoutEffect`, so the answer is in before the browser paints. In an
+  // effect the card would be laid out as a window for one frame and become a
+  // column in the next, which is a flinch on every open.
+  const [columnFits, setColumnFits] = useState(false);
+  useLayoutEffect(() => {
+    const pane = windowRef.current?.closest("[data-kub-conversation-pane]");
+    if (!pane) return undefined;
+    const read = () => {
+      const next = paneFitsProfileColumn(pane.getBoundingClientRect().width);
+      setColumnFits((current) => (current === next ? current : next));
+    };
+    read();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    // The pane, not this card: the pane's width is the same number whether the
+    // card is floating over it or taking a column out of it, so observing it
+    // cannot feed itself.
+    const observer = new ResizeObserver(read);
+    observer.observe(pane);
+    return () => observer.disconnect();
+  }, []);
+  const frame = profileWindowFrame(placement, viewport, { x: insets.left, y: insets.top }, columnFits);
   const docked = frame.docked;
   const rootTitle = isSaved ? "Избранное" : isGroup ? "Информация о группе" : "Профиль пользователя";
 
@@ -250,6 +280,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     if (
       !shouldStartProfileDrag({
         docked,
+        column: frame.surface === "column",
         button: event.button,
         target: event.target as HTMLElement | null,
       })
@@ -1099,6 +1130,11 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       style={frame.style}
       data-testid="chat-info-panel"
       data-docked={docked ? "true" : "false"}
+      // Three shapes now, and `data-docked` has only ever meant the phone's
+      // sheet — the signed-in stand reads it that way and so does the support
+      // window. The shape itself gets its own attribute rather than a second
+      // meaning loaded onto that one.
+      data-surface={frame.surface}
     >
       <div
         onPointerDown={onHandlePointerDown}
@@ -1110,9 +1146,11 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
           // so a control that grows to the 44px touch minimum on a coarse
           // pointer is not overflowing a 40px column.
           "kub-glass-strong sticky top-0 z-20 grid h-[var(--kub-control-row-height)] flex-shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-[color:var(--kub-border-color)] px-3",
-          // The title bar is the handle. `touch-none` stops a drag on a tablet
-          // from scrolling the page instead of moving the card.
-          docked ? "" : "cursor-grab touch-none select-none active:cursor-grabbing",
+          // The title bar is the handle, but only while there is somewhere to
+          // drag to. `touch-none` stops a drag on a tablet from scrolling the
+          // page instead of moving the card. A column is laid out by its row,
+          // so it offers no grab cursor and takes no drag.
+          frame.draggable ? "cursor-grab touch-none select-none active:cursor-grabbing" : "",
         )}
         data-testid="chat-info-header"
       >

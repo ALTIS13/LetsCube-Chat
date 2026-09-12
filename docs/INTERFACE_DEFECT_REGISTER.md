@@ -8085,7 +8085,7 @@ with the phone sheet, where the frames are byte-identical by design.
 
 ---
 
-## D-161 `[ ]` The contact card is a draggable window sitting on the messages
+## D-161 `[x]` The contact card is a draggable window sitting on the messages
 
 `ChatInfoPanel.tsx` renders `position: fixed` at `PROFILE_WINDOW_DEFAULT_SIZE` — 380x620 — with a
 `cursor: grab` header, because `floatingWindow.ts` only docks below its `DOCK_BREAKPOINT` of 640.
@@ -8100,3 +8100,112 @@ third column at these widths, the existing floating and sheet forms below — is
 The stacking is real but elsewhere — confirmations and `GroupInviteModal` open as separate modals over it —
 and the same person-profile content lives in three unrelated components (`ChatInfoPanel`,
 `SearchShared.tsx`'s «Мини-профиль», `UsersTab.tsx`).
+
+**Fixed 2026-09-13.** The card wears one of three shapes and a rule picks it: the phone's sheet below the dock
+breakpoint, a third column when the pane can hold one, the floating window otherwise. `paneFitsProfileColumn`
+asks whether `paneWidth - 380` still clears `CHAT_LIST_MIN_WIDTH` — the product's own column floor, which
+is Telegram's `columnMinimalWidthLeft`, so the threshold moves with that decision instead of restating it.
+
+**Measured against the pane, never the viewport, and that correction came from an agent.** The chat list is
+dragged by hand: at 1440 the pane is 1007px with the list at its default and 787px at its maximum, and no
+viewport width can tell those apart. At 768 the pane is 335px, which is why the sheet stays the sheet there.
+
+The **pane** is observed rather than the card — the pane's width is the same number whether the card floats over
+it or takes a column out of it, so the observer cannot feed itself — and the answer is read in
+`useLayoutEffect`, so the card never lays out as a window for one frame and becomes a column in the next. An
+unmeasured pane is not a wide one: it falls back to the window. A column takes no drag, because a drag would
+write a placement that only appears later on a narrower pane, and the card would seem to have moved on its own.
+
+`data-surface` carries the shape; `data-docked` goes on meaning the phone's sheet alone, which is what every
+existing reader already assumed it meant.
+
+**Proof:** `tests/e2e/profile-column.spec.ts` — 4 passed, 4 skipped, each project skipping the shape that
+belongs to the other; `tests/unit/profile-window.test.mts`; and the signed-in production run of
+`visual-style-layout.spec.ts`, whose profile contract now branches on the shape the card actually took rather
+than assuming the window: 11 passed, 9 skipped, 0 failed.
+
+---
+
+## D-162 `[x]` A casual hint swallowed every tap that landed on it, in production, for staff on phones
+
+**Severity: high, and it was live.** Shipped in `8629549` and on `origin/main` from that deploy
+until 2026-09-13. While the administration hint was showing, a member of staff on a phone **could not open a
+chat**: every tap that landed on the plate's rectangle was taken by it and never reached the row beneath.
+
+**Found by running something, not by reading.** A signed-in run of `visual-style-layout.spec.ts` at 390
+against production failed two contracts that are on the critical list — «fast upward scroll after opening a read
+chat is not pulled back to bottom» and «loading older messages preserves the visible history anchor». Neither
+failed on its own assertion. Both timed out on `locator.click` in their shared setup, and Playwright named
+the culprit in its own words:
+
+```
+<span …>Управление сообществом живёт здесь: пользователи,…</span>
+  from <div data-radix-popper-content-wrapper=""> subtree intercepts pointer events
+```
+
+Twenty-odd retries, then the timeout. The owner had asked for hints that do not do this, in these words: «не
+такое которое перехватывает всё управление».
+
+**Cause, and which half actually carries the fix.** `KubHint` renders through a Radix popover, and a
+popover is a dismissable layer that holds the pointer. It also refuses to close on an outside interaction — which
+is deliberate and stays, since a hint is governed by its budget rather than dismissed by a stray tap. Two elements
+were changed, and only one of them turns out to be load-bearing:
+
+1. the content itself — `pointer-events-none` on `PopoverContent`, with `pointer-events-auto` put back
+   on the close button so «Понятно» still answers. **Defence in depth, not the contract** — see the mutation
+   below;
+2. **Radix's positioning wrapper**, which the component cannot style. A scoped rule in `index.css` —
+   `[data-radix-popper-content-wrapper]:has(> [data-testid="kub-hint"])` — narrow by the hint's own test id,
+   because seven other surfaces here use the same popper and every one of them must keep receiving the pointer.
+
+The order matters as evidence: after fix 1 alone the same run still failed, and Playwright's message **changed
+from naming the plate's `<span>` to naming the wrapper**. That proved the class alone is not enough.
+
+**What the class alone is worth was settled by mutation on 2026-09-13, and it is less than this entry first
+claimed.** Against `tests/e2e/hint-pointer.spec.ts`: neutering the stylesheet rule (`none` to `auto`) turns
+the guard **red**, four times naming «intercepts pointer events», with the precondition still holding — so the
+red is the interception and not a plate that moved. Stripping `pointer-events-none` from the component leaves
+the guard **green**, and the browser says why: `pointer-events` is an inherited property, so with the wrapper
+at `none` the plate computes `none` regardless, and the close button takes the pointer back for itself.
+**The rule in `index.css` is necessary and sufficient; the class on `PopoverContent` is kept deliberately
+but carries nothing.** The sentence «two elements had to give the pointer up» was wrong, and only pressing on it
+found that out.
+
+A fourth measurement nearly hid the correction: counting `pointer-events-none` in the module the dev server
+served returned **1 with the class removed**, because the file's own comment names it. The DOM's `className` was
+the only honest witness. Prose read as code, for the third time inside this one defect.
+
+**Proof:** the same signed-in run afterwards — **11 passed, 0 failed**, and **zero** occurrences of «intercepts
+pointer events» against six before. Typecheck clean, production build clean (the CSS parses), unit suite
+1916 to 1921 — the two added here pin the stylesheet rule.
+
+**What is proved and what is merely unblocked, stated apart.** «Fast upward scroll» now passes on both projects.
+«History anchor» passes on the computer and **skips** on the phone: with the tap landing, the helper walks up to
+twenty-four read chats looking for one with a second page of history, finds none on this account, and skips
+honestly. That contract is unblocked but not covered on the phone, for want of data rather than for want of code.
+
+**Three measurements of mine said this was fine, and each failed differently.** They belong here because the
+defect outlived them:
+
+- a patch script verified its own change by counting occurrences of the class name, counted **its own explanatory
+  comment** as one, and reported failure over a file it had just written correctly;
+- the generated guard did not compile — doubled quotes from a string-building slip — so the whole file reported
+  «1 test, 1 failed» and looked like a failing assertion rather than a parse error;
+- and the guard itself, once compiling, was **green while the defect was alive**: it asserted the class was
+  present in the source, which it was. A source-text check cannot see a tap that does not arrive.
+
+**Regression tests, and which of them would have caught this.**
+
+- `tests/e2e/hint-pointer.spec.ts` — the one that presses. At 390 it seeds a staff account (the store reads
+  `profiles.role`, so `role: "manager"` is the whole of what the administration hint needs), waits for the
+  plate, **proves the point it is about to press lies under the plate**, presses the chat row, and requires the
+  chat to open. Both halves of the fix are mutation-tested against it; the result is recorded above.
+- `tests/unit/interface-hints.test.mts` — the source scan. It now pins the stylesheet rule that carries the
+  contract as well as the class that does not, and refuses to be satisfied by a mention in a comment.
+
+Two earlier shapes of the e2e guard were wrong, and both are worth keeping on the record because each would have
+gone green while the defect stood. The first reproduced the **search** hint, on the belief that the fixture could
+not make an account staff; its plate covers six pixels of a row's top edge against the administration plate's 52
+of 68. The second asked only whether the two rectangles **overlapped** — but Playwright presses an element's
+centre, and a six-pixel overlap leaves that centre in the clear. A guard has to cover **the point that gets
+pressed**, not merely touch the element.

@@ -1,5 +1,65 @@
 # QA Results
 
+## 2026-09-13 - A hint that ate the tap, and a guard that was green while the defect was alive
+
+The signed-in contract that an agent had changed but could not run was run here, with credentials it did not
+have. It failed — and not on the assertion the agent touched. Two contracts from the critical list timed out
+clicking a chat row, and Playwright named what was in the way: the administration hint's plate, through Radix's
+popper wrapper, intercepting pointer events.
+
+That hint shipped in `8629549` and had been live on production ever since. A member of staff on a phone
+could not open a chat while it was showing. It is D-162, and the fix is one scoped rule in the stylesheet: Radix's
+positioning wrapper, which the component cannot reach, gives the pointer up — narrowed by the hint's own test id
+so the seven other poppers in this product keep theirs.
+
+**The order of the evidence is the interesting part.** After changing the component alone, the run still failed —
+but the message changed from naming the plate's own text to naming the wrapper. The defect moving one element
+outward is what proved the component change was not enough. Afterwards: 11 passed, 0 failed, zero mentions of
+interception against six.
+
+**And then the mutation corrected me.** I had written that the fix was two halves and that both were needed.
+Pressed on: neutering the stylesheet rule turns the new end-to-end guard red four times over, while stripping the
+class from the component leaves it green — because `pointer-events` inherits, so the plate computes `none` from
+the wrapper either way. One half carries the contract; the other is defence in depth. No amount of reading would
+have told me that, and I nearly missed it a second time: grepping the served module for the class returned 1
+after I had removed it, because the file's own comment names it.
+
+**And three of my own measurements had said it was fine.** A patch script counted its own explanatory comment as
+code and declared failure over a file it had written correctly. A generated guard failed to compile from doubled
+quotes and reported «1 test, 1 failed», which reads like an assertion rather than a parse error. And the guard
+itself, once compiling, was **green while the defect was alive**: it checked that a class was present in the
+source, and it was. None of that sees a tap that never arrives.
+
+The unit guard now also refuses to be satisfied by a mention in a comment — the first mistake written back as a
+test. But the honest conclusion is the one this file has reached twice before tonight: a source-text check is
+necessary and not sufficient, and the contract that catches this class of defect is the one that presses a
+control and waits to see whether the press lands. That guard is `tests/e2e/hint-pointer.spec.ts`, and two of
+its own earlier shapes would have passed while the defect stood: one reproduced a hint whose plate covers six
+pixels of a row, and the other asked whether rectangles overlapped rather than whether the pressed point was
+covered.
+
+**Gates over the settled tree.** Typecheck clean across all four packages. Unit suite **1921/1921** over 205
+files — and the first attempt at that number was my own invocation error: `node --test tests/unit` resolves
+the directory as a module and reports «tests 1, fail 1», which is not a suite of 1900 with one failure but
+reads exactly like one. Production build clean, `sw.js build 78e9fcb2834efa03`. Mounted routing matrix
+**15/15**, including the two unconfigured cases that start their own server. `profile-column`: 4 passed,
+4 skipped. `hint-pointer`: green at 390, and on the computer it **skips** rather than passing, because the
+staff entry is `md:hidden` and the hint it reproduces does not exist there. Signed-in production run of
+`visual-style-layout`: **11 passed, 9 skipped, 0 failed**, zero mentions of interception, with screenshots,
+traces and video forced off for it.
+
+**Deploy markers, calibrated in both directions before the push** rather than trusted after it. Absent from the
+deployed assets now and present in the build: `popper-content-wrapper` in the stylesheet, `data-surface`
+in the bundle. Controls proving the probe finds anything at all: `--kub-window-caption` and
+`--kub-chat-track` in the stylesheet, `chat-header-shell` in the bundle. One control failed calibration
+and was replaced: `kub-hint` returns 0 against the stylesheet, because it is a test id and lives in the
+bundle — so a zero there would have meant nothing, which is exactly how a marker invented off a screenshot once
+cost 83 rounds of watching for something that was never going to appear.
+
+**Stated apart, because a skip is not a pass:** «fast upward scroll» now passes on both projects; «history
+anchor» passes on the computer and skips on the phone, the helper having walked twenty-four read chats without
+finding a second page of history on this account. Unblocked, not covered.
+
 ## 2026-09-13 - Deployed 540df15, and the rule caught a bad marker on its first outing
 
 The settings column is live. Verified as the four deploys before it — image tag carrying the full SHA, health,
