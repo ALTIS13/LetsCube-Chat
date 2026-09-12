@@ -6979,6 +6979,87 @@ Three things are for the owner to judge, and none of them is decided here:
    not the desktop's cancel — releasing outside the field is. It may be that the
    desktop row should not move at all.
 
+### The owner ruled on all three, 2026-09-12: the slide goes
+
+He answered with two screenshots of Telegram itself and one sentence — «Запись
+голосового переделай также под современный стиль telegram, без сдвига вбок, у
+них просто кнопка посередине - отмена» — plus «Рейка фиксации и на пк версии
+тоже». The rest of the sheet he passed. Done on `design/recording-telegram-row`,
+not deployed, and not settled until he has seen the new sheets.
+
+**The sideways slide is gone on every shell.** `RECORDING_CANCEL_SLIDE_PX`,
+`slideCancelProgress`, `slideFollowX`, the `cancelling` hold and the diagonal
+rule that arbitrated between the two axes are all deleted; `readRecordingHold`
+takes one number, `dy`. Nothing translates, so the third defect on the list above
+went with it rather than being fixed: the timer was clipped **by** the movement —
+`04` for `00:04` on the phone, `:03` on the desktop — and there is no movement
+left to clip it.
+
+**«Отмена» is a button in the middle of the row**, in all three states, on the
+phone and on the desktop. The row is a `1fr auto 1fr` grid, so the middle column
+is centred by the grid rather than by a number. A held recording is thrown away
+by letting go **on** that button — `overCancelButton`, the button's box inflated
+12 points on every side — and a locked one by clicking it. Two consequences worth
+stating:
+
+- **The desktop's hidden rule is gone.** «Release outside the composer cancels»
+  existed because the desktop had no visible cancel; it does now, and a hidden
+  destructive gesture over a 44-point row is worse than no gesture. One rule for
+  both pointers.
+- **Crossing onto the cancel no longer discards on the spot.** The threshold used
+  to fire mid-drag; the button only arms — it turns from accent to danger — and
+  the release is what acts. A person can now change their mind after arriving.
+
+**The lock rail is a capsule**, 40 points wide and **62 tall**, of the panel
+material through `KubGlassLayer` (rule 1), with a padlock above a chevron that
+rises and fades as the finger comes up. It was a 15-point glyph over a
+one-pixel line. It is drawn **on the desktop too**, which he asked for by name,
+and it is placed over the record button's centre rather than the row's — measured
+at 0px off on all eight frames that have one.
+
+**Locking with a mouse is the same gesture as with a thumb**: press the button,
+pull the pointer up onto the capsule, release. Nothing new was invented for it.
+A plain click on the record button still switches nothing and starts nothing —
+Telegram Desktop's click-to-start-a-locked-recording was **not** copied, because
+it collides with our tap-to-switch-mode and the short-press hint.
+
+**The timer carries tenths, `00:05,2`**, as Telegram Desktop writes it, comma
+included: it is the one clock in the product a person watches while it runs, and
+a seconds-only readout stands still for exactly as long as it takes to wonder
+whether the recording started. The tick went from 250ms to 100ms. The **paused**
+row keeps whole seconds — that is a recorded length, not a clock.
+
+**What was compared against Telegram and deliberately left alone:** the red
+pulsing dot and its position; the blue circular send at the right edge; hold to
+record, release to send, swipe up to lock; the locked row's pause / listen /
+delete / send; the hint beside the button instead of a modal. One thing was
+removed rather than kept: the separate trash in the locked row, because «Отмена»
+is now that control and Telegram's own bar has one way out, not two.
+
+Measured on the new frames, twenty of twenty passing their own verdicts, with
+mic 1, camera 0 and an empty tray on every one:
+
+| | held | locked / paused |
+| --- | --- | --- |
+| «Отмена» off the composer's centre | −22px | +4px |
+| Lock rail off the record button's centre | 0px | — |
+| Row transform | `none` | `none` |
+
+The −22 is the one asymmetry and it is deliberate: while the finger is down the
+record button stays under it as a sibling, so the row is 52 points narrower than
+the composer (a 44-point button and its 8-point gap) and its middle column is
+half of that to the left. Moving the button inside the row would centre it
+exactly and would re-parent the button mid-gesture, which is precisely how the
+lock broke last time. The verdict function allows 28px held and 8px locked, so a
+regression either way fails the render rather than being noticed on a sheet.
+
+Still not proven: everything here is Chromium at 430×932 and 1440×900. No finger
+has touched it. The touch thresholds, the forgiveness of the inflated cancel box
+and whether the rail is reachable with a thumb on a real iPhone are all device
+questions, and `video-message.spec.ts` — updated for the new testids and the new
+wording — cannot run on this workstation, because `loadQaEnvValues()` makes it
+attempt a real sign-in against a fixture backend.
+
 ### The rectangular video, decided here as D-122 asked
 
 Removed rather than rehoused. Telegram has no rectangular recorder anywhere: its

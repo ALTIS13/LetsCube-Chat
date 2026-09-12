@@ -58,13 +58,12 @@ import { locationMessageText, type AttachIncoming, type AttachSendRequest } from
 import { ComposerRecordingRow, type ComposerRecordingPreview } from "./ComposerRecordingRow";
 import {
   lockProgress,
+  overCancelButton,
   readRecordingHold,
   recordingButtonLabel,
   recordingMinimumMs,
   releaseRecording,
   shortPressHint,
-  slideCancelProgress,
-  slideFollowX,
   type RecordingMode,
   type RecordingPhase,
 } from "@/lib/recordingGesture";
@@ -157,8 +156,16 @@ export function MessageInput({
     mode: RecordingMode;
     phase: RecordingPhase;
   } | null>(null);
-  /** How far the finger has travelled from where it landed; the row reads it. */
-  const [holdTravel, setHoldTravel] = useState<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
+  /**
+   * How far **up** the finger has come from where it landed, and nothing else.
+   *
+   * There were two axes here. The sideways one went with the owner's ruling of
+   * 2026-09-12: nothing slides, and a held recording is thrown away by letting
+   * go on «Отмена» rather than by travelling a distance.
+   */
+  const [holdDy, setHoldDy] = useState(0);
+  /** The pointer is resting on «Отмена», so letting go here throws the recording away. */
+  const [cancelArmed, setCancelArmed] = useState(false);
   /** A paused recording, waiting to be listened to and then sent. */
   const [recordingPreview, setRecordingPreview] = useState<ComposerRecordingPreview | null>(null);
   /** What a press too short to be a recording leaves beside the button (R7). */
@@ -177,12 +184,11 @@ export function MessageInput({
   const recorderPointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const recorderPointerDownAtRef = useRef(0);
   const recorderPointerIdRef = useRef<number | null>(null);
-  const recorderPointerTypeRef = useRef<"mouse" | "touch" | "pen">("mouse");
   /** When the recording itself began, which is later than the press on a finger. */
   const recordingStartedAtRef = useRef(0);
   const shortHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** The composer's own row: a mouse released outside it cancels (R4, source T21). */
-  const composerRowRef = useRef<HTMLDivElement | null>(null);
+  /** The «Отмена» button in the recording row, which a release is measured against. */
+  const recordingCancelRef = useRef<HTMLButtonElement | null>(null);
   const recordingPreviewUrlRef = useRef<string | null>(null);
   const pausedRecordingRef = useRef<VoiceRecordResult | null>(null);
   const hasText = text.trim().length > 0;
@@ -217,7 +223,8 @@ export function MessageInput({
     setHoldRecorderState(null);
     setVideoAutoStart(false);
     setVideoAutoAddOnStop(false);
-    setHoldTravel({ dx: 0, dy: 0 });
+    setHoldDy(0);
+    setCancelArmed(false);
     setRecordingPreview(null);
     setShortHint(null);
     return () => {
@@ -273,7 +280,9 @@ export function MessageInput({
     if (!holdRecorderState || holdRecorderState.phase === "paused") return;
     const tick = () => setHoldElapsedMs(Math.max(0, Date.now() - recordingStartedAtRef.current));
     tick();
-    const timer = setInterval(tick, 250);
+    // Ten times a second, because the row reads in tenths now. Four times a
+    // second would show the same tenth twice and skip the next one.
+    const timer = setInterval(tick, 100);
     return () => clearInterval(timer);
   }, [holdRecorderState]);
 
@@ -377,7 +386,8 @@ export function MessageInput({
     setHoldRecorderState(null);
     recorderPointerStartRef.current = null;
     recorderPointerDownAtRef.current = 0;
-    setHoldTravel({ dx: 0, dy: 0 });
+    setHoldDy(0);
+    setCancelArmed(false);
     if (recordingPreviewUrlRef.current) URL.revokeObjectURL(recordingPreviewUrlRef.current);
     recordingPreviewUrlRef.current = null;
     pausedRecordingRef.current = null;
@@ -398,12 +408,19 @@ export function MessageInput({
     shortHintTimerRef.current = setTimeout(() => setShortHint(null), SHORT_PRESS_HINT_MS);
   }, []);
 
-  /** Whether a point is over the composer's own row. */
-  const pointerInsideComposer = useCallback((x: number, y: number) => {
-    const box = composerRowRef.current?.getBoundingClientRect();
-    if (!box) return true;
-    return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
-  }, []);
+  /**
+   * Whether a point is on «Отмена», which is the only way out of a held
+   * recording now that nothing slides.
+   *
+   * Note what the version this replaced returned when it could not measure:
+   * `true`, for «inside the composer», for «send». This one returns false, for
+   * «not on the cancel» — which also means send. The safe answer is the same
+   * either way, and it is the one that never throws a recording away because a
+   * measurement failed.
+   */
+  const pointerOverCancel = useCallback((x: number, y: number) => (
+    overCancelButton({ x, y }, recordingCancelRef.current?.getBoundingClientRect() ?? null)
+  ), []);
 
   const startVideoHoldRecording = useCallback(() => {
     // Nothing is asked and nothing is refused: a recording is sent as soon as it
@@ -568,7 +585,8 @@ export function MessageInput({
     recorderPointerStartRef.current = null;
     recorderPointerDownAtRef.current = 0;
     recorderPointerIdRef.current = null;
-    setHoldTravel({ dx: 0, dy: 0 });
+    setHoldDy(0);
+    setCancelArmed(false);
   }, []);
 
 
@@ -586,9 +604,8 @@ export function MessageInput({
     recorderPointerIdRef.current = event.pointerId;
     touchPointerMovedRef.current = false;
     touchLongPressTriggeredRef.current = false;
-    recorderPointerTypeRef.current =
-      event.pointerType === "touch" ? "touch" : event.pointerType === "pen" ? "pen" : "mouse";
-    setHoldTravel({ dx: 0, dy: 0 });
+    setHoldDy(0);
+    setCancelArmed(false);
     setShortHint(null);
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -704,10 +721,12 @@ export function MessageInput({
     const onMove = (event: PointerEvent) => {
       const travel = travelFrom(event);
       if (!travel) return;
-      setHoldTravel(travel);
-      const verdict = readRecordingHold(travel);
-      if (verdict === "locking") lockActiveRecording();
-      else if (verdict === "cancelling") cancelRecorderHold();
+      setHoldDy(travel.dy);
+      // Nothing is decided here but the lock. Crossing onto «Отмена» used to be
+      // crossing a threshold, which discarded the recording on the spot; the
+      // button only arms, and the release is what acts on it.
+      setCancelArmed(pointerOverCancel(event.clientX, event.clientY));
+      if (readRecordingHold(travel.dy) === "locking") lockActiveRecording();
     };
 
     const onUp = (event: PointerEvent) => {
@@ -717,12 +736,11 @@ export function MessageInput({
       if (!current) return;
       const travel = travelFrom(event) ?? { dx: 0, dy: 0 };
       const verdict = releaseRecording({
-        hold: readRecordingHold(travel),
+        hold: readRecordingHold(travel.dy),
         phase: current.phase,
         durationMs: Date.now() - recordingStartedAtRef.current,
         mode: current.mode,
-        pointerInsideComposer: pointerInsideComposer(event.clientX, event.clientY),
-        pointerType: recorderPointerTypeRef.current,
+        pointerOverCancel: pointerOverCancel(event.clientX, event.clientY),
       });
       resetRecorderPointer();
       if (verdict === "hold" || verdict === "lock") return;
@@ -748,7 +766,7 @@ export function MessageInput({
     cancelRecorderHold,
     holdRecorderState,
     lockActiveRecording,
-    pointerInsideComposer,
+    pointerOverCancel,
     resetRecorderPointer,
     showShortPressHint,
     stopRecorderHold,
@@ -1224,17 +1242,15 @@ export function MessageInput({
             textarea keeps its ref and its sizing, and the composer measures
             the way it always has. The field's rim takes the accent while the
             text has focus: that rim is the field's focus indicator. */}
-        <div ref={composerRowRef} className="group/composer relative flex items-end gap-2">
+        <div className="group/composer relative flex items-end gap-2">
           {recording && holdRecorderState ? (
             <ComposerRecordingRow
               mode={holdRecorderState.mode}
               phase={holdRecorderState.phase}
-              hold={readRecordingHold(holdTravel)}
-              pointerType={recorderPointerTypeRef.current}
               durationMs={holdElapsedMs}
-              cancelProgress={slideCancelProgress(holdTravel.dx)}
-              lockFill={lockProgress(holdTravel.dy)}
-              followX={slideFollowX(holdTravel.dx)}
+              lockFill={lockProgress(holdDy)}
+              cancelArmed={cancelArmed}
+              cancelRef={recordingCancelRef}
               preview={recordingPreview}
               onCancel={cancelRecorderHold}
               onPause={pauseLockedRecording}

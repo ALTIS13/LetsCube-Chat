@@ -147,8 +147,11 @@ test.describe("KUB video recorders", () => {
 
     await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
     await page.mouse.down();
-    // A mouse is told its own way out, which is Telegram Desktop's (D-130).
-    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Отпустите вне поля — отмена");
+    // The row says what it is doing, and «Отмена» in the middle of it says the
+    // way out — the same one for a mouse and a thumb since the owner's ruling
+    // of 2026-09-12 (D-130). There is no «release outside the field» left.
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Идёт запись голосового");
+    await expect(page.getByTestId("composer-recording-cancel")).toBeVisible();
     await expect(page.getByTestId("composer-recording-lock-rail")).toBeVisible();
     await expect(page.getByTestId("composer-recording-lock-progress")).toHaveAttribute("data-lock-progress", /0\.\d+|1/);
     await page.mouse.move(box!.x + box!.width / 2, box!.y - 96, { steps: 4 });
@@ -165,7 +168,7 @@ test.describe("KUB video recorders", () => {
     // And nothing has been staged or sent by any of it.
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
 
-    await page.getByTestId("composer-recording-delete").click();
+    await page.getByTestId("composer-recording-cancel").click();
     await expect(page.getByTestId("composer-recording-lock-indicator")).toHaveCount(0);
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
   });
@@ -213,7 +216,7 @@ test.describe("KUB video recorders", () => {
     // A round video's stop ends and sends it now (D-130, R6), and this spec runs
     // against a real account, so it must not. The lock and the camera switch are
     // what it is here to prove; the recording is thrown away instead.
-    await page.getByTestId("composer-recording-delete").click();
+    await page.getByTestId("composer-recording-cancel").click();
 
     await expect(modal).toHaveCount(0);
     await expect(page.getByTestId("composer-recording-lock-indicator")).toHaveCount(0);
@@ -251,7 +254,7 @@ test.describe("KUB video recorders", () => {
       clientY: y,
     });
     await page.waitForTimeout(520);
-    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Влево — отмена");
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Идёт запись голосового");
     await recorder.dispatchEvent("pointermove", {
       pointerId: 41,
       pointerType: "touch",
@@ -280,7 +283,7 @@ test.describe("KUB video recorders", () => {
     await expect(page.getByTestId("composer-recording-preview")).toBeVisible();
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
 
-    await page.getByTestId("composer-recording-delete").click();
+    await page.getByTestId("composer-recording-cancel").click();
     await expect(page.getByTestId("composer-recording-lock-indicator")).toHaveCount(0);
   });
 
@@ -339,31 +342,38 @@ test.describe("KUB video recorders", () => {
       clientY: y,
     });
     await page.waitForTimeout(360);
-    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Влево — отмена");
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Идёт запись голосового");
     await expect(recorder).toHaveAttribute("data-recorder-mode", "voice");
     await page.waitForTimeout(1_100);
     // Releasing sends now (D-130, R6) and this spec signs in to a real account,
-    // so the recording leaves the way a person's own slip leaves: left, past the
-    // cancel threshold, which discards it without waiting for the release.
+    // so the recording leaves the way a person's own slip leaves: the thumb
+    // slides onto «Отмена» in the middle of the row and lets go there. Nothing
+    // is discarded on the way — the button arms, and the release acts.
+    const cancel = page.getByTestId("composer-recording-cancel");
+    const cancelBox = await cancel.boundingBox();
+    expect(cancelBox).not.toBeNull();
+    const cancelX = cancelBox!.x + cancelBox!.width / 2;
+    const cancelY = cancelBox!.y + cancelBox!.height / 2;
     await recorder.dispatchEvent("pointermove", {
       pointerId: 52,
       pointerType: "touch",
       isPrimary: true,
       button: 0,
       buttons: 1,
-      clientX: x - 120,
-      clientY: y,
+      clientX: cancelX,
+      clientY: cancelY,
     });
-    await expect(page.getByTestId("composer-recording-lock-indicator")).toHaveCount(0);
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toHaveAttribute("data-cancel-armed", "true");
     await recorder.dispatchEvent("pointerup", {
       pointerId: 52,
       pointerType: "touch",
       isPrimary: true,
       button: 0,
       buttons: 0,
-      clientX: x - 120,
-      clientY: y,
+      clientX: cancelX,
+      clientY: cancelY,
     });
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toHaveCount(0);
     await expect(recorder).toHaveAttribute("data-recorder-mode", "voice");
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
   });

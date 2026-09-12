@@ -4,15 +4,17 @@
  * themes, on an iPhone and on a desktop, over the checked-in fictional
  * conversation.
  *
- * Five states, and they are the gesture's own: held at rest, slid part of the
- * way towards the cancel, locked hands-free, stopped for a listen, and the hint
- * a press too short to be a recording leaves behind.
+ * Five states, and they are the gesture's own: held at rest, held with the
+ * pointer resting on «Отмена», locked hands-free, stopped for a listen, and the
+ * hint a press too short to be a recording leaves behind.
  *
  * Every frame is the real application on the DEV preview route, driven by real
  * input — a finger's touch and drag on the iPhone, the mouse on the desktop —
  * and it measures what it shows before it is photographed: which phase the row
- * is in, what the timer reads, how full the lock rail is, how far the row has
- * followed the finger, and that exactly one microphone was opened and no camera.
+ * is in, what the timer reads, how full the lock rail is, whether the row has
+ * moved at all — since 2026-09-12 it must not — where «Отмена» sits against the
+ * middle of the composer and the rail against the middle of the record button,
+ * and that exactly one microphone was opened and no camera.
  * The numbers go into results.json beside the pictures, so what the owner is
  * looking at is described by the frame rather than by me.
  *
@@ -53,8 +55,7 @@ const ALLOWED_HOSTS = new Set(["127.0.0.1", "localhost", "fonts.googleapis.com",
 
 /** How long each frame lets the recording run, on the page's own clock. */
 const RECORD_MS = 3_000;
-/** The two distances the gesture is measured against, from lib/recordingGesture.ts. */
-const CANCEL_SLIDE_PX = 96;
+/** The one distance the gesture is measured against, from lib/recordingGesture.ts. */
 const LOCK_DRAG_PX = 72;
 
 const argValue = (flag) => {
@@ -106,7 +107,7 @@ const DEVICES = {
 
 const STATE_LIST = [
   { id: "1-holding", title: "1. Удержание: идёт запись" },
-  { id: "2-sliding", title: "2. Сдвиг влево: на пути к отмене" },
+  { id: "2-cancel", title: "2. Палец на «Отмена»: отпустить — отменить" },
   { id: "3-locked", title: "3. Закреплено: руки свободны" },
   { id: "4-paused", title: "4. Остановлено: можно прослушать" },
   { id: "5-hint", title: "5. Слишком короткое нажатие" },
@@ -182,7 +183,18 @@ function gesture(page, device, cdp) {
     origin = null;
   };
 
-  return { press, moveTo, release };
+  /** Onto something on the screen, which is how the cancel is now reached. */
+  const moveToElement = async (selector) => {
+    if (!origin) throw new Error("nothing is being held");
+    const box = await page.locator(selector).boundingBox();
+    if (!box) throw new Error(`${selector} is not on screen`);
+    await moveTo(
+      Math.round(box.x + box.width / 2) - origin.x,
+      Math.round(box.y + box.height / 2) - origin.y,
+    );
+  };
+
+  return { press, moveTo, moveToElement, release };
 }
 
 const STATES = {
@@ -190,12 +202,13 @@ const STATES = {
     await g.press();
     await page.clock.runFor(RECORD_MS);
   },
-  "2-sliding": async (g, page) => {
+  "2-cancel": async (g, page) => {
     await g.press();
     await page.clock.runFor(RECORD_MS);
-    // Two thirds of the way to the cancel: far enough to read as going, short
-    // of the point where the recording would already be gone.
-    await g.moveTo(-Math.round(CANCEL_SLIDE_PX * 0.65), 0);
+    // Onto «Отмена» itself, where letting go throws the recording away. Nothing
+    // slides and nothing is discarded on the way: what changes is the button
+    // under the pointer, which turns red to say what the release will do.
+    await g.moveToElement('[data-testid="composer-recording-cancel"]');
   },
   "3-locked": async (g, page) => {
     await g.press();
@@ -225,7 +238,22 @@ const SERVED_MARKERS = [
   ["/src/components/chat/MessageInput.tsx", "ComposerRecordingRow"],
   ["/src/components/chat/MessageInput.tsx", "readRecordingHold"],
   ["/src/components/chat/ComposerRecordingRow.tsx", "data-recording-phase"],
+  ["/src/components/chat/ComposerRecordingRow.tsx", "composer-recording-cancel"],
   ["/src/lib/recordingGesture.ts", "releaseRecording"],
+  ["/src/lib/recordingGesture.ts", "overCancelButton"],
+];
+
+/**
+ * And what must **not** be served any more.
+ *
+ * A stale module is the failure this whole script exists to avoid, and the
+ * cheapest tell that the server is serving the work before the ruling is the
+ * name of the function that moved the row sideways. Without this the frames
+ * would photograph the old gesture and be reported as the new one.
+ */
+const RETIRED_MARKERS = [
+  ["/src/lib/recordingGesture.ts", "slideFollowX"],
+  ["/src/components/chat/ComposerRecordingRow.tsx", "followX"],
 ];
 
 async function assertFixtureServer() {
@@ -247,6 +275,12 @@ async function assertFixtureServer() {
     // page then holds two copies of it. Stale code photographs as new code.
     if (served.includes("app.store.ts?t=")) throw new Error(`${modulePath} carries a hot-update URL. Restart the server.`);
   }
+  for (const [modulePath, marker] of RETIRED_MARKERS) {
+    const served = await fetch(`${BASE}${modulePath}`).then((response) => response.text());
+    if (served.includes(marker)) {
+      throw new Error(`The dev server still serves the slide («${marker}» in ${modulePath}). Restart it.`);
+    }
+  }
   const capture = await fetch(`${BASE}${CAPTURE_PATH}`);
   if (!capture.ok) throw new Error(`The capture route answered ${capture.status}.`);
 }
@@ -258,22 +292,42 @@ async function measure(page, frame) {
     const button = document.querySelector('[data-testid="composer-recorder-button"]');
     const hint = document.querySelector('[data-testid="composer-short-press-hint"]');
     const rail = document.querySelector('[data-testid="composer-recording-lock-progress"]');
+    const cancel = document.querySelector('[data-testid="composer-recording-cancel"]');
     const probe = window.__recordingProbe ?? { audio: -1, video: -1 };
     const rowBox = row?.getBoundingClientRect();
     const styles = row ? getComputedStyle(row) : null;
+    const cancelBox = cancel?.getBoundingClientRect();
+    const railBox = document
+      .querySelector('[data-testid="composer-recording-lock-rail"]')
+      ?.getBoundingClientRect();
+    // The composer's own row is this row's parent, which is how the two offsets
+    // below are taken without a selector carrying an escaped slash.
+    const composerBox = row?.parentElement?.getBoundingClientRect();
+    const buttonBox = button?.getBoundingClientRect();
+    const centreX = (box) => (box ? (box.left + box.right) / 2 : null);
     return {
       phase: row?.getAttribute("data-recording-phase") ?? null,
       hold: row?.getAttribute("data-recording-hold") ?? null,
       mode: row?.getAttribute("data-recording-row") ?? null,
       timer: row?.querySelector('[data-testid="composer-recording-timer"]')?.textContent?.trim() ?? null,
-      label: row?.querySelector('[data-testid="composer-recording-hint"]')?.textContent?.trim() ?? null,
+      spoken: row?.querySelector('[data-testid="composer-recording-state"]')?.textContent?.trim() ?? null,
+      cancelArmed: row?.getAttribute("data-cancel-armed") ?? null,
       lockFill: rail?.getAttribute("data-lock-progress") ?? null,
       transform: styles?.transform ?? null,
       opacity: styles?.opacity ?? null,
       rowWidth: rowBox ? Math.round(rowBox.width) : null,
+      composerWidth: composerBox ? Math.round(composerBox.width) : null,
+      // The two geometric claims this work makes, measured rather than asserted:
+      // «Отмена» stands in the middle of the composer, and the lock rail stands
+      // over the middle of the record button.
+      cancelOffCentrePx:
+        cancelBox && composerBox ? Math.round(centreX(cancelBox) - centreX(composerBox)) : null,
+      railOffButtonPx: railBox && buttonBox ? Math.round(centreX(railBox) - centreX(buttonBox)) : null,
+      railHeight: railBox ? Math.round(railBox.height) : null,
       recorderButtonOnScreen: Boolean(button),
+      railOnScreen: Boolean(railBox),
       preview: Boolean(document.querySelector('[data-testid="composer-recording-preview"]')),
-      deleteControl: Boolean(document.querySelector('[data-testid="composer-recording-delete"]')),
+      cancelControl: Boolean(cancel),
       sendControl: Boolean(document.querySelector('[data-testid="composer-recording-send"]')),
       hint: hint?.textContent?.trim() ?? null,
       // Nothing may be waiting in the tray: a released recording is sent, and a
@@ -290,7 +344,7 @@ function verdict(frame, found) {
   const problems = [];
   const expected = {
     "1-holding": "holding",
-    "2-sliding": "holding",
+    "2-cancel": "holding",
     "3-locked": "locked",
     "4-paused": "paused",
     "5-hint": null,
@@ -303,28 +357,58 @@ function verdict(frame, found) {
   if (frame.state === "5-hint") {
     if (!found.hint) problems.push("no hint was left beside the button");
     if (!found.recorderButtonOnScreen) problems.push("the record button is gone");
-  } else {
-    if (found.audioOpened !== 1) problems.push(`the microphone was opened ${found.audioOpened} time(s)`);
+    return problems;
   }
 
-  if (frame.state === "1-holding") {
-    if (found.timer === "00:00") problems.push("the timer never moved");
-    if (!found.label) problems.push("the row says nothing about the way out");
-    if (found.transform && found.transform !== "none") problems.push(`the row has moved: ${found.transform}`);
+  if (found.audioOpened !== 1) problems.push(`the microphone was opened ${found.audioOpened} time(s)`);
+
+  // The owner's ruling of 2026-09-12, on every state that has a row: nothing
+  // slides and nothing fades. This is the old check inverted — the script used
+  // to *require* the row to have moved in the state that slid, and to have
+  // faded along with it.
+  if (found.transform && found.transform !== "none") problems.push(`the row has moved: ${found.transform}`);
+  if (found.opacity !== null && Number(found.opacity) < 1) problems.push(`the row is faded to ${found.opacity}`);
+
+  // «Отмена» stands in every state, near the middle of the composer. While the
+  // finger is down the row is 52 points narrower than the composer — the record
+  // button and its gap, which stay under the thumb — so the button sits about
+  // half of that to the left; locked and paused, the row is the whole composer.
+  if (!found.cancelControl) problems.push("the row has no «Отмена»");
+  const allowedOffCentre = frame.state === "3-locked" || frame.state === "4-paused" ? 8 : 28;
+  if (found.cancelOffCentrePx === null) problems.push("«Отмена» could not be measured");
+  else if (Math.abs(found.cancelOffCentrePx) > allowedOffCentre) {
+    problems.push(`«Отмена» is ${found.cancelOffCentrePx}px off the composer's centre`);
+  }
+
+  if (frame.state !== "4-paused") {
+    if (!/^[0-9][0-9]:[0-9][0-9],[0-9]$/.test(found.timer ?? "")) {
+      problems.push(`the timer reads ${JSON.stringify(found.timer)}, which is not MM:SS,d`);
+    }
+    if (/^00:00,/.test(found.timer ?? "")) problems.push("the timer never moved");
+  }
+
+  if (frame.state === "1-holding" || frame.state === "2-cancel") {
+    if (!found.railOnScreen) problems.push("the lock rail is not drawn");
+    else if (found.railOffButtonPx === null) problems.push("the lock rail could not be measured");
+    else if (Math.abs(found.railOffButtonPx) > 2) {
+      problems.push(`the rail is ${found.railOffButtonPx}px off the record button's centre`);
+    }
     if (!found.recorderButtonOnScreen) problems.push("the button left from under the finger");
   }
-  if (frame.state === "2-sliding") {
-    if (!found.transform || found.transform === "none") problems.push("the row did not follow the finger");
-    if (Number(found.opacity) >= 1) problems.push("the row did not fade along the slide");
+  if (frame.state === "1-holding" && found.cancelArmed !== "false") {
+    problems.push("«Отмена» is armed with the pointer nowhere near it");
+  }
+  if (frame.state === "2-cancel" && found.cancelArmed !== "true") {
+    problems.push("the pointer is resting on «Отмена» and it is not armed");
   }
   if (frame.state === "3-locked") {
     if (found.lockFill !== null) problems.push("the lock rail is still drawn after locking");
-    if (!found.deleteControl || !found.sendControl) problems.push("the locked row has no delete or no send");
+    if (!found.sendControl) problems.push("the locked row has no send");
     if (found.recorderButtonOnScreen) problems.push("the record button is still there with the finger gone");
   }
   if (frame.state === "4-paused") {
     if (!found.preview) problems.push("there is nothing to listen to");
-    if (!found.deleteControl || !found.sendControl) problems.push("the paused row has no delete or no send");
+    if (!found.sendControl) problems.push("the paused row has no send");
   }
   return problems;
 }
@@ -526,9 +610,12 @@ async function buildSheet({ file, title, subtitle, columns, rows, cell }) {
 
 const SHEET_NOTE =
   "Настоящие компоненты приложения на DEV-маршруте, вымышленная переписка, микрофон — тестовое устройство Chromium. " +
-  "Удержание записывает; сдвиг влево за 96 точек отменяет сразу, не дожидаясь отпускания; отпускание отправляет, " +
-  "а не кладёт во вложения; сдвиг вверх за 72 точки закрепляет запись, и тогда её можно остановить, прослушать и уже " +
-  "потом отправить или удалить. Слишком короткое нажатие оставляет подсказку у кнопки вместо модального окна. " +
+  "Строка больше никуда не съезжает: «Отмена» стоит посередине, слева — точка и время, справа — отправка. " +
+  "Удержание записывает; запись отменяют, отпустив палец на «Отмена» (мышью — клик по ней); отпускание в любом " +
+  "другом месте отправляет, а не кладёт во вложения. Сдвиг вверх за 72 точки закрепляет запись: рейка фиксации — " +
+  "капсула с замком и шевроном над кнопкой записи, теперь и на компьютере. Закреплённую запись можно остановить, " +
+  "прослушать и уже потом отправить или удалить. Время идёт с десятыми долями, как в Telegram Desktop. " +
+  "Слишком короткое нажатие оставляет подсказку у кнопки вместо модального окна. " +
   "Показан нижний край экрана — там, где находится строка ввода.";
 
 /**
@@ -612,7 +699,9 @@ async function main() {
           results[frame.id] = result;
           console.log(
             `${frame.id}: ok phase=${result.phase} timer=${result.timer ?? "-"} lock=${result.lockFill ?? "-"} ` +
-              `label=${JSON.stringify(result.label ?? result.hint ?? "")} mic=${result.audioOpened} cam=${result.videoOpened}` +
+              `armed=${result.cancelArmed ?? "-"} offCentre=${result.cancelOffCentrePx ?? "-"} ` +
+              `rail=${result.railOffButtonPx ?? "-"}/${result.railHeight ?? "-"} ` +
+              `said=${JSON.stringify(result.spoken ?? result.hint ?? "")} mic=${result.audioOpened} cam=${result.videoOpened}` +
               `${result.errors.length ? ` errors: ${JSON.stringify(result.errors)}` : ""}`,
           );
         } catch (error) {

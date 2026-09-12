@@ -2,19 +2,26 @@
  * The recording gesture's rules, as pure functions (D-130).
  *
  * Telegram records from one continuous gesture on the composer's round button:
- * hold and it records, slide left and it is thrown away, slide up and it locks
- * and goes on without the finger, let go and it is **sent**. A locked recording
- * can be paused, listened to and then sent or deleted. A press too short to be a
- * recording says so beside the button rather than in a dialog.
+ * hold and it records, slide up and it locks and goes on without the finger, let
+ * go and it is **sent**. A locked recording can be paused, listened to and then
+ * sent or deleted. A press too short to be a recording says so beside the button
+ * rather than in a dialog.
  *
- * What we had instead: only the upward drag was read, so a sideways slide did
- * nothing and an accidental recording could not be abandoned; and every release
- * parked the recording in the attachment tray, where it needed a second,
- * separate «Отправить». The audit rows are R4, R6 and R7 of
+ * **The sideways slide is gone, on every shell**, on the owner's ruling of
+ * 2026-09-12 after he put our renders beside Telegram's own: «без сдвига вбок, у
+ * них просто кнопка посередине - отмена». So there is no cancel threshold, no
+ * lateral travel to read and no row that moves — a recording is abandoned by the
+ * «Отмена» button standing in the middle of the row, which a finger releases over
+ * and a mouse clicks. Removing the movement also removed a defect the renders
+ * showed: while the row slid it took the timer out of the frame, `04` for
+ * `00:04` on the phone and `:03` on the desktop. Nothing translates now, so
+ * nothing clips.
+ *
+ * What the audit found and this work answers is unchanged: rows R4, R6 and R7 of
  * `output/audits/2026-09-12-telegram-parity/chat-functions`, against Telegram's
- * own sources T19 (the recording hints, «Slide to cancel» included), T20 (hold,
- * release sends, swipe up to lock) and T21 (the desktop bar: release outside the
- * field cancels, and a locked recording plays back).
+ * own sources T19, T20 (hold, release sends, swipe up to lock) and T21 (the
+ * desktop bar). Only the way out of a held recording has changed shape, from a
+ * distance to a target.
  *
  * Nothing here touches the DOM, the network or React, and it imports nothing at
  * all, so `tests/unit/recording-gesture.test.mts` reads this file directly. That
@@ -30,10 +37,11 @@ export type RecordingMode = "voice" | "video";
 /**
  * Where a held recording is while the finger is still down.
  *
- * `recording` is the resting state of the gesture; `cancelling` and `locking`
- * are reached by travel and are what a release then means.
+ * Two states, where there were three: `recording` is the gesture at rest and
+ * `locking` is reached by travelling up. There is no third reached by travel,
+ * because cancelling is no longer a distance — it is a button.
  */
-export type RecordingHold = "recording" | "cancelling" | "locking";
+export type RecordingHold = "recording" | "locking";
 
 /**
  * The recording's own state, which outlives the gesture once it is locked.
@@ -48,15 +56,6 @@ export type RecordingPhase = "holding" | "locked" | "paused";
 export type RecordingRelease = "send" | "cancel" | "lock" | "too-short" | "hold";
 
 /**
- * How far left the finger travels before the recording is thrown away.
- *
- * Far enough that the drift of a thumb settling on a button is not a cancel, and
- * near enough to reach without lifting the hand: on the narrowest phone in the
- * matrix, 360 points, it is a bit over a quarter of the screen.
- */
-export const RECORDING_CANCEL_SLIDE_PX = 96;
-
-/**
  * How far up the finger travels before the recording locks.
  *
  * Unchanged from the value the product already shipped, so the gesture people
@@ -65,6 +64,16 @@ export const RECORDING_CANCEL_SLIDE_PX = 96;
  * meant.
  */
 export const RECORDING_LOCK_DRAG_PX = 72;
+
+/**
+ * How far outside its own box the «Отмена» button still catches a release.
+ *
+ * The button is 36 points tall in a row of 44, and a thumb dragging along that
+ * row is not aiming — it is arriving. Twelve points each way covers the rest of
+ * the row's height and a little of the gap on either side, which is the whole
+ * of the forgiveness the vanished 96-point slide used to provide.
+ */
+export const RECORDING_CANCEL_TOUCH_PAD_PX = 12;
 
 /**
  * Shorter than this and there is no recording, only a press.
@@ -82,12 +91,6 @@ export function recordingMinimumMs(mode: RecordingMode): number {
   return RECORDING_MIN_MS[mode];
 }
 
-/** 0 to 1 along the way to a cancel. Only leftward travel counts; rightward is nothing. */
-export function slideCancelProgress(dx: number): number {
-  if (!Number.isFinite(dx) || dx >= 0) return 0;
-  return Math.min(1, -dx / RECORDING_CANCEL_SLIDE_PX);
-}
-
 /** 0 to 1 along the way to the lock. Only upward travel counts. */
 export function lockProgress(dy: number): number {
   if (!Number.isFinite(dy) || dy >= 0) return 0;
@@ -95,46 +98,47 @@ export function lockProgress(dy: number): number {
 }
 
 /**
- * How far the recording row is drawn from where it started, following the
- * finger leftwards and never past the point where it would be cancelled.
+ * Which way a held gesture is going, from how far up the finger has come.
  *
- * Telegram's row travels with the finger, which is what makes «Влево — отмена»
- * a gesture a person can feel their way through rather than a sentence to obey.
+ * One axis, where there were two. The diagonal rule that used to decide between
+ * a cancel and a lock went with the slide: there is nothing for the lock to
+ * compete with any more, so a finger either reached the rail or it did not.
  */
-export function slideFollowX(dx: number): number {
-  if (!Number.isFinite(dx) || dx >= 0) return 0;
-  return Math.max(-RECORDING_CANCEL_SLIDE_PX, dx);
+export function readRecordingHold(dy: number): RecordingHold {
+  return lockProgress(dy) >= 1 ? "locking" : "recording";
+}
+
+/** A box on the screen, as four edges. Kept plain so this file imports no DOM types. */
+export interface RecordingBox {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
 }
 
 /**
- * How far along an axis the finger is, as a multiple of that axis's threshold
- * and **not** clamped. Zero or less means it went the other way.
+ * Whether a release lands on «Отмена», which is the only way a held recording is
+ * thrown away now.
  *
- * The clamped versions above are for drawing — a rail cannot fill past its top.
- * This one is for deciding, and the difference is the whole of a diagonal: once
- * both axes clamp at 1, a finger that went twice as far left as it did up reads
- * as an exact tie, and the gesture it plainly is gets the wrong answer. Caught
- * by `tests/unit/recording-gesture.test.mts` on the first run of the rule.
+ * The box is inflated by `RECORDING_CANCEL_TOUCH_PAD_PX` on every side, so what
+ * a person aims at is the word and what catches them is the row around it. A box
+ * with no size — an element that is not on the screen — catches nothing, which
+ * is what keeps a missing button from cancelling every recording.
  */
-function travelRatio(distance: number, threshold: number): number {
-  if (!Number.isFinite(distance)) return 0;
-  return -distance / threshold;
-}
-
-/**
- * Which way a held gesture is going, from where the finger landed.
- *
- * The two axes are compared by how far along each is rather than by pixels, so
- * neither threshold has to be the other's size for the comparison to be fair. A
- * tie goes to the lock: a recording that locks can still be cancelled a moment
- * later from its own row, where a cancelled one is gone for good.
- */
-export function readRecordingHold(travel: { dx: number; dy: number }): RecordingHold {
-  const lock = travelRatio(travel.dy, RECORDING_LOCK_DRAG_PX);
-  const cancel = travelRatio(travel.dx, RECORDING_CANCEL_SLIDE_PX);
-  if (lock >= 1 && lock >= cancel) return "locking";
-  if (cancel >= 1) return "cancelling";
-  return "recording";
+export function overCancelButton(
+  point: { x: number; y: number },
+  box: RecordingBox | null | undefined,
+): boolean {
+  if (!box) return false;
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return false;
+  if (box.right <= box.left || box.bottom <= box.top) return false;
+  const pad = RECORDING_CANCEL_TOUCH_PAD_PX;
+  return (
+    point.x >= box.left - pad &&
+    point.x <= box.right + pad &&
+    point.y >= box.top - pad &&
+    point.y <= box.bottom + pad
+  );
 }
 
 export interface RecordingReleaseInput {
@@ -146,12 +150,15 @@ export interface RecordingReleaseInput {
   durationMs: number;
   mode: RecordingMode;
   /**
-   * Whether the pointer is over the composer. Only a mouse is asked: Telegram
-   * Desktop cancels a recording released outside the field (T21), where a finger
-   * has «Влево — отмена» instead and nothing outside to mean anything.
+   * Whether the release lands on «Отмена», from `overCancelButton`.
+   *
+   * The same question for a finger and for a mouse, which is new: the desktop
+   * used to cancel a recording released anywhere outside the composer — a hidden
+   * rule over a 44-point row, and the only one it had while it had no visible
+   * cancel. It has one now, in the middle of the row, so the hidden rule is gone
+   * and a mouse released on the button cancels exactly as a thumb does.
    */
-  pointerInsideComposer: boolean;
-  pointerType: "mouse" | "touch" | "pen";
+  pointerOverCancel: boolean;
 }
 
 /**
@@ -159,35 +166,60 @@ export interface RecordingReleaseInput {
  *
  * The order is the order the reasons beat each other. A locked recording is not
  * ended by a release at all — that is the whole point of locking it — so it is
- * asked first. Then the two ways to throw the recording away, because a person
- * who has slid to cancel means it whatever the recording's length. Only then is
- * the recording judged long enough to be one, and anything that survives all of
- * that is **sent**, with no tray and no second button (R6).
+ * asked first. Then the lock, then the cancel, because a person who let go over
+ * «Отмена» means it whatever the recording's length. Only then is the recording
+ * judged long enough to be one, and anything that survives all of that is
+ * **sent**, with no tray and no second button (R6).
  */
 export function releaseRecording(input: RecordingReleaseInput): RecordingRelease {
   if (input.phase === "locked" || input.phase === "paused") return "hold";
   if (input.hold === "locking") return "lock";
-  if (input.hold === "cancelling") return "cancel";
-  if (input.pointerType === "mouse" && !input.pointerInsideComposer) return "cancel";
+  if (input.pointerOverCancel) return "cancel";
   if (input.durationMs < recordingMinimumMs(input.mode)) return "too-short";
   return "send";
 }
 
+/** The word on the button that throws a recording away, in the middle of the row. */
+export const RECORDING_CANCEL_LABEL = "Отмена";
+
 /**
- * What the row says while the finger is down, in Telegram's words for the state
- * rather than a card explaining the gesture (R3).
+ * The elapsed time, with tenths, as Telegram Desktop writes it: `00:05,2`.
  *
- * Two states, because there is no third to describe. Crossing the cancel
- * threshold does not wait for the release: the recording is thrown away at once,
- * which is what Telegram does and what makes the slide read as a gesture rather
- * than a command waiting to be confirmed. So up to the threshold the row says
- * which way to go, and past it there is no row left to say anything. A
- * `cancelling` verdict still reaches the release — a finger can lift in the same
- * frame it crosses — and it is spoken by nothing.
+ * Two decisions, and both are the owner's screenshot rather than a preference.
+ * Tenths, because a recording is the one clock in the product a person watches
+ * while it runs, and a seconds-only readout stands still for a whole second at a
+ * time — which is exactly how long it takes to wonder whether the recording
+ * started. And a comma, because that is the decimal separator in Russian and it
+ * is what the screenshot shows; the colon already means something else in the
+ * same string.
+ *
+ * Minutes are not clamped: a long recording grows the field rather than lying
+ * about its length.
  */
-export function recordingHoldLabel(hold: RecordingHold, pointerType: "mouse" | "touch" | "pen"): string {
-  if (hold === "locking") return "Запись закреплена";
-  return pointerType === "mouse" ? "Отпустите вне поля — отмена" : "Влево — отмена";
+export function formatRecordingElapsed(ms: number): string {
+  const safe = Number.isFinite(ms) && ms > 0 ? ms : 0;
+  const tenths = Math.floor(safe / 100);
+  const seconds = Math.floor(tenths / 10);
+  const minutes = Math.floor(seconds / 60);
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds % 60).padStart(2, "0");
+  return `${mm}:${ss},${tenths % 10}`;
+}
+
+/**
+ * What state the row is in, for a screen reader.
+ *
+ * It is spoken rather than drawn. The row used to print the way out in words —
+ * «Влево — отмена» under a finger, «Отпустите вне поля — отмена» under a mouse —
+ * and both sentences described a gesture that no longer exists. What replaced
+ * them is a button that says what it does, so the words left here are the ones a
+ * person who cannot see the button still needs.
+ */
+export function recordingStateLabel(phase: RecordingPhase, mode: RecordingMode): string {
+  const what = mode === "video" ? "видеосообщения" : "голосового";
+  if (phase === "locked") return "Запись закреплена";
+  if (phase === "paused") return "Запись остановлена, можно прослушать";
+  return `Идёт запись ${what}`;
 }
 
 /**
