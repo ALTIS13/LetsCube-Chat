@@ -133,6 +133,38 @@ export function removeSearchChip(rawQuery: string, chip: ParsedSearchChip): stri
   return `${rawQuery.slice(0, chip.start)} ${rawQuery.slice(chip.end)}`.trim().replace(/\s+/g, " ");
 }
 
+/**
+ * Takes every `type:` token back out of a query.
+ *
+ * This exists because of how the two ways of choosing a type resolve against
+ * each other. `parseAdvancedSearchQuery` seeds `filters.type` from the selected
+ * value and then lets a `type:` token in the text overwrite it — **the typed
+ * syntax wins.** That is the deliberate rule, and the argument for it is that
+ * the token is the half a person can see: it produces a removable chip, while a
+ * selected pill produces none. If the pill won instead, typing `type:message`
+ * would render a chip claiming a filter that is not being applied, which is a
+ * visible lie rather than a hidden one.
+ *
+ * The cost of that rule on its own is a control that silently does nothing: tap
+ * a pill while `type:chat` is in the text and the text keeps winning. So a tap
+ * strips the tokens first and the selection always takes effect. Both halves
+ * are needed — the rule decides who wins a conflict, this decides that a tap
+ * never creates one.
+ *
+ * Ranges are taken from the parse rather than re-matched, and they index the
+ * string that was parsed: pass `parsed.raw`, not some other spelling of the
+ * query. Removal runs last-to-first so that each `start`/`end` still refers to
+ * the text it was measured against.
+ */
+export function clearTypeSyntax(parsed: ParsedSearchQuery): string {
+  const typeChips = parsed.chips.filter((chip) => chip.key === "type");
+  if (typeChips.length === 0) return parsed.raw;
+  return typeChips
+    .slice()
+    .sort((a, b) => b.start - a.start)
+    .reduce((query, chip) => removeSearchChip(query, chip), parsed.raw);
+}
+
 export function searchFiltersToRpc(filters: ParsedSearchFilters): Json {
   return {
     type: filters.type === "all" ? null : filters.type,

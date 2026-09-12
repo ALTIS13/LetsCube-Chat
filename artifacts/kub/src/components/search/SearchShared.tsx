@@ -9,6 +9,7 @@ import type { GlobalSearchResult, GlobalSearchResultType } from "@/hooks/useGlob
 import { useRoleAccess } from "@/hooks/useRole";
 import { showAppAlert } from "@/lib/appDialogs";
 import { requestChatMessageJump } from "@/lib/chatJumpEvents";
+import { FOCUS_RING, PRESS_FILLED, PRESS_SINK_RAISED } from "@/lib/controlSurface";
 import { safeOpenChat } from "@/lib/safeOpenChat";
 import {
   parseAdvancedSearchQuery,
@@ -175,6 +176,108 @@ export function SearchEmptyState({
       </span>
       <div className="text-sm font-semibold text-[color:var(--kub-text)]">{title}</div>
       <div className="mt-1 max-w-sm text-xs leading-relaxed text-[color:var(--kub-muted)]">{description}</div>
+    </div>
+  );
+}
+
+/**
+ * The type filters, as a row of pills under the search field.
+ *
+ * `SEARCH_FILTERS` has always held these nine, and until this row existed
+ * nothing consumed it: the only way to narrow results by type was to type
+ * `type:message` into the query, with no control anywhere that offered it.
+ * This is that control, built from the same list — not a second vocabulary
+ * beside it.
+ *
+ * Telegram's arrangement, from the folder row it puts directly under its own
+ * search field: fully rounded pills, scrolled sideways, the chosen one filled,
+ * the rest muted and unbordered, counts as small secondary badges. `FolderTabs`
+ * is this product's own version of that row and the metrics come from it — the
+ * 12px semibold label, the horizontal scroll, the accent language. Two things
+ * are deliberately not copied from it:
+ *
+ *  - **its underline.** That is a tab's active treatment and cannot be worn by
+ *    a pill; a fill is what the reference shows and what reads at this size.
+ *  - **its uppercase.** «Сообщения» set in capitals is both long and loud, and
+ *    the two rows never appear together — `Sidebar` mounts the folder strip
+ *    only while no query is typed, and this one only while one is — so there is
+ *    no inconsistency to see.
+ *
+ * The active fill is `--kub-cyan` with `--kub-bg` ink, which is the pair this
+ * product has already measured; `text-white` on the accent is 3.55:1 and is
+ * held out by `control-vocabulary`. The inactive pill rests on `kub-raise` and
+ * answers the cursor by changing its *text* colour only: a resting veil plus a
+ * hover veil is the 1.002 of rule 5, a hover that has stopped existing. Neither
+ * state carries a border — rule 11's nested box, separated by a step of
+ * material — so the row adds nothing to the perimeter ratchet.
+ *
+ * Counts are shown only while nothing is filtered, and that is honesty rather
+ * than restraint. Once a type is chosen the query is narrowed to it, so every
+ * other type's result count is unknown — not zero. Rendering the zeros would
+ * state, in the one place a person looks to decide where to go next, that there
+ * is nothing there.
+ */
+export function SearchTypeFilters({
+  active,
+  counts,
+  onSelect,
+  compact = false,
+}: {
+  active: SearchTypeFilter;
+  /** Results per type in the current set, or null while a type is chosen. */
+  counts: Partial<Record<SearchTypeFilter, number>> | null;
+  onSelect: (type: SearchTypeFilter) => void;
+  compact?: boolean;
+}) {
+  return (
+    // No surface of its own, for the reason `FolderTabs` gives: this sits
+    // inside the sidebar's glass, and a second fill here would read as an
+    // opaque band punched through the panel.
+    <div
+      role="group"
+      aria-label="Фильтр по типу"
+      data-testid="search-type-filters"
+      className={cn("flex gap-1.5 overflow-x-auto no-scrollbar", compact ? "px-3 py-2" : "mt-2 pb-0.5")}
+    >
+      {SEARCH_FILTERS.map((filter) => {
+        const isActive = filter.id === active;
+        const count = counts?.[filter.id] ?? 0;
+        return (
+          <button
+            key={filter.id}
+            type="button"
+            data-testid={`search-type-filter-${filter.id}`}
+            data-active={isActive ? "true" : undefined}
+            aria-pressed={isActive}
+            onClick={() => onSelect(filter.id)}
+            className={cn(
+              // No `h-*` or `min-h-*`: `.kub-button` carries the 44px floor on
+              // a coarse pointer, and a height utility on the same element
+              // outranks it silently. Padding only.
+              "kub-button kub-interactive flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold whitespace-nowrap transition-colors",
+              FOCUS_RING,
+              isActive
+                ? `bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] ${PRESS_FILLED}`
+                : `kub-raise text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] ${PRESS_SINK_RAISED}`,
+            )}
+          >
+            <span>{filter.label}</span>
+            {count > 0 && (
+              // On the filled pill the number is the label's own ink on the
+              // measured pair; giving it a chip of its own would dilute the
+              // fill underneath it and cost contrast nobody has measured.
+              <span
+                className={cn(
+                  "flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[12px] font-bold",
+                  isActive ? "text-[color:var(--kub-bg)]" : "bg-[var(--kub-inset)] text-[color:var(--kub-muted)]",
+                )}
+              >
+                {count}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }

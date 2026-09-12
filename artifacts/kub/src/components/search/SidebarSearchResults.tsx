@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { KubIcon } from "@/components/kub";
 import {
   buildCommandResults,
@@ -11,12 +11,14 @@ import {
   SearchFilterChips,
   SearchProfilePreview,
   SearchResultsList,
+  SearchTypeFilters,
   useSearchResultActions,
+  type SearchTypeFilter,
 } from "@/components/search/SearchShared";
 import { getLocalChatSearchResults, useGlobalSearch } from "@/hooks/useGlobalSearch";
 import { useRoleAccess } from "@/hooks/useRole";
 import { useTaskAccessGate } from "@/hooks/useTaskAccess";
-import { typeFilterToDataType } from "@/lib/searchQuery";
+import { clearTypeSyntax, typeFilterToDataType } from "@/lib/searchQuery";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app.store";
 
@@ -36,7 +38,15 @@ export function SidebarSearchResults({ query }: { query: string }) {
     openPreviewChat,
   } = useSearchResultActions({ onAfterOpen: () => setSearchQuery("") });
 
-  const parsed = useMemo(() => parseSearchTypeSyntax(trimmedQuery, "all"), [trimmedQuery]);
+  // The type chosen by tapping a pill. `parseSearchTypeSyntax` takes it as the
+  // seed for `filters.type` and lets a `type:` token in the text overwrite it,
+  // so the typed syntax wins a conflict — see `clearTypeSyntax` for why that is
+  // the right way round, and for the other half that stops a tap ever creating
+  // one. No reset effect is needed: `Sidebar` mounts this surface only while a
+  // query is typed, so clearing the field unmounts it and the state goes with
+  // it, which is «Все» again on the way back in.
+  const [selectedType, setSelectedType] = useState<SearchTypeFilter>("all");
+  const parsed = useMemo(() => parseSearchTypeSyntax(trimmedQuery, selectedType), [selectedType, trimmedQuery]);
   const localChatResults = useMemo(
     () => getLocalChatSearchResults({
       query: parsed.query,
@@ -73,6 +83,31 @@ export function SidebarSearchResults({ query }: { query: string }) {
 
   const grouped = useMemo(() => groupSearchResults(results), [results]);
 
+  // Only while nothing is filtered. Once a type is chosen the set is narrowed
+  // to it, so every other count would read 0 — which is unknown stated as
+  // empty. See the note on `SearchTypeFilters`.
+  const typeCounts = useMemo(() => {
+    if (parsed.filters.type !== "all") return null;
+    const counts: Partial<Record<SearchTypeFilter, number>> = { all: results.length };
+    for (const result of results) {
+      counts[result.resultType] = (counts[result.resultType] ?? 0) + 1;
+    }
+    return counts;
+  }, [parsed.filters.type, results]);
+
+  const chooseType = useCallback(
+    (next: SearchTypeFilter) => {
+      setSelectedType(next);
+      // Strip any `type:` token first, so the tap cannot lose to the text. The
+      // ranges are measured against `parsed.raw`, which is the trimmed query
+      // this surface parsed — passing the untrimmed one would shift every
+      // offset by the leading whitespace.
+      const stripped = clearTypeSyntax(parsed);
+      if (stripped !== parsed.raw) setSearchQuery(stripped);
+    },
+    [parsed, setSearchQuery],
+  );
+
   useEffect(() => {
     setActiveIndex(0);
   }, [parsed.query, parsed.filters.type, results.length]);
@@ -81,6 +116,23 @@ export function SidebarSearchResults({ query }: { query: string }) {
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col" data-testid="sidebar-global-search-results">
+      {/* Flush under the search field — above the «ПОИСК» heading, not below it.
+          Telegram has no heading between its field and its pill row, and the row
+          belongs to the field: it narrows the query. Everything after it is about
+          the results — the heading and its rule, the two database notices, and the
+          chips of whatever the typed query happened to produce. Those chips stay
+          down there on purpose: that row comes and goes, and a row that appears
+          must not shove the results down from the top of the column.
+
+          An earlier attempt at this moved the row above the notices only, which
+          left the heading still standing between the field and the pills and
+          changed nothing a reader could see.
+
+          `active` is the *effective* type rather than the pill state, so a typed
+          `type:chat` lights «Чаты» up and the control can never disagree with the
+          text about what is being filtered. */}
+      <SearchTypeFilters active={parsed.filters.type} counts={typeCounts} onSelect={chooseType} compact />
+
       <div className="flex items-center justify-between gap-2 border-b border-[color:var(--kub-border-color)] px-3 py-2">
         <div className="min-w-0 text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--kub-muted)]">
           Поиск
@@ -111,9 +163,26 @@ export function SidebarSearchResults({ query }: { query: string }) {
         </div>
       )}
 
-      <SearchFilterChips parsed={parsed} query={query} onChangeQuery={setSearchQuery} compact />
 
-      <div className={cn("min-h-0 flex-1 overflow-y-auto px-2 py-3", search.migrationMissing && "pt-2")}>
+      {/* `parsed.raw`, not `query`: a chip carries the offsets it was measured
+          at, and it was measured against the trimmed string this surface parsed.
+          Handing it the untrimmed one cut a range shifted by every leading
+          space, so removing a chip from a query typed with a leading space
+          deleted the wrong characters. */}
+      <SearchFilterChips parsed={parsed} query={parsed.raw} onChangeQuery={setSearchQuery} compact />
+
+      <div
+        // The floating capsule lies over this column on a phone. The room for
+        // it is reserved inside the scroller, exactly as `ChatList` reserves
+        // it — shrinking the container instead leaves a band of ground in the
+        // shape of the old bar, which is the mistake that was made once
+        // already. Below `md` only, because the capsule is `md:hidden`;
+        // above it the original bottom padding stands.
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto px-2 py-3 pb-[calc(var(--kub-bottom-nav)+var(--kub-bottom-nav-gap)*2)] md:pb-3",
+          search.migrationMissing && "pt-2",
+        )}
+      >
         {showEmpty ? (
           <SearchEmptyState compact />
         ) : (
