@@ -154,9 +154,11 @@ export function Sidebar() {
                 so without this gate the same folders were drawn twice from
                 `md` upward — once down the rail and once across this strip,
                 which is what the owner saw on the computer on 2026-09-12.
-                The gate is here rather than on the component because
-                `PublicPreviewCapturePage` renders `FolderTabs` at desktop
-                widths to capture the product assets. */}
+                The gate is here rather than on the component because a phone
+                renders this strip at whatever width it has; `FolderTabs`
+                itself must stay width-agnostic. `PublicPreviewCapturePage`
+                now carries the same gate at its own mount site, so the
+                published product images show one folder surface too. */}
             {!hasSearchQuery && (
               <div className="md:hidden">
                 <FolderTabs

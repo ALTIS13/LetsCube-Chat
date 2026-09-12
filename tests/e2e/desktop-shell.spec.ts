@@ -306,7 +306,9 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     // setting anywhere in the source, so both arrangements rendered at once
     // and the owner saw his folders twice. The strip is now the phone's only,
     // gated at the mount site in `Sidebar.tsx` — not inside `FolderTabs`,
-    // which `PublicPreviewCapturePage` still renders at desktop widths.
+    // which must stay width-agnostic for the phone. `PublicPreviewCapturePage`
+    // carries the same mount-site gate since 2026-09-12, so the published
+    // product images show one folder surface as well.
     //
     // Found inside the list's own chrome, because the strip's button reads
     // «Личные 1» — the name and its count — where the rail's carries the name

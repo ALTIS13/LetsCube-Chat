@@ -54,7 +54,9 @@ import {
  * alone. It mounts `FolderRail` from `md` as `Sidebar` does, so the side-menu
  * button — which moved onto the rail on 2026-09-12 — exists here at desktop
  * widths too; without it an iPhone held sideways (852pt, above `md`) had no way
- * into the side list at all. What this page still does not copy is the
+ * into the side list at all. Both folder surfaces carry the gates `Sidebar`
+ * puts on them, so exactly one of them shows at a time: the rail from `md`, the
+ * strip below it. What this page still does not copy is the
  * resizable column: it stays the fixed 360/380/400 the shell had before the
  * rail landed (`c31e5ab`), with no `ChatListResizer` and no narrowing.
  *
@@ -276,15 +278,27 @@ export default function PublicPreviewCapturePage() {
 
               <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
                 <SidebarHeader />
-                {/* Ungated, unlike `Sidebar`, which wraps this in `md:hidden`:
-                    the product previews are captured from this page at 1280pt
-                    and the strip is part of those images. See the note at the
-                    mount site in `Sidebar.tsx`. */}
-                <FolderTabs
-                  folders={previewFolders}
-                  activeFolder={null}
-                  onFolderChange={() => undefined}
-                />
+                {/* Below `md` only, gated at the mount site exactly as
+                    `Sidebar` gates its own — not inside `FolderTabs`, which
+                    still has to render at any width for a phone.
+
+                    This wrapper is new on 2026-09-12. The rail above is
+                    `hidden` until `md:flex`, so while this strip was ungated
+                    the same folder was drawn twice from `md` upward, once down
+                    the rail and once across here, and the product previews
+                    captured from this page published that. Telegram shows
+                    folders in one place at a time — a strip on Android, a rail
+                    on the desktop client, never both — and the shipped product
+                    follows it, gated in `Sidebar`. This page exists so the
+                    published screenshots match the product, so it cannot keep
+                    an arrangement the product does not have. */}
+                <div className="md:hidden">
+                  <FolderTabs
+                    folders={previewFolders}
+                    activeFolder={null}
+                    onFolderChange={() => undefined}
+                  />
+                </div>
                 <div className="flex-1 overflow-hidden">
                   {chats.map((chat) => (
                     <ChatListItem
