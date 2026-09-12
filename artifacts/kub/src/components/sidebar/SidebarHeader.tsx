@@ -19,9 +19,13 @@ import { openSupportWindow } from "@/lib/supportWindowEvents";
 interface SidebarHeaderProps {
   onNewChat?: () => void;
   onRefetch?: () => void;
+  /** The list has scrolled, so the phone's search row is tucked away. */
+  searchTucked?: boolean;
+  /** Bring it back, from the magnifier this header shows in its place. */
+  onUntuckSearch?: () => void;
 }
 
-export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
+export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSearch }: SidebarHeaderProps) {
   const searchQuery = useAppStore((s) => s.searchQuery);
   const setSearchQuery = useAppStore((s) => s.setSearchQuery);
   const currentUser = useAppStore((s) => s.currentUser);
@@ -42,6 +46,9 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showNewGroup, setShowNewGroup] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // Never while a person is searching: the field may not go out from under
+  // the cursor, and a query has to keep the box it was typed into.
+  const tuck = Boolean(searchTucked) && !searchQuery && !isSearchFocused;
   const iconButtonClass =
     "kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]";
 
@@ -113,7 +120,13 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
       {showNewGroup && <NewGroupModal onClose={() => setShowNewGroup(false)} onRefetch={onRefetch} />}
 
       <div
-        className="flex h-[var(--kub-control-row-height)] min-w-0 items-center gap-1.5 px-3"
+        // Two lines on a phone and one from `md`. The field is the only item
+        // that wraps, so the title line keeps the row's own height and the
+        // search row sits under it — Telegram's arrangement on Android. From
+        // `md` the row is exactly what it was, which is what keeps this
+        // header's bottom edge level with the chat header's (a contract
+        // `unified-interface-chrome` measures to within a pixel).
+        className="flex min-w-0 flex-wrap items-center gap-1.5 px-3 pb-1.5 min-h-[var(--kub-control-row-height)] md:h-[var(--kub-control-row-height)] md:min-h-0 md:flex-nowrap md:pb-0"
         data-testid="sidebar-control-row"
       >
         <KubBrandLogo
@@ -230,6 +243,24 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
             field went flush with it — measured at rgb(11,33,58) inside a panel
             of rgb(13,33,58), which is a hollow outline rather than a well.
             --kub-inset is the token for what a field is cut into. */}
+        {/* Below `md` only, and it carries no meaning: it takes the slack the
+            search field used to take on this line, so the bell, the pencil and
+            the magnifier sit on the right edge instead of bunching against the
+            logo. From `md` it is gone and the field stretches the row again. */}
+        <div aria-hidden="true" className="min-w-0 flex-1 md:hidden" />
+
+        {/* The wrapper is what collapses, never the field. A field whose own
+            box goes to zero stops being visible to the four specs that
+            assert it; a field inside a clipped wrapper keeps its box and
+            its visibility, which was measured rather than assumed. */}
+        <div
+          className={cn(
+            "order-last w-full min-w-0 basis-full transition-[max-height,opacity] duration-200 md:order-none md:w-auto md:basis-auto md:flex-1",
+            tuck
+              ? "max-h-0 overflow-hidden opacity-0 md:max-h-none md:overflow-visible md:opacity-100"
+              : "max-h-12 opacity-100",
+          )}
+        >
         <div className="kub-field min-w-0 flex-1 gap-2 rounded-lg px-3 h-9 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] transition-all focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]">
           <KubIcon name="search" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
           <input
@@ -255,6 +286,23 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
             </button>
           )}
         </div>
+        </div>
+
+        {/* In the field's place while it is tucked, and named «Поиск»: this
+            is the phone's way back to search now that the tab is gone. */}
+        {tuck && (
+          <button
+            type="button"
+            onClick={() => {
+              onUntuckSearch?.();
+              window.requestAnimationFrame(() => searchInputRef.current?.focus());
+            }}
+            className={cn(iconButtonClass, "md:hidden text-[color:var(--kub-muted)]")}
+            aria-label="Поиск"
+          >
+            <KubIcon name="search" size={18} />
+          </button>
+        )}
 
         {!isSearchFocused && !searchQuery && (
           <>

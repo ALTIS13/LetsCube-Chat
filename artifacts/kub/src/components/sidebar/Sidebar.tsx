@@ -47,6 +47,9 @@ export function Sidebar() {
   const [showNewChat, setShowNewChat] = useState(false);
   const [editingFolder, setEditingFolder] = useState<Folder | "new" | null>(null);
   const [showFolderList, setShowFolderList] = useState(false);
+  // Phone only in effect: the header keeps the field in its control row from
+  // `md`, so this flag changes nothing on a computer.
+  const [searchTucked, setSearchTucked] = useState(false);
   // The computer's side list, and the two surfaces it opens. They are owned
   // here rather than in `SidebarHeader` because from `md` the button that opens
   // them lives on the folder rail, not in the list's header.
@@ -141,7 +144,12 @@ export function Sidebar() {
               fade and close this as `--kub-chat-list-narrow` goes to 1, so the
               list keeps narrowing continuously instead of switching mode. */}
           <div data-kub-list-chrome="" className="relative shrink-0">
-            <SidebarHeader onNewChat={() => setShowNewChat(true)} onRefetch={refetch} />
+            <SidebarHeader
+              onNewChat={() => setShowNewChat(true)}
+              onRefetch={refetch}
+              searchTucked={searchTucked}
+              onUntuckSearch={() => setSearchTucked(false)}
+            />
             {/* Below `md` only. The folder rail above is `hidden … md:flex`,
                 so without this gate the same folders were drawn twice from
                 `md` upward — once down the rail and once across this strip,
@@ -173,6 +181,7 @@ export function Sidebar() {
               chats={filtered}
               selectedChatId={selectedChatId}
               onChatSelect={setSelectedChatId}
+              onScrollStateChange={setSearchTucked}
             />
           )}
         </div>

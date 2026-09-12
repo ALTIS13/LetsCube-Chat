@@ -451,6 +451,8 @@ const DEVICES = {
  */
 const SCENES = {
   rest: { path: "/", openChat: false, collapsed: false, menu: false },
+  /** The list scrolled past the point where a phone tucks its search row. */
+  scrolled: { path: "/", openChat: false, collapsed: false, menu: false, scrolled: true },
   collapsed: { path: "/", openChat: true, collapsed: true, menu: false },
   menu: { path: "/", openChat: false, collapsed: false, menu: true },
   chat: { path: "/", openChat: true, collapsed: false, menu: false },
@@ -468,6 +470,11 @@ const add = (theme, device, scene, role = "staff") =>
 // ever came back this is the frame it would come back in.
 add("dark", "phone", "rest");
 add("light", "phone", "rest");
+// The same phone with the list scrolled: the search row tucked away and the
+// magnifier in its place, which is the half of the change a resting frame
+// cannot show.
+add("dark", "phone", "scrolled");
+add("light", "phone", "scrolled");
 add("dark", "desktop", "rest");
 add("dark", "desktop", "collapsed");
 add("dark", "desktop", "menu");
@@ -967,6 +974,27 @@ async function renderFrame(browser, frame) {
     await page.waitForTimeout(4_700);
   } else {
     await page.waitForTimeout(1_200);
+  }
+
+  if (scene.scrolled) {
+    // With the wheel, so the list scrolls the way it scrolls for a person and
+    // the header hears the same event it hears in use.
+    const list = page.locator('[data-testid="chat-list-scroller"]');
+    const box = await list.boundingBox();
+    if (!box) throw new Error("no chat list to scroll");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, 240);
+    await page.waitForTimeout(600);
+    // The frame has to prove what it claims. The header replaces the search
+    // row with a magnifier named «Поиск» once the list has scrolled past its
+    // threshold; if that button is not on screen the list did not scroll, and
+    // photographing it would file an untucked row as evidence of a tucked one.
+    const magnifier = page.locator('[aria-label="Поиск"]');
+    if ((await magnifier.count()) === 0) {
+      throw new Error(
+        "the list did not scroll: the header still shows its search row, so this frame would not be the tucked state",
+      );
+    }
   }
 
   if (scene.collapsed) {

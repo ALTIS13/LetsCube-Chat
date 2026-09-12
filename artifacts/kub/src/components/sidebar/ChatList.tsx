@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type UIEvent } from "react";
 import { ChatListItem } from "./ChatListItem";
 import { useAppStore } from "@/store/app.store";
 import { KubEmptyState, KubIcon, type KubIconName } from "@/components/kub";
@@ -22,6 +22,12 @@ interface ChatListProps {
   chats: ChatWithLastMessage[];
   selectedChatId: string | null;
   onChatSelect: (id: string) => void;
+  /**
+   * Told when the list has scrolled far enough that the phone's search row
+   * should tuck away, and when it has come back. Optional: the public
+   * preview page renders this list without it.
+   */
+  onScrollStateChange?: (tucked: boolean) => void;
 }
 
 type ChatMenuState =
@@ -40,7 +46,7 @@ interface ChatAction {
 const DESKTOP_MENU_WIDTH = 272;
 const DESKTOP_MENU_HEIGHT_ESTIMATE = 388;
 
-export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps) {
+export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateChange }: ChatListProps) {
   const supabase = createClient();
   const currentUser = useAppStore((s) => s.currentUser);
   const mutedChatIds = useAppStore((s) => s.mutedChatIds);
@@ -52,6 +58,22 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
   const [openMenu, setOpenMenu] = useState<ChatMenuState | null>(null);
   const [busyActionId, setBusyActionId] = useState<string | null>(null);
   const [draggedPinnedChatId, setDraggedPinnedChatId] = useState<string | null>(null);
+
+  // Two thresholds rather than one, because a single one flaps: a row that
+  // tucks at exactly the scroll position it untucks at will do both on every
+  // frame while a finger rests on the boundary. It tucks after 48px and only
+  // comes back within 8px of the top.
+  const tuckedRef = useRef(false);
+  const handleListScroll = useCallback(
+    (event: UIEvent<HTMLDivElement>) => {
+      const top = event.currentTarget.scrollTop;
+      const next = tuckedRef.current ? top > 8 : top > 48;
+      if (next === tuckedRef.current) return;
+      tuckedRef.current = next;
+      onScrollStateChange?.(next);
+    },
+    [onScrollStateChange],
+  );
   const [dragOverPinnedChatId, setDragOverPinnedChatId] = useState<string | null>(null);
   const presenceNow = usePresenceNow();
 
@@ -498,7 +520,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto" data-testid="chat-list-scroller">
+      <div className="flex-1 overflow-y-auto" data-testid="chat-list-scroller" onScroll={handleListScroll}>
         {chats.map((chat) => (
           <ChatListItem
             key={chat.id}
