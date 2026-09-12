@@ -531,15 +531,31 @@ const SHEET_NOTE =
   "потом отправить или удалить. Слишком короткое нажатие оставляет подсказку у кнопки вместо модального окна. " +
   "Показан нижний край экрана — там, где находится строка ввода.";
 
+/**
+ * Each cell's shape matches its crop's exactly.
+ *
+ * `sharp`'s `cover` fit trims the sides to reach the cell's ratio, so a cell
+ * shaped differently from what it is given silently cuts the picture — which is
+ * what took the timer off the left of the first sheet. Cell height is therefore
+ * derived from the crop rather than chosen.
+ */
+const cellFor = (width, crop) => ({ width, height: Math.round((width * crop.height) / crop.width), crop });
+
 const DEVICE_SHEETS = {
   iphone: {
     label: "iPhone 430",
-    cell: { width: 300, height: 420, crop: { left: 0, top: 1024, width: 860, height: 840 } },
+    // The bottom two fifths of the screen: the last messages and the composer,
+    // which is the only part of the page this work changes.
+    cell: cellFor(340, { left: 0, top: 1104, width: 860, height: 760 }),
     subtitle: "iPhone 430×932, режим установленного приложения; статус-бар и полоска «домой» дорисованы для масштаба.",
   },
   desktop: {
     label: "компьютер",
-    cell: { width: 380, height: 300, crop: { left: 360, top: 560, width: 1000, height: 340 } },
+    // A desktop frame is wide, so its states run down the sheet and the two
+    // themes across it. Five narrow columns scaled the composer's own words to
+    // about seven pixels, which is a picture nobody can judge.
+    statesDownTheSheet: true,
+    cell: cellFor(900, { left: 380, top: 640, width: 1060, height: 260 }),
     subtitle: "Окно 1440×900; показан низ переписки со строкой ввода.",
   },
 };
@@ -547,16 +563,24 @@ const DEVICE_SHEETS = {
 async function buildSheets() {
   const sheets = [];
   for (const [device, spec] of Object.entries(DEVICE_SHEETS)) {
-    const rows = THEMES.map((theme) => ({
-      label: theme.title,
-      frames: STATE_LIST.map((state) => framePath(`${theme.id}-${device}-${state.id}`)),
-    }));
+    const rows = spec.statesDownTheSheet
+      ? STATE_LIST.map((state) => ({
+          label: state.title,
+          frames: THEMES.map((theme) => framePath(`${theme.id}-${device}-${state.id}`)),
+        }))
+      : THEMES.map((theme) => ({
+          label: theme.title,
+          frames: STATE_LIST.map((state) => framePath(`${theme.id}-${device}-${state.id}`)),
+        }));
+    const columns = spec.statesDownTheSheet
+      ? THEMES.map((theme) => theme.title)
+      : STATE_LIST.map((state) => state.title);
     sheets.push(
       await buildSheet({
         file: path.join(OUT, `sheet-${device}.png`),
         title: `Запись голосового · ${spec.label}`,
         subtitle: `${spec.subtitle} ${SHEET_NOTE}`,
-        columns: STATE_LIST.map((state) => state.title),
+        columns,
         rows,
         cell: spec.cell,
       }),
