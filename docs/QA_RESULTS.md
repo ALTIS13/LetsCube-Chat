@@ -1,5 +1,27 @@
 # QA Results
 
+## 2026-09-13 - Deployed 540df15, and the rule caught a bad marker on its first outing
+
+The settings column is live. Verified as the four deploys before it — image tag carrying the full SHA, health,
+rollover complete, no build in flight, `sw.js` answering one id six times, then the served bytes with
+controls.
+
+**What is worth recording is that the new rule paid for itself immediately.** After the previous deploy sent a
+watcher hunting for eighty-three rounds after two markers I had invented, the rule became: a marker must be
+**absent from what is served now** and **present in the source being shipped**. Three candidates were checked
+against both halves before this push. `sidebar-settings` and «Поиск по настройкам» passed.
+`settings-field-name` failed — zero occurrences in the working tree, because that id is composed at runtime
+as `settings-field-${field}` and the literal never exists in source. The old check would have called it
+excellent: absent from the live bundle, new-looking, and useless.
+
+Both surviving markers were found on the first round that spoke after the rollover. No false negative, no hunt.
+
+**The rollover disagreement appeared again and is now a property, not a story.** Three rounds mid-swap returned
+144 bytes with controls missing, and one of them had taken the **new** asset name from the page while the old
+container was still answering for it. During a swap the page and its assets come from different replicas; a
+single fetch pair in that window is worth nothing unless it proves itself first. Five rounds, two verdicts, three
+refusals — the same shape as the last two deploys, for a reason now understood.
+
 ## 2026-09-13 - Settings becomes a column, and a marker proved absent is not a marker proved useful
 
 D-160 is fixed: settings is the list column's body from `md` — 360px instead of 896, the application no

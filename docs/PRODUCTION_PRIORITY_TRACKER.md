@@ -480,7 +480,33 @@ ask the tester to retry the video that failed, now that the send path names the 
 
 ## Last Confirmed Deploy Baseline
 
-**Current: `df5dce0`, deployed 2026-09-13 at 00:20 MSK.** In-chat search moved into the list column
+**Current: `540df15`, deployed 2026-09-13 at 00:55 MSK.** The settings column (D-160) and the record of
+the deploy before it.
+
+Verified by the running container's own image tag —
+`l64kyyu1sysev2izzjjbizhe:540df154673466eb8950d96ede30ce113a34fcc4`, the commit's full SHA — with the
+rollover complete, the previous container gone, no build still running, and `sw.js` answering
+`df3284221f6e1a8e` on six consecutive requests.
+
+Then the bytes: the page's asset moved from `index-v9NfXnOf.js` to `index-CYp9DLS8.js`, the controls
+are present, and **both markers were found** — `sidebar-settings` and «Поиск по настройкам».
+
+**This is the first deploy whose markers were proved in both directions before the push, and it is the reason
+this entry is short.** The rule written after the previous deploy — a marker must be *absent from what is served
+now* **and** *present in the source being shipped* — was applied to three candidates. Two passed. The third,
+`settings-field-name`, failed the new half: zero files in the working tree, because the id is composed at
+runtime as `settings-field-${field}` and the whole string never appears in source. Under the old
+one-directional check it would have looked like a perfect discriminator and produced another false negative.
+Both surviving markers then appeared on the first round that spoke after the swap.
+
+**And the rollover disagreement showed itself a second time, so it is a property rather than an anecdote.** Three
+rounds mid-swap fetched 144 bytes with the controls missing, and one of them named `index-CYp9DLS8.js` — the
+**new** asset — while the container answering for it was still the old one. The page and its assets come from
+different replicas during a swap. The probe refused those three rounds and spoke on two.
+
+Rollback: fast-forward `main` back to `df5dce0`.
+
+**Superseded:** `df5dce0`, deployed 2026-09-13 at 00:20 MSK. In-chat search moved into the list column
 (D-159), with the register entries that opened D-160 and D-161.
 
 Verified by the running container's own image tag —
