@@ -64,6 +64,13 @@ const FIXTURE_SUPABASE_KEY = "public-preview-fixture";
 const ALLOWED_HOSTS = ["127.0.0.1", "localhost", "fonts.googleapis.com", "fonts.gstatic.com"];
 
 const REQUIRED_FONT = "16px Inter";
+const REQUIRED_FONT_FAMILY = "Inter";
+
+// The component reserves the footer's width plus 8px for an inline time.
+// Four is that with room for rounding at deviceScaleFactor 2 — enough to
+// pass a close call and nowhere near enough to pass a collision, which
+// measures zero or less.
+const MIN_META_GAP_PX = 4;
 const WEBP_QUALITY = 88;
 
 /**
@@ -277,12 +284,38 @@ async function capture(browser, fixture, target) {
   // it proves nothing on its own. Without this check an offline or blocked run
   // would silently fall back to the system stack and produce different pixels.
   await page.evaluate(() => document.fonts.ready);
-  const fontLoaded = await page.evaluate((font) => document.fonts.check(font), REQUIRED_FONT);
+  // Nor does `document.fonts.check` prove it: it answers whether the face is
+  // usable, and a family that never loaded falls back and still counts. It
+  // returned true in the sibling frame renderer on 2026-09-12 with both font
+  // hosts blocked, and the frames were measured in Segoe UI — about 5px
+  // narrower a label than the product. So the face is proved by measuring it:
+  // the same string laid out with the page's stack and again with Inter struck
+  // out of the stack must come to different widths.
+  const fontLoaded = await page.evaluate((family) => {
+    const probe = document.createElement("span");
+    probe.textContent = "Сообщение";
+    probe.style.cssText = "position:absolute;left:-9999px;top:0;font-size:16px;white-space:nowrap";
+    document.body.appendChild(probe);
+    const stack = getComputedStyle(document.body).fontFamily;
+    probe.style.fontFamily = stack;
+    const withFace = probe.getBoundingClientRect().width;
+    probe.style.fontFamily = stack.split(",").filter((name) => !name.toLowerCase().includes(family.toLowerCase())).join(",");
+    const withoutFace = probe.getBoundingClientRect().width;
+    probe.remove();
+    return withFace !== withoutFace;
+  }, REQUIRED_FONT_FAMILY);
   if (!fontLoaded) {
     throw new Error(
       `The web font (${REQUIRED_FONT}) did not load, so this capture would not match a normal run.`,
     );
   }
+
+  // The face arrives after the ready attribute and re-wraps the conversation.
+  // Without this wait the shot can freeze a state no reader ever sees, which
+  // is how android-messenger-dark.webp came to print a time against the last
+  // word of its message on 2026-09-12 while its three siblings were clean.
+  await waitForSettledLayout(page);
+  await assertMetaStandsClear(page, target.file);
 
   const background = await page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue("--kub-bg").trim(),
@@ -294,6 +327,105 @@ async function capture(browser, fixture, target) {
   return sharp(screenshot).resize({ width: target.output.width });
 }
 
+
+/**
+ * Until the placements and the paragraph boxes have been unchanged for 2.5
+ * seconds. Copied in spirit from `message-meta-spacer-line.spec.ts`, which
+ * needed the same wait for the same reason: WebKit re-lays the conversation
+ * out about 1.3s after the route reports ready, and Chromium does it when
+ * Inter arrives. A plateau shorter than the wait is not settled.
+ */
+async function waitForSettledLayout(page) {
+  const signature = () =>
+    page.evaluate(() =>
+      Array.from(document.querySelectorAll('[data-message-text-meta-group="true"]'))
+        .map((group) => {
+          const paragraph = group.querySelector("[data-message-text-flow]");
+          const box = paragraph ? paragraph.getBoundingClientRect() : null;
+          return group.getAttribute("data-message-meta-placement") + ":" + (box ? Math.round(box.width) : 0) + "x" + (box ? Math.round(box.height) : 0);
+        })
+        .join("|"),
+    );
+  let previous = await signature();
+  let unchanged = 0;
+  for (let sample = 0; sample < 80 && unchanged < 10; sample += 1) {
+    await page.waitForTimeout(250);
+    const current = await signature();
+    unchanged = current === previous ? unchanged + 1 : 0;
+    previous = current;
+  }
+  if (unchanged < 10) {
+    throw new Error(
+      "The conversation never stopped re-laying itself out, so this capture would freeze a state the reader never sees.",
+    );
+  }
+}
+
+/**
+ * An inline time must stand clear of the text it sits beside, measured on the
+ * geometry about to be written rather than on a class name. Refuses a scene
+ * where nothing could be measured, so the check cannot pass by finding no
+ * messages.
+ */
+async function assertMetaStandsClear(page, file) {
+  const spacing = await page.evaluate((minimum) => {
+    const lineBoxes = (rects) => {
+      const lines = [];
+      for (const rect of rects) {
+        if (rect.width <= 0.5 || rect.height <= 0.5) continue;
+        const centre = (rect.top + rect.bottom) / 2;
+        const line = lines.find((candidate) => {
+          const candidateCentre = (candidate.top + candidate.bottom) / 2;
+          return Math.abs(candidateCentre - centre) <= Math.max(4, Math.min(candidate.bottom - candidate.top, rect.height) * 0.7);
+        });
+        if (line) {
+          line.top = Math.min(line.top, rect.top);
+          line.bottom = Math.max(line.bottom, rect.bottom);
+          line.right = Math.max(line.right, rect.right);
+        } else {
+          lines.push({ top: rect.top, bottom: rect.bottom, right: rect.right });
+        }
+      }
+      return lines.sort((a, b) => a.top - b.top);
+    };
+    const rectsOf = (node) => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const rects = Array.from(range.getClientRects());
+      range.detach();
+      return rects;
+    };
+    const tight = [];
+    let measured = 0;
+    for (const group of Array.from(document.querySelectorAll('[data-message-text-meta-group="true"]'))) {
+      if (group.getAttribute("data-message-meta-placement") !== "inline") continue;
+      const content = group.querySelector('[data-message-text-content="true"]');
+      const footer = group.querySelector('[data-message-footer="true"]');
+      if (!content || !footer) continue;
+      const lines = lineBoxes(rectsOf(content));
+      const last = lines.length > 0 ? lines[lines.length - 1] : null;
+      if (!last) continue;
+      measured += 1;
+      const gap = footer.getBoundingClientRect().left - last.right;
+      if (gap < minimum) {
+        tight.push((content.textContent || "").slice(0, 32).trim() + " -> " + gap.toFixed(1) + "px");
+      }
+    }
+    return { measured, tight };
+  }, MIN_META_GAP_PX);
+
+  if (spacing.measured === 0) {
+    throw new Error(
+      file + ": no inline message time could be measured, so the spacing of the published image is unproven.",
+    );
+  }
+  if (spacing.tight.length > 0) {
+    throw new Error(
+      file + ": a time would be printed against its message (" + MIN_META_GAP_PX + "px minimum): " + spacing.tight.join("; "),
+    );
+  }
+  log(`  ${file}: ${spacing.measured} inline times, all clear of their text`);
+}
 
 function pruneOutputDirectory() {
   mkdirSync(OUTPUT_DIRECTORY, { recursive: true });
