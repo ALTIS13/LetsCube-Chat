@@ -1,5 +1,33 @@
 # QA Results
 
+## 2026-09-12 - Deployed: the media batch, the attach sheet and the chat screen reach production
+
+The owner lifted the deploy hold («если требуется сделай деплой без моего вмешательства»), so this was carried
+out and verified rather than announced.
+
+- **What went.** `main` fast-forwarded `0b69e38` to `17a1c47`, 104 commits, 211 files. Every commit was read
+  before the push, because pushing `HEAD:main` unread once carried other agents' work into `main` in this
+  project: all 104 are this track's, the four merges are its own branches, and nothing in the range touches CI,
+  Dockerfiles, Coolify configuration, environment files, keystores or signing material.
+- **Gates before the push.** Typecheck of both packages clean; unit suite 1783 of 1783; production build clean;
+  the mounted routing matrix 15 of 15 on `chromium-desktop-1440`; server tests 58 of 59, the one failure being
+  `variant-upload-headers`, which asserts a `cacheControlSeconds` line absent from both this tree and its base.
+- **`letscube-web`.** Reached image tag `17a1c47e8f88` - the exact commit, read off the running container rather
+  than trusted from the webhook. One replica, healthy; the previous replica at `0b69e38` is gone. The served
+  bundle moved from `index-Bltc_o8I.js` to `index-DYwkcdSI.js` and the site answers 200.
+- **What the served code proves.** Each of «Скоро здесь можно будет создать опрос», «…создать список»,
+  «…отправить контакт», «Отправить без сжатия», «Галерея» and «Геопозиция» appears once; «Музыка» does not appear
+  at all, which is the owner's decision made visible in the bytes. The bubble's constants are there as
+  `me=.5,Dme=1.9,Hme=550` - a first grep for `550px` found nothing because the minifier folds the template
+  literal into a variable, which is why the marker was checked a second way instead of being assumed.
+- **`letscube-worker`** (`fkd10qwlo4qod9e6gtyzzuwk`) redeployed to the same commit on its own, queued behind the web
+  build rather than skipped - it had been running the 5 September image, and the D-116 preview rule was verified
+  absent from that one before the deploy and present after.
+- **Not deployed:** `letscube-bot-gateway` (`935a670`, auto-deploy off by design) and `fsk7qm5e4nm9kap9hv8chtts`.
+- **Rollback** is a fast-forward of `main` back to `0b69e38`, which is the image the previous replica ran.
+- **No production screenshots were taken.** Verification is the running image tag, the replica count, the served
+  bundle's name and its contents - signed-in production screens are not photographed.
+
 ## 2026-09-12 - The media batch after the owner's answers: a taller bubble, a preview that matches it, and the old pictures
 
 Four answers came back from the owner and all four are done or designed; nothing is deployed.
