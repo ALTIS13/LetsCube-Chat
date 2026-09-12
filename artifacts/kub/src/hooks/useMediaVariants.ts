@@ -208,7 +208,7 @@ async function loadMessageVariants(entry: MessageVariantCacheEntry): Promise<voi
     const supabase = createClient();
     const { data, error } = await supabase
       .from("media_variants")
-      .select("id,message_id,variant_kind,variant_bucket,variant_path,width,height,status")
+      .select("id,message_id,variant_kind,variant_bucket,variant_path,width,height,status,updated_at")
       .eq("status", "ready")
       .in("variant_kind", [...MESSAGE_VARIANT_KINDS])
       .in("message_id", messageIds);
@@ -217,7 +217,13 @@ async function loadMessageVariants(entry: MessageVariantCacheEntry): Promise<voi
     const next: Record<string, MessageMediaVariantUrls> = {};
     for (const row of (data ?? []) as unknown as MediaVariant[]) {
       if (!row.message_id) continue;
-      const publicUrl = getVariantPublicUrl(supabase.storage, row);
+      // A message variant keeps its path when it is rewritten, and the worker
+      // writes it `max-age=31536000, immutable`. Without the moment it was
+      // written in the URL, a reader who has already seen a picture keeps the
+      // old bytes for a year — which would make the D-116 backfill invisible to
+      // exactly the people who complained. Avatars have carried this token for
+      // the same reason since they were cacheable.
+      const publicUrl = withVersionToken(getVariantPublicUrl(supabase.storage, row), row.updated_at);
       if (!publicUrl) continue;
       const current = next[row.message_id] ?? {};
       if (row.variant_kind === "image_preview") {
