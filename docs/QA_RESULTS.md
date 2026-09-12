@@ -1,5 +1,59 @@
 # QA Results
 
+## 2026-09-12 - The desktop shell of «A с поправками»: a folder rail, a side list that is a layer, and a list that narrows to avatars
+
+Built on `feat/desktop-folder-rail` (`c31e5ab`, off `da25c75`); not merged and not deployed, because one thing
+in it is the owner's to judge. Gates re-run by hand inside that worktree: unit suite **1811 of 1811**, typecheck
+clean, and nothing tracked under `output/`. The agent's own figures matched.
+
+**Measured across 14 frames** - two themes, 1440x900 and 1024x720, the Windows shell, and a person without rights:
+the folder rail is **72** in all fourteen; the collapsed list and its rows are **66**; there is **no bottom capsule**
+in any of them; the menu button is on the rail and never in the list header; the side list is **304x900 at 0,0**,
+nine rows with rights and seven without. Contrast photographed at the worst pixel, floor 4.5: the lowest anywhere
+is 4.56 on a rail count, everything else well clear.
+
+The strip is Telegram's 66 exactly, spent differently: theirs is 10 + 46 + 10, ours 9 + 48 + 9, because our avatar
+is 48 everywhere and the padding gives way instead.
+
+**Two ready-made components were rejected, with the reason named rather than asserted.** `ui/sidebar.tsx` collapses
+to an icon width as a boolean, where Telegram's is a float ratio - a two-state component cannot express a row that
+interpolates and never snaps. `ui/resizable.tsx` distributes percentages rather than pixels and holds the size in
+React state, so every frame of a drag would re-render every row - and `chat-list-event-cost.spec.ts` counts those
+renders as a contract. The resizer therefore writes two custom properties off a ref, and a whole drag costs zero
+React renders.
+
+**Two silent defects were found on the way**, both rule 10 - a utility beats a class in `@layer components`, so the
+source reads correctly while nothing happens: `w-full` on the region outranked the width, and the column stayed
+1367 px through every drag; `gap-3 px-3` on the row outranked the narrowing. Both carry mutation proofs - putting
+`w-full` back reproduces exactly 1367 in the drag test.
+
+**It corrected itself mid-flight.** Its first commit message and a comment repeated the assessment's «we lay glass
+on glass on the desktop»; seeing that refuted on the working branch, it amended both. It added no glass layer - the
+rail shares the column's existing sheet behind a hairline, and the side list's material replaces the avatar
+dropdown's rather than adding to it.
+
+**Open, and the owner's to judge - one thing, not two.** A bar carrying the LETSCUBE wordmark sits above
+everything. Telegram Desktop has no such bar: its window begins with the rail. Because ours is there, the folder
+rail starts below the window's top edge instead of at it, **and** the mark appears twice, once in that bar and once
+in the list's top row. Both complaints are the same cause. Collapsing it touches two mutation-proved guard tests,
+which is a reason to do it deliberately rather than a reason to leave it. Recommended to him: remove the bar, so
+the rail reaches the top as Telegram's does and the one mark left is the cube the assessment asked to keep.
+
+**D-112 is honest about what it did not fix.** The messenger's window-button zone is clean, with the side list open
+too. `/tasks` still has «+ Новая» 64% under the buttons - the identical figure measured before this branch. The
+mechanism the options used cannot be reached by redeclaring `--kub-safe-top`, which a test pins to exactly one
+`:root` declaration from `env()`, and routing it through `pt-safe` would crush a header whose height is a fixed
+calculation. The spec asserts that corner as a named set, so it is a ratchet: anything the shell adds there fails.
+
+**Not verified**: a real Windows window - the bridge is stubbed and the buttons are ours, not the system's; a real
+pointer, with trackpad inertia and high DPI; **WebKit on a desktop**, since the matrix's only WebKit project is a
+phone and rule 12 exists because a WebKit-only paint-order bug survived six deploys with seven Chromium viewports
+green; and `prefers-reduced-transparency`, which the material does not answer at all.
+
+**A note for whoever renders next**: these sheets are 2,700 to 4,000 px tall, against the 2,200 earlier renders
+held to. Two of the six went to the owner rather than all six, because sending him everything is the complaint he
+already made once.
+
 ## 2026-09-12 - Two measurements: «Управление» does not fit, and the glass-on-glass finding is false
 
 Both were demanded by the Windows and iOS assessment as «measure, do not decide by eye». Branch
