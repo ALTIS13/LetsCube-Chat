@@ -1,5 +1,38 @@
 # QA Results
 
+## 2026-09-12 - Deployed 9c58247, and the probe that said «not deployed» was asking for a file that no longer existed
+
+Fourteen commits went to `main` — the search filters restored, the palette deleted, the capture instrument
+taught to refuse a bad frame, the folder surfaces reconciled, a security guard stopped failing on the clock, and
+Playwright's report directories ignored before they could hold a picture of a real account.
+
+**Verified at every level, in this order:** the pushed SHA; the running container's own image tag carrying that
+same full SHA; its health; the rollover — old container gone, one replica, no build in flight; then the bytes a
+reader actually receives.
+
+**The bytes are where it went wrong, and the way it went wrong is the part to keep.** The first read of the live
+bundle returned **144 bytes** and found none of today's markers. Read as data, that says «the deploy has not
+landed». It was not: the request used the *previous* build's hashed asset name, and the new container has no such
+file, so nginx answered something tiny. What caught it was the control strings — «Выберите диалог»,
+«Конфиденциальность», «Поддержка» — which came back **zero as well**, and those exist in every build ever shipped.
+A probe that cannot find what is certainly there is not reporting on the subject; it is reporting on itself.
+
+Taking the asset URL from the page instead gave `index-B1n3R-R-.js`, 2,398,881 bytes, and then the answer:
+the three controls present, `search-type-filters`, `Фильтр по типу` and `search-type-filter-` present,
+and `openGlobalSearch` **absent** — the deleted palette's event proved gone rather than assumed gone. The
+stylesheet is served under the same filename the validating build produced locally, and carries the capsule's
+`--kub-bottom-nav`. All four re-shot product images are served byte-identical to the committed files.
+
+**And one number that differs without meaning anything.** The live `sw.js` answers `533b119180156a9a` on
+six consecutive requests — one replica, answering consistently — while the local validating build of the same
+commit produced `60d1bb25848174d7`. The id is not derived from the sources alone, so it cannot be used to
+match a build; the content-hashed stylesheet filename and the container's image tag are what do that. Written down
+because two different sixteen-character ids beside one deploy look like an alarm to whoever meets them next.
+
+**Still open and recorded:** D-156, the type-filter row clipped at both ends with no scrollbar, fade or arrow, and
+«Все» scrolling out of reach once a filter is chosen. It ships in this deploy as a working row with an awkward
+scroll, and is being fixed by lifting the arrows `FolderTabs` already has into a shared hook.
+
 ## 2026-09-12 - The filter row comes back, and a security guard that failed on the clock
 
 **Why there was a row to bring back.** The search audit earlier this day told the owner the interface offered

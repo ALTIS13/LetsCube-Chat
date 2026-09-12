@@ -480,7 +480,43 @@ ask the tester to retry the video that failed, now that the send path names the 
 
 ## Last Confirmed Deploy Baseline
 
-**Current: `245e4d9`, deployed 2026-09-12.** Verified by reading the running container's own image tag
+**Current: `9c58247`, deployed 2026-09-12 at 20:48 MSK.** Verified by reading the running container's own
+image tag — `l64kyyu1sysev2izzjjbizhe:9c582479629ad147d89333f225710a997fd8c0bd`, the commit's full SHA —
+its health (`Up … (healthy)`), and the rollover: the previous container on `245e4d9` had gone and one
+replica remained, with no build still running. `sw.js` answers the id `533b119180156a9a` on six
+consecutive requests, which is the same one-replica proof the previous baseline used.
+
+Then the live files, with controls, because a probe that finds nothing and a probe that reads nothing look the
+same. The served bundle carries `search-type-filters`, `Фильтр по типу` and `search-type-filter-` —
+today's row of type filters — while `openGlobalSearch` is **absent**, which is the deleted palette's event
+proved gone rather than assumed gone. The controls «Выберите диалог», «Конфиденциальность» and «Поддержка» are
+present, so the absence above is a real absence. The stylesheet is served as `index-Du7qh2Mh.css` — the same
+filename the validating build produced locally — and declares `--kub-bottom-nav`, the capsule's height, new in
+this deploy. All four product images are served **byte-identical** to the committed files, compared by checksum.
+`/`, `/privacy` and `/login` all answer 200.
+
+**One number differs and it is not a discrepancy, recorded so nobody re-discovers it as an alarm.** The served
+`sw.js` id is `533b119180156a9a`; the local validating build of the same commit produced
+`60d1bb25848174d7`. The id is therefore not derived from the sources alone. What proves the deployed artefact
+is this commit's is the pair that *is* content-derived: the container's image tag carries the full SHA, and the
+stylesheet's content-hashed filename matches the local build exactly. Use the id for «one replica, answering
+consistently», never for «the same build as mine».
+
+Gates at that commit: typecheck clean, production build proved by its own `sw.js build` and `built in` lines,
+unit suite **1858 of 1858**, the fixture Playwright set **41 passed and 0 failed** with all 31 skips accounted for
+by project (desktop-only tests on the phone project, the routing matrix outside its width, one long-standing bot
+skip), and the signed-in `global-search` spec **2 of 2** against the production backend with screenshots,
+traces and video switched off and nothing written to disk.
+
+**An instrument fault worth copying the fix for.** The first check of the live bundle read 144 bytes and found
+none of its markers — because it asked for the *previous* build's hashed filename, which the new container does
+not have. A stale asset path answers small and looks exactly like «not deployed yet». Take the asset URL from the
+page on every attempt, and keep a control string that must be present: here the 144-byte response failed the
+controls too, which is what exposed it.
+
+Rollback: fast-forward `main` back to `245e4d9`.
+
+**Superseded:** `245e4d9`, deployed 2026-09-12. Verified by reading the running container's own image tag
 (`l64kyyu1sysev2izzjjbizhe:245e4d9714683323c4d169932646d8b6975de5e9`, the commit's full SHA), its replica count
 after the rollover (one), and then the live files: the stylesheet declares `--kub-window-caption` and
 `--kub-chat-track`, and `sw.js` answers the id `b6200ce4f3b7741a` on six consecutive requests. Gates at that
