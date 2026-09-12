@@ -1,5 +1,52 @@
 # QA Results
 
+## 2026-09-12 - Three answers, three branches unblocked, and a fourth thing he spotted himself
+
+The owner answered all three open pixel questions in one line each: **«1. Высветли / 2. Лучше убрать / 3. Хорошо,
+действуем по рекомендованному варианту»**. Each had a branch waiting on it, and none of the three had been merged,
+because none had been seen. He then found a fourth thing in the rendered frames that nobody had raised.
+
+- **«Высветли»** - the unplayed part of the progress track in the stopped voice-recording row, which in the dark
+  theme sat close to the capsule's own fill and read as a hairline while the light theme read clearly. The previous
+  work had taken `--kub-inset` from 4 px to 6 px and then stopped rather than tuning blind, because it was a pixel
+  judgement. It is judged now. Unblocks `design/recording-stopped-row` and the recording chain behind it.
+- **«Лучше убрать»** - the round search button beside the phone's bottom capsule. D-151 measured that the capsule
+  does not fit at 360 with it: «Управление» is 66.22 px where a tab gives 57.50, it neither truncates nor wraps, and
+  it paints into «Настройки» with a 2.50 px gap where the font's space is 2.78. Keeping «Админка» would not have
+  saved it either. Dropping the button frees 90 px - a quarter of a 360 px row - and leaves the full word with
+  about 7.78 px of slack. The argument for dropping it was that it duplicates the search the list column already
+  carries; that is being verified rather than assumed, and if search turns out not to be reachable without it the
+  work stops rather than shipping a capsule with no way in.
+- **«Действуем по рекомендованному варианту»** - remove the bar carrying the LETSCUBE wordmark from the desktop
+  shell. Telegram Desktop has no such bar; because ours was there the folder rail started below the window's top
+  edge and the mark appeared twice. Both complaints shared one cause, so one answer settles both. Unblocks
+  `feat/desktop-folder-rail`.
+
+**And a fourth, which he saw in the frames before anyone said it.** «Также убери эти три полосочки которые
+отображают закрепление, они сдвигают аватарки, а двигать чаты должно быть можно и без них.» Both halves check out
+in the committed code rather than on impression. The stripes are a `data-pinned-drag-handle` span, 16 px wide,
+carrying the `menu` glyph, drawn only for pinned chats and only from `sm` up - and it sits **before** the avatar
+in the same row, which is exactly why pinned rows are shifted against the rest and why avatars walk in the
+collapsed strip: the comment beside the avatar says everything but the avatar fades as the column narrows, while
+the handle keeps its 16 px. And dragging does not depend on it: `onDragEnter`, `onDragOver` and `onDrop` are
+already on the row, the RPC `set_pinned_chat_order` persists the order, and only `draggable` and `onDragStart` live
+on the handle. So the work is to move those two onto the row and delete the span.
+
+**The thing not to lose with it:** that handle carries `title` and `aria-label` «Перетащить закреплённый чат» and is
+today the only announced way to reorder. Removing it silently would fix the look and break the announcement, so the
+row must announce it instead, with the keyboard path stated plainly or its absence admitted. The brief is written
+and waits on the branch that currently holds that file - a second pair of hands in `ChatListItem.tsx` is how the
+branches got tangled once already tonight.
+
+**One of the three needs care rather than obedience.** Collapsing the top bar touches two guard tests that were
+proved by mutation, and the earlier work left the bar alone precisely because of them. The instruction given is not
+to make them pass: for each, say what decision it was protecting, whether that protection is still needed in
+another form, and change it knowingly with the reason recorded. A guard bent to fit the change it existed to catch
+is worse than no guard, and this project has that failure in its own history.
+
+Nothing of the three is merged or deployed yet: each will be re-rendered and shown before it ships, because the
+answers approved a direction, not a set of pixels.
+
 ## 2026-09-12 - The desktop shell of «A с поправками»: a folder rail, a side list that is a layer, and a list that narrows to avatars
 
 Built on `feat/desktop-folder-rail` (`c31e5ab`, off `da25c75`); not merged and not deployed, because one thing
