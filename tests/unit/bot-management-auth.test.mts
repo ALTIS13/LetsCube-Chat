@@ -984,7 +984,26 @@ test("actor-scoped missing and unauthorized bot ids have one response", async ()
     await close(server);
   }
 
-  assert.deepEqual(responses[0], responses[1]);
+  // The two must be indistinguishable, which is the whole point of this test:
+  // a caller must not be able to tell «no such bot» from «not yours». Every
+  // part of the response is compared except one.
+  //
+  // `Date` is stamped by the server from the wall clock, and these two
+  // responses are fetched one after the other, so the header differs whenever
+  // the pair straddles a second. Measured on 2026-09-12 under load: the entire
+  // difference between the two results was `17:16:04` against `17:16:05`,
+  // with the status, the body and every other header identical. It says nothing
+  // about which branch answered, and a guard that reddens on the clock is one
+  // that eventually gets ignored — which, for this guard, would mean the leak it
+  // exists to catch goes unwatched.
+  //
+  // Excluded narrowly, and only after asserting both responses carry the header,
+  // so that dropping it cannot cover for one going missing.
+  assert.ok(responses[0]?.headers.date, "the first response carried no Date header");
+  assert.ok(responses[1]?.headers.date, "the second response carried no Date header");
+  const withoutDate = (result: HttpResult | undefined) =>
+    result ? { ...result, headers: { ...result.headers, date: undefined } } : result;
+  assert.deepEqual(withoutDate(responses[0]), withoutDate(responses[1]));
   assert.equal(responses[0]?.status, 404);
   assert.deepEqual(responses[0]?.body, {
     ok: false,
