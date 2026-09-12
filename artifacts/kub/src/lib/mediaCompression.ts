@@ -47,16 +47,26 @@ export const MAX_ORIGINAL_ATTACHMENT_SIZE_LABEL = "50\u00a0МБ";
  */
 export const ORIGINAL_PREVIEW_MAX_DIMENSION = 1280;
 /**
- * What the short side keeps, when the source has it (D-116).
+ * What a tall picture's width keeps, when the source has it (D-116).
  *
  * A long-side cap on its own makes a tall picture thin: 1290x2796 came out
- * 591x1280, and the bubble draws a tall picture about 240x480 CSS px — around
- * 720x1440 device pixels on a 3x phone — so the reader was shown a preview
- * stretched about 1.4x. The floor costs an ordinary photograph nothing: it
- * bites only past 16:9, which is exactly where the long-side cap would take the
- * short side under 720.
+ * 591x1280, and the reader was shown it stretched to fill the bubble.
+ *
+ * The number is the bubble's own box in device pixels on the phone the tester
+ * holds: 430 CSS px of screen gives a 310 px bubble, and a phone has three
+ * device pixels to the point. A picture taller than 2:1 is drawn 310x550 CSS —
+ * 930x1650 — and 930 across the short side carries a 0.5 picture to 1860 down
+ * the long one, so neither axis is enlarged. On a phone wider than about
+ * 480 CSS px the bubble reaches its own cap of 360 px and a tall preview is
+ * then drawn about 1.16x up; that is the one case left, and it is small.
+ *
+ * It floors the short side only when the short side is the width — when the
+ * picture is taller than it is wide. A landscape picture fills the bubble with
+ * its long side, which the cap already leaves at 1280, comfortably past 930;
+ * flooring its short side would only buy height the bubble never draws. That is
+ * why 4:3, 16:9 and a panorama are all sized exactly as they were.
  */
-export const ORIGINAL_PREVIEW_MIN_SHORT_SIDE = 720;
+export const ORIGINAL_PREVIEW_MIN_SHORT_SIDE = 930;
 /** Whatever the short side asks for, the long side stops here: a preview is not a second original. */
 export const ORIGINAL_PREVIEW_MAX_LONG_SIDE = 2560;
 export const ORIGINAL_PREVIEW_QUALITY = 0.82;
@@ -184,12 +194,14 @@ export function shouldBuildOriginalPreview(input: {
 /**
  * The preview's size, with the same rounding the canvas encoder uses.
  *
- * The long side stops at `max`, as it always did — unless that would take the
- * short side under `ORIGINAL_PREVIEW_MIN_SHORT_SIDE`. Then the short side keeps
- * 720 px, or all of itself when the source has less, and the long side follows
- * it up to `ORIGINAL_PREVIEW_MAX_LONG_SIDE`. A preview is never enlarged.
+ * The long side stops at `max`, as it always did — unless the picture is taller
+ * than it is wide and that would take its width under
+ * `ORIGINAL_PREVIEW_MIN_SHORT_SIDE`. Then the width keeps 930 px, or all of
+ * itself when the source has less, and the long side follows it up to
+ * `ORIGINAL_PREVIEW_MAX_LONG_SIDE`. A preview is never enlarged.
  *
- * 4032x3024 -> 1280x960, as before. 1080x2341 -> 720x1561, not 591x1280.
+ * 4032x3024 -> 1280x960, as before, and so is every landscape picture.
+ * 1080x2341 -> 930x2016, not 591x1280.
  *
  * The same arithmetic as `imagePreviewSize` in
  * `artifacts/api-server/src/workers/mediaVariantRules.ts`, which is what the
@@ -207,9 +219,12 @@ export function originalPreviewDimensions(
   const longSide = Math.max(width, height);
   const shortSide = Math.min(width, height);
   const capped = max / longSide;
-  const keepsShortSide = Math.min(1, ORIGINAL_PREVIEW_MIN_SHORT_SIDE / shortSide);
+  // Only a picture taller than it is wide fills the bubble with its short side;
+  // a landscape one fills it with the long side the cap already keeps.
+  const keepsDrawnWidth =
+    height > width ? Math.min(1, ORIGINAL_PREVIEW_MIN_SHORT_SIDE / shortSide) : 0;
   const ceiling = Math.max(max, ORIGINAL_PREVIEW_MAX_LONG_SIDE) / longSide;
-  const scale = Math.min(1, Math.max(capped, keepsShortSide), ceiling);
+  const scale = Math.min(1, Math.max(capped, keepsDrawnWidth), ceiling);
   return {
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale)),

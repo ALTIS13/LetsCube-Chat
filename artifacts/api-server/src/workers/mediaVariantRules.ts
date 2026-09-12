@@ -22,16 +22,27 @@ export const MESSAGE_IMAGE_VARIANTS = [
 ] as const;
 
 /**
- * What an `image_preview`'s short side keeps, when the source has it (D-116).
+ * What a tall `image_preview`'s width keeps, when the source has it (D-116).
  *
  * A long-side cap on its own makes a tall picture thin: a 1080x2341 screenshot
- * came out 591x1280, and the bubble draws a tall picture about 240x480 CSS px —
- * around 720x1440 device pixels on a 3x phone — so the reader was shown a
- * preview stretched about 1.4x. The floor bites only past 16:9, which is
- * exactly where the cap would take the short side under 720; an ordinary
- * photograph is unchanged.
+ * came out 591x1280, and the reader was shown it stretched to fill the bubble.
+ *
+ * The number is the bubble's own box in device pixels on the phone the tester
+ * holds: 430 CSS px of screen gives a 310 px bubble, three device pixels to the
+ * point, and the bubble stops at 550 CSS px tall — 930x1650. A picture taller
+ * than 2:1 kept at 930 across carries to 1860 down, so neither axis is
+ * enlarged.
+ *
+ * It floors the short side only when the short side is the width — when the
+ * picture is taller than it is wide. A landscape picture fills the bubble with
+ * its long side, which the cap already leaves at 1280; flooring its short side
+ * would only buy height the bubble never draws. So 4:3, 16:9 and a panorama are
+ * sized exactly as they were.
+ *
+ * Must stay the same rule as `originalPreviewDimensions` in
+ * `artifacts/kub/src/lib/mediaCompression.ts`.
  */
-export const IMAGE_PREVIEW_MIN_SHORT_SIDE = 720;
+export const IMAGE_PREVIEW_MIN_SHORT_SIDE = 930;
 /** Whatever the short side asks for, the long side stops here: a preview is not a second original. */
 export const IMAGE_PREVIEW_MAX_LONG_SIDE = 2560;
 
@@ -58,9 +69,12 @@ export function imagePreviewSize(
   const longSide = Math.max(width, height);
   const shortSide = Math.min(width, height);
   const capped = max / longSide;
-  const keepsShortSide = Math.min(1, IMAGE_PREVIEW_MIN_SHORT_SIDE / shortSide);
+  // Only a picture taller than it is wide fills the bubble with its short side;
+  // a landscape one fills it with the long side the cap already keeps.
+  const keepsDrawnWidth =
+    height > width ? Math.min(1, IMAGE_PREVIEW_MIN_SHORT_SIDE / shortSide) : 0;
   const ceiling = Math.max(max, IMAGE_PREVIEW_MAX_LONG_SIDE) / longSide;
-  const scale = Math.min(1, Math.max(capped, keepsShortSide), ceiling);
+  const scale = Math.min(1, Math.max(capped, keepsDrawnWidth), ceiling);
   return {
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale)),

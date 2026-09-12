@@ -103,11 +103,13 @@ test("media variants worker scans bounded candidate pages beyond the newest page
 test("an image_preview keeps a tall picture's short side", () => {
   const preview = (width, height) => mediaVariantRules.imagePreviewSize(width, height, 1280);
   assert.deepEqual(preview(4032, 3024), { width: 1280, height: 960 }, "an ordinary photograph is unchanged");
-  assert.deepEqual(preview(1920, 1080), { width: 1280, height: 720 }, "16:9 is where the floor starts to bite");
+  assert.deepEqual(preview(1920, 1080), { width: 1280, height: 720 }, "16:9 is the cap's, not the floor's");
   // A 1290x2796 screenshot as it is stored once compressed. It was 591x1280,
-  // and the bubble draws a tall picture about 720x1440 device pixels (D-116).
-  assert.deepEqual(preview(1080, 2341), { width: 720, height: 1561 });
-  assert.deepEqual(preview(2000, 1000), { width: 1440, height: 720 });
+  // and the bubble draws a tall picture 930x1650 device pixels on the phone the
+  // tester holds (D-116), so the floor carries its width that far.
+  assert.deepEqual(preview(1080, 2341), { width: 930, height: 2016 });
+  // A landscape picture fills the bubble with its long side and is capped alone.
+  assert.deepEqual(preview(2000, 1000), { width: 1280, height: 640 });
   assert.deepEqual(preview(1080, 20000), { width: 138, height: 2560 }, "the long side still stops");
   assert.deepEqual(preview(800, 600), { width: 800, height: 600 }, "never enlarged");
   assert.deepEqual(preview(0, 0), { width: 1280, height: 1280 }, "an unreadable size keeps the square box");
@@ -146,9 +148,12 @@ test("a quarter-turned photograph is sized on the axes it will be shown on", () 
   assert.deepEqual(oriented({ width: 1080, height: 2341 }), { width: 1080, height: 2341 });
   assert.equal(oriented({ width: 0, height: 2341 }), null);
   assert.equal(oriented({}), null);
-  // Why it matters: the box has a floor on the short side, so reading the axes
-  // as stored would size this portrait photograph as a landscape one.
-  assert.deepEqual(mediaVariantRules.imagePreviewSize(2341, 1080, 1280), { width: 1561, height: 720 });
+  // Why it matters: the floor applies only to a picture taller than it is wide,
+  // so reading the axes as stored would not merely turn this portrait picture on
+  // its side — it would skip the floor altogether and hand the bubble a 1280x591
+  // strip instead of the 930x2016 the oriented size gets.
+  assert.deepEqual(mediaVariantRules.imagePreviewSize(2341, 1080, 1280), { width: 1280, height: 591 });
+  assert.deepEqual(mediaVariantRules.imagePreviewSize(1080, 2341, 1280), { width: 930, height: 2016 });
 });
 
 test("media variants worker uses bounded 720p encoding defaults", () => {

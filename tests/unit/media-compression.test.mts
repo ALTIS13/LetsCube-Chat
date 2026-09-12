@@ -298,28 +298,37 @@ test("a preview sits beside its original and is read from nowhere else", () => {
   }
 
   assert.equal(ORIGINAL_PREVIEW_MAX_DIMENSION, 1280, "the same size as the server's image_preview");
-  // The floor is the bubble's box in device pixels (D-116): a tall picture is
-  // drawn 240x480 CSS px on the narrowest phone, and a phone has three device
-  // pixels to the point. Both numbers are asserted against the bubble's own
-  // constant, so neither can be tuned on its own and leave the preview too
-  // small for the box it is drawn in.
-  assert.equal(ORIGINAL_PREVIEW_MIN_SHORT_SIDE, 240 * 3);
-  assert.equal(MEDIA_BUBBLE_MAX_HEIGHT_PX * 3, ORIGINAL_PREVIEW_MIN_SHORT_SIDE * 2);
+  // The floor is the bubble's box in device pixels (D-116), measured on the
+  // phone the tester holds: 430 CSS px of screen gives a 310 px bubble, and a
+  // phone has three device pixels to the point. It is asserted against the
+  // bubble's own constant so that neither can be tuned alone and leave the
+  // preview smaller than the box it is drawn in — which is exactly what the
+  // equality below caught when the cap went from 480 to 550.
+  assert.equal(ORIGINAL_PREVIEW_MIN_SHORT_SIDE, 310 * 3);
+  // The box is at most this tall in device pixels, and a picture held at the
+  // 0.5 clamp is twice its width long, so the floor has to carry that far.
+  assert.ok(
+    MEDIA_BUBBLE_MAX_HEIGHT_PX * 3 <= ORIGINAL_PREVIEW_MIN_SHORT_SIDE * 2,
+    "the bubble is taller than the preview the floor guarantees",
+  );
   assert.equal(ORIGINAL_PREVIEW_MAX_LONG_SIDE, 2560);
 
+  // Every landscape picture is sized by the long-side cap alone: it fills the
+  // bubble with that side, which 1280 already carries well past the floor.
   assert.deepEqual(originalPreviewDimensions(4032, 3024), { width: 1280, height: 960 }, "an ordinary photograph is unchanged");
-  assert.deepEqual(originalPreviewDimensions(3024, 4032), { width: 960, height: 1280 });
   assert.deepEqual(originalPreviewDimensions(1000, 800), { width: 1000, height: 800 });
-  assert.deepEqual(originalPreviewDimensions(1920, 1080), { width: 1280, height: 720 }, "16:9 is where the floor starts to bite");
+  assert.deepEqual(originalPreviewDimensions(1920, 1080), { width: 1280, height: 720 }, "16:9 is the cap's, not the floor's");
+  assert.deepEqual(originalPreviewDimensions(2000, 1000), { width: 1280, height: 640 });
+  // A portrait photograph is inside the floor already at 4:3.
+  assert.deepEqual(originalPreviewDimensions(3024, 4032), { width: 960, height: 1280 });
   // A 1290x2796 screenshot, and the 1080x2341 it is stored as once compressed.
-  // Both were 591x1280 before, which the bubble drew stretched about 1.4x.
-  assert.deepEqual(originalPreviewDimensions(1290, 2796), { width: 720, height: 1561 });
-  assert.deepEqual(originalPreviewDimensions(1080, 2341), { width: 720, height: 1561 });
-  assert.deepEqual(originalPreviewDimensions(2000, 1000), { width: 1440, height: 720 });
+  // Both were 591x1280 before D-116 and 720x1561 while the cap was 480.
+  assert.deepEqual(originalPreviewDimensions(1290, 2796), { width: 930, height: 2016 });
+  assert.deepEqual(originalPreviewDimensions(1080, 2341), { width: 930, height: 2016 });
   assert.deepEqual(originalPreviewDimensions(1080, 20000), { width: 138, height: 2560 }, "the long side still stops");
-  // Was 1280x1. A short side of 3px can never reach the floor, so the picture
-  // keeps all of itself, up to the ceiling, instead of being halved again.
-  assert.deepEqual(originalPreviewDimensions(5000, 3), { width: 2560, height: 2 });
+  // A 3px side is the long-side cap's business, not the floor's: this is a
+  // landscape strip, so it is simply capped rather than blown up to the ceiling.
+  assert.deepEqual(originalPreviewDimensions(5000, 3), { width: 1280, height: 1 });
 
   assert.equal(shouldBuildOriginalPreview({ mimeType: "image/jpeg", width: 4032, height: 3024, size: 4_800_000 }), true);
   assert.equal(shouldBuildOriginalPreview({ mimeType: "image/png", width: 800, height: 600, size: 90_000 }), false, "small enough to be its own preview");

@@ -1605,9 +1605,10 @@ function MediaImage({
    * `sizes` over-states the box on purpose: 86vw is 335px where the box is
    * `min(360px, 100vw - 7.5rem)` — 270px on a 390px phone — and over-stating is
    * the safe direction, because the browser then reaches for the larger
-   * candidate instead of the thumb. With a tall picture's preview now 720px
-   * across rather than 591 (D-116), every viewport and pixel ratio in the
-   * project matrix lands on the preview, never on the 360px thumb.
+   * candidate instead of the thumb. With a tall picture's preview now 930px
+   * across rather than 591 (D-116, and 720 while the bubble's cap was 480),
+   * every viewport and pixel ratio in the project matrix lands on the preview,
+   * never on the 360px thumb.
    */
   const srcSet = !usingOriginal && thumbUrl && thumbWidth && mainWidth && thumbWidth < mainWidth
     ? `${thumbUrl} ${thumbWidth}w, ${url} ${mainWidth}w`
