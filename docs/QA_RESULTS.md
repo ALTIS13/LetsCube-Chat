@@ -1,5 +1,65 @@
 # QA Results
 
+## 2026-09-12 - The stopped recording row, corrected by the owner's own screenshot
+
+Built on `design/recording-stopped-row` (`49b5ec5`, off `bf538c4`); not merged and not deployed, because one
+pixel judgement is his to make.
+
+**It corrects a decision I made wrongly.** When «Отмена» became the centred button, I removed the separate bin from
+the locked row, reasoning that a single visible way out was what the owner had asked for. He then sent a screenshot
+of Telegram Desktop's stopped state, which has a bin at the left edge, a bar across the width with the play control
+and the length on it, a send button at the right - and no «Отмена» at all. «Отмена» belongs to the states where
+recording is still running; once stopped, the bin is the way out. The reasoning was mine, the error was mine, and
+the screenshot settled it in one image.
+
+- **The bin is back at the left of the stopped row** and carries the discard handler «Отмена» had.
+- **«Отмена» is gone from the stopped state** on both a phone and a computer.
+- **The row is `auto 1fr auto`**: bin, bar, send. The play control and the length are now one control sitting on the
+  bar, with a playhead travelling beneath it - they used to be a round button at one end and a duration at the
+  other.
+- **The running states are untouched**: held and locked keep the arrangement he approved, and were measured
+  identical to the previous run.
+- The decision moved into `recordingGesture.ts` as `recordingRowControls(phase)`, pure and importing nothing so
+  `node --test` reaches it. Its invariant: the cancel button and the bin are never both present and never both
+  absent. `formatRecordingLength` renders `0:03` rather than `00:03`, because a finished recording has a length,
+  not a running clock.
+- **A defect was fixed in the code being replaced**: the preview effect added four listeners and removed two, so
+  play and pause went on setting state after the row had unmounted.
+
+**Numbers, re-taken by hand after the first attempt measured the wrong thing.** My first verification ran
+  `git switch` onto the branch, which git refused because it was already checked out in the agent's worktree; the
+suite then ran on the working branch instead and reported 1800, its own number. Taken again inside that worktree:
+unit suite **1806 of 1806**, the recording rules **23 of 23**, typecheck clean on both packages. A check that
+silently measures something else is worse than no check, which is why the first figure is written down here beside
+the real one.
+
+- Mutation proofs, the file restored byte-identical each time: putting «Отмена» back into the stopped row and
+  taking the bin away turns 2 tests red; giving the stopped row both ways out turns 3 red, which is the invariant
+  test earning its place.
+- Renders 20 of 20 against their own verdicts, on a server checked to be serving the new modules. Bin 4 px from the
+  row's left edge, send 4 px from the right, the bar 76% of the row on an iPhone and 90% on a desktop, the play
+  control 0 px off centre and on the bar, the length `0:05`.
+- The render script now **fails** a stopped row that carries «Отмена» or lacks a bin, and a running row that carries
+  a bin. The earlier check that the row has not moved or faded is kept.
+
+**Open, and his to judge:** in the dark theme the unplayed part of the track is the quietest thing on the row -
+  `--kub-inset` on dark glass sits close to the capsule's own fill. It was taken from 4 px to 6 px, which helped,
+and then left alone rather than tuned blind. The light theme reads clearly.
+
+**Not built, recorded so it is not mistaken for an oversight:** Telegram's play-once voice message, the circular
+«1» reading «Нажмите, чтобы сообщение исчезло после прослушивания». We have no equivalent, and it is not a drawing
+job: it needs a per-message flag that survives delivery, a server rule that refuses a second fetch, a decision
+about what the sender sees afterwards, and an answer for Windows and Android.
+
+**Not verified:** nothing has been touched by a finger - whether the bin and the play pill are comfortable thumb
+targets, and whether the playhead is hittable, are device questions. The bar is a progress bar, not a waveform:
+Telegram draws the real envelope of the clip, and drawing ours means decoding the recorded blob, which is a change
+of a different size. A waveform invented rather than measured would be a picture of the wrong audio.
+
+**An environment note for the next worktree:** `api-server`'s typecheck first failed with TS6305 in a fresh
+worktree that had no `lib/api-zod` output; `tsc -b lib/api-zod lib/db` builds it and the failure is unrelated to any
+change.
+
 ## 2026-09-12 - «A с поправками» approved, and the order the rebuild goes in
 
 The owner answered «А с поправками принято». Navigation is settled: option A on a phone with administration kept
