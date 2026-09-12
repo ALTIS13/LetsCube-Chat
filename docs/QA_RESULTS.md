@@ -1,5 +1,25 @@
 # QA Results
 
+## 2026-09-12 - Tall pictures merged onto the working branch, and checked there
+
+D-116 option B and the preview floor, merged from `fix/tall-pictures`; not deployed.
+
+- No conflicts. Unit suite on the merged tree 1758 of 1758. Typecheck of both packages and the production build
+  were clean on the branch, and this side of the merge carried only documentation, so the merged sources are the
+  branch's own.
+- Frames were photographed from the real application on the DEV preview route over the checked-in fictional
+  conversation, at 430x932 in both themes, each reporting the box it drew and the share that survived the crop,
+  read off the element rather than computed. Sent to the owner.
+- Two test failures were investigated rather than waved through. `variant-upload-headers` fails identically on
+  the base commit and names a `cacheControlSeconds` line that exists in neither tree, so it is not this work.
+  The six `message-image-srcset` failures are the owner's QA file: `loadQaEnvValues()` finds a role, the spec
+  attempts a real sign-in against the fixture backend where nothing listens, and it times out before it ever
+  reaches the descriptors. Running it as designed would mean driving signed-in production chats, which this work
+  excludes. The other four media specs pass on all three projects, WebKit included.
+- `srcSet` and `sizes` were read but not changed: the descriptors come from the database rows and `sizes` overstates
+  the box, which is the safe direction - every viewport and density in the matrix picks the 720w preview rather
+  than the 360w thumbnail. Only the comment was corrected.
+
 ## 2026-09-12 - Backups: two faults on production, fixed and verified, and media no longer re-archived nightly
 
 The owner asked for the backups to be rebuilt so that unchanged files are not copied afresh every day. Reading

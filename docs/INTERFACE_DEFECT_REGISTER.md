@@ -6472,6 +6472,27 @@ a tall picture, instead of today's centre crop that hides about 42%. The preview
 match it, in the client and in the worker, so a tall picture is no longer drawn from a 591 px-wide copy. The
 tester confirmed the photo he could not zoom came from an iPhone, and that it did not zoom in the viewer.
 
+**Done on the branch** 2026-09-12 in the merge of `fix/tall-pictures`, not deployed. The owner's option B is
+in: the aspect clamp falls from 0.72 to 0.5 and the bubble is capped at 480 px, the decision moved out of
+`MessageBubble.tsx` into `artifacts/kub/src/lib/mediaBubbleLayout.ts`, which imports nothing and so can be tested
+directly. Previews take a short-side floor of 720 in both places that size them - `originalPreviewDimensions` in
+the client and `imagePreviewSize` in the worker, which now reads the original's size once and respects EXIF
+orientation, without which the floor would land on the wrong axis.
+
+**The share visible depends on the phone's width, and the two figures differ**: a 1290x2796 screenshot shows 71%
+of its height on a 430 px phone (bubble 310x480, was 51%), 82% on a 390 px one (270x480, was 58%) and 92% on a
+360 px one. The owner approved "about 82%", which is the 390 px figure; the tester's iPhone 15 Pro Max is 430 px,
+so he will see 71% unless the 480 px cap is raised. Both numbers are written on the render sheet. A normal 4:3
+photo and a wide picture are unchanged at every width; video was deliberately left on the old 0.72 and 320,
+since the choice was about pictures.
+
+**Two consequences worth knowing before it ships.** The worker deploys separately from the web application, and
+it does not regenerate variants that already exist, so larger previews arrive only for new uploads and only
+after `letscube-worker` is deployed; until then the taller bubble stretches the existing 591x1280 preview a
+little harder than before. Measured cost of the larger preview, not estimated: a UI screenshot goes from 10.9 to
+13.0 KiB, an original 1290x2796 from 10.7 to 13.1 KiB, and pure noise as an upper bound 205 to 358 KiB; 4:3 and
+16:9 are byte for byte the same.
+
 ## D-117 `[x]` In the light theme the time in your own message is under the contrast floor
 
 **Severity:** low, for legibility. Found on 2026-09-11 by the assessment of the
