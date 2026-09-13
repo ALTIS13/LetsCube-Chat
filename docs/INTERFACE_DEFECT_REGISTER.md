@@ -8853,7 +8853,7 @@ to download the whole video to cut one frame out of it. That is the dominant cos
 belongs with D-176, because it needs the same thing D-176 needs — the client telling the server what it
 uploaded, and the server checking rather than believing it.
 
-## D-176 `[ ]` The server re-does work the device already did, and hunts for it by scanning every minute
+## D-176 `[x]` The server re-does work the device already did, and hunts for it by scanning every minute
 
 **Severity: medium for a person, high for the bill.** Nothing on screen is wrong; the cost is entirely in what
 the server is made to do, and it grows with every upload.
@@ -8935,6 +8935,38 @@ waiting twice. A browser cannot do this today with WebCodecs the way a native cl
 D-175.
 
 ---
+
+**Closed 2026-09-13, in three pieces, all of them the half the correction above says stands.**
+
+*The video work is on the device now.* That is D-175: the client transcodes down a ladder the person chooses
+from, and the worker probes what arrived and reuses it when it is already the rendition. The photo variants
+were deliberately left exactly where they are — Telegram's server makes its own thumbnail ladder, and moving
+ours to the device would be moving away from the reference the owner named.
+
+*The hunting stopped.* `private.media_variant_jobs`, three triggers, and claim/finish/retry functions reached
+the way `registration_cleanup_claim` reaches its own private table. The worker drains that queue every five
+seconds and keeps the scan as a half-hourly safety net for rows that predate the queue and for anything a
+trigger ever misses. Applied to production after a verified backup and a rehearsal that was rolled back, and
+that rehearsal earned its keep: `pg_catalog.coalesce` does not exist — COALESCE is parser syntax — so four
+calls written that way would have failed inside the triggers on somebody's next upload rather than at creation.
+
+*The client stopped asking too.* `configureMessageVariantPolling` started a 60-second interval for any chat
+holding a video and never stopped it: about 1440 queries from a conversation left open all day, for rows that
+all landed in the first few seconds. It now stops when nothing is outstanding, backs off from a minute to five
+while something still is, and gives up after eight answers that say nothing new — 24 minutes of patience for 8
+queries, a bound taken from the worker's own ten-minute transcode timeout rather than from taste. A terminal
+failure counts as settled; a retryable one does not, and making that distinction reachable is why the query now
+reads failed rows too, gating them out before any URL is built.
+
+**What the measurement says it was worth.** The scan found nothing on every one of its runs: 244 media
+messages, 10 profile pictures and 3 chat pictures on production, none missing anything. The cost it was really
+imposing was the wait — up to a minute before the server so much as looked at a new video — and that is now a
+few seconds.
+
+**Still open, and recorded here rather than left as folklore:** the worker downloads the whole video to cut one
+poster frame out of it, which is the dominant cost of the pipeline. Closing it means the client producing the
+poster it already has the bytes for and the server checking rather than believing — the same shape as the
+reuse above, and the right next slice.
 
 ## D-177 `[~]` Eleven things the client decides that the server never re-checks
 
