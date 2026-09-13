@@ -47,7 +47,7 @@ const PACKET_SAMPLE = 200;
  * case, QTFF is what an iPhone writes, and WebM and Matroska cover Android and
  * desktop recordings — including the ones this product records itself.
  */
-const SENDABLE_FORMATS = [MP4, QTFF, WEBM, MATROSKA];
+export const SENDABLE_FORMATS = [MP4, QTFF, WEBM, MATROSKA];
 
 /** What a container can tell us, before any judgement is applied. */
 export interface RawVideoFacts {
