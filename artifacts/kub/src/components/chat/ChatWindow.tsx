@@ -36,7 +36,12 @@ import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor
 // gallery disagree about the same row.
 import { isRoundVideoMessageContent, isVoiceMessageContent } from "@/lib/messageMediaSections";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
-import { DEFAULT_MEDIA_QUALITY, selectVideoPlaybackUrl } from "@/lib/mediaQuality";
+import {
+  DEFAULT_MEDIA_QUALITY,
+  DEFAULT_PHOTO_SEND_QUALITY,
+  selectVideoPlaybackUrl,
+  type MediaQuality,
+} from "@/lib/mediaQuality";
 import { prepareChatImageAttachment, prepareOriginalPreview, readMediaDimensions, type MediaDimensions } from "@/lib/mediaUpload";
 import {
   buildAttachmentMediaMetadata,
@@ -339,10 +344,16 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const stageFiles = useCallback(async (
     files: File[],
     _source: IncomingFilesSource,
-    options: { compress?: boolean } = {},
+    options: { compress?: boolean; photoQuality?: MediaQuality } = {},
   ): Promise<StagedAttachment[]> => {
     if (!files.length) return [];
     const compress = options.compress !== false;
+    // What a photograph is re-encoded at (D-174). Absent means SD, which is
+    // what a send that never mentioned quality asked for. Deliberately not
+    // DEFAULT_MEDIA_QUALITY: that constant is the camera recorder bitrates,
+    // and answering a question about photographs with it would re-tune video
+    // recording as a side effect.
+    const photoQuality = options.photoQuality ?? DEFAULT_PHOTO_SEND_QUALITY;
     const scopeToken = uploadScope.capture();
     const existingCount = stagedAttachmentsRef.current.length;
     const availableSlots = Math.max(0, MAX_STAGED_ATTACHMENTS - existingCount);
@@ -376,7 +387,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         const prepared = await runScopedStagedPreparation(
           uploadScope,
           scopeToken,
-          () => prepareChatImageAttachment(sourceFile, DEFAULT_MEDIA_QUALITY),
+          () => prepareChatImageAttachment(sourceFile, photoQuality),
         );
         if (prepared.status === "stale") {
           accepted.forEach(revokeAttachmentPreview);
@@ -443,7 +454,15 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         originalSize: sourceFile.size,
         originalMimeType: sourceFile.type || undefined,
         // No quality is chosen any more (D-119): a video goes at the standard one.
-        mediaQuality: file.type.startsWith("video/") ? (uncompressed ? "original" : DEFAULT_MEDIA_QUALITY) : undefined,
+        // A video carries the recorder vocabulary; a photograph now carries
+        // what it was actually encoded at, so what was sent stays readable
+        // afterwards. An uncompressed one carries neither: it was not
+        // re-encoded at all, and a quality would be a claim about nothing.
+        mediaQuality: file.type.startsWith("video/")
+          ? (uncompressed ? "original" : DEFAULT_MEDIA_QUALITY)
+          : uncompressed
+            ? undefined
+            : photoQuality,
         uncompressed,
         previewFile,
         previewWidth: previewSize?.width,
@@ -792,7 +811,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   // The attach sheet (D-122) sends what it picked: staged as chosen, compressed
   // or as originals, then sent with its caption.
   const sendMediaFromSheet = useCallback(async (request: AttachSendRequest) => {
-    const staged = await stageFiles(request.files, request.source, { compress: request.compress });
+    const staged = await stageFiles(request.files, request.source, {
+      compress: request.compress,
+      photoQuality: request.photoQuality,
+    });
     if (!staged.length) return;
     await sendStagedAttachments(request.caption, undefined, staged);
   }, [sendStagedAttachments, stageFiles]);

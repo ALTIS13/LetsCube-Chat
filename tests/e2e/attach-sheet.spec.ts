@@ -185,6 +185,96 @@ test.describe("the attach sheet (D-122)", () => {
     expect(backend.inserts[0]).toMatchObject({ media_metadata: { uncompressed: true, optimized: false } });
   });
 
+  /**
+   * D-174. The owner asked on 2026-09-13 for SD by default with HD available,
+   * which supersedes the photo half of D-119 — that entry recorded no quality
+   * choice at all. What D-119 objected to is kept: the default needs no
+   * thought, nothing is remembered between sends, and the composer asks
+   * nothing. The control lives here, on the sheet that already holds the send.
+   *
+   * This test measures the bytes rather than the button. A control that
+   * toggles and changes nothing downstream would pass any assertion about its
+   * own state, and the wiring it depends on runs through four files.
+   */
+  test("HD leaves the device larger than SD, and the message records which it was (D-174)", async ({ page }) => {
+    const backend = await installBackend(page);
+    await openChat(page);
+    const facade = await testPhoto("facade.png", 30);
+
+    // First send: nothing is touched, which is what SD means.
+    const first = await openSheet(page);
+    await pick(page, '[data-attach-entry="library"]', [facade]);
+    await expect(first.getByTestId("attach-hd")).toHaveAttribute("aria-pressed", "false");
+    await first.getByTestId("attach-send").click();
+    await expect(first).toHaveCount(0);
+    await expect.poll(() => backend.inserts.length).toBe(1);
+
+    // Second send: HD, chosen for this send only.
+    const second = await openSheet(page);
+    await pick(page, '[data-attach-entry="library"]', [facade]);
+    const hd = second.getByTestId("attach-hd");
+    await expect(hd, "a quality chosen once must not be remembered for the next send").toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await hd.click();
+    await expect(hd).toHaveAttribute("aria-pressed", "true");
+    await second.getByTestId("attach-send").click();
+    await expect(second).toHaveCount(0);
+    await expect.poll(() => backend.inserts.length).toBe(2);
+
+    const handed = await probedUploads(page);
+    expect(handed, "two compressed photographs, no previews").toHaveLength(2);
+    const sdBytes = await probedBytes(page, handed[0].path);
+    const hdBytes = await probedBytes(page, handed[1].path);
+    expect(sdBytes, "the SD upload was not captured").not.toBeNull();
+    expect(hdBytes, "the HD upload was not captured").not.toBeNull();
+    const sd = await sharp(sdBytes as Buffer).metadata();
+    const high = await sharp(hdBytes as Buffer).metadata();
+
+    // The assertion that fails if the choice reaches nothing. Not a fixed
+    // number: the short side has a floor of its own, so the exact result of
+    // 2400x1800 at each profile is arithmetic this test has no business
+    // restating. What must hold is that HD is the larger encode.
+    expect(high.width ?? 0, "HD did not reach the encoder: both sends left the device the same size").toBeGreaterThan(
+      sd.width ?? 0,
+    );
+    expect(handed[1].size).toBeGreaterThan(handed[0].size);
+
+    // And what was sent stays readable afterwards, without a migration.
+    expect(backend.inserts[0]).toMatchObject({ media_metadata: { media_quality: "compact", uncompressed: false } });
+    expect(backend.inserts[1]).toMatchObject({ media_metadata: { media_quality: "original", uncompressed: false } });
+  });
+
+  test("HD is not offered until a photograph is selected (D-174)", async ({ page }) => {
+    await installBackend(page);
+    await openChat(page);
+
+    const sheet = await openSheet(page);
+    await expect(sheet.getByTestId("attach-hd"), "nothing is selected, so there is nothing to encode").toHaveCount(0);
+
+    await pick(page, '[data-attach-entry="library"]', [await testPhoto("facade.png", 30)]);
+    await expect(sheet.getByTestId("attach-hd"), "a gallery photograph is re-encoded, so the choice is real").toBeVisible();
+  });
+
+  /**
+   * Its own page rather than a second act of the test above: with something
+   * selected, Escape does not close the sheet — it asks whether to discard the
+   * selection. That is the sheet behaving correctly and the first draft of this
+   * test behaving badly.
+   */
+  test("«Файл» hands over the picked bytes, so HD is not offered there (D-174)", async ({ page }) => {
+    await installBackend(page);
+    await openChat(page);
+
+    const sheet = await openSheet(page);
+    await sheet.getByRole("tab", { name: "Файл" }).click();
+    await pick(page, '[data-attach-entry="library-original"]', [await testPhoto("north.png", 250)]);
+    await expect(sheet.getByRole("checkbox", { name: "north.png" })).toHaveAttribute("aria-checked", "true");
+    // A control that changes nothing teaches people to distrust the ones that do.
+    await expect(sheet.getByTestId("attach-hd"), "«Файл» sends the original, so HD would mean nothing").toHaveCount(0);
+  });
+
   test("«Геопозиция» sends nothing until its row is tapped, then the message a location always was", async ({ page }) => {
     const backend = await installBackend(page);
     await openChat(page);

@@ -8477,6 +8477,52 @@ permissions `chats.invite`, `chats.manage_invites`, `chats.moderate`, `chats.man
 (`20260514_dynamic_roles_permissions.sql:104-106, 136-140, 212-219`) — with no table assigning a chat-scope
 role to a (chat, person) pair.
 
+**The owner, 2026-09-13, on tags and roles.** Asked whether to build the per-member tag, he answered with a
+shape rather than a yes. Three parts, and a direction. Each is set here against what the product actually has,
+which was searched for rather than assumed — and the search moved one of them from «to build» to «to surface».
+
+1. **Tags inside a group, as Discord has roles** — «в своей группе у пользователя свои теги». Per chat, per
+   person, set by that chat. **Nothing for this exists.** `chat_members` has eleven columns and no place for
+   a name or a colour, and the chat-scope roles seeded in 2026-05-14 have no table assigning them to a person.
+   This is the migration this entry already describes.
+
+2. **Global roles as badges carrying a reason** — «по типу лычек … в которых написано кто такой, за что получил
+   медальку (достижения, покупка подписки и статус условно премиум)». This splits in three, and only one third
+   is missing:
+
+   - **Achievements exist, and are further along than the question assumed.** `public.achievements` and
+     `public.user_achievements` (`20260903210000_profile_achievements_cosmetics.sql:18, :31`), granted
+     `auto` by `achievements_sync` or `manual` by a person holding the right; criteria
+     (`20260903220000`), version binding (`20260903230000`), a pre-alpha tester award
+     (`20260904050000`), and reads narrowed to signed-in accounts on 2026-09-11 (`20260911151000`).
+     They already unlock profile decorations through `required_achievement` (`:47`). There is even a
+     surface: `components/settings/ProfileDecorationSection.tsx:109-147` draws each achievement with its
+     icon, title, description, whether it is held, the progress toward it, and the share of people who have it.
+     **What is missing is not the system but the audience.** All of that is visible only to yourself, inside your
+     own settings, as a way to unlock cosmetics. Discord shows badges on anyone card it opens. So this part is a
+     rendering on another person profile, not a subsystem to build.
+   - **A paid subscription does not exist.** Every `subscription` in this repository is a Web Push one
+     (`20260427_push_subscriptions.sql:4`, `lib/browserPushSubscription.ts`).
+   - **Premium does not exist** — zero occurrences of `premium` or «премиум» in the client, the API server or
+     the migrations. A badge saying so would have nothing behind it, so that third is a product decision before
+     it is an interface one.
+
+3. **«Squad» repurposed as the display of the global role** — «свой значок красивый в зависимости от локации
+   работника и отношения человека к админскому составу, чем выше статус тем красивее иконка». The word
+   `squad` appears nowhere in this product; what it maps onto is the global role, which exists. The
+   ordering such a mapping needs also exists and is **already unread by the client**: `roles.priority` and
+   `roles.colour` (`20260904080000_roles_priority_and_colour.sql:42-49`), with `lib/roleHierarchy.ts` as
+   the whole of the logic that reads them — and its own header warns that priority is presentation and grants
+   nothing at all. An icon ladder keyed to it is honest only while it keeps saying so.
+
+**The direction, which changes how other entries should be answered.** «мы и так планировали делать это скорее
+как каналы в дискорде с войсами и т.п, чем просто группами как изначально в телеге». The target for this surface
+is the shape Discord has. Recorded rather than acted on, because three entries opened the same day assume the
+shape Telegram has: **D-164** proposes a group settings screen of that kind, **D-169** would label a channel the
+way Telegram labels one, and **D-170** measures the absence of a Telegram-style invite link. The gaps they
+measure are real; what a fix should look like is now an open question, and copying Telegram would be answering
+against the wrong reference.
+
 ---
 
 ## D-169 `[ ]` A channel is shown as a group, with a «Участники» tab and a group's title
@@ -8571,3 +8617,249 @@ nobody had run it lately.
 **Proposed:** find what subscribes to visibility and fans out — seven is close to the six-to-eight of a
 per-something loop rather than a double-fire — and give the revalidation one owner, the way the profile fetch
 got one after it was found running three times concurrently during session recovery.
+
+---
+
+## D-174 `[x]` Photos go at SD by default and there is no way to send one at full quality
+
+**This is a design decision, not a defect report**, and it **supersedes the photo half of D-119** rather than
+refining it. D-119 records «no quality choice when sending». The owner's instruction of 2026-09-13 is a quality
+choice when sending, and the register must not hold both sentences as current.
+
+**The owner, 2026-09-13:** «сделай по стоку загрузку в sd качестве, но чтобы пользователь мог выбрать hd
+(именно фото …)».
+
+**What changed from D-119 and what did not.** D-119's objection was never to the existence of a control — it was
+to being *asked on every send*, through a five-stop slider whose choice was remembered and applied to everything
+afterwards. That stays gone: the default needs no thought, nothing is remembered between sends, and the composer
+still asks nothing. What returns is a two-state control on the sheet that already holds the send button, off by
+default.
+
+**Present state, measured:** every compressed photo goes through `prepareChatImageAttachment(file, DEFAULT_MEDIA_QUALITY)`
+(`ChatWindow.tsx:379`), and `DEFAULT_MEDIA_QUALITY` is `balanced` — 1920px at quality 0.84
+(`lib/mediaQuality.ts:29-33`). The other two profiles exist and are unreachable: nothing passes anything but
+the default. So the whole of this change is a value travelling from the sheet to that one call.
+
+**A naming trap to keep out of the code.** In this repository «original» already means two different things: the
+image profile `mediaQuality: "original"` (2560px at 0.90, still a re-encode) and a genuinely untouched
+upload (`uncompressed: true`, the «Отправить без сжатия» path). HD is the first; «без сжатия» remains the
+second and is not renamed, merged or replaced.
+
+**Proposed:** SD is `compact` (1280px, 0.76) and becomes the default; HD is `original` (2560px, 0.90) and
+is chosen per send on the attach sheet, beside the send button, offered only where there is a photo that would
+be compressed at all. Nothing is stored between sends. `media_metadata.media_quality` already carries the
+value, so what was sent stays readable afterwards without a migration.
+
+**Fixed 2026-09-13.** Built as proposed. The control is a two-state «HD» beside the send button, drawn only when
+the selection holds a photograph that would be re-encoded — not on the file tab, where the bytes go untouched,
+and not before anything is picked. Off for every send, and not remembered between them.
+
+**The numbers turned out to be Telegram own, which was not known when they were chosen.** A study of its open
+clients afterwards found the same pair on every platform: Android `getPhotoSize(highQuality)` returns 2560
+or 1280; iOS `LegacyMediaPickers` uses `item.forceHd ? 2560 : 1280`; tdesktop
+`PhotoSideLimit(large)` returns 2560 or 1280. Encoding quality differs — mozjpeg q72 on iOS, JPEG q80/q99 on
+Android, q87 on desktop — but the two sizes are identical everywhere. Ours are 0.76 and 0.90 on WebP.
+
+**What travels, and what does not.** The chosen value goes from the sheet into `AttachSendRequest.photoQuality`,
+through `stageFiles`, into the one call that encodes (`prepareChatImageAttachment`), and into
+`media_metadata.media_quality`. Nothing is written to storage and nothing is read back on the next send. The
+recorder constant `DEFAULT_MEDIA_QUALITY` is deliberately untouched: it feeds `getVideoRecordingProfile`,
+and answering a question about photographs with it would have re-tuned video recording as a side effect. A unit
+test fails if the two constants are ever collapsed into one.
+
+**Proof, and it measures the bytes rather than the button.** `tests/e2e/attach-sheet.spec.ts` sends the same
+2400x1800 photograph twice, once untouched and once with HD, reads both uploaded objects back out of the
+browser and compares them with sharp: the HD encode must be the wider one, and the two inserts must record
+`compact` and `original`. A test that only asserted the button state would pass against a control wired
+to nothing, and the wiring here runs through four files.
+
+Mutation-proven, each half separately: making the choice always return SD turns the byte test red on «HD did not
+reach the encoder»; making the offer rule always true turns the file-tab test red on «would mean nothing». Both
+restored byte-identical.
+
+**One thing the tests could not judge and the frames did.** The first version drew «HD» as bare grey text, which
+reads as a label rather than a control. Telegram draws it boxed even when off — visible in the reference the
+owner sent — so the off state now carries a border. Every test passed both before and after; only looking
+settled it.
+
+**Not done here, and not pretended to be:** the video half of the owner instruction, which is D-175. A video is
+not re-encoded on the way out at all, so a ladder of 480p to 4K with a size beside each has nothing to attach to
+yet.
+
+---
+
+## D-175 `[ ]` A video is never compressed on the way out, so there is nothing for a quality to choose between
+
+**Severity: medium**, and larger in effort than it looks from the outside.
+
+**The owner, 2026-09-13:** «у видно должен быть ползунок с корректным счётчиком веса в мегабайтах или ГБ в
+разном качестве 480p/720p/1080p/2k/4k».
+
+**Measured before estimating it:** `planAttachmentPreparation` (`lib/mediaCompression.ts:108-115`) returns
+`"compress"` only for `isCanvasPhotoCandidate` — a photo. **A picked video returns `"as-is"` whether or
+not the send was asked to compress**, so it is uploaded byte-for-byte as it sits on the phone. The
+`VIDEO_PROFILES` with their bitrates (`lib/mediaQuality.ts:35-71`) are read only by
+`getVideoRecordingProfile`, which the camera recorder uses. Nothing on the send path has ever re-encoded a
+video.
+
+**So this is not wiring up something that exists.** A ladder of 480p/720p/1080p/2k/4k with a truthful size beside
+each needs client-side transcoding built from nothing — WebCodecs where it is available, a MediaRecorder
+re-encode where it is not — with the decode time on a phone, the browser matrix and the memory ceiling that come
+with it. The size counter is the easy half and is worthless without the other: a number no upload can be made to
+match is a lie told precisely.
+
+**The one thing that does exist:** the worker already produces a `video_720p` variant server-side
+(`artifacts/api-server/src/workers/mediaVariantRules.ts:107`), and `selectVideoPlaybackUrl` already prefers it
+for playback. That is a delivery ladder, not a send ladder, and it cannot make an upload smaller.
+
+**Proposed, in the order that keeps each step honest:** first the photo control (D-174), which is a value
+travelling to an existing call; then a measurement pass on client-side video transcoding — what a 1080p minute
+costs in seconds and megabytes on the phones this product is installed on — and only then the ladder, with the
+counter fed by the encoder's own settings rather than by an estimate. Recorded now so the gap between «the
+counter is easy» and «the ladder is not» is on the record before anyone promises a date.
+
+---
+
+## D-176 `[ ]` The server re-does work the device already did, and hunts for it by scanning every minute
+
+**Severity: medium for a person, high for the bill.** Nothing on screen is wrong; the cost is entirely in what
+the server is made to do, and it grows with every upload.
+
+**The owner, 2026-09-13:** «давай больше возьмём от функционала telegram чтобы какие-то действия выполнялись на
+его устройстве и не грузили сервер лишний раз». This entry is the measurement that request deserves.
+
+**What the server does that the device had already done, or could:**
+
+1. **Every image variant.** `image_thumb` (360px, q76) and `image_preview` (1280px, q82) are sharp
+   re-encodes (`workers/mediaVariantsWorker.ts:396-419`, rules at `mediaVariantRules.ts:19-22`) of bytes
+   the browser held in a canvas moments earlier (`lib/mediaUpload.ts:114`). For an **original** the device
+   already uploads a preview of the same geometry on purpose — `lib/mediaCompression.ts:211` and
+   `mediaVariantRules.ts:61` are the same arithmetic in two copies, kept in step by a test so the bubble does
+   not resize when the worker catches up. The server then produces it a second time.
+2. **The video poster.** ffmpeg is spawned over a temp copy of the whole file to take one frame at 00:00:01
+   (`mediaVariantsWorker.ts:496-529`). The device already opens that video to read its dimensions
+   (`readVideoDimensions`, `lib/mediaUpload.ts:219`) and could draw the frame then.
+3. **A full libx264 transcode per video** (`mediaVariantsWorkerHelpers.ts:33-73`: veryfast, crf 24, maxrate
+   3M, AAC 128k) — while the device uploads the untouched original, because `planAttachmentPreparation` has no
+   video branch at all (`lib/mediaCompression.ts:114`). That absence is D-175.
+4. **Finding the work.** There is no queue and no webhook: `tick()` scans the newest 1200 image and video
+   messages plus 240 avatar rows **every 60 seconds, forever, whether or not anything was uploaded**
+   (`mediaVariantsWorker.ts:136-146, :196-206`). The code says so itself: «it has no queue — the candidate
+   set is a fresh scan every minute» (`mediaVariantRules.ts:196-198`). The client knows the exact moment an
+   upload finishes and tells nobody.
+5. **Pulling the whole source into memory.** `downloadStorageObject` (`:625-636`) buffers the entire
+   object — a 250 MB video is a 250 MB Node buffer — then writes it to a temp file for ffmpeg to read back.
+
+**And three round-trips for answers the client already holds:**
+
+- **In-chat search.** `search_chat_messages` on a 250ms debounce (`hooks/useChatMessageSearch.ts:100`),
+  while a complete local implementation runs in the same render and is used only as a fallback (`:73-78`).
+- **Permissions, one key at a time.** `has_permission` and `has_location_permission` fire per key and per
+  location (`hooks/useRole.ts:144, :153, :279`) while one snapshot answers all of them locally three lines
+  earlier (`:120`, `:255`).
+- **Unread counts and previews** for chats whose Realtime events the client is already applying
+  (`chat_list_summaries`, `hooks/useChats.ts:612`; the local deltas are `lib/chatListDelta.ts:4-22`,
+  whose own header says it works out what one event changes without asking the server).
+
+**The precedent is already in this codebase**, which is why this is a correction rather than a redesign: photo
+compression, encoder selection, the skip-the-encode rule, GPS and QuickTime location stripping, the preview file
+uploaded beside an original, chat-list deltas, message merging, receipt batching and permission evaluation from
+a snapshot are all on the device today, and several of them were moved there deliberately.
+
+**Proposed, first draft:** the device produces the poster and the preview it already has the bytes for, and says
+so in the message it inserts; the worker stops scanning and drains a queue of what was not produced; the
+transcode stays server-side until D-175 measures what a browser can do.
+
+**Corrected 2026-09-13 by the evidence, and the correction matters more than the draft.** A study of what
+Telegram actually does — read in its open clients, with the server inferred from its published API — says the
+first half of that proposal is wrong and the second half is right.
+
+- **Photographs: their server does exactly what ours does, and deliberately.** The client re-encodes to one size
+  and uploads that one file; the whole ladder of thumbnails is generated server-side. Telegram own documentation
+  names them so: type `s` is «Server-side resized image, bounded by 100x100 pixels», and `m` / `x` /
+  `y` / `w` are 320, 800, 1280 and 2560; `a`–`d` are «Server-side cropped image». The uploaded
+  photo is also **validated** — `PHOTO_INVALID_DIMENSIONS`, `PHOTO_SAVE_FILE_INVALID` are documented
+  errors of `messages.sendMedia`. So `image_thumb` and `image_preview` being made on our server is
+  **not** the defect this entry took them for. Moving them to the device would be moving away from the reference
+  the owner named, not toward it.
+- **Video: their client transcodes and their server does not** — except when sending to a big channel, where
+  Telegram converts server-side and says so by **delaying publication**: such messages «will be added to the
+  schedule queue … with schedule date equal to the approximated server-side conversion date». Ours is the
+  opposite of both: the device uploads the file untouched and the server transcodes every one of them, silently.
+  That half of this entry stands, and it is the same gap as D-175 seen from the server side.
+- **Finding the work.** Telegram never scans for it: the upload is addressed by a client-chosen file id and the
+  send itself carries the media, so the server learns of a file at the moment it is referenced. Our 60-second
+  scan of 1200 rows has no counterpart there. That half stands too.
+
+**So what this entry is really about, after the correction:** not that the server does image work, but that it
+does **video** work the device should do, and that it **hunts** for work it should be told about. The photo
+variants are the one piece to leave exactly where it is.
+
+**One thing worth copying outright:** Telegram uploads the file in parts *while the encoder is still producing
+them* — the documentation describes it («each part is uploaded immediately as soon as it is produced by the
+encoder») and both native clients implement it. It is the reason transcoding on the device does not feel like
+waiting twice. A browser cannot do this today with WebCodecs the way a native client does, which is recorded in
+D-175.
+
+---
+
+## D-177 `[ ]` Eleven things the client decides that the server never re-checks
+
+**Severity: high.** Not a defect anyone can see, and the reason it is here rather than in a performance note is
+that three rules of exactly this shape had to be added in the week before this audit, each migration header
+naming the hole it closed: one reaction per person (`20260911142000`), read marks that only move forward
+(`20260911140000`), and forwarding that copies media from the server own row rather than from the client
+(`20260911144000`). The list below is the same shape, still open.
+
+Each item is something the client decides, where no trigger, constraint, RLS policy or bucket setting re-checks
+it.
+
+1. **`media_metadata` entirely.** The only server rule is that it is a JSON object
+   (`20260523_message_media_metadata.sql:20-21`). Width, height, size, mime type, `optimized`,
+   `uncompressed`, `media_quality`, duration and the whole `preview` block are the sender word
+   (`lib/mediaCompression.ts:333-391`) and are inserted verbatim.
+2. **`media_bucket` / `media_path` / `media_url`.** The insert policy checks membership and
+   authorship and nothing about media (`20260831100000_bot_platform_foundation.sql:759-767`). The `media`
+   bucket is public, so a member can post a message pointing at another person object path. The **write** policy
+   does confine uploads to `{auth.uid()}/` (`20260505_media_storage_path_policies.sql:47-49`), so this is
+   a mislabelling hole rather than an upload hole — but a message can still claim someone else file as its own.
+3. **Size limits.** 50 MiB general, 250 MiB video, 50 MiB original are client constants
+   (`lib/stagedAttachments.ts:93-97`, `lib/mediaCompression.ts:36`). The `media` bucket has **no**
+   `file_size_limit`; the only bucket with one is `chat-media`, which the forward migration records as
+   unused (`20260911144000:47-48`).
+4. **MIME type.** No `allowed_mime_types` on `media` either. The `type` column and
+   `getAttachmentKind` (`lib/stagedAttachments.ts:234`) are both the client word.
+5. **Ten attachments per send** — `MAX_STAGED_ATTACHMENTS`, client-only.
+6. **Location stripping.** `removeLocation` runs in the browser only (`ChatWindow.tsx:395`). A client
+   that skips it uploads GPS-bearing EXIF and QuickTime location boxes, and nothing on the server inspects the
+   bytes it later hands to sharp and ffmpeg. **This is a privacy guarantee with no server enforcement anywhere**,
+   and it is the one on this list that would embarrass us rather than cost us.
+7. **`client_sent_at`** is a free-form client timestamp (`hooks/useMessages.ts:973`) with no trigger
+   clamping it to `now()` — the contrast being read marks, which got exactly that clamp
+   (`20260911140000:33-36`). `created_at` is a database default and is safe.
+8. **`edited_at`** is set by the client in the same PATCH as the content (`useMessages.ts:1220-1223`).
+   Nothing requires it, so an edit can be made without stamping one, or with any value. There is no edit-window
+   rule at all.
+9. **Whether an image is uncompressed.** That flag and the `preview` block decide whether a reader downloads
+   an original or a preview (`readOriginalPreview`, `lib/mediaCompression.ts:296`). The server never
+   verifies that the file is the untouched original, nor that the declared preview dimensions match the object.
+10. **`optimized`, `original_size_bytes`, `original_mime_type`** — sender assertions with no
+    counterpart.
+11. **A resumable upload reports its own destination.** `lib/resumableStorageUpload.ts:183-187` resolves with
+    the name the client intended rather than anything the tus server confirmed, and that value becomes
+    `messages.media_path`. The plain branch does use the path the server returned (`ChatWindow.tsx:562`).
+
+**One mitigation worth naming, because it shows the shape of the fix:** `readOriginalPreview` refuses any
+preview path that is not exactly `originalPreviewPath(media_path)` and rejects traversal
+(`lib/mediaCompression.ts:288-306`, reasoning at `:236-245`). That is the right instinct applied on the
+wrong side of the wire: it protects a reader from a bad row, and does nothing to stop the row being written.
+
+**Proposed:** close these where the database can, in the order of what a bad actor gets for free — the bucket
+limits and the mime allowlist first, because they are configuration rather than code; then a trigger that
+constrains `media_path` to the sender own prefix, matching the storage policy that already exists; then the
+timestamps. Server-side location stripping is the one that needs a decision rather than a patch, because it
+means the server reading every uploaded byte.
+
+**Not a finding, and stated so nobody re-opens it:** this list is about what the server would accept from a
+modified client, not about anything the shipped client does wrong. Each item costs nothing today and costs
+everything on the day someone points a script at the API.

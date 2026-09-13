@@ -19,6 +19,7 @@ import {
   attachTab,
   attachTabSelection,
   fittedSheetHeight,
+  offersHdPhotos,
   offersSendWithoutCompression,
   planAttachSend,
   releaseSheet,
@@ -44,6 +45,7 @@ import {
   originalLimitMessage,
   type IncomingFilesSource,
 } from "@/lib/mediaCompression";
+import { photoSendQuality } from "@/lib/mediaQuality";
 import { isNativeAndroid } from "@/lib/platform/capabilities";
 import { cn } from "@/lib/utils";
 import { AttachFilePanel, type AttachFileSource } from "./AttachFilePanel";
@@ -117,6 +119,10 @@ export default function AttachSheet({
   const [filesSelected, setFilesSelected] = useState<string[]>([]);
   const [caption, setCaption] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  // Off for every send, and not remembered between them: the objection D-119
+  // recorded was to being asked and then having the answer applied for ever
+  // afterwards. The sheet unmounts with the send, so this resets itself.
+  const [hd, setHd] = useState(false);
   const [dragY, setDragY] = useState(0);
   const [dragFrom, setDragFrom] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -231,6 +237,7 @@ export default function AttachSheet({
   const chosen = selectedInOrder(activePicks, activeSelected);
   const chosenFiles = chosen.map((pick) => pick.file);
   const offersOriginal = offersSendWithoutCompression(tab, chosenFiles);
+  const offersHd = offersHdPhotos(tab, chosenFiles);
   const selecting = chosen.length > 0;
 
   const requestClose = useCallback(() => {
@@ -256,7 +263,15 @@ export default function AttachSheet({
       );
     }
     if (!plan.send.length) return;
-    onSendMedia({ files: plan.send, compress: plan.compress, caption: caption.trim(), source: chosen[0].source });
+    onSendMedia({
+      files: plan.send,
+      compress: plan.compress,
+      caption: caption.trim(),
+      source: chosen[0].source,
+      // Named on every send rather than defaulted somewhere downstream, so
+      // the one place that decides is the one the person pressed.
+      photoQuality: photoSendQuality(hd),
+    });
     onClose();
   };
 
@@ -460,6 +475,9 @@ export default function AttachSheet({
       caption={caption}
       onCaptionChange={setCaption}
       onSend={() => send("compressed")}
+      hdAvailable={offersHd}
+      hd={hd}
+      onHdChange={setHd}
     />
   ) : null;
   const bottom = selecting ? null : <div className="flex shrink-0 justify-center px-4 pb-3 pt-1.5">{tabs}</div>;

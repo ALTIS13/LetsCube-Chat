@@ -147,3 +147,42 @@ export function getVideoRecordingProfile(
     audioBitsPerSecond: profile.audioBitsPerSecond,
   };
 }
+
+// ── what a photo is sent at (D-174) ──────────────────────────────────────────
+
+/**
+ * The two states the attach sheet offers for a photo, named so they cannot be
+ * confused with the other meaning of «original» in this file.
+ *
+ * `original` here is still a re-encode — 2560px at 0.90 — and has nothing to do
+ * with `uncompressed: true`, which is the «Отправить без сжатия» path that
+ * uploads the picked bytes untouched. HD is a smaller photo than an original;
+ * it is only a larger one than SD.
+ *
+ * D-119 removed a five-stop selector that asked on every send and remembered
+ * what it was told. This is not that returning: the default needs no thought,
+ * nothing is remembered between sends, and the composer still asks nothing.
+ */
+export const PHOTO_SEND_SD: MediaQuality = "compact";
+export const PHOTO_SEND_HD: MediaQuality = "original";
+
+/**
+ * What a photo goes at when nobody says otherwise — the owner's instruction of
+ * 2026-09-13, «по стоку загрузку в sd качестве».
+ *
+ * Deliberately not `DEFAULT_MEDIA_QUALITY`: that constant is also what the
+ * camera recorder reads for its bitrates (`getVideoRecordingProfile`), so
+ * moving it to answer a question about photographs would quietly re-tune video
+ * recording as well.
+ */
+export const DEFAULT_PHOTO_SEND_QUALITY: MediaQuality = PHOTO_SEND_SD;
+
+/** The sheet's two-state control, as a value rather than a boolean at the call site. */
+export function photoSendQuality(hd: boolean): MediaQuality {
+  return hd ? PHOTO_SEND_HD : PHOTO_SEND_SD;
+}
+
+/** Whether a value is the high-quality one, for reading a sent photo back. */
+export function isHdPhotoQuality(value: MediaQuality): boolean {
+  return value === PHOTO_SEND_HD;
+}

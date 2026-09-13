@@ -9,6 +9,10 @@ interface AttachSendBarProps {
   caption: string;
   onCaptionChange: (value: string) => void;
   onSend: () => void;
+  /** Whether HD is worth offering at all for what is selected (D-174). */
+  hdAvailable: boolean;
+  hd: boolean;
+  onHdChange: (next: boolean) => void;
 }
 
 /**
@@ -21,7 +25,7 @@ interface AttachSendBarProps {
  * capsule look the owner chose, and in this button's own accessible name, so a
  * screen reader hears it at the control that sends.
  */
-export function AttachSendBar({ sendLabel, caption, onCaptionChange, onSend }: AttachSendBarProps) {
+export function AttachSendBar({ sendLabel, caption, onCaptionChange, onSend, hdAvailable, hd, onHdChange }: AttachSendBarProps) {
   const handleCaptionKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
     event.preventDefault();
@@ -46,6 +50,25 @@ export function AttachSendBar({ sendLabel, caption, onCaptionChange, onSend }: A
           className="relative h-11 w-full min-w-0 bg-transparent text-base text-[color:var(--kub-text)] outline-none placeholder:text-[color:var(--kub-muted)] sm:text-sm"
         />
       </label>
+      {hdAvailable && (
+        <button
+          type="button"
+          data-testid="attach-hd"
+          aria-pressed={hd}
+          aria-label={hd ? "Фото уйдут в высоком качестве" : "Фото уйдут в обычном качестве"}
+          title={hd ? "Высокое качество" : "Обычное качество"}
+          onClick={() => onHdChange(!hd)}
+          className={cn(
+            "kub-interactive relative flex h-11 shrink-0 items-center justify-center rounded-full px-3 text-[13px] font-semibold tracking-[0.06em]",
+            hd
+              ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
+              : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] kub-raise-hover",
+            FOCUS_RING,
+          )}
+        >
+          HD
+        </button>
+      )}
       <button
         type="button"
         data-testid="attach-send"

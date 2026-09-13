@@ -19,6 +19,8 @@
  */
 
 import { isCompressibleMediaType, splitByOriginalLimit, type IncomingFilesSource } from "./mediaCompression.ts";
+import type { MediaQuality } from "./mediaQuality.ts";
+import { isCanvasPhotoCandidate } from "./photoEncoding.ts";
 
 // ── tabs ─────────────────────────────────────────────────────────────────────
 
@@ -247,6 +249,12 @@ export type AttachSendMode = "compressed" | "original";
 export interface AttachSendRequest {
   files: File[];
   compress: boolean;
+  /**
+   * What a photo is re-encoded at, for this send only (D-174). SD unless the
+   * sheet was told otherwise; nothing is remembered between sends. Ignored
+   * where `compress` is false, because an original is not re-encoded at all.
+   */
+  photoQuality: MediaQuality;
   caption: string;
   source: IncomingFilesSource;
 }
@@ -280,6 +288,21 @@ export function planAttachSend<T extends { size: number; type: string }>(
  */
 export function offersSendWithoutCompression(tab: AttachTabId, files: ReadonlyArray<{ type: string }>): boolean {
   return tab === "gallery" && files.some((file) => isCompressibleMediaType(file.type));
+}
+
+/**
+ * Whether the sheet offers HD for this selection (D-174).
+ *
+ * Only where a photograph would be re-encoded at all: the gallery tab, with at
+ * least one picture the canvas can read. A pick from the file tab already goes
+ * untouched, so there is nothing for a quality to change; and a video is not
+ * re-encoded on the way out at all, which is D-175 and not this control.
+ *
+ * Offering it where it changes nothing would be worse than not offering it: a
+ * control that does nothing teaches people to distrust the ones that do.
+ */
+export function offersHdPhotos(tab: AttachTabId, files: ReadonlyArray<{ type: string }>): boolean {
+  return tab === "gallery" && files.some((file) => isCanvasPhotoCandidate(file.type));
 }
 
 /**

@@ -478,9 +478,59 @@ absent. Gates: typecheck clean, unit 1783 of 1783, routing matrix 15 of 15, prod
 Still to do after it: run the preview backfill, which needed the worker to carry the D-116 rule and now can, and
 ask the tester to retry the video that failed, now that the send path names the file and the server's own reason.
 
+## Direction Recorded 2026-09-13: the shape Discord has, not the shape Telegram has
+
+The owner, answering a question about per-member tags: «мы и так планировали делать это скорее как каналы в
+дискорде с войсами и т.п, чем просто группами как изначально в телеге».
+
+Recorded here because it is cheap to write down and expensive to discover late. The interface audit stage spent
+2026-09-13 comparing the group surface against Telegram — the reference pack the owner sent that day was of
+Telegram group screens — and the entries it produced (D-164, D-169, D-170) propose Telegram-shaped answers. The
+gaps are real; the shape of the fix is now open.
+
+**Voice is named in that sentence and does not exist in this product at all.** Searched rather than assumed:
+zero occurrences of `webrtc`, `RTCPeerConnection`, signalling, `livekit` or `jitsi` across the
+client, the API server, the migrations and the Android project. `getUserMedia` appears in five files and
+every one of them records rather than calls — the camera, video messages, voice messages, the audio settings and
+the capability probe. So voice is a track, not a feature.
+
+**What is already built and only needs an audience:** achievements. Tables, criteria, automatic and manual
+granting, progress, and a surface that draws them — visible only to yourself in settings, as a way to unlock
+cosmetics. Discord shows badges on any card it opens. See D-168.
+
+Nothing is redesigned on the strength of one sentence. What changes today: no further Telegram-shaped fix is
+started on that surface without first asking what the Discord-shaped one would be.
 ## Last Confirmed Deploy Baseline
 
-**Current: `ca04e21`, deployed 2026-09-13.** The hint that no longer takes the tap (D-162) and the contact
+**Current: `14854cc`, deployed 2026-09-13.** A group's member actions reachable by a finger (D-163). The
+push carried `3fa7a17` and `3fb9d7c` with it — the audit of ten defects in the group information
+surface, and the record of the previous deploy.
+
+**Verified by the served bytes.** `https://app.letscube.ru` answering 200; the page's assets moving from
+`index-CzsrUfGW.js` and `index-OWWVxcqE.css` to `index-DByhqmBI.js` and `index-D2QioPW6.css`;
+a body of 2,420,498 bytes, printed so that a zero could never be an empty fetch. Four markers of this change,
+all absent before it: `chat-info-member`, `data-has-actions`, the control's own name «Действия с
+участником», and `data-row-action-menu`. Two controls still present: `chat-header-shell` and
+`data-kub-conversation-pane` (twice, as before).
+
+**The rollover disagreement showed itself a third time, and a control caught it again.** Polls 3 and 4 named the
+**new** assets while the marker read 0 — which alone reads as «not deployed yet» — but `chat-header-shell` read
+0 in those same polls, and it had read 1 a minute earlier on the old build. Those two rounds measured nothing at
+all: the page and the container disagree mid-swap. Poll 5 spoke with both at 1. Counting polls 3 and 4 would have
+recorded a failed deploy; this is now three deploys in a row where only the control told the difference between
+«absent» and «unreadable».
+
+Gates at this commit: typecheck clean; unit 1933/1933 over 206 files; production build clean; routing matrix
+15/15; `profile-column` 4 passed 4 skipped; `hint-pointer` green; `desktop-shell` 16 passed;
+the new `member-actions-reachable` 3 passed, each half mutation-proven separately.
+
+**Known failing and not from this batch:** `chat-list-event-cost.spec.ts:215` — coming back to the tab
+refetches the open conversation seven times against a contract of one. Recorded as D-173, and proved to predate
+this work by removing every source change of it and watching the same test fail identically.
+
+Rollback: fast-forward `main` back to `ca04e21`.
+
+**Superseded:** `ca04e21`, deployed 2026-09-13. The hint that no longer takes the tap (D-162) and the contact
 card as a third column (D-161). The push carried `1535cc4` with it, the docs record of the previous deploy.
 
 **Verified by the served bytes and by markers, not by the container's image tag.** There was no SSH reading in
