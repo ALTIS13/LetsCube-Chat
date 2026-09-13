@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { KubIcon, KubPanel, KubSkeletonRows, type KubIconName } from "@/components/kub";
+import { KubButton, KubIcon, KubNotice, KubPanel, KubSkeletonRows, type KubIconName } from "@/components/kub";
 import type { AuditAction, AuditLogWithActor, Ban, Mute, Profile, Chat } from "@/types/database";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
-import { prefixError } from "@/lib/errors";
+import { mapPgError, prefixError } from "@/lib/errors";
+import { listReadView, readReplacesScreen } from "@/lib/listReadState";
 import { showAppAlert } from "@/lib/appDialogs";
 import { useAuditLogs } from "@/hooks/useAuditLogs";
 
@@ -40,6 +41,13 @@ export function BansMutesTab() {
   const [bans, setBans] = useState<BanRow[]>([]);
   const [mutes, setMutes] = useState<MuteRow[]>([]);
   const [loading, setLoading] = useState(true);
+  // D-140. Two separate things, and the tab used to have neither: whether the
+  // last read failed, and whether anything has ever been read at all. Without
+  // the first a refused query renders «Активных банов нет», which tells a
+  // moderator that nobody is restricted; without the second every realtime
+  // change blanked the whole tab back to a spinner while it re-read.
+  const [error, setError] = useState<string | null>(null);
+  const loadedOnceRef = useRef(false);
   const [showExpired, setShowExpired] = useState(false);
   const [bansOpen, setBansOpen] = useState(true);
   const [mutesOpen, setMutesOpen] = useState(true);
@@ -47,8 +55,14 @@ export function BansMutesTab() {
   const auditFilters = useMemo(() => ({ actions: SANCTION_AUDIT_ACTIONS }), []);
   const audit = useAuditLogs(auditFilters, 20);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (options: { background?: boolean } = {}) => {
+    // A background read keeps what is on screen. Only the first read, and a
+    // deliberate retry, are allowed to replace the tab with a spinner.
+    const replaces = readReplacesScreen({
+      background: options.background === true,
+      loadedOnce: loadedOnceRef.current,
+    });
+    if (replaces) setLoading(true);
     const [bansRes, mutesRes] = await Promise.all([
       supabase
         .from("bans")
@@ -61,14 +75,25 @@ export function BansMutesTab() {
         .order("created_at", { ascending: false })
         .limit(500),
     ]);
+    // A failed read is not an empty one. The rows already on screen are older
+    // than the database but they are true; blanking them would state something
+    // that is false.
+    const failure = bansRes.error ?? mutesRes.error;
+    if (failure) {
+      setError(mapPgError(failure));
+      setLoading(false);
+      return;
+    }
     const bansData = (bansRes.data ?? []) as unknown;
     const mutesData = (mutesRes.data ?? []) as unknown;
     setBans(bansData as BanRow[]);
     setMutes(mutesData as MuteRow[]);
+    setError(null);
+    loadedOnceRef.current = true;
     setLoading(false);
   }, [supabase]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const visibleBans = showExpired ? bans : bans.filter(isActiveSanction);
   const visibleMutes = showExpired ? mutes : mutes.filter(isActiveSanction);
@@ -78,7 +103,7 @@ export function BansMutesTab() {
     const debouncedLoad = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
-        void load();
+        void load({ background: true });
       }, 500);
     };
     const channel = supabase
@@ -104,10 +129,29 @@ export function BansMutesTab() {
     setMutes((m) => m.filter((x) => x.id !== id));
   };
 
-  if (loading) {
+  const view = listReadView({ loading, error, loadedOnce: loadedOnceRef.current });
+
+  if (view === "loading") {
     return (
       <div className="flex items-center justify-center py-16">
         <KubIcon name="spinner" size={24} tone="accent" label="Загрузка" />
+      </div>
+    );
+  }
+
+  // Nothing has ever loaded and the read failed: there is nothing truthful to
+  // show but the failure itself, and a way to ask again.
+  if (view === "unavailable") {
+    return (
+      <div className="py-10" data-testid="bans-mutes-error">
+        <KubNotice tone="danger" className="text-sm">
+          {error}
+        </KubNotice>
+        <div className="mt-3 flex justify-center">
+          <KubButton size="sm" variant="secondary" onClick={() => void load()}>
+            Повторить
+          </KubButton>
+        </div>
       </div>
     );
   }
@@ -128,6 +172,20 @@ export function BansMutesTab() {
           Показать истёкшие
         </label>
       </div>
+
+      {/* Rows are on screen and the last read failed: they are older than the
+          database, and saying so is the difference between a stale list and a
+          list a moderator will act on believing it is current. */}
+      {view === "stale" && (
+        <div className="mb-4 flex flex-wrap items-center gap-2" data-testid="bans-mutes-stale">
+          <KubNotice tone="danger" className="min-w-0 flex-1 text-xs">
+            Список мог устареть: {error}
+          </KubNotice>
+          <KubButton size="sm" variant="secondary" onClick={() => void load()}>
+            Повторить
+          </KubButton>
+        </div>
+      )}
 
       <CollapsibleSection
         title={showExpired ? "Баны" : "Активные баны"}

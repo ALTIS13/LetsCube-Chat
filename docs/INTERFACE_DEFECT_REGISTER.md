@@ -7517,7 +7517,7 @@ location's own page (D-123) instead of the admin tab. Stop routing a ban notice 
 
 **Audit rows:** work-surfaces E-08, E-09.
 
-## D-140 `[ ]` In «Блокировки» a failed load reads as "no bans", and every realtime reload blanks the tab
+## D-140 `[x]` In «Блокировки» a failed load reads as "no bans", and every realtime reload blanks the tab
 
 **Severity:** medium, for moderation: an administrator can conclude that nobody is
 restricted. Found by the work-surfaces audit from the code.
@@ -7532,7 +7532,26 @@ restricted. Found by the work-surfaces audit from the code.
 
 **Audit rows:** work-surfaces A-50.
 
-## D-141 `[ ]` The users search invites «@username», and a leading «@» finds nobody
+**Fixed 2026-09-14.** The tab now reads `error` as well as `data`, and the
+decision moved out of the component into `artifacts/kub/src/lib/listReadState.ts`
+so a test can reach it: `listReadView({ loading, error, loadedOnce })` answers one
+of four, not two. «Не загрузилось» and «ничего нет» are different screens, and
+«загружено, но последнее чтение не прошло» is a third — the rows stay, with
+«Список мог устареть: …» and «Повторить» above them, because rows older than the
+database are still true and blanking them would put something false on screen.
+`readReplacesScreen` is the other half: a realtime notification re-reads in the
+background and leaves the tab alone; only the first read and a pressed
+«Повторить» show the spinner.
+
+`tests/unit/list-read-state.test.mts` pins all four answers. Three mutations turn
+it red: dropping the error branch (2), swapping «stale» and «unavailable» (2),
+and letting every read blank the screen (1).
+
+Not verified in a browser: the administration screens need a signed-in
+production session, and this track does not photograph those. What is proved is
+the rule and the wiring, not the rendered pixels.
+
+## D-141 `[x]` The users search invites «@username», and a leading «@» finds nobody
 
 **Severity:** low. Found by the work-surfaces audit from the code.
 
@@ -7544,6 +7563,28 @@ but the «@» is never stripped, so that query matches nobody. Queries also matc
 **Proposed:** strip a leading «@», and make the placeholder «Имя или @имя пользователя».
 
 **Audit rows:** work-surfaces A-13.
+
+**Fixed 2026-09-14**, with one deliberate departure from the proposal above.
+
+The «@» is stripped in `artifacts/kub/src/lib/adminUserSearch.ts` — every leading
+one, because «@@olga» is a typo and not a different person — and a «@» inside a
+name is kept, because that is a character in the name. The same module decides
+what is an id and escapes the characters PostgREST would otherwise read rather
+than match: `,` ends a filter inside `or=(…)`, `(` and `)` delimit it, and `%`
+and `*` are both `ilike` wildcards, so somebody typing one of those meant the
+character.
+
+**The placeholder is «Имя, @никнейм или ID», not the proposed «Имя или @имя
+пользователя».** The proposal dropped «ID» because the field's three claims were
+not all true; stripping the «@» makes all three true, and removing a working
+capability from the label would hide it rather than fix it.
+
+`tests/unit/admin-user-search.test.mts` pins it. Three mutations turn it red:
+dropping the strip (4 failures), dropping the name filters (1), and narrowing
+the escaped set to `%` alone (2). A fourth mutation — removing the "nothing
+typed" early return — stayed green, and the answer was to delete that line
+rather than write a test that pretends to reach it: both branches below it
+already decline, so it was a guard no test could turn red.
 
 ## D-142 `[ ]` Administration forms offer what they then refuse, and drop what was entered
 

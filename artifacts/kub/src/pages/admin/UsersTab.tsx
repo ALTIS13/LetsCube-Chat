@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { adminUserQuery, adminUserSearchFilters } from "@/lib/adminUserSearch";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import type { AppRole, DynamicRole, LocationRole, Profile } from "@/types/database";
@@ -121,13 +122,11 @@ export function UsersTab() {
       .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(from, to);
-    if (query) {
-      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      const safe = query.replace(/[%,()]/g, "");
-      const filters = [`full_name.ilike.%${safe}%`, `username.ilike.%${safe}%`];
-      if (uuidRe.test(query)) filters.push(`id.eq.${query}`);
-      q = q.or(filters.join(","));
-    }
+    // D-141: the «@» the placeholder invites is dropped here rather than sent
+    // to PostgREST, where it matched nobody. The rule is in `lib/adminUserSearch`
+    // because it is worth a test and this file is not loadable by one.
+    const filters = adminUserSearchFilters(adminUserQuery(query));
+    if (filters.length > 0) q = q.or(filters.join(","));
     const { data, count, error } = await q;
     if (error) {
       setError(mapPgError(error));
@@ -564,7 +563,7 @@ export function UsersTab() {
         <input
           value={queryRaw}
           onChange={(e) => setQueryRaw(e.target.value)}
-          placeholder="Поиск по имени, @никнейму или ID"
+          placeholder="Имя, @никнейм или ID"
           className="h-full flex-1 bg-transparent text-sm outline-none text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]"
         />
         {queryRaw && (
