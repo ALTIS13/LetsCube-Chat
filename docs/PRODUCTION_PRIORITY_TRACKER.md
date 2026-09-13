@@ -550,6 +550,63 @@ with the two commands that remove the probe entirely.
 Traefik router, no Coolify application, no migration, no client dependency and no
 route on `app.letscube.ru`. Slice 1 had to be cheap to discard, and it is.
 
+## What Was On Production But Not In Production (2026-09-14)
+
+Two things this project believed were done turned out never to have reached the
+server. Neither was found by a test; both were found by asking the live system
+the question directly, which is now written down as a procedure rather than as
+an anecdote.
+
+### Six migrations, unapplied for three days
+
+`6e2f5ed` and its neighbours were committed on 2026-09-11 and the register
+described them as fixed. The database still carried the old policies. The worst
+of them, **D-104**: `Anyone in chat can view reactions` with `using (true)`, and
+`anon` holding SELECT, INSERT, UPDATE and DELETE — every signed-in account read
+who reacted to what in every chat in the product, and could react to any message
+whose id it knew.
+
+All seven of that day's migrations were applied. The procedure, in the order it
+was done: a `pg_dump` verified with `pg_restore -l` and hashed; a throwaway
+database loaded from a schema-only dump of production; every migration **and its
+rehearsal** run there and green; then production, as the role that owns the
+tables; then the effect measured as `authenticated` with real claims, never as
+the table's owner.
+
+| | before | after |
+| --- | --- | --- |
+| reactions an outsider can read | 149 of 149 | **0 of 149** |
+| an outsider may react to a message in a chat they are not in | yes | refused |
+| achievements readable without an account | all 59 | refused outright |
+| `set_message_reaction`, `delete_messages_for_everyone`, `forward_message`, `mark_chat_read_through` | absent | present |
+| rows touched | — | none |
+
+The client needed no deploy: each of those features tries its RPC and falls back
+where it is absent, which is why nobody noticed for three days.
+
+**`scripts/migration-inventory.*` now asks this question**, and
+`docs/operations/migration-inventory.md` carries its two limits and the triage of
+the nine older entries that are superseded rather than missing.
+
+### A push function seven weeks stale, with no Windows sender in it
+
+Hashing every Edge Function against the served copy found
+`send-push-notifications` dated 2026-07-14 where the repository's is 2026-08-31 —
+and **without `wns.ts` at all**. The whole Windows Notification Service sender,
+including the two helpers that stop a toast carrying an external or signed avatar
+URL, had unit tests here and no existence there. Part of why «killed-process WNS
+delivery» is an open Windows gate is that the sender was never deployed.
+
+Deployed with a backup first and all four files verified byte-identical after.
+No restart was needed, proved by the new code answering `401` to an unauthorised
+call immediately. FCM and web push are untouched; Windows delivery stays off
+until `WNS_TENANT_ID`, `WNS_CLIENT_ID` and `WNS_CLIENT_SECRET` exist, which is
+the owner's to supply. Three other function directories were serving stale
+copies of themselves; those were moved into the same backup.
+
+**The functions have no inventory script yet.** The comparison was a directory
+hash run by hand, and it is worth writing down as one.
+
 ## Last Confirmed Deploy Baseline
 
 **`67454a6`, deployed 2026-09-14.** Voice is a feature people can switch on, and
