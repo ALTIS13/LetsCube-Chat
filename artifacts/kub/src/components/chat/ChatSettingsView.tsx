@@ -15,6 +15,12 @@ interface ChatSettingsViewProps {
   onNameChange: (value: string) => void;
   description: string;
   onDescriptionChange: (value: string) => void;
+  /**
+   * «О чём эта группа» or «О чём этот канал» (D-169). The screen is titled
+   * «Настройки канала» over a channel, so a placeholder hard-coded to «группа»
+   * contradicted the title bar two rows above it.
+   */
+  descriptionPlaceholder: string;
   /** Which row has opened its choice, and the way to open one. */
   openRow: ChatSettingsRowId | null;
   onOpenRowChange: (id: ChatSettingsRowId | null) => void;
@@ -69,6 +75,7 @@ export function ChatSettingsView({
   onNameChange,
   description,
   onDescriptionChange,
+  descriptionPlaceholder,
   openRow,
   onOpenRowChange,
   invitePolicy,
@@ -110,7 +117,7 @@ export function ChatSettingsView({
             <textarea
               value={description}
               onChange={(event) => onDescriptionChange(event.target.value)}
-              placeholder="О чём эта группа"
+              placeholder={descriptionPlaceholder}
               rows={3}
               disabled={!canEditProfile}
               data-testid="chat-settings-description"

@@ -300,7 +300,11 @@ const veiled = [
   // the settings screen (D-164), taking their two hovers with them. The count
   // is the point of this guard -- a hover that goes missing is invisible --
   // so it is updated deliberately rather than widened into a range.
-  ["components/chat/ChatInfoPanel.tsx", 17],
+  // 16 since 2026-09-13 (D-172): the invitations block's «Обновить» button is
+  // gone. The binding on `group_invites` delivers, so the list was already
+  // current every time it was pressed, and it stood beside a sentence saying
+  // exactly that.
+  ["components/chat/ChatInfoPanel.tsx", 16],
   // Two, down from eleven on 2026-09-11: the hover cluster, the per-message
   // context menu and its reaction pickers left the bubble for
   // `MessageActionLayer` and `MessageReactions`, which are counted below.

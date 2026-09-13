@@ -8,7 +8,14 @@ import { KubIcon, KubModal, KubStableSkeleton, type KubIconName } from "@/compon
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
-import { getChatDisplayInfo, memberCountLabel } from "@/lib/chatDisplay";
+import { getChatDisplayInfo } from "@/lib/chatDisplay";
+import { chatVocabulary, countedMemberLabel } from "@/lib/chatVocabulary";
+import {
+  inviteState,
+  invitesEmptyText,
+  invitesWaitingLine,
+  type InviteTone,
+} from "@/lib/groupInviteCopy";
 import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { subscribeByTable } from "@/lib/realtimeTableChannels";
@@ -168,6 +175,11 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const display = getChatDisplayInfo(chat, currentUser?.id ?? null);
   const isSaved = display.isSaved;
   const isGroup = !isSaved && (chat.type === "group" || chat.type === "channel");
+  // D-169: this card called both of them a group. `isGroup` stays — a channel
+  // really is a group as far as every rule in this component goes, because the
+  // database gives it the same members, the same roles and the same permission
+  // to post — but what the card SAYS now comes from the chat's own type.
+  const words = chatVocabulary(chat.type);
   const storedMemberRole: "owner" | "admin" | "member" | null =
     (chat.members?.find((m) => m.user_id === currentUser?.id)?.role as
       | "owner" | "admin" | "member" | undefined) ?? null;
@@ -253,7 +265,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   }, []);
   const frame = profileWindowFrame(placement, viewport, { x: insets.left, y: insets.top }, columnFits);
   const docked = frame.docked;
-  const rootTitle = isSaved ? "Избранное" : isGroup ? "Информация о группе" : "Профиль пользователя";
+  const rootTitle = isSaved ? "Избранное" : isGroup ? words.infoTitle : "Профиль пользователя";
 
   // A resize or a rotation can strand the card off screen; crossing the dock
   // breakpoint has to put it back into the column it came from.
@@ -904,7 +916,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
 
     if (error) {
       console.error("delete group chat failed:", error);
-      setDestructiveError(prefixError("Не удалось удалить групповой чат", error));
+      setDestructiveError(prefixError(words.deleteError, error));
       return;
     }
 
@@ -1177,7 +1189,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   // The sub-view is one kind now, so the title bar names it. It falls back to
   // the old wording only in the moment between the last row of a kind being
   // cleared and the pop that follows it.
-  const settingsTitle = chat.type === "channel" ? "Настройки канала" : "Настройки группы";
+  const settingsTitle = words.settingsTitle;
   const windowTitle =
     view === "gallery"
       ? (activeSection?.label ?? "Общие медиа")
@@ -1194,6 +1206,22 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     () => invites.filter((invite) => !(invite.status === "accepted" && memberIdSet.has(invite.invitee_id))),
     [invites, memberIdSet],
   );
+  // D-172: what stood under «Приглашения» was «Статусы обновляются без
+  // перезагрузки панели.» — a note about how the code works, beside a manual
+  // «Обновить» button that contradicted it. In its place is the one thing on
+  // this list a person can act on: how many people have not answered yet.
+  const invitesWaiting = invitesWaitingLine(
+    visibleInvites.filter((invite) => invite.status === "pending").length,
+  );
+  // And why the list is empty, when it is. `inviteError` means the list was
+  // never read, which is not the same as there being nothing in it — the block
+  // used to draw its unavailable banner with «никого не приглашали» beneath it.
+  const invitesEmpty = invitesEmptyText({
+    total: invites.length,
+    visible: visibleInvites.length,
+    failed: Boolean(inviteError),
+    type: chat.type,
+  });
   /**
    * Whether the open section is worth asking the server about again.
    *
@@ -1293,7 +1321,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     });
   };
 
-  const tabLabels: Record<Tab, string> = { info: "Сведения", members: "Участники" };
+  const tabLabels: Record<Tab, string> = { info: "Сведения", members: words.membersTitle };
   // A hover is the «immediate» step of the shared scale, and it is a colour, so
   // nothing with a size moves. Taking the duration from the token rather than
   // from Tailwind's built-in 150ms is also what makes reduced motion reach it:
@@ -1459,7 +1487,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               </div>
             ) : isGroup ? (
               <div className="col-start-2 row-start-2 text-left text-xs text-[color:var(--kub-muted)]">
-                {memberCountLabel(members.length || chat.members?.length || 0)}
+                {countedMemberLabel(members.length || chat.members?.length || 0, chat.type)}
               </div>
             ) : otherUser?.username ? (
               // Carried over from the chat-list mini-profile this card replaced:
@@ -1635,7 +1663,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                   className={dangerActionRowClass}
                 >
                   <KubIcon name="logout" size={17} className="shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">{leavingChat ? "Выходим..." : "Покинуть группу"}</span>
+                  <span className="min-w-0 flex-1 truncate">{leavingChat ? "Выходим..." : words.leaveLabel}</span>
                 </button>
               )}
               {isGroup && isOwner && (
@@ -1647,9 +1675,10 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                   disabled={deletingChat}
                   className={dangerActionRowClass}
                 >
-                  <KubIcon name="userRemove" size={17} className="shrink-0" />
+                  {/* A bin, as the settings screen draws the same action. */}
+                  <KubIcon name="delete" size={17} className="shrink-0" />
                   <span className="min-w-0 flex-1 truncate">
-                    {deletingChat ? "Удаление..." : "Удалить групповой чат"}
+                    {deletingChat ? "Удаление..." : words.deleteLabel}
                   </span>
                 </button>
               )}
@@ -1722,50 +1751,59 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
             ))}
             {isOwnerOrAdmin && (
               <div className="mt-3 border-t border-[color:var(--kub-rule)] px-4 pt-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--kub-accent-text)]">
-                      Приглашения
-                    </div>
-                    <div className="text-xs text-[color:var(--kub-muted)]">
-                      Статусы обновляются без перезагрузки панели.
-                    </div>
+                {/* D-172. The «Обновить» button went with the sentence beside
+                    it: the binding on `group_invites` delivers, so the list was
+                    already current every time somebody pressed it, and a
+                    control that never changes anything teaches a person to
+                    distrust what is on the screen. */}
+                <div className="mb-2">
+                  <div className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--kub-accent-text)]">
+                    Приглашения
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void loadInvites()}
-                    className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-muted)] kub-raise-hover"
-                  >
-                    <KubIcon name="rotate" size={12} />
-                    Обновить
-                  </button>
+                  {invitesWaiting && (
+                    <div
+                      className="text-xs text-[color:var(--kub-muted)]"
+                      data-testid="chat-info-invites-waiting"
+                    >
+                      {invitesWaiting}
+                    </div>
+                  )}
                 </div>
 
                 {inviteError && (
-                  <div className="mb-2 rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger-text)]">
+                  <div
+                    className="mb-2 rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger-text)]"
+                    data-testid="chat-info-invites-error"
+                  >
                     {inviteError}
                   </div>
                 )}
 
-                {visibleInvites.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-[color:var(--kub-border-color)] px-3 py-3 text-xs text-[color:var(--kub-muted)]">
-                    Активных или отклонённых приглашений пока нет.
+                {invitesEmpty ? (
+                  <div
+                    className="rounded-xl border border-dashed border-[color:var(--kub-border-color)] px-3 py-3 text-xs text-[color:var(--kub-muted)]"
+                    data-testid="chat-info-invites-empty"
+                  >
+                    {invitesEmpty}
                   </div>
-                ) : (
+                ) : visibleInvites.length === 0 ? null : (
                   <div className="space-y-1">
                     {visibleInvites.map((invite) => {
                       const invitee = invite.invitee;
                       const inviter = invite.inviter;
-                      const inviteeIsCurrentMember = memberIdSet.has(invite.invitee_id);
-                      const canReinvite = !inviteeIsCurrentMember && (
-                        invite.status === "accepted" ||
-                        invite.status === "declined" ||
-                        invite.status === "cancelled" ||
-                        invite.status === "expired"
-                      );
-                      const canCancel = invite.status === "pending";
+                      // D-172: which words this invitation gets, and which of
+                      // the two actions it offers, are one decision now and are
+                      // tested in `tests/unit/group-invite-copy.test.mts`. The
+                      // rules are unchanged — only a waiting invitation can be
+                      // withdrawn, and only somebody outside the chat can be
+                      // asked again.
+                      const state = inviteState({
+                        status: invite.status,
+                        isMember: memberIdSet.has(invite.invitee_id),
+                        type: chat.type,
+                      });
                       return (
-                        <div key={invite.id} className="rounded-xl px-2 py-2 kub-raise-hover">
+                        <div key={invite.id} className="rounded-xl px-2 py-2 kub-raise-hover" data-testid="chat-info-invite-row">
                           <div className="flex min-w-0 items-center gap-3">
                             <UserAvatar user={invitee ?? { id: invite.invitee_id, full_name: null, username: null, avatar_url: null }} size="sm" />
                             <div className="min-w-0 flex-1">
@@ -1773,21 +1811,28 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                                 <span className="truncate text-sm font-medium text-[color:var(--kub-text)]">
                                   {invitee ? displayProfileName(invitee) : "Пользователь"}
                                 </span>
-                                <span className={cn(
-                                  "shrink-0 rounded-full px-2 py-0.5 text-[12px] font-semibold",
-                                  inviteStatusClass(invite.status),
-                                )}>
-                                  {inviteStatusLabel(invite.status, inviteeIsCurrentMember)}
+                                <span
+                                  className={cn(
+                                    "shrink-0 rounded-full px-2 py-0.5 text-[12px] font-semibold",
+                                    inviteToneClass(state.tone),
+                                  )}
+                                  data-testid="chat-info-invite-state"
+                                >
+                                  {state.label}
                                 </span>
                               </div>
+                              {/* «Пригласил: Анна» agreed with Anna and was
+                                  wrong for half the people it named. «Кто
+                                  пригласил» agrees with «кто», so it is right
+                                  for all of them. */}
                               <div className="truncate text-xs text-[color:var(--kub-muted)]">
-                                Пригласил: {inviter ? displayProfileName(inviter) : "администратор"} · {formatInviteTime(invite.created_at)}
+                                Кто пригласил: {inviter ? displayProfileName(inviter) : "администратор"} · {formatInviteTime(invite.created_at)}
                               </div>
                             </div>
                           </div>
-                          {(canCancel || canReinvite) && (
+                          {(state.canCancel || state.canInviteAgain) && (
                             <div className="mt-2 flex justify-end gap-2">
-                              {canCancel && (
+                              {state.canCancel && (
                                 <button
                                   type="button"
                                   onClick={() => void handleCancelInvite(invite)}
@@ -1797,7 +1842,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                                   {inviteBusyId === invite.id ? "Отмена..." : "Отменить"}
                                 </button>
                               )}
-                              {canReinvite && (
+                              {state.canInviteAgain && (
                                 <button
                                   type="button"
                                   onClick={() => void handleReinvite(invite)}
@@ -1997,6 +2042,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
             onNameChange={(value) => setName(limitText(value, CHAT_NAME_MAX_LENGTH))}
             description={description}
             onDescriptionChange={setDescription}
+            descriptionPlaceholder={words.descriptionPlaceholder}
             openRow={settingsRow}
             onOpenRowChange={setSettingsRow}
             invitePolicy={invitePolicySupported ? invitePolicy : null}
@@ -2026,8 +2072,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         onClose={() => {
           if (!leavingChat) setLeaveGroupOpen(false);
         }}
-        title="Покинуть группу?"
-        description="Группа исчезнет из вашего списка. История у других участников останется."
+        title={words.leaveTitle}
+        description={words.leaveDescription}
         icon={<KubIcon name="logout" size={18} tone="danger" />}
         size="sm"
         mobileSheet={false}
@@ -2067,8 +2113,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         onClose={() => {
           if (!deletingChat) setDeleteGroupOpen(false);
         }}
-        title="Удалить групповой чат?"
-        description="Это действие нельзя отменить. Чат и история исчезнут у всех участников."
+        title={words.deleteTitle}
+        description={words.deleteDescription}
         icon={<KubIcon name="userRemove" size={18} tone="danger" />}
         size="sm"
         mobileSheet={false}
@@ -2099,7 +2145,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
           </div>
         ) : (
           <p className="text-sm text-[color:var(--kub-muted)]">
-            После удаления группа исчезнет у всех участников.
+            {words.deleteAftermath}
           </p>
         )}
       </KubModal>
@@ -2126,18 +2172,19 @@ function displayProfileName(profile: Profile): string {
   return profile.full_name ?? profile.username ?? "Без имени";
 }
 
-function inviteStatusLabel(status: GroupInviteStatus, isCurrentMember = false): string {
-  if (status === "pending") return "Ожидает подтверждения";
-  if (status === "declined") return "Отказался";
-  if (status === "accepted") return isCurrentMember ? "Принял" : "Был участником";
-  if (status === "cancelled") return "Отменено";
-  return "Истекло";
-}
-
-function inviteStatusClass(status: GroupInviteStatus): string {
-  if (status === "pending") return "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] text-[color:var(--kub-accent-text)]";
-  if (status === "declined") return "bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger-text)]";
-  if (status === "accepted") return "bg-[color-mix(in_srgb,var(--kub-online)_14%,transparent)] text-[color:var(--kub-online-text)]";
+/**
+ * The chip's colour, from the tone `inviteState` decided (D-172).
+ *
+ * Keyed on the tone rather than on the status, which is what fixes the one
+ * case the old mapping got wrong: somebody who accepted and is no longer in the
+ * chat used to wear the same green as somebody who is in it, because the class
+ * was chosen from the status alone and the label from the status plus the
+ * membership. Now both come from one answer.
+ */
+function inviteToneClass(tone: InviteTone): string {
+  if (tone === "waiting") return "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] text-[color:var(--kub-accent-text)]";
+  if (tone === "refused") return "bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger-text)]";
+  if (tone === "joined") return "bg-[color-mix(in_srgb,var(--kub-online)_14%,transparent)] text-[color:var(--kub-online-text)]";
   return "bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)]";
 }
 

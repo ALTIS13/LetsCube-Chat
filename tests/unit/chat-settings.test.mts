@@ -12,7 +12,6 @@ import {
   chatProfileDirty,
   chatSettingsRows,
   invitePolicyLabel,
-  memberCountValue,
   type ChatSettingsInput,
 } from "../../artifacts/kub/src/lib/chatSettings.ts";
 
@@ -58,6 +57,17 @@ test("a channel has no topics, and its destructive row says channel", () => {
   assert.equal(row(group(), "delete")?.label, "Удалить группу");
 });
 
+test("a channel's people are its subscribers, on the row that names them", () => {
+  // D-169: the row said «Участники · 12 участников» over a channel, while the
+  // screen's own title bar said «Настройки канала». The words come from
+  // `lib/chatVocabulary.ts` now, which is where both of them are tested.
+  const channel = group({ type: "channel", members: 12 });
+  assert.equal(row(channel, "members")?.label, "Подписчики");
+  assert.equal(row(channel, "members")?.value, "12 подписчиков");
+  assert.equal(row(group({ members: 12 }), "members")?.label, "Участники");
+  assert.equal(row(group({ members: 12 }), "members")?.value, "12 участников");
+});
+
 test("topics say which way they are, because the row is read at a glance", () => {
   assert.equal(row(group({ isForum: true }), "topics")?.value, "Включены");
   assert.equal(row(group({ isForum: false }), "topics")?.value, "Выключены");
@@ -78,14 +88,9 @@ test("an unread invite policy says so rather than naming a default", () => {
 });
 
 test("the counts are counted in Russian", () => {
-  assert.equal(memberCountValue(1), "1 участник");
-  assert.equal(memberCountValue(2), "2 участника");
-  assert.equal(memberCountValue(5), "5 участников");
-  assert.equal(memberCountValue(11), "11 участников", "eleven is not one");
-  assert.equal(memberCountValue(21), "21 участник");
-  assert.equal(memberCountValue(112), "112 участников");
-  assert.equal(memberCountValue(0), "0 участников");
-
+  // The member forms moved to `lib/chatVocabulary.ts` with D-169, because a
+  // channel counts subscribers with the same machinery, and they are asserted
+  // there in both nouns. Administrators are an administrator either way.
   assert.equal(adminCountValue(1), "1 администратор");
   assert.equal(adminCountValue(3), "3 администратора");
   assert.equal(adminCountValue(14), "14 администраторов");

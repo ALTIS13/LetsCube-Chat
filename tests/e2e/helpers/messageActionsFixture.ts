@@ -58,7 +58,7 @@ export function membership(chatId: string, who: Person, role: string, lastReadAt
  * showed a state the product cannot be in — «Недоступно» beside a policy nobody
  * had set. The register recorded the symptom on 2026-09-13; this is the cause.
  */
-export function chat(id: string, type: "private" | "group", name: string | null, updatedAt: string): Row {
+export function chat(id: string, type: "private" | "group" | "channel", name: string | null, updatedAt: string): Row {
   return { id, type, name, description: null, avatar_url: null, created_by: null, created_at: EPOCH, updated_at: updatedAt, is_forum: false, invite_policy: "owner_admin_only" };
 }
 

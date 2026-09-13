@@ -565,8 +565,13 @@ test("every action and confirmation the card carried is still on it", () => {
     ["Закрепить чат", /onClick=\{handlePinToggle\}[\s\S]{0,400}?Открепить чат[\s\S]{0,40}?Закрепить чат/],
     ["Очистить историю у себя", /onClick=\{handleClearForMe\}[\s\S]{0,500}?Очистить историю у себя/],
     ["Удалить чат у себя", /onClick=\{handleHidePrivateChat\}[\s\S]{0,400}?Удалить чат у себя/],
-    ["Покинуть группу", /setLeaveGroupOpen\(true\)[\s\S]{0,700}?Покинуть группу/],
-    ["Удалить групповой чат", /setDeleteGroupOpen\(true\)[\s\S]{0,700}?Удалить групповой чат/],
+    // D-169: these two read their own words out of `lib/chatVocabulary.ts`, so
+    // that a channel is offered «Покинуть канал» rather than «Покинуть группу».
+    // What each one says is pinned in `tests/unit/chat-vocabulary.test.mts`, in
+    // both nouns; what is pinned here is still the binding — that the label the
+    // person presses is the one wired to this handler.
+    ["Покинуть группу", /setLeaveGroupOpen\(true\)[\s\S]{0,700}?words\.leaveLabel/],
+    ["Удалить группу", /setDeleteGroupOpen\(true\)[\s\S]{0,700}?words\.deleteLabel/],
     ["Пригласить пользователя", /setInviteOpen\(true\)[\s\S]{0,400}?Пригласить пользователя/],
   ];
   for (const [label, pattern] of rows) {

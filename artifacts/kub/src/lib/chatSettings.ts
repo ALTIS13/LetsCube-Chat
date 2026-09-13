@@ -21,6 +21,7 @@
  * Free of React and of every browser API, so `node --test` reads it directly.
  */
 
+import { chatVocabulary, countedMemberLabel } from "./chatVocabulary.ts";
 import type { InvitePolicy } from "./groupInvites.ts";
 
 export type ChatSettingsRowId =
@@ -78,16 +79,7 @@ export function invitePolicyLabel(policy: InvitePolicy | null): string {
   return "Неизвестно";
 }
 
-/** «12 участников», in the forms Russian actually takes. */
-export function memberCountValue(count: number): string {
-  const remainder10 = count % 10;
-  const remainder100 = count % 100;
-  if (remainder10 === 1 && remainder100 !== 11) return `${count} участник`;
-  if (remainder10 >= 2 && remainder10 <= 4 && (remainder100 < 12 || remainder100 > 14)) return `${count} участника`;
-  return `${count} участников`;
-}
-
-/** «3 администратора», the same forms. */
+/** «3 администратора», in the forms Russian actually takes. */
 export function adminCountValue(count: number): string {
   const remainder10 = count % 10;
   const remainder100 = count % 100;
@@ -107,6 +99,11 @@ export function adminCountValue(count: number): string {
 export function chatSettingsRows(input: ChatSettingsInput): ChatSettingsRow[] {
   const rows: ChatSettingsRow[] = [];
   const isGroup = input.type === "group";
+  // D-169: a channel's people are its subscribers, and the row that names them
+  // and the row that deletes the thing are the two that have to say so. Both
+  // come from one place now, so the screen cannot call it a channel in its
+  // title and a group two rows below.
+  const words = chatVocabulary(input.type);
 
   rows.push({
     id: "invites",
@@ -136,8 +133,8 @@ export function chatSettingsRows(input: ChatSettingsInput): ChatSettingsRow[] {
 
   rows.push({
     id: "members",
-    label: "Участники",
-    value: memberCountValue(input.members),
+    label: words.membersTitle,
+    value: countedMemberLabel(input.members, input.type),
     kind: "navigate",
     editable: true,
   });
@@ -155,7 +152,7 @@ export function chatSettingsRows(input: ChatSettingsInput): ChatSettingsRow[] {
   if (input.isOwner) {
     rows.push({
       id: "delete",
-      label: input.type === "channel" ? "Удалить канал" : "Удалить группу",
+      label: words.deleteLabel,
       value: null,
       kind: "danger",
       editable: true,

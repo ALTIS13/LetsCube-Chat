@@ -1,7 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, GroupInvite, Json } from "@/types/database";
 
-export const GROUP_INVITES_MIGRATION_REQUIRED = "Приглашения требуют обновления базы данных.";
+/**
+ * D-172: the reader is told what is true for them, not what is true of the
+ * database. The condition is still a missing migration — the name says so, and
+ * that is for us — but «требуют обновления базы данных» named a repair nobody
+ * reading it can make, in the one moment they wanted to invite somebody.
+ */
+export const GROUP_INVITES_MIGRATION_REQUIRED = "Приглашения сейчас недоступны. Попробуйте позже.";
 export const INVITE_POLICY_MIGRATION_REQUIRED = "Настройка режима приглашений станет доступна после обновления базы данных.";
 
 export type GroupInviteStatus = "pending" | "accepted" | "declined" | "cancelled" | "expired";
