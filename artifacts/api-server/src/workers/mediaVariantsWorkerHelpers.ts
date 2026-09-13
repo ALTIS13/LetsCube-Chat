@@ -1,6 +1,18 @@
+/**
+ * The playback rendition every video message gets.
+ *
+ * `shortSide` and `longSide` replaced a single 1280x720 box on 2026-09-13, and
+ * the difference is not cosmetic. The box was applied to the picture whichever
+ * way round it was, so a portrait clip - which is most of what a phone takes -
+ * was fitted inside 1280x720 and came out 405 points wide. The name 720p has
+ * always meant the SHORT side, tdesktop counts it that way, and the client
+ * ladder added in D-175 counts it that way. A portrait video now comes out
+ * 720x1280 and a landscape one 1280x720. The long side keeps a cap of its own so
+ * an extreme aspect cannot produce an absurd frame.
+ */
 export const VIDEO_720P_ENCODING = {
-  width: 1280,
-  height: 720,
+  shortSide: 720,
+  longSide: 1280,
   preset: "veryfast",
   crf: 24,
   maxRate: "3M",
@@ -9,6 +21,157 @@ export const VIDEO_720P_ENCODING = {
   pixelFormat: "yuv420p",
   fastStart: true,
 } as const;
+
+/** What a probe of the uploaded file tells us about it. */
+export interface VideoSourceProbe {
+  width: number;
+  height: number;
+  /** ffprobe codec_name for the first video stream. */
+  videoCodec: string | null;
+  /** The first audio stream codec_name, or null for a silent file. */
+  audioCodec: string | null;
+  /** format_name split on commas: an mp4 reports mov,mp4,m4a,3gp,3g2,mj2. */
+  formatNames: string[];
+}
+
+/** Ask ffprobe about the source rather than about our own output. */
+export function buildVideoProbeArgs(inputPath: string): string[] {
+  return [
+    "-v",
+    "error",
+    "-show_entries",
+    "stream=index,codec_type,codec_name,width,height:format=format_name",
+    "-of",
+    "json",
+    inputPath,
+  ];
+}
+
+export function parseVideoProbe(stdout: string): VideoSourceProbe | null {
+  try {
+    const parsed = JSON.parse(stdout) as {
+      streams?: Array<{ codec_type?: unknown; codec_name?: unknown; width?: unknown; height?: unknown }>;
+      format?: { format_name?: unknown };
+    };
+    const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
+    const video = streams.find((stream) => stream.codec_type === "video");
+    const audio = streams.find((stream) => stream.codec_type === "audio");
+    const width = Number(video?.width);
+    const height = Number(video?.height);
+    if (!Number.isInteger(width) || width <= 0 || !Number.isInteger(height) || height <= 0) return null;
+    const formatName = typeof parsed.format?.format_name === "string" ? parsed.format.format_name : "";
+    return {
+      width,
+      height,
+      videoCodec: typeof video?.codec_name === "string" ? video.codec_name : null,
+      audioCodec: typeof audio?.codec_name === "string" ? audio.codec_name : null,
+      formatNames: formatName ? formatName.split(",").map((name) => name.trim()).filter(Boolean) : [],
+    };
+  } catch {
+    // The caller maps invalid probe output to a bounded error code.
+    return null;
+  }
+}
+
+/** Even, because H.264 in yuv420p cannot encode an odd dimension. */
+function toEven(value: number): number {
+  return Math.max(2, Math.round(value / 2) * 2);
+}
+
+/**
+ * The frame the rendition is encoded at, from the source own frame.
+ *
+ * Computed here rather than in an ffmpeg expression, for the same reason the
+ * client ladder computes it in TypeScript: the rule is the part that can be
+ * quietly wrong, and an expression inside a -vf string cannot be unit-tested.
+ * Never larger than the source, so a small clip is left at its own size - which
+ * is also what makes the reuse below possible.
+ */
+export function video720pTargetSize(source: { width: number; height: number }): { width: number; height: number } {
+  const shortSide = Math.min(source.width, source.height);
+  const longSide = Math.max(source.width, source.height);
+  if (shortSide <= 0 || longSide <= 0) return { width: 0, height: 0 };
+  const scale = Math.min(
+    1,
+    VIDEO_720P_ENCODING.shortSide / shortSide,
+    VIDEO_720P_ENCODING.longSide / longSide,
+  );
+  if (scale >= 1) return { width: toEven(source.width), height: toEven(source.height) };
+  return { width: toEven(source.width * scale), height: toEven(source.height * scale) };
+}
+
+/**
+ * Whether an uploaded file is already the rendition, so nothing has to be made.
+ *
+ * This is what the client-side transcoding of D-175 buys: the device produced a
+ * 720p H.264 mp4, and re-encoding it here would spend a CPU minute to produce a
+ * slightly worse copy of the same thing.
+ *
+ * Nothing here trusts the client. Every condition is measured on the server from
+ * the bytes that arrived: ffprobe for the codecs and the frame, and the file own
+ * top-level boxes for where its metadata sits. A claim in media_metadata would
+ * have been the easy way and would have let any caller skip the pipeline by
+ * asserting that it had already done the work.
+ *
+ * The bucket check is not a formality: a ready row names a bucket and a path,
+ * and buildMessageVariantReadyRow writes the variant bucket. Reusing a source
+ * that lives anywhere else would write a row pointing at the wrong object.
+ */
+export function canReuseSourceAsVideo720p(input: {
+  probe: VideoSourceProbe;
+  sourceBucket: string;
+  variantBucket: string;
+  /** The moov box lies before the mdat box, so playback can start on the first bytes. */
+  frontLoadedMoov: boolean;
+}): boolean {
+  const { probe, sourceBucket, variantBucket, frontLoadedMoov } = input;
+  if (sourceBucket !== variantBucket) return false;
+  if (!frontLoadedMoov) return false;
+  if ((probe.videoCodec ?? "").toLowerCase() !== "h264") return false;
+  const audio = (probe.audioCodec ?? "").toLowerCase();
+  if (audio && audio !== "aac") return false;
+  if (!probe.formatNames.some((name) => name === "mp4" || name === "mov")) return false;
+  const target = video720pTargetSize(probe);
+  return target.width === probe.width && target.height === probe.height;
+}
+
+/**
+ * Whether an MP4 metadata sits in front of its media.
+ *
+ * A file whose moov box follows its mdat has to be fetched whole before it can
+ * start playing, which is what -movflags +faststart exists to prevent. The
+ * top-level boxes are a length and a four-character name each, so the answer is
+ * a short walk through the head of the file rather than a second ffprobe.
+ *
+ * A 64-bit box length (declared size 1) and the to-end-of-file length (declared
+ * size 0) are both handled: a large upload uses the first and a last box often
+ * uses the second.
+ */
+export function hasFrontLoadedMoov(buffer: Uint8Array): boolean {
+  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  let at = 0;
+  // A handful of boxes: ftyp, free, moov and mdat are all that precede the media.
+  for (let box = 0; box < 16; box += 1) {
+    if (at + 8 > buffer.byteLength) return false;
+    const declared = view.getUint32(at);
+    const type = String.fromCharCode(buffer[at + 4], buffer[at + 5], buffer[at + 6], buffer[at + 7]);
+    if (type === "moov") return true;
+    if (type === "mdat") return false;
+    let size = declared;
+    if (declared === 1) {
+      if (at + 16 > buffer.byteLength) return false;
+      const large = view.getBigUint64(at + 8);
+      if (large > BigInt(Number.MAX_SAFE_INTEGER)) return false;
+      size = Number(large);
+    } else if (declared === 0) {
+      // To the end of the file: nothing follows, so nothing more can be moov.
+      return false;
+    }
+    if (size < 8) return false;
+    at += size;
+  }
+  return false;
+}
 
 interface MessageRowCandidate {
   id: string;
@@ -34,6 +197,7 @@ export function buildVideo720pFfmpegArgs(
   inputPath: string,
   outputPath: string,
   threads: number,
+  target: { width: number; height: number },
 ): string[] {
   return [
     "-hide_banner",
@@ -47,7 +211,10 @@ export function buildVideo720pFfmpegArgs(
     "-map",
     "0:a?",
     "-vf",
-    `scale=w=min(${VIDEO_720P_ENCODING.width}\\,iw):h=min(${VIDEO_720P_ENCODING.height}\\,ih):force_original_aspect_ratio=decrease:force_divisible_by=2`,
+    // Explicit numbers, computed by video720pTargetSize from a probe of
+    // the source. The expression this replaced fitted every picture into
+    // one landscape box and so cut portrait video to 405 points wide.
+    `scale=w=${target.width}:h=${target.height}`,
     "-c:v",
     "libx264",
     "-preset",
@@ -262,7 +429,12 @@ function safeStorageStatus(value: unknown): number | undefined {
 
 export const mediaVariantWorkerTestSeams = {
   buildVideo720pFfmpegArgs,
+  buildVideoProbeArgs,
+  canReuseSourceAsVideo720p,
+  hasFrontLoadedMoov,
   parseVideoDimensions,
+  parseVideoProbe,
+  video720pTargetSize,
   buildMessageVariantReadyRow,
   buildMessageVariantFailedRow,
   safeStorageFailureDetails,

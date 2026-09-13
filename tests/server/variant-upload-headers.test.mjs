@@ -61,10 +61,17 @@ test("passing the whole directive as cacheControl is what doubled it", async () 
 });
 
 test("the worker asks for seconds and carries the directive in headers", () => {
+  // This guard reads the source, so it is bound to how the source is spelled,
+  // and it has to be updated whenever that spelling changes. It was not: the
+  // day after it was written, variantCacheControl began returning a pair
+  // instead of a string, and the regex went on looking for the old call. It
+  // stayed red from 2026-09-05 to 2026-09-13 without anybody seeing it, because
+  // tests/server is not in the suite the gates run. A guard nobody runs is a
+  // comment with a slower failure mode.
   const worker = readFileSync("artifacts/api-server/src/workers/mediaVariantsWorker.ts", "utf8");
   assert.match(
     worker,
-    /cacheControl: cacheControlSeconds\(cacheControl\),\s*\n\s*headers: \{ "cache-control": cacheControl \},/,
+    /cacheControl: cacheControl\.seconds,\s*\n\s*headers: \{ "cache-control": cacheControl\.directive \},/,
     "uploadVariant no longer sends the directive through the header that wins",
   );
 });

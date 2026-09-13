@@ -411,6 +411,13 @@ VITE_SUPABASE_ANON_KEY="$(cat "$CFG/.k")" pnpm.cmd --filter @workspace/kub run d
   pass with such tests fails. A `--reporter` given on the command line replaces
   the configured reporters, so name the guard there too:
   `--reporter=list,./tests/e2e/helpers/did-not-run-guard.ts`.
+- **Run `tests/server` too.** It is not part of the unit command above, and on
+  2026-09-13 that was measured rather than supposed: a source-scanning guard in
+  `variant-upload-headers.test.mjs` had been red since 2026-09-05, because the
+  source it reads was refactored the day after the guard was written and nobody
+  ran the suite again. These tests read `artifacts/api-server/dist`, so build
+  first: `pnpm.cmd --filter @workspace/api-server run build`, then
+  `node --test $(find tests/server -name "*.test.mjs")`.
 - Build before the unit suite: `tests/unit/public-product-assets.test.mjs`
   refuses a `dist/public` older than its sources.
 - `windows:tauri:qa` refuses an unbuilt, unconfigured, loopback or stale

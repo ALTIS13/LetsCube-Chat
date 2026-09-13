@@ -158,8 +158,10 @@ test("a quarter-turned photograph is sized on the axes it will be shown on", () 
 
 test("media variants worker uses bounded 720p encoding defaults", () => {
   assert.deepEqual(mediaVariantRules.VIDEO_720P_ENCODING, {
-    width: 1280,
-    height: 720,
+    // The short side, and a cap on the long one. Replaced a single landscape
+    // 1280x720 box on 2026-09-13: see tests/server/video-rendition-reuse.test.mjs.
+    shortSide: 720,
+    longSide: 1280,
     preset: "veryfast",
     crf: 24,
     maxRate: "3M",
@@ -185,7 +187,7 @@ test("media variants worker builds bounded 720p ffmpeg args and parses probed di
   assert.equal(typeof seam?.buildVideo720pFfmpegArgs, "function");
   if (typeof seam?.buildVideo720pFfmpegArgs !== "function") return;
 
-  assert.deepEqual(seam.buildVideo720pFfmpegArgs("input.mov", "output.mp4", 2), [
+  assert.deepEqual(seam.buildVideo720pFfmpegArgs("input.mov", "output.mp4", 2, { width: 1280, height: 720 }), [
     "-hide_banner",
     "-loglevel",
     "error",
@@ -197,7 +199,7 @@ test("media variants worker builds bounded 720p ffmpeg args and parses probed di
     "-map",
     "0:a?",
     "-vf",
-    "scale=w=min(1280\\,iw):h=min(720\\,ih):force_original_aspect_ratio=decrease:force_divisible_by=2",
+    "scale=w=1280:h=720",
     "-c:v",
     "libx264",
     "-preset",

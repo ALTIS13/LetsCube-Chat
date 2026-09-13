@@ -8688,7 +8688,7 @@ yet.
 
 ---
 
-## D-175 `[ ]` A video is never compressed on the way out, so there is nothing for a quality to choose between
+## D-175 `[x]` A video is never compressed on the way out, so there is nothing for a quality to choose between
 
 **Severity: medium**, and larger in effort than it looks from the outside.
 
@@ -8798,6 +8798,60 @@ beside a rung that no upload can be made to match is a lie told precisely, and i
 opened rather than folded into D-174.
 
 ---
+
+**Closed 2026-09-13, in five slices, each with its own commit.**
+
+1. `videoSendLadder.ts` — the arithmetic, taken from tdesktop with its reasoning rather than only its
+   constants: the short side names the rung, 0.07 bits per pixel per frame clamped between 600 kbit/s and
+   6.8 Mbit/s, never more than the source already spends, and the container modelled rather than ignored.
+   A unit test caught a real inversion here: portrait and landscape short sides were swapped, so 1920x1080 at
+   720p asked for a 720x720 square. No amount of looking at a slider would have found that.
+2. `videoSource.ts` — reading what a picked file actually is. Before it, the client could measure two of the
+   six numbers the ladder needs; `fps`, `bitrate` and the codec string had no source in this codebase at all,
+   so the ladder was arithmetic that could not be fed and its most important rule could never fire.
+   `mediabunny` closed that gap and the encoder gap with one dependency, which is the standing rule the owner
+   set the same day: a good existing solution beats writing one.
+3. `videoTranscodeSupport.ts` and `videoTranscode.ts` — the capability probe and the plan. Every path that
+   ends in «send the picked bytes» is named — `chose-source`, `no-encoder`, `rung-not-encodable`,
+   `not-smaller` — because to a person all four look identical: the video simply arrives large.
+4. `videoSendSelection.ts`, `AttachVideoQuality.tsx`, `useVideoSendLadder.ts` — one slider over a batch. A
+   stop takes the files bigger than it and leaves the rest as they were picked; the counter is the sum of
+   both halves and marks itself with «≈» exactly when some of it is an estimate.
+5. The server half, below.
+
+**What the number is worth, measured rather than asserted.** The spec records a real 1920x1080 clip in the
+browser and sends it through the shipping components. Asked for 1 940 794 bit/s, the encoder produced
+1 913 362, and 1 898 279 bytes against an estimate of «1,8 МБ» — inside one per cent. Constant and variable
+rate differed by 289 bytes on the same file, so the code names no mode; claiming constant rate was the reason
+would be a claim the measurement does not make. The exception is incompressible footage: the same encoder over
+pure noise produced six times the estimate, which is why `estimateIsApproximate` exists and why the slider
+marks its number. **A browser cannot ask its encoder what it will really spend.** Android can, and Telegram
+there is exact for that reason; that difference is the whole justification for the «≈».
+
+**The server half, and why it is part of this defect rather than of D-176.** A client that transcodes and a
+server that transcodes anyway is not a saving, it is one extra minute of somebody battery. So
+`ensureVideoMessageVariants` now probes the upload with ffprobe and, when the bytes that arrived are already
+the rendition, writes a ready `video_720p` row pointing at the source object instead of making a copy of it.
+Every condition is measured on the server — codecs and frame from ffprobe, metadata position from the file own
+top-level boxes — and nothing reads `media_metadata`. A claim in the sender metadata would have been the easy
+way and would have let any caller skip the pipeline by asserting it had already done the work.
+
+**One thing changed that nobody asked for, and it is the best part of this defect.** The server rendition was
+a single 1280x720 box applied to the picture whichever way round it was, so a portrait clip — most of what a
+phone takes — was fitted inside it and came out **405 points wide**. «720p» has always named the short side;
+tdesktop counts it that way and the new client ladder counts it that way. Both halves now agree, a portrait
+video comes out 720x1280, and the reuse above is possible at all because they agree. The frame is computed by
+a pure function from a probe rather than by an expression inside a `-vf` string, for the same reason the
+client computes its own: the rule is the part that can be quietly wrong, and an ffmpeg expression cannot be
+unit-tested.
+
+**Also fixed in passing:** the poster and the rendition each wrote the same source buffer to disk on their
+own, so a 300 MB upload cost 600 MB of writes to answer two questions about one file. One temp file now.
+
+**Still open, and deliberately not done here:** the client does not upload a poster, so the worker still has
+to download the whole video to cut one frame out of it. That is the dominant cost of the pipeline and it
+belongs with D-176, because it needs the same thing D-176 needs — the client telling the server what it
+uploaded, and the server checking rather than believing it.
 
 ## D-176 `[ ]` The server re-does work the device already did, and hunts for it by scanning every minute
 
@@ -8942,3 +8996,34 @@ means the server reading every uploaded byte.
 **Not a finding, and stated so nobody re-opens it:** this list is about what the server would accept from a
 modified client, not about anything the shipped client does wrong. Each item costs nothing today and costs
 everything on the day someone points a script at the API.
+
+## D-178 `[x]` A hint stood over the attach sheet and swallowed its taps
+
+**Severity: medium**, and the third defect of this exact shape in the register — after D-162, where a hint
+took the press meant for the administration plate, and D-163, where the member actions were unreachable by a
+finger. A plate that explains a control is not supposed to be able to stop a different control working.
+
+**How it was found.** Not by reading, and not by looking. The D-175 ladder spec pressed «Отмена» on the
+attach sheet at 390 points and Playwright named the interceptor outright: `aria-label="Понятно"` inside a
+`data-radix-popper-content-wrapper`, «intercepts pointer events». On the desktop project the same test passed,
+because there the sheet is a panel on the left and the hint sits at the composer right edge.
+
+**The cause is a deliberate property, not a mistake.** `KubHint` does not close because a person touched
+something else — that is what a menu does, and an explanation should survive being read past. The cost of
+that choice is that the plate stays exactly where it is while a sheet opens over the composer, and on a phone
+the sheet own capsule lands underneath it.
+
+**Fixed** by `overlayOpen`, one more condition in `shouldOfferRecorderModeHint`, which already holds every
+other rule about when this plate belongs on screen — including two device gates whose whole purpose is to keep
+it from sharing a screen with the sidebar search hint. The composer passes the five overlays it owns: the
+attach sheet, the camera, the video-message recorder, the voice recorder and the emoji panel.
+
+**What made the fix safe** was a test written for another reason: `interface-hints.test.mts` asserts the exact
+set of condition names the composer hands the predicate, so adding one to the type turned the wiring test red
+until the composer passed it. A gate of that shape is worth copying — it is the only kind that catches a
+caller quietly dropping a condition, since a missing field is `undefined`, which is falsy, which is silent.
+
+**Where the same shape may still be open:** every other `KubHint` caller has the same non-closing property.
+`SidebarSearchResults` and `SidebarHeader` are gated to a pane that is not on screen with a sheet up, so
+neither can overlap one today, but nothing in `KubHint` itself prevents it. If a third hint is ever added
+beside a surface that can be covered, it needs the same gate.

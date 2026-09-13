@@ -127,7 +127,16 @@ export async function transcodeVideo(
   let input: Input | null = null;
   try {
     input = new Input({ source: new BlobSource(file), formats: SENDABLE_FORMATS });
-    const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
+    // `fastStart` explicitly rather than by inference. The library picks
+    // `'in-memory'` or `false` from the kind of target, and a file whose moov
+    // box sits after its mdat has to be downloaded whole before it can start
+    // playing — which is exactly what a conversation must not do. Stated here
+    // so it cannot change under us, and checked on the server: the worker
+    // refuses to reuse an upload whose metadata is at the back.
+    const output = new Output({
+      format: new Mp4OutputFormat({ fastStart: "in-memory" }),
+      target: new BufferTarget(),
+    });
 
     const conversion = await Conversion.init({
       input,

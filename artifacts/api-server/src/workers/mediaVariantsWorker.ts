@@ -29,11 +29,17 @@ import {
   buildMessageVariantFailedRow,
   buildMessageVariantReadyRow,
   buildVideo720pFfmpegArgs,
+  buildVideoProbeArgs,
+  canReuseSourceAsVideo720p,
+  hasFrontLoadedMoov,
   isMissingStorageObjectError,
   parseVideoDimensions,
+  parseVideoProbe,
   safeStorageFailureDetails,
   shouldAttemptVariantKind,
+  video720pTargetSize,
   type RecordedVariantAttempt,
+  type VideoSourceProbe,
 } from "./mediaVariantsWorkerHelpers";
 
 const DEFAULT_TICK_MS = 60_000;
@@ -442,67 +448,103 @@ async function ensureVideoMessageVariants(
   const missingKinds = new Set(
     message.missingVariantKinds ?? getExpectedMessageVariantKinds(message),
   );
+  if (!missingKinds.size) return false;
+
+  // One temp file for the whole message. The poster and the rendition each used
+  // to write the same buffer to disk on their own, which for a 300 MB upload is
+  // 600 MB of writes to answer two questions about one file.
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "letscube-video-"));
+  const inputPath = path.join(tempDir, `source${videoTempExtension(source.path)}`);
   let generated = false;
-  for (const variant of MESSAGE_VIDEO_VARIANTS) {
-    if (!missingKinds.has(variant.kind)) continue;
-    const isPoster = variant.kind === "video_poster";
-    const mimeType = isPoster ? WEBP_MIME_TYPE : variant.mimeType;
-    const variantPath = buildMessageVariantPath(
-      message.chat_id,
-      message.id,
-      variant.kind,
-      isPoster ? "webp" : variant.extension,
-    );
-    try {
-      if (isPoster) {
-        const output = await generateVideoPosterVariant(sourceBuffer, source.path, VIDEO_POSTER_VARIANT);
-        await uploadVariant(supabase, variantPath, output.data, mimeType);
-        await replaceMessageVariant(supabase, message, source, {
-          kind: variant.kind,
-          path: variantPath,
-          mimeType,
-          width: output.info.width,
-          height: output.info.height,
-          sizeBytes: output.info.size,
-        });
-      } else {
-        const output = await generateVideo720pVariant(sourceBuffer, source.path);
-        await uploadVariant(supabase, variantPath, output.data, mimeType);
-        await replaceMessageVariant(supabase, message, source, {
-          kind: variant.kind,
-          path: variantPath,
-          mimeType,
-          width: output.width,
-          height: output.height,
-          sizeBytes: output.data.length,
-        });
-      }
-      generated = true;
-    } catch (err) {
-      await markMessageVariantFailed(
-        supabase,
-        message,
-        source,
+  try {
+    await writeFile(inputPath, sourceBuffer);
+    // A probe of what actually arrived. Failing to read it is not fatal: the
+    // rendition is then simply made the way it always was.
+    const probe = await probeVideoSource(inputPath).catch(() => null);
+
+    for (const variant of MESSAGE_VIDEO_VARIANTS) {
+      if (!missingKinds.has(variant.kind)) continue;
+      const isPoster = variant.kind === "video_poster";
+      const mimeType = isPoster ? WEBP_MIME_TYPE : variant.mimeType;
+      const variantPath = buildMessageVariantPath(
+        message.chat_id,
+        message.id,
         variant.kind,
-        variantPath,
-        mimeType,
-        classifyVariantError(err),
+        isPoster ? "webp" : variant.extension,
       );
+      try {
+        if (isPoster) {
+          const output = await generateVideoPosterVariant(inputPath, VIDEO_POSTER_VARIANT);
+          await uploadVariant(supabase, variantPath, output.data, mimeType);
+          await replaceMessageVariant(supabase, message, source, {
+            kind: variant.kind,
+            path: variantPath,
+            mimeType,
+            width: output.info.width,
+            height: output.info.height,
+            sizeBytes: output.info.size,
+          });
+        } else if (
+          probe &&
+          canReuseSourceAsVideo720p({
+            probe,
+            sourceBucket: source.bucket,
+            variantBucket: MEDIA_BUCKET,
+            frontLoadedMoov: hasFrontLoadedMoov(sourceBuffer),
+          })
+        ) {
+          // The upload already is the rendition, measured on the server from the
+          // bytes that arrived. The ready row points at the source object, which
+          // is the shape the reader already understands: it builds a URL out of
+          // the row bucket and path without caring whether anything was made.
+          await replaceMessageVariant(supabase, message, source, {
+            kind: variant.kind,
+            path: source.path,
+            mimeType: variant.mimeType,
+            width: probe.width,
+            height: probe.height,
+            sizeBytes: sourceBuffer.length,
+          });
+        } else {
+          const output = await generateVideo720pVariant(
+            inputPath,
+            probe ? video720pTargetSize(probe) : null,
+          );
+          await uploadVariant(supabase, variantPath, output.data, mimeType);
+          await replaceMessageVariant(supabase, message, source, {
+            kind: variant.kind,
+            path: variantPath,
+            mimeType,
+            width: output.width,
+            height: output.height,
+            sizeBytes: output.data.length,
+          });
+        }
+        generated = true;
+      } catch (err) {
+        await markMessageVariantFailed(
+          supabase,
+          message,
+          source,
+          variant.kind,
+          variantPath,
+          mimeType,
+          classifyVariantError(err),
+        );
+      }
     }
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
   }
   return generated;
 }
 
 async function generateVideoPosterVariant(
-  sourceBuffer: Buffer,
-  sourcePath: string,
+  inputPath: string,
   variant: typeof VIDEO_POSTER_VARIANT,
 ): Promise<{ data: Buffer; info: OutputInfo }> {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "letscube-video-poster-"));
-  const inputPath = path.join(tempDir, `source${videoTempExtension(sourcePath)}`);
-  const framePath = path.join(tempDir, "poster.jpg");
+  const framePath = `${inputPath}.poster.jpg`;
   try {
-    await writeFile(inputPath, sourceBuffer);
     await extractVideoFrame(inputPath, framePath);
     const frame = await readFile(framePath);
     return sharp(frame)
@@ -511,7 +553,7 @@ async function generateVideoPosterVariant(
       .webp({ quality: variant.quality })
       .toBuffer({ resolveWithObject: true });
   } finally {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(framePath, { force: true });
   }
 }
 
@@ -529,23 +571,36 @@ async function extractVideoFrame(inputPath: string, framePath: string): Promise<
 }
 
 async function generateVideo720pVariant(
-  sourceBuffer: Buffer,
-  sourcePath: string,
+  inputPath: string,
+  target: { width: number; height: number } | null,
 ): Promise<{ data: Buffer; width: number; height: number }> {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "letscube-video-transcode-"));
-  const inputPath = path.join(tempDir, `source${videoTempExtension(sourcePath)}`);
-  const outputPath = path.join(tempDir, "video_720p.mp4");
+  const outputPath = `${inputPath}.video_720p.mp4`;
   try {
-    await writeFile(inputPath, sourceBuffer);
+    // Without a probe there is no frame to ask for. Rather than guess, the
+    // source frame is read on its own and the rule applied to it; a file whose
+    // frame cannot be read at all was never going to transcode either.
+    const frame = target ?? video720pTargetSize(await probeVideoDimensions(inputPath));
     await runFfmpeg(
-      buildVideo720pFfmpegArgs(inputPath, outputPath, videoTranscodeThreads()),
+      buildVideo720pFfmpegArgs(inputPath, outputPath, videoTranscodeThreads(), frame),
       videoTranscodeTimeoutMs(),
     );
     const [data, dimensions] = await Promise.all([readFile(outputPath), probeVideoDimensions(outputPath)]);
     return { data, ...dimensions };
   } finally {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(outputPath, { force: true });
   }
+}
+
+/** What arrived, asked of the file rather than of the sender. */
+async function probeVideoSource(inputPath: string): Promise<VideoSourceProbe> {
+  const { stdout } = await execFileAsync("ffprobe", buildVideoProbeArgs(inputPath), {
+    timeout: videoTranscodeTimeoutMs(),
+    windowsHide: true,
+    maxBuffer: 256 * 1024,
+  });
+  const probe = parseVideoProbe(stdout);
+  if (probe) return probe;
+  throw Object.assign(new Error("video probe failed"), { code: "video_probe_failed" });
 }
 
 async function runFfmpeg(args: string[], timeout: number): Promise<void> {
