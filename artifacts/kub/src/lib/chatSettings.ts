@@ -23,6 +23,7 @@
 
 import { chatVocabulary, countedMemberLabel } from "./chatVocabulary.ts";
 import type { InvitePolicy } from "./groupInvites.ts";
+import { hasUnsavedEdits } from "./unsavedEdits.ts";
 
 export type ChatSettingsRowId =
   | "invites"
@@ -174,5 +175,12 @@ export function chatProfileDirty(
   saved: { name: string; description: string },
   edited: { name: string; description: string },
 ): boolean {
-  return saved.name.trim() !== edited.name.trim() || saved.description.trim() !== edited.description.trim();
+  // The comparison itself moved to `unsavedEdits.ts` when D-136 was fixed on
+  // the personal settings screen, which needed the same rule over three fields
+  // of its own. Two copies of «has this been typed into and not saved» would
+  // have drifted — this surface trims, and the next one to need it might not.
+  return hasUnsavedEdits([
+    { saved: saved.name, edited: edited.name },
+    { saved: saved.description, edited: edited.description },
+  ]);
 }

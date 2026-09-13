@@ -38,6 +38,11 @@ export function SettingsPanel() {
   const [query, setQuery] = useState("");
   const screen = useSettingsScreen({ onClose: closeSettings });
 
+  // D-136: the column's two ways out — this ✕ and a second Escape in the search
+  // field — dropped whatever was typed into «Имя», «Никнейм» or «О себе». The
+  // screen decides whether that is worth a question; the panel only asks to go.
+  const leave = () => void screen.requestClose();
+
   const filtering = query.trim().length > 0;
   // The engine is `lib/settingsRows.ts`, which imports nothing and is reached
   // directly by `tests/unit/settings-search.test.mts`. The panel decides how a
@@ -61,7 +66,7 @@ export function SettingsPanel() {
         </div>
         <button
           type="button"
-          onClick={closeSettings}
+          onClick={leave}
           data-testid="settings-close"
           className="kub-icon-action kub-interactive flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
           aria-label="Закрыть настройки"
@@ -88,7 +93,7 @@ export function SettingsPanel() {
               // so a long query is not lost to one keystroke — the same two
               // steps the in-chat search field takes.
               if (query) setQuery("");
-              else closeSettings();
+              else leave();
             }}
             className="h-full min-w-0 flex-1 bg-transparent text-sm text-[color:var(--kub-text)] outline-none placeholder:text-[color:var(--kub-muted)]"
           />

@@ -55,8 +55,28 @@ export function KubModal({
 
   useEffect(() => {
     if (!open) return;
+    /**
+     * A dialog opened by a key press is not closed by that same press (D-181).
+     *
+     * Measured on 2026-09-13 while wiring D-136: Escape in the settings column
+     * raised «Отменить изменения?» and it was gone before the next frame — a
+     * `MutationObserver` saw the dialog inserted into the body and removed
+     * again inside the one keydown, so the screen closed as though nothing had
+     * been asked. React flushes a discrete event's update synchronously, which
+     * means this effect runs while that keydown is still travelling up to
+     * `window`; the listener it adds sits on an ancestor the event has not
+     * reached yet, and the DOM duly delivers it. Every confirmation raised from
+     * a key press was answered by the key that raised it, and the defect hid
+     * behind a working ✕ because the click path cannot reproduce it.
+     *
+     * `timeStamp` shares its clock with `performance.now()`, so a press older
+     * than this dialog is simply not this dialog's to answer.
+     */
+    const openedAt = performance.now();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (e.timeStamp <= openedAt) return;
+      onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

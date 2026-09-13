@@ -9,7 +9,9 @@ import { useSignOut } from "@/hooks/useUser";
 import { useTheme } from "@/hooks/useTheme";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
 import { useTaskAccessGate } from "@/hooks/useTaskAccess";
+import { requestAppConfirm } from "@/lib/appDialogs";
 import { FOCUS_RING } from "@/lib/controlSurface";
+import { signOutConfirm } from "@/lib/signOutConfirm";
 import { getBuildMetadata } from "@/lib/monitoring";
 import { getDesktopBridge } from "@/lib/platform/desktop";
 import { getVisibleReleaseVersion } from "@/lib/releaseVersionLabel";
@@ -99,7 +101,22 @@ export function SideMenuLayer({ onClose, onOpenSettings, onOpenNewGroup, onOpenS
     ...(isStaff ? [{ icon: "shield" as const, label: "Управление", accent: true, action: go("/admin") } satisfies Row] : []),
     { icon: "settings", label: "Настройки", action: () => { onClose(); onOpenSettings(); } },
     { icon: "help", label: "Помощь", action: () => { onClose(); openSupportWindow(); } },
-    { icon: "logout", label: "Выйти", danger: true, action: async () => { onClose(); await signOut(); } },
+    // D-135, the same question the phone's avatar menu asks and in the same
+    // words — one object in `signOutConfirm.ts`, because a confirmation worded
+    // two ways reads as two different actions. The layer closes first: its own
+    // Escape handler is on the window, and leaving it open would let one press
+    // dismiss the dialog and the layer together.
+    {
+      icon: "logout",
+      label: "Выйти",
+      danger: true,
+      action: async () => {
+        onClose();
+        const confirmed = await requestAppConfirm(signOutConfirm({ username: currentUser?.username }));
+        if (!confirmed) return;
+        await signOut();
+      },
+    },
   ];
 
   // The installed version first, the bundle's second — the pair

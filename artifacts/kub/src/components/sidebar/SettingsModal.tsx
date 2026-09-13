@@ -23,17 +23,24 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
   if (!screen.ready) return null;
 
+  // Every door goes through `requestClose` (D-136). ✕, Escape and a click on
+  // the backdrop are all `KubModal`'s one `onClose`, and «Закрыть» is this
+  // footer's — four ways out, all of which used to drop a typed name, никнейм
+  // or «О себе» without a word. The question belongs to the screen rather than
+  // to this container, so both forms of it ask the same one.
+  const leave = () => void screen.requestClose();
+
   return (
     <KubModal
       open
-      onClose={onClose}
+      onClose={leave}
       title="Настройки"
       icon={<KubIcon name="settings" size={16} />}
       size="xl"
       contentClassName="p-0"
       footer={
         <>
-          <KubButton variant="ghost" onClick={onClose}>Закрыть</KubButton>
+          <KubButton variant="ghost" onClick={leave}>Закрыть</KubButton>
           <KubButton
             onClick={() => void screen.save()}
             disabled={screen.saving}

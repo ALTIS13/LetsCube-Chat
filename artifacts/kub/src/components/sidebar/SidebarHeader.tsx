@@ -14,6 +14,8 @@ import { KubBrandLogo, KubHint, KubIcon, KubTooltip, type KubIconName } from "@/
 import { NewGroupModal } from "./NewGroupModal";
 import { NotificationBell } from "./NotificationBell";
 import { cn } from "@/lib/utils";
+import { requestAppConfirm } from "@/lib/appDialogs";
+import { signOutConfirm } from "@/lib/signOutConfirm";
 import { openSavedMessagesChat } from "@/lib/savedMessages";
 import { openSupportWindow } from "@/lib/supportWindowEvents";
 
@@ -146,7 +148,22 @@ export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSear
     // window they can move rather than by leaving the screen they are asking
     // about. The /support route stays for guests.
     { icon: "help",   label: "Помощь", action: () => { setMenuOpen(false); openSupportWindow(); } },
-    { icon: "logout", label: "Выйти",  danger: true, action: async () => { setMenuOpen(false); await signOut(); } },
+    // D-135: it used to sign out on the tap. It is the one irreversible row on
+    // this list, it sits under «Помощь» where a thumb arrives by accident, and
+    // on a shared device the session it ends is somebody's. The menu closes
+    // first so the question is not asked from behind it; on «Отмена» nothing
+    // happens and the person is back on the list they were on.
+    {
+      icon: "logout",
+      label: "Выйти",
+      danger: true,
+      action: async () => {
+        setMenuOpen(false);
+        const confirmed = await requestAppConfirm(signOutConfirm({ username: currentUser?.username }));
+        if (!confirmed) return;
+        await signOut();
+      },
+    },
   ];
 
   return (

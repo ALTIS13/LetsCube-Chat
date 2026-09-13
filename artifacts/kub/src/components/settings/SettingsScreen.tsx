@@ -41,11 +41,14 @@ import {
 } from "@/lib/settingsRows";
 import {
   PROFILE_LIMITS,
+  normalizeBio,
   normalizeFullName,
   normalizeUsername,
+  profileDraftDirty,
   validateFullName,
   validateUsername,
 } from "@/lib/profileValidation";
+import { requestAppConfirm } from "@/lib/appDialogs";
 
 /**
  * The settings screen itself, with no container of its own.
@@ -81,6 +84,12 @@ export interface SettingsScreen {
   error: string | null;
   isStaff: boolean;
   save: () => Promise<void>;
+  /**
+   * The way out, for every control that offers one (D-136). Both forms call
+   * this instead of their own `onClose`, so unsaved text is asked about once
+   * and in one place rather than at each door.
+   */
+  requestClose: () => Promise<void>;
   body: (visibleRows: ReadonlySet<SettingsRowId> | null) => ReactNode;
   identity: ReactNode;
 }
@@ -122,6 +131,11 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
   const [saved, setSaved] = useState(false);
   const [openSections, setOpenSections] = useState<ReadonlySet<DisclosureId>>(() => new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Whether the «Отменить изменения?» question is already on screen (D-136).
+  // Escape reaches this screen and the dialog alike — `KubModal` listens on the
+  // window and both are open — so without this a second press would cancel the
+  // dialog and queue another one behind it, and the screen would never close.
+  const discardAskedRef = useRef(false);
   const fieldPrefix = useId();
   const avatarInputId = `profile-avatar-input-${currentUser?.id ?? "self"}`;
 
@@ -154,7 +168,10 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
       .update({
         full_name: cleanFullName,
         username: cleanUsername || null,
-        bio: bio.trim().slice(0, PROFILE_LIMITS.bioMax) || null,
+        // `normalizeBio` is this expression, moved next to the other two
+        // normalisers (D-136): what the save writes is also what decides
+        // whether the field has been edited, and one of them had no name.
+        bio: normalizeBio(bio) || null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", currentUser.id)
@@ -165,6 +182,47 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
     if (data) setCurrentUser(data);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  /**
+   * Leaving the screen, which until D-136 threw away whatever was typed.
+   *
+   * «Сохранить» commits three fields — «Имя», «Никнейм», «О себе» — and every
+   * other control here writes as it is flipped. So ✕, «Закрыть», Escape and a
+   * click on the backdrop each dropped unsaved text without a word, and did it
+   * on a screen where most things had already been kept: a person who turned a
+   * switch on and then typed a bio had every reason to believe both had taken.
+   *
+   * Both forms of the screen close through this — the dialog below `md` and the
+   * column's panel from it — because the defect is the screen's, not the
+   * container's, and a guard on one of them would leave the other exactly as it
+   * was. The question is the one the group's settings screen asks (D-164); what
+   * the fields are worth is `profileDraftDirty`, which compares what the save
+   * would write rather than what is on screen.
+   */
+  const requestClose = async () => {
+    const dirty = profileDraftDirty(
+      {
+        fullName: currentUser?.full_name ?? "",
+        username: currentUser?.username ?? "",
+        bio: currentUser?.bio ?? "",
+      },
+      { fullName, username, bio },
+    );
+    if (!dirty) {
+      onClose();
+      return;
+    }
+    if (discardAskedRef.current) return;
+    discardAskedRef.current = true;
+    const confirmed = await requestAppConfirm({
+      title: "Отменить изменения?",
+      description: "Имя, никнейм и «О себе» останутся прежними. Остальные настройки уже сохранены.",
+      confirmLabel: "Отменить",
+      cancelLabel: "Продолжить",
+    });
+    discardAskedRef.current = false;
+    if (confirmed) onClose();
   };
 
   const handleAvatarChange = async (file: File) => {
@@ -221,6 +279,8 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
       error: null,
       isStaff: false,
       save: async () => {},
+      // Nothing is loaded, so nothing can have been typed: leaving is leaving.
+      requestClose: async () => { onClose(); },
       body: () => null,
       identity: null,
     };
@@ -577,6 +637,7 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
     error,
     isStaff,
     save: handleSave,
+    requestClose,
     body,
     identity,
   };

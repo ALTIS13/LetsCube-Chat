@@ -1,3 +1,5 @@
+import { hasUnsavedEdits } from "./unsavedEdits.ts";
+
 export const PROFILE_LIMITS = {
   usernameMax: 32,
   fullNameMax: 64,
@@ -45,6 +47,47 @@ export function normalizeFullName(value: string): string {
 
 export function normalizeUsername(value: string): string {
   return value.trim().replace(/^@+/, "").replace(/[^A-Za-z0-9_.]/g, "").slice(0, PROFILE_LIMITS.usernameMax);
+}
+
+/**
+ * What «О себе» becomes on its way to the database.
+ *
+ * The settings screen wrote this inline for as long as it has existed, which
+ * meant the question «has the bio been edited» could not be asked without
+ * repeating the expression. It is the save's own rule, so it lives beside the
+ * other two.
+ */
+export function normalizeBio(value: string): string {
+  return value.trim().slice(0, PROFILE_LIMITS.bioMax);
+}
+
+/** The three fields the settings screen holds back for its «Сохранить» button. */
+export interface ProfileDraft {
+  fullName: string;
+  username: string;
+  bio: string;
+}
+
+/**
+ * Whether «Имя», «Никнейм» or «О себе» has been typed into and not saved
+ * (D-136).
+ *
+ * These three are the only things on that screen a person can lose. Every other
+ * control there — тема, «в сети», the push categories, the microphone — writes
+ * as it is flipped, and that asymmetry is the other half of the defect:
+ * somebody who flipped a switch and then typed a bio can reasonably believe
+ * both were kept, because one of them was.
+ *
+ * Each side is normalised the way the save normalises it, so the only changes
+ * that raise a question are the ones that would really reach the database. A
+ * name retyped with a double space is not one of them.
+ */
+export function profileDraftDirty(saved: ProfileDraft, edited: ProfileDraft): boolean {
+  return hasUnsavedEdits([
+    { saved: saved.fullName, edited: edited.fullName, normalize: normalizeFullName },
+    { saved: saved.username, edited: edited.username, normalize: normalizeUsername },
+    { saved: saved.bio, edited: edited.bio, normalize: normalizeBio },
+  ]);
 }
 
 export function validateFullName(value: string): string | null {
