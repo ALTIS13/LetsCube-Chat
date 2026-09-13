@@ -9775,3 +9775,51 @@ supposed to say "this is destructive" said "this is the accent".
 tone it already had, so every confirmation raised by `requestAppConfirm` follows
 without a change at its call site. Nothing that did not already carry
 `tone="danger"` on its icon changed at all.
+
+## D-185 `[x]` The deployed push function was seven weeks old and had no Windows delivery in it at all
+
+**Severity:** high, for a delivery channel that was believed to work. Found on
+2026-09-14 by hashing every Edge Function in the repository against the copy the
+server serves, after the same question about migrations found six unapplied.
+
+**Surface:** `supabase/functions/send-push-notifications/` against
+`/srv/letscube/platform/supabase-docker/volumes/functions/send-push-notifications/`.
+
+**Defect:** the served copy was dated **2026-07-14**; the repository's is
+2026-08-31. `index.ts` 19 325 bytes against 25 631, `fcm.ts` 4 080 against 5 840,
+and **`wns.ts` was not there at all** — the whole Windows Notification Service
+sender, with `deliverWns`, `getWnsAccessToken`, `readWnsConfig`, and the two
+helpers that keep a toast from carrying an external or signed avatar URL. Those
+have unit tests in this repository, all passing, against code production was not
+running. Section 13 of `CLAUDE.md` lists «killed-process WNS delivery» as an open
+Windows gate; part of the reason it was open is that the sender had never been
+deployed.
+
+Three other function directories were serving stale copies of themselves as
+well: `auth-send-sms` carried `p1sms.mjs.bak-20260824-182823` and
+`p1sms.mjs.pre-contract-cleanup`, `auth-yandex-gateway` three
+`index.ts.bak.20260622*`, and `recurring-tasks-run-due` a `supabase/.temp/`
+directory. Not routable by themselves, but old gateway code inside a directory
+the runtime serves is a trap for whoever reads it next.
+
+**Fixed 2026-09-14.** The served directory was backed up to
+`/srv/letscube/backups/edge-functions/20260913T225025Z/`, the repository's four
+files copied in, and all four verified byte-identical afterwards. The stale
+copies were **moved** into that backup rather than deleted — they are somebody's
+safety net, and a safety net does not belong in a served directory.
+
+No restart: the edge runtime serves each function from disk per request, which
+was proved rather than assumed — the new code answered `401` to an unauthorised
+call immediately after the copy, so it compiled and ran.
+
+**Nothing that worked stopped working.** The new version reads the same
+environment as the old one plus three optional `WNS_*` names, and
+`readWnsConfig()` answers null without them, after which a WNS device is skipped
+with a recorded reason rather than crashing the batch. FCM and web push are
+untouched. Windows delivery stays off until those three values exist, which is
+the owner's to supply.
+
+**What found it is now a check:** `scripts/migration-inventory.*` asks the same
+question of migrations, and `docs/operations/migration-inventory.md` records the
+procedure. The functions have no equivalent script yet — the comparison here was
+a hash of each directory, and it is worth writing down as one.
