@@ -6120,6 +6120,41 @@ was put from outside the message's chat, and the client production runs reads an
 writes reactions only in the reader's own chats, so this may go out before the new
 client.
 
+**Applied to production on 2026-09-14**, three days after it was written and
+approved, having sat unapplied while the register said «fixed». Reading the live
+policies is what found that: `Anyone in chat can view reactions` was still there
+with `using (true)`, and `anon` still held SELECT, INSERT, UPDATE and DELETE. A
+fix in a commit is not a fix in a database.
+
+Both migrations of `6e2f5ed` went in, in order — `20260911142000` first, because
+`150000`'s insert policy is written to mirror what `set_message_reaction`
+checks, and that function did not exist on production either.
+
+*How.* A `pg_dump` of `public.reactions`, verified restorable with `pg_restore -l`
+and hashed, at
+`/srv/letscube/backups/pre-migrations/20260913-223914-before-reactions-members-only.dump`.
+Then a throwaway database loaded from a schema-only dump of production, both
+migrations applied there, and **both rehearsal files run there and green** —
+rather than running data-creating SQL against production and trusting ROLLBACK.
+Then applied to production as `postgres`, which owns both tables.
+
+*Measured after, as `authenticated` with real claims rather than as the table's
+owner — a policy measured as its own table's owner is not measured at all:*
+
+| | before | after |
+| --- | --- | --- |
+| `SELECT` policies with `using (true)` | 1 | 0 |
+| `anon` may SELECT | yes | no |
+| reactions an outsider can read | 149 of 149 | **0 of 149** |
+| an outsider may react to a message in a chat they are not in | yes | refused |
+| `set_message_reaction` exists | no | yes |
+| reaction rows | 149 | 149 (none touched) |
+
+The deployed client is unaffected: it prefers `set_message_reaction` and falls
+back to a direct insert where the function is absent, and that insert is made
+only in a chat the reader is in, which is exactly what the new policy allows.
+The function now exists, so the fallback stops being used.
+
 **Regression tests:** the rehearsal
 `.migration-backup/supabase/rehearsal/20260911150000_reactions_visible_to_chat_members.test.sql`
 — a member reads and adds; a stranger to the chat neither reads nor adds; no one
