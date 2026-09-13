@@ -27,6 +27,12 @@ import {
   type ChatSettingsRowId,
 } from "@/lib/chatSettings";
 import { GroupInviteModal } from "./GroupInviteModal";
+import { VoiceChannelRow } from "./VoiceChannelRow";
+import {
+  voiceChannelRowOffer,
+  type VoiceChannelSummary,
+  type VoiceParticipant,
+} from "@/lib/voiceChannel";
 import { ProfileBadgeChip } from "@/components/profile/ProfileBadgeChip";
 import { ProfileRoleSummary } from "@/components/profile/ProfileRoleSummary";
 import { KUB_ICON_NAMES } from "@/components/kub/icons";
@@ -93,10 +99,32 @@ import {
 } from "@/lib/messageMediaSections";
 import { copyWithFeedback } from "@/lib/actionFeedback";
 
+/**
+ * The voice channel, handed down rather than read here.
+ *
+ * `ChatWindow` owns the subscription because the capsule under its header needs
+ * the same two tables: reading them in both places would be two Realtime
+ * channels and two queries per chat, and — worse — two views that can disagree
+ * about who is in the room while the panel is open beside the capsule.
+ */
+export interface ChatInfoVoice {
+  channel: VoiceChannelSummary | null;
+  participants: readonly VoiceParticipant[];
+  faces?: ReadonlyMap<string, string | null>;
+  /** True when this client is connected to this chat's channel. */
+  inCall: boolean;
+  /** True while a join to this chat's channel is in flight. */
+  busy: boolean;
+  refusal: string | null;
+  onJoin: () => void;
+  onLeave: () => void;
+}
+
 interface ChatInfoPanelProps {
   chat: ChatWithLastMessage;
   onClose: () => void;
   onClearForMe?: () => Promise<{ ok: boolean; error: string | null }>;
+  voice?: ChatInfoVoice;
 }
 
 type Tab = "info" | "members";
@@ -172,7 +200,7 @@ const MEDIA_SECTION_ICONS: Record<MessageMediaKind, KubIconName> = {
   audio: "volume",
 };
 
-export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProps) {
+export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPanelProps) {
   const { currentUser, setSelectedChatId, chats, setChats, setMessages, mutedChatIds, toggleMutedChat } = useAppStore();
   const supabase = createClient();
   // The identity, not the object. The store hands back a fresh `currentUser`
@@ -443,6 +471,18 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const isOwnerOrAdmin = !isSaved && (myRole === "owner" || myRole === "admin");
   const canEditChatProfile = isGroup && isOwnerOrAdmin;
   const canSendInvites = isGroup && Boolean(myRole) && (isOwnerOrAdmin || (invitePolicySupported && invitePolicy === "members_can_invite"));
+
+  // Whether a voice row is offered at all: a group rather than a channel, a
+  // member rather than an onlooker, and a channel that exists. All three are
+  // rules and live where a unit test can reach them — D-169 is the register
+  // entry for this panel calling a channel a group, and slice 2 of the voice
+  // proposal is deliberately group-only, so this is exactly the distinction
+  // that must not be made by eye here.
+  const voiceOffer = voiceChannelRowOffer({
+    chatType: chat.type,
+    myRole,
+    channel: voice?.channel ?? null,
+  });
 
   const loadMembers = useCallback(async () => {
     if (!isGroup) {
@@ -1609,6 +1649,21 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 </button>
               )}
             </div>
+            {voiceOffer.offered && voice && (
+              <VoiceChannelRow
+                channel={voiceOffer.channel}
+                participants={voice.participants}
+                faces={voice.faces}
+                selfId={currentUserId}
+                full={voiceOffer.full}
+                inCall={voice.inCall}
+                busy={voice.busy}
+                refusal={voice.refusal}
+                rowClassName={actionRowClass}
+                onJoin={voice.onJoin}
+                onLeave={voice.onLeave}
+              />
+            )}
             {/* What this chat holds, counted, one kind per line.
 
                 Not a strip of tabs behind «Общие медиа»: the point of the

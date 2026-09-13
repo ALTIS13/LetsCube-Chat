@@ -88,6 +88,57 @@ The proposal's section 6 asked for this and nothing in the repository had it.
    publishers over TCP and UDP alike, and it should be set before any real
    traffic: `net.core.rmem_max` and `net.core.rmem_default`.
 
+## What a real webhook carries (measured 2026-09-13, for slice 2)
+
+The gateway's webhook verification was written from the documentation. It was
+then checked against six real deliveries from LiveKit 1.8.4 on this probe, and
+**one of the two things it was most confident about was wrong**.
+
+A listener on the host's docker gateway caught one whole call: `CreateRoom`, a
+`lk load-test` participant publishing audio for ten seconds, `DeleteRoom`.
+
+| | what arrives |
+| --- | --- |
+| Content type | `application/webhook+json` |
+| Authorization | the compact JWS **on its own** — no `Bearer`, no scheme |
+| JWT | HS256; claims exactly `iss`, `exp`, `nbf`, `sha256` — no `sub`, no `video` |
+| `sha256` | **standard** base64 with padding (not url-safe, not hex) |
+| Body | camelCase, unpopulated fields omitted: `{createdAt, event, id, room[, participant]}` |
+| `id` | `EV_` followed by twelve base62 characters — **not** a uuid |
+| `room` | `sid, name, emptyTimeout, departureTimeout, maxParticipants, creationTime, creationTimeMs, turnPassword, enabledCodecs` |
+| `participant` | `sid, identity, state, joinedAt, joinedAtMs, version, permission` (+ `disconnectReason`, `isPublisher` on leave) |
+| `joinedAt` | a decimal **string** of epoch seconds, present on the leave as well as the join |
+
+The six events, in order: `room_started`, `participant_joined`,
+`track_published`, `track_unpublished`, `participant_left`, `room_finished`.
+Four of the six are not among the four the product acts on, which is why routing
+happens before the idempotency table is touched.
+
+**The defect this caught.** `readBearerToken` requires the `Bearer ` prefix and
+returns null without it, so the webhook route built on it would have answered
+401 to every real delivery — a gateway that looks deployed, an SFU that looks
+silent, and nothing in any log to say which. The unit tests did not catch it
+because they were written from the same assumption as the code: they sent
+`Bearer`. They now send the scheme-less form by default, and putting
+`readBearerToken` back turns eight of them red.
+
+Also measured, because the plan rests on it: **`maxParticipants` is enforced by
+the SFU.** A room created with `maxParticipants: 2` took two publishers and
+refused the third — one `could not establish signal connection`, not three. The
+gateway's `channel_full` 409 is the courteous refusal in front of that; the SFU
+is the binding one. And an explicit `maxParticipants` overrides the global
+`room.max_participants: 10` in either direction.
+
+Three environmental traps cost an hour before any of this arrived, all four now
+recorded together: the listener must bind `0.0.0.0` (the deliverer is a
+container), the URL must be the container's gateway address (`172.30.3.1` here,
+not Docker's stock `172.17.0.1`), **ufw blocks that port until it is opened to
+the compose subnet**, and a duplicate `webhook:` key in `livekit.yaml` is
+accepted with a warning while the second silently wins.
+
+The probe's configuration was restored afterwards: no webhook block, no ufw
+rule. Slice 3 sets the real URL when the SFU has a hostname.
+
 ## What is running, and how to remove it
 
 `/srv/letscube/voice-probe/` on the production host, as a plain Compose project

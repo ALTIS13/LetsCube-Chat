@@ -46,6 +46,7 @@ import {
   GearSix,
   HandWaving,
   Hash,
+  Headset,
   Heart,
   IdentificationBadge,
   Image as ImageIcon,
@@ -154,6 +155,7 @@ export type KubIconName =
   | "gesture"
   | "group"
   | "hash"
+  | "headset"
   | "heart"
   | "help"
   | "image"
@@ -278,6 +280,11 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   gesture: { Icon: HandWaving },
   group: { Icon: UsersThree },
   hash: { Icon: Hash },
+  // A voice channel, everywhere outside a call: the row in the information
+  // panel, the capsule under the chat header, and the chat list count of
+  // slice 3. A headset rather than a telephone, because this is a room you
+  // join and leave, not a call that rings.
+  headset: { Icon: Headset },
   heart: { Icon: Heart },
   help: { Icon: Question },
   image: { Icon: ImageIcon },

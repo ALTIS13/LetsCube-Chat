@@ -14,7 +14,17 @@ import { MessageDeleteDialogHost, copySelectedMessages, useChatMessageSelection 
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
 import { ChatMediaPlaybackBar, ChatMediaPlaybackProvider, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 import { TopicStrip } from "./TopicStrip";
+import { VoiceCallCapsule } from "./VoiceCallCapsule";
 import { useTopics } from "@/hooks/useTopics";
+import { useVoiceChannel } from "@/hooks/useVoiceChannel";
+import {
+  joinVoiceChannel,
+  leaveVoiceCall,
+  setVoiceMuted,
+  useVoiceCall,
+  voiceCallSnapshot,
+} from "@/hooks/useVoiceCall";
+import { renameVoiceParticipants, resolveVoiceParticipants, voiceCapsuleState } from "@/lib/voiceChannel";
 import { useMessages } from "@/hooks/useMessages";
 import { useMessageMediaVariantUrls, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
@@ -300,6 +310,60 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const myRole = (chat?.members?.find((m) => m.user_id === userId)?.role ?? null) as
     | "owner" | "admin" | "member" | null;
   const canManageTopics = myRole === "owner" || myRole === "admin";
+
+  // The voice channel, and the call.
+  //
+  // Two hooks with very different lifetimes, deliberately. `useVoiceChannel`
+  // belongs to this conversation and dies with it — it is the chat's own view
+  // of who is in the room, read from the database for everyone outside the
+  // call. `useVoiceCall` reads module state that outlives every component, so
+  // opening another conversation unmounts this whole tree without touching the
+  // connection or the microphone.
+  const voiceEnabled = chat?.type === "group";
+  const voice = useVoiceChannel(voiceEnabled ? chatId : null, voiceEnabled);
+  const call = useVoiceCall();
+  const voiceDirectory = useMemo(() => {
+    const names = new Map<string, string>();
+    const faces = new Map<string, string | null>();
+    for (const member of chat?.members ?? []) {
+      names.set(member.user_id, member.profile?.full_name ?? "");
+      faces.set(member.user_id, member.profile?.avatar_url ?? null);
+    }
+    return { names, faces };
+  }, [chat?.members]);
+  const inThisChannel = voice.channel !== null && call.channelId === voice.channel.id;
+  // While connected the SDK is the truth (section 3.1): it holds a live
+  // connection to every participant, where the table is a mirror that can be up
+  // to one reconciliation period stale. Outside the call the table is all there
+  // is.
+  const voiceParticipants = useMemo(
+    () =>
+      inThisChannel && (call.phase === "connected" || call.phase === "reconnecting")
+        ? renameVoiceParticipants(call.participants, voiceDirectory.names)
+        : resolveVoiceParticipants(voice.participantIds, voiceDirectory.names),
+    [call.participants, call.phase, inThisChannel, voice.participantIds, voiceDirectory.names],
+  );
+  const voiceCapsule = voiceCapsuleState({
+    channel: voice.channel,
+    phase: call.phase,
+    callChannelId: call.channelId,
+    participants: voiceParticipants,
+    selfId: userId,
+    micMuted: call.micMuted,
+    canPublish: call.canPublish,
+    refusal: call.refusal,
+  });
+  const joinVoice = useCallback(() => {
+    if (!voice.channel || !chat) return;
+    void joinVoiceChannel({ channelId: voice.channel.id, chatId: chat.id, channelName: voice.channel.name });
+  }, [chat, voice.channel]);
+  const leaveVoice = useCallback(() => {
+    void leaveVoiceCall();
+  }, []);
+  const toggleVoiceMute = useCallback(() => {
+    void setVoiceMuted(!voiceCallSnapshot().micMuted);
+  }, []);
+
   if (chat && initialUnreadRef.current?.chatId !== chatId) {
     const myMembership = chat.members?.find((member) => member.user_id === userId) ?? null;
     initialUnreadRef.current = {
@@ -1219,6 +1283,19 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             />
           )}
 
+          {/* Above the topic strip, because the voice channel is about the
+              chat and the topic strip is about the conversation (section 4.1). */}
+          <VoiceCallCapsule
+            channel={voice.channel}
+            participants={voiceParticipants}
+            faces={voiceDirectory.faces}
+            selfId={userId}
+            view={voiceCapsule}
+            onJoin={joinVoice}
+            onLeave={leaveVoice}
+            onToggleMute={toggleVoiceMute}
+          />
+
           {isForum && (
             <TopicStrip
               topics={topics}
@@ -1301,7 +1378,21 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         </div>
       </div>
       {showInfo && chat && (
-        <ChatInfoPanel chat={chat} onClose={() => setShowInfo(false)} onClearForMe={clearChatForMe} />
+        <ChatInfoPanel
+          chat={chat}
+          onClose={() => setShowInfo(false)}
+          onClearForMe={clearChatForMe}
+          voice={{
+            channel: voice.channel,
+            participants: voiceParticipants,
+            faces: voiceDirectory.faces,
+            inCall: inThisChannel && (call.phase === "connected" || call.phase === "reconnecting"),
+            busy: inThisChannel && call.phase === "joining",
+            refusal: call.refusal,
+            onJoin: joinVoice,
+            onLeave: leaveVoice,
+          }}
+        />
       )}
       {forwardingMessages && (
         <ForwardModal

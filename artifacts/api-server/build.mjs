@@ -24,6 +24,9 @@ async function buildAll() {
       // still enters through src/index.ts; this entry only exposes the loop.
       path.resolve(artifactDir, "src/workers/mediaVariantsWorker.ts"),
       path.resolve(artifactDir, "src/workers/registrationCleanupWorker.ts"),
+      // Same reason as mediaVariantsWorker above: the runtime enters through
+      // src/index.ts, and this entry exists so a test can drive a real tick.
+      path.resolve(artifactDir, "src/workers/voiceReconciler.ts"),
     ],
     platform: "node",
     bundle: true,
