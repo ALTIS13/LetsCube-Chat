@@ -516,374 +516,45 @@ Nothing is redesigned on the strength of one sentence. What changes today: no fu
 started on that surface without first asking what the Discord-shaped one would be.
 ## Last Confirmed Deploy Baseline
 
-**Current: `14854cc`, deployed 2026-09-13.** A group's member actions reachable by a finger (D-163). The
-push carried `3fa7a17` and `3fb9d7c` with it — the audit of ten defects in the group information
-surface, and the record of the previous deploy.
+**`e91bee2`, deployed 2026-09-13.** Twelve commits: the video send ladder end to
+end, the media pipeline's queue, four of D-177's holes closed on the database,
+the group settings screen, and three defects found while building them.
 
-**Verified by the served bytes.** `https://app.letscube.ru` answering 200; the page's assets moving from
-`index-CzsrUfGW.js` and `index-OWWVxcqE.css` to `index-DByhqmBI.js` and `index-D2QioPW6.css`;
-a body of 2,420,498 bytes, printed so that a zero could never be an empty fetch. Four markers of this change,
-all absent before it: `chat-info-member`, `data-has-actions`, the control's own name «Действия с
-участником», and `data-row-action-menu`. Two controls still present: `chat-header-shell` and
-`data-kub-conversation-pane` (twice, as before).
+- `letscube-web` runs `l64kyyu1sysev2izzjjbizhe:e91bee210810cc21a694945eb471dac8ce1c185e`,
+  one replica, healthy; the previous one was retired during the rollover.
+- `letscube-worker` runs `fkd10qwlo4qod9e6gtyzzuwk:e91bee21...`, one replica,
+  healthy, logging «mediaVariantsWorker started». It picked the push up on its
+  own about four minutes after the web application did, which is the first time
+  this track has needed it to.
+- **Verified by the served bytes, with the marker calibrated both ways**:
+  `chat-settings-view` is present in the bundle built here and absent from what
+  production served before the push; `attach-video-quality` is the control. The
+  served file went from `index-CKggd6Jy.js` (2 421 500 bytes) to
+  `index-D9OnwLaV.js` (2 861 091). One read mid-rollover returned 146 bytes,
+  which is the «page and assets disagree during a rollover» state and not a
+  failure.
+- `https://app.letscube.ru` answers 200.
 
-**The rollover disagreement showed itself a third time, and a control caught it again.** Polls 3 and 4 named the
-**new** assets while the marker read 0 — which alone reads as «not deployed yet» — but `chat-header-shell` read
-0 in those same polls, and it had read 1 a minute earlier on the old build. Those two rounds measured nothing at
-all: the page and the container disagree mid-swap. Poll 5 spoke with both at 1. Counting polls 3 and 4 would have
-recorded a failed deploy; this is now three deploys in a row where only the control told the difference between
-«absent» and «unreadable».
+**The database was already ahead of the code, deliberately.** Five migrations
+were applied earlier the same day — the variant job queue, the bucket size
+limit, the `media_path` guard, the `media_metadata` shape and the `client_sent_at`
+clamp — each after a verified schema backup and a rehearsal rolled back, and each
+written so the old code keeps working: the queue fills and nobody drains it, the
+guards refuse only what the product never sends. Recorded byte-identical in
+`.migration-backup/supabase/migrations/2026091312*` and `2026091313*`.
 
-Gates at this commit: typecheck clean; unit 1933/1933 over 206 files; production build clean; routing matrix
-15/15; `profile-column` 4 passed 4 skipped; `hint-pointer` green; `desktop-shell` 16 passed;
-the new `member-actions-reachable` 3 passed, each half mutation-proven separately.
+**The one thing proved after the deploy rather than before.** The server's reuse
+decision reads ffprobe, and until today it had only ever read JSON written by
+hand. The mp4 this product's client really produces was copied into the running
+worker container, probed with the worker's own ffprobe and the worker's own
+arguments, and the answer fed to the shipped module: `h264`,
+`mov,mp4,m4a,3gp,3g2,mj2`, 1280x720, `reused: true`. No production row was
+written to establish it.
 
-**Known failing and not from this batch:** `chat-list-event-cost.spec.ts:215` — coming back to the tab
-refetches the open conversation seven times against a contract of one. Recorded as D-173, and proved to predate
-this work by removing every source change of it and watching the same test fail identically.
-
-Rollback: fast-forward `main` back to `ca04e21`.
-
-**Superseded:** `ca04e21`, deployed 2026-09-13. The hint that no longer takes the tap (D-162) and the contact
-card as a third column (D-161). The push carried `1535cc4` with it, the docs record of the previous deploy.
-
-**Verified by the served bytes and by markers, not by the container's image tag.** There was no SSH reading in
-this session, and the entry below did have one — so this is a weaker verification, stated as such rather than
-dressed up. What was measured: `https://app.letscube.ru` answering 200; the page's assets moving from
-`index-CYp9DLS8.js` and `index-Du7qh2Mh.css` to `index-CzsrUfGW.js` and `index-OWWVxcqE.css`;
-bodies of 2,414,682 and 233,644 bytes, printed **so that a zero could never be an empty fetch**; and three
-controls still present in them — `--kub-window-caption`, `--kub-chat-track`, `chat-header-shell`.
-
-The stylesheet name `index-OWWVxcqE.css` is byte-for-byte the name the local production build produced,
-which is the strongest evidence available here that the same source built it. The bundle name differs, as it
-does on every build whose environment differs.
-
-Markers, all three absent at T0 immediately after the push and present after the swap:
-`popper-content-wrapper` in the stylesheet (D-162), `data-surface` and `data-kub-conversation-pane` in
-the bundle (D-161). Calibrated in **both** directions before the push, per the rule from the previous deploy.
-
-**Two things went wrong in the watching, and both are the reason to keep controls in a probe.**
-
-- A control caught three dead rounds. Polls 1 to 3 reported the marker at 0 on the **old** asset name, which
-  reads as «not deployed yet» — but `--kub-window-caption` read 0 in the same rounds, and it had read 1 in
-  the same file minutes earlier. Those three rounds measured nothing at all; the container was being replaced.
-  Without the control they would have been recorded as evidence about the old build. This is the page-and-assets
-  disagreement from the previous entry, arriving a third time, so it is settled as a property of the swap.
-- A marker was discarded rather than explained. `sw.js` read `df3284221f6e1a8e` at T0 and
-  `250cc91de1aab7d4` from the first poll onward — changing **before** the assets did and not changing when
-  they did. The extraction took the first 16-hex token in the file, which was never proved to be the build id.
-  An uncalibrated marker that happens to move is not evidence, so it is not cited above.
-
-Gates at this commit: typecheck clean across four packages; unit 1921/1921 over 205 files; production build
-clean; mounted routing matrix 15/15; `profile-column` 4 passed and 4 skipped; `hint-pointer` green at 390
-and skipping honestly on the computer; the signed-in production run of `visual-style-layout` 11 passed, 9
-skipped, 0 failed, with zero mentions of interception against six before the fix.
-
-Rollback: fast-forward `main` back to `540df15`.
-
-**Superseded:** `540df15`, deployed 2026-09-13 at 00:55 MSK. The settings column (D-160) and the record of
-the deploy before it.
-
-Verified by the running container's own image tag —
-`l64kyyu1sysev2izzjjbizhe:540df154673466eb8950d96ede30ce113a34fcc4`, the commit's full SHA — with the
-rollover complete, the previous container gone, no build still running, and `sw.js` answering
-`df3284221f6e1a8e` on six consecutive requests.
-
-Then the bytes: the page's asset moved from `index-v9NfXnOf.js` to `index-CYp9DLS8.js`, the controls
-are present, and **both markers were found** — `sidebar-settings` and «Поиск по настройкам».
-
-**This is the first deploy whose markers were proved in both directions before the push, and it is the reason
-this entry is short.** The rule written after the previous deploy — a marker must be *absent from what is served
-now* **and** *present in the source being shipped* — was applied to three candidates. Two passed. The third,
-`settings-field-name`, failed the new half: zero files in the working tree, because the id is composed at
-runtime as `settings-field-${field}` and the whole string never appears in source. Under the old
-one-directional check it would have looked like a perfect discriminator and produced another false negative.
-Both surviving markers then appeared on the first round that spoke after the swap.
-
-**And the rollover disagreement showed itself a second time, so it is a property rather than an anecdote.** Three
-rounds mid-swap fetched 144 bytes with the controls missing, and one of them named `index-CYp9DLS8.js` — the
-**new** asset — while the container answering for it was still the old one. The page and its assets come from
-different replicas during a swap. The probe refused those three rounds and spoke on two.
-
-Rollback: fast-forward `main` back to `df5dce0`.
-
-**Superseded:** `df5dce0`, deployed 2026-09-13 at 00:20 MSK. In-chat search moved into the list column
-(D-159), with the register entries that opened D-160 and D-161.
-
-Verified by the running container's own image tag —
-`l64kyyu1sysev2izzjjbizhe:df5dce06c8692e45ef14910dd36bbe263452f507`, the commit's full SHA — with the
-rollover complete and no build still running.
-
-**And then eighty-three rounds of a probe that said the opposite, because both of its markers were invented.**
-The watcher polled for `ПОИСК В ЧАТЕ` and `chat-search-panel` and found neither, while its controls
-sat green the whole time — so it was reading the bundle correctly and reporting a real absence. Both strings were
-mine and neither exists:
-
-- `ПОИСК В ЧАТЕ` was copied off a **screenshot**. The source renders «Поиск в чате» and CSS raises it with
-  `uppercase`, so the bundle carries the lower-case form and always would have.
-- `chat-search-panel` was invented from the component's filename. The root test id is
-  `sidebar-chat-search`.
-
-Asked for what the commit really ships, the same bundle answers at once: `sidebar-chat-search` is present,
-«Поиск сейчас выполняется по загруженным сообщениям» appears twice, and `data-testid` attributes are not
-stripped in production at all — `side-menu-layer`, `composer-recorder-button` and
-`sidebar-global-search-results` are all there.
-
-**The lesson is about the calibration, not the marker.** Before the push the candidates were checked against the
-live bundle and found absent, and that was read as «good discriminator». It meant nothing of the kind: it meant
-the strings did not exist anywhere, including in the source about to be shipped. A marker has to be proved in
-**both** directions — absent from what is served now, and **present in the source being deployed**. Only the first
-half was ever checked here; the positive control covered the previous deploy's marker, not the new one.
-
-Rollback: fast-forward `main` back to `05fc53f`.
-
-**Superseded:** `05fc53f`, deployed 2026-09-12 at 23:25 MSK. Two casual hints — the search syntax and the
-recorder's second mode — and the register entries D-158 and the two sentences that now name their input device.
-
-Verified by reading the running container's own image tag —
-`l64kyyu1sysev2izzjjbizhe:05fc53f37cb904bc5bba673ba29e6232e30cf3a1`, the commit's full SHA — its health, and
-the rollover: the previous container on `84963d1` had gone, one replica remained, no build was still
-running, and `sw.js` answered `4a61857c0ccc72d6` on six consecutive requests.
-
-Then the bytes. The page's asset moved from `index-BDTg7n-j.js` to `index-DYQWU2QG.js`, the three
-controls are present, and both hint sentences are found along with `search-syntax`. The markers were
-calibrated **before** the push: all three were absent from the build then being served, and the previous deploy's
-`Прокрутить фильтры` was present, so the probe was shown to discriminate in both directions.
-
-**One candidate marker was thrown out by that calibration and it is worth naming.** `recorder-mode` was
-already in the served bundle — it is a substring of `data-recorder-mode`, an attribute the composer button
-has carried for months. Used as a marker it would have reported «deployed» before the push.
-
-**And a sharper name for the rollover trap than the last entry gave it.** Three rounds mid-swap fetched 144 bytes,
-and the log shows why: at 23:26:22 the **page** already named the new asset `index-DYQWU2QG.js` while the
-container answering for it was still the old one. So it is not merely «a stale filename» — during a rollover the
-page and its assets come from **different replicas** and disagree with each other. Any single fetch pair taken in
-that window is untrustworthy. The probe refused three rounds and spoke on two; five rounds, two verdicts.
-
-Rollback: fast-forward `main` back to `84963d1`.
-
-**Superseded:** `84963d1`, deployed 2026-09-12 at 21:29 MSK. The filter row's scroll arrows, the mechanism
-lifted into a shared hook, and the register entries that close D-156 and open D-157.
-
-Verified by reading the running container's own image tag —
-`l64kyyu1sysev2izzjjbizhe:84963d1f340cc7429b19498de20aa53605eaa235`, the commit's full SHA — its health, and
-the rollover: the previous container on `9c58247` had gone, one replica remained, and no build was still
-running. `sw.js` answers `e1b8b92a787c7cc9` on six consecutive requests.
-
-Then the bytes. The page's asset changed from `index-B1n3R-R-.js` to `index-BDTg7n-j.js`, and on the
-new one the three controls («Выберите диалог», «Конфиденциальность», «Поддержка») are present and the marker
-`Прокрутить фильтры` is found — the arrows' own labels, which exist only since this commit;
-`Прокрутить папки` would have been no discriminator, since the folder strip has had them all along.
-
-**The rollover window, caught by the probe itself, which is what this entry is really for.** Three consecutive
-rounds in the middle of the swap fetched **144 bytes** — the stale asset name answered by the container that had
-already moved on. An hour earlier exactly that reading made me believe a deploy had not landed. This time the
-probe checked its controls every round, found them missing, and wrote «probe unreliable, not a verdict» instead of
-reporting a verdict at all. Two rounds proved themselves and were counted; three did not and were not. That is the
-whole difference between a measurement and a guess, and it cost one extra line in the loop.
-
-Rollback: fast-forward `main` back to `9c58247`.
-
-**Superseded:** `9c58247`, deployed 2026-09-12 at 20:48 MSK. Verified by reading the running container's own
-image tag — `l64kyyu1sysev2izzjjbizhe:9c582479629ad147d89333f225710a997fd8c0bd`, the commit's full SHA —
-its health (`Up … (healthy)`), and the rollover: the previous container on `245e4d9` had gone and one
-replica remained, with no build still running. `sw.js` answers the id `533b119180156a9a` on six
-consecutive requests, which is the same one-replica proof the previous baseline used.
-
-Then the live files, with controls, because a probe that finds nothing and a probe that reads nothing look the
-same. The served bundle carries `search-type-filters`, `Фильтр по типу` and `search-type-filter-` —
-today's row of type filters — while `openGlobalSearch` is **absent**, which is the deleted palette's event
-proved gone rather than assumed gone. The controls «Выберите диалог», «Конфиденциальность» and «Поддержка» are
-present, so the absence above is a real absence. The stylesheet is served as `index-Du7qh2Mh.css` — the same
-filename the validating build produced locally — and declares `--kub-bottom-nav`, the capsule's height, new in
-this deploy. All four product images are served **byte-identical** to the committed files, compared by checksum.
-`/`, `/privacy` and `/login` all answer 200.
-
-**One number differs and it is not a discrepancy, recorded so nobody re-discovers it as an alarm.** The served
-`sw.js` id is `533b119180156a9a`; the local validating build of the same commit produced
-`60d1bb25848174d7`. The id is therefore not derived from the sources alone. What proves the deployed artefact
-is this commit's is the pair that *is* content-derived: the container's image tag carries the full SHA, and the
-stylesheet's content-hashed filename matches the local build exactly. Use the id for «one replica, answering
-consistently», never for «the same build as mine».
-
-Gates at that commit: typecheck clean, production build proved by its own `sw.js build` and `built in` lines,
-unit suite **1858 of 1858**, the fixture Playwright set **41 passed and 0 failed** with all 31 skips accounted for
-by project (desktop-only tests on the phone project, the routing matrix outside its width, one long-standing bot
-skip), and the signed-in `global-search` spec **2 of 2** against the production backend with screenshots,
-traces and video switched off and nothing written to disk.
-
-**An instrument fault worth copying the fix for.** The first check of the live bundle read 144 bytes and found
-none of its markers — because it asked for the *previous* build's hashed filename, which the new container does
-not have. A stale asset path answers small and looks exactly like «not deployed yet». Take the asset URL from the
-page on every attempt, and keep a control string that must be present: here the 144-byte response failed the
-controls too, which is what exposed it.
-
-Rollback: fast-forward `main` back to `245e4d9`.
-
-**Superseded:** `245e4d9`, deployed 2026-09-12. Verified by reading the running container's own image tag
-(`l64kyyu1sysev2izzjjbizhe:245e4d9714683323c4d169932646d8b6975de5e9`, the commit's full SHA), its replica count
-after the rollover (one), and then the live files: the stylesheet declares `--kub-window-caption` and
-`--kub-chat-track`, and `sw.js` answers the id `b6200ce4f3b7741a` on six consecutive requests. Gates at that
-commit: typecheck clean across four packages, unit suite 1832 of 1832, routing matrix 15 of 15, production build
-clean. Rollback: fast-forward `main` back to `17a1c47`.
-
-**Superseded, and kept because its evidence pattern is the one to copy:** `45971c6`, deployed 2026-09-11.
-Verified by reading the running
-container's own image tag (`l64kyyu1sysev2izzjjbizhe:45971c602962…`), its healthcheck and its replica
-count, and then by fetching the live files: `index.html` carries
-`viewport-fit=cover`, the installed-app marker and `Alt-Svc: clear`; `sw.js`
-carries its `@kub-sw-build` line with the 16-character id `fe02060fc5256c77`, and a
-fresh browser loading the page ends up with exactly one cache, named by that id;
-the stylesheet declares `--kub-safe-top` and the status band's `#3d78b8`. Before
-the push, the same checks against `a30e392` found `Alt-Svc: clear` and none of the
-rest.
-
-Production QA as a guest, the public home only and nobody signed in: 9
-checks passed across Chromium at 1440, WebKit at 393, and Chromium at 390
-standing in for the installed app in the light theme (`navigator.standalone`
-answered true, the notch's inset given to `env()` by the engine): viewport-fit
-served, one cache named by the build, no band in a Safari tab, and a 59px band
-of `rgb(61, 120, 184)` in the stand-in.
-
-It carried the 2026-09-11 wave, validated as one tree
-(`docs/QA_RESULTS.md`, 2026-09-11):
-
-| area | what shipped |
-| --- | --- |
-| service worker | a new worker on every deploy, and the handoff that spares a page already on the new build (D-072); the offline page only for navigations (D-073); no backend host list (D-074) |
-| installed iPhone app | drawn edge to edge with every edge reading the insets (D-075), the composer (D-076), the support window (D-077), the sidebar menu (D-078), the message menus, and the light theme's status band in blue (D-079) |
-| chat | the inline time no longer wraps its spacer at phone widths (D-070) |
-| tests and gates | named dropped tests, the production-write gate, the Windows QA bundle check, and the worker test that raced |
-| database | the two 2026-09-11 changes were applied directly beforehand (Priority 2); their migration files ship here for the record |
-
-Two things worth knowing after this deploy. Every browser and installed app
-installs the new worker on its first launch, and that worker deletes
-`kub-app-shell-v2`, so Cache Storage shrinks once for everyone. And the
-installed iPhone app reads its `apple-mobile-web-app-*` tags only when it is
-added to the home screen, so a device check of D-075 and D-079 needs the icon
-removed and added again.
-
-**Previous: `a30e392`, running from 2026-09-07.** This section had last
-recorded `4f67e45`.
-
-**Before that: `4f67e45`, deployed 2026-09-06.** Verified the way every deployment
-in this stage was: by reading the running container's own image tag, its
-healthcheck and its replica count, and then by fetching a live asset to confirm
-the change reached a reader. A webhook firing is not evidence that anyone
-received anything.
-
-Three pushes went out after the staged interface batches below, each validated
-at its own commit:
-
-| tip | what it carried |
-| --- | --- |
-| `20feafc` | the flat stage track on the Windows startup screen |
-| `07b3c82` | Windows 0.2.12 |
-| `4f67e45` | the chat header WebKit fix, `pb-safe`, `Alt-Svc: clear`, Windows 0.2.13 |
-
-Two live checks worth repeating after any web deploy, because both have failed
-silently before: `curl -sI https://app.letscube.ru/index.html` must carry
-`Alt-Svc: clear` (nginx replaces the inherited `add_header` set rather than
-adding to it, so a location that grows a header of its own drops this one), and
-the served stylesheet must contain
-`padding-bottom:env(safe-area-inset-bottom,0px)` (`pb-safe` resolved to nothing
-at all for months and looked deliberate in the source).
-
-**HTTP/3 is off at the proxy as of 2026-09-06**, on the owner's instruction.
-Traefik advertised `Alt-Svc: h3=":443"; ma=2592000`, and a VLESS/REALITY tunnel
-carries TCP only — its iOS clients commonly drop UDP 443 so QUIC cannot leak
-around the proxy — so an affected browser spent a full connect timeout on every
-navigation for up to thirty days. The flag is removed from
-`/data/coolify/proxy/docker-compose.yml`, backed up beside it as
-`docker-compose.pre-http3-off.20260906-170416.yml`; rollback is that one flag
-and a proxy restart, which briefly drops every service. Nothing in the product
-needs UDP: no `RTCPeerConnection`, voice and video captured with `getUserMedia`
-and uploaded over HTTPS, realtime over a WebSocket.
-
-Two things checked and found irrelevant while diagnosing that, recorded so they
-are not checked again: the server does no IP, geo or fail2ban filtering of VPN
-exits, and ufw's missing `443/udp` rule does not matter because Docker's
-published-port DNAT runs ahead of ufw and did forward UDP.
-
-**Previous: `8bff49f`, deployed 2026-09-05/06 in four staged pushes.** The
-staging was deliberate — the interface work changes how the whole product looks,
-and shipping it apart from the fixes means a regression points at one batch
-rather than at twelve commits.
-
-| batch | tip | what it carried |
-| --- | --- | --- |
-| 1 | `5fcc6dd` | Windows startup screen rebuilt with real TLS fingerprints; the storage relocation fix; the material foundation; chat sync repairs; the file name that arrived as the sender's caption |
-| 2 | `7837286` | `/privacy` printing in one column; the guest-session fixture dated from the run; a flake that was a race, not a threshold |
-| 3 | `0f3c0cd` | the cascade-layer move; seven interface findings closed; the fourth text colour |
-| 4 | `053aeb6` | the visual redesign: quieted material, glass that shows content, one focus language, the type scale, border discipline |
-| 5 | `8bff49f` | realtime channels split per table |
-
-Each batch was validated at its own commit before shipping — batches 2 and 3 in
-a throwaway worktree, because a green run on the full tree says nothing about
-whether a batch works **without** what sits above it. That caught three
-failures in batch 2 that turned out to be a missing production build, which the
-tests refuse to proceed without rather than passing trivially.
-
-Every deployment was verified by reading the running container's own image tag,
-its healthcheck and its replica count, and then by fetching the live stylesheet
-to confirm the change reached a reader. A webhook firing is not evidence that
-anyone received anything.
-
-Rollback is a fast-forward of `main` to the previous tip in that table.
-
-Three production database repairs were applied in the same window, each with a
-verified schema backup taken first and each ending in a check that raises
-rather than reporting success on a half-applied state. They are in
-`.migration-backup/supabase/migrations/`: `20260905140000` gave back the
-execute permission that had stopped **every** client upload for 37 hours;
-`20260905150000` fixed a UUID pattern of 8-4-4-12 that had made two storage
-paths unreachable since May; `20260906120000` and `20260906130000` published
-four tables whose realtime bindings had never delivered.
-
-- Previous baseline, superseded: `5da93e0` (public home with downloads and the
-  compact Stable changelog, over the previous single-scroll folder editor,
-  grouped emoji pickers, privacy-safe verified-phone search, Windows
-  notification routing and chat-history anchoring baseline). `main` was
-  fast-forwarded from `7a99f52` to `5da93e0` on 2026-09-02, taking 63 commits, so
-  it no longer diverges from the branch the Bot Gateway canary was cut from.
-- Deployed revision verified by behaviour, not by assumption: the live page
-  renders the macOS and iPhone/iPad status as `В разработке` and joins the
-  summary with `и` ("Windows и Android доступны для загрузки; macOS и iOS в
-  разработке"). Both strings exist only in `5da93e0`. The served bundle changed
-  from `index-Do_cSPEY.js` to `index-DY4jgnIu.js` roughly 150 seconds after the
-  push. The Coolify deployment id, its healthcheck result and the replica
-  replacement were not read from Coolify in this session and are therefore not
-  recorded here.
-- Coolify app: `letscube-web`.
-- Public app: `https://app.letscube.ru`.
-- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`. The latest UI code container completed exact commit `aff77ab82c9af30deea25781caa742b558dbecbb`, passed its healthcheck and replaced the previous rolling replica. The chat-summary and access-snapshot RPC build flags remain enabled.
-- Worker auto deploy: worker-specific GitHub webhook is verified. Deployment `hjlbhqir375ia6wzmqarhswq` completed exact commit `8d20b89645b9471b4477a8566a5d23ff5cfc9027` with `is_webhook=true`, status `finished` and a healthy `/api/healthz` check. Worker `watch_paths` remain limited to worker/build/runtime paths and shared package manifests. GitHub Actions are intentionally disabled and repo workflow files/secrets were removed to avoid billing-lock email noise.
-- Self-host stack: Coolify proxy, self-hosted Supabase, Mailcow, app and worker deployment are already in place.
-- Bot Gateway: Coolify application `letscube-bot-gateway` (`twezs89u2m6d6ln6c0rpaqxe`) is healthy on exact commit `01d26a9225fee1cda0b8e9676b4ab03b084dec64`; deployment `z9rvt9gh3qtos2oqp3lcxoh5` passed the 2026-08-31 production canary. Creation admission is still bounded to one internal owner.
-- Support mail bridge: MX/SPF/DKIM/DMARC passed on authoritative and public
-  resolvers. The non-public `letscube-support-mail` worker is enabled and
-  healthy after verified backup
-  `/srv/letscube/backups/automated/20260729-134340`. A real outbox delivery was
-  accepted by Gmail MX and external receipt was confirmed. Commit `8c1f5fa`
-  fixed the IMAP fetch/flag deadlock found by the first reply; production is
-  restart-free after the repair. The manually seeded QA contact HMAC was
-  corrected. A second physical reply was attached to the same ticket exactly
-  once, acknowledged in Mailcow and displayed in the production operator UI
-  without console/network errors, completing bidirectional acceptance. A
-  dedicated GitHub push webhook was added for this resource, passed its initial
-  ping and has auto deploy enabled; the next matching support-mail source push
-  still needs to prove a deployment with `is_webhook=true`.
-- Support notification fanout: migration
-  `.migration-backup/supabase/migrations/20260801100856_support_email_pool_notifications.sql`
-  is active after verified backup
-  `/srv/letscube/backups/pre-migrations/20260801-101035-before-support-email-pool-notifications.dump`.
-  The production DB smoke covers creation fanout, first-message dedupe and
-  later unassigned requester replies inside `BEGIN ... ROLLBACK`. Client roles
-  cannot execute the internal trigger helper. No support-mail source changed in
-  this stage, so a webhook deployment was intentionally not manufactured.
-- Production domains verified on 2026-07-09: `app.letscube.ru`, `deploy.letscube.ru`, `core.letscube.ru`, `mailserver.letscube.ru`, `notify.letscube.ru`, and SSH host `ms.letscube.ru` resolve and expose their expected services with valid TLS where applicable.
-- `api.letscube.ru` now serves the read-only native release catalog with valid TLS through Coolify application `letscube-releases`; `status.letscube.ru` and `monitor.letscube.ru` remain reserved future endpoints.
-- The installed Supabase MCP connector still targets the legacy cloud project. Production self-host checks must use `core.letscube.ru`, the local secret-safe env file, or read-only SSH/database inspection.
+Rollback is a fast-forward of `main` back to `ab69dfe`, plus, if it is ever
+wanted, the four rollback files beside the migrations. The queue rollback is
+safe at any time: the worker keeps its half-hourly scan precisely so that a
+deployment with no queue behaves as it did before the queue existed.
 
 ## Completed Baseline - Do Not Rebuild Without A New Finding
 
