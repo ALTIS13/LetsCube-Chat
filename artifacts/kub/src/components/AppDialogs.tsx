@@ -35,6 +35,7 @@ export function AppDialogs() {
       onClose={() => finish(false)}
       title={current.title}
       icon={<KubIcon name={current.icon ?? (isDanger ? "delete" : "alert")} size={18} tone={isDanger ? "danger" : "accent"} />}
+      tone={tone}
       size="sm"
       mobileSheet={false}
       footer={(

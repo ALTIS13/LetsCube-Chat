@@ -24,7 +24,12 @@ import {
   useVoiceCall,
   voiceCallSnapshot,
 } from "@/hooks/useVoiceCall";
-import { renameVoiceParticipants, resolveVoiceParticipants, voiceCapsuleState } from "@/lib/voiceChannel";
+import {
+  renameVoiceParticipants,
+  resolveVoiceParticipants,
+  voiceCallLostItsChannel,
+  voiceCapsuleState,
+} from "@/lib/voiceChannel";
 import { useMessages } from "@/hooks/useMessages";
 import { useMessageMediaVariantUrls, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
@@ -363,6 +368,35 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const toggleVoiceMute = useCallback(() => {
     void setVoiceMuted(!voiceCallSnapshot().micMuted);
   }, []);
+
+  /**
+   * An administrator ended the voice chat, so this client's call ends too.
+   *
+   * Ending is a DELETE of the channel row; the SFU keeps the room for another
+   * minute and no client call closes it sooner. Without this the capsule — the
+   * only «Выйти» there is in slice 2 — would disappear from under somebody who
+   * is still connected and still audible, and the only way out would be a
+   * reload. The rule itself is in `lib/voiceChannel.ts`, including why only
+   * this chat's own view is allowed to speak for this chat's channel.
+   */
+  useEffect(() => {
+    if (
+      !voiceCallLostItsChannel({
+        callChannelId: call.channelId,
+        callChatId: call.chatId,
+        // The chat the view was **read for**, not the one that is open: they
+        // differ for as long as a read takes, and reading the wrong one hangs
+        // up a live call on the way back to the conversation it is in.
+        chatId: voice.chatId,
+        ready: voice.ready,
+        supported: voice.supported,
+        channel: voice.channel,
+      })
+    ) {
+      return;
+    }
+    void leaveVoiceCall();
+  }, [call.channelId, call.chatId, voice.chatId, voice.channel, voice.ready, voice.supported]);
 
   if (chat && initialUnreadRef.current?.chatId !== chatId) {
     const myMembership = chat.members?.find((member) => member.user_id === userId) ?? null;
@@ -1389,8 +1423,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             inCall: inThisChannel && (call.phase === "connected" || call.phase === "reconnecting"),
             busy: inThisChannel && call.phase === "joining",
             refusal: call.refusal,
+            supported: voice.supported,
+            ready: voice.ready,
+            viewChatId: voice.chatId,
             onJoin: joinVoice,
             onLeave: leaveVoice,
+            onRefresh: voice.refresh,
           }}
         />
       )}

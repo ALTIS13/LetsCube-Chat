@@ -178,19 +178,19 @@ export function voiceGatewayRefusalText(code: VoiceGatewayRefusalCode): string {
     case "unauthenticated":
       return "Сессия истекла, войдите заново.";
     case "forbidden":
-      return "Нет доступа к этому голосовому каналу.";
+      return "Нет доступа к этому голосовому чату.";
     case "not_found":
-      return "Голосовой канал больше не существует.";
+      return "Голосовой чат уже завершён.";
     case "channel_full":
-      return "В канале уже максимум участников.";
+      return "В голосовом чате уже максимум участников.";
     case "disabled":
-      return "Голосовые каналы сейчас отключены.";
+      return "Голосовые чаты сейчас отключены.";
     case "rate_limited":
       return "Слишком много попыток, подождите немного.";
     case "network":
       return "Нет связи с сервером, проверьте подключение.";
     case "unavailable":
-      return "Сервер голосовых каналов недоступен.";
+      return "Сервер голосовых чатов недоступен.";
     default:
       return "Сервер ответил неожиданно, попробуйте ещё раз.";
   }

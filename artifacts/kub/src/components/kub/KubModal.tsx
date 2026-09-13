@@ -9,6 +9,17 @@ interface KubModalProps {
   title?: ReactNode;
   description?: ReactNode;
   icon?: ReactNode;
+  /**
+   * What the header badge behind `icon` is tinted with.
+   *
+   * Default until 2026-09-14, and always: the badge painted
+   * `color-mix(var(--kub-cyan) 15%)` whatever it held, so every destructive
+   * dialog in the product — «Покинуть группу?», «Удалить группу?»,
+   * «Завершить голосовой чат?» — showed a red glyph sitting on the accent
+   * colour, because the caller can tint the icon and not the square behind it.
+   * Pass "danger" and the square agrees with what it holds.
+   */
+  tone?: "default" | "danger";
   children: ReactNode;
   footer?: ReactNode;
   size?: "sm" | "md" | "lg" | "xl";
@@ -50,6 +61,7 @@ export function KubModal({
   contentClassName,
   scrollBody = true,
   mobileSheet = true,
+  tone = "default",
 }: KubModalProps) {
   const pointerStartedInsideRef = useRef(false);
 
@@ -150,7 +162,14 @@ export function KubModal({
           <div className="flex items-start justify-between gap-3 px-4 sm:px-5 py-3 sm:py-4 flex-shrink-0 border-b border-[color:var(--kub-border-color)]">
             <div className="flex items-center gap-3 min-w-0">
               {icon && (
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] text-[color:var(--kub-cyan)] flex-shrink-0">
+                <span
+                  className={cn(
+                    "flex h-9 w-9 items-center justify-center rounded-lg flex-shrink-0",
+                    tone === "danger"
+                      ? "bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)] text-[color:var(--kub-danger-text)]"
+                      : "bg-[color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] text-[color:var(--kub-cyan)]",
+                  )}
+                >
                   {icon}
                 </span>
               )}

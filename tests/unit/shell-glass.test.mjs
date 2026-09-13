@@ -304,7 +304,11 @@ const veiled = [
   // gone. The binding on `group_invites` delivers, so the list was already
   // current every time it was pressed, and it stood beside a sentence saying
   // exactly that.
-  ["components/chat/ChatInfoPanel.tsx", 16],
+  // 17 since 2026-09-14: «Завершить голосовой чат?» is a third confirmation on
+  // this card, and its «Отмена» carries the veil like the two beside it. Its
+  // «Завершить» does not — a danger button paints its own hover, exactly as
+  // «Покинуть» and «Удалить» already do.
+  ["components/chat/ChatInfoPanel.tsx", 17],
   // Two, down from eleven on 2026-09-11: the hover cluster, the per-message
   // context menu and its reaction pickers left the bubble for
   // `MessageActionLayer` and `MessageReactions`, which are counted below.

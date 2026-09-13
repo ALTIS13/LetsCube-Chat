@@ -55,6 +55,8 @@ const GRANT = { ok: true, url: "wss://voice.letscube.ru", room: `vc_${CHANNEL_ID
 interface Seed {
   /** Whether this account is in the group at all. A non-member gets no row. */
   member?: boolean;
+  /** This account's role in the group. Only an administrator may start or end a voice chat. */
+  role?: "owner" | "admin" | "member";
   /** The channel row, or none at all. */
   channel?: { participantCount: number; maxParticipants?: number } | null;
   /** Who the table says is in the channel. */
@@ -65,7 +67,7 @@ interface Seed {
 
 function rows(seed: Seed): { chats: Row[]; memberships: Row[]; messages: Row[] } {
   const team = [membership(CHAT_TEAM, ANNA, "owner", AT), membership(CHAT_TEAM, PETR, "member", AT)];
-  if (seed.member !== false) team.unshift(membership(CHAT_TEAM, ME, "member", AT));
+  if (seed.member !== false) team.unshift(membership(CHAT_TEAM, ME, seed.role ?? "member", AT));
   return {
     chats: [chat(CHAT_TEAM, "group", "Команда проекта", AT), chat(CHAT_OTHER, "group", "Смета и склад", AT)],
     memberships: [...team, membership(CHAT_OTHER, ME, "owner", AT), membership(CHAT_OTHER, ANNA, "member", AT)],
@@ -174,27 +176,79 @@ async function open(page: Page, seed: Seed = {}) {
   // fixture answers every unknown table with an empty array, so without these
   // the voice tables would simply look empty rather than mocked.
   const channel = seed.channel === undefined ? { participantCount: 0 } : seed.channel;
+  /**
+   * The team's channel is **mutable**, because the panel can now make one and
+   * delete one. A fixed answer would have let an insert report success while
+   * every later read still said the group had no channel, which is the one
+   * thing these tests are here to catch.
+   */
+  let team: { id: string; name: string; count: number; max: number } | null = channel
+    ? { id: CHANNEL_ID, name: "Общий голос", count: channel.participantCount, max: channel.maxParticipants ?? 10 }
+    : null;
+  const writes: { method: string; body: Record<string, unknown> | null; search: string }[] = [];
+  const asRow = (entry: NonNullable<typeof team>) => ({
+    id: entry.id,
+    name: entry.name,
+    participant_count: entry.count,
+    max_participants: entry.max,
+  });
+
   // Each chat gets its **own** channel, keyed off the `chat_id` filter the hook
   // sends. One row for both would have made the second conversation's capsule
   // believe the call was in its channel, which is the opposite of what the
   // «другой голосовой канал» branch is there to say.
   await page.route(/\/rest\/v1\/voice_channels/, (route) => {
-    const filter = new URL(route.request().url()).searchParams.get("chat_id") ?? "";
-    const forTeam = filter.endsWith(CHAT_TEAM);
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(
-        channel
-          ? [{
-              id: forTeam ? CHANNEL_ID : OTHER_CHANNEL_ID,
-              name: forTeam ? "Общий голос" : "Склад",
-              participant_count: forTeam ? channel.participantCount : 0,
-              max_participants: channel.maxParticipants ?? 10,
-            }]
-          : [],
-      ),
-    });
+    const request = route.request();
+    const url = new URL(request.url());
+    const method = request.method();
+    // `.select(…).maybeSingle()` asks for an object rather than an array, and a
+    // client handed the wrong shape reads it as «no row» — which is exactly the
+    // branch the panel turns into «Недостаточно прав».
+    const single = (request.headers().accept ?? "").includes("application/vnd.pgrst.object");
+    const answer = (found: unknown[], status = 200) =>
+      route.fulfill({
+        status,
+        contentType: "application/json",
+        body: JSON.stringify(single ? found[0] ?? null : found),
+      });
+
+    if (method === "POST") {
+      let body: Record<string, unknown> | null = null;
+      try {
+        body = request.postDataJSON() as Record<string, unknown>;
+      } catch {
+        body = null;
+      }
+      writes.push({ method, body, search: url.search });
+      const made = {
+        id: body?.chat_id === CHAT_TEAM ? CHANNEL_ID : OTHER_CHANNEL_ID,
+        name: String(body?.name ?? "Общий голос"),
+        count: 0,
+        max: Number(body?.max_participants ?? 10),
+      };
+      if (body?.chat_id === CHAT_TEAM) team = made;
+      return answer([asRow(made)], 201);
+    }
+
+    if (method === "DELETE") {
+      writes.push({ method, body: null, search: url.search });
+      const removed = team;
+      team = null;
+      return answer(removed ? [asRow(removed)] : []);
+    }
+
+    const filter = url.searchParams.get("chat_id") ?? "";
+    if (filter.endsWith(CHAT_TEAM)) return answer(team ? [asRow(team)] : []);
+    return answer(
+      channel
+        ? [{
+            id: OTHER_CHANNEL_ID,
+            name: "Склад",
+            participant_count: 0,
+            max_participants: channel.maxParticipants ?? 10,
+          }]
+        : [],
+    );
   });
   await page.route(/\/rest\/v1\/voice_participants/, (route) =>
     route.fulfill({
@@ -220,7 +274,7 @@ async function open(page: Page, seed: Seed = {}) {
   });
 
   await openChat(page, "Команда проекта", LINE);
-  return { tokenCalls };
+  return { tokenCalls, writes };
 }
 
 /**
@@ -288,6 +342,153 @@ test("a group with no voice channel shows no row and no capsule", async ({ page 
   await expect(capsule(page)).toHaveCount(0);
   await openInfo(page);
   await expect(page.getByTestId("chat-info-voice")).toHaveCount(0);
+});
+
+/* -------------------------------------------------------------------------- */
+/* Starting a voice chat and ending it. None of these joins a call, so none of  */
+/* them needs WebRTC and every one runs on every project.                       */
+/* -------------------------------------------------------------------------- */
+
+/** The confirmation, as `KubModal` portals it to the body. */
+const endDialog = (page: Page) => page.locator('[role="dialog"][aria-modal="true"]');
+
+test("an administrator of a group without a voice chat is offered to start one", async ({ page }) => {
+  await open(page, { role: "owner", channel: null });
+  await openInfo(page);
+
+  // The section exists for a group that has no channel at all now — before this
+  // there was nothing here, and a voice channel could only be turned on with
+  // SQL against production.
+  await expect(page.getByTestId("chat-info-voice")).toBeVisible();
+  await expect(page.getByTestId("chat-info-voice-start")).toHaveText("Начать голосовой чат");
+  // And nothing that belongs to a channel that does not exist.
+  await expect(page.getByTestId("chat-info-voice-name")).toHaveCount(0);
+  await expect(page.getByTestId("chat-info-voice-join")).toHaveCount(0);
+  await expect(page.getByTestId("chat-info-voice-end")).toHaveCount(0);
+});
+
+test("a plain member of that same group is offered nothing at all", async ({ page }) => {
+  await open(page, { role: "member", channel: null });
+  await openInfo(page);
+  // `is_chat_admin(chat_id)` is the WITH CHECK of the only policy that lets a
+  // client write this table, so a start control here would be a control the
+  // database refuses.
+  await expect(page.getByTestId("chat-info-voice")).toHaveCount(0);
+  await expect(page.getByTestId("chat-info-voice-start")).toHaveCount(0);
+});
+
+test("a member sees the voice chat an administrator started, and no way to end it", async ({ page }) => {
+  await open(page, { role: "member", channel: { participantCount: 1 }, present: [ANNA.id] });
+  await openInfo(page);
+  await expect(page.getByTestId("chat-info-voice-join")).toBeVisible();
+  await expect(page.getByTestId("chat-info-voice-end")).toHaveCount(0);
+});
+
+test("starting sends exactly one insert carrying the chat id, and the channel appears", async ({ page }) => {
+  const { writes } = await open(page, { role: "admin", channel: null });
+  await openInfo(page);
+
+  await page.getByTestId("chat-info-voice-start").click();
+
+  // The row that was not there is there: the name, the occupancy and the way
+  // in, all from a re-read rather than from optimistic local state.
+  await expect(page.getByTestId("chat-info-voice-name")).toHaveText("Общий голос");
+  await expect(page.getByTestId("chat-info-voice-occupancy")).toHaveText("Никого нет");
+  await expect(page.getByTestId("chat-info-voice-join")).toBeVisible();
+
+  expect(writes.filter((entry) => entry.method === "POST")).toHaveLength(1);
+  const insert = writes.find((entry) => entry.method === "POST")!;
+  expect(insert.body).toMatchObject({
+    chat_id: CHAT_TEAM,
+    name: "Общий голос",
+    max_participants: 10,
+    created_by: ME.id,
+  });
+  // `participant_count` and `active_since` belong to the SFU's webhooks, and
+  // the grant on this table does not even include them — a client that wrote
+  // either would be refused column by column.
+  expect(Object.keys(insert.body ?? {})).not.toContain("participant_count");
+  expect(Object.keys(insert.body ?? {})).not.toContain("active_since");
+  // Nothing was deleted on the way.
+  expect(writes.filter((entry) => entry.method === "DELETE")).toHaveLength(0);
+
+  // And now the same reader is offered the other half of the mechanic.
+  await expect(page.getByTestId("chat-info-voice-end")).toHaveText("Завершить голосовой чат");
+});
+
+test("ending asks first, and answering «Отмена» deletes nothing", async ({ page }) => {
+  const { writes } = await open(page, { role: "owner", channel: { participantCount: 2 }, present: [ANNA.id, PETR.id] });
+  await openInfo(page);
+
+  await page.getByTestId("chat-info-voice-end").click();
+
+  const dialog = endDialog(page);
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("Завершить голосовой чат?");
+  // The question has to say that it reaches other people: two of them are in
+  // this call and both are about to be disconnected.
+  await expect(dialog).toContainText("будут отключены");
+
+  await dialog.getByRole("button", { name: "Отмена" }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(writes.filter((entry) => entry.method === "DELETE")).toHaveLength(0);
+  // The channel is exactly where it was.
+  await expect(page.getByTestId("chat-info-voice-name")).toHaveText("Общий голос");
+});
+
+test("ending after the confirmation deletes exactly this channel, and the section goes back to offering a new one", async ({ page }) => {
+  const { writes } = await open(page, { role: "owner", channel: { participantCount: 2 }, present: [ANNA.id, PETR.id] });
+  await openInfo(page);
+
+  await page.getByTestId("chat-info-voice-end").click();
+  await expect(endDialog(page)).toBeVisible();
+  await page.getByTestId("chat-info-voice-end-confirm").click();
+
+  await expect(endDialog(page)).toHaveCount(0);
+  const deletes = writes.filter((entry) => entry.method === "DELETE");
+  expect(deletes).toHaveLength(1);
+  // By id, not by chat: two channels in one chat would otherwise both go.
+  expect(deletes[0].search).toContain(`id=eq.${CHANNEL_ID}`);
+
+  // The channel is gone for this reader, and the administrator is offered a new
+  // one — which is what «Начать новый можно в любой момент» promised.
+  await expect(page.getByTestId("chat-info-voice-name")).toHaveCount(0);
+  await expect(page.getByTestId("chat-info-voice-start")).toBeVisible();
+  await expect(capsule(page)).toHaveCount(0);
+});
+
+test("the start row, the end control and the question, photographed in both themes", async ({ page }, info: TestInfo) => {
+  await open(page, { role: "owner", channel: null });
+  await openInfo(page);
+  const shot = (name: string) => `output/voice-start/${name}-${info.project.name}.png`;
+  const section = page.getByTestId("chat-info-voice");
+
+  for (const theme of ["dark", "light"] as const) {
+    await stampTheme(page, theme);
+    await page.evaluate(() => document.fonts.ready);
+    await expect(page.getByTestId("chat-info-voice-start")).toBeVisible();
+    await section.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: shot(`start-${theme}`) });
+  }
+
+  await page.getByTestId("chat-info-voice-start").click();
+  await expect(page.getByTestId("chat-info-voice-end")).toBeVisible();
+
+  for (const theme of ["dark", "light"] as const) {
+    await stampTheme(page, theme);
+    await page.evaluate(() => document.fonts.ready);
+    await section.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: shot(`channel-${theme}`) });
+  }
+
+  await page.getByTestId("chat-info-voice-end").click();
+  await expect(endDialog(page)).toBeVisible();
+
+  for (const theme of ["dark", "light"] as const) {
+    await stampTheme(page, theme);
+    await page.evaluate(() => document.fonts.ready);
+    await page.screenshot({ path: shot(`confirm-${theme}`) });
+  }
 });
 
 /**
@@ -426,7 +627,7 @@ test("the call survives a change of conversation", async ({ page, browserName })
   // the call actually is rather than offering to start a second one — a second
   // join from the same identity disconnects the first (section 3.6).
   await expect(page.getByTestId("voice-capsule-title")).toHaveText("Склад");
-  await expect(detail(page)).toHaveText("Вы в другом голосовом канале");
+  await expect(detail(page)).toHaveText("Вы в другом голосовом чате");
   await expect(action(page)).toHaveCount(0);
 
   // Back again, and the call is still the same call.
@@ -467,12 +668,12 @@ test("a gateway refusal is shown as a sentence, in the panel and in the capsule"
   });
 
   await action(page).click();
-  await expect(detail(page)).toHaveText("Нет доступа к этому голосовому каналу.");
+  await expect(detail(page)).toHaveText("Нет доступа к этому голосовому чату.");
   await expect(action(page)).toHaveText("Повторить");
 
   // The same sentence in the information panel, where the row's own control is.
   await openInfo(page);
-  await expect(page.getByTestId("chat-info-voice-refusal")).toHaveText("Нет доступа к этому голосовому каналу.");
+  await expect(page.getByTestId("chat-info-voice-refusal")).toHaveText("Нет доступа к этому голосовому чату.");
 
   // The microphone was opened and then released: a failed join must not leave
   // the capture running.
@@ -482,7 +683,7 @@ test("a gateway refusal is shown as a sentence, in the panel and in the capsule"
 
 test("a full channel offers no way in, and says why", async ({ page }) => {
   await open(page, { channel: { participantCount: 10 }, present: [ANNA.id, PETR.id] });
-  await expect(detail(page)).toHaveText("Канал заполнен");
+  await expect(detail(page)).toHaveText("Мест больше нет");
   await expect(action(page)).toHaveCount(0);
   await openInfo(page);
   await expect(page.getByTestId("chat-info-voice-full")).toHaveText("Заполнен");
@@ -543,6 +744,38 @@ test("the capsule and the row, photographed in both themes", async ({ page, brow
     await page.getByTestId("chat-info-panel").getByLabel("Закрыть").click();
     await expect(page.getByTestId("chat-info-panel")).toHaveCount(0);
   }
+});
+
+/**
+ * The one claim the confirmation makes about other people, proved rather than
+ * asserted in copy.
+ *
+ * «Все, кто сейчас в нём, будут отключены» is only true if a client whose
+ * channel disappears actually leaves. Deleting the row does not close the room
+ * — the SFU keeps it for another minute and no client call closes it sooner —
+ * so without `voiceCallLostItsChannel` this reader would stay connected and
+ * audible while the capsule, and with it the only «Выйти» in slice 2,
+ * disappeared from under them.
+ */
+test("ending a voice chat disconnects the person who is in it", async ({ page, browserName }) => {
+  needsWebRtc(browserName);
+  await open(page, { role: "owner", channel: { participantCount: 1 }, present: [ANNA.id] });
+
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+  expect((await probe(page)).track).toMatchObject({ readyState: "live" });
+
+  await openInfo(page);
+  await page.getByTestId("chat-info-voice-end").click();
+  await page.getByTestId("chat-info-voice-end-confirm").click();
+
+  await expect(page.getByTestId("chat-info-voice-start")).toBeVisible();
+  await expect(capsule(page)).toHaveCount(0);
+
+  const after = await probe(page);
+  expect(after.left).toBe(1);
+  // Ended, not merely muted: the microphone light goes out too.
+  expect(after.track).toMatchObject({ readyState: "ended" });
 });
 
 test("the capsule is inset like the pinned message it stands beside", async ({ page }) => {

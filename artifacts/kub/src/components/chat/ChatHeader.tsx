@@ -365,6 +365,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
       title="Удалить групповой чат?"
       description="Это действие нельзя отменить. Чат и история исчезнут у всех участников."
       icon={<KubIcon name="userRemove" size={18} tone="danger" />}
+      tone="danger"
       size="sm"
       mobileSheet={false}
       footer={(

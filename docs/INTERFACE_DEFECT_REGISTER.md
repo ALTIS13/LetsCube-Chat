@@ -9687,3 +9687,56 @@ its state across the swap instead: either the column keeps `SettingsPanel` mount
 hidden while a query is showing, or the three fields are lifted out of the component
 that the swap unmounts. That is a decision about how the column swaps its body, so it
 belongs with the settings parity work rather than with a confirmation.
+
+## D-183 `[x]` Voice calls one thing by two names on the same card
+
+**Severity:** low, and the kind that reads as two features rather than one.
+Found on 2026-09-14 by looking at the rendered panel, not by a scan.
+
+**Surface:** `artifacts/kub/src/components/chat/VoiceChannelRow.tsx:97`,
+`artifacts/kub/src/lib/voiceChannel.ts:371, 401`,
+`artifacts/kub/src/lib/voiceGateway.ts:181-193`.
+
+**Defect:** the section header read «ГОЛОСОВОЙ КАНАЛ» and the action directly
+under it «Начать голосовой чат». Five gateway refusals said «канал» too —
+«Голосовой канал больше не существует.», «В канале уже максимум участников.» —
+while eleven newer sentences said «чат». Somebody reading the card has no way to
+know the two words mean one thing.
+
+**Fixed 2026-09-14:** «голосовой чат» everywhere a person can read it. The
+shipped mechanic is Telegram's — an administrator starts it, it exists until
+somebody ends it — so the visible word is Telegram's. Three other sentences
+moved with it: «Вы в другом голосовом канале» → «…чате», «Канал заполнен» →
+«Мест больше нет» (a channel that is full is a phrase about the row; what the
+person needs to know is that there is no seat), and the five gateway refusals.
+The table, the component, the hook and every `data-testid` stay `voice_channel`:
+nobody using the product reads those, and renaming them would touch the
+migration, the gateway and the reconciler for no visible gain. Six assertions in
+`voice-call.spec.ts` and `voice-channel.test.mts` moved with the copy.
+
+**The glyph moved too.** «Завершить голосовой чат» wore `close` — the «×» every
+dismissable thing in this product wears — where what the row does is hang up on
+everybody in the call. `phoneOff` (phosphor's `PhoneDisconnect`) is the vocabulary
+entry for that and for nothing else.
+
+## D-184 `[x]` Every destructive dialog shows a red glyph on an accent-coloured square
+
+**Severity:** low. Found on 2026-09-14 by looking at «Завершить голосовой чат?»,
+and it turned out to predate that dialog by every other one.
+
+**Surface:** `artifacts/kub/src/components/kub/KubModal.tsx:153`.
+
+**Defect:** the header badge was `bg-[color-mix(var(--kub-cyan) 15%)]` with
+`text-[var(--kub-cyan)]` whatever it held. A caller can tint the icon and not
+the square behind it, so «Покинуть группу?», «Удалить группу?», «Удалить
+сообщение?» and the chat header's own removal dialog all painted a danger-red
+glyph sitting on the accent colour — the one place on the screen that is
+supposed to say "this is destructive" said "this is the accent".
+
+**Fixed 2026-09-14:** `KubModal` takes `tone`, default `"default"`, and
+`"danger"` tints the square with `--kub-danger` and the glyph with
+`--kub-danger-text`. Five dialogs pass it — the three on the group card,
+`ChatHeader`'s, `MessageDeleteDialog`'s — and `AppDialogs` passes through the
+tone it already had, so every confirmation raised by `requestAppConfirm` follows
+without a change at its call site. Nothing that did not already carry
+`tone="danger"` on its icon changed at all.

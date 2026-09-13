@@ -113,17 +113,34 @@ a configuration.
 
 ## Turning it on for a group
 
-A voice channel is a row. There is no interface that creates one yet, which is
-the feature's only switch:
+A voice channel is a row, and since 2026-09-14 the product writes it: an owner
+or an administrator of a **group** opens «Информация о группе» and presses
+«Начать голосовой чат» under «Голосовой чат». The same section then offers
+«Завершить голосовой чат», which asks first and deletes the row. Nothing else
+in the interface creates or removes one, and nobody but an owner or an
+administrator is offered either control — `admins manage voice channels` is
+`is_chat_admin(chat_id)` as both USING and WITH CHECK, so a member's write is
+refused by the database as well as unoffered by the interface.
+
+The insert carries `chat_id`, `name`, `created_by` and `max_participants` and
+nothing else: `participant_count` and `active_since` belong to the SFU's
+webhooks and are not in the client's column grant.
+
+The equivalent by hand, for a deployment being set up before anybody is an
+administrator of anything:
 
 ```sql
 insert into public.voice_channels (chat_id, name, created_by, max_participants)
 values ('<a group chat id>', 'Общий голос', '<a member id>', 10);
 ```
 
-Delete the row and the capsule and the panel section disappear again. The room
-on the SFU is created by the gateway on the first token request and closes 60
-seconds after the last person leaves.
+Delete the row and the capsule and the panel section disappear again. Anybody
+in the call who is looking at that conversation is disconnected with it — which
+is what the confirmation promises — but slice 2 has nothing outside the
+conversation that watches, so somebody reading a **different** chat keeps
+hearing the call until they come back. The room on the SFU is created by the
+gateway on the first token request and closes 60 seconds after the last person
+leaves; there is no client call that closes it sooner.
 
 One consequence worth knowing: **asking for a token creates the room**, so
 `voice_channels.active_since` is set for a minute after anyone presses join even
@@ -161,7 +178,10 @@ place as the staging state. No real user's group has one.
 
 ## Not done
 
-**There is no interface for making a channel.** Deliberate for this slice.
+**Nothing outside the conversation watches the channel.** An administrator
+ending a voice chat disconnects everyone who is looking at that group, because
+that chat's own view sees the row go; a person reading another chat keeps the
+call until they come back to it. The bar that would follow them is slice 3.
 
 **No TURN.** The case it would serve was measured working over ICE/TCP instead.
 If a network ever turns up that blocks 7881 as well, TURN/TLS needs a hostname

@@ -3,17 +3,25 @@ import test from "node:test";
 
 import {
   classifyMicrophoneError,
+  classifyVoiceChannelWriteError,
   microphoneRefusalText,
+  newVoiceChannelDraft,
   orderVoiceParticipants,
   renameVoiceParticipants,
   resolveVoiceParticipants,
+  voiceCallLostItsChannel,
   voiceCapsuleState,
+  voiceChannelControl,
+  voiceChannelEndConfirmation,
+  voiceChannelEndRefusalText,
   voiceChannelRowOffer,
+  voiceChannelStartRefusalText,
   voiceOccupancy,
   voiceOccupancyLabel,
   voiceParticipantsLine,
   type VoiceCallPhase,
   type VoiceChannelSummary,
+  type VoiceChannelWriteRefusal,
   type VoiceParticipant,
 } from "../../artifacts/kub/src/lib/voiceChannel.ts";
 
@@ -202,7 +210,7 @@ test("at rest the capsule offers the way in, and says how full the channel is", 
 test("a full channel shows itself and offers nothing", () => {
   const view = capsule({ channel: { ...CHANNEL, participantCount: 10 } });
   assert.equal(view.visible, true);
-  assert.equal(view.detail, "Канал заполнен");
+  assert.equal(view.detail, "Мест больше нет");
   assert.equal(view.action, null);
   assert.equal(view.actionLabel, null);
 });
@@ -279,7 +287,7 @@ test("a call in another chat's channel offers no control here", () => {
   for (const phase of ["joining", "connected", "reconnecting"] as VoiceCallPhase[]) {
     const view = capsule({ phase, callChannelId: "44444444-4444-4444-8444-000000000009" });
     assert.equal(view.visible, true, phase);
-    assert.equal(view.detail, "Вы в другом голосовом канале", phase);
+    assert.equal(view.detail, "Вы в другом голосовом чате", phase);
     // Joining from here would disconnect the call the person is in: a LiveKit
     // identity is unique per room and the second session kicks the first
     // (section 3.6). Offering it would be offering to hang up.
@@ -312,4 +320,202 @@ test("every microphone refusal is classified and has a sentence", () => {
     (["permission_denied", "no_device", "unsupported", "unknown"] as const).map(microphoneRefusalText),
   );
   assert.equal(sentences.size, 4);
+});
+
+/* -------------------------------------------------------------------------- */
+/* Starting a voice chat, and ending it. Telegram's mechanic, slice 2's table. */
+/* -------------------------------------------------------------------------- */
+
+const control = (over: Partial<Parameters<typeof voiceChannelControl>[0]> = {}) =>
+  voiceChannelControl({
+    chatType: "group",
+    myRole: "admin",
+    hasChannel: false,
+    supported: true,
+    ready: true,
+    ...over,
+  });
+
+test("only an administrator of a group may start a voice chat or end one", () => {
+  // The whole mechanic in two lines: no channel and you may make one; a channel
+  // and you may end it.
+  assert.equal(control({ hasChannel: false }), "start");
+  assert.equal(control({ hasChannel: true }), "end");
+  assert.equal(control({ myRole: "owner", hasChannel: false }), "start");
+  assert.equal(control({ myRole: "owner", hasChannel: true }), "end");
+
+  // A member joins what exists and creates nothing. `is_chat_admin(chat_id)` is
+  // both the USING and the WITH CHECK of the one policy that lets a client
+  // write this table, so either control offered here is a control the database
+  // will refuse.
+  assert.equal(control({ myRole: "member", hasChannel: false }), null);
+  assert.equal(control({ myRole: "member", hasChannel: true }), null);
+
+  // And an onlooker gets nothing at all, with or without a channel.
+  assert.equal(control({ myRole: null, hasChannel: false }), null);
+  assert.equal(control({ myRole: null, hasChannel: true }), null);
+
+  // Slice 2 is group-only, exactly as `voiceChannelRowOffer` is — D-169 is the
+  // register entry for this panel calling a channel a group.
+  for (const chatType of ["channel", "private", "saved", ""]) {
+    assert.equal(control({ chatType, myRole: "owner" }), null, chatType);
+  }
+});
+
+test("nothing is offered before the first read, or where the tables are absent", () => {
+  // «This group has no channel» and «I have not looked yet» are the same shape
+  // in the hook's state, and offering to start one in the second case flashes a
+  // control that is about to be wrong.
+  assert.equal(control({ ready: false }), null);
+  assert.equal(control({ ready: false, hasChannel: true }), null);
+
+  // A deployment whose voice tables are absent is a state the client half is
+  // built to pass through silently. A start control there ends in a Postgres
+  // error and nothing else.
+  assert.equal(control({ supported: false }), null);
+  assert.equal(control({ supported: false, hasChannel: true }), null);
+});
+
+test("a new voice chat is named, and holds what the SFU will let it hold", () => {
+  const draft = newVoiceChannelDraft();
+  assert.equal(draft.name, "Общий голос");
+  // Ten is the SFU's own room limit and what the one existing row carries.
+  // Asking for more would write a number the server will not honour.
+  assert.equal(draft.maxParticipants, 10);
+  // A fresh object each time: the caller spreads it into an insert.
+  assert.notEqual(newVoiceChannelDraft(), draft);
+});
+
+test("a refused write is classified from what PostgREST actually sends", () => {
+  // RLS, as the insert is refused.
+  assert.equal(
+    classifyVoiceChannelWriteError({
+      code: "42501",
+      message: 'new row violates row-level security policy for table "voice_channels"',
+    }),
+    "forbidden",
+  );
+  // The same refusal from a deployment that answers with a message and no code.
+  assert.equal(
+    classifyVoiceChannelWriteError({ message: "permission denied for table voice_channels" }),
+    "forbidden",
+  );
+  assert.equal(classifyVoiceChannelWriteError({ code: "PGRST301" }), "forbidden");
+
+  // The three shapes of «this deployment has no voice tables», the same ones
+  // `useVoiceChannel` already treats that way.
+  for (const code of ["42P01", "PGRST205", "PGRST202"]) {
+    assert.equal(classifyVoiceChannelWriteError({ code }), "unsupported", code);
+  }
+
+  assert.equal(classifyVoiceChannelWriteError({ code: "23505" }), "already");
+
+  // Nothing answered. supabase-js reports a fetch that never arrived as an
+  // error with no code, and the two engines word it differently.
+  assert.equal(classifyVoiceChannelWriteError({ message: "TypeError: Failed to fetch" }), "network");
+  assert.equal(classifyVoiceChannelWriteError({ message: "Load failed" }), "network");
+  assert.equal(classifyVoiceChannelWriteError({ message: "NetworkError when attempting to fetch" }), "network");
+
+  // Anything else, including nothing at all.
+  assert.equal(classifyVoiceChannelWriteError({ code: "22P02", message: "invalid input syntax" }), "unknown");
+  assert.equal(classifyVoiceChannelWriteError(null), "unknown");
+  assert.equal(classifyVoiceChannelWriteError(undefined), "unknown");
+  assert.equal(classifyVoiceChannelWriteError("something"), "unknown");
+});
+
+test("a failed start and a failed end each have their own sentence", () => {
+  const codes: VoiceChannelWriteRefusal[] = ["forbidden", "unsupported", "already", "network", "unknown"];
+
+  for (const code of codes) {
+    for (const text of [voiceChannelStartRefusalText(code), voiceChannelEndRefusalText(code)]) {
+      assert.match(text, /[А-Яа-яЁё]/, `${code} must be Russian`);
+      assert.match(text, /\.$/, `${code} must be a sentence`);
+      // The same rule `voiceGatewayRefusalText` obeys: a number is the one
+      // thing the reader can do nothing with.
+      assert.ok(!/\d/.test(text), `${code} must not print a code: ${text}`);
+    }
+  }
+
+  // Five codes, five sentences, in each direction.
+  assert.equal(new Set(codes.map(voiceChannelStartRefusalText)).size, 5);
+  assert.equal(new Set(codes.map(voiceChannelEndRefusalText)).size, 5);
+
+  // And starting is not ending. «Не удалось начать» after pressing «Завершить»
+  // would send the reader looking for a mistake they did not make.
+  for (const code of ["forbidden", "already", "unknown"] as VoiceChannelWriteRefusal[]) {
+    assert.notEqual(
+      voiceChannelStartRefusalText(code),
+      voiceChannelEndRefusalText(code),
+      `${code} says the same thing both ways`,
+    );
+  }
+  // The two that genuinely are the same fact about the world, and say so.
+  assert.equal(voiceChannelStartRefusalText("network"), voiceChannelEndRefusalText("network"));
+  assert.equal(voiceChannelStartRefusalText("unsupported"), voiceChannelEndRefusalText("unsupported"));
+});
+
+test("the question before an end says that it reaches other people", () => {
+  const words = voiceChannelEndConfirmation();
+  assert.match(words.title, /\?$/);
+  // The one thing this question must not be coy about: pressing it disconnects
+  // everybody who is in the call. A confirmation that only says «удалить» is a
+  // confirmation of a different act.
+  assert.match(words.description.toLocaleLowerCase("ru-RU"), /отключен/);
+  assert.match(words.aftermath.toLocaleLowerCase("ru-RU"), /у всех/);
+  for (const line of [words.title, words.description, words.aftermath, words.confirmLabel, words.busyLabel]) {
+    assert.match(line, /[А-Яа-яЁё]/);
+  }
+  assert.notEqual(words.confirmLabel, words.busyLabel);
+});
+
+const lost = (over: Partial<Parameters<typeof voiceCallLostItsChannel>[0]> = {}) =>
+  voiceCallLostItsChannel({
+    callChannelId: CHANNEL.id,
+    callChatId: "22222222-2222-4222-8222-000000000001",
+    chatId: "22222222-2222-4222-8222-000000000001",
+    ready: true,
+    supported: true,
+    channel: CHANNEL,
+    ...over,
+  });
+
+test("a call whose channel was ended has to end, and one whose channel is elsewhere does not", () => {
+  // The ordinary case: the channel is still there.
+  assert.equal(lost(), false);
+
+  // An administrator ended it. Without this the capsule — the only «Выйти»
+  // there is in slice 2 — disappears from under somebody still connected.
+  assert.equal(lost({ channel: null }), true);
+  // Ended and immediately started again is a different channel, not this one.
+  assert.equal(lost({ channel: { ...CHANNEL, id: "33333333-3333-4333-8333-00000000000f" } }), true);
+
+  // No call at all.
+  assert.equal(lost({ callChannelId: null, callChatId: null, channel: null }), false);
+
+  // Looking at another conversation. That conversation's view says nothing
+  // about this call's channel, and «no channel here» must never be read as «the
+  // call was ended» — which is what hanging up on a person reading a different
+  // chat would be.
+  assert.equal(lost({ chatId: "22222222-2222-4222-8222-000000000002", channel: null }), false);
+  assert.equal(lost({ chatId: null, channel: null }), false);
+
+  // The measured version of the same mistake, 2026-09-14: coming back to the
+  // conversation the call is in, while the view still holds the **other**
+  // conversation's channel, because opening a chat does not clear what the hook
+  // is holding until the new read lands. Passing the open chat's id here
+  // instead of the id the view was read for hung up a live call, and
+  // `tests/e2e/voice-call.spec.ts` caught it as «the call survives a change of
+  // conversation».
+  assert.equal(
+    lost({
+      chatId: "22222222-2222-4222-8222-000000000002",
+      channel: { ...CHANNEL, id: "33333333-3333-4333-8333-000000000002", name: "Склад" },
+    }),
+    false,
+  );
+
+  // And neither an unfinished first read nor a deployment without the tables is
+  // evidence that anything was ended.
+  assert.equal(lost({ ready: false, channel: null }), false);
+  assert.equal(lost({ supported: false, channel: null }), false);
 });

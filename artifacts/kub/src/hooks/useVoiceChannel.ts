@@ -24,6 +24,19 @@ export interface VoiceChannelView {
   supported: boolean;
   /** Whether the first read has come back, so an empty list is not drawn as «никого». */
   ready: boolean;
+  /**
+   * The chat this answer was actually read for, and null when it was not read
+   * at all — before the first read, and after one that failed.
+   *
+   * Opening another conversation changes `chatId` without clearing what is
+   * held, so for a moment this view is the **previous** chat's answer. That is
+   * harmless where it only names a capsule, and dangerous where a decision is
+   * made from it: «this group has no channel» read off another group's answer
+   * would end a call that nobody ended, and «this group has one» would offer an
+   * administrator a control that deletes a different conversation's channel.
+   * Both are decided against this field rather than against the argument.
+   */
+  chatId: string | null;
   channel: VoiceChannelSummary | null;
   /** Ids only. Names come from the chat's member list, through `resolveVoiceParticipants`. */
   participantIds: string[];
@@ -33,6 +46,7 @@ export interface VoiceChannelView {
 const EMPTY: VoiceChannelView = {
   supported: true,
   ready: false,
+  chatId: null,
   channel: null,
   participantIds: [],
   refresh: () => undefined,
@@ -97,7 +111,7 @@ export function useVoiceChannel(chatId: string | null, enabled: boolean): VoiceC
 
       const row = (channelRead.data as unknown as ChannelRow[] | null)?.[0] ?? null;
       if (!row) {
-        setView({ ...EMPTY, ready: true, refresh });
+        setView({ ...EMPTY, ready: true, chatId, refresh });
         return;
       }
 
@@ -131,6 +145,7 @@ export function useVoiceChannel(chatId: string | null, enabled: boolean): VoiceC
       setView({
         supported: true,
         ready: true,
+        chatId,
         channel,
         participantIds: ids,
         refresh,

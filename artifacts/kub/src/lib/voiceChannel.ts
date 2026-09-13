@@ -368,7 +368,7 @@ export function voiceCapsuleState(input: {
     return {
       visible: true,
       title: channel.name,
-      detail: "Вы в другом голосовом канале",
+      detail: "Вы в другом голосовом чате",
       action: null,
       actionLabel: null,
       mute: false,
@@ -398,7 +398,7 @@ export function voiceCapsuleState(input: {
     visible: true,
     title: channel.name,
     detail: full
-      ? "Канал заполнен"
+      ? "Мест больше нет"
       : voiceOccupancyLabel(channel.participantCount, channel.maxParticipants),
     action: full ? null : "join",
     actionLabel: full ? null : "Присоединиться",
@@ -407,4 +407,231 @@ export function voiceCapsuleState(input: {
     busy: false,
     tone: "neutral",
   };
+}
+
+/**
+ * What an administrator may do to the channel **itself**, as opposed to to the
+ * call in it.
+ *
+ * Telegram's mechanic, which is the one this follows: in a group an
+ * administrator starts a voice chat, everybody else joins the thing that now
+ * exists, and an administrator can end it for everyone. Nobody else is offered
+ * either control — not a member, and certainly not an onlooker.
+ *
+ * The two halves of the rule are not decorative. `is_chat_admin(chat_id)` is
+ * the USING and the WITH CHECK of the one policy that lets a client write this
+ * table at all, so an offer to a member is an offer the database will refuse;
+ * and slice 2 is group-only, so a channel chat gets nothing here for the same
+ * reason `voiceChannelRowOffer` refuses it (D-169).
+ *
+ * `supported` and `ready` are the two states where the honest answer is «not
+ * yet, and I do not know». A deployment whose voice tables are absent answers
+ * `supported: false` and must offer nothing rather than a control that ends in
+ * a Postgres error; and until the first read has come back, «this group has no
+ * channel» is indistinguishable from «I have not looked», so offering to start
+ * one would flash a control that is about to be wrong.
+ */
+export type VoiceChannelControl = "start" | "end" | null;
+
+export function voiceChannelControl(input: {
+  chatType: string;
+  myRole: "owner" | "admin" | "member" | null;
+  hasChannel: boolean;
+  /** False where this deployment has no voice tables at all. */
+  supported: boolean;
+  /** False until the first read of the channel has come back. */
+  ready: boolean;
+}): VoiceChannelControl {
+  if (!input.supported || !input.ready) return null;
+  if (input.chatType !== "group") return null;
+  if (input.myRole !== "owner" && input.myRole !== "admin") return null;
+  return input.hasChannel ? "end" : "start";
+}
+
+/** The row an administrator's press inserts, minus the ids the caller holds. */
+export interface VoiceChannelDraft {
+  name: string;
+  maxParticipants: number;
+}
+
+/**
+ * What a new channel is called, and how many it holds.
+ *
+ * There is no dialog before the insert, because Telegram has none: the press
+ * starts the thing, and a form in front of it would turn a one-tap mechanic
+ * into a configuration screen for two values almost nobody would change.
+ *
+ * Ten is not a preference. It is what `livekit.yaml` on the production SFU
+ * already limits a room to and what the one existing row in
+ * `public.voice_channels` carries, so a client that asked for more would be
+ * writing a number the server will not honour — the gateway compares
+ * `participant_count` against this column before it mints, and the SFU has the
+ * last word either way.
+ */
+export function newVoiceChannelDraft(): VoiceChannelDraft {
+  return { name: "Общий голос", maxParticipants: 10 };
+}
+
+/**
+ * Why a start or an end did not happen.
+ *
+ * Deliberately not the Postgres code: `42501` on the screen is a number the
+ * reader can do nothing with, and the raw message behind it («new row violates
+ * row-level security policy for table "voice_channels"») names an
+ * implementation the product does not otherwise admit to having.
+ */
+export type VoiceChannelWriteRefusal =
+  | "forbidden"
+  | "unsupported"
+  | "already"
+  | "network"
+  | "unknown";
+
+function writeErrorFields(error: unknown): { code: string; message: string } {
+  if (typeof error === "string") return { code: "", message: error.toLocaleLowerCase("ru-RU") };
+  if (!error || typeof error !== "object") return { code: "", message: "" };
+  const record = error as Record<string, unknown>;
+  return {
+    code: typeof record.code === "string" ? record.code : "",
+    message: typeof record.message === "string" ? record.message.toLocaleLowerCase("ru-RU") : "",
+  };
+}
+
+/**
+ * One PostgREST answer, read as a reason.
+ *
+ * The three table-absent codes are the same ones `useVoiceChannel` already
+ * treats as «this deployment has no voice tables» — a state the client half is
+ * built to pass through, because the migration, the gateway and this interface
+ * are three separate pieces of work.
+ *
+ * `23505` is the race between two administrators pressing at the same moment on
+ * a deployment that has given `chat_id` a unique index. Without one they both
+ * succeed and the second row is simply ignored by the reader, which takes the
+ * first; with one, the loser is told the true thing rather than «unknown».
+ *
+ * supabase-js reports a fetch that never reached anything as an error with no
+ * code, so the message is the only evidence — «failed to fetch» in Chromium,
+ * «load failed» in WebKit.
+ */
+export function classifyVoiceChannelWriteError(error: unknown): VoiceChannelWriteRefusal {
+  const { code, message } = writeErrorFields(error);
+  if (code === "42501" || code === "PGRST301") return "forbidden";
+  if (code === "42P01" || code === "PGRST205" || code === "PGRST202") return "unsupported";
+  if (code === "23505") return "already";
+  if (message.includes("row-level security") || message.includes("permission denied")) {
+    return "forbidden";
+  }
+  if (code === "" && (message.includes("fetch") || message.includes("network") || message.includes("load failed"))) {
+    return "network";
+  }
+  return "unknown";
+}
+
+/**
+ * What a refused start means to a person.
+ *
+ * Full sentences, in the voice `microphoneRefusalText` and
+ * `voiceGatewayRefusalText` already speak in: one line, no code, and nothing
+ * the reader cannot act on.
+ */
+export function voiceChannelStartRefusalText(code: VoiceChannelWriteRefusal): string {
+  switch (code) {
+    case "forbidden":
+      return "Недостаточно прав, чтобы начать голосовой чат.";
+    case "unsupported":
+      return "Голосовые чаты здесь пока недоступны.";
+    case "already":
+      return "Голосовой чат уже начат.";
+    case "network":
+      return "Нет связи с сервером, проверьте подключение.";
+    default:
+      return "Не удалось начать голосовой чат.";
+  }
+}
+
+/** The same, for an end that did not happen. */
+export function voiceChannelEndRefusalText(code: VoiceChannelWriteRefusal): string {
+  switch (code) {
+    case "forbidden":
+      return "Недостаточно прав, чтобы завершить голосовой чат.";
+    case "unsupported":
+      return "Голосовые чаты здесь пока недоступны.";
+    case "already":
+      return "Голосовой чат уже завершён.";
+    case "network":
+      return "Нет связи с сервером, проверьте подключение.";
+    default:
+      return "Не удалось завершить голосовой чат.";
+  }
+}
+
+/** The question raised before an end, and the words it is answered with. */
+export interface VoiceChannelEndConfirmation {
+  title: string;
+  description: string;
+  aftermath: string;
+  confirmLabel: string;
+  busyLabel: string;
+}
+
+/**
+ * Ending asks first, and says what it does.
+ *
+ * The one thing this question must not be coy about is that it reaches other
+ * people: an administrator pressing it while three colleagues are talking
+ * disconnects all three. «Удалить канал?» would read as tidying up a row.
+ */
+export function voiceChannelEndConfirmation(): VoiceChannelEndConfirmation {
+  return {
+    title: "Завершить голосовой чат?",
+    description: "Все, кто сейчас в нём, будут отключены.",
+    aftermath:
+      "Голосовой чат исчезнет у всех участников группы. Начать новый можно в любой момент.",
+    confirmLabel: "Завершить",
+    busyLabel: "Завершаем…",
+  };
+}
+
+/**
+ * Whether this client's own call has to end because its channel is gone.
+ *
+ * This is what makes the question above true rather than a claim. Ending is a
+ * DELETE of the channel row; the SFU keeps the room open for another minute and
+ * there is no client call that closes it sooner, so without this a person in
+ * the call would keep hearing everybody while their capsule — and with it the
+ * only «Выйти» control that exists in slice 2 — vanished from under them.
+ *
+ * Only the chat's **own** view may speak for the chat's own channel. A person
+ * looking at another conversation is reading that conversation's channel, which
+ * says nothing at all about this call, and «no channel here» must not be read
+ * as «the call was ended». The honest consequence, recorded rather than hidden:
+ * somebody whose call is ended while they are looking elsewhere keeps hearing
+ * it until they come back, because slice 2 has nothing outside the conversation
+ * that watches. The bar that would is slice 3.
+ *
+ * `chatId` is therefore the chat the view was **read for**, not the chat that
+ * is open. The two differ for as long as a read takes, because opening another
+ * conversation does not clear what the hook is holding — and measured on
+ * 2026-09-14, reading the argument instead hung up a live call on the way back
+ * to the conversation it was in.
+ */
+export function voiceCallLostItsChannel(input: {
+  /** The channel this client's call is in, or null when there is no call. */
+  callChannelId: string | null;
+  /** The chat that call belongs to. */
+  callChatId: string | null;
+  /** The chat this channel view was read for; null when nothing was read. */
+  chatId: string | null;
+  /** False until the first read has come back. */
+  ready: boolean;
+  /** False where this deployment has no voice tables. */
+  supported: boolean;
+  /** The channel this chat has now, or null. */
+  channel: VoiceChannelSummary | null;
+}): boolean {
+  if (!input.callChannelId || !input.callChatId) return false;
+  if (!input.ready || !input.supported) return false;
+  if (input.chatId === null || input.chatId !== input.callChatId) return false;
+  return input.channel === null || input.channel.id !== input.callChannelId;
 }

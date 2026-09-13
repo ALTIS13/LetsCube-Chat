@@ -50,6 +50,7 @@ export function MessageDeleteDialog({
       }}
       title={deleteDialogTitle(count)}
       icon={<KubIcon name="delete" size={18} tone="danger" />}
+      tone="danger"
       size="sm"
       mobileSheet={false}
       footer={(
