@@ -552,38 +552,32 @@ route on `app.letscube.ru`. Slice 1 had to be cheap to discard, and it is.
 
 ## Last Confirmed Deploy Baseline
 
-**`d8c51a2`, deployed 2026-09-13**, four commits after `e91bee2` earlier the same
-day. A global role is finally visible to somebody other than an administrator; a
-channel is called a channel in the six places that answered that question
-separately; the media viewer says what its controls will actually do on each
-shell; and one place owns the playback volume.
+**`e6006f5`, deployed 2026-09-13**, the third deploy of the day. The badge
+reaches the member list and the profile dialog; signing out and leaving settings
+with something typed both ask first; and a dialog no longer dismisses itself on
+the key press that opened it.
 
-- `letscube-web` runs `l64kyyu1sysev2izzjjbizhe:d8c51a2d0d2db1f11734554a46700cebea6e750c`,
-  one replica, healthy. `https://app.letscube.ru` answers 200.
-- `letscube-worker` stays on `e91bee21…` and correctly did not rebuild: nothing
-  under `artifacts/api-server` changed.
-- **Marker calibrated both ways**: `profile-badges` is in the bundle built here
-  and absent from what production served before the push; `chat-settings-view` is
-  the control. The served file went from `index-D9OnwLaV.js` to
-  `index-Dtg6_FHL.js` (2 869 516 bytes). One mid-rollover read returned 144
-  bytes, which is the rollover state rather than a failure.
+- `letscube-web` runs `l64kyyu1sysev2izzjjbizhe:e6006f53271d0501e48ead28494252cb6dc590e2`,
+  one replica, healthy; `https://app.letscube.ru` answers 200.
+- **Marker calibrated both ways**: `chat-info-member-badges` is in the bundle
+  built here and absent from what production served before the push;
+  `profile-badges` is the control. The served file went from `index-Dtg6_FHL.js`
+  to `index-ss_27b8S.js`. One mid-rollover read showed the control at 0 as well,
+  which is the rollover state.
+- `letscube-worker` and `letscube-bot-gateway` unchanged, correctly: nothing
+  under `artifacts/api-server` moved.
+- **`letscube-voice-probe` runs beside them**, 0.28 % CPU and 36 MiB at rest. It
+  is slice 1's SFU and no part of the product can reach it;
+  `docs/operations/voice-probe.md` has the two commands that remove it.
 
-**One migration went with it**, `20260913140000_profile_badges.sql`, applied
-after a verified schema backup and a rehearsal rolled back. It adds two columns
-and one SECURITY DEFINER function returning presentation fields only; the old
-client ignores both.
+Three defects were found while building these and are recorded rather than
+carried: D-181 (Escape opened a dialog and the same press closed it, in every
+dialog in the product), D-182 (a keystroke in the list search replaced the
+settings panel and discarded a typed name), and the member row that read
+«Владелец [♛ Владелец]» — this chat's owner beside LETSCUBE's, one word meaning
+two things a line apart.
 
-**A correction worth carrying forward.** Two read-only probes of the role
-policies set the JWT claims and stayed `supabase_admin`, which owns those tables
-and is not subject to their policies. They reported that every account could read
-every role and every assignment — a security finding that was not one. With
-`set_config('role','authenticated')` as well, an ordinary account reads 1 of 13
-role rows. **A policy measured as its own table's owner is not measured at all**,
-and every future probe in this project should switch the role, not only the
-claims.
-
-Rollback is a fast-forward of `main` back to `e91bee2`, plus the badge
-migration's own rollback file if the columns are ever unwanted.
+Rollback is a fast-forward of `main` back to `4ac06e3`.
 
 ## Completed Baseline - Do Not Rebuild Without A New Finding
 
