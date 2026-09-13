@@ -8936,7 +8936,7 @@ D-175.
 
 ---
 
-## D-177 `[ ]` Eleven things the client decides that the server never re-checks
+## D-177 `[~]` Eleven things the client decides that the server never re-checks
 
 **Severity: high.** Not a defect anyone can see, and the reason it is here rather than in a performance note is
 that three rules of exactly this shape had to be added in the week before this audit, each migration header
@@ -8996,6 +8996,48 @@ means the server reading every uploaded byte.
 **Not a finding, and stated so nobody re-opens it:** this list is about what the server would accept from a
 modified client, not about anything the shipped client does wrong. Each item costs nothing today and costs
 everything on the day someone points a script at the API.
+
+**Four of the eleven closed on production, 2026-09-13**, each after a verified schema backup, a full rehearsal
+inside a transaction that was rolled back, and a functional probe that also ran and rolled back. The proposal
+they were taken from is `docs/proposals/2026-09-13-media-upload-hardening.md`; the applied SQL and its rollback
+are recorded byte-identical in `.migration-backup/supabase/migrations/2026091313*`.
+
+- **The bucket has a size ceiling of its own** (item 3): `media.file_size_limit` is 262,144,000, exactly
+  `MAX_VIDEO_ATTACHMENT_BYTES` and exactly the Storage container's own global limit, so it refuses nothing the
+  product accepts today. What it buys is that the number is a property of the bucket rather than an environment
+  variable on a container, where an overlay lost in a redeploy silently drops it to 52,428,800. The largest
+  object the bucket has ever accepted is 51,215,994 bytes, measured, so the ceiling has four times the room it
+  needs.
+- **A message's `media_path` must be the sender's own upload** (item 2), with the two exemptions that are not
+  optional: a forward carries the source's path, and a session with no `auth.uid()` is the worker. Both were
+  probed against real rows. The forgery — a member posting a message that points at another person's object —
+  is refused by name, and so is a forgery dressed as a forward: a row naming a `forwarded_from_id` whose
+  message does not carry that same bucket and path.
+- **`media_metadata` has a shape** (items 9 and 10, in part): types for every flag the readers act on, and the
+  one real rule — a preview's address is derived from `media_path`, never chosen. `readOriginalPreview` has
+  demanded exactly that of a *reader* since it was written; now the row cannot be written. Left NOT VALID
+  deliberately: one row sent 2026-07-17 carries `media_quality: "high"`, a value from a vocabulary the product
+  no longer has, and validating would either fail on it or force `high` into the allowed list for ever.
+- **`client_sent_at` may not be far in the future** (item 7). The proposal said one minute; the pre-flight it
+  demanded says 1877 rows are ahead of their own `created_at`, the worst by 1 minute 15 seconds. One minute
+  would have clamped writes this product really makes, in about a fifth of every message ever sent. Five
+  minutes now, with the measured worst case asserted in the migration's own self-check so nobody lowers it
+  back. That spread is ordinary phone clock skew, not the millisecond batch offset `nextClientSentAt` produces.
+
+**What the pre-flight corrected in the entry above.** The two buckets are one: `chat-media` is the bucket with
+a size limit and a MIME allowlist, and it is unused — `CHAT_MEDIA_BUCKET` is a constant whose value is
+`"media"`. Everything goes to `media`, which had neither.
+
+**The MIME allowlist is deliberately not applied, and this is a decision rather than a postponement.** «Файл»
+takes any type by design (D-119), and production has already stored
+`application/vnd.android.package-archive`, `application/x-msdownload`, `application/octet-stream` and eleven
+others. An allowlist that refuses those refuses a function the owner asked for. The upload path is confined by
+`_kub_media_path_allowed` and now by the row guard, which is where the protection belongs.
+
+**Still open:** items 1 and 4-6 (the sender's own claims about width, height and compression), item 8
+(`edited_at` has no edit-window rule), item 11 (a resumable upload reporting its own destination — a client
+fix no SQL reaches), and server-side location stripping, which is the one that needs a decision rather than a
+patch because it means the server reading every uploaded byte.
 
 ## D-178 `[x]` A hint stood over the attach sheet and swallowed its taps
 
