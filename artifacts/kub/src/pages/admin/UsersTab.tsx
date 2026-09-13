@@ -1200,8 +1200,12 @@ function ProfilePreviewModal({
           )}
         </div>
       </div>
+      {/* D-146: «Базовая роль» used to sit here, reading «Пользователь» from the
+          legacy `profiles.role` two rows above a «Глобальные роли: Владелец» for
+          the same person. `ProfileRoleSummary` below already falls back to that
+          legacy value where the roles system has nothing to say, so nothing is
+          lost by removing the contradiction. */}
       <div className="grid grid-cols-2 gap-3 text-sm">
-        <Field label="Базовая роль" value={roleLabel[user.role]} />
         <Field label="Эл. почта" value={email ?? "—"} mono copyable />
         <PhoneField
           phone={contact?.phone ?? null}

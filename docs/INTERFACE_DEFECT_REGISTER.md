@@ -7676,7 +7676,7 @@ the list.
 
 **Audit rows:** work-surfaces B-03, B-12, B-19.
 
-## D-146 `[ ]` Administration shows a legacy role that contradicts a person's real role
+## D-146 `[x]` Administration shows a legacy role that contradicts a person's real role
 
 **Severity:** medium, for administrators reading who may do what. Found by the
 work-surfaces audit from the code and the 2026-09-04 migration notes; the profile dialog
@@ -7695,6 +7695,36 @@ are owners by assignment. A global manager sees only the legacy labels (A-17).
 **Proposed:** label people from their global roles everywhere, and drop «Базовая роль».
 
 **Audit rows:** work-surfaces A-09, A-21 (A-17 for the manager's view).
+
+**Fixed 2026-09-14.** Two contradictions removed; one thing deliberately left
+alone.
+
+The profile dialog's «Базовая роль» field is gone. It printed `profiles.role`
+eighteen lines above `ProfileRoleSummary`, which prints the global roles for the
+same person — «Пользователь» over «Владелец». Nothing is lost by removing it:
+that summary already falls back to the same legacy value where the roles system
+has nothing to say, so the legacy label still appears exactly where it is the
+only thing known.
+
+The dashboard's «Новые пользователи» no longer labels a registration with that
+field either. It is «Пользователь» for all but two accounts here, so it
+distinguished nobody while being wrong about two. `formatNewUserLine` puts the
+handle and the time there instead — the two facts a registration list is about —
+and prints the handle only when the title is not already showing it, because the
+title falls back to «@ник» when there is no name.
+
+**Left alone on purpose:** the users list row and `ProfileRoleSummary` both
+already prefer the dynamic roles and fall back to the legacy label only when
+there are none. That is not the defect; that is the fallback working.
+
+The proposal said "label people from their global roles everywhere". The
+dashboard has `Profile[]` and no role assignments, and fetching them for a
+five-row list would be a query for a line that is not about roles — so there it
+is satisfied by not labelling rather than by labelling.
+
+`tests/unit/admin-dashboard-model.test.mts` pins the line; two mutations turn it
+red — printing the handle when the title already carries it, and dropping the
+time.
 
 ## D-147 `[x]` «Открыть оригинал» opens the raw file address in a browser tab, which takes a person out of the Windows and Android apps
 

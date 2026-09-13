@@ -97,6 +97,25 @@ export function formatAdminProfileName(profile?: Profile | null): string {
   return profile.full_name ?? (profile.username ? `@${profile.username}` : "пользователю");
 }
 
+/**
+ * The second line of a «Новые пользователи» row (D-146).
+ *
+ * It used to be `LEGACY_APP_ROLE_LABEL[user.role]` — the legacy `profiles.role`,
+ * which on this deployment is «Пользователь» for all but two accounts and
+ * contradicts the global role the same person's card shows. A registration list
+ * is about who registered and when, so that is what the line says: the handle,
+ * where the title is not already showing it, and the time.
+ */
+export function formatNewUserLine(
+  profile: Pick<Profile, "full_name" | "username" | "created_at">,
+): string {
+  const when = formatAdminDateTime(profile.created_at);
+  // The title falls back to «@ник» when there is no name, so repeating it
+  // underneath would print the same handle twice.
+  const handle = profile.full_name && profile.username ? `@${profile.username}` : null;
+  return handle ? `${handle} · ${when}` : when;
+}
+
 export function formatAdminAuditEvent(row: AuditLogWithActor): string {
   const payload = asRecord(row.diff);
   const get = (key: string) => payload?.[key] ?? null;

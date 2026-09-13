@@ -1,7 +1,6 @@
 import { KubIcon, KubPanel } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
-import { LEGACY_APP_ROLE_LABEL } from "@/lib/rolePermissions";
-import { formatAdminAuditEvent, formatAdminDateTime } from "@/pages/admin/dashboardModel";
+import { formatAdminAuditEvent, formatAdminDateTime, formatNewUserLine } from "@/pages/admin/dashboardModel";
 import type { AuditLogWithActor, Profile } from "@/types/database";
 
 export function RecentActivity({ users, events, usersError, eventsError }: {
@@ -23,7 +22,7 @@ export function RecentActivity({ users, events, usersError, eventsError }: {
                   {user.full_name ?? (user.username ? `@${user.username}` : "Пользователь")}
                 </div>
                 <div className="truncate text-xs text-[color:var(--kub-muted)]">
-                  {LEGACY_APP_ROLE_LABEL[user.role]} · {formatAdminDateTime(user.created_at)}
+                  {formatNewUserLine(user)}
                 </div>
               </div>
               <span className={`h-2 w-2 shrink-0 rounded-full ${isOnline(user.online_at) ? "bg-[var(--kub-online)]" : "bg-[var(--kub-border-color)]"}`} aria-label={isOnline(user.online_at) ? "Онлайн" : "Не в сети"} />

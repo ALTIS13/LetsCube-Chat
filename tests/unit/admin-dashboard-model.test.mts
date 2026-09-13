@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   buildRegistrationSeries,
   formatAdminAuditEvent,
+  formatAdminDateTime,
+  formatNewUserLine,
 } from "../../artifacts/kub/src/pages/admin/dashboardModel.ts";
 
 test("registration series includes every requested day, including zero days", () => {
@@ -51,4 +53,33 @@ test("audit formatter describes known registration mode changes in Russian", () 
   });
 
   assert.equal(result, "Регистрация ограничена приглашениями");
+});
+
+test("a new registration is described by when it happened, not by a legacy role", () => {
+  // D-146. The line used to read `LEGACY_APP_ROLE_LABEL[user.role]`, which on
+  // this deployment is «Пользователь» for all but two accounts and contradicts
+  // the global role the same person's card shows.
+  const withName = formatNewUserLine({
+    full_name: "Фиктивный Участник",
+    username: "fixture_user",
+    created_at: "2026-09-14T08:30:00.000Z",
+  });
+  assert.match(withName, /^@fixture_user · /);
+  assert.doesNotMatch(withName, /Пользователь/);
+
+  // The title already falls back to «@ник» when there is no name, so the line
+  // underneath must not print the same handle a second time.
+  const withoutName = formatNewUserLine({
+    full_name: null,
+    username: "fixture_user",
+    created_at: "2026-09-14T08:30:00.000Z",
+  });
+  assert.doesNotMatch(withoutName, /@fixture_user/);
+  assert.equal(withoutName, formatAdminDateTime("2026-09-14T08:30:00.000Z"));
+
+  // And a person with neither is still described by the one fact there is.
+  assert.equal(
+    formatNewUserLine({ full_name: null, username: null, created_at: "2026-09-14T08:30:00.000Z" }),
+    formatAdminDateTime("2026-09-14T08:30:00.000Z"),
+  );
 });
