@@ -41,6 +41,15 @@ export interface RowAction {
   icon: KubIconName;
   danger?: boolean;
   disabled?: boolean;
+  /**
+   * A question to put before `run`, answered true to go ahead.
+   *
+   * Separate from `run` so the caller can raise it **before** the row is marked
+   * busy: an action that asks inside `run` leaves «Выполняем…» on the row while
+   * the question is still on the screen, which says something that has not
+   * happened yet.
+   */
+  confirm?: () => Promise<boolean>;
   run: () => void | Promise<void>;
 }
 

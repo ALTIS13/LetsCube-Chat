@@ -60,6 +60,12 @@ export interface ChatVocabulary {
   deleteDescription: string;
   /** The line inside the confirmation, under its heading. */
   deleteAftermath: string;
+  /** Handing the chat over, which is the other way out for its owner (D-150). */
+  transferLabel: string;
+  transferTitle: string;
+  transferDescription: (name: string) => string;
+  transferAftermath: string;
+  transferError: string;
   /** What failed, for `prefixError` to put the server's reason after. */
   deleteError: string;
   /** The placeholder over the description box on the settings screen. */
@@ -118,8 +124,23 @@ export function chatVocabulary(type: string | null | undefined): ChatVocabulary 
     deleteLabel: `Удалить ${object}`,
     deleteTitle: `Удалить ${object}?`,
     deleteDescription: `Это действие нельзя отменить. Чат и история исчезнут у всех ${others}.`,
-    deleteAftermath: `После удаления ${subject.toLocaleLowerCase("ru-RU")} исчезнет у всех ${others}.`,
+    // D-150: this used to repeat `deleteDescription` almost word for word —
+    // «Чат и история исчезнут у всех участников» over «После удаления группа
+    // исчезнет у всех участников». A second line that says the first one again
+    // is a line nobody reads. It now says the thing an owner who only wants out
+    // actually needs to know, which is that deleting is not their only option.
+    deleteAftermath: channel
+      ? "Если вы просто хотите уйти, передайте права владельца другому подписчику — тогда канал останется."
+      : "Если вы просто хотите уйти, передайте права владельца другому участнику — тогда группа останется.",
     deleteError: `Не удалось удалить ${object}`,
+    transferLabel: "Передать права владельца",
+    transferTitle: "Передать права владельца?",
+    // No pronoun for the new owner: the product does not know anybody's, and
+    // «новый владелец» says the same thing without guessing.
+    transferDescription: (name: string) =>
+      `${name} станет владельцем, а вы — администратором. Вернуть права сможет только новый владелец.`,
+    transferAftermath: `После этого вы сможете покинуть ${object}.`,
+    transferError: "Не удалось передать права владельца",
     descriptionPlaceholder: channel ? "О чём этот канал" : "О чём эта группа",
   };
 }

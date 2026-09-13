@@ -70,7 +70,7 @@ function rows(): { chats: Row[]; memberships: Row[]; messages: Row[] } {
 
 async function openMembers(page: Page) {
   const seed = rows();
-  await openFixture(page, {
+  const fixture = await openFixture(page, {
     me: ME,
     chats: seed.chats,
     memberships: seed.memberships,
@@ -84,6 +84,7 @@ async function openMembers(page: Page) {
   // Scoped to the panel: unscoped, «УЧАСТНИКИ» also matches the conversation.
   await panel.getByText("УЧАСТНИКИ", { exact: false }).first().click();
   await expect(page.getByTestId("chat-info-member").first()).toBeVisible();
+  return fixture;
 }
 
 /**
@@ -109,6 +110,14 @@ async function drawnOpacity(page: Page, selector: string): Promise<number> {
 }
 
 const ACTIONS_CONTROL = '[data-testid="chat-info-member"][data-has-actions="true"] [aria-label="Действия с участником"]';
+
+/** Open one member's actions by the name on their row. */
+async function openActionsFor(page: Page, name: string) {
+  const row = page.getByTestId("chat-info-member").filter({ hasText: name }).first();
+  await expect(row).toBeVisible();
+  await row.getByLabel("Действия с участником").click();
+}
+
 
 test.beforeEach(async ({ request }) => {
   await requireFixtureServer(request);
@@ -179,6 +188,110 @@ test.describe("a group's member actions", () => {
         insidePanel,
         "the actions render inside the information panel, which makes the panel their containing block and puts them under it",
       ).toBe(false);
+    });
+  });
+
+  // D-150. An owner had «Удалить групповой чат» and nothing else: no way to
+  // leave, and no way to hand the group over. The database has permitted the
+  // handover all along — `enforce_chat_member_update` gives `caller_role =
+  // 'owner'` full control and only refuses to demote the **last** owner, read
+  // off production on 2026-09-14 — and `canTransferOwnership` has been in the
+  // rules module, tested, with nothing calling it.
+  test.describe("handing the chat over", () => {
+    test("an owner can make somebody else the owner, and then leave", async ({ page }) => {
+      const fixture = await openMembers(page);
+
+      // The owner's own row offers nothing: the last owner cannot step down,
+      // which is the trigger's rule and not a courtesy.
+      const mine = page.getByTestId("chat-info-member").filter({ hasText: "Максим Орлов" }).first();
+      await expect(mine).toHaveAttribute("data-has-actions", "false");
+
+      await openActionsFor(page, "Анна Смирнова");
+      const transfer = page.getByRole("menuitem", { name: "Передать права владельца" });
+      await expect(transfer).toBeVisible();
+      await transfer.click();
+
+      // It asks first, and the question names the person and what it costs.
+      const dialog = page.getByRole("dialog").filter({ hasText: "Передать права владельца?" });
+      await expect(dialog).toBeVisible();
+      // And the row does not claim to be doing it while the question is still
+      // on the screen: the menu used to mark itself busy before asking.
+      await expect(page.getByText("Выполняем…")).toHaveCount(0);
+      await expect(dialog).toContainText("Анна Смирнова станет владельцем");
+      await expect(dialog).toContainText("вы — администратором");
+      expect(
+        fixture.restCalls("chat_members", "PATCH").length,
+        "the handover happened before anybody answered",
+      ).toBe(0);
+
+      await dialog.getByRole("button", { name: "Передать права владельца" }).click();
+
+      // Two writes, in the one order the trigger accepts: the new owner is made
+      // first, because demoting the last owner is what it refuses.
+      await expect
+        .poll(() => fixture.restCalls("chat_members", "PATCH").length, { timeout: 5000 })
+        .toBe(2);
+      const [first, second] = fixture.restCalls("chat_members", "PATCH");
+      expect(first.body).toMatchObject({ role: "owner" });
+      expect(first.search).toContain(ANNA.id);
+      expect(second.body).toMatchObject({ role: "admin" });
+      expect(second.search).toContain(ME.id);
+    });
+
+    test("the handover, photographed in both themes", async ({ page }, info) => {
+      await openMembers(page);
+      await openActionsFor(page, "Анна Смирнова");
+      const shot = (name: string) => `output/owner-handover/${name}-${info.project.name}.png`;
+
+      for (const theme of ["dark", "light"] as const) {
+        await page.evaluate((value) => {
+          document.documentElement.setAttribute("data-theme", value);
+        }, theme);
+        await page.evaluate(() => document.fonts.ready);
+        await expect(page.getByRole("menuitem", { name: "Передать права владельца" })).toBeVisible();
+        await page.screenshot({ path: shot(`menu-${theme}`) });
+      }
+
+      await page.getByRole("menuitem", { name: "Передать права владельца" }).click();
+      for (const theme of ["dark", "light"] as const) {
+        await page.evaluate((value) => {
+          document.documentElement.setAttribute("data-theme", value);
+        }, theme);
+        await page.evaluate(() => document.fonts.ready);
+        // Two dialogs are open: the information card is one, so the question
+        // has to be named rather than asked for by role alone.
+        await expect(
+          page.getByRole("dialog").filter({ hasText: "Передать права владельца?" }),
+        ).toBeVisible();
+        await page.screenshot({ path: shot(`question-${theme}`) });
+      }
+    });
+
+    test("nobody but an owner is offered it", async ({ page }) => {
+      // The same fixture read from the other side: an administrator may not
+      // create an owner, and the trigger says so too.
+      const seed = rows();
+      seed.memberships = [
+        membership(CHAT_TEAM, ME, "admin", AT),
+        membership(CHAT_TEAM, ANNA, "owner", AT),
+        membership(CHAT_TEAM, PETR, "member", AT),
+      ];
+      await openFixture(page, {
+        me: ME,
+        chats: seed.chats,
+        memberships: seed.memberships,
+        messages: seed.messages,
+        rpc: (name) => (name === "search_chat_messages" ? missingFunction(name) : undefined),
+      });
+      await openChat(page, "Команда проекта", LINES[0]);
+      await page.getByTestId("chat-header-info-button").click();
+      const panel = page.getByTestId("chat-info-panel");
+      await panel.getByText("УЧАСТНИКИ", { exact: false }).first().click();
+      await expect(page.getByTestId("chat-info-member").first()).toBeVisible();
+
+      await openActionsFor(page, "Пётр Ильин");
+      await expect(page.getByRole("menuitem", { name: "Удалить из чата" })).toBeVisible();
+      await expect(page.getByRole("menuitem", { name: "Передать права владельца" })).toHaveCount(0);
     });
   });
 });

@@ -93,7 +93,13 @@ export function canRemoveMember({ myRole, targetRole, isSelf }: ChatMemberSubjec
 /** Whether this person has any action at all — what decides if a control is drawn. */
 export function hasAnyMemberAction(subject: ChatMemberSubject): boolean {
   return (
-    canPromoteToAdmin(subject) || canDemoteFromAdmin(subject) || canRemoveMember(subject)
+    canPromoteToAdmin(subject) ||
+    canDemoteFromAdmin(subject) ||
+    // D-150. Left out until 2026-09-14, when the control was finally added: an
+    // owner looking at the only other member of a group they want to leave has
+    // exactly one thing they can do to that person, and it is this one.
+    canTransferOwnership(subject) ||
+    canRemoveMember(subject)
   );
 }
 

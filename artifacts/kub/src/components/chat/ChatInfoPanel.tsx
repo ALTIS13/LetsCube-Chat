@@ -77,6 +77,7 @@ import {
   canDemoteFromAdmin,
   canPromoteToAdmin,
   canRemoveMember,
+  canTransferOwnership,
   chatRoleLabel,
   hasAnyMemberAction,
   type ChatMemberSubject,
@@ -1188,7 +1189,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
     dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
   };
 
-  const setMemberRole = async (userId: string, role: "admin" | "member") => {
+  const setMemberRole = async (userId: string, role: "admin" | "member" | "owner") => {
     const { error } = await supabase
       .from("chat_members").update({ role })
       .eq("chat_id", chat.id).eq("user_id", userId);
@@ -1200,6 +1201,45 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
       return;
     }
     setMembers((ms) => ms.map((m) => m.id === userId ? { ...m, chat_role: role } : m));
+    void loadMembers();
+  };
+
+  /**
+   * Hand the chat over (D-150).
+   *
+   * Two updates rather than one, because that is what the database permits:
+   * `enforce_chat_member_update` lets an owner set any role — read off
+   * production on 2026-09-14 — and refuses to demote the **last** owner. So the
+   * new owner is made first and only then does the old one step down; doing it
+   * the other way round is the one order the trigger rejects.
+   *
+   * They are not one transaction. If the second fails the chat has two owners,
+   * which is a state the trigger allows, nothing is lost, and either of them can
+   * finish the job — so the failure is reported rather than rolled back, and it
+   * names what actually happened.
+   */
+  const transferOwnership = async (userId: string, name: string) => {
+    const promoted = await supabase
+      .from("chat_members").update({ role: "owner" })
+      .eq("chat_id", chat.id).eq("user_id", userId);
+    if (promoted.error) {
+      console.error("transferOwnership (promote):", promoted.error);
+      showAppAlert(prefixError(words.transferError, promoted.error), "Ошибка");
+      return;
+    }
+    if (!currentUserId) return;
+    const stepped = await supabase
+      .from("chat_members").update({ role: "admin" })
+      .eq("chat_id", chat.id).eq("user_id", currentUserId);
+    if (stepped.error) {
+      console.error("transferOwnership (step down):", stepped.error);
+      showAppAlert(
+        `${name} теперь владелец, но снять права с себя не удалось. Попробуйте ещё раз или попросите нового владельца.`,
+        "Ошибка",
+      );
+      void loadMembers();
+      return;
+    }
     void loadMembers();
   };
 
@@ -1288,6 +1328,22 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
         run: () => setMemberRole(openMember.id, "admin"),
       });
     }
+    if (canTransferOwnership(subject)) {
+      actions.push({
+        id: "transfer",
+        label: words.transferLabel,
+        icon: "crown",
+        confirm: () =>
+          requestAppConfirm({
+            title: words.transferTitle,
+            description: `${words.transferDescription(name)} ${words.transferAftermath}`,
+            confirmLabel: words.transferLabel,
+            tone: "danger",
+            icon: "crown",
+          }),
+        run: () => transferOwnership(openMember.id, name),
+      });
+    }
     if (canDemoteFromAdmin(subject)) {
       actions.push({
         id: "demote",
@@ -1302,16 +1358,15 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
         label: "Удалить из чата",
         icon: "userRemove",
         danger: true,
-        run: async () => {
-          const confirmed = await requestAppConfirm({
+        confirm: () =>
+          requestAppConfirm({
             title: "Удалить участника из чата?",
             description: `${name} потеряет доступ к этому чату.`,
             confirmLabel: "Удалить",
             tone: "danger",
             icon: "userRemove",
-          });
-          if (confirmed) await handleRemoveMember(openMember.id);
-        },
+          }),
+        run: () => handleRemoveMember(openMember.id),
       });
     }
     return actions;
@@ -1328,6 +1383,12 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
 
   /** Runs one action, keeps the menu honest about being busy, then closes it. */
   const runMemberAction = async (action: RowAction) => {
+    // Ask first, and only then say the row is busy. The other order put
+    // «Выполняем…» under a question nobody had answered.
+    if (action.confirm && !(await action.confirm())) {
+      setMemberMenu(null);
+      return;
+    }
     setMemberBusyId(action.id);
     try {
       await action.run();

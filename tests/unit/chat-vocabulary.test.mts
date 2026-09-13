@@ -75,8 +75,46 @@ test("the sentences about the other people use the other people's noun", () => {
     channel.deleteDescription,
     "Это действие нельзя отменить. Чат и история исчезнут у всех подписчиков.",
   );
-  assert.equal(group.deleteAftermath, "После удаления группа исчезнет у всех участников.");
-  assert.equal(channel.deleteAftermath, "После удаления канал исчезнет у всех подписчиков.");
+  // D-150: `deleteAftermath` used to repeat `deleteDescription` almost word for
+  // word, which is a second line nobody reads. It now says the thing an owner
+  // who only wants out needs to know, and it still uses the right noun for the
+  // other people.
+  assert.equal(
+    group.deleteAftermath,
+    "Если вы просто хотите уйти, передайте права владельца другому участнику — тогда группа останется.",
+  );
+  assert.equal(
+    channel.deleteAftermath,
+    "Если вы просто хотите уйти, передайте права владельца другому подписчику — тогда канал останется.",
+  );
+  // And it must not simply restate the sentence above it.
+  assert.notEqual(group.deleteAftermath, group.deleteDescription);
+  assert.ok(
+    !group.deleteAftermath.includes("исчезнет у всех"),
+    "the second line says the first one again",
+  );
+});
+
+test("handing the chat over is offered in the words of that chat", () => {
+  const group = chatVocabulary("group");
+  const channel = chatVocabulary("channel");
+
+  assert.equal(group.transferLabel, "Передать права владельца");
+  assert.equal(group.transferTitle, "Передать права владельца?");
+  assert.equal(
+    group.transferDescription("Фиктивный Участник"),
+    "Фиктивный Участник станет владельцем, а вы — администратором. Вернуть права сможет только новый владелец.",
+  );
+  assert.equal(group.transferAftermath, "После этого вы сможете покинуть группу.");
+  assert.equal(channel.transferAftermath, "После этого вы сможете покинуть канал.");
+
+  // Nobody's pronoun is guessed: the product does not know it, and «новый
+  // владелец» says the same thing without getting it wrong.
+  for (const kind of ["group", "channel"] as const) {
+    const words = chatVocabulary(kind);
+    const sentence = words.transferDescription("Кто-то");
+    assert.ok(!/он|она|его|её/.test(sentence), sentence);
+  }
 });
 
 test("the description box asks about the thing it is describing", () => {

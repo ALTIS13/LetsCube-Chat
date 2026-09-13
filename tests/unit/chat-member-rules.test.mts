@@ -64,6 +64,24 @@ test("nobody acts on themselves", () => {
   assert.equal(hasAnyMemberAction(subject("owner", "owner", true)), false);
 });
 
+test("the handover counts as an action, so its row draws a control", () => {
+  // D-150. `hasAnyMemberAction` left `canTransferOwnership` out until
+  // 2026-09-14, and **no test can turn that omission red**: everywhere the
+  // handover is permitted, demotion or removal is permitted too, so the control
+  // drew anyway. It is listed now for completeness rather than for coverage —
+  // this function answers "any action", and an enumeration missing one of its
+  // four is a promise waiting on somebody narrowing `canRemoveMember`. Said
+  // here rather than pretended away with an assertion that passes either way.
+  assert.equal(hasAnyMemberAction(subject("owner", "admin")), true);
+  assert.equal(canTransferOwnership(subject("owner", "admin")), true);
+
+  // And it must not appear where the database would refuse it.
+  assert.equal(canTransferOwnership(subject("admin", "member")), false);
+  assert.equal(canTransferOwnership(subject("member", "member")), false);
+  assert.equal(canTransferOwnership(subject("owner", "owner", true)), false, "not to yourself");
+  assert.equal(canTransferOwnership(subject(null, "member")), false, "not as an onlooker");
+});
+
 test("removal follows the delete policy, not the role matrix", () => {
   assert.equal(canRemoveMember(subject("owner", "member")), true);
   assert.equal(canRemoveMember(subject("owner", "admin")), true);
