@@ -8358,7 +8358,7 @@ trade for whoever reads it.
 
 ---
 
-## D-164 `[ ]` A group has no settings screen: the pencil swaps two fields and there is no way to cancel
+## D-164 `[x]` A group has no settings screen: the pencil swaps two fields and there is no way to cancel
 
 **Severity: medium**, rising with every group setting the product gains, because there is nowhere to put one.
 
@@ -8382,7 +8382,28 @@ way the media sub-view already works here (`:1084-1092`). Not a second window.
 
 ---
 
-## D-165 `[ ]` The invite card states a policy it never read, and silently takes the invite button away
+**Closed 2026-09-13.** The pencil opens a third layer of the same card, beside the root and the gallery, and
+the arrow leaves it — which is what the register proposed and what the reference does.
+
+- **One row per setting, with its current value on the right.** That is the half that makes such a screen
+  readable at a glance rather than a list of doors, and it is why `chatSettingsRows` is a pure function with a
+  test: which rows exist, for whom, and what each says can be argued about without a browser.
+- **Only rows that exist.** Who may invite, topics, administrators, members, shared media, and the destructive
+  row at the foot. No «Статистика», no «Недавние действия», no «Приветствие»: a row for a feature nobody has
+  built teaches a person that the screen is decorative. When one is built it arrives here with its value beside
+  it like the rest.
+- **A member reads it too.** Every value is shown to people who cannot change it, because a rule about the
+  group they are in is a fact they are entitled to. What they do not get is the pencil.
+- **Leaving asks.** A name or a description typed and not saved raises «Отменить изменения?» rather than being
+  dropped — the answer D-136 wants one surface over. The check appears only once something has really been
+  typed: a control that is always there and usually does nothing teaches people to press it out of habit.
+- The topics handler was lifted out of the middle of the button's markup so it could be called from the new
+  row; the invite-policy card moved wholesale.
+
+**What this did not do:** the reference's fifteen rows include several this product has no feature for, and one
+— «Тип группы» — that it has no column for. Nothing was invented to fill them.
+
+## D-165 `[~]` The invite card states a policy it never read, and silently takes the invite button away
 
 **Severity: medium.** It tells people something untrue about who may invite.
 
@@ -8407,6 +8428,26 @@ exists and the control works.
 change what a member may do.
 
 ---
+
+**Two of the three closed 2026-09-13**, with the card that carried them.
+
+- **It no longer asserts a policy it has not read.** `invitePolicyLabel(null)` is «Неизвестно», and the row on
+  the settings screen shows that rather than the default. Part 1 closed.
+- **The value and the control now use the same words.** «Только администраторы» in both places; the button used
+  to say «Администраторы», which reads as a third setting. Part 3 closed.
+- **Part 2 is left open deliberately.** `canSendInvites` still requires the policy to have been read before it
+  honours `members_can_invite`, so an unread value still leaves an ordinary member without the invite button.
+  Being unable to read the policy and defaulting to «administrators only» is the *safe* direction, and the card
+  now says so instead of claiming to know; changing who may invite on the strength of a value we could not read
+  would be the unsafe one. What is left is a product decision, not a defect.
+
+**And a cause found while closing it.** The «Недоступно» badge the earlier pass recorded as a fixture artefact
+had a cause worth its own line: `messageActionsFixture.chat()` seeded `invite_policy: "admins_only"`, a value
+**production would refuse** — its CHECK allows `owner_admin_only` and `members_can_invite` and nothing else, and
+all 40 chats carry the first. Six specs seeded it. Every fixture-based render of the information card was
+therefore showing a state the product cannot be in. Corrected in five of the six; the sixth
+(`chat-list-event-cost.spec.ts`) was being edited by another agent at the time and is noted here so it is not
+forgotten.
 
 ## D-166 `[ ]` Every membership change is already recorded per chat, and no chat can show it
 
@@ -8590,7 +8631,11 @@ invite bindings do work, which is why a manual refresh looks unnecessary and mos
 
 ---
 
-## D-173 `[ ]` Coming back to the tab refetches the open conversation seven times
+## D-173 `[x]` The cost gate counts the chat list's previews as revalidations of the open chat
+
+**Filed as** «Coming back to the tab refetches the open conversation seven times», which the
+measurement below records faithfully and the diagnosis below gets wrong. The seven were real; only
+one of them was the conversation.
 
 **Severity: medium**, and it is a cost every person pays on every return to the tab, on every device.
 
@@ -8617,6 +8662,45 @@ nobody had run it lately.
 **Proposed:** find what subscribes to visibility and fans out — seven is close to the six-to-eight of a
 per-something loop rather than a double-fire — and give the revalidation one owner, the way the profile fetch
 got one after it was found running three times concurrently during session recovery.
+
+**Re-measured 2026-09-13, and the fan-out was in the gate, not in the product.** The proposal above
+would have found nothing to give an owner to: the revalidation already has exactly one.
+`fetchMessages` was made to record a stack every time it ran, and over the same phase that counted
+`GET messages:list` 7 it recorded **one**. The other six came from
+`useChats.fetchFallbackChatSummary` (`artifacts/kub/src/hooks/useChats.ts:564`), which asks
+`GET /rest/v1/messages` once per chat for the sidebar's preview line — six chats, six requests, and
+one `GET message_hidden_for_users` and one `GET messages:count` with each, which is the whole of the
+7 / 7 / 6 recorded above. A second probe counted it directly: six calls, one per chat id.
+
+The spec's request classifier put both in one bucket, because both are a GET on `messages`
+(`chat-list-event-cost.spec.ts`, the old `labelOf`). So one allowed revalidation of a six-chat list
+was reported as the conversation revalidating seven times — and the number depended on which summary
+path the server under test was built for. Proved in the other direction on a second dev server with
+`VITE_CHAT_LIST_SUMMARIES_RPC_ENABLED=1`, the flag production builds carry: the same phase counted
+`GET messages:list` **1**, `GET messages:count` **0**, `fetchFallbackChatSummary` **0**, the six
+previews replaced by one `POST rpc/chat_list_summaries` — and the test passed. The gate was red for a
+configuration, not for a regression.
+
+**Fixed 2026-09-13** by making the gate measure what its failure text claims. The rule moved to
+`tests/e2e/helpers/request-labels.ts`, where the two are separate labels — `GET messages:list` for
+the conversation's history, `GET messages:preview` for one chat's sidebar line — told apart by the
+only thing about them a server sees differ: the conversation's projection asks for reactions and the
+replied-to row, the preview's asks for neither. The previews did not lose their bound in the split;
+they gained their own, at one per chat and zero where the RPC answers, so a list that genuinely fans
+out still turns the phase red.
+
+Both halves were mutation-proven against a real defect rather than assumed: making the conversation
+revalidate twice on the way back counted `messages:list` 2 and failed on «coming back revalidates the
+open chat, once»; making the list revalidate twice counted `messages:preview` 12 and failed on
+«asked the list for more previews than it has chats». Both source files were restored and verified
+byte-identical by hash. The pure rule is pinned by `tests/unit/request-labels.test.mts`, which
+imports the product's own two projection constants, so collapsing them back into one shape fails
+there — four mutations turn it red, including the one that puts the single bucket back.
+
+**Nothing in the product changed, and the compatibility path was left alone deliberately.** Asking
+one query per chat is an N+1, but it is the documented fallback for a deployment without the
+`chat_list_summaries` RPC, it costs the same as the first load rather than more, and production does
+not take it. Replacing it is not this defect.
 
 ---
 
@@ -9101,3 +9185,34 @@ caller quietly dropping a condition, since a missing field is `undefined`, which
 `SidebarSearchResults` and `SidebarHeader` are gated to a pane that is not on screen with a sheet up, so
 neither can overlap one today, but nothing in `KubHint` itself prevents it. If a third hint is ever added
 beside a surface that can be covered, it needs the same gate.
+
+## D-179 `[x]` Every confirmation raised from the information card was unreachable on a phone
+
+**Severity: high.** Not cosmetic: the button was there, at full opacity, with pointer events on, and the press
+landed on something else entirely.
+
+**How it was found.** By a new test failing for the wrong reason. The D-164 settings screen asks «Отменить
+изменения?» when it is left with a typed name, and on a 390-point viewport Playwright resolved the dialog's
+«Продолжить» nineteen times in ten seconds without ever being able to click it. `elementFromPoint` at the
+centre of that button answered a `<span>` belonging to a settings row underneath.
+
+**Two defects, one cause, both measured:**
+
+1. **Painted behind the card.** `KubModal`'s overlay stood at `z-50`; the information card stands at `z-[60]`.
+   On a phone the card is the whole screen, so every confirmation it raised was drawn underneath it.
+2. **Confined to the card.** The card carries `kub-glass-strong`, whose `backdrop-filter` makes it the
+   containing block for any `position: fixed` descendant, so a modal rendered as its child was trapped inside a
+   380-point column on a computer — measured left edge 19 points *inside* the card rather than centred on the
+   window.
+
+**This is D-163's trap arriving at the dialog.** That entry recorded exactly these two mechanisms for the
+member-row menu and fixed them by portalling it and raising it above the panel. `KubModal` had neither.
+
+**Fixed** by `createPortal` to the body and `z-[95]` — above the media viewer's `z-[90]`, because a
+confirmation raised from a full-screen photograph has to be reachable too, and below the ban screen's
+`z-[100]`, which is the one thing that outranks everything. Every `KubModal` in the product gains both, which
+closes the same hole in the group-delete and leave-group dialogs the card already had.
+
+**Proved both ways**, at 390 and at 1440: the confirmation's own button is the element under its centre, and a
+dialog opened from the card starts to the left of the card rather than inside it. Both assertions fail against
+the old build.

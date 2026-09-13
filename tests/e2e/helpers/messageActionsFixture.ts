@@ -48,8 +48,18 @@ export function membership(chatId: string, who: Person, role: string, lastReadAt
   };
 }
 
+/**
+ * A chat row as the database really holds one.
+ *
+ * `invite_policy` used to be seeded «admins_only», which production would
+ * refuse: its CHECK allows `owner_admin_only` and `members_can_invite` and
+ * nothing else, and all 40 chats there carry the first. The client reads only
+ * those two as well, so every fixture-based render of the information card
+ * showed a state the product cannot be in — «Недоступно» beside a policy nobody
+ * had set. The register recorded the symptom on 2026-09-13; this is the cause.
+ */
 export function chat(id: string, type: "private" | "group", name: string | null, updatedAt: string): Row {
-  return { id, type, name, description: null, avatar_url: null, created_by: null, created_at: EPOCH, updated_at: updatedAt, is_forum: false, invite_policy: "admins_only" };
+  return { id, type, name, description: null, avatar_url: null, created_by: null, created_at: EPOCH, updated_at: updatedAt, is_forum: false, invite_policy: "owner_admin_only" };
 }
 
 export function message(id: string, chatId: string, sender: Person, content: string, createdAt: string, extra: Row = {}): Row {

@@ -840,7 +840,7 @@ function chat(id: string, name: string, updatedAt: string, memberships: Array<Re
     created_at: "2026-09-01T09:00:00.000Z",
     updated_at: updatedAt,
     is_forum: false,
-    invite_policy: "admins_only",
+    invite_policy: "owner_admin_only",
     members: memberships.filter((row) => row.chat_id === id),
   };
 }

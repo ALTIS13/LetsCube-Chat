@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext, type Page, type Route } from "@playwright/test";
 import { installRenderCounter, readRenderCounts, resetRenderCounts, type RenderCounts } from "./helpers/render-counter";
 import { RealtimeFixture } from "./helpers/realtime-fixture";
+import { labelPostgrestRequest, MESSAGES_HISTORY, MESSAGES_PREVIEW } from "./helpers/request-labels";
 
 /**
  * Complaints 12 and 13, measured per event: what one message, one receipt, one
@@ -29,7 +30,12 @@ import { RealtimeFixture } from "./helpers/realtime-fixture";
  * The dev server must use `VITE_SUPABASE_URL=http://127.0.0.1:54321`. With
  * `VITE_CHAT_LIST_SUMMARIES_RPC_ENABLED=1` the list is summarised by the RPC, as
  * production builds do; without it, by the per-chat compatibility queries. The
- * spec counts either way and says which it saw.
+ * spec counts either way and says which it saw — and counting either way is
+ * what the labels in `helpers/request-labels.ts` are for. The compatibility
+ * path asks `GET /rest/v1/messages` once per chat for a preview line, which is
+ * the same URL the open conversation asks for its history; while both were one
+ * label, a single allowed list revalidation was reported as the conversation
+ * revalidating once per chat (D-173).
  */
 
 const FIXTURE_HOST = "http://127.0.0.1:54321";
@@ -52,13 +58,14 @@ const RENDERED = ["Sidebar", "ChatList", "ChatListItem", "ChatWindow", "MessageL
 const KEYS = { ChatListItem: ["chat", "id"], MessageRow: ["msg", "id"], MessageBubble: ["message", "id"] };
 
 /** The requests a whole-list refetch is made of. None of them may follow a single event. */
-const LIST_REFETCH = ["GET chats", "POST rpc/chat_list_summaries", "GET messages:count"];
+const LIST_REFETCH = ["GET chats", "POST rpc/chat_list_summaries", "GET messages:count", MESSAGES_PREVIEW];
 /** Everything a chat's data is read from. */
 const CHAT_DATA = [
   "GET chat_members",
   "GET chats",
   "POST rpc/chat_list_summaries",
-  "GET messages:list",
+  MESSAGES_HISTORY,
+  MESSAGES_PREVIEW,
   "GET messages:one",
   "GET messages:pinned",
   "GET messages:count",
@@ -212,7 +219,19 @@ test.describe("what one event costs the chat list and the conversation", () => {
     renders = await readRenderCounts(page);
     report("hidden for 16.5s, then visible", cost, renders);
     expect.soft(cost["GET chats"] ?? 0, "coming back revalidates the list, once").toBeLessThanOrEqual(1);
-    expect.soft(cost["GET messages:list"] ?? 0, "coming back revalidates the open chat, once").toBeLessThanOrEqual(1);
+    expect.soft(cost[MESSAGES_HISTORY] ?? 0, "coming back revalidates the open chat, once").toBeLessThanOrEqual(1);
+    // D-173. The line above counted the chat list's per-chat preview queries as
+    // revalidations of the open conversation, because both are a GET on
+    // `messages` and they shared one bucket. Measured 2026-09-13: seven, of
+    // which one was the conversation and six were the six chats' previews. They
+    // are separate buckets now (helpers/request-labels.ts), and the previews get
+    // their own bound here rather than none: one revalidation of the list may
+    // ask each chat at most once, and asks nothing at all where the
+    // `chat_list_summaries` RPC answers for all of them in one call. Without
+    // this line, splitting the bucket would have made the gate blind to a list
+    // that fans out on its own.
+    const previewBudget = backend.requests.includes("POST rpc/chat_list_summaries") ? 0 : Object.keys(CHAT).length;
+    expect.soft(cost[MESSAGES_PREVIEW] ?? 0, "coming back asked the list for more previews than it has chats").toBeLessThanOrEqual(previewBudget);
     expect.soft(renders.counts.ChatListItem, "a revalidation that changed nothing rendered chat rows").toBe(0);
     expect.soft(renders.counts.MessageRow, "a revalidation that changed nothing rendered messages").toBe(0);
     // The rows survive a refetch on their own — the merge keeps the objects the
@@ -243,7 +262,7 @@ test.describe("what one event costs the chat list and the conversation", () => {
     expect(distance, "a chat with nothing unread opens at the bottom").toBeLessThanOrEqual(2);
 
     const perRow = Object.values(renders.byKey.MessageRow ?? {});
-    expect.soft(cost["GET messages:list"] ?? 0, `the history was fetched more than once: ${JSON.stringify(cost)}`).toBeLessThanOrEqual(1);
+    expect.soft(cost[MESSAGES_HISTORY] ?? 0, `the history was fetched more than once: ${JSON.stringify(cost)}`).toBeLessThanOrEqual(1);
     expect.soft(cost["GET chat_members"] ?? 0, `the clear mark was read more than once: ${JSON.stringify(cost)}`).toBeLessThanOrEqual(1);
     expect.soft(sum(cost, LIST_REFETCH), `the list was refetched for opening a chat: ${JSON.stringify(cost)}`).toBe(0);
     expect.soft(Math.max(0, ...perRow), `a message rendered more than once: ${JSON.stringify(renders.byKey.MessageRow)}`).toBeLessThanOrEqual(1);
@@ -299,7 +318,7 @@ test.describe("what one event costs the chat list and the conversation", () => {
     report("switch back", cost, renders);
 
     const perRow = Object.values(renders.byKey.MessageRow ?? {});
-    expect.soft(cost["GET messages:list"] ?? 0, `the history was fetched more than once: ${JSON.stringify(cost)}`).toBeLessThanOrEqual(1);
+    expect.soft(cost[MESSAGES_HISTORY] ?? 0, `the history was fetched more than once: ${JSON.stringify(cost)}`).toBeLessThanOrEqual(1);
     expect.soft(cost["GET chat_members"] ?? 0, `the clear mark was read more than once: ${JSON.stringify(cost)}`).toBeLessThanOrEqual(1);
     expect.soft(Math.max(0, ...perRow), `a message rendered more than once: ${JSON.stringify(renders.byKey.MessageRow)}`).toBeLessThanOrEqual(1);
     expect.soft(otherKeys(renders, "ChatListItem", [CHAT.A, CHAT.C]), `rows other than the two selected ones rendered: ${JSON.stringify(renders.byKey.ChatListItem)}`).toEqual([]);
@@ -322,7 +341,7 @@ test.describe("what one event costs the chat list and the conversation", () => {
     report("offline, then online", cost, renders);
 
     expect(cost["GET chats"] ?? 0, `the list was not refetched after the outage: ${JSON.stringify(cost)}`).toBeGreaterThanOrEqual(1);
-    expect(cost["GET messages:list"] ?? 0, `the open chat was not refetched after the outage: ${JSON.stringify(cost)}`).toBeGreaterThanOrEqual(1);
+    expect(cost[MESSAGES_HISTORY] ?? 0, `the open chat was not refetched after the outage: ${JSON.stringify(cost)}`).toBeGreaterThanOrEqual(1);
     await expect.poll(() => realtime.joinCount(`messages:chat:${CHAT.A}`), { timeout: 15_000 }).toBeGreaterThanOrEqual(2);
 
     // Nothing changed during the outage. A revalidation that runs before
@@ -601,7 +620,7 @@ class FixtureBackend {
     const url = new URL(request.url());
     const method = request.method();
     const headers = request.headers();
-    this.requests.push(labelOf(method, url, headers));
+    this.requests.push(labelPostgrestRequest({ method, url, headers }));
     const single = (headers.accept ?? "").includes("application/vnd.pgrst.object");
     const path = url.pathname;
 
@@ -850,20 +869,6 @@ function messageRow(id: string, chatId: string, userId: string | null, content: 
     edited_at: null,
     deleted_at: null,
   };
-}
-
-function labelOf(method: string, url: URL, headers: Record<string, string>): string {
-  const path = url.pathname;
-  if (path.startsWith("/auth/v1/")) return `${method} auth${path.slice("/auth/v1".length)}`;
-  const resource = path.match(/^\/rest\/v1\/(.+)$/)?.[1];
-  if (!resource) return `${method} ${path}`;
-  if (resource === "messages" && method === "GET") {
-    if ((headers.prefer ?? "").includes("count=")) return "GET messages:count";
-    if (url.searchParams.get("id")?.startsWith("eq.") || url.searchParams.get("client_message_id")) return "GET messages:one";
-    if (url.searchParams.get("pinned")) return "GET messages:pinned";
-    return "GET messages:list";
-  }
-  return `${method} ${resource}`;
 }
 
 const NON_FILTER_PARAMS = new Set(["select", "order", "limit", "offset", "on_conflict", "columns"]);

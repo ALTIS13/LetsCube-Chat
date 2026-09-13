@@ -13,6 +13,12 @@ import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail 
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { subscribeByTable } from "@/lib/realtimeTableChannels";
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
+import { ChatSettingsView } from "./ChatSettingsView";
+import {
+  chatProfileDirty,
+  chatSettingsRows,
+  type ChatSettingsRowId,
+} from "@/lib/chatSettings";
 import { GroupInviteModal } from "./GroupInviteModal";
 import { ProfileRoleSummary } from "@/components/profile/ProfileRoleSummary";
 import {
@@ -89,7 +95,7 @@ type Tab = "info" | "members";
  * sub-view is only the contents of the row that was pressed. What is left of
  * the push is the same push: one layer at a time, a back control, Escape to pop.
  */
-type CardView = "root" | "gallery";
+type CardView = "root" | "gallery" | "settings";
 
 const MEDIA_PAGE_SIZE = 24;
 
@@ -173,6 +179,9 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const [view, setView] = useState<CardView>("root");
   const [mediaSection, setMediaSection] = useState<MessageMediaKind | null>(null);
   const [editing, setEditing] = useState(false);
+  /** Which settings row has opened its choice in place. */
+  const [settingsRow, setSettingsRow] = useState<ChatSettingsRowId | null>(null);
+  const [topicsBusy, setTopicsBusy] = useState(false);
   const [name, setName] = useState(chat.name ?? "");
   const [description, setDescription] = useState(chat.description ?? "");
   const [saving, setSaving] = useState(false);
@@ -291,7 +300,11 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       if (outcome === "ignore") return;
       event.preventDefault();
       if (outcome === "back") {
-        setView("root");
+        // Not a bare `setView("root")` any more: the settings screen can hold a
+        // typed name that has not been saved, and Escape must ask about it
+        // exactly as the arrow does.
+        if (view === "settings") void leaveSettings();
+        else setView("root");
         return;
       }
       onClose();
@@ -737,6 +750,82 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     }
     setSaving(false);
     setEditing(false);
+    // The settings screen is left by saving as well as by the arrow: a person
+    // who pressed the check has finished with it.
+    setView("root");
+  };
+
+  /**
+   * Turning topics on or off.
+   *
+   * Lifted out of the row it used to be written inside (D-164): the setting now
+   * lives on the settings screen, and a handler written in the middle of a
+   * button's markup can be called from nowhere else.
+   */
+  const handleToggleTopics = async () => {
+    if (topicsBusy) return;
+    const next = !chat.is_forum;
+    const confirmed = await requestAppConfirm({
+      title: next ? "Включить режим топиков?" : "Выключить режим топиков?",
+      description: next
+        ? "Все будущие сообщения можно будет отправлять в общий раздел или выбранный топик."
+        : "Топики останутся в базе, но чат вернётся к обычному отображению.",
+      confirmLabel: next ? "Включить" : "Выключить",
+      icon: "hash",
+    });
+    if (!confirmed) return;
+    setTopicsBusy(true);
+    try {
+      const { error: updErr } = await supabase
+        .from("chats").update({ is_forum: next }).eq("id", chat.id);
+      if (updErr) {
+        console.error("toggle is_forum failed:", updErr);
+        showAppAlert(prefixError("Не удалось переключить режим топиков", updErr), "Ошибка");
+        return;
+      }
+      setChats(chats.map((c) => c.id === chat.id ? { ...c, is_forum: next } : c));
+      if (next) {
+        const { data: existing } = await supabase
+          .from("topics").select("id").eq("chat_id", chat.id).eq("is_general", true).maybeSingle();
+        if (!existing) {
+          const { error: tErr } = await supabase.from("topics").insert({
+            chat_id: chat.id, name: "Общий", emoji: "💬", is_general: true, position: 0,
+          });
+          if (tErr) console.error("create general topic failed:", tErr);
+        }
+      }
+    } finally {
+      setTopicsBusy(false);
+    }
+  };
+
+  /**
+   * Leaving the settings screen, which is the thing the pencil never had.
+   *
+   * A name or a description typed and not saved is asked about rather than
+   * dropped: D-136 records the same defect one surface over, and the answer
+   * there is the answer here.
+   */
+  const leaveSettings = async () => {
+    if (
+      canEditChatProfile &&
+      chatProfileDirty(
+        { name: chat.name ?? "", description: chat.description ?? "" },
+        { name, description },
+      )
+    ) {
+      const confirmed = await requestAppConfirm({
+        title: "Отменить изменения?",
+        description: "Название и описание останутся прежними.",
+        confirmLabel: "Отменить",
+        cancelLabel: "Продолжить",
+      });
+      if (!confirmed) return;
+      setName(chat.name ?? "");
+      setDescription(chat.description ?? "");
+    }
+    setSettingsRow(null);
+    setView("root");
   };
 
   const handleAvatarChange = async (file: File) => {
@@ -1088,7 +1177,13 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   // The sub-view is one kind now, so the title bar names it. It falls back to
   // the old wording only in the moment between the last row of a kind being
   // cleared and the pop that follows it.
-  const windowTitle = view === "gallery" ? (activeSection?.label ?? "Общие медиа") : rootTitle;
+  const settingsTitle = chat.type === "channel" ? "Настройки канала" : "Настройки группы";
+  const windowTitle =
+    view === "gallery"
+      ? (activeSection?.label ?? "Общие медиа")
+      : view === "settings"
+        ? settingsTitle
+        : rootTitle;
   const mediaGridItems = useMemo(
     () => media.filter((m) => m.type === "image" || m.type === "video"),
     [media],
@@ -1209,6 +1304,22 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   // 357x36 without it, and this card is one of the two surfaces rebuilt after
   // the rule was written, so it had never been opted in. The class costs
   // nothing on a pointer device — it only carries the coarse-pointer minimum.
+  // What the settings screen shows, and whether its check button is offered.
+  const profileDirty = chatProfileDirty(
+    { name: chat.name ?? "", description: chat.description ?? "" },
+    { name, description },
+  );
+  const settingsRows = chatSettingsRows({
+    type: chat.type,
+    isForum: Boolean(chat.is_forum),
+    invitePolicy: invitePolicySupported ? invitePolicy : null,
+    administrators: members.filter((member) => member.chat_role === "owner" || member.chat_role === "admin").length,
+    members: members.length || chat.members?.length || 0,
+    media: mediaCounts ? mediaSections.reduce((total, section) => total + section.count, 0) : null,
+    isOwner,
+    isOwnerOrAdmin,
+  });
+
   const actionRowClass = cn(
     "kub-button inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 text-left kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
     rowMotionClass,
@@ -1255,9 +1366,9 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         {/* One slot, two meanings: inside a sub-view the leading control goes
             back to the card root rather than closing the card, which is what
             the arrow says and what Escape does. */}
-        {view === "gallery" ? (
+        {view !== "root" ? (
           <button
-            onClick={() => setView("root")}
+            onClick={() => (view === "settings" ? void leaveSettings() : setView("root"))}
             className="kub-icon-action h-9 w-9 rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
             aria-label="Назад"
             data-testid="chat-info-back"
@@ -1277,16 +1388,19 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
           {windowTitle}
         </span>
         <div className="flex min-h-9 min-w-9 items-center justify-center justify-self-end">
-          {canEditChatProfile && !editing && view === "root" && (
+          {canEditChatProfile && view === "root" && (
             <button
-              onClick={() => setEditing(true)}
+              onClick={() => setView("settings")}
               className="kub-icon-action h-9 w-9 rounded-lg text-[color:var(--kub-cyan)] kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
               aria-label="Редактировать"
             >
               <KubIcon name="edit" size={16} />
             </button>
           )}
-          {editing && (
+          {/* The check appears on the settings screen and only while something
+              has really been typed: a control that is always there and usually
+              does nothing teaches a person to press it out of habit. */}
+          {view === "settings" && canEditChatProfile && profileDirty && (
             <button
               onClick={handleSave}
               disabled={saving}
@@ -1333,24 +1447,6 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
           )}
         </div>
 
-        {editing ? (
-          <div className="col-start-2 row-span-2 w-full min-w-0 space-y-2">
-            <input
-              value={name}
-              onChange={(e) => setName(limitText(e.target.value, CHAT_NAME_MAX_LENGTH))}
-              maxLength={CHAT_NAME_MAX_LENGTH}
-              className="w-full text-sm rounded-xl px-3 py-2 text-center font-semibold bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
-            />
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Описание…"
-              rows={2}
-              className="w-full text-sm rounded-xl px-3 py-2 resize-none bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
-            />
-          </div>
-        ) : (
-          <>
             <div
               className="col-start-2 row-start-1 w-full max-w-full text-left text-base font-semibold leading-snug text-[color:var(--kub-text)] line-clamp-2 [overflow-wrap:anywhere]"
               title={display.title}
@@ -1392,8 +1488,6 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 {chat.description}
               </p>
             )}
-          </>
-        )}
       </div>
 
       {/* The summary scrolls away with the content; the tabs do not, so a long
@@ -1451,112 +1545,6 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 >
                   <KubIcon name="userPlus" size={17} tone="muted" className="shrink-0" />
                   <span className="min-w-0 flex-1 truncate">Пригласить пользователя</span>
-                </button>
-              )}
-              {isGroup && (
-                <div className="rounded-xl px-3 py-2 kub-raise">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-[color:var(--kub-text)]">Кто может приглашать</div>
-                      <div className="text-xs text-[color:var(--kub-muted)]">
-                        {invitePolicy === "members_can_invite" ? "Все участники" : "Только администраторы"}
-                      </div>
-                    </div>
-                    {!invitePolicySupported && (
-                      <span className="shrink-0 rounded-full border border-[color:var(--kub-border-color)] px-2 py-0.5 text-[12px] font-semibold text-[color:var(--kub-muted)]">
-                        Недоступно
-                      </span>
-                    )}
-                  </div>
-                  {isOwnerOrAdmin && (
-                    <div className="grid grid-cols-2 gap-1">
-                      <button
-                        type="button"
-                        disabled={!invitePolicySupported || invitePolicySaving}
-                        onClick={() => void handleInvitePolicyChange("owner_admin_only")}
-                        className={cn(
-                          "h-8 rounded-lg px-2 text-xs font-semibold transition-colors disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed",
-                          invitePolicy === "owner_admin_only"
-                            ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
-                            : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] kub-raise-hover",
-                        )}
-                      >
-                        Администраторы
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!invitePolicySupported || invitePolicySaving}
-                        onClick={() => void handleInvitePolicyChange("members_can_invite")}
-                        className={cn(
-                          "h-8 rounded-lg px-2 text-xs font-semibold transition-colors disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed",
-                          invitePolicy === "members_can_invite"
-                            ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
-                            : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] kub-raise-hover",
-                        )}
-                      >
-                        Все участники
-                      </button>
-                    </div>
-                  )}
-                  {!invitePolicySupported && isOwnerOrAdmin && (
-                    <div className="mt-2 text-xs text-[color:var(--kub-muted)]">
-                      {INVITE_POLICY_MIGRATION_REQUIRED}
-                    </div>
-                  )}
-                  {invitePolicyError && (
-                    <div className="mt-2 text-xs text-[color:var(--kub-danger-text)]">
-                      {invitePolicyError}
-                    </div>
-                  )}
-                </div>
-              )}
-              {isGroup && chat.type === "group" && isOwner && (
-                <button
-                  onClick={async () => {
-                    const next = !chat.is_forum;
-                    const confirmed = await requestAppConfirm({
-                      title: next ? "Включить режим топиков?" : "Выключить режим топиков?",
-                      description: next
-                        ? "Все будущие сообщения можно будет отправлять в общий раздел или выбранный топик."
-                        : "Топики останутся в базе, но чат вернётся к обычному отображению.",
-                      confirmLabel: next ? "Включить" : "Выключить",
-                      icon: "hash",
-                    });
-                    if (!confirmed) return;
-                    const { error: updErr } = await supabase
-                      .from("chats").update({ is_forum: next }).eq("id", chat.id);
-                    if (updErr) {
-                      console.error("toggle is_forum failed:", updErr);
-                      showAppAlert(prefixError("Не удалось переключить режим топиков", updErr), "Ошибка");
-                      return;
-                    }
-                    setChats(chats.map((c) => c.id === chat.id ? { ...c, is_forum: next } : c));
-                    if (next) {
-                      const { data: existing } = await supabase
-                        .from("topics").select("id").eq("chat_id", chat.id).eq("is_general", true).maybeSingle();
-                      if (!existing) {
-                        const { error: tErr } = await supabase.from("topics").insert({
-                          chat_id: chat.id, name: "Общий", emoji: "💬", is_general: true, position: 0,
-                        });
-                        if (tErr) console.error("create general topic failed:", tErr);
-                      }
-                    }
-                  }}
-                  className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
-                >
-                  <KubIcon
-                    name="hash"
-                    size={17}
-                    tone={chat.is_forum ? "accent" : "muted"}
-                    className="shrink-0"
-                  />
-                  <span className="flex-1 text-left">Топики</span>
-                  <span className={cn(
-                    "text-[12px] uppercase tracking-wide font-semibold",
-                    chat.is_forum ? "text-[color:var(--kub-accent-text)]" : "text-[color:var(--kub-muted)]"
-                  )}>
-                    {chat.is_forum ? "Вкл" : "Выкл"}
-                  </span>
                 </button>
               )}
             </div>
@@ -1967,6 +1955,70 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
             </div>
           )}
         </div>
+      </div>
+      {/* The settings screen, the third layer of the same card (D-164). It
+          arrives from the right like the gallery does, which is what says it is
+          somewhere you came from rather than something that replaced the card. */}
+      <div
+        className="kub-subview absolute inset-0 overflow-y-auto"
+        data-state={view === "settings" ? "current" : "ahead"}
+        data-testid="chat-info-settings-view"
+        inert={view !== "settings"}
+      >
+        {isGroup && (
+          <ChatSettingsView
+            rows={settingsRows}
+            avatar={(
+              <div className="relative">
+                <ChatAvatar
+                  chat={{ id: chat.id, name: display.title, avatar_url: chat.avatar_url ?? null, type: chat.type }}
+                  size="xl"
+                  isSaved={display.isSaved}
+                />
+                {canEditChatProfile && (
+                  <label className="absolute bottom-0 right-0 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan">
+                    <KubIcon name="camera" size={14} label="Сменить аватар" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(event) => {
+                        const picked = event.target.files?.[0];
+                        if (picked) void handleAvatarChange(picked);
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+            )}
+            canEditProfile={canEditChatProfile}
+            name={name}
+            nameMaxLength={CHAT_NAME_MAX_LENGTH}
+            onNameChange={(value) => setName(limitText(value, CHAT_NAME_MAX_LENGTH))}
+            description={description}
+            onDescriptionChange={setDescription}
+            openRow={settingsRow}
+            onOpenRowChange={setSettingsRow}
+            invitePolicy={invitePolicySupported ? invitePolicy : null}
+            invitePolicySupported={invitePolicySupported}
+            invitePolicySaving={invitePolicySaving}
+            invitePolicyError={invitePolicyError}
+            invitePolicyNotice={invitePolicySupported ? null : INVITE_POLICY_MIGRATION_REQUIRED}
+            onInvitePolicyChange={(next) => void handleInvitePolicyChange(next)}
+            topicsBusy={topicsBusy}
+            onToggleTopics={() => void handleToggleTopics()}
+            onNavigate={(id) => {
+              // Every one of these is somewhere that already exists on the card
+              // root, so the row takes a person there rather than opening a
+              // fourth layer that would hold a copy of it.
+              setSettingsRow(null);
+              setView("root");
+              if (id === "administrators" || id === "members") setTab("members");
+              else if (id === "media") setTab("info");
+            }}
+            onDelete={() => setDeleteGroupOpen(true)}
+          />
+        )}
       </div>
       </div>
       <KubModal

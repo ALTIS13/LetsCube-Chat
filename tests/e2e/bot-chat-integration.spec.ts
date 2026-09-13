@@ -256,7 +256,7 @@ async function installSupabaseFixture(page: Page) {
         created_at: "2026-08-31T11:00:00.000Z",
         updated_at: "2026-08-31T12:01:00.000Z",
         is_forum: false,
-        invite_policy: "admins_only",
+        invite_policy: "owner_admin_only",
         members: [membership],
       }]);
     }

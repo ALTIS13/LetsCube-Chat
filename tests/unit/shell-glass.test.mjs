@@ -296,7 +296,11 @@ const veiled = [
   // The three actions moved into `RowActions.tsx`, which is counted below and
   // was added to this table in the same change, because a new file carrying
   // hovers escapes the two checks this table exists for until it is listed.
-  ["components/chat/ChatInfoPanel.tsx", 19],
+  // 17 since 2026-09-13: the invite-policy card and the topics row moved to
+  // the settings screen (D-164), taking their two hovers with them. The count
+  // is the point of this guard -- a hover that goes missing is invisible --
+  // so it is updated deliberately rather than widened into a range.
+  ["components/chat/ChatInfoPanel.tsx", 17],
   // Two, down from eleven on 2026-09-11: the hover cluster, the per-message
   // context menu and its reaction pickers left the bubble for
   // `MessageActionLayer` and `MessageReactions`, which are counted below.

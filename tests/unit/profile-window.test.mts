@@ -660,7 +660,10 @@ test("the section tab strip is gone from the sub-view", () => {
   // The title bar names the one kind that is open instead.
   assert.match(
     panelSource,
-    /const windowTitle = view === "gallery" \? \(activeSection\?\.label \?\? "Общие медиа"\) : rootTitle;/,
+    // Loosened on 2026-09-13 when the settings screen made this a three-way
+    // choice rather than a ternary (D-164). What is being guarded is that the
+    // gallery's title is the section's own name, and that is still the line.
+    /view === "gallery"\s*\n?\s*\? \(activeSection\?\.label \?\? "Общие медиа"\)/,
     "the sub-view title no longer names the kind that is open",
   );
 });

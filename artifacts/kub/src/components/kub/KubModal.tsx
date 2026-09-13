@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { KubIcon } from "./KubIcon";
 import { cn } from "@/lib/utils";
 
@@ -63,10 +64,31 @@ export function KubModal({
 
   if (!open) return null;
 
-  return (
+  /**
+   * Portalled to the body, and above the windows rather than below them
+   * (D-179).
+   *
+   * Two measured failures, one defect. The information card carries
+   * `kub-glass-strong`, whose `backdrop-filter` makes it the containing block
+   * for any `position: fixed` descendant — so a modal rendered as its child was
+   * trapped inside a 380-point column on a computer, its left edge 19 points
+   * *inside* the card. And the card stands at `z-[60]` while this overlay stood
+   * at `z-50`, so on a phone — where the card is the whole screen — the
+   * confirmation was painted behind it: the button was at full opacity with
+   * pointer events on, and `elementFromPoint` at its own centre answered a
+   * settings row underneath.
+   *
+   * Both are the trap D-163 recorded for the member-row menu, arriving again at
+   * the dialog, and the answer is the one that worked there: leave the
+   * containing block, and sit above what raised you. `z-[95]` is above the
+   * media viewer's `z-[90]` — a confirmation raised from a full-screen photo
+   * has to be reachable too — and below the ban screen's `z-[100]`, which is
+   * the one thing that outranks everything.
+   */
+  return createPortal(
     <div
       className={cn(
-        "kub-modal-overlay fixed inset-0 z-50 flex bg-[color:var(--kub-bg)]/75 backdrop-blur-sm",
+        "kub-modal-overlay fixed inset-0 z-[95] flex bg-[color:var(--kub-bg)]/75 backdrop-blur-sm",
         // A centred dialog keeps at least its 16px from every edge, and more
         // wherever the hardware takes more — `max()`, so on a screen without
         // insets it keeps exactly the padding it had.
@@ -153,6 +175,7 @@ export function KubModal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
