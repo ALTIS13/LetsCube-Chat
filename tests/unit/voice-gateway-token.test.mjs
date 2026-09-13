@@ -357,6 +357,27 @@ test("the signalling URL is translated to the SFU's http origin", () => {
   }
 });
 
+test("a path prefix survives the translation, because the SFU is behind one", () => {
+  // This SFU is published as a path on a shared hostname so that it needs no
+  // DNS record and no certificate of its own. Dropping the path -- which is
+  // what `new URL(...).origin` does, and what this function used to return --
+  // sends every twirp call to whatever else answers for that hostname. Here
+  // that is the release catalogue, which would answer 404 and look like an SFU
+  // that is down.
+  assert.equal(
+    livekitHttpOrigin("wss://api.letscube.ru/voice"),
+    "https://api.letscube.ru/voice",
+  );
+  assert.equal(
+    livekitHttpOrigin("wss://api.letscube.ru/voice/"),
+    "https://api.letscube.ru/voice",
+  );
+  assert.equal(
+    livekitHttpOrigin("http://letscube-voice:7880"),
+    "http://letscube-voice:7880",
+  );
+});
+
 test("the gateway's own modules log nothing", () => {
   for (
     const name of ["index.ts", "livekitToken.mjs", "roomName.mjs", "webhookAuth.mjs", "webhookEvents.mjs"]

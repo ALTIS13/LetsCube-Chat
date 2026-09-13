@@ -503,13 +503,23 @@ function base64url(value: string): string {
 /**
  * The credentials, or null when any of the three is absent.
  *
- * `LIVEKIT_URL` is the signalling URL the clients are given, so it usually
- * carries a WebSocket scheme; the twirp API lives on the same origin over HTTP.
- * Translating it here means one environment variable instead of two that can
- * disagree.
+ * Two URLs, not one, because in this deployment they are genuinely different
+ * things. `LIVEKIT_URL` is the signalling URL a *browser* dials, and here that
+ * is a path on a shared hostname (`wss://api.letscube.ru/voice`) so the SFU
+ * needs no DNS record and no certificate of its own. `LIVEKIT_API_URL` is where
+ * *this process* reaches the twirp API, which is the container on the internal
+ * network -- so the administrative API is never published to the internet at
+ * all.
+ *
+ * Deriving one from the other is what the first draft did, and it is wrong in
+ * exactly this arrangement: `new URL(...).origin` drops the path, so a twirp
+ * call built from the public URL would land on whatever else answers for that
+ * hostname. `LIVEKIT_API_URL` therefore wins when it is set, and `LIVEKIT_URL`
+ * is the fallback for a deployment where the SFU does own its hostname.
  */
 function livekitCredentials(): LiveKitCredentials | null {
-  const rawUrl = process.env["LIVEKIT_URL"]?.trim();
+  const apiUrl = process.env["LIVEKIT_API_URL"]?.trim();
+  const rawUrl = apiUrl || process.env["LIVEKIT_URL"]?.trim();
   const apiKey = process.env["LIVEKIT_API_KEY"]?.trim();
   const apiSecret = process.env["LIVEKIT_API_SECRET"]?.trim();
   if (!rawUrl || !apiKey || !apiSecret) return null;
@@ -519,6 +529,11 @@ function livekitCredentials(): LiveKitCredentials | null {
   return { base, apiKey, apiSecret };
 }
 
+/**
+ * The base every twirp path is appended to. The **path is kept**: an SFU behind
+ * a path prefix answers at `<origin><prefix>/twirp/...`, and `origin` alone
+ * would silently address a different service.
+ */
 function httpBase(rawUrl: string): string | null {
   let parsed: URL;
   try {
@@ -529,7 +544,8 @@ function httpBase(rawUrl: string): string | null {
   if (parsed.protocol === "ws:") parsed.protocol = "http:";
   else if (parsed.protocol === "wss:") parsed.protocol = "https:";
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
-  return parsed.origin;
+  const path = parsed.pathname.replace(/\/+$/, "");
+  return parsed.origin + path;
 }
 
 function warnOnce(key: string, message: string, err?: unknown): void {

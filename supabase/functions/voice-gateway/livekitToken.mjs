@@ -210,7 +210,11 @@ export function livekitHttpOrigin(value) {
         : null;
   if (scheme === null) return null;
   url.protocol = scheme;
-  return url.origin;
+  // The path is kept. An SFU behind a path prefix -- which is how this one is
+  // published, so that it needs no hostname and no certificate of its own --
+  // answers at `<origin><prefix>/twirp/...`; `url.origin` alone would address
+  // whatever else serves that hostname, which here is the release catalogue.
+  return url.origin + url.pathname.replace(/\/+$/, "");
 }
 
 export function base64UrlBytes(bytes) {

@@ -10,9 +10,11 @@
 // a LiveKit-signed JWT that Kong would otherwise reject before it arrived.
 //
 // Environment: LIVEKIT_URL (the signalling URL clients dial, `wss://…`),
-// LIVEKIT_API_KEY, LIVEKIT_API_SECRET, plus the SUPABASE_* triple every gateway
-// here already has. On the SFU, `webhook.api_key` must name the same key and
-// `webhook.urls` must point at `<functions host>/voice-gateway/webhook`.
+// LIVEKIT_API_URL (optional — where *this* function reaches the twirp API, for a
+// deployment that keeps that API off the internet), LIVEKIT_API_KEY,
+// LIVEKIT_API_SECRET, plus the SUPABASE_* triple every gateway here already has.
+// On the SFU, `webhook.api_key` must name the same key and `webhook.urls` must
+// point at `<functions host>/voice-gateway/webhook`.
 //
 // One thing to check at deploy rather than assume: LiveKit sends no `apikey`
 // header, so the webhook URL has to reach this function without one. If the
@@ -397,7 +399,14 @@ function readEnvironment(): Environment | null {
   const livekitUrl = Deno.env.get("LIVEKIT_URL");
   const livekitApiKey = Deno.env.get("LIVEKIT_API_KEY");
   const livekitApiSecret = Deno.env.get("LIVEKIT_API_SECRET");
-  const livekitOrigin = livekitHttpOrigin(livekitUrl);
+  // Two URLs, because here they are different things. `LIVEKIT_URL` is what a
+  // browser dials and goes in the response; `LIVEKIT_API_URL` is where this
+  // function reaches the twirp API, which is the container on the internal
+  // network -- so the administrative API is never published at all. Where the
+  // SFU owns a hostname the second is unset and the first serves for both.
+  const livekitOrigin = livekitHttpOrigin(
+    Deno.env.get("LIVEKIT_API_URL") || livekitUrl,
+  );
   if (
     !supabaseUrl ||
     !publicKey ||

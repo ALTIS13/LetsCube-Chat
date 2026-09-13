@@ -85,21 +85,31 @@ function createBackend({ channels = [CHANNEL_A], livekit = {}, rooms = [], missi
     // turns a missing body into a stub bug that reads like a worker bug.
     const body = () => JSON.parse(init.body);
 
-    if (url.pathname.startsWith("/twirp/livekit.RoomService/")) {
-      const rpc = url.pathname.slice("/twirp/livekit.RoomService/".length);
+    // Found anywhere in the path, not only at its start: an SFU published
+    // behind a path prefix answers at `<prefix>/twirp/...`, and a stub that
+    // only matched the bare path would make that arrangement look like a
+    // worker that never called LiveKit at all.
+    const twirp = url.pathname.indexOf("/twirp/livekit.RoomService/");
+    if (twirp >= 0) {
+      const rpc = url.pathname.slice(twirp + "/twirp/livekit.RoomService/".length);
       const headers = init.headers ?? {};
       const wanted = body().room;
       livekitCalls.push({
         rpc,
         room: wanted,
-        origin: url.origin,
+        // The base the worker appended `/twirp/...` to, prefix included.
+        origin: url.origin + url.pathname.slice(0, twirp),
         authorization: headers.authorization ?? headers.Authorization,
       });
 
       if (rpc === "ListRooms") {
         if (rooms === "throw") throw new TypeError("fetch failed");
         if (rooms.status >= 400) return json({ code: 13, msg: "internal" }, rooms.status);
-        // proto3 JSON omits an empty repeated field, so no rooms means `{}`.
+        // `{}` for no rooms is the defensive case, not the observed one:
+        // LiveKit 1.8.4 was measured answering `{"participants":[]}` for an
+        // empty room rather than omitting the field. A proto3 JSON encoder is
+        // permitted to omit an empty repeated field, so the worker accepts
+        // both, and this stub exercises the shape that is easier to get wrong.
         return json(
           rooms.length === 0 ? {} : { rooms: rooms.map((name) => ({ sid: `RM_${name}`, name })) },
         );
@@ -340,6 +350,41 @@ test("the admin token names the room it administers, and is really signed", asyn
     .digest("base64url");
   assert.equal(signature, expected, "the signature verifies against the secret");
   assert.ok(!token.includes(process.env["LIVEKIT_API_SECRET"]), "the secret is not in the token");
+});
+
+test("LIVEKIT_API_URL is where the worker calls, path and all", async () => {
+  // In production the SFU is published as a path on a shared hostname, so that
+  // it needs no DNS record and no certificate of its own -- and its twirp API
+  // is not published at all. This worker runs inside the same docker host, so
+  // it is given the container address instead, and a deployment where the SFU
+  // owns a hostname sets neither and keeps using `LIVEKIT_URL`.
+  //
+  // A path must survive: `new URL(...).origin` drops it, and the call would
+  // then go to whatever else answers for that hostname.
+  const previous = process.env["LIVEKIT_API_URL"];
+  process.env["LIVEKIT_API_URL"] = "http://letscube-voice:7880/voice";
+  try {
+    const backend = createBackend({
+      channels: [CHANNEL_A],
+      livekit: { [room(CHANNEL_A)]: { participants: [] } },
+    });
+    await tick(backend);
+    assert.equal(
+      backend.participantCalls()[0].origin,
+      "http://letscube-voice:7880/voice",
+    );
+  } finally {
+    if (previous === undefined) delete process.env["LIVEKIT_API_URL"];
+    else process.env["LIVEKIT_API_URL"] = previous;
+  }
+
+  // And with it gone the public URL is what is used again.
+  const fallback = createBackend({
+    channels: [CHANNEL_A],
+    livekit: { [room(CHANNEL_A)]: { participants: [] } },
+  });
+  await tick(fallback);
+  assert.equal(fallback.participantCalls()[0].origin, "http://voice.internal:7880");
 });
 
 test("only the channels the table believes are live are asked about", async () => {

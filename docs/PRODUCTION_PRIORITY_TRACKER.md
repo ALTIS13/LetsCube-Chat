@@ -552,6 +552,62 @@ route on `app.letscube.ru`. Slice 1 had to be cheap to discard, and it is.
 
 ## Last Confirmed Deploy Baseline
 
+**`7260ee8`, deployed 2026-09-14**, the fourth deploy of this run: voice slice 2.
+
+**Nothing in it is visible yet, deliberately.** A voice channel is a row in
+`public.voice_channels`, no row exists, and nothing in this interface creates
+one -- so the capsule and the panel row have nothing to show, and the reconciler
+sleeps without `LIVEKIT_*`. The code is reviewed, built and deployed before the
+SFU it needs exists, which is the opposite of putting a stub in front of people.
+
+- `letscube-web` runs `l64kyyu1sysev2izzjjbizhe:7260ee8002796115d72a4e8c8faaed46781d854b`
+  -- the full SHA read off the running container, not trusted from the webhook --
+  healthy; `https://app.letscube.ru` answers 200.
+- **Marker calibrated both ways**: «не умеет записывать звук» is in the bundle
+  built here (1) and was absent from what production served before the push (0),
+  with «Голосовое» as the control at 5 both times. The served file went from
+  `index-ss_27b8S.js` to `index-mSZR-sOQ.js`. Two mid-rollover reads returned a
+  144-byte asset -- "I cannot see", not "not deployed" -- and the watch kept
+  going rather than concluding.
+- The SDK is its own chunk: `livekit-client.esm-DijAR4tD.js`, 561.21 kB /
+  147.71 kB gzip, served 200 and reached only by a dynamic import. Proved both
+  ways -- three SDK strings present in that chunk and absent from the entry, and
+  a fourth marker absent from both as the calibration.
+- `letscube-worker` and `letscube-bot-gateway` are not redeployed by this push;
+  `artifacts/api-server` did move, so the worker will pick the reconciler up on
+  its next deploy, where it will log that `LIVEKIT_*` is missing and sleep.
+- **`letscube-voice-probe` runs beside them**, restored to its slice 1
+  configuration after the webhook capture: no webhook block, no ufw rule.
+
+### What slice 2 measured against the real SFU
+
+Five things the gateway had been written to believe, checked on the probe rather
+than read about, and the two that were wrong:
+
+1. **The webhook `Authorization` header carries the token alone, with no
+   `Bearer`.** The route used a Bearer-only reader, so every real delivery would
+   have been refused 401 -- a deployed gateway and a silent SFU, with nothing in
+   a log to say which. The unit tests missed it because they were written from
+   the same assumption; they now send the measured form, and restoring the old
+   reader turns eight of them red.
+2. **`public.profiles` has no `display_name`.** The gateway asked for it and its
+   own cosmetic fallback swallowed the error, so every caller would have joined
+   nameless. The test stub had invented the column too.
+3. `sha256` is standard base64, the body is camelCase with unpopulated fields
+   omitted, `participant.joinedAt` is a decimal string present on the leave as
+   well as the join, and four of the six events one call produces are ones to
+   ignore before touching the idempotency table.
+4. **`maxParticipants` is enforced by the SFU**: a room capped at two took two
+   publishers and refused the third.
+5. LiveKit 1.8.4 answers `{"participants":[]}` for an empty room; the reconciler
+   comment claiming proto3 omits the field was wrong, though its handling was
+   right.
+
+`docs/operations/voice-probe.md` carries the table and the four environmental
+traps that cost an hour before the first webhook arrived.
+
+### The previous baseline
+
 **`e6006f5`, deployed 2026-09-13**, the third deploy of the day. The badge
 reaches the member list and the profile dialog; signing out and leaving settings
 with something typed both ask first; and a dialog no longer dismisses itself on

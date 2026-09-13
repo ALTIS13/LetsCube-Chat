@@ -135,6 +135,37 @@ function createRoomCall() {
 
 // ── POST /voice-gateway/token ────────────────────────────────────────────────
 
+test("CreateRoom goes to LIVEKIT_API_URL when there is one, not to the public URL", async () => {
+  // The URL a browser dials and the URL this function calls are different in
+  // production: the first is a path on a shared hostname, the second is the
+  // container on the internal network, so the administrative API is never
+  // published at all. What comes back to the client must still be the public
+  // one -- an internal name is unreachable from a browser.
+  reset({}, { LIVEKIT_API_URL: "http://letscube-voice:7880" });
+  const response = await handler(tokenRequest());
+
+  assert.equal(response.status, 200);
+  const call = createRoomCall();
+  assert.ok(call, "no CreateRoom was made");
+  assert.equal(
+    String(call[0]),
+    "http://letscube-voice:7880/twirp/livekit.RoomService/CreateRoom",
+  );
+  assert.equal((await readJson(response)).url, SIGNALLING_URL);
+});
+
+test("without LIVEKIT_API_URL the public URL is still what CreateRoom uses", async () => {
+  reset();
+  await handler(tokenRequest());
+
+  const call = createRoomCall();
+  assert.ok(call, "no CreateRoom was made");
+  assert.ok(
+    String(call[0]).startsWith(SIGNALLING_URL.replace(/^wss:/, "https:").replace(/^ws:/, "http:")),
+    `CreateRoom went to ${call[0]}`,
+  );
+});
+
 test("the profile read names columns the database actually has", async () => {
   reset();
   await handler(tokenRequest());
