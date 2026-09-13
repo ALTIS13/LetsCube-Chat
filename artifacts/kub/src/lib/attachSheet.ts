@@ -257,6 +257,12 @@ export interface AttachSendRequest {
   photoQuality: MediaQuality;
   caption: string;
   source: IncomingFilesSource;
+  /**
+   * For a file the sheet replaced with a smaller one, the size of what was
+   * picked (D-175). The tray reads it to say «после сжатия»; without it a
+   * transcoded video arrives looking as though it had always been that size.
+   */
+  originalSizes?: ReadonlyMap<File, number>;
 }
 
 /** Files that reached the composer another way — pasted, dropped, shot on a webcam — and open the sheet. */

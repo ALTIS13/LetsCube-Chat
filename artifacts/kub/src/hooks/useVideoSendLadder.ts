@@ -43,8 +43,14 @@ export interface VideoSendLadder {
   /**
    * The files to send: every video the chosen stop encodes, replaced by its
    * smaller self. `null` means the person cancelled, and nothing should be sent.
+   *
+   * `origins` maps each replacement back to the size of the file it replaced, so
+   * the tray can say «после сжатия» and mean it. Without it the staged
+   * attachment carries the transcoded file as though it were the original, and
+   * the one number that would tell a person their wait was worth something is
+   * the only one missing.
    */
-  prepare: (files: readonly File[]) => Promise<File[] | null>;
+  prepare: (files: readonly File[]) => Promise<{ files: File[]; origins: Map<File, number> } | null>;
 }
 
 interface LadderFacts {
@@ -163,7 +169,7 @@ export function useVideoSendLadder(picks: readonly VideoSendPick[]): VideoSendLa
   }, []);
 
   const prepare = useCallback(
-    async (files: readonly File[]): Promise<File[] | null> => {
+    async (files: readonly File[]): Promise<{ files: File[]; origins: Map<File, number> } | null> => {
       const byFile = new Map<File, SelectedVideo>();
       for (const pick of picksRef.current) {
         const video = readRef.current.get(pick.id);
@@ -179,7 +185,8 @@ export function useVideoSendLadder(picks: readonly VideoSendPick[]): VideoSendLa
         return plan.action === "transcode" ? { file, plan } : null;
       });
       const total = plans.filter(Boolean).length;
-      if (!total) return [...files];
+      const origins = new Map<File, number>();
+      if (!total) return { files: [...files], origins };
 
       const controller = new AbortController();
       abortRef.current = controller;
@@ -200,14 +207,17 @@ export function useVideoSendLadder(picks: readonly VideoSendPick[]): VideoSendLa
           // A transcode that failed for any other reason is not a failed send:
           // the picked bytes go, which is the path a browser without an encoder
           // takes anyway.
-          if (encoded) prepared[index] = encoded;
+          if (encoded) {
+            prepared[index] = encoded;
+            origins.set(encoded, entry.file.size);
+          }
           done += 1;
         }
       } finally {
         abortRef.current = null;
         setProgress(null);
       }
-      return prepared;
+      return { files: prepared, origins };
     },
     [facts.encodable, stop],
   );

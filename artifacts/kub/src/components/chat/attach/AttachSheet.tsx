@@ -314,11 +314,12 @@ export default function AttachSheet({
     // «Отмена», rather than behind a sheet that has already closed. A send asked
     // for as originals is never encoded — that is what «Отправить без сжатия»
     // means.
-    const files = plan.compress ? await ladder.prepare(plan.send) : plan.send;
+    const prepared = plan.compress ? await ladder.prepare(plan.send) : { files: plan.send, origins: undefined };
     // Cancelled: the selection stays where it was and nothing is sent.
-    if (!files) return;
+    if (!prepared) return;
     onSendMedia({
-      files,
+      files: prepared.files,
+      originalSizes: prepared.origins,
       compress: plan.compress,
       caption: caption.trim(),
       source: chosen[0].source,

@@ -344,7 +344,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const stageFiles = useCallback(async (
     files: File[],
     _source: IncomingFilesSource,
-    options: { compress?: boolean; photoQuality?: MediaQuality } = {},
+    options: {
+      compress?: boolean;
+      photoQuality?: MediaQuality;
+      /** What a file weighed before the sheet replaced it with a smaller one (D-175). */
+      originalSizes?: ReadonlyMap<File, number>;
+    } = {},
   ): Promise<StagedAttachment[]> => {
     if (!files.length) return [];
     const compress = options.compress !== false;
@@ -372,7 +377,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       }
       const preparation = planAttachmentPreparation(sourceFile.type, compress);
       let file = sourceFile;
-      let optimized = false;
+      // A video the attach sheet already encoded arrives here as the small file,
+      // so nothing downstream can tell it was made smaller. The sheet hands over
+      // what it weighed before, which is both the truth and the only way the
+      // tray can say «после сжатия» about a wait somebody sat through (D-175).
+      const pickedSize = options.originalSizes?.get(sourceFile) ?? sourceFile.size;
+      let optimized = pickedSize > sourceFile.size;
       let decodedDimensions: MediaDimensions | null = null;
       if (preparation === "original") {
         // Before anything reads the file: a refused original costs no decode.
@@ -451,7 +461,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         width: dimensions?.width,
         height: dimensions?.height,
         optimized,
-        originalSize: sourceFile.size,
+        originalSize: pickedSize,
         originalMimeType: sourceFile.type || undefined,
         // No quality is chosen any more (D-119): a video goes at the standard one.
         // A video carries the recorder vocabulary; a photograph now carries
@@ -814,6 +824,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     const staged = await stageFiles(request.files, request.source, {
       compress: request.compress,
       photoQuality: request.photoQuality,
+      originalSizes: request.originalSizes,
     });
     if (!staged.length) return;
     await sendStagedAttachments(request.caption, undefined, staged);
