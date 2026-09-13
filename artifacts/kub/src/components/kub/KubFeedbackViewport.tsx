@@ -80,7 +80,15 @@ export function KubFeedbackViewport() {
           role={item.kind === "error" ? "alert" : "status"}
           aria-live={item.kind === "error" ? "assertive" : "polite"}
           className={cn(
-            "kub-feedback-card pointer-events-auto relative flex w-full max-w-sm items-start gap-2.5",
+            // D-186. The card itself takes no clicks, only its close button
+            // does. It used to be `pointer-events-auto` as a whole, and the
+            // offset above was tuned so it would clear the chrome — 108px, from
+            // the staff area's 56 + 45. The bots page stacks its tabs lower, at
+            // 147, so the card sat squarely on them and for the 2.4 seconds it
+            // was up a press on «Диагностика» went into the toast. A number
+            // tuned against one layout cannot hold for the next one; a card that
+            // swallows nothing does not need to be tuned at all.
+            "kub-feedback-card pointer-events-none relative flex w-full max-w-sm items-start gap-2.5",
             "overflow-hidden rounded-xl border border-[color:var(--kub-border-color)]",
             // A toast floats over whatever the person was looking at, so it
             // takes the covering fill rather than the panel one.
@@ -104,7 +112,7 @@ export function KubFeedbackViewport() {
             type="button"
             onClick={() => actionFeedback.dismiss(item.id)}
             aria-label="Закрыть уведомление"
-            className="kub-icon-action kub-interactive shrink-0 rounded-md text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
+            className="kub-icon-action kub-interactive pointer-events-auto shrink-0 rounded-md text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
           >
             <KubIcon name="close" size={13} />
           </button>

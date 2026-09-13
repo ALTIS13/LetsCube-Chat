@@ -6,6 +6,25 @@ const OWNER_BOT_ID = "22222222-2222-4222-8222-222222222222";
 const DEVELOPER_BOT_ID = "33333333-3333-4333-8333-333333333333";
 const RAW_TOKEN = "lc_bot_0123456789.abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG";
 const NOW = "2026-08-31T12:00:00.000Z";
+const DEVELOPER_USER_ID = "44444444-4444-4444-8444-000000000001";
+const DEVELOPER_NAME = "Анна Смирнова";
+const WEBHOOK_URL = "https://hooks.example.invalid/letscube";
+/**
+ * A picture for one of the two bots, so «the bot's own picture» and «the robot
+ * where there is none» are both on the screen at once (D-145, row B-03).
+ *
+ * Inline rather than fetched: it has to be a URL the page can really load, and
+ * the management fixture owns a different origin than the storage bucket a real
+ * avatar lives in. Drawn, not photographic, so nothing recognisable can end up
+ * in a screenshot.
+ */
+const BOT_AVATAR = `data:image/svg+xml;base64,${Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96">' +
+    '<rect width="96" height="96" fill="#f2a33c"/>' +
+    '<circle cx="48" cy="37" r="17" fill="#1d2430"/>' +
+    '<rect x="19" y="60" width="58" height="28" rx="14" fill="#1d2430"/>' +
+    "</svg>",
+).toString("base64")}`;
 
 test.describe("authenticated bot management", () => {
   test.beforeEach(async ({ page }) => {
@@ -285,6 +304,241 @@ test.describe("authenticated bot management", () => {
     await expect(page.getByRole("button", { name: "Выпустить новый токен" })).toHaveCount(0);
   });
 
+  // D-145, row B-03. The list drew a robot for every bot and never read
+  // `avatar_url`, while the settings header one pane to the right drew the
+  // picture — so an owner could see their own upload and its absence at once.
+  test("draws a bot's own picture in the list, and the robot only where there is none", async ({ page }) => {
+    await installManagementFixture(page);
+    await page.goto("/bots");
+
+    const withPicture = page.getByRole("button", { name: /Owner bot/ });
+    const without = page.getByRole("button", { name: /Developer bot/ });
+    await expect(withPicture.locator("img")).toHaveAttribute("src", BOT_AVATAR);
+    await expect(withPicture.locator("img")).toHaveAttribute("alt", "Owner bot");
+    // The fallback is a glyph on a fill rather than an image, and it is still a
+    // bot rather than the monogram a person would get.
+    await expect(without.locator("img")).toHaveCount(0);
+    await expect(without.locator('[data-message-actor-kind="bot"]')).toHaveCount(1);
+    await expect(without.locator('[data-message-actor-kind="bot"] svg')).toHaveCount(1);
+
+    // And the same picture in the settings header, which is where it already
+    // was — the two panes have to agree.
+    await withPicture.click();
+    await expect(page.getByTestId("bots-detail-pane").locator("img").first()).toHaveAttribute("src", BOT_AVATAR);
+  });
+
+  // D-145, row B-19. Every save ended in silence, so pressing the button again
+  // was the only way to learn whether the first press had done anything.
+  test("says a save worked, in the product's own confirmation", async ({ page }) => {
+    await installManagementFixture(page);
+    await page.goto(`/bots?bot=${OWNER_BOT_ID}`);
+
+    await expect(page.getByTestId("kub-feedback-viewport")).toHaveCount(0);
+    await page.getByRole("button", { name: "Сохранить профиль" }).click();
+    const feedback = page.getByTestId("kub-feedback-viewport");
+    await expect(feedback).toContainText("Сохранено");
+    await expect(feedback).toContainText("Профиль бота обновлён.");
+  });
+
+  // D-186, found by looking at the 1440 frames of the test above: the card sat
+  // at y 108-169 and the tab strip at 147-191, so for the 2.4 seconds a
+  // confirmation was up, a press on «Диагностика» went into the toast. The
+  // viewport's offset had been measured against the staff area, whose tabs end
+  // at 101; the bots page stacks them lower. The fix is not another number —
+  // the card takes no clicks at all now, only its close button does.
+  test("a confirmation floats over the tabs without swallowing a press", async ({ page }) => {
+    await installManagementFixture(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`/bots?bot=${OWNER_BOT_ID}`);
+
+    await page.getByRole("button", { name: "Сохранить профиль" }).click();
+    const feedback = page.getByTestId("kub-feedback-viewport");
+    await expect(feedback).toContainText("Сохранено");
+
+    const card = feedback.locator("[role=status], [role=alert]").first();
+    const box = await card.boundingBox();
+    expect(box, "the confirmation was not drawn").not.toBeNull();
+
+    // What is under the middle of the card, asked of the browser rather than
+    // worked out from two rectangles.
+    const underneath = await page.evaluate(
+      ({ x, y }) => {
+        const element = document.elementFromPoint(x, y);
+        return {
+          isTheCard: Boolean(element?.closest("[data-testid=kub-feedback-viewport]")),
+          tag: element?.tagName.toLowerCase() ?? null,
+        };
+      },
+      { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 },
+    );
+    expect(underneath.isTheCard, "the card is still taking presses meant for what is behind it").toBe(false);
+
+    // And it is still dismissible, which is the whole reason the card used to
+    // take clicks in the first place.
+    const close = feedback.getByRole("button", { name: "Закрыть уведомление" }).first();
+    await expect(close).toBeVisible();
+    await close.click();
+    await expect(feedback).toHaveCount(0);
+  });
+
+  // D-145, row B-19. Every failure landed in one banner above the tabs, which
+  // on another tab belonged to a section the reader could not see at all.
+  test("puts a failure beside the section that failed, and nowhere else", async ({ page }) => {
+    await installManagementFixture(page);
+    await page.route(`${API}/bots/${OWNER_BOT_ID}/webhook`, async (route) => {
+      if (route.request().method() === "PUT") {
+        await failure(route, 400, "validation_failed");
+        return;
+      }
+      await route.fallback();
+    });
+    await page.goto(`/bots?bot=${OWNER_BOT_ID}`);
+
+    await page.getByRole("tab", { name: "API" }).click();
+    await page.getByLabel("URL webhook").fill(WEBHOOK_URL);
+    await page.getByLabel("Секрет подписи").fill("fixture_secret_0123456789");
+    await page.getByRole("button", { name: "Сохранить webhook", exact: true }).click();
+
+    const webhookSection = section(page, "Webhook");
+    await expect(webhookSection.getByRole("alert")).toContainText("Проверьте заполненные поля.");
+    // Inside its own box and nowhere else: not above the tabs, and not in a
+    // sibling section that had nothing to do with the press.
+    await expect(page.getByRole("alert")).toHaveCount(1);
+    await expect(section(page, "Команды").getByRole("alert")).toHaveCount(0);
+    const tabs = page.getByRole("tablist");
+    expect(await verticalOrder(tabs, webhookSection.getByRole("alert"))).toBe("after");
+  });
+
+  // D-133, rows B-08, B-12 and B-15. Each acted the moment it was pressed.
+  test("asks before removing the picture, the webhook and a developer", async ({ page }) => {
+    await installManagementFixture(page);
+    const calls = { avatar: 0, webhook: 0, developer: 0 };
+    await page.route(`${API}/bots/${OWNER_BOT_ID}/avatar`, async (route) => {
+      if (route.request().method() === "PATCH") calls.avatar += 1;
+      await route.fallback();
+    });
+    await page.route(`${API}/bots/${OWNER_BOT_ID}/webhook`, async (route) => {
+      if (route.request().method() === "DELETE") calls.webhook += 1;
+      await route.fallback();
+    });
+    await page.route(`${API}/bots/${OWNER_BOT_ID}/developers/${DEVELOPER_USER_ID}`, async (route) => {
+      if (route.request().method() === "DELETE") calls.developer += 1;
+      await route.fallback();
+    });
+    await page.goto(`/bots?bot=${OWNER_BOT_ID}`);
+
+    // B-08 — the picture.
+    await page.getByRole("button", { name: "Убрать", exact: true }).click();
+    const avatarQuestion = confirmation(page, "Убрать картинку бота?");
+    await expect(avatarQuestion).toContainText("значком робота");
+    await avatarQuestion.getByRole("button", { name: "Отмена" }).click();
+    await expect(avatarQuestion).toHaveCount(0);
+    expect(calls.avatar).toBe(0);
+    await page.getByRole("button", { name: "Убрать", exact: true }).click();
+    await confirmation(page, "Убрать картинку бота?").getByRole("button", { name: "Убрать", exact: true }).click();
+    await expect(page.getByTestId("kub-feedback-viewport")).toContainText("Картинка убрана");
+    expect(calls.avatar).toBe(1);
+
+    // B-12 — the webhook.
+    await page.getByRole("tab", { name: "API" }).click();
+    await page.getByRole("button", { name: "Удалить webhook", exact: true }).click();
+    const webhookQuestion = confirmation(page, "Удалить webhook?");
+    await expect(webhookQuestion).toContainText("перестанет получать обновления");
+    await expect(webhookQuestion).toContainText("останутся в очереди");
+    await webhookQuestion.getByRole("button", { name: "Отмена" }).click();
+    expect(calls.webhook).toBe(0);
+    // The line follows the box above the button: with pending updates dropped,
+    // the queue is thrown away rather than kept.
+    await page.getByLabel("Удалить ожидающие обновления").check();
+    await page.getByRole("button", { name: "Удалить webhook", exact: true }).click();
+    const droppingQuestion = confirmation(page, "Удалить webhook?");
+    await expect(droppingQuestion).toContainText("удалены без доставки");
+    await droppingQuestion.getByRole("button", { name: "Удалить webhook", exact: true }).click();
+    await expect(page.getByTestId("kub-feedback-viewport")).toContainText("Webhook удалён");
+    expect(calls.webhook).toBe(1);
+
+    // B-15 — the one that reaches somebody else, so the question names them.
+    await page.getByRole("tab", { name: "Команда" }).click();
+    await page.getByRole("button", { name: `Удалить разработчика ${DEVELOPER_NAME}` }).click();
+    const developerQuestion = confirmation(page, "Убрать разработчика?");
+    await expect(developerQuestion).toContainText(DEVELOPER_NAME);
+    await expect(developerQuestion).toContainText("потеряет доступ");
+    await developerQuestion.getByRole("button", { name: "Отмена" }).click();
+    expect(calls.developer).toBe(0);
+    await page.getByRole("button", { name: `Удалить разработчика ${DEVELOPER_NAME}` }).click();
+    await confirmation(page, "Убрать разработчика?").getByRole("button", { name: "Убрать", exact: true }).click();
+    await expect(page.getByTestId("kub-feedback-viewport")).toContainText("Разработчик убран");
+    expect(calls.developer).toBe(1);
+  });
+
+  // D-145. The secret is not kept by the server in a form the browser can
+  // resend, so the field says why instead of looking broken.
+  test("explains why the signing secret has to be typed again", async ({ page }) => {
+    await installManagementFixture(page);
+    await page.goto(`/bots?bot=${OWNER_BOT_ID}`);
+    await page.getByRole("tab", { name: "API" }).click();
+
+    const webhookSection = section(page, "Webhook");
+    await expect(webhookSection).toContainText("Сервер не возвращает сохранённый секрет");
+    await expect(webhookSection).toContainText("даже если меняется только адрес");
+    // The address is already filled from the saved webhook, and the button is
+    // still held back — which is exactly the state the sentence explains.
+    await expect(page.getByLabel("URL webhook")).toHaveValue(WEBHOOK_URL);
+    await expect(page.getByLabel("Секрет подписи")).toHaveValue("");
+    await expect(page.getByRole("button", { name: "Сохранить webhook", exact: true })).toBeDisabled();
+    await page.getByLabel("Секрет подписи").fill("fixture_secret_0123456789");
+    await expect(page.getByRole("button", { name: "Сохранить webhook", exact: true })).toBeEnabled();
+  });
+
+  test("records the bot surfaces in both themes", async ({ page }, testInfo) => {
+    await installManagementFixture(page);
+    let failWebhookSave = false;
+    await page.route(`${API}/bots/${OWNER_BOT_ID}/webhook`, async (route) => {
+      if (failWebhookSave && route.request().method() === "PUT") {
+        await failure(route, 400, "validation_failed");
+        return;
+      }
+      await route.fallback();
+    });
+
+    for (const theme of ["dark", "light"] as const) {
+      const shot = (name: string) => `output/bots/${name}-${theme}-${testInfo.project.name}.png`;
+
+      failWebhookSave = false;
+      await page.goto("/bots");
+      await page.evaluate((value) => localStorage.setItem("kub-theme", value), theme);
+      await page.reload();
+      await expect(page.getByRole("button", { name: /Owner bot/ })).toBeVisible();
+      await page.screenshot({ path: shot("list") });
+
+      await page.getByRole("button", { name: /Owner bot/ }).click();
+      await page.getByRole("button", { name: "Сохранить профиль" }).click();
+      await expect(page.getByTestId("kub-feedback-viewport")).toContainText("Сохранено");
+      await page.screenshot({ path: shot("save") });
+
+      // The success is evidence of its own; leaving it up would put it over the
+      // next frame, whose subject is an error somewhere else on the screen.
+      await page.getByRole("button", { name: "Закрыть уведомление" }).click();
+      await expect(page.getByTestId("kub-feedback-viewport")).toHaveCount(0);
+
+      failWebhookSave = true;
+      await page.getByRole("tab", { name: "API" }).click();
+      await page.getByLabel("Секрет подписи").fill("fixture_secret_0123456789");
+      await page.getByRole("button", { name: "Сохранить webhook", exact: true }).click();
+      const webhookSection = section(page, "Webhook");
+      await expect(webhookSection.getByRole("alert")).toBeVisible();
+      await webhookSection.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: shot("error") });
+
+      await page.getByRole("button", { name: "Удалить webhook", exact: true }).click();
+      const question = confirmation(page, "Удалить webhook?");
+      await expect(question).toBeVisible();
+      await settledDialog(page);
+      await page.screenshot({ path: shot("confirm") });
+      await question.getByRole("button", { name: "Отмена" }).click();
+    }
+  });
+
   test("uses desktop master-detail and mobile one-pane without overflow", async ({ page }, testInfo) => {
     await installManagementFixture(page);
     await page.goto("/bots");
@@ -317,6 +571,46 @@ test.describe("authenticated bot management", () => {
     await expect(page.getByTestId("bots-detail-pane")).toBeHidden();
   });
 });
+
+/** One of the panel's settings boxes, by the heading it is labelled with. */
+const section = (page: Page, title: string) =>
+  page.locator(`section[aria-labelledby="bot-section-${title}"]`);
+
+/** The shared confirmation, whichever question it is asking. */
+const confirmation = (page: Page, title: string) =>
+  page.locator('[role="dialog"][aria-modal="true"]').filter({ hasText: title });
+
+/**
+ * Which of two elements is lower on the page.
+ *
+ * The defect this replaces was a position, not a wording: the message really
+ * did exist, above the tabs, where nothing connected it to the button that
+ * produced it. Measuring the box is the only way to hold that.
+ */
+async function verticalOrder(first: ReturnType<Page["locator"]>, second: ReturnType<Page["locator"]>) {
+  const [above, below] = await Promise.all([first.boundingBox(), second.boundingBox()]);
+  if (!above || !below) throw new Error("both elements must be on the screen to be ordered");
+  return below.y > above.y ? "after" : "before";
+}
+
+/**
+ * Until the dialog has finished arriving.
+ *
+ * The overlay fades and the panel lifts, and Playwright calls both visible at
+ * an opacity of zero — so a screenshot taken on «visible» catches the entrance
+ * rather than the dialog. The same trap the settings specs record.
+ */
+async function settledDialog(page: Page) {
+  await page.waitForFunction(() => {
+    const last = (selector: string) => {
+      const all = document.querySelectorAll(selector);
+      return all.length ? all[all.length - 1] : null;
+    };
+    const parts = [last(".kub-modal-overlay"), last(".kub-modal-panel")];
+    if (parts.some((part) => !part)) return false;
+    return parts.every((part) => part!.getAnimations().every((animation) => animation.playState !== "running"));
+  });
+}
 
 async function installSession(page: Page) {
   await page.addInitScript(({ userId }) => {
@@ -366,8 +660,10 @@ async function installSupabaseFixture(page: Page) {
 
 async function installManagementFixture(page: Page) {
   const bots = [
-    summary(OWNER_BOT_ID, "owner_bot", "Owner bot", "owner"),
-    summary(DEVELOPER_BOT_ID, "developer_bot", "Developer bot", "developer"),
+    // One with a picture and one without, so the list shows both halves of the
+    // B-03 fix in the same frame.
+    summary(OWNER_BOT_ID, "owner_bot", "Owner bot", "owner", BOT_AVATAR),
+    summary(DEVELOPER_BOT_ID, "developer_bot", "Developer bot", "developer", null),
   ];
   await page.route(`${API}/**`, async (route) => {
     const request = route.request();
@@ -391,7 +687,7 @@ async function installManagementFixture(page: Page) {
       return;
     }
     if (request.method() === "POST" && path === "/bots") {
-      const bot = summary("55555555-5555-4555-8555-555555555555", "release_bot", "Release bot", "owner");
+      const bot = summary("55555555-5555-4555-8555-555555555555", "release_bot", "Release bot", "owner", null);
       bots.unshift(bot);
       await ok(route, {
         bot: {
@@ -428,13 +724,13 @@ async function installManagementFixture(page: Page) {
   });
 }
 
-function summary(id: string, username: string, displayName: string, role: "owner" | "developer") {
+function summary(id: string, username: string, displayName: string, role: "owner" | "developer", avatarUrl: string | null) {
   return {
     id,
     username,
     display_name: displayName,
     description: "A bot description that remains readable at narrow widths.",
-    avatar_url: null,
+    avatar_url: avatarUrl,
     state: "active",
     delete_after: null as string | null,
     role,
@@ -448,7 +744,14 @@ function detail(bot: ReturnType<typeof summary>) {
   return {
     bot,
     commands: [{ command: "help", description: "Показать справку" }],
-    developers: [],
+    // A developer to remove (B-15) and a webhook to delete (B-12); both
+    // controls are only drawn when there is something for them to act on.
+    developers: [{
+      user_id: DEVELOPER_USER_ID,
+      display_name: DEVELOPER_NAME,
+      username: "anna",
+      created_at: NOW,
+    }],
     privacy: [{
       chat_id: "44444444-4444-4444-8444-444444444444",
       chat_name: "Команда продукта",
@@ -456,7 +759,7 @@ function detail(bot: ReturnType<typeof summary>) {
       full_visibility_requested_at: null,
       full_visibility_approved: false,
     }],
-    webhook: { configured: false, url: null },
+    webhook: { configured: true, url: WEBHOOK_URL },
     diagnostics: {
       delivery_mode: null,
       pending_update_count: 0,

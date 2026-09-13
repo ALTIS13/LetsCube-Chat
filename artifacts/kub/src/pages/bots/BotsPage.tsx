@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useSearchParams } from "wouter";
 
+import { BotAvatar } from "@/components/bots/BotAvatar";
 import { BotCreateModal } from "@/components/bots/BotCreateModal";
 import { BotSettingsPanel } from "@/components/bots/BotSettingsPanel";
 import { BotTokenDialog, type BotTokenDialogHandle } from "@/components/bots/BotTokenDialog";
@@ -126,7 +127,11 @@ function selectedBotId(searchParams: URLSearchParams) {
 
 function BotRow({ bot, selected, onSelect }: { bot: BotSummary; selected: boolean; onSelect(): void }) {
   const tone = bot.state === "active" ? "online" : bot.state === "paused" ? "warn" : bot.state === "deleted" ? "muted" : "danger";
-  return <button type="button" onClick={onSelect} aria-current={selected ? "true" : undefined} className={cn("flex w-full min-w-0 items-start gap-3 rounded-md border px-3 py-3 text-left transition-colors", selected ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)]" : "border-transparent hover:border-[color:var(--kub-border-color)] kub-raise-hover")}><div className="kub-raise flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[color:var(--kub-cyan)]"><KubIcon name="bot" size={21} /></div><div className="min-w-0 flex-1"><div className="break-words text-sm font-semibold text-[color:var(--kub-text)]">{bot.display_name}</div><div className="break-all text-xs text-[color:var(--kub-muted)]">@{bot.username}</div><div className="mt-2 flex flex-wrap items-center gap-1.5"><KubBadge tone={tone} dot className="text-[color:var(--kub-text)]">{STATE_COPY[bot.state]}</KubBadge><KubBadge tone="muted">{bot.role === "owner" ? "Владелец" : "Разработчик"}</KubBadge></div><div className="mt-2 text-[12px] text-[color:var(--kub-muted)]">Обновлён {formatDate(bot.updated_at)}</div></div><KubIcon name="chevronRight" size={16} className="mt-2 shrink-0 text-[color:var(--kub-muted)]" /></button>;
+  // D-145, row B-03. The tile here was a robot for every bot, whatever picture
+  // its owner had uploaded — and the owner could see that picture one pane to
+  // the right, on the settings header, which is what made it read as a bug
+  // rather than as a style. `BotAvatar` keeps the robot as the fallback.
+  return <button type="button" onClick={onSelect} aria-current={selected ? "true" : undefined} className={cn("flex w-full min-w-0 items-start gap-3 rounded-md border px-3 py-3 text-left transition-colors", selected ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)]" : "border-transparent hover:border-[color:var(--kub-border-color)] kub-raise-hover")}><BotAvatar bot={bot} /><div className="min-w-0 flex-1"><div className="break-words text-sm font-semibold text-[color:var(--kub-text)]">{bot.display_name}</div><div className="break-all text-xs text-[color:var(--kub-muted)]">@{bot.username}</div><div className="mt-2 flex flex-wrap items-center gap-1.5"><KubBadge tone={tone} dot className="text-[color:var(--kub-text)]">{STATE_COPY[bot.state]}</KubBadge><KubBadge tone="muted">{bot.role === "owner" ? "Владелец" : "Разработчик"}</KubBadge></div><div className="mt-2 text-[12px] text-[color:var(--kub-muted)]">Обновлён {formatDate(bot.updated_at)}</div></div><KubIcon name="chevronRight" size={16} className="mt-2 shrink-0 text-[color:var(--kub-muted)]" /></button>;
 }
 
 function EligibilityNotice({ eligibility }: { eligibility: NonNullable<ReturnType<typeof useBots>["data"]>["eligibility"] }) {

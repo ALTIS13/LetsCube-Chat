@@ -1,10 +1,23 @@
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import { useEffect, useRef, useState } from "react";
 
+import { BotAvatar } from "@/components/bots/BotAvatar";
 import { KubBadge, KubButton, KubEmptyState, KubIcon, KubInput } from "@/components/kub";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBotMutations } from "@/hooks/useBots";
+import { showActionFeedback } from "@/lib/actionFeedback";
+import { requestAppConfirm } from "@/lib/appDialogs";
 import { BotManagementError, botManagement, type BotCommand, type BotDetail } from "@/lib/botManagement";
+import {
+  BOT_WEBHOOK_SECRET_HINT,
+  botActionFeedback,
+  botActionSection,
+  botAvatarRemoveConfirm,
+  botDeveloperRemoveConfirm,
+  botWebhookDeleteConfirm,
+  type BotSettingsAction,
+  type BotSettingsSection,
+} from "@/lib/botSettingsCopy";
 
 type Props = {
   detail: BotDetail;
@@ -28,7 +41,12 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
   const mutations = useBotMutations(bot.id);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [confirm, setConfirm] = useState<ConfirmAction>(null);
-  const [error, setError] = useState<string | null>(null);
+  // D-145. One banner above the tabs used to carry every failure, so a save
+  // pressed at the bottom of «Webhook» reported itself at the top of the screen
+  // — and, on another tab, out of sight entirely. An error is kept under the
+  // section whose button produced it; at most one per section, because the
+  // second attempt is what the person is reading about.
+  const [errors, setErrors] = useState<Partial<Record<BotSettingsSection, string>>>({});
   const [profile, setProfile] = useState({ display_name: bot.display_name, description: bot.description });
   const [commands, setCommands] = useState<BotCommand[]>(detail.commands);
   const [developerUsername, setDeveloperUsername] = useState("");
@@ -38,21 +56,37 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
     setProfile({ display_name: bot.display_name, description: bot.description });
     setCommands(detail.commands);
     setWebhook((current) => ({ ...current, url: detail.webhook.url ?? "", secret: "" }));
-    setError(null);
+    setErrors({});
   }, [bot.id, bot.display_name, bot.description, detail.commands, detail.webhook.url]);
 
-  const run = async (action: () => Promise<unknown>) => {
-    setError(null);
+  const failed = (action: BotSettingsAction, message: string) =>
+    setErrors((current) => ({ ...current, [botActionSection(action)]: message }));
+  const cleared = (action: BotSettingsAction) =>
+    setErrors((current) => ({ ...current, [botActionSection(action)]: undefined }));
+
+  /**
+   * Every action goes through here, so every action says something.
+   *
+   * Before D-145 a success was silence: nine buttons that changed the server
+   * and told nobody, which leaves pressing it again as the only way to find
+   * out whether the first press landed. The confirmation is the product's own
+   * one — the toast viewport mounted at the root — rather than a second
+   * mechanism grown inside this panel.
+   */
+  const run = async (action: BotSettingsAction, work: () => Promise<unknown>) => {
+    cleared(action);
     try {
-      await action();
+      await work();
       setConfirm(null);
+      const done = botActionFeedback(action);
+      if (done) showActionFeedback(done);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Не удалось выполнить действие.");
+      failed(action, cause instanceof Error ? cause.message : "Не удалось выполнить действие.");
     }
   };
 
   const rotate = async () => {
-    setError(null);
+    cleared("rotateToken");
     try {
       const result = await botManagement.rotateOnce(bot.id, bot.token?.prefix ?? null);
       onToken(result.token);
@@ -66,16 +100,17 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
         } catch {
           // Recovery remains explicit even when the refresh itself is unavailable.
         }
-        setError(
+        failed(
+          "rotateToken",
           "Запрос мог выполниться. Мы обновили данные бота. Проверьте префикс токена; если новый токен недоступен, повторно выпустите новый токен явным действием.",
         );
       } else {
-        setError(cause instanceof Error ? cause.message : "Не удалось выпустить токен.");
+        failed("rotateToken", cause instanceof Error ? cause.message : "Не удалось выпустить токен.");
       }
     }
   };
 
-  const saveWebhook = () => run(async () => {
+  const saveWebhook = () => run("webhookSave", async () => {
     await botManagement.setWebhook(bot.id, {
       url: webhook.url,
       secret: webhook.secret,
@@ -85,11 +120,32 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
     await mutations.refresh();
   });
 
+  // The three actions D-133 names on this panel. Each asked nothing and acted
+  // on the press; each now asks first, with the words kept in `botSettingsCopy`
+  // so `node --test` can read them.
+  const removeAvatar = async () => {
+    if (!(await requestAppConfirm(botAvatarRemoveConfirm()))) return;
+    await run("avatarRemove", () => mutations.avatar.mutateAsync(null));
+  };
+
+  const deleteWebhook = async () => {
+    if (!(await requestAppConfirm(botWebhookDeleteConfirm({ dropPending: webhook.drop })))) return;
+    await run("webhookDelete", async () => {
+      await botManagement.deleteWebhook(bot.id, webhook.drop);
+      await mutations.refresh();
+    });
+  };
+
+  const removeDeveloper = async (developer: { user_id: string; display_name: string }) => {
+    if (!(await requestAppConfirm(botDeveloperRemoveConfirm({ displayName: developer.display_name })))) return;
+    await run("removeDeveloper", () => mutations.removeDeveloper.mutateAsync(developer.user_id));
+  };
+
   return (
     <div className="min-w-0">
       <div className="kub-glass border-b border-[color:var(--kub-border-color)] px-4 py-4 sm:px-6">
         <div className="flex min-w-0 items-start gap-3">
-          <BotMark name={bot.display_name} avatarUrl={bot.avatar_url} />
+          <BotAvatar bot={bot} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="break-words text-lg font-semibold text-[color:var(--kub-text)]">{bot.display_name}</h2>
@@ -105,7 +161,6 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
         </div>
       </div>
 
-      {error && <div role="alert" className="kub-glass mx-4 mt-4 rounded-md border border-[color:var(--kub-danger)]/40 px-3 py-2 text-sm text-[color:var(--kub-text)] sm:mx-6">{error}</div>}
       {bot.state === "suspended" && <Notice>Бот приостановлен платформой. Владелец не может изменить состояние или настройки.</Notice>}
       {bot.state === "pending_delete" && <Notice>Настройки доступны только для чтения. Отмена вернёт бота на паузу без токена.</Notice>}
       {!owner && <Notice>Доступ разработчика: команды, webhook, настройки приватности и диагностика.</Notice>}
@@ -118,7 +173,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
         </TabsList>
 
         <TabsContent value="main" className="m-0 space-y-5 p-4 sm:p-6">
-          <Section title="Профиль" description={owner ? "Имя пользователя закреплено за ботом и не изменяется." : "Профиль доступен только владельцу."}>
+          <Section title="Профиль" error={errors.profile} description={owner ? "Имя пользователя закреплено за ботом и не изменяется." : "Профиль доступен только владельцу."}>
             <div className="grid gap-3">
               <KubInput label="Название" value={profile.display_name} onChange={(event) => setProfile({ ...profile, display_name: event.target.value })} disabled={!owner || !editable} maxLength={64} />
               <div>
@@ -127,7 +182,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
               </div>
               {owner && (
                 <div className="flex flex-wrap items-center gap-3">
-                  <BotMark name={bot.display_name} avatarUrl={bot.avatar_url} />
+                  <BotAvatar bot={bot} />
                   <input
                     ref={avatarInputRef}
                     type="file"
@@ -136,7 +191,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
                     onChange={(event) => {
                       const file = event.target.files?.[0] ?? null;
                       event.target.value = "";
-                      if (file) run(() => mutations.avatar.mutateAsync(file));
+                      if (file) void run("avatarUpload", () => mutations.avatar.mutateAsync(file));
                     }}
                   />
                   <KubButton
@@ -152,37 +207,37 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
                       variant="ghost"
                       className="min-h-11"
                       disabled={!editable || mutations.avatar.isPending}
-                      onClick={() => run(() => mutations.avatar.mutateAsync(null))}
+                      onClick={() => void removeAvatar()}
                     >
                       Убрать
                     </KubButton>
                   )}
                 </div>
               )}
-              {owner && <KubButton className="min-h-11 justify-self-start" disabled={!editable || mutations.profile.isPending} onClick={() => run(() => mutations.profile.mutateAsync(profile))}>Сохранить профиль</KubButton>}
+              {owner && <KubButton className="min-h-11 justify-self-start" disabled={!editable || mutations.profile.isPending} onClick={() => void run("profile", () => mutations.profile.mutateAsync(profile))}>Сохранить профиль</KubButton>}
             </div>
           </Section>
 
           {owner && (
-            <Section title="Состояние" description="Пауза останавливает API-операции и доставку обновлений.">
+            <Section title="Состояние" error={errors.state} description="Пауза останавливает API-операции и доставку обновлений.">
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 {bot.state === "active" && <KubButton variant="secondary" className="min-h-11" onClick={() => setConfirm("pause")} leftIcon={<KubIcon name="pause" size={17} />}>Поставить на паузу</KubButton>}
-                {bot.state === "paused" && <KubButton variant="primary" className="min-h-11" disabled={!bot.token || mutations.resume.isPending} onClick={() => run(() => mutations.resume.mutateAsync())} leftIcon={<KubIcon name="play" size={17} />}>Возобновить</KubButton>}
-                {bot.state === "pending_delete" && <KubButton variant="secondary" className="min-h-11" disabled={mutations.cancelDeletion.isPending} onClick={() => run(() => mutations.cancelDeletion.mutateAsync())}>Отменить удаление</KubButton>}
+                {bot.state === "paused" && <KubButton variant="primary" className="min-h-11" disabled={!bot.token || mutations.resume.isPending} onClick={() => void run("resume", () => mutations.resume.mutateAsync())} leftIcon={<KubIcon name="play" size={17} />}>Возобновить</KubButton>}
+                {bot.state === "pending_delete" && <KubButton variant="secondary" className="min-h-11" disabled={mutations.cancelDeletion.isPending} onClick={() => void run("cancelDeletion", () => mutations.cancelDeletion.mutateAsync())}>Отменить удаление</KubButton>}
               </div>
               {bot.state === "paused" && !bot.token && <p className="mt-2 text-xs text-[color:var(--kub-muted)]">Сначала выпустите новый токен во вкладке API.</p>}
             </Section>
           )}
 
           {owner && (bot.state === "active" || bot.state === "paused") && (
-            <Section title="Удаление" description="Запрос сразу отзывает токен. Удаление можно отменить в течение семи дней.">
+            <Section title="Удаление" error={errors.deletion} description="Запрос сразу отзывает токен. Удаление можно отменить в течение семи дней.">
               <KubButton variant="danger" className="min-h-11" onClick={() => setConfirm("delete")} leftIcon={<KubIcon name="delete" size={17} />}>Запросить удаление</KubButton>
             </Section>
           )}
         </TabsContent>
 
         <TabsContent value="api" className="m-0 space-y-5 p-4 sm:p-6">
-          <Section title="Команды" description="До 100 команд, доступных пользователям бота.">
+          <Section title="Команды" error={errors.commands} description="До 100 команд, доступных пользователям бота.">
             <div className="space-y-2">
               {commands.map((command, index) => (
                 <div key={`${command.command}-${index}`} className="grid gap-2 border-b border-[color:var(--kub-rule)] pb-3 sm:grid-cols-[10rem_1fr_2.75rem]">
@@ -194,36 +249,40 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
               {commands.length === 0 && <KubEmptyState title="Команд пока нет" description="Добавьте первую команду для Bot API." className="py-5" />}
               <div className="flex flex-col gap-2 sm:flex-row">
                 <KubButton variant="secondary" className="min-h-11" disabled={!editable || commands.length >= 100} onClick={() => setCommands([...commands, { command: "", description: "" }])}>Добавить команду</KubButton>
-                <KubButton className="min-h-11" disabled={!editable || mutations.commands.isPending} onClick={() => run(() => mutations.commands.mutateAsync(commands))}>Сохранить команды</KubButton>
+                <KubButton className="min-h-11" disabled={!editable || mutations.commands.isPending} onClick={() => void run("commands", () => mutations.commands.mutateAsync(commands))}>Сохранить команды</KubButton>
               </div>
             </div>
           </Section>
 
-          <Section title="Webhook" description="Webhook и getUpdates взаимоисключающие. Секрет после сохранения не отображается.">
+          <Section title="Webhook" error={errors.webhook} description="Webhook и getUpdates взаимоисключающие.">
             <div className="grid gap-3">
               <KubInput label="URL webhook" type="url" value={webhook.url} disabled={!editable} onChange={(event) => setWebhook({ ...webhook, url: event.target.value })} placeholder="https://example.com/bot/webhook" />
-              <KubInput label="Секрет подписи" type="password" value={webhook.secret} disabled={!editable} onChange={(event) => setWebhook({ ...webhook, secret: event.target.value })} autoComplete="new-password" />
+              {/* D-145. The field is empty after a save and «Сохранить webhook»
+                  stays disabled until it is filled again, which read as a bug
+                  until the reason stood beside it. See BOT_WEBHOOK_SECRET_HINT
+                  for why the secret genuinely cannot be kept. */}
+              <KubInput label="Секрет подписи" type="password" value={webhook.secret} disabled={!editable} onChange={(event) => setWebhook({ ...webhook, secret: event.target.value })} autoComplete="new-password" hint={BOT_WEBHOOK_SECRET_HINT} />
               <label className="flex min-h-11 items-center gap-3 text-sm text-[color:var(--kub-text)]"><input type="checkbox" checked={webhook.drop} disabled={!editable} onChange={(event) => setWebhook({ ...webhook, drop: event.target.checked })} />Удалить ожидающие обновления</label>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <KubButton className="min-h-11" disabled={!editable || !webhook.url || !webhook.secret} onClick={saveWebhook}>Сохранить webhook</KubButton>
-                {detail.webhook.configured && <KubButton variant="danger" className="min-h-11" disabled={!editable} onClick={() => run(async () => { await botManagement.deleteWebhook(bot.id, webhook.drop); await mutations.refresh(); })}>Удалить webhook</KubButton>}
+                {detail.webhook.configured && <KubButton variant="danger" className="min-h-11" disabled={!editable} onClick={() => void deleteWebhook()}>Удалить webhook</KubButton>}
               </div>
             </div>
           </Section>
 
-          <Section title="Приватность в группах" description="Полный доступ запрашивается отдельно для каждого чата и подтверждается администратором группы.">
+          <Section title="Приватность в группах" error={errors.privacy} description="Полный доступ запрашивается отдельно для каждого чата и подтверждается администратором группы.">
             <div className="space-y-2">
               {detail.privacy.map((item) => {
                 const requested = Boolean(item.full_visibility_requested_at) && !item.full_visibility_approved;
                 const label = item.privacy_mode === "full" && item.full_visibility_approved ? "Полный доступ одобрен" : requested ? "Запрошен полный доступ" : "Ограниченный";
-                return <div key={item.chat_id} className="flex flex-col gap-2 border-b border-[color:var(--kub-rule)] py-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><div className="break-words text-sm font-medium text-[color:var(--kub-text)]">{item.chat_name}</div><div className="mt-1 text-xs text-[color:var(--kub-muted)]">{label}</div></div>{item.privacy_mode !== "full" && <KubButton variant="secondary" size="sm" className="min-h-11" disabled={!editable} onClick={() => run(async () => { await botManagement.setPrivacyRequest(bot.id, item.chat_id, !requested); await mutations.refresh(); })}>{requested ? "Отменить запрос" : "Запросить полный доступ"}</KubButton>}</div>;
+                return <div key={item.chat_id} className="flex flex-col gap-2 border-b border-[color:var(--kub-rule)] py-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><div className="break-words text-sm font-medium text-[color:var(--kub-text)]">{item.chat_name}</div><div className="mt-1 text-xs text-[color:var(--kub-muted)]">{label}</div></div>{item.privacy_mode !== "full" && <KubButton variant="secondary" size="sm" className="min-h-11" disabled={!editable} onClick={() => void run(requested ? "privacyCancel" : "privacyRequest", async () => { await botManagement.setPrivacyRequest(bot.id, item.chat_id, !requested); await mutations.refresh(); })}>{requested ? "Отменить запрос" : "Запросить полный доступ"}</KubButton>}</div>;
               })}
               {detail.privacy.length === 0 && <KubEmptyState title="Бот не добавлен в группы" description="Настройки появятся после добавления в чат." className="py-5" />}
             </div>
           </Section>
 
           {owner && (
-            <Section title="Токен" description="Префикс помогает отличить текущий токен, но не подходит для авторизации.">
+            <Section title="Токен" error={errors.token} description="Префикс помогает отличить текущий токен, но не подходит для авторизации.">
               <div className="break-all font-mono text-sm text-[color:var(--kub-text)]">{bot.token?.prefix ?? "Активного токена нет"}</div>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 <KubButton className="min-h-11" disabled={!editable} onClick={() => setConfirm("rotate")} leftIcon={<KubIcon name="key" size={17} />}>Выпустить новый токен</KubButton>
@@ -234,10 +293,10 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
         </TabsContent>
 
         <TabsContent value="team" className="m-0 space-y-5 p-4 sm:p-6">
-          <Section title="Разработчики" description="Разработчики могут менять API-конфигурацию, но не профиль, токен или состояние бота.">
-            {owner && editable && <div className="mb-4 flex flex-col gap-2 sm:flex-row"><KubInput aria-label="Имя пользователя разработчика" value={developerUsername} onChange={(event) => setDeveloperUsername(event.target.value)} placeholder="username" containerClassName="flex-1" /><KubButton className="min-h-11" disabled={!developerUsername || mutations.addDeveloper.isPending} onClick={() => run(async () => { await mutations.addDeveloper.mutateAsync(developerUsername); setDeveloperUsername(""); })}>Добавить разработчика</KubButton></div>}
+          <Section title="Разработчики" error={errors.developers} description="Разработчики могут менять API-конфигурацию, но не профиль, токен или состояние бота.">
+            {owner && editable && <div className="mb-4 flex flex-col gap-2 sm:flex-row"><KubInput aria-label="Имя пользователя разработчика" value={developerUsername} onChange={(event) => setDeveloperUsername(event.target.value)} placeholder="username" containerClassName="flex-1" /><KubButton className="min-h-11" disabled={!developerUsername || mutations.addDeveloper.isPending} onClick={() => void run("addDeveloper", async () => { await mutations.addDeveloper.mutateAsync(developerUsername); setDeveloperUsername(""); })}>Добавить разработчика</KubButton></div>}
             <div className="space-y-2">
-              {detail.developers.map((developer) => <div key={developer.user_id} className="flex min-h-14 items-center gap-3 border-b border-[color:var(--kub-rule)] py-2"><div className="min-w-0 flex-1"><div className="break-words text-sm font-medium text-[color:var(--kub-text)]">{developer.display_name}</div><div className="break-all text-xs text-[color:var(--kub-muted)]">{developer.username ? `@${developer.username}` : "Без имени пользователя"}</div></div>{owner && editable && <button aria-label={`Удалить разработчика ${developer.display_name}`} className="h-11 w-11 rounded-md text-[color:var(--kub-danger)] kub-raise-hover" onClick={() => run(() => mutations.removeDeveloper.mutateAsync(developer.user_id))}><KubIcon name="userRemove" size={18} className="mx-auto" /></button>}</div>)}
+              {detail.developers.map((developer) => <div key={developer.user_id} className="flex min-h-14 items-center gap-3 border-b border-[color:var(--kub-rule)] py-2"><div className="min-w-0 flex-1"><div className="break-words text-sm font-medium text-[color:var(--kub-text)]">{developer.display_name}</div><div className="break-all text-xs text-[color:var(--kub-muted)]">{developer.username ? `@${developer.username}` : "Без имени пользователя"}</div></div>{owner && editable && <button aria-label={`Удалить разработчика ${developer.display_name}`} className="h-11 w-11 rounded-md text-[color:var(--kub-danger)] kub-raise-hover" onClick={() => void removeDeveloper(developer)}><KubIcon name="userRemove" size={18} className="mx-auto" /></button>}</div>)}
               {detail.developers.length === 0 && <KubEmptyState title="Разработчиков пока нет" description="Владелец может добавить участника по имени пользователя." className="py-5" />}
             </div>
           </Section>
@@ -256,24 +315,12 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
       </Tabs>
 
       <ConfirmDialog action={confirm} onClose={() => setConfirm(null)} onConfirm={() => {
-        if (confirm === "pause") return run(() => mutations.pause.mutateAsync());
+        if (confirm === "pause") return run("pause", () => mutations.pause.mutateAsync());
         if (confirm === "rotate") return rotate();
-        if (confirm === "revoke") return run(() => mutations.revoke.mutateAsync());
-        if (confirm === "delete") return run(() => mutations.requestDeletion.mutateAsync());
+        if (confirm === "revoke") return run("revokeToken", () => mutations.revoke.mutateAsync());
+        if (confirm === "delete") return run("requestDeletion", () => mutations.requestDeletion.mutateAsync());
         return Promise.resolve();
       }} />
-    </div>
-  );
-}
-
-function BotMark({ name, avatarUrl }: { name: string; avatarUrl?: string | null }) {
-  return (
-    <div className="kub-raise flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md text-[color:var(--kub-cyan)]">
-      {avatarUrl ? (
-        <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-      ) : (
-        <KubIcon name="bot" size={23} label={`${name}, бот`} />
-      )}
     </div>
   );
 }
@@ -287,8 +334,17 @@ function Notice({ children }: { children: string }) {
   return <div className="kub-glass mx-4 mt-4 rounded-md border border-[color:var(--kub-border-color)] px-3 py-2 text-sm text-[color:var(--kub-text)] sm:mx-6">{children}</div>;
 }
 
-function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
-  return <section aria-labelledby={`bot-section-${title}`} className="kub-glass rounded-md border border-[color:var(--kub-border-color)] p-4"><h3 id={`bot-section-${title}`} className="text-sm font-semibold text-[color:var(--kub-text)]">{title}</h3>{description && <p className="mt-1 text-xs leading-5 text-[color:var(--kub-muted)]">{description}</p>}<div className="mt-4">{children}</div></section>;
+/**
+ * A box of settings, and — since D-145 — the only place its own failures are
+ * printed.
+ *
+ * The error sits after the controls rather than under the heading, because the
+ * buttons that produce it are at the foot of every one of these boxes, and a
+ * message a person has to scroll back up to read is the defect this replaced,
+ * only shorter.
+ */
+function Section({ title, description, error, children }: { title: string; description?: string; error?: string | null; children: React.ReactNode }) {
+  return <section aria-labelledby={`bot-section-${title}`} className="kub-glass rounded-md border border-[color:var(--kub-border-color)] p-4"><h3 id={`bot-section-${title}`} className="text-sm font-semibold text-[color:var(--kub-text)]">{title}</h3>{description && <p className="mt-1 text-xs leading-5 text-[color:var(--kub-muted)]">{description}</p>}<div className="mt-4">{children}</div>{error && <p role="alert" data-bot-section-error={title} className="mt-3 rounded-md border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-sm leading-5 text-[color:var(--kub-danger-text)]">{error}</p>}</section>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
