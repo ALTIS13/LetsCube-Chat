@@ -6,6 +6,16 @@ export type AudioProcessingMode = "clean" | "raw" | "custom";
 
 export interface AudioSettings {
   micInputGain: number;
+  /**
+   * Kept so that what is already in storage still parses, and read in exactly
+   * one place: `readStoredPlayback` in `lib/playbackVolume.ts`, which inherits
+   * it once when the player has no volume of its own.
+   *
+   * Nothing writes it and nothing else reads it. It used to be applied straight
+   * to a voice bubble's `<audio>` element, which the player writes to as well,
+   * and the two overwrote each other (D-149). Do not wire it to a control
+   * again: the playback bar's slider is the volume.
+   */
   voicePlaybackVolume: number;
   processingMode: AudioProcessingMode;
   noiseSuppression: boolean;

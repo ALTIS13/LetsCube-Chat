@@ -19,6 +19,17 @@ import { coarsePointer } from "../../artifacts/kub/src/lib/pointer.ts";
 
 const source = (path: string) => readFileSync(new URL(`../../artifacts/kub/src/${path}`, import.meta.url), "utf8");
 
+/**
+ * The same source with its comments blanked.
+ *
+ * Rule 9 of the interface material, met again: a sentence *about* a name reads
+ * as a use of it. The note in `AudioMessage.tsx` that explains which volume used
+ * to be written there would otherwise keep the assertion below red for ever, and
+ * deleting the explanation to please a test is the wrong way round.
+ */
+const code = (path: string) =>
+  source(path).replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
+
 function withWindow(value: unknown, run: () => void) {
   const saved = Object.getOwnPropertyDescriptor(globalThis, "window");
   Object.defineProperty(globalThis, "window", { configurable: true, writable: true, value });
@@ -95,21 +106,28 @@ test("under a finger nothing draws a playback volume, and nothing hidden keeps i
   const playback = source("components/chat/ChatMediaPlayback.tsx");
   const slider = /<label\b(?:(?!<label\b)[\s\S])*?data-testid="chat-media-playback-volume"/.exec(playback)?.[0] ?? "";
   assert.match(slider, /pointer-coarse:hidden/, "the playback bar's volume slider is a desktop's");
-  assert.match(playback, /const volume = coarsePointer\(\) \? 1 : playbackSettings\.volume;/);
+  // The rule moved to `lib/playbackVolume.ts` with D-149 and is pinned by
+  // `tests/unit/playback-volume.test.mts`, where a finger and a stored volume can
+  // be put together without a browser. What is read here is that the player is
+  // still the thing that asks.
+  assert.match(playback, /const volume = elementVolume\(playbackSettings\.volume, coarsePointer\(\)\);/);
   assert.match(playback, /title="Громкость"/);
   assert.match(playback, /aria-label="Громкость воспроизведения"/);
   assert.doesNotMatch(playback, /Р“|Рѕ|Рј/, "the control's names were Cyrillic decoded as Windows-1251");
 
   const voice = source("components/chat/AudioMessage.tsx");
-  assert.match(voice, /const voicePlaybackVolume = coarsePointer\(\) \? 1 : settings\.voicePlaybackVolume;/);
-  assert.doesNotMatch(
-    voice,
-    /clampAudioElementVolume\(settings\.voicePlaybackVolume\)/,
-    "a voice message is given its volume only through the finger check",
-  );
+  // D-149. A voice bubble has no volume of its own to be turned down behind the
+  // player's back any more: it takes the player's, which is also where the finger
+  // check now lives. The two used to write to the same element and overwrite each
+  // other, so which of them a person heard depended on how playback had started.
+  assert.match(voice, /const playbackVolume = mediaPlayback\.volume;/);
+  assert.doesNotMatch(code("components/chat/AudioMessage.tsx"), /voicePlaybackVolume/, "the sound settings write to a voice element again");
 
   const settings = source("components/sidebar/AudioSettingsSection.tsx");
   assert.match(settings, /const deviceSetsVolume = coarsePointer\(\);/);
-  assert.match(settings, /\{!deviceSetsVolume && \(\s*<SliderRow\s+label="Голосовые сообщения"/);
+  // Gone from the settings entirely rather than only from a phone: the volume
+  // is the player's now, on every device (D-149).
+  assert.doesNotMatch(settings, /label="Голосовые сообщения"/);
+  assert.doesNotMatch(code("components/sidebar/AudioSettingsSection.tsx"), /voicePlaybackVolume/);
   assert.match(settings, /\{selfMonitoring && !deviceSetsVolume && \(\s*<SliderRow\s+label="Громкость прослушивания"/);
 });

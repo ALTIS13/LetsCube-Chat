@@ -4,6 +4,7 @@ import {
   ArrowCounterClockwise,
   ArrowLeft,
   ArrowSquareOut,
+  ArrowsOut,
   At,
   Bell,
   BellSlash,
@@ -149,6 +150,7 @@ export type KubIconName =
   | "folderOpen"
   | "food"
   | "forward"
+  | "fullscreen"
   | "gesture"
   | "group"
   | "hash"
@@ -269,6 +271,10 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   folderOpen: { Icon: FolderOpen },
   food: { Icon: ForkKnife },
   forward: { Icon: PaperPlaneRight },
+  // «На весь экран» in the video viewer, which wore the external-link glyph
+  // until D-148 and so said «this leaves the page» about a control that does
+  // the opposite. The vocabulary had no fullscreen glyph at all before this.
+  fullscreen: { Icon: ArrowsOut },
   gesture: { Icon: HandWaving },
   group: { Icon: UsersThree },
   hash: { Icon: Hash },

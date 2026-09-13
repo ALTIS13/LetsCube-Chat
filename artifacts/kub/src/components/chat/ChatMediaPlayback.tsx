@@ -14,10 +14,21 @@ import {
 import { KubIcon } from "@/components/kub";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
 import { reportError } from "@/lib/monitoring";
-import { clampAudioElementVolume, useAudioSettings } from "@/hooks/useAudioSettings";
+import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { cn } from "@/lib/utils";
 import { replacePlaybackItemUrl } from "@/lib/mediaQuality";
 import { coarsePointer } from "@/lib/pointer";
+import {
+  AUDIO_SETTINGS_KEY,
+  PLAYBACK_RATES,
+  PLAYBACK_SETTINGS_KEY,
+  DEFAULT_PLAYBACK,
+  elementVolume,
+  normalizePlaybackRate,
+  normalizeVolume,
+  readStoredPlayback,
+  type StoredPlayback,
+} from "@/lib/playbackVolume";
 
 export type ChatMediaPlaybackKind = "voice" | "audio" | "video" | "video_message";
 
@@ -60,14 +71,6 @@ interface ChatMediaPlaybackContextValue {
 
 const ChatMediaPlaybackContext = createContext<ChatMediaPlaybackContextValue | null>(null);
 
-const PLAYBACK_RATES = [0.5, 1, 1.5, 2];
-const PLAYBACK_SETTINGS_KEY = "kub.mediaPlayback.v1";
-
-interface PlaybackSettings {
-  playbackRate: number;
-  volume: number;
-}
-
 export function ChatMediaPlaybackProvider({
   chatId,
   playlist,
@@ -89,14 +92,15 @@ export function ChatMediaPlaybackProvider({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [playbackSettings, setPlaybackSettings] = useState<PlaybackSettings>(() => readPlaybackSettings());
+  const [playbackSettings, setPlaybackSettings] = useState<StoredPlayback>(() => readPlaybackSettings());
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { settings } = useAudioSettings();
   const playbackRate = playbackSettings.playbackRate;
-  // Under a finger there is no slider, so nothing but the device's own volume
-  // may turn it down (D-118).
-  const volume = coarsePointer() ? 1 : playbackSettings.volume;
+  // The one volume every element in a conversation is set to — this provider is
+  // the only thing that writes `.volume` now (D-149) — and under a finger it is
+  // the device's own (D-118). Both rules live in `lib/playbackVolume.ts`.
+  const volume = elementVolume(playbackSettings.volume, coarsePointer());
 
   const playlistIndex = useMemo(() => {
     if (!currentItem || currentItem.isStaged) return -1;
@@ -616,22 +620,29 @@ export function VideoCircleProgressRing({
   );
 }
 
-function readPlaybackSettings(): PlaybackSettings {
-  if (typeof window === "undefined") return { playbackRate: 1, volume: 1 };
+/**
+ * The player's stored rate and volume.
+ *
+ * The sound settings are read too, and only so that they can be inherited: a
+ * volume somebody had set there before D-149 took that second slider away
+ * becomes this player's, once, and the next write below makes it the player's
+ * own. What that inheritance is and when it stops applying is
+ * `readStoredPlayback`'s to say, which is why it takes the two raw strings and
+ * this function does nothing but fetch them.
+ */
+function readPlaybackSettings(): StoredPlayback {
+  if (typeof window === "undefined") return DEFAULT_PLAYBACK;
   try {
-    const raw = window.localStorage.getItem(PLAYBACK_SETTINGS_KEY);
-    if (!raw) return { playbackRate: 1, volume: 1 };
-    const parsed = JSON.parse(raw) as Partial<PlaybackSettings>;
-    return {
-      playbackRate: normalizePlaybackRate(Number(parsed.playbackRate)),
-      volume: normalizeVolume(Number(parsed.volume)),
-    };
+    return readStoredPlayback(
+      window.localStorage.getItem(PLAYBACK_SETTINGS_KEY),
+      window.localStorage.getItem(AUDIO_SETTINGS_KEY),
+    );
   } catch {
-    return { playbackRate: 1, volume: 1 };
+    return DEFAULT_PLAYBACK;
   }
 }
 
-function writePlaybackSettings(settings: PlaybackSettings) {
+function writePlaybackSettings(settings: StoredPlayback) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(PLAYBACK_SETTINGS_KEY, JSON.stringify({
@@ -641,14 +652,6 @@ function writePlaybackSettings(settings: PlaybackSettings) {
   } catch {
     // Local storage can be unavailable in private mode; playback still works.
   }
-}
-
-function normalizePlaybackRate(rate: number): number {
-  return PLAYBACK_RATES.includes(rate) ? rate : 1;
-}
-
-function normalizeVolume(volume: number): number {
-  return clampAudioElementVolume(Number.isFinite(volume) ? volume : 1);
 }
 
 function readMediaDuration(element: HTMLMediaElement): number {

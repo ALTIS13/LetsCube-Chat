@@ -406,11 +406,19 @@ export function AudioSettingsSection() {
         </div>
 
         <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] px-3 py-3">
+          {/*
+            «Голосовые сообщения» stood here and is gone (D-149). It wrote a
+            second stored volume to the very element the player writes to, so
+            which of the two a person heard was decided by whichever had written
+            last — and that depended on how playback had been started. The
+            player's own slider, in the playback bar, is the one volume now; a
+            value set here before is inherited by it once, so nothing anybody
+            had chosen is thrown away. The microphone's gain stays: no system
+            control sets it.
+          */}
           <SectionHeader
             title="Громкость"
-            description={deviceSetsVolume
-              ? "Микрофон влияет на проверку и голосовые записи."
-              : "Микрофон влияет на проверку и голосовые записи. Громкость голосовых применяется только в LETSCUBE."}
+            description="Микрофон влияет на проверку и голосовые записи."
           />
           <div className="mt-3 grid gap-3">
             <SliderRow
@@ -421,16 +429,6 @@ export function AudioSettingsSection() {
               step={0.05}
               onChange={(micInputGain) => updateSettings({ micInputGain })}
             />
-            {!deviceSetsVolume && (
-              <SliderRow
-                label="Голосовые сообщения"
-                value={settings.voicePlaybackVolume}
-                min={0}
-                max={1}
-                step={0.05}
-                onChange={(voicePlaybackVolume) => updateSettings({ voicePlaybackVolume })}
-              />
-            )}
           </div>
         </div>
 

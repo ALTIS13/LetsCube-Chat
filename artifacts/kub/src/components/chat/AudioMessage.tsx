@@ -2,10 +2,9 @@
 
 import { type ChangeEvent, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KubIcon } from "@/components/kub";
-import { clampAudioElementVolume, useAudioSettings } from "@/hooks/useAudioSettings";
+import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
 import { reportError } from "@/lib/monitoring";
-import { coarsePointer } from "@/lib/pointer";
 import { cn } from "@/lib/utils";
 import { useChatMediaPlayback, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 
@@ -29,9 +28,16 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
   const durationPrimingRef = useRef(false);
   const { settings } = useAudioSettings();
   const mediaPlayback = useChatMediaPlayback();
-  // Under a finger the settings draw no slider for this, so a volume lowered
-  // before cannot stay lowered with nothing to raise it (D-118).
-  const voicePlaybackVolume = coarsePointer() ? 1 : settings.voicePlaybackVolume;
+  // The player's volume, and no longer a second one of this bubble's own.
+  //
+  // This element used to be written to twice: here, from the sound settings'
+  // `voicePlaybackVolume`, and by the player, which activates this very element
+  // when the bubble hands it over. Whichever wrote last decided what a person
+  // heard, so the volume depended on how playback had been started (D-149).
+  // There is one owner now, and it is the player — which is also where the rule
+  // about a finger lives, so this bubble no longer asks about the pointer
+  // either (D-118).
+  const playbackVolume = mediaPlayback.volume;
 
   const stopProgressLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -111,9 +117,9 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
 
   useEffect(() => {
     if (audioRef.current) {
-      audioRef.current.volume = clampAudioElementVolume(voicePlaybackVolume);
+      audioRef.current.volume = playbackVolume;
     }
-  }, [voicePlaybackVolume]);
+  }, [playbackVolume]);
 
   useEffect(() => {
     void applyAudioOutputDevice(audioRef.current, settings.selectedOutputDeviceId);
@@ -133,7 +139,9 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
     if (!audio || !url) return;
 
     audio.preload = "auto";
-    audio.volume = clampAudioElementVolume(voicePlaybackVolume);
+    // Deliberately not a dependency of this effect: it reloads the file, and
+    // a volume change must not do that.
+    audio.volume = playbackVolume;
     audio.load();
 
     const syncTimer = window.setTimeout(() => {
@@ -162,7 +170,7 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
       syncFromAudio({ force: true });
     }
     else {
-      audio.volume = clampAudioElementVolume(voicePlaybackVolume);
+      audio.volume = playbackVolume;
       if (audio.ended || (durationSeconds > 0 && audio.currentTime >= durationSeconds)) {
         audio.currentTime = 0;
         setCurrentTime(0);
