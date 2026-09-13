@@ -97,7 +97,19 @@ export function hasAnyMemberAction(subject: ChatMemberSubject): boolean {
   );
 }
 
-/** «Владелец», «Администратор», or nothing for an ordinary member. */
-export function chatRoleLabel(role: string): string {
-  return role === "owner" ? "Владелец" : role === "admin" ? "Администратор" : "";
+/**
+ * «Владелец», «Администратор», or nothing for an ordinary member.
+ *
+ * `possessive` scopes the word to this chat — «Владелец группы», «Администратор
+ * канала» — and the member list needs it as of D-180. A person's global
+ * standing now stands in the same row as a chip that may read «Владелец» in its
+ * own right, so the bare word would have appeared twice on one line meaning two
+ * different things. Take it from `chatVocabulary`, which knows whether this is a
+ * group or a channel; the row-action menu leaves it out, because a menu opened
+ * on one member of one chat has already said which chat it means.
+ */
+export function chatRoleLabel(role: string, possessive?: string): string {
+  const word = role === "owner" ? "Владелец" : role === "admin" ? "Администратор" : "";
+  if (!word || !possessive) return word;
+  return `${word} ${possessive}`;
 }

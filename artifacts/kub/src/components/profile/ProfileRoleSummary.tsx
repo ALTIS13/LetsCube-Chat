@@ -2,14 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { KubBadge, KubIcon, KubStableSkeleton } from "@/components/kub";
-import { KUB_ICONS, type KubIconName } from "@/components/kub/icons";
+import { KUB_ICON_NAMES, type KubIconName } from "@/components/kub/icons";
+import { ProfileBadgeChip } from "@/components/profile/ProfileBadgeChip";
 import { InfoHint } from "@/components/settings/InfoHint";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
 import { useProfileBadges } from "@/hooks/useProfileBadges";
 import { useRoleAccess } from "@/hooks/useRole";
 import { useTaskRouting, type TaskRoutingState } from "@/hooks/useTaskRouting";
 import { LOCATION_ROLE_LABEL } from "@/lib/locationRouting";
-import { projectProfileBadges, hiddenBadgeCount, type ProfileBadge } from "@/lib/profileBadges";
+import { projectProfileBadges, hiddenBadgeCount } from "@/lib/profileBadges";
 import { getRoleLabel, LEGACY_APP_ROLE_LABEL } from "@/lib/rolePermissions";
 import type { DynamicRole, LocationRole, Profile } from "@/types/database";
 
@@ -19,9 +20,6 @@ interface ProfileRoleSummaryProps {
   user: Profile;
   compact?: boolean;
 }
-
-/** The icon names this build has, for a seed that may name one it does not. */
-const KNOWN_ICONS: ReadonlySet<string> = new Set(Object.keys(KUB_ICONS));
 
 /** How many chips the compact strip has room for beside a name. */
 const COMPACT_BADGE_LIMIT = 2;
@@ -37,9 +35,13 @@ export function ProfileRoleSummary({ user, compact = false, routing: routingProp
   const badgeIds = useMemo(() => [user.id], [user.id]);
   const badges = useProfileBadges(badgeIds);
   const worn = useMemo(
-    () => projectProfileBadges(badges.rows.get(user.id) ?? [], user.id, { knownIcons: KNOWN_ICONS }),
+    () => projectProfileBadges(badges.rows.get(user.id) ?? [], user.id, { knownIcons: KUB_ICON_NAMES }),
     [badges.rows, user.id],
   );
+  // The medals, for the «Достижения» section of the full form. The same answer
+  // feeds the compact strip, so opening a card and opening the administration
+  // panel's dialog cost one round trip between them rather than two (D-180).
+  const medals = useMemo(() => worn.filter((badge) => badge.kind === "achievement"), [worn]);
   const [dynamicRolesEnabled] = useDynamicRolesEnabledPreference();
   const canReadDynamicRoles = dynamicRolesEnabled && access.isAdmin;
   const canReadLocationSummaries = access.isStaff;
@@ -200,6 +202,63 @@ export function ProfileRoleSummary({ user, compact = false, routing: routingProp
         </div>
       </section>
 
+      {/* D-180, and the «за что получил медальку» half of what the owner asked
+          for. It is a section rather than a strip because a medal's whole point
+          is the sentence beside it — «Ветеран» alone says nothing, «В LETSCUBE
+          больше года» is the answer to «за что».
+
+          Absent when somebody holds none, never «Достижений нет»: the settings
+          screen already draws an empty state for your own achievements, where
+          it is an invitation; on somebody else's card it would be a verdict on
+          a person. The same reasoning keeps the locations section's «Локации не
+          назначены» off a card that simply does not know yet.
+
+          The share line the design sketched — «у 12% участников» — is not here,
+          and deliberately: `describeAchievementShare` needs holders and
+          eligible, which `profile_badges` does not return and could not without
+          a second read of `achievement_stats` on every card open. */}
+      {medals.length > 0 && (
+        <section data-testid="profile-achievements">
+          <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
+            Достижения
+            <InfoHint
+              term="Достижения"
+              className="normal-case tracking-normal"
+              text="Отметки за то, что человек уже сделал в LETSCUBE: сколько времени он здесь и что успел. Прав они не дают."
+            />
+          </div>
+          <div className="space-y-1.5">
+            {medals.map((badge) => (
+              <div
+                key={badge.key}
+                data-achievement-key={badge.key}
+                className="flex min-w-0 items-center gap-2.5 rounded-xl px-3 py-2 kub-raise"
+              >
+                {badge.icon && KUB_ICON_NAMES.has(badge.icon) && (
+                  // Outline and muted, which is section 4.5's whole separation
+                  // of the families: a standing is a rank and is coloured, a
+                  // medal is earned and is not. Shape first, tone second, so
+                  // colour is never the only thing telling them apart.
+                  <KubIcon
+                    name={badge.icon as KubIconName}
+                    size={18}
+                    weight="regular"
+                    tone="muted"
+                    className="flex-shrink-0"
+                  />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-[color:var(--kub-text)]">{badge.title}</div>
+                  {badge.detail && (
+                    <div className="text-xs text-[color:var(--kub-muted)]">{badge.detail}</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section>
         <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
           Локации
@@ -283,38 +342,6 @@ function roleRank(key: string): number {
   if (key === "manager") return 3;
   if (key === "user") return 4;
   return 9;
-}
-
-/**
- * One badge.
- *
- * The colour is deliberately not on the words. Measured in this product and
- * pinned by `tests/unit/status-badge-contrast.test.mjs`: the role tones read
- * 4.05, 4.18 and 3.82 against the surfaces they sit on, under the 4.5 a body of
- * text needs. So the tone goes on `KubBadge`'s dot and border, where it is a
- * signal rather than a sentence, and the name stays legible.
- *
- * «Чем выше статус тем красивее иконка» is the weight: filled at the top of the
- * ladder, bold in the middle, regular below — inside the icon set the product
- * already has, rather than a second set of assets.
- */
-function ProfileBadgeChip({ badge }: { badge: ProfileBadge }) {
-  return (
-    <KubBadge
-      tone={roleTone(badge.key)}
-      pill
-      // One marker, not two: the dot and the icon say the same thing, and a chip
-      // wearing both reads as a bullet point with a picture in it.
-      dot={!badge.icon}
-      title={badge.detail ?? undefined}
-      data-badge-key={badge.key}
-    >
-      {badge.icon && KNOWN_ICONS.has(badge.icon) && (
-        <KubIcon name={badge.icon as KubIconName} size={11} weight={badge.weight} />
-      )}
-      {badge.title}
-    </KubBadge>
-  );
 }
 
 function roleTone(key: string): "pink" | "cyan" {

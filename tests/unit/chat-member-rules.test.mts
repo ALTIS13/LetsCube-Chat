@@ -117,6 +117,19 @@ test("the role words are the ones already on screen", () => {
   assert.equal(chatRoleLabel("nonsense"), "");
 });
 
+test("the word can say which chat it means, and an ordinary member still says nothing", () => {
+  // D-180. The member row now carries a global standing beside this word, and
+  // that chip may itself read «Владелец» — so the row said it twice, meaning
+  // two different things. Scoped, each half says what it is about.
+  assert.equal(chatRoleLabel("owner", "группы"), "Владелец группы");
+  assert.equal(chatRoleLabel("admin", "канала"), "Администратор канала");
+  assert.equal(
+    chatRoleLabel("member", "группы"),
+    "",
+    "scoping an empty word would leave a line reading « группы»",
+  );
+});
+
 /**
  * The mutations. Each one is a way the mirror could crack while every other
  * test still passed, and each is the shape of a real defect: the interface

@@ -23,7 +23,15 @@
  * asset pipeline: at 100 and above the glyph is filled, from 80 bold, below that
  * regular. If the rule is ever removed the badge degrades to a legible glyph
  * rather than to nothing.
+ *
+ * **Which glyph is not decided here.** Three medals name an icon a role has
+ * already taken, so the strip would have shipped with `crown` meaning both
+ * «Владелец» and «Ветеран». That is `badgeVocabulary.ts`, and it is applied in
+ * the projection below rather than at each surface: a rule remembered per call
+ * site is a rule the next call site forgets.
  */
+
+import { resolveBadgeIcon } from "./badgeVocabulary.ts";
 
 /** One row as `profile_badges` returns it. */
 export interface ProfileBadgeRow {
@@ -101,7 +109,10 @@ export function projectProfileBadges(
   const mine = rows.filter((row) => row.user_id === userId && (row.title ?? "").trim() !== "");
   const projected = mine.map((row) => {
     const kind: ProfileBadgeKind = row.kind === "achievement" ? "achievement" : "global_role";
-    const icon = row.icon ?? null;
+    // Resolved before the build's own icon set is consulted, so a medal that
+    // borrows a role's glyph is corrected rather than merely dropped, and the
+    // `knownIcons` guard below still catches a name this build does not have.
+    const icon = resolveBadgeIcon(kind === "achievement" ? "medal" : "standing", row.key, row.icon);
     const known = !icon || !options.knownIcons || options.knownIcons.has(icon);
     return {
       kind,
@@ -131,6 +142,70 @@ export function projectProfileBadges(
 export function hiddenBadgeCount(total: number, limit: number | undefined): number {
   if (typeof limit !== "number") return 0;
   return Math.max(0, total - Math.max(0, limit));
+}
+
+/** What a strip shows, and what it only counts. */
+export interface BadgeStrip {
+  shown: ProfileBadge[];
+  /** Everything the surface had no room for, as one «+N». */
+  hidden: number;
+}
+
+/**
+ * How many of each family a strip beside a name has room for (D-180).
+ *
+ * Section 5.1 of the proposal: «then the standing chip, then at most two medals
+ * and a «+N» for the rest». Counted per family rather than as one limit of
+ * three, and the difference is section 4.5's «at most one chip» for the
+ * standing: somebody holding two public roles would otherwise spend the row's
+ * whole budget on two ranks and show nothing they earned. It is not about the
+ * standing being pushed off — standings sort first, so a flat limit would never
+ * drop one. That was the reason written here first, and the mutation that was
+ * supposed to prove it stayed green, which is how it got corrected.
+ */
+export const MEMBER_ROW_BADGE_LIMITS = { standings: 1, medals: 1 } as const;
+
+/**
+ * One medal rather than the proposal's two, decided by looking at the rendered
+ * list at 390 points.
+ *
+ * With two, a member holding a standing and two medals wrapped to a second line
+ * of chips, and the four-person list grew from 223 to 331 points — the panel
+ * stopped reading as a list of people and started reading as a list of chip
+ * collections. Neither Telegram nor Discord stacks chips in a member list;
+ * Discord puts one icon beside a name and keeps the rest for the profile.
+ *
+ * So the row shows the standing, the newest medal and «+N», and the whole strip
+ * belongs where the whole strip has room — which is the person's own card,
+ * opened from the row. That opening is D-168 and is not built yet, which is the
+ * one cost of this decision and is written down rather than hidden.
+ */
+
+/**
+ * The chips a strip shows, keeping the order `projectProfileBadges` put them in.
+ *
+ * A person may hold several public roles; only the highest is worn, which is
+ * section 4.5's «at most one chip» for the standing. The rows arrive sorted, so
+ * taking the first of each family takes the right ones.
+ */
+export function badgeStrip(
+  worn: readonly ProfileBadge[],
+  limits: { standings: number; medals: number } = MEMBER_ROW_BADGE_LIMITS,
+): BadgeStrip {
+  let standings = 0;
+  let medals = 0;
+  const shown: ProfileBadge[] = [];
+  for (const badge of worn) {
+    if (badge.kind === "achievement") {
+      if (medals >= limits.medals) continue;
+      medals += 1;
+    } else {
+      if (standings >= limits.standings) continue;
+      standings += 1;
+    }
+    shown.push(badge);
+  }
+  return { shown, hidden: worn.length - shown.length };
 }
 
 /**

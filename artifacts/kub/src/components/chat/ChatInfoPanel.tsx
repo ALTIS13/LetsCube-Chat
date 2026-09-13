@@ -4,7 +4,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } fr
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
-import { KubIcon, KubModal, KubStableSkeleton, type KubIconName } from "@/components/kub";
+import { KubBadge, KubIcon, KubModal, KubStableSkeleton, type KubIconName } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
@@ -27,7 +27,15 @@ import {
   type ChatSettingsRowId,
 } from "@/lib/chatSettings";
 import { GroupInviteModal } from "./GroupInviteModal";
+import { ProfileBadgeChip } from "@/components/profile/ProfileBadgeChip";
 import { ProfileRoleSummary } from "@/components/profile/ProfileRoleSummary";
+import { KUB_ICON_NAMES } from "@/components/kub/icons";
+import { useProfileBadges } from "@/hooks/useProfileBadges";
+import {
+  badgeStrip,
+  projectProfileBadges,
+  type BadgeStrip,
+} from "@/lib/profileBadges";
 import {
   cancelGroupInvite,
   createGroupInvite,
@@ -1202,6 +1210,31 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   );
   const mediaVariantUrls = useMessageMediaVariantUrls(mediaGridItems);
   const memberIdSet = useMemo(() => new Set(members.map((member) => member.id)), [members]);
+  /**
+   * Who everybody in this list is, in one request (D-180).
+   *
+   * Until today a member row could say «Владелец» about this chat and nothing at
+   * all about the person — an administrator of LETSCUBE and somebody who joined
+   * yesterday were the same two lines. The ids are already in hand here, which
+   * is the whole reason the strip costs no query per row: `useProfileBadges`
+   * batches the list into one `profile_badges` call and caches the answer at
+   * module level, so a second look at the same group asks nothing at all.
+   *
+   * Projected here rather than inside the row, so the sort and the icon
+   * resolution run once per answer instead of once per row per render.
+   */
+  const memberIds = useMemo(() => members.map((member) => member.id), [members]);
+  const memberBadges = useProfileBadges(memberIds);
+  const memberBadgeStrips = useMemo(() => {
+    const strips = new Map<string, BadgeStrip>();
+    for (const member of members) {
+      const rows = memberBadges.rows.get(member.id);
+      if (!rows?.length) continue;
+      const strip = badgeStrip(projectProfileBadges(rows, member.id, { knownIcons: KUB_ICON_NAMES }));
+      if (strip.shown.length) strips.set(member.id, strip);
+    }
+    return strips;
+  }, [members, memberBadges.rows]);
   const visibleInvites = useMemo(
     () => invites.filter((invite) => !(invite.status === "accepted" && memberIdSet.has(invite.invitee_id))),
     [invites, memberIdSet],
@@ -1715,6 +1748,11 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                   key={member.id}
                   member={member}
                   subject={subjectFor(member)}
+                  // Scoped to this chat on purpose: the strip beside it may
+                  // carry a «Владелец» of its own, which is LETSCUBE's owner
+                  // rather than this group's (D-180).
+                  roleLabel={chatRoleLabel(member.chat_role, words.possessive)}
+                  badges={memberBadgeStrips.get(member.id) ?? null}
                   onOpenMenu={(position) =>
                     setMemberMenu({ memberId: member.id, mode: "menu", placement: rowMenuPlacement(position) })
                   }
@@ -2313,11 +2351,17 @@ async function fetchHiddenMessageIdSet(
 function GroupMemberRow({
   member,
   subject,
+  roleLabel,
+  badges,
   onOpenMenu,
   onOpenSheet,
 }: {
   member: MemberRow;
   subject: ChatMemberSubject;
+  /** «Владелец группы», «Администратор канала», or empty for an ordinary member. */
+  roleLabel: string;
+  /** What this person wears, or null when they wear nothing at all. */
+  badges: BadgeStrip | null;
   onOpenMenu: (position: { x: number; y: number }) => void;
   onOpenSheet: () => void;
 }) {
@@ -2340,14 +2384,47 @@ function GroupMemberRow({
       <UserAvatar user={member} size="sm" />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium truncate flex items-center gap-1 text-[color:var(--kub-text)]">
-          {isMemberOwner && <KubIcon name="crown" size={12} tone="pink" className="flex-shrink-0" label="Владелец" />}
-          {isMemberAdmin && <KubIcon name="shield" size={12} tone="accent" className="flex-shrink-0" label="Администратор" />}
+          {/* The accessible name is the scoped one, so a screen reader hears
+              «Владелец группы» here and «Владелец» from a standing chip — the
+              two things this glyph would otherwise be read as (D-180). */}
+          {isMemberOwner && <KubIcon name="crown" size={12} tone="pink" className="flex-shrink-0" label={roleLabel} />}
+          {isMemberAdmin && <KubIcon name="shield" size={12} tone="accent" className="flex-shrink-0" label={roleLabel} />}
           <span className="truncate">{member.full_name ?? member.username ?? "Без имени"}</span>
           {subject.isSelf && <span className="text-xs flex-shrink-0 text-[color:var(--kub-muted)]">(вы)</span>}
         </div>
-        {(isMemberOwner || isMemberAdmin) && (
-          <div className="text-xs text-[color:var(--kub-accent-text)]">
-            {isMemberOwner ? "Владелец" : "Администратор"}
+        {/* The second line, which used to be two words for two of the three
+            chat roles and nothing for anybody else — so an administrator of
+            LETSCUBE and somebody who arrived yesterday read identically
+            (D-180). The chat's own role still comes first, because it is what
+            this list is about; the standing and the medals stand beside it.
+
+            Nothing is drawn when there is nothing to say. A person with no chat
+            role and no badge keeps the single-line row they have always had:
+            an empty strip would add height to every row for a fact nobody
+            has. */}
+        {(roleLabel || badges) && (
+          <div
+            className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
+            data-testid="chat-info-member-standing"
+          >
+            {roleLabel && (
+              <span className="truncate text-xs text-[color:var(--kub-accent-text)]">{roleLabel}</span>
+            )}
+            {badges && (
+              <span
+                className="flex min-w-0 flex-wrap items-center gap-1.5"
+                data-testid="chat-info-member-badges"
+              >
+                {badges.shown.map((badge) => (
+                  <ProfileBadgeChip key={`${badge.kind}:${badge.key}`} badge={badge} />
+                ))}
+                {badges.hidden > 0 && (
+                  <KubBadge tone="muted" pill>
+                    +{badges.hidden}
+                  </KubBadge>
+                )}
+              </span>
+            )}
           </div>
         )}
       </div>

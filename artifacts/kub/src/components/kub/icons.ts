@@ -339,3 +339,13 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   webhook: { Icon: WebhooksLogo },
   zap: { Icon: Lightning, weight: "fill" },
 };
+
+/**
+ * Every icon name this build actually has.
+ *
+ * A badge names its icon in the database (D-180), so an older client can meet a
+ * newer seed and be handed a name it has no glyph for. Two surfaces need the
+ * same answer to «do I have this one», and a `new Set(Object.keys(KUB_ICONS))`
+ * written twice is the same list maintained in two places.
+ */
+export const KUB_ICON_NAMES: ReadonlySet<string> = new Set(Object.keys(KUB_ICONS));
