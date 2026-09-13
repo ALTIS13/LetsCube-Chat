@@ -514,6 +514,42 @@ cosmetics. Discord shows badges on any card it opens. See D-168.
 
 Nothing is redesigned on the strength of one sentence. What changes today: no further Telegram-shaped fix is
 started on that surface without first asking what the Discord-shaped one would be.
+## Voice Channels — Slice 1 Result (2026-09-13)
+
+**The riskiest assumption in the whole voice plan is tested, and it holds.**
+
+A LiveKit SFU runs on the production host as a plain Compose project at
+`/srv/letscube/voice-probe/`, reachable by nothing in the product. Two headless
+browsers joined one room over the open internet and each heard the other. The
+second ran with Chrome's own `--force-webrtc-ip-handling-policy=disable_non_proxied_udp`,
+which is the environment the tunnelled part of this audience is in, and its media
+went over **TCP** — 82 374 bytes out, 85 805 in, candidate pair `prflx → host`,
+`protocol: tcp`, no TURN and no certificate needed. The ordinary browser's went
+over UDP. Both readings are from `getStats()` rather than from the call appearing
+to work.
+
+The kill criterion — a tunnelled client that cannot connect at all — is **not
+met**, so the plan proceeds to slice 2 instead of being redesigned.
+
+**What it costs.** Ten audio publishers for ten minutes, each subscribed to the
+others, is 18.58 % of the container's two-core limit and 64 MiB. A fixed Postgres
+read measured p95 137 ms before, 146 during and **150 after** — the highest
+figure being the one taken when the SFU was idle is the plainest statement that
+it is not what moved the number.
+
+**The host, measured at last** and recorded because the proposal asked and nobody
+had: 8 cores (EPYC 7662), 11 GiB memory, 119 GB disk at **82 % full**, 41
+containers, load about 1.5 at rest.
+
+Full detail, including three things learned by doing it — `auto_create: false`
+biting first, Docker publishing past ufw on this host, and the kernel's UDP
+receive buffer being too small for an SFU — is in `docs/operations/voice-probe.md`,
+with the two commands that remove the probe entirely.
+
+**Deliberately not done in slice 1:** no hostname, no DNS record, no TLS, no
+Traefik router, no Coolify application, no migration, no client dependency and no
+route on `app.letscube.ru`. Slice 1 had to be cheap to discard, and it is.
+
 ## Last Confirmed Deploy Baseline
 
 **`d8c51a2`, deployed 2026-09-13**, four commits after `e91bee2` earlier the same

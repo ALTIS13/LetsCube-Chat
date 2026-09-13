@@ -1,0 +1,87 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>voice transport probe</title>
+<body>
+<pre id="log">starting…</pre>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.7.5/dist/livekit-client.umd.min.js"></script>
+<script>
+  // The scratch client of slice 1. It exists to answer one question — can media
+  // reach this host from a network that carries no UDP — and it lives nowhere
+  // near the product: no build, no dependency, no route on app.letscube.ru.
+  const out = document.getElementById("log");
+  const say = (line) => { out.textContent += "\n" + line; };
+  window.__state = { connected: false, subscribed: 0, error: null };
+
+  async function main() {
+    const params = new URLSearchParams(location.search);
+    const url = params.get("url");
+    const token = params.get("token");
+    if (!url || !token) { say("no url or token"); return; }
+
+    const { Room, RoomEvent, createLocalAudioTrack } = LivekitClient;
+    const room = new Room({ adaptiveStream: false, dynacast: false });
+
+    room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
+      window.__state.subscribed += 1;
+      say("subscribed to " + track.kind + " from " + participant.identity);
+    });
+    room.on(RoomEvent.Disconnected, (reason) => say("disconnected: " + reason));
+
+    try {
+      await room.connect(url, token, { autoSubscribe: true });
+      window.__state.connected = true;
+      say("connected as " + room.localParticipant.identity);
+      const mic = await createLocalAudioTrack();
+      await room.localParticipant.publishTrack(mic);
+      say("published audio");
+      window.__room = room;
+    } catch (err) {
+      window.__state.error = String(err && err.message ? err.message : err);
+      say("error: " + window.__state.error);
+    }
+  }
+
+  // What the deliverable actually is: which candidate pair carried the media.
+  window.__transport = async () => {
+    const room = window.__room;
+    if (!room) return { error: "no room" };
+    const pcs = [];
+    const engine = room.engine;
+    for (const key of ["publisher", "subscriber"]) {
+      const transport = engine && engine.pcManager ? engine.pcManager[key] : null;
+      const pc = transport && transport.pc ? transport.pc : null;
+      if (pc) pcs.push([key, pc]);
+    }
+    const found = [];
+    for (const [name, pc] of pcs) {
+      const stats = await pc.getStats();
+      const candidates = new Map();
+      let pair = null;
+      stats.forEach((report) => {
+        if (report.type === "local-candidate" || report.type === "remote-candidate") {
+          candidates.set(report.id, report);
+        }
+        if (report.type === "candidate-pair" && (report.selected || report.state === "succeeded" || report.nominated)) {
+          if (!pair || (report.bytesSent || 0) > (pair.bytesSent || 0)) pair = report;
+        }
+      });
+      if (pair) {
+        const local = candidates.get(pair.localCandidateId) || {};
+        const remote = candidates.get(pair.remoteCandidateId) || {};
+        found.push({
+          pc: name,
+          protocol: local.protocol || remote.protocol || "unknown",
+          localType: local.candidateType || "unknown",
+          remoteType: remote.candidateType || "unknown",
+          relayProtocol: local.relayProtocol || null,
+          bytesSent: pair.bytesSent || 0,
+          bytesReceived: pair.bytesReceived || 0,
+        });
+      }
+    }
+    return { pairs: found, subscribed: window.__state.subscribed };
+  };
+
+  main();
+</script>
+</body>

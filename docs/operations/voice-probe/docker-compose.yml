@@ -1,0 +1,35 @@
+# The voice transport probe (slice 1 of docs/proposals/2026-09-13-voice-channels.md).
+#
+# Deliberately NOT a Coolify application yet. Slice 1 must be cheap to discard —
+# `docker compose down` and one directory removed is the whole of it — and it
+# must not acquire a Traefik router, a hostname or an auto-deploy hook before the
+# question it exists to answer has been answered.
+#
+# The limit is the point of the exercise as much as the ports are. This host runs
+# 41 containers including the production database, and exactly one of them is
+# capped today. An SFU whose CPU rises with how many people are talking must not
+# be the second uncapped thing on that box.
+services:
+  livekit:
+    image: livekit/livekit-server:v1.8.4
+    container_name: letscube-voice-probe
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    env_file: ./livekit.env
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      - "7880:7880/tcp"
+      - "7881:7881/tcp"
+      - "7882:7882/udp"
+      - "3478:3478/udp"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1g
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7880/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

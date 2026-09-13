@@ -7332,14 +7332,19 @@ does not delete it either.
 
 **Audit rows:** work-surfaces A-18.
 
-## D-135 `[ ]` Sign-out ends the session on one tap
+## D-135 `[x]` Sign-out ends the session on one tap
 
 **Severity:** medium. Found by the settings audit from the code; not rendered, because
 signing out would have ended the fixture session.
 
-**Surface:** the avatar menu in `artifacts/kub/src/components/sidebar/SidebarHeader.tsx`,
-calling `auth.signOut()` through `artifacts/kub/src/hooks/useUser.ts`. The menu is in
-frames `settings-profile-frame-p02.png` and `settings-profile-frame-d01.png`.
+**Surface, corrected 2026-09-13:** *two* menus, not one. The phone's avatar menu in
+`artifacts/kub/src/components/sidebar/SidebarHeader.tsx:152-165` — which is `md:hidden` and
+does not exist on a computer at all — and the computer's side list in
+`artifacts/kub/src/components/sidebar/SideMenuLayer.tsx:105-118`, which carries the same
+row. Both call `auth.signOut()` through `useSignOut()` in
+`artifacts/kub/src/hooks/useUser.ts:13`. This entry named only the first, so a fix
+written from it would have left every computer unprotected. The menu is in frames
+`settings-profile-frame-p02.png` and `settings-profile-frame-d01.png`.
 
 **Defect:** «Выйти», the last item of the menu that opens from a person's own avatar,
 signs out immediately.
@@ -7350,13 +7355,56 @@ sources [Desk-main], [TR], [iOS-logout], [And-logout]).
 
 **Audit rows:** settings-profile A5; top-10 item 7.
 
-## D-136 `[ ]` Closing settings throws away a typed name, username or bio without asking
+**Fixed** 2026-09-13. Both menus ask first, through `requestAppConfirm`, and both ask
+the same question: `artifacts/kub/src/lib/signOutConfirm.ts` holds it as data, because
+a confirmation worded one way on a phone and another way on a computer reads as two
+different actions. The menu closes before the question is raised — the side list has
+its own Escape handler on the window, and one press would otherwise dismiss the dialog
+and the layer together.
+
+**What the question says, and why it is not what this entry proposed.** The wording
+proposed here was «Вы действительно хотите выйти?», Telegram Desktop's `lng_sure_logout`.
+Measured at 390: `KubModal` truncates its title to one line, and beside the icon and the
+✕ that sentence rendered as «Вы действительно хотите в…». A question cut off mid-word
+asks nothing, so the title is «Выйти из аккаунта?» — still a question, still naming what
+is being left, 18 characters instead of 30. The consequence a person actually needs goes
+in the body: «Сеанс @maks на этом устройстве завершится. Чтобы вернуться, нужно будет
+войти снова.»
+
+The никнейм is printed and a name never is. On a shared device two people can both be
+«Максим» and only one can be `@maks`; and «Сеанс @maks завершится» needs no declension,
+while the same sentence with a name in the nominative is not Russian. Where there is no
+никнейм the clause is dropped rather than filled, because the menu the question was
+raised from has the person's name and picture at its top either way.
+
+**What this did not do:** move the row. The proposal also put «Выйти» at the foot of
+«Настройки», which is where Telegram keeps it; here it stays the last row of each
+account menu, where the audit found it. That is a placement decision about a screen
+which has had two forms since D-160, and it belongs with the settings parity work — the
+one-tap defect this entry records is closed either way, and the placement is not being
+dropped quietly.
+
+**Tests:** `tests/unit/sign-out-confirm.test.mts` pins the wording, the tone, the icon
+and the handle rule; six mutations red, one control green.
+`tests/e2e/settings-exit-confirmations.spec.ts` proves both menus on their own shells —
+the side list at 1440, the avatar menu at 390 — that «Отмена» leaves the session alone,
+that «Выйти» really ends it, and that the confirming button is what `elementFromPoint`
+answers at its own centre. Frames: `output/settings-defects/sign-out-{light,dark}-*.png`.
+
+## D-136 `[x]` Closing settings throws away a typed name, username or bio without asking
 
 **Severity:** medium. Found by the settings audit from the code; the footer is in every
 settings frame.
 
-**Surface:** the footer of `artifacts/kub/src/components/sidebar/SettingsModal.tsx`,
-inside `artifacts/kub/src/components/kub/KubModal.tsx`.
+**Surface, corrected 2026-09-13:** that describes the screen as it was before D-160,
+when a dialog was its only form. The screen is `useSettingsScreen` in
+`artifacts/kub/src/components/settings/SettingsScreen.tsx` now, and it has **two** forms
+with doors of their own: the list column's panel from `md`
+(`artifacts/kub/src/components/settings/SettingsPanel.tsx` — the ✕ at `:69`, and a
+second Escape in the search field at `:96`), and below `md` the full-screen sheet
+(`artifacts/kub/src/components/sidebar/SettingsModal.tsx` — its footer «Закрыть», plus
+`KubModal`'s ✕, Escape and backdrop, which are one `onClose`). Five doors between them.
+The three fields are held back by `handleSave` at `SettingsScreen.tsx:151`.
 
 **Defect:** «Сохранить» saves only «Имя», «Никнейм» and «О себе»; every other control on
 the same screen saves at once. ✕, «Закрыть», Escape and a click on the backdrop all close
@@ -7368,6 +7416,47 @@ own «Изменить профиль» screen with «Готово» and «От�
 closing with unsaved text asks whether to discard it.
 
 **Audit rows:** settings-profile B4; top-10 items 1 and 5.
+
+**Fixed** 2026-09-13, by the second half of what this entry proposed: a separate
+«Изменить профиль» screen is not built, and until it is, leaving with unsaved text asks.
+Every door of both forms goes through one `requestClose` on the screen itself rather
+than through each container's own `onClose` — the defect is the screen's, and a guard
+written into the dialog would have left the column exactly as it was.
+
+**What is at risk is exactly three fields**, established from the code rather than
+assumed: «Имя», «Никнейм» and «О себе» are what `handleSave` writes. Everything else on
+the screen — тема, «Статус «в сети»», the three push categories, the microphone,
+«Оформление» — writes as it is flipped, and the phone number has its own verified flow.
+That asymmetry is the other half of the defect, so the question says it: «Имя, никнейм и
+«О себе» останутся прежними. Остальные настройки уже сохранены.»
+
+**The rule is shared, not copied.** `chatProfileDirty` (D-164) and the profile's
+`profileDraftDirty` are both calls into `artifacts/kub/src/lib/unsavedEdits.ts`. It
+compares **what the save would write**, not what is on screen: each field carries the
+normaliser its own save uses, so a name retyped with a double space, a никнейм typed
+with «@», or a trailing space are not changes and raise nothing. Normalising only the
+edited side — the obvious way to write it — asks about changes the save itself would
+erase, and that mutation is one of the four the unit test refuses.
+
+A question that is always asked is one people learn to dismiss, so nothing typed means
+nothing asked and the screen closes as it always did.
+
+**Tests:** `tests/unit/unsaved-edits.test.mts` (four mutations red, one control green)
+and `tests/e2e/settings-exit-confirmations.spec.ts`, which walks every door each shell
+offers in turn, answers «Продолжить», and requires the text to still be in hand for the
+next one. Frames: `output/settings-defects/discard-{light,dark}-*.png`.
+
+**Found while wiring it:** D-181 and D-182, below. Two of those five doors are key
+presses, and a dialog raised from a key press was being dismissed by that same press;
+and on a computer the settings screen can be taken off the column by something that is
+not a door at all.
+
+**One door that turned out not to exist**, measured rather than assumed: below `md` the
+bottom navigation cannot be reached while the sheet is open — the sheet is a full-screen
+`KubModal` and its own footer intercepts the press — so switching from «Профиль» to
+«Чаты» is not a way out of a screen with text in it. The same measurement says a
+backdrop click is unreachable there too, the panel covering the overlay edge to edge;
+below `md` the doors are three, not four.
 
 ## D-137 `[ ]` Notification category switches look on and do nothing until device push is enabled
 
@@ -9418,3 +9507,69 @@ the text colour.
 author line (4), per-group roles (5–7, blocked on nothing now that D-164 has landed), and the subscription and
 premium medals (8), which stay undesigned on purpose — a medal with no data behind it is the one thing in that
 document that would be a relabelling.
+
+---
+
+## D-181 `[x]` A confirmation raised by a key press was answered by that same press
+
+**Severity: high** wherever it happened: the question appeared and vanished inside one
+keydown, so the person saw nothing and had no chance to answer. Worse than not asking,
+because the guard looks as though it ran.
+
+**Found** 2026-09-13 while closing D-136, and only because that fix gave Escape
+something to raise — two of the settings screen's five doors are key presses.
+
+**Surface:** `artifacts/kub/src/components/kub/KubModal.tsx:56-83`, the window `keydown`
+listener every dialog in the product installs.
+
+**Defect, and how it was measured.** Escape in the settings column called
+`requestClose`, which raised «Отменить изменения?» — and the screen simply closed with
+the text dropped, exactly as before the fix. A `MutationObserver` on `document.body`
+counted the dialog **inserted and removed inside the one key press**: one dialog request
+dispatched, one insertion seen, nothing on screen afterwards. React flushes a discrete
+event's update synchronously, so the new dialog's effect runs while that keydown is
+still travelling up to `window`; the listener it installs sits on an ancestor the event
+has not reached yet, and the DOM duly delivers it. `onClose` fires and the promise
+resolves `false`.
+
+It hid behind a working ✕ for as long as it existed: the click path cannot reproduce it,
+and until D-136 every confirmation in the product was raised by a pointer.
+
+**Fixed** the same day. The listener records `performance.now()` when it is installed
+and ignores any press whose `timeStamp` is older — the two share a clock, so a press
+that predates the dialog is not that dialog's to answer. Two lines, in the one component
+every dialog in the product goes through.
+
+**Test:** `tests/e2e/settings-exit-confirmations.spec.ts` — «every door this shell offers
+asks before dropping the text» walks the Escape doors on both shells and goes red on both
+projects when the timestamp check is removed.
+
+---
+
+## D-182 `[ ]` A global search takes the settings screen off the column and drops what was typed
+
+**Severity: medium**, and the same defect D-136 records reaching the same screen by a
+road that is not a door.
+
+**Found** 2026-09-13, measured while closing D-136 on the message-actions fixture at
+1440.
+
+**Surface:** `artifacts/kub/src/components/sidebar/Sidebar.tsx:203-206`, the chain that
+decides what the list column's body is — `hasSearchQuery ? <SidebarSearchResults/> :
+settingsColumnOpen ? <SettingsPanel/> : …`. The field that feeds it is the list header's
+own search (`SidebarHeader.tsx:329`), which stays on screen above the settings panel.
+
+**Defect, as measured.** With «Настройки» open on the column and «Максим Орлов-Тестов»
+typed into «Имя», one character into the header's search field replaces the panel with
+the search results: `field 0, panel 0, dialogs 0`. Clearing the query brings the screen
+back — `settingsOpen` was never false — showing the stored «Максим Орлов». The typed
+name is gone, with nothing said. D-136's guard cannot see this: nothing calls
+`requestClose`, the component is simply unmounted under it.
+
+**Proposed — preserve, do not ask.** Searching the chat list is not a decision to
+abandon the profile, so a confirmation here would be a question raised by the first
+keystroke in an unrelated field, which is worse than the defect. The screen should keep
+its state across the swap instead: either the column keeps `SettingsPanel` mounted and
+hidden while a query is showing, or the three fields are lifted out of the component
+that the swap unmounts. That is a decision about how the column swaps its body, so it
+belongs with the settings parity work rather than with a confirmation.

@@ -1,0 +1,31 @@
+# LiveKit, as slice 1 of the voice-channel plan starts it.
+#
+# This is a probe, not the product: no route on app.letscube.ru, no migration,
+# no client dependency, and nothing in the application knows it exists. It is
+# here to answer the one question the whole plan rests on — whether media can
+# reach this host from a client whose network carries no UDP.
+#
+# `udp_port` is the mux: one published UDP port rather than the 50000-60000
+# range, which matters on a host whose Docker address pools were customised to
+# avoid a provider conflict and must not be reset.
+port: 7880
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  port_range_start: 0
+  port_range_end: 0
+  use_external_ip: true
+turn:
+  enabled: true
+  # No TLS here: slice 1 has no certificate and no hostname, so the TURN test is
+  # over plain TCP, which is the same transport a tunnelled client would get and
+  # the same question it answers. TLS is slice 2's, with the hostname.
+  udp_port: 3478
+room:
+  # A room is created deliberately, never conjured by a token. With auto-create
+  # on, a token bug becomes a room-spam bug.
+  auto_create: false
+  empty_timeout: 60
+  max_participants: 10
+logging:
+  level: info
