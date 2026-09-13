@@ -2,10 +2,25 @@ const MIN_INVITE_CODE_LENGTH = 6;
 const MAX_INVITE_CODE_LENGTH = 64;
 const INVITE_CODE_RE = /^[A-Z0-9_-]+$/;
 
+/**
+ * D-132 (A-34). These two sentences used to name the SQL proposals to apply —
+ * `20260622_registration_invite_codes.sql` and
+ * `20260622_registration_invite_mode_settings.sql`.
+ *
+ * The second of them is not an administration screen at all: it is what
+ * `mapRegistrationInviteError` answers for `invite_not_configured`, which the
+ * public registration form shows to somebody trying to create an account.
+ * A stranger was being handed the name of a migration file in this project.
+ *
+ * The names are kept here, in a comment, because that is where they help: the
+ * condition is still a missing object, and whoever reads this file is the
+ * person who can do something about it. The screen gets one plain sentence and
+ * the cause goes to the log.
+ */
 export const REGISTRATION_INVITES_REQUIRED_MESSAGE =
-  "Инвайты требуют обновления базы данных. Примените SQL-предложение 20260622_registration_invite_codes.sql.";
+  "Приглашения временно недоступны. Попробуйте позже.";
 export const REGISTRATION_INVITE_MODE_REQUIRED_MESSAGE =
-  "Режим регистрации требует обновления базы данных. Примените SQL-предложение 20260622_registration_invite_mode_settings.sql.";
+  "Режим регистрации временно недоступен. Попробуйте позже.";
 export const REGISTRATION_INVITE_ONLY_BANNER_TITLE =
   "Регистрация сейчас доступна только по приглашению.";
 export const REGISTRATION_INVITE_ONLY_BANNER_BODY =

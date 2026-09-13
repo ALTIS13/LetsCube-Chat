@@ -7,7 +7,8 @@ import type { AuditAction, AuditLogWithActor, Ban, Mute, Profile, Chat } from "@
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { listReadView, readReplacesScreen } from "@/lib/listReadState";
-import { showAppAlert } from "@/lib/appDialogs";
+import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
+import { canLiftSanctionRow, sanctionRowLiftPrompt } from "@/lib/adminPrompts";
 import { useAuditLogs } from "@/hooks/useAuditLogs";
 
 type BanRow = Ban & {
@@ -117,16 +118,30 @@ export function BansMutesTab() {
     };
   }, [supabase, load]);
 
-  const removeBan = async (id: string) => {
-    const { error } = await supabase.from("bans").delete().eq("id", id);
+  // D-133 (A-49). Both acted on the press. The row this hangs off deletes by
+  // `id`, so it ends exactly one restriction and leaves the rest of the
+  // person's history alone (checked while closing D-134) — the question says
+  // so rather than leaving the reader to assume the worse reading.
+  const removeBan = async (row: BanRow) => {
+    const confirmed = await requestAppConfirm({
+      ...sanctionRowLiftPrompt("ban", profileName(row.user)),
+      icon: "unban",
+    });
+    if (!confirmed) return;
+    const { error } = await supabase.from("bans").delete().eq("id", row.id);
     if (error) { showAppAlert(prefixError("Не удалось снять блокировку", error), "Ошибка"); return; }
-    setBans((b) => b.filter((x) => x.id !== id));
+    setBans((b) => b.filter((x) => x.id !== row.id));
   };
 
-  const removeMute = async (id: string) => {
-    const { error } = await supabase.from("mutes").delete().eq("id", id);
+  const removeMute = async (row: MuteRow) => {
+    const confirmed = await requestAppConfirm({
+      ...sanctionRowLiftPrompt("mute", profileName(row.user), row.chat?.name ?? null),
+      icon: "volume",
+    });
+    if (!confirmed) return;
+    const { error } = await supabase.from("mutes").delete().eq("id", row.id);
     if (error) { showAppAlert(prefixError("Не удалось снять мьют", error), "Ошибка"); return; }
-    setMutes((m) => m.filter((x) => x.id !== id));
+    setMutes((m) => m.filter((x) => x.id !== row.id));
   };
 
   const view = listReadView({ loading, error, loadedOnce: loadedOnceRef.current });
@@ -208,7 +223,7 @@ export function BansMutesTab() {
                 expired={!!expired}
                 reason={b.reason}
                 meta={`${b.issuer?.full_name ?? "—"} · ${fmt(b.created_at)} → ${fmt(b.expires_at)}`}
-                onRemove={() => removeBan(b.id)}
+                onRemove={() => void removeBan(b)}
               />
             );
           })
@@ -238,7 +253,7 @@ export function BansMutesTab() {
                 expired={!!expired}
                 reason={m.reason}
                 meta={`${m.chat ? `в «${m.chat.name ?? m.chat.id.slice(0, 8)}»` : "везде"} · ${m.issuer?.full_name ?? "—"} · ${fmt(m.created_at)} → ${fmt(m.expires_at)}`}
-                onRemove={() => removeMute(m.id)}
+                onRemove={() => void removeMute(m)}
               />
             );
           })
@@ -391,8 +406,24 @@ function isActiveSanction(row: Pick<Ban | Mute, "expires_at">): boolean {
   return !isExpiredSanction(row, Date.now());
 }
 
+/**
+ * One definition, three callers: the two lists, and the «Снять» button.
+ *
+ * D-133 (A-49) asked for the button to stop appearing on a restriction that
+ * has already run out. Written separately from the filter above it, the two
+ * could disagree about one row — and a button offered for something the list
+ * calls over is the same class of bug as a button whose delete matches nothing.
+ */
 function isExpiredSanction(row: Pick<Ban | Mute, "expires_at">, nowMs: number): boolean {
-  return Boolean(row.expires_at && new Date(row.expires_at).getTime() <= nowMs);
+  return !canLiftSanctionRow(row, new Date(nowMs));
+}
+
+/** The name a question about this person should use, or nothing. */
+function profileName(user: Pick<Profile, "full_name" | "username"> | null | undefined): string {
+  const full = user?.full_name?.trim();
+  if (full) return full;
+  const username = user?.username?.trim();
+  return username ? `@${username}` : "";
 }
 
 function RowCard({
@@ -429,14 +460,19 @@ function RowCard({
         <div className="text-xs mt-0.5 break-words text-[color:var(--kub-text)]">{reason}</div>
         <div className="text-[12px] mt-1 break-words text-[color:var(--kub-muted)]">{meta}</div>
       </div>
-      <button
-        onClick={onRemove}
-        aria-label="Снять ограничение"
-        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold kub-raise-hover flex-shrink-0 text-[color:var(--kub-accent-text)]"
-      >
-        <KubIcon name="rotate" size={12} />
-        Снять
-      </button>
+      {/* D-133 (A-49). A restriction that has run out is over; ending it is not
+          an action, and the chip beside this said «истёк» while the button
+          claimed there was still something to end. */}
+      {!expired && (
+        <button
+          onClick={onRemove}
+          aria-label="Снять ограничение"
+          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold kub-raise-hover flex-shrink-0 text-[color:var(--kub-accent-text)]"
+        >
+          <KubIcon name="rotate" size={12} />
+          Снять
+        </button>
+      )}
     </div>
   );
 }

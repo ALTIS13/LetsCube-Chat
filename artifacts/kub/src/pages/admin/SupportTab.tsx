@@ -34,6 +34,8 @@ import {
   type SupportTicketDetails as SupportTicketDetailsModel,
 } from "@/lib/support/operatorApi";
 import { useAppStore } from "@/store/app.store";
+import { requestAppConfirm } from "@/lib/appDialogs";
+import { supportIntakeClosurePrompt } from "@/lib/adminPrompts";
 import { SupportQueue } from "./support/SupportQueue";
 import {
   SupportTicketDetails,
@@ -288,6 +290,15 @@ export function SupportTab() {
   }, [selectedTicketId]);
 
   const saveSettings = useCallback(async () => {
+    // D-133 (A-69). The switch only edits a draft; «Сохранить» is the press
+    // that reaches people, and it reached them silently. Only a closure asks —
+    // raising a rate limit or fixing the closed-intake wording must not grow a
+    // dialog, or the dialog stops being read.
+    const closure = supportIntakeClosurePrompt(settings, settingsDraft);
+    if (closure) {
+      const confirmed = await requestAppConfirm({ ...closure, icon: "headset" });
+      if (!confirmed) return;
+    }
     setBusyAction("settings");
     setActionError(null);
     try {
@@ -301,7 +312,7 @@ export function SupportTab() {
     } finally {
       setBusyAction(null);
     }
-  }, [settingsDraft]);
+  }, [settings, settingsDraft]);
 
   const savePreferences = useCallback(async () => {
     if (!userId) return;

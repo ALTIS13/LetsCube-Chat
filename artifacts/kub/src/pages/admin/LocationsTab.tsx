@@ -8,10 +8,17 @@ import { useTaskRouting, useTaskRoutingEnabledPreference } from "@/hooks/useTask
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
 import {
   LOCATION_ROLE_LABEL,
-  LOCATION_ROUTING_REQUIRED_MESSAGE,
   mapLocationRoutingError,
 } from "@/lib/locationRouting";
 import { getRoleLabel, mapRolesPermissionsError } from "@/lib/rolePermissions";
+import { requestAppConfirm } from "@/lib/appDialogs";
+import {
+  ADMIN_LOCATIONS_UNAVAILABLE,
+  ADMIN_LOCATIONS_UNAVAILABLE_DETAIL,
+  locationArchivePrompt,
+  locationMemberRemovePrompt,
+  plainAdminMessage,
+} from "@/lib/adminPrompts";
 import type { Location, LocationRole, Profile } from "@/types/database";
 import { cn } from "@/lib/utils";
 
@@ -126,7 +133,15 @@ export function LocationsTab() {
     const result = await fn();
     setSaving(null);
     if (result.error) {
-      setError(dynamicRoles.available ? mapRolesPermissionsError(result.error, mapLocationRoutingError(result.error)) : mapLocationRoutingError(result.error));
+      // D-132 (A-31). The shared mappers belong to other tracks and still
+      // answer «требуют обновления базы данных»; this screen refuses that
+      // answer rather than rewriting them, and keeps the cause in the log.
+      const mapped = dynamicRoles.available
+        ? mapRolesPermissionsError(result.error, mapLocationRoutingError(result.error))
+        : mapLocationRoutingError(result.error);
+      const shown = plainAdminMessage(mapped, ADMIN_LOCATIONS_UNAVAILABLE);
+      if (shown !== mapped) console.error(`[admin/locations] ${key} failed:`, result.error);
+      setError(shown);
       return false;
     }
     setNotice(success);
@@ -176,6 +191,13 @@ export function LocationsTab() {
 
   const archiveLocation = async () => {
     if (!selectedLocation) return;
+    // D-133 (A-28). It sat beside «Сохранить» in the same row of buttons and
+    // took the location out of every picker on the press.
+    const confirmed = await requestAppConfirm({
+      ...locationArchivePrompt(selectedLocation.name, selectedMembers.length),
+      icon: "folder",
+    });
+    if (!confirmed) return;
     await runAction(
       "archive-location",
       () => supabase.rpc("location_archive", { p_location_id: selectedLocation.id }),
@@ -214,8 +236,15 @@ export function LocationsTab() {
     }
   };
 
-  const removeMember = async (userId: string) => {
+  const removeMember = async (userId: string, personName: string) => {
     if (!selectedLocation) return;
+    // D-133 (A-30). `location_member_remove` deletes the row; there is no undo
+    // beyond assigning the person again by hand.
+    const confirmed = await requestAppConfirm({
+      ...locationMemberRemovePrompt(personName, selectedLocation.name),
+      icon: "userRemove",
+    });
+    if (!confirmed) return;
     await runAction(
       `remove-${userId}`,
       () => supabase.rpc("location_member_remove", {
@@ -235,6 +264,10 @@ export function LocationsTab() {
   }
 
   if (!routingProbeEnabled || !routing.available) {
+    // D-132 (A-31). «Локации требуют обновления базы данных» told a location
+    // administrator to apply a migration. The cause goes to the log; the panel
+    // says only that the section cannot be used and what still can.
+    if (routing.error) console.error("[admin/locations] locations unavailable:", routing.error);
     return (
       <KubPanel className="space-y-3">
         <div className="flex items-start gap-3">
@@ -244,10 +277,10 @@ export function LocationsTab() {
           <div className="min-w-0">
             <h2 className="text-lg font-bold text-[color:var(--kub-text)]">Локации</h2>
             <p className="mt-1 text-sm leading-relaxed text-[color:var(--kub-muted)]">
-              {routingProbeEnabled ? routing.error ?? LOCATION_ROUTING_REQUIRED_MESSAGE : LOCATION_ROUTING_REQUIRED_MESSAGE}
+              {ADMIN_LOCATIONS_UNAVAILABLE}
             </p>
             <p className="mt-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
-              Существующее создание и обновление задач остаётся доступным без маршрутизации по локациям.
+              {ADMIN_LOCATIONS_UNAVAILABLE_DETAIL}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <KubButton
@@ -260,7 +293,7 @@ export function LocationsTab() {
                 }}
                 loading={routingProbeEnabled && routing.loading}
               >
-                Проверить обновление базы
+                Проверить ещё раз
               </KubButton>
               {routingProbeEnabled && (
                 <KubButton
@@ -548,7 +581,7 @@ export function LocationsTab() {
                       <KubButton
                         variant="ghost"
                         size="sm"
-                        onClick={() => void removeMember(member.user_id)}
+                        onClick={() => void removeMember(member.user_id, getProfileName(member.profile))}
                         loading={saving === `remove-${member.user_id}`}
                         leftIcon={<KubIcon name="userRemove" size={13} />}
                       >

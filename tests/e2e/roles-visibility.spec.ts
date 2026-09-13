@@ -74,7 +74,10 @@ test.describe("KUB role visibility", () => {
     await expect(page.getByText("Режим регистрации")).toBeVisible();
     await expect(page.getByRole("switch", { name: "Включить режим только по приглашению" })).toBeVisible();
     await expect(
-      page.getByText(/Приглашения сотрудников|Инвайты требуют обновления базы данных/),
+      // D-132 (A-34). The unavailable half used to read «Инвайты требуют
+      // обновления базы данных. Примените SQL-предложение …»; it is now one
+      // plain sentence and the cause is in the console.
+      page.getByText(/Приглашения сотрудников|Приглашения временно недоступны/),
     ).toBeVisible();
 
     await gotoOrSkip(page, "/tasks");

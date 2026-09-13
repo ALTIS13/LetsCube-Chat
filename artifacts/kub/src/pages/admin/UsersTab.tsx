@@ -3,6 +3,12 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { adminUserQuery, adminUserSearchFilters } from "@/lib/adminUserSearch";
 import { activeSanctionFilter, sanctionLiftPrompt } from "@/lib/sanctions";
+import {
+  ADMIN_LOCATIONS_UNAVAILABLE,
+  ADMIN_USER_PROFILE_UNAVAILABLE,
+  bulkGlobalRoleAssignPrompt,
+  bulkLocationAssignPrompt,
+} from "@/lib/adminPrompts";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import type { AppRole, DynamicRole, LocationRole, Profile } from "@/types/database";
@@ -37,6 +43,14 @@ import { cacheControlFor } from "@/lib/mediaCacheControl";
 
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
+
+/** The name a question about this person should use, or nothing. */
+function profileName(user: Pick<Profile, "full_name" | "username">): string {
+  const full = user.full_name?.trim();
+  if (full) return full;
+  const username = user.username?.trim();
+  return username ? `@${username}` : "";
+}
 
 const roleLabel: Record<AppRole, string> = {
   admin: "Администратор",
@@ -496,6 +510,15 @@ export function UsersTab() {
       setBulkError("Выберите глобальную роль.");
       return;
     }
+    // D-133 (A-16). «Снять роль» beside this already asked; giving a role to
+    // everybody selected did not, though it is the same reach in the other
+    // direction and one press away from the same mistake.
+    const role = dynamicRoleById.get(bulkGlobalRoleId);
+    const confirmed = await requestAppConfirm({
+      ...bulkGlobalRoleAssignPrompt(role ? getRoleLabel(role) : null, selectedUsers.map(profileName)),
+      icon: "shield",
+    });
+    if (!confirmed) return;
     await runBulk(
       "assign-global",
       async (user) => await supabase.rpc("user_assign_global_role", { p_user_id: user.id, p_role_id: bulkGlobalRoleId }),
@@ -534,6 +557,20 @@ export function UsersTab() {
       setBulkError("Выберите роль в локации.");
       return;
     }
+    // D-133 (A-16). Joining people to a location starts routing that
+    // location's tasks and questions to them; it acted on the press.
+    const location = routing.locations.find((item) => item.id === bulkLocationId) ?? null;
+    const confirmed = await requestAppConfirm({
+      ...bulkLocationAssignPrompt(
+        location?.name ?? null,
+        // The legacy branch below sends "staff" whatever the picker says, so
+        // the question must name the role the call will actually use.
+        selectedDynamicLocationRole ? getRoleLabel(selectedDynamicLocationRole) : LOCATION_ROLE_LABEL.staff,
+        selectedUsers.map(profileName),
+      ),
+      icon: "mapPin",
+    });
+    if (!confirmed) return;
     await runBulk(
       "assign-location",
       async (user) => {
@@ -682,7 +719,7 @@ export function UsersTab() {
               Свернуть
             </KubButton>
             {!routing.available && (
-              <span className="text-xs text-[color:var(--kub-muted)]">Локации недоступны или требуют обновления базы данных.</span>
+              <span className="text-xs text-[color:var(--kub-muted)]">{ADMIN_LOCATIONS_UNAVAILABLE}</span>
             )}
           </div>
         </KubPanel>
@@ -1264,7 +1301,11 @@ function ProfilePreviewModal({
 
 function mapAdminProfileAvatarError(error: unknown, stage: "upload" | "update"): string {
   if (isAdminProfileRpcMissing(error)) {
-    return "Редактирование профиля пользователя требует обновления базы данных.";
+    // D-132. Not named by the entry, but the same sentence in the same family
+    // of screens: an administrator cannot apply a migration from a profile
+    // dialog, and the cause is already in the log beside the failing call.
+    console.error("[admin/users] admin profile update unavailable:", error);
+    return ADMIN_USER_PROFILE_UNAVAILABLE;
   }
   if (isPermissionLikeError(error)) {
     return "Недостаточно прав для изменения профиля.";

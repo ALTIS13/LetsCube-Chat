@@ -6,12 +6,19 @@ import { KubBadge, KubButton, KubCreateSection, KubIcon, KubInput, KubNotice, Ku
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
 import { usePermissionAccess } from "@/hooks/useRole";
 import { useTaskRouting, useTaskRoutingEnabledPreference } from "@/hooks/useTaskRouting";
-import { LOCATION_ROUTING_REQUIRED_MESSAGE } from "@/lib/locationRouting";
 import {
   REGISTRATION_INVITE_MODE_REQUIRED_MESSAGE,
   REGISTRATION_INVITES_REQUIRED_MESSAGE,
   buildRegistrationInviteLink,
 } from "@/lib/registrationInvite";
+import { requestAppConfirm } from "@/lib/appDialogs";
+import {
+  ADMIN_LOCATIONS_UNAVAILABLE,
+  canRevokeInvite,
+  inviteRevokePrompt,
+  plainAdminMessage,
+  registrationModePrompt,
+} from "@/lib/adminPrompts";
 import { InfoHint } from "@/components/settings/InfoHint";
 import { getRoleLabel, mapRolesPermissionsError } from "@/lib/rolePermissions";
 import { createClient } from "@/lib/supabase/client";
@@ -155,6 +162,12 @@ export function InvitesTab() {
   };
 
   const revokeInvite = async (invite: RegistrationInviteListRow) => {
+    // D-133 (A-38). A red button at the end of the row, acting on the press.
+    const confirmed = await requestAppConfirm({
+      ...inviteRevokePrompt(invite.code, invite.label),
+      icon: "lock",
+    });
+    if (!confirmed) return;
     setSaving(invite.id);
     setNotice(null);
     setError(null);
@@ -169,6 +182,16 @@ export function InvitesTab() {
   };
 
   const toggleInviteOnlyMode = async (next: boolean) => {
+    // D-133 (A-33). One tap on a switch either opened account creation to
+    // anybody who can reach the address, or shut it for everybody without a
+    // code. Neither said so, and neither could be undone by letting go.
+    const confirmed = await requestAppConfirm({
+      ...registrationModePrompt(next),
+      icon: next ? "lock" : "userPlus",
+    });
+    // The switch is controlled by `inviteOnlyEnabled`, so refusing here leaves
+    // it where it was without a second render having to put it back.
+    if (!confirmed) return;
     setModeSaving(true);
     setModeError(null);
     setNotice(null);
@@ -398,7 +421,7 @@ export function InvitesTab() {
 
         {(!routingEnabled || routing.error) && (
           <div className="kub-raise rounded-xl px-3 py-2 text-xs text-[color:var(--kub-muted)]">
-            {routingEnabled ? routing.error ?? LOCATION_ROUTING_REQUIRED_MESSAGE : LOCATION_ROUTING_REQUIRED_MESSAGE}
+            {ADMIN_LOCATIONS_UNAVAILABLE}
             <KubButton
               type="button"
               variant="ghost"
@@ -475,6 +498,9 @@ function InviteRow({
   onRevoke: () => void;
 }) {
   const status = getInviteStatus(invite);
+  // D-133 (A-38). «Отозвать» stayed live on a link whose date had passed, so
+  // the row offered to stop something that had already stopped.
+  const revocable = canRevokeInvite(invite, new Date());
   return (
     <div className="grid gap-3 px-4 py-4 lg:grid-cols-[1fr_auto] lg:items-center">
       <div className="min-w-0 space-y-2">
@@ -527,8 +553,8 @@ function InviteRow({
           size="sm"
           onClick={onRevoke}
           loading={saving}
-          disabled={Boolean(invite.revoked_at)}
-          className={cn(invite.revoked_at && "opacity-50")}
+          disabled={!revocable}
+          className={cn(!revocable && "opacity-50")}
         >
           Отозвать
         </KubButton>
@@ -564,7 +590,10 @@ function formatDate(value: string): string {
 }
 
 function mapInviteError(error: unknown): string {
-  if (isRegistrationInviteMissingError(error)) return REGISTRATION_INVITES_REQUIRED_MESSAGE;
+  if (isRegistrationInviteMissingError(error)) {
+    console.error("[admin/invites] registration invites unavailable:", error);
+    return REGISTRATION_INVITES_REQUIRED_MESSAGE;
+  }
   const text = readErrorText(error);
   if (text.includes("invite_label_invalid")) return "Название инвайта должно быть от 2 до 120 символов.";
   if (text.includes("invite_max_uses_invalid")) return "Лимит использований должен быть от 1 до 1000.";
@@ -573,7 +602,13 @@ function mapInviteError(error: unknown): string {
   if (text.includes("invite_location_role_invalid")) return "Выбранная роль в локации недоступна.";
   if (text.includes("invite_critical_role_forbidden")) return "Критические роли может выдавать только тех. администратор.";
   if (text.includes("permission") || text.includes("42501")) return "Недостаточно прав для управления инвайтами.";
-  return mapRolesPermissionsError(error, "Не удалось выполнить действие с инвайтом.");
+  // D-132 (A-34). `mapRolesPermissionsError` belongs to a shared module and
+  // can still answer «требуют обновления базы данных» here; the screen refuses
+  // that answer and keeps the cause in the log.
+  const mapped = mapRolesPermissionsError(error, "Не удалось выполнить действие с инвайтом.");
+  const shown = plainAdminMessage(mapped, "Не удалось выполнить действие с инвайтом.");
+  if (shown !== mapped) console.error("[admin/invites] invite action failed:", error);
+  return shown;
 }
 
 function readInviteModeRow(value: unknown): RegistrationInviteModeRow | null {
@@ -583,12 +618,18 @@ function readInviteModeRow(value: unknown): RegistrationInviteModeRow | null {
 }
 
 function mapInviteModeError(error: unknown): string {
-  if (isRegistrationInviteMissingError(error)) return REGISTRATION_INVITE_MODE_REQUIRED_MESSAGE;
+  if (isRegistrationInviteMissingError(error)) {
+    console.error("[admin/invites] registration mode unavailable:", error);
+    return REGISTRATION_INVITE_MODE_REQUIRED_MESSAGE;
+  }
   const text = readErrorText(error);
   if (text.includes("permission") || text.includes("42501")) {
     return "Недостаточно прав для переключения режима регистрации.";
   }
-  return mapRolesPermissionsError(error, "Не удалось загрузить режим регистрации.");
+  const mapped = mapRolesPermissionsError(error, "Не удалось загрузить режим регистрации.");
+  const shown = plainAdminMessage(mapped, "Не удалось загрузить режим регистрации.");
+  if (shown !== mapped) console.error("[admin/invites] registration mode action failed:", error);
+  return shown;
 }
 
 function isRegistrationInviteMissingError(error: unknown): boolean {

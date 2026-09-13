@@ -25,7 +25,12 @@ test.describe("LETSCUBE admin ops report", () => {
     const events = page.getByTestId("admin-ops-events");
     await expect(events).toBeVisible();
     if (await warning.isVisible().catch(() => false)) {
-      await expect(warning).toContainText("admin_ops_security_report");
+      // D-132 (A-54). This used to assert the opposite: that the panel named
+      // the server function it needs. The panel now says only that the live
+      // metrics cannot be read; the function name goes to the console.
+      await expect(warning).toContainText("Живые метрики сейчас недоступны");
+      await expect(warning).not.toContainText("admin_ops_security_report");
+      await expect(warning).not.toContainText(".sql");
     }
 
     const bodyText = await page.locator("body").innerText();

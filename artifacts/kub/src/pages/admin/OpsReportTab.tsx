@@ -4,6 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KubBadge, KubButton, KubIcon, KubPanel, type KubIconName } from "@/components/kub";
 import { getAuthCaptchaConfig, isAuthCaptchaEnabled, shouldUseAuthCaptchaGateway } from "@/lib/authCaptcha";
 import { mapPgError } from "@/lib/errors";
+import {
+  ADMIN_OPS_INVITE_METRICS_UNAVAILABLE,
+  ADMIN_OPS_INVITE_MODE_UNKNOWN,
+  ADMIN_OPS_METRICS_UNAVAILABLE,
+  ADMIN_OPS_METRICS_UNAVAILABLE_DETAIL,
+  plainAdminMessage,
+} from "@/lib/adminPrompts";
 import { createClient } from "@/lib/supabase/client";
 import type { AdminOpsSecurityReport, AdminOpsSecurityReportEvent } from "@/types/database";
 
@@ -29,12 +36,16 @@ export function OpsReportTab() {
 
     if (rpcError) {
       setReport(null);
+      // D-132 (A-54). Both branches used to reach the screen with the cause in
+      // them: the missing-object one named the function and its file, and
+      // `mapPgError` passes server text through. The cause goes to the log.
+      console.error("[admin/ops] security report failed:", rpcError);
       if (isRpcMissing(rpcError)) {
         setState("missing");
         return;
       }
       setState("error");
-      setError(mapPgError(rpcError));
+      setError(plainAdminMessage(mapPgError(rpcError), ADMIN_OPS_METRICS_UNAVAILABLE));
       return;
     }
 
@@ -138,12 +149,14 @@ export function OpsReportTab() {
           <div className="flex items-start gap-3">
             <KubIcon name="warning" size={20} tone="warn" className="mt-0.5 shrink-0" />
             <div className="min-w-0">
+              {/* D-132 (A-54). This panel named the server function and the
+                  path of the SQL file to apply by hand. The person who can do
+                  that reads the log, not this tab. */}
               <div className="text-sm font-semibold text-[color:var(--kub-text)]">
-                Нужно применить SQL-предложение для живых метрик
+                {ADMIN_OPS_METRICS_UNAVAILABLE}
               </div>
               <p className="mt-1 text-sm leading-6 text-[color:var(--kub-muted)]">
-                Вкладка готова, но серверная функция `admin_ops_security_report` ещё не применена в базе. Примените вручную
-                `.migration-backup/supabase/migrations/20260622_admin_ops_security_report.sql`.
+                {ADMIN_OPS_METRICS_UNAVAILABLE_DETAIL}
               </p>
             </div>
           </div>
@@ -387,7 +400,7 @@ function buildControlCards(report: AdminOpsSecurityReport | null) {
       title: "Модель инвайт-кодов видна отчёту",
       detail: controls?.invite_table_available
         ? "Таблицы инвайтов доступны серверной функции только агрегированно."
-        : "Живые метрики инвайтов появятся после применения SQL-предложения или если таблицы доступны в текущей базе.",
+        : ADMIN_OPS_INVITE_METRICS_UNAVAILABLE,
       ok: Boolean(controls?.invite_table_available),
       tone: "warn" as const,
     },
@@ -397,7 +410,7 @@ function buildControlCards(report: AdminOpsSecurityReport | null) {
         ? report?.invites?.invite_only_enabled
           ? "Открытая регистрация ограничена кодом или ссылкой-приглашением."
           : "Открытая регистрация включена; ссылка-приглашение продолжает заранее задавать роль и локацию в фоне."
-        : "Статус режима приглашений недоступен без серверной функции или таблицы настроек.",
+        : ADMIN_OPS_INVITE_MODE_UNKNOWN,
       ok: inviteModeKnown,
       tone: "warn" as const,
     },

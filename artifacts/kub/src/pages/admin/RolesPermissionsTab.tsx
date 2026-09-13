@@ -37,6 +37,14 @@ import {
 import type { DynamicRole, Permission, Profile, RoleScope } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { requestAppConfirm } from "@/lib/appDialogs";
+import {
+  ADMIN_ROLES_UNAVAILABLE,
+  ADMIN_ROLES_UNAVAILABLE_DETAIL,
+  ADMIN_ROLE_UNUSED_NOTE,
+  globalRoleRemovalPrompt,
+  plainAdminMessage,
+  rolePermissionsSavePrompt,
+} from "@/lib/adminPrompts";
 
 const ROLE_SCOPES: RoleScope[] = ["global", "location", "chat"];
 const ROLE_KEY_RE = /^[a-z][a-z0-9_]{1,48}$/;
@@ -260,7 +268,13 @@ export function RolesPermissionsTab() {
     const result = await fn();
     setSaving(null);
     if (result.error) {
-      setError(mapRolesPermissionsError(result.error));
+      // D-132 (A-47). `mapRolesPermissionsError` belongs to a shared module
+      // and still answers «Роли и права требуют обновления базы данных»; the
+      // screen refuses that answer and logs the cause instead.
+      const mapped = mapRolesPermissionsError(result.error);
+      const shown = plainAdminMessage(mapped, ADMIN_ROLES_UNAVAILABLE);
+      if (shown !== mapped) console.error(`[admin/roles] ${key} failed:`, result.error);
+      setError(shown);
       return false;
     }
     setNotice(success);
@@ -378,6 +392,15 @@ export function RolesPermissionsTab() {
       setError("Недостаточно прав для изменения прав роли.");
       return;
     }
+    // D-133 (A-44). `role_set_permissions` replaces the set; the button said
+    // «Сохранить» and acted on the press, so one stray checkbox took access
+    // away from everyone holding the role with nothing on screen about it.
+    const prompt = rolePermissionsSavePrompt(
+      getRoleLabel(selectedRole),
+      selectedRoleUsageKnown ? selectedRoleUsageCount : null,
+    );
+    const confirmed = await requestAppConfirm({ ...prompt, icon: "shield" });
+    if (!confirmed) return;
     await runAction(
       "save-permissions",
       () => supabase.rpc("role_set_permissions", {
@@ -436,11 +459,23 @@ export function RolesPermissionsTab() {
     }
   };
 
-  const removeGlobalRole = async (userId: string, roleId: string) => {
+  const removeGlobalRole = async (
+    userId: string,
+    roleId: string,
+    personName: string,
+    roleName: string,
+  ) => {
     if (!canAssignGlobalRoles) {
       setError("Недостаточно прав для назначения ролей.");
       return;
     }
+    // D-133 (A-45). A ghost button at the end of a row, one press away from
+    // taking somebody's access to the whole product.
+    const confirmed = await requestAppConfirm({
+      ...globalRoleRemovalPrompt(personName, roleName),
+      icon: "shieldOff",
+    });
+    if (!confirmed) return;
     await runAction(
       `remove-role-${userId}-${roleId}`,
       () => supabase.rpc("user_remove_global_role", { p_user_id: userId, p_role_id: roleId }),
@@ -458,10 +493,13 @@ export function RolesPermissionsTab() {
   }
 
   if (!rolesProbeEnabled || !rolesState.available) {
+    // D-132 (A-47). The reader used to be told which migration was missing and
+    // which legacy role keys the product was falling back to. Nobody who can
+    // open this tab can apply a migration from it, and the tab is reachable by
+    // roles that are not the owner. The cause is still kept — it goes to the
+    // log — but the screen says only whether the section can be used.
     const missingSchema = !rolesProbeEnabled || rolesState.error === ROLES_PERMISSIONS_REQUIRED_MESSAGE;
-    const panelMessage = missingSchema
-      ? ROLES_PERMISSIONS_REQUIRED_MESSAGE
-      : rolesState.error ?? "Не удалось загрузить роли. Попробуйте ещё раз.";
+    if (rolesState.error) console.error("[admin/roles] roles and permissions unavailable:", rolesState.error);
     return (
       <KubPanel className="space-y-3">
         <div className="flex items-start gap-3">
@@ -471,12 +509,12 @@ export function RolesPermissionsTab() {
           <div className="min-w-0">
             <h2 className="text-lg font-bold text-[color:var(--kub-text)]">Роли и права</h2>
             <p className="mt-1 text-sm leading-relaxed text-[color:var(--kub-muted)]">
-              {panelMessage}
+              {ADMIN_ROLES_UNAVAILABLE}
             </p>
             <p className="mt-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
               {missingSchema
-                ? "До применения migration приложение продолжает использовать legacy роли admin / manager / user, а локации и задачи работают по текущей модели."
-                : "Динамические роли уже найдены или проверяются, но текущий пользователь не может загрузить полный набор данных. Существующие локации и задачи продолжают работать."}
+                ? ADMIN_ROLES_UNAVAILABLE_DETAIL
+                : "Этот раздел не удалось загрузить полностью. Локации и задачи продолжают работать."}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <KubButton
@@ -489,7 +527,7 @@ export function RolesPermissionsTab() {
                 }}
                 loading={rolesProbeEnabled && rolesState.loading}
               >
-                Проверить обновление базы
+                Проверить ещё раз
               </KubButton>
               {rolesProbeEnabled && (
                 <KubButton variant="ghost" size="sm" onClick={() => setRolesProbeEnabled(false)}>
@@ -771,7 +809,7 @@ export function RolesPermissionsTab() {
                   <div className="kub-raise rounded-xl px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
                     {selectedRoleUsageKnown
                       ? selectedRoleUsageCount === 0
-                        ? "Кастомная роль нигде не назначена. После применения migration её можно удалить полностью."
+                        ? ADMIN_ROLE_UNUSED_NOTE
                         : `Роль используется в назначениях: ${selectedRoleUsageCount}. Её можно отключить, чтобы больше не выдавать новые права.`
                       : "Не удалось проверить все назначения роли. Безопасное действие: отключить роль."}
                   </div>
@@ -1073,7 +1111,12 @@ export function RolesPermissionsTab() {
                     <KubButton
                       variant="ghost"
                       size="sm"
-                      onClick={() => void removeGlobalRole(assignment.user_id, assignment.role_id)}
+                      onClick={() => void removeGlobalRole(
+                        assignment.user_id,
+                        assignment.role_id,
+                        getProfileName(profile),
+                        getRoleLabel(role),
+                      )}
                       loading={saving === busyKey}
                       disabled={!canAssignGlobalRoles}
                       leftIcon={<KubIcon name="userRemove" size={13} />}
