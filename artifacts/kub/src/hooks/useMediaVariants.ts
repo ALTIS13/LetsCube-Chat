@@ -3,13 +3,19 @@ import type { MediaVariant, MessageWithSender } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
 import {
   beginMessageVariantRefresh,
+  collectSettledMessageVariantKinds,
   completeMessageVariantRefresh,
   createMessageVariantRefreshLifecycle,
+  decideMessageVariantPoll,
+  getExpectedMessageVariantKindsByMessage,
   getMessageVariantCacheKey,
+  getMessageVariantRowsSignature,
   getMessageVariantSourceIds,
+  hasNewMessageVariantWork,
   hasVideoVariantSources,
   queueMessageVariantRefresh,
   selectMessageVariantCacheEvictions,
+  type MessageVariantKind,
   type MessageVariantRefreshState,
   type MessageVariantRefreshLifecycle,
 } from "@/lib/messageVariantRefresh";
@@ -39,7 +45,14 @@ export type { AvatarVariantUrls } from "@/lib/avatarVariantStore";
 
 const MESSAGE_VARIANT_KINDS = ["image_preview", "image_thumb", "video_poster", "video_720p"] as const;
 const AVATAR_VARIANT_KINDS = ["avatar_128", "avatar_256"] as const;
-const VIDEO_VARIANT_REFRESH_INTERVAL_MS = 60_000;
+/**
+ * The rows a message's poll reads.
+ *
+ * A failed row is read alongside the ready ones only so the polling rule can
+ * tell "not made yet" from "never going to be made" (D-176); nothing is drawn
+ * from one. `stale` is left out because a row being remade is still owed.
+ */
+const MESSAGE_VARIANT_STATUSES = ["ready", "failed"] as const;
 const MESSAGE_VARIANT_REFRESH_DEBOUNCE_MS = 120;
 const MESSAGE_VARIANT_TAB_RETURN_DEBOUNCE_MS = 80;
 const MESSAGE_VARIANT_CACHE_LIMIT = 8;
@@ -55,6 +68,13 @@ interface MessageVariantCacheEntry {
   evictionTimer: number | null;
   hasStarted: boolean;
   disposed: boolean;
+  /** What the messages on screen are waiting for, and what the last answer settled (D-176). */
+  expectedKinds: Map<string, readonly MessageVariantKind[]>;
+  settledKinds: Map<string, Set<string>>;
+  unchangedPolls: number;
+  lastRowsSignature: string | null;
+  /** The pace the running lifecycle was built with, so it is only rebuilt when that changes. */
+  pollIntervalMs: number | null;
 }
 
 const messageVariantCache = new Map<string, MessageVariantCacheEntry>();
@@ -91,6 +111,7 @@ export function useMessageMediaVariantUrls(messages: MessageMediaVariantSource[]
   const messageIdKey = messageIds.join("|");
   const chatId = useMemo(() => getMessageVariantCacheKey(messages), [messages]);
   const hasVideoMessages = useMemo(() => hasVideoVariantSources(messages), [messages]);
+  const expectedKinds = useMemo(() => getExpectedMessageVariantKindsByMessage(messages), [messages]);
   const [variantsByMessageId, setVariantsByMessageId] = useState<Record<string, MessageMediaVariantUrls>>({});
 
   useEffect(() => {
@@ -106,7 +127,7 @@ export function useMessageMediaVariantUrls(messages: MessageMediaVariantSource[]
       entry.evictionTimer = null;
     }
     setVariantsByMessageId(entry.variants);
-    updateMessageVariantCacheEntry(entry, messageIds, hasVideoMessages);
+    updateMessageVariantCacheEntry(entry, messageIds, hasVideoMessages, expectedKinds);
     return () => {
       entry.listeners.delete(setVariantsByMessageId);
       scheduleMessageVariantEntryEviction(entry);
@@ -130,6 +151,11 @@ function getMessageVariantCacheEntry(chatId: string): MessageVariantCacheEntry {
     evictionTimer: null,
     hasStarted: false,
     disposed: false,
+    expectedKinds: new Map(),
+    settledKinds: new Map(),
+    unchangedPolls: 0,
+    lastRowsSignature: null,
+    pollIntervalMs: null,
   };
   evictUnusedMessageVariantEntries();
   messageVariantCache.set(chatId, entry);
@@ -140,10 +166,17 @@ function updateMessageVariantCacheEntry(
   entry: MessageVariantCacheEntry,
   messageIds: string[],
   hasVideoMessages: boolean,
+  expectedKinds: Map<string, readonly MessageVariantKind[]>,
 ): void {
   const transition = queueMessageVariantRefresh(entry.refreshState, messageIds);
   entry.refreshState = transition.state;
-  configureMessageVariantPolling(entry, hasVideoMessages);
+  // A message that arrived after the polling gave up has to hand the patience
+  // back, or D-176 is traded for a video that never loads. Only genuinely new
+  // work counts; see `hasNewMessageVariantWork`.
+  if (hasNewMessageVariantWork(entry.expectedKinds, expectedKinds)) entry.unchangedPolls = 0;
+  entry.expectedKinds = expectedKinds;
+  entry.hasVideoMessages = hasVideoMessages;
+  applyMessageVariantPolling(entry);
   if (messageIds.length === 0) {
     entry.variants = {};
     notifyMessageVariantListeners(entry);
@@ -154,17 +187,38 @@ function updateMessageVariantCacheEntry(
   }
 }
 
-function configureMessageVariantPolling(entry: MessageVariantCacheEntry, hasVideoMessages: boolean): void {
-  if (entry.hasVideoMessages === hasVideoMessages) return;
+/**
+ * Starts, re-paces or ends this chat's polling from the current rule.
+ *
+ * Called after anything that could change the answer: the messages on screen,
+ * and every poll's own result. The lifecycle takes its interval once, when it
+ * is built, so a changed pace means a new one — but it is only rebuilt when the
+ * pace actually changed, or a poll that keeps its minute would reset its own
+ * timer and its tab-return listeners every time it ran.
+ *
+ * Only a chat holding a video polls at all, exactly as before this change: a
+ * picture's variants land in one pass, and the sender's own preview is already
+ * on screen while they do, so nothing there was ever waiting on a second look.
+ */
+function applyMessageVariantPolling(entry: MessageVariantCacheEntry): void {
+  const decision = decideMessageVariantPoll({
+    expected: entry.expectedKinds,
+    settled: entry.settledKinds,
+    unchangedPolls: entry.unchangedPolls,
+  });
+  if (entry.disposed || !entry.hasVideoMessages || !decision.poll) {
+    stopMessageVariantPolling(entry);
+    return;
+  }
+  if (entry.refreshLifecycle && entry.pollIntervalMs === decision.intervalMs) return;
   stopMessageVariantPolling(entry);
-  entry.hasVideoMessages = hasVideoMessages;
-  if (!hasVideoMessages) return;
+  entry.pollIntervalMs = decision.intervalMs;
   entry.refreshLifecycle = createMessageVariantRefreshLifecycle({
     windowTarget: window,
     documentTarget: document,
     getVisibilityState: () => document.visibilityState,
     timer: window,
-    intervalMs: VIDEO_VARIANT_REFRESH_INTERVAL_MS,
+    intervalMs: decision.intervalMs,
     tabReturnDebounceMs: MESSAGE_VARIANT_TAB_RETURN_DEBOUNCE_MS,
     onRefresh: () => requestMessageVariantLifecycleRefresh(entry),
   });
@@ -174,6 +228,7 @@ function configureMessageVariantPolling(entry: MessageVariantCacheEntry, hasVide
 function stopMessageVariantPolling(entry: MessageVariantCacheEntry): void {
   entry.refreshLifecycle?.stop();
   entry.refreshLifecycle = null;
+  entry.pollIntervalMs = null;
 }
 
 function requestMessageVariantLifecycleRefresh(entry: MessageVariantCacheEntry): void {
@@ -208,15 +263,23 @@ async function loadMessageVariants(entry: MessageVariantCacheEntry): Promise<voi
     const supabase = createClient();
     const { data, error } = await supabase
       .from("media_variants")
-      .select("id,message_id,variant_kind,variant_bucket,variant_path,width,height,status,updated_at")
-      .eq("status", "ready")
+      .select("id,message_id,variant_kind,variant_bucket,variant_path,width,height,status,error_code,updated_at")
+      .in("status", [...MESSAGE_VARIANT_STATUSES])
       .in("variant_kind", [...MESSAGE_VARIANT_KINDS])
       .in("message_id", messageIds);
+    // An answer that never came is no evidence that the variants have
+    // converged, so it leaves the futile-poll count where it was: a minute
+    // offline must not retire this chat's polling for the rest of the session.
     if (error) return;
 
+    const rows = (data ?? []) as unknown as MediaVariant[];
     const next: Record<string, MessageMediaVariantUrls> = {};
-    for (const row of (data ?? []) as unknown as MediaVariant[]) {
+    for (const row of rows) {
       if (!row.message_id) continue;
+      // A failed row is here for the polling rule and nothing else: its
+      // `variant_path` names an object that was never written, so building a
+      // URL from it would put a broken picture in the conversation.
+      if (row.status !== "ready") continue;
       // A message variant keeps its path when it is rewritten, and the worker
       // writes it `max-age=31536000, immutable`. Without the moment it was
       // written in the URL, a reader who has already seen a picture keeps the
@@ -245,11 +308,18 @@ async function loadMessageVariants(entry: MessageVariantCacheEntry): Promise<voi
       }
       next[row.message_id] = current;
     }
+    // What this answer settled, and whether it said anything the last one did
+    // not — the two things the polling rule reads (D-176).
+    const signature = getMessageVariantRowsSignature(rows);
+    entry.unchangedPolls = signature === entry.lastRowsSignature ? entry.unchangedPolls + 1 : 0;
+    entry.lastRowsSignature = signature;
+    entry.settledKinds = collectSettledMessageVariantKinds(rows);
     entry.variants = next;
     notifyMessageVariantListeners(entry);
   } finally {
     const transition = completeMessageVariantRefresh(entry.refreshState);
     entry.refreshState = transition.state;
+    applyMessageVariantPolling(entry);
     if (transition.startNow) scheduleMessageVariantLoad(entry, MESSAGE_VARIANT_REFRESH_DEBOUNCE_MS);
   }
 }
