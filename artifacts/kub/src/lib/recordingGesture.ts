@@ -373,6 +373,19 @@ export interface RecorderModeHintInput {
   coarsePointer: boolean;
   /** Below `md`, where the shell shows one pane. See the note below. */
   phoneWidth: boolean;
+  /**
+   * Something modal is drawn over the composer: the attach sheet, the camera,
+   * the video-message recorder, the emoji panel.
+   *
+   * This hint deliberately does not close because a person touched something
+   * else — that is what a menu does, and an explanation should survive being
+   * read past. The cost of that choice is that the plate stays where it is
+   * while a sheet opens over the composer, and on a phone the sheet's own
+   * capsule lands under it: measured on a 390-point viewport, the plate took
+   * the tap meant for «Отмена» on the attach sheet. A hint about a control
+   * nobody can reach is teaching nobody and intercepting somebody.
+   */
+  overlayOpen: boolean;
 }
 
 /**
@@ -387,13 +400,14 @@ export interface RecorderModeHintInput {
  * guarantees the two are never up together. A tablet is coarse and shows two
  * panes, which is exactly the case the width test excludes.
  *
- * The rest is ordinary courtesy: not while something is recording, not on top
- * of the composer's own feedback plate, and not once the person has reached
- * `video`, which is proof they found it.
+ * The rest is ordinary courtesy: not while something is recording, not under a
+ * sheet that has opened over the composer, not on top of the composer's own
+ * feedback plate, and not once the person has reached `video`, which is proof
+ * they found it.
  */
 export function shouldOfferRecorderModeHint(input: RecorderModeHintInput): boolean {
   if (!input.coarsePointer || !input.phoneWidth) return false;
-  if (!input.buttonOnScreen) return false;
+  if (!input.buttonOnScreen || input.overlayOpen) return false;
   if (input.recording || input.feedbackVisible) return false;
   return input.mode === "voice";
 }

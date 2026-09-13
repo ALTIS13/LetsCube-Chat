@@ -1013,6 +1013,7 @@ export function MessageInput({
       coarsePointer: coarsePointer(),
       phoneWidth: isPhoneWidth,
       buttonOnScreen: !(hasText || hasAttachments || hasForwardDraft),
+      overlayOpen: showAttach || showCamera || showVideoMessage || showVoice || showEmoji,
     }),
   });
 

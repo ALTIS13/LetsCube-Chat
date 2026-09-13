@@ -184,6 +184,7 @@ const offering: RecorderModeHintInput = {
   coarsePointer: true,
   phoneWidth: true,
   buttonOnScreen: true,
+  overlayOpen: false,
 };
 
 test("the composer hint is offered on a resting phone composer in voice mode", () => {
@@ -197,6 +198,7 @@ test("each condition on the composer hint is load-bearing", () => {
     ["send in the slot, so the button it points at is gone", { buttonOnScreen: false }],
     ["a recording under way, when the button is not a switch", { recording: true }],
     ["the composer's own plate already up", { feedbackVisible: true }],
+    ["a sheet open over the composer, where the plate would take its taps", { overlayOpen: true }],
     ["video already chosen, which is proof it was found", { mode: "video" }],
   ];
 
@@ -273,6 +275,7 @@ test("the composer hands the predicate every condition it judges", () => {
     "coarsePointer",
     "feedbackVisible",
     "mode",
+    "overlayOpen",
     "phoneWidth",
     "recording",
   ]);
