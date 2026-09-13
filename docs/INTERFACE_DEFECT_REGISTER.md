@@ -8718,6 +8718,85 @@ costs in seconds and megabytes on the phones this product is installed on — an
 counter fed by the encoder's own settings rather than by an estimate. Recorded now so the gap between «the
 counter is easy» and «the ladder is not» is on the record before anyone promises a date.
 
+**The plan, and the first slice of it that has shipped.** The owner confirmed on 2026-09-13 that the
+transcoding is to be built rather than deferred: «Если функционала перекодирования нет, то требуется
+реализовать».
+
+*Slice 1, shipped in `2456a42`:* `lib/videoSendLadder.ts` — the ladder, the target frame, the bitrate
+and the estimate, with thirteen tests and no encoder behind any of it. Counted on the short side; 0.07 bits per
+pixel per frame clamped to [600 kbit/s, 6.8 Mbit/s]; never more than the source already spends; the container
+modelled rather than ignored; frames aligned to 16 because Chromium on Android **crops** rather than refusing.
+The tests caught a real inversion — portrait and landscape had their short sides swapped, so 1920x1080 at 720p
+came out a 720x720 square — which is the argument for keeping this layer free of the browser.
+
+*What that slice deliberately does not claim:* the estimate is an estimate. Android computes its own from a
+bitrate it asks the hardware for (`extractRealEncoderBitrate`); a browser has no such call, because
+`VideoEncoder.isConfigSupported` answers yes or no and nothing else. `estimateIsApproximate` exists so a
+surface cannot present the number as a promise without deleting a constant that says otherwise.
+
+*Slice 2, next: the encoder — and the owner has settled how to get one.* Asked whether to take a dependency for
+the container writing, he answered: «Если это хорошая зависимость и слой то почему бы и нет, это применимо к
+остальным функциям тоже, нам незачем всё писать с нуля если уже придумано хорошее решение». So the path is
+**WebCodecs with an existing muxer**, not a hand-rolled container and not a re-recording through
+`MediaRecorder` chosen merely to avoid a package. That is also the path Telegram Web took.
+
+The two candidates remain worth stating, because the comparison is what justifies the choice rather than the
+choice justifying itself:
+
+- `MediaRecorder` — this product already encodes video with it (the round-video recorder feeds it the
+  bitrates from `getVideoRecordingProfile`). Cheap and dependency-free, but it re-records through playback:
+  bounded by realtime, with the output container decided by the browser rather than by us.
+- **WebCodecs plus a muxer** — control over frame size, bitrate and keyframes, and an mp4 out the other end.
+  WebCodecs hands back encoded chunks rather than a file, so the container writer is the part that comes from a
+  package.
+
+**The dependency, assessed against that bar rather than assumed to clear it.** The candidate is
+`mediabunny` — the package Telegram Web itself depends on, and the one this comparison kept arriving at.
+
+*What makes it a good one:*
+
+- **No runtime dependencies at all.** Its manifest lists only type packages, so nothing else arrives behind it.
+  For a media library that is unusual and is the single strongest point in its favour.
+- **About 17 kB** when only the mp4 muxer is used, and tree-shakable by design.
+- **It is the consolidation, not another entrant.** The same author earlier `mp4-muxer` and `webm-muxer`
+  packages are now marked deprecated in its favour, so choosing it removes a future migration rather than
+  adding one. Remotion retired its own `@remotion/media-parser` and `@remotion/webcodecs` for it.
+- **The API answers the problem rather than a part of it.** `Conversion.init({ input, output, video: { width,`
+  `height, fit, quality } })` with `onProgress`, `cancel()`, and — the part worth the package on
+  its own — a **remux that happens automatically** where the configuration allows it («will try to perform a copy
+  conversion by default»), plus `conversion.isValid` and `discardedTracks` to ask **before** starting
+  whether this file can be converted at all. Writing that feasibility check by hand is most of the work.
+
+*What is honestly against it, recorded rather than glossed:*
+
+- **It is young** — under a year old at the time of this decision, on its 56th release. A library of this kind
+  earns trust by surviving browsers changing under it, and it has not had long to.
+- **MPL-2.0, not MIT.** Using it unmodified as a dependency is unencumbered; **modifying its files obliges us to
+  publish those modifications**. So the rule is: use it, do not fork it into the tree. If a change is needed, it
+  goes upstream or the file stays untouched and the behaviour is wrapped.
+- **It documents no behaviour when WebCodecs is absent.** That is our problem to solve, not its bug, and the
+  feature detection above is not optional because of it.
+
+*Three things are fixed by the evidence and not open to preference:*
+
+1. **Feature detection is mandatory and the fallback is a full path, not an error.** `VideoEncoder` is absent
+   from Firefox on Android in every version. Telegram Web gates on `isConfigSupported` and falls back to
+   sending the file as it is. So must we.
+2. **A remux fast path comes before any transcode.** An H.264 video with AAC audio, unchanged in size, only
+   needs repackaging — «remuxing is I/O-bound, so even a huge H.264 file converts in moments», against a
+   transcode that runs «at roughly realtime». `canRemux` in the shipped slice already answers the question;
+   nothing yet acts on the answer.
+3. **A hard size ceiling.** Telegram Web caps its editor at 100 MB, which is their measured answer to how much a
+   browser may be given. Memory binds as much as time: their own note records that an in-memory finalisation
+   holds the media twice.
+
+*Slice 3:* the control itself — a ladder with the estimate beside each rung, marked as an estimate, offered only
+where an encoder exists and only for rungs below the source.
+
+*What would make this dishonest, and so will not be done:* shipping the counter without the encoder. A number
+beside a rung that no upload can be made to match is a lie told precisely, and it is the reason this entry was
+opened rather than folded into D-174.
+
 ---
 
 ## D-176 `[ ]` The server re-does work the device already did, and hunts for it by scanning every minute

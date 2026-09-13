@@ -478,6 +478,20 @@ absent. Gates: typecheck clean, unit 1783 of 1783, routing matrix 15 of 15, prod
 Still to do after it: run the preview backfill, which needed the worker to carry the D-116 rule and now can, and
 ask the tester to retry the video that failed, now that the send path names the file and the server's own reason.
 
+## Standing Rule Recorded 2026-09-13: a good existing solution beats writing one
+
+The owner, asked whether to add a dependency for writing an mp4 container: «Если это хорошая зависимость и слой
+то почему бы и нет, это применимо к остальным функциям тоже, нам незачем всё писать с нуля если уже придумано
+хорошее решение».
+
+Recorded as a standing rule rather than as an answer about one package, because that is how it was given. It
+does not license adding anything: «хорошая» is the load-bearing word, and the bar this project has already
+applied elsewhere stands — a dependency is judged on what it costs to audit, how much of it is actually used,
+whether it can be replaced later, and whether it drags a runtime in behind it.
+
+What it does change: reaching for a hand-rolled version **to avoid the conversation** is no longer the safe
+default. Two places in this codebase already pay for that instinct — three separate long-press implementations
+(D-163), and a Radix context menu sitting unused beside a hand-written one.
 ## Direction Recorded 2026-09-13: the shape Discord has, not the shape Telegram has
 
 The owner, answering a question about per-member tags: «мы и так планировали делать это скорее как каналы в
