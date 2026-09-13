@@ -1,4 +1,10 @@
-# Is the migration actually on the database?
+# Is it actually on production?
+
+Two checks with the same shape, for the two kinds of thing this project ships
+outside a git push: database migrations, and Edge Functions. Both were written on
+2026-09-14, the day each of them found something.
+
+## Is the migration actually on the database?
 
 On 2026-09-14 six migrations were found sitting unapplied, three days after they
 were written, committed, and described in the defect register as fixed. One of
@@ -74,3 +80,29 @@ loaded from a schema-only dump of production, every migration **and its
 rehearsal** run there first, then production as the owning role, then the effect
 measured as `authenticated` with real claims — never as the table's owner, since
 a policy measured as its own table's owner is not measured at all.
+
+## Is the Edge Function the one in this repository?
+
+`send-push-notifications` on the server was dated 2026-07-14 where this
+repository's is 2026-08-31, and had no `wns.ts` at all — the whole Windows
+sender, with unit tests here and no existence there (D-185). Three other
+directories were serving old copies of themselves beside the real file.
+
+```bash
+node scripts/function-inventory.mjs --local > output/functions-local.txt
+node scripts/function-inventory.mjs --remote-command      # prints the ssh line
+node scripts/function-inventory.mjs --compare output/functions-local.txt output/functions-remote.txt
+```
+
+It hashes source bytes and nothing else: no environment, no secret, no row. It
+answers three things, and the third is the one that is easy to leave out — a
+file **on the server and not here** is reported rather than ignored, because
+that is exactly what the stale `.bak` copies were. `main` and `hello` belong to
+the runtime, not to this repository, and are left out so the output stays worth
+reading.
+
+It says nothing about whether the function *works*: the runtime compiles per
+request, so a function that matches byte for byte can still fail to boot. After
+deploying one, call it once and read the runtime's log.
+
+As of 2026-09-14 all 22 files match, with nothing extra on either side.

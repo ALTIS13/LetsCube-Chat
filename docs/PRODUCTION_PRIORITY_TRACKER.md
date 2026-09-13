@@ -585,7 +585,7 @@ The client needed no deploy: each of those features tries its RPC and falls back
 where it is absent, which is why nobody noticed for three days.
 
 **`scripts/migration-inventory.*` now asks this question**, and
-`docs/operations/migration-inventory.md` carries its two limits and the triage of
+`docs/operations/deployment-inventory.md` carries its two limits and the triage of
 the nine older entries that are superseded rather than missing.
 
 ### A push function seven weeks stale, with no Windows sender in it

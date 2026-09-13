@@ -19,7 +19,7 @@
  * migration shows up here for ever; on the first run nine of the thirteen it
  * found were exactly that, and the check is only useful if somebody reads each
  * one rather than counting them. Triage what it prints, and when an entry is
- * settled as superseded, say so in `docs/operations/migration-inventory.md`
+ * settled as superseded, say so in `docs/operations/deployment-inventory.md`
  * rather than teaching this script to hide it.
  *
  * Usage, from the repository root, with the live objects already exported:
