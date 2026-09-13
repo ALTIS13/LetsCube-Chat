@@ -1,7 +1,7 @@
 # Voice channels in production
 
-The SFU, how it is published, what talks to what, and the two things that are
-not done yet. Slice 1's throwaway probe is gone; this replaces it.
+The SFU, how it is published, what talks to what, and what is deliberately not
+built yet. Slice 1's throwaway probe is gone; this replaces it.
 `docs/operations/voice-probe.md` stays as the record of what was measured before
 any of this was built, including the webhook table that the gateway is written
 against.
@@ -92,6 +92,20 @@ Two kernel parameters were raised in `/etc/sysctl.d/99-livekit.conf`:
 receive buffer, the kernel silently capped it at 212992, and the server said so
 in a WARN on every start. These raise only the ceiling a socket may ask for.
 
+The worker (`letscube-worker`) gets the same four names from
+`/srv/letscube/secrets/letscube-infra.env`, the file its entrypoint sources —
+**not** from Coolify's environment UI, which holds nothing for this application.
+`LIVEKIT_API_URL` is `http://letscube-voice:7880`: both containers are on the
+`coolify` network, so the worker reaches the SFU by container name and the twirp
+API stays off the internet. A restart of the worker container is enough to pick
+up a change to that file; no redeploy is needed.
+
+One thing was fixed in that file while adding them: it is sourced by `sh`, and a
+value containing a space with no quotes runs its second word as a command. The
+worker had been printing `/run/secrets/letscube-infra.env: Support: not found`
+on every start, and the variable that line came from had been truncated to its
+first word ever since. Every unquoted value carrying a space is now quoted.
+
 `rtc.node_ip` is pinned to `157.22.206.43` and `use_external_ip` is off. With
 two docker networks attached, LiveKit's STUN probe cancelled itself and fell
 back to the node IP — right here, but a fallback that happens to be right is not
@@ -137,24 +151,15 @@ Each of these was run against the real thing rather than a stub:
    `roomCreate: false`, `canPublishData: false`, scoped to the derived room.
 6. The SFU accepted it: `GET /voice/rtc/validate?access_token=…` → 200
    `success`.
+7. **The reconciler clears a ghost.** A `voice_participants` row was written for
+   a channel the SFU had no room for — exactly what a lost `participant_left`
+   leaves behind — and the next pass removed it, 30 seconds later, logging
+   `reconciled: 1, unknown: 0, reaped: 0`. The repair layer is not a theory.
 
 A voice channel exists on one group whose only member is a test account, left in
 place as the staging state. No real user's group has one.
 
 ## Not done
-
-**The reconciler is not running.** `letscube-worker` has no `LIVEKIT_URL`,
-`LIVEKIT_API_URL`, `LIVEKIT_API_KEY` or `LIVEKIT_API_SECRET`, and the worker
-logs that and sleeps rather than half-running — without a single confirmation
-from the SFU its reaper would delete every participant row five minutes after
-start-up, which is the failure it exists to prevent, reached by a different
-door. Those four names have to be added to that application in Coolify, whose
-environment this project's operators own and whose values are not readable from
-here; the key and secret are in `/srv/letscube/voice/livekit.env` on the host.
-
-Until then the webhook is the only thing that writes participants, so a webhook
-that is lost — the runtime restarting mid-delivery, say — leaves a stale row
-that nothing cleans up.
 
 **There is no interface for making a channel.** Deliberate for this slice.
 
