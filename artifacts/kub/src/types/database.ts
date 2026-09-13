@@ -1263,6 +1263,24 @@ export interface Database {
       // Manually maintained until `supabase gen types typescript` is wired
       // into the project. Mirrors the SECURITY DEFINER RPC declared in
       // `.migration-backup/supabase/migrations/20260504_roles_admin.sql`.
+      // The badges other people may see (D-180). Presentation fields only: the
+      // function cannot return a permission, an `assigned_by` or an
+      // `assigned_at`, which is why a badge became visible without widening the
+      // read policies on `roles` and `user_global_roles`.
+      // `.migration-backup/supabase/migrations/20260913140000_profile_badges.sql`.
+      profile_badges: {
+        Args: { p_user_ids: string[] }
+        Returns: {
+          user_id: string
+          kind: string
+          key: string
+          title: string | null
+          detail: string | null
+          icon: string | null
+          colour: string | null
+          rank: number | null
+        }[]
+      }
       admin_user_emails: {
         Args: { uids: string[] }
         Returns: { id: string; email: string }[]

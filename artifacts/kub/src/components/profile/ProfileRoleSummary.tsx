@@ -2,11 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { KubBadge, KubIcon, KubStableSkeleton } from "@/components/kub";
+import { KUB_ICONS, type KubIconName } from "@/components/kub/icons";
 import { InfoHint } from "@/components/settings/InfoHint";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
+import { useProfileBadges } from "@/hooks/useProfileBadges";
 import { useRoleAccess } from "@/hooks/useRole";
 import { useTaskRouting, type TaskRoutingState } from "@/hooks/useTaskRouting";
 import { LOCATION_ROLE_LABEL } from "@/lib/locationRouting";
+import { projectProfileBadges, hiddenBadgeCount, type ProfileBadge } from "@/lib/profileBadges";
 import { getRoleLabel, LEGACY_APP_ROLE_LABEL } from "@/lib/rolePermissions";
 import type { DynamicRole, LocationRole, Profile } from "@/types/database";
 
@@ -17,9 +20,26 @@ interface ProfileRoleSummaryProps {
   compact?: boolean;
 }
 
+/** The icon names this build has, for a seed that may name one it does not. */
+const KNOWN_ICONS: ReadonlySet<string> = new Set(Object.keys(KUB_ICONS));
+
+/** How many chips the compact strip has room for beside a name. */
+const COMPACT_BADGE_LIMIT = 2;
+
 export function ProfileRoleSummary({ user, compact = false, routing: routingProp }: ProfileRoleSummaryProps) {
   const [showAllClubs, setShowAllClubs] = useState(false);
   const access = useRoleAccess();
+  // The badges anybody may see (D-180). Until today this component was switched
+  // off for everyone but an administrator, because reading somebody else's role
+  // meant reading `roles`, and that policy admits only your own rows. The RPC
+  // behind this hook returns presentation fields and nothing else, so an
+  // ordinary member finally sees who they are talking to.
+  const badgeIds = useMemo(() => [user.id], [user.id]);
+  const badges = useProfileBadges(badgeIds);
+  const worn = useMemo(
+    () => projectProfileBadges(badges.rows.get(user.id) ?? [], user.id, { knownIcons: KNOWN_ICONS }),
+    [badges.rows, user.id],
+  );
   const [dynamicRolesEnabled] = useDynamicRolesEnabledPreference();
   const canReadDynamicRoles = dynamicRolesEnabled && access.isAdmin;
   const canReadLocationSummaries = access.isStaff;
@@ -84,6 +104,31 @@ export function ProfileRoleSummary({ user, compact = false, routing: routingProp
 
   if (compact) {
     const primaryMembership = memberships[0] ?? null;
+    // What is worn wins the strip: it is the same fact the administrator's view
+    // shows, read through a door everybody has. Where somebody wears nothing the
+    // card keeps exactly what it showed before rather than going blank, so no
+    // surface loses a line it used to have.
+    if (worn.length > 0) {
+      const shown = worn.slice(0, COMPACT_BADGE_LIMIT);
+      const hidden = hiddenBadgeCount(worn.length, COMPACT_BADGE_LIMIT);
+      return (
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid="profile-badges">
+          {shown.map((badge) => (
+            <ProfileBadgeChip key={`${badge.kind}:${badge.key}`} badge={badge} />
+          ))}
+          {hidden > 0 && (
+            <KubBadge tone="muted" pill>
+              +{hidden}
+            </KubBadge>
+          )}
+          {primaryMembership && (
+            <KubBadge tone="muted" pill>
+              {getLocationRoleDisplay(primaryMembership.dynamicRole, primaryMembership.member.role)}
+            </KubBadge>
+          )}
+        </div>
+      );
+    }
     return (
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         {hasDynamicContent ? (
@@ -238,6 +283,38 @@ function roleRank(key: string): number {
   if (key === "manager") return 3;
   if (key === "user") return 4;
   return 9;
+}
+
+/**
+ * One badge.
+ *
+ * The colour is deliberately not on the words. Measured in this product and
+ * pinned by `tests/unit/status-badge-contrast.test.mjs`: the role tones read
+ * 4.05, 4.18 and 3.82 against the surfaces they sit on, under the 4.5 a body of
+ * text needs. So the tone goes on `KubBadge`'s dot and border, where it is a
+ * signal rather than a sentence, and the name stays legible.
+ *
+ * «Чем выше статус тем красивее иконка» is the weight: filled at the top of the
+ * ladder, bold in the middle, regular below — inside the icon set the product
+ * already has, rather than a second set of assets.
+ */
+function ProfileBadgeChip({ badge }: { badge: ProfileBadge }) {
+  return (
+    <KubBadge
+      tone={roleTone(badge.key)}
+      pill
+      // One marker, not two: the dot and the icon say the same thing, and a chip
+      // wearing both reads as a bullet point with a picture in it.
+      dot={!badge.icon}
+      title={badge.detail ?? undefined}
+      data-badge-key={badge.key}
+    >
+      {badge.icon && KNOWN_ICONS.has(badge.icon) && (
+        <KubIcon name={badge.icon as KubIconName} size={11} weight={badge.weight} />
+      )}
+      {badge.title}
+    </KubBadge>
+  );
 }
 
 function roleTone(key: string): "pink" | "cyan" {

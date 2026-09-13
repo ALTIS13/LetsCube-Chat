@@ -2196,6 +2196,19 @@ export type Database = {
         Returns: undefined
       }
       unhide_private_chat: { Args: { p_chat_id: string }; Returns: undefined }
+      profile_badges: {
+        Args: { p_user_ids: string[] }
+        Returns: {
+          colour: string | null
+          detail: string | null
+          icon: string | null
+          key: string
+          kind: string
+          rank: number
+          title: string
+          user_id: string
+        }[]
+      }
       unpin_chat: { Args: { p_chat_id: string }; Returns: undefined }
       unpin_message: {
         Args: { p_message_id: string }
