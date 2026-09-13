@@ -8237,7 +8237,7 @@ that nothing gets 'fixed' that is not broken:**
   `readChatInvitePolicy` (`ChatInfoPanel.tsx:2031-2035`) returns null. **The badge in those frames is the
   harness, not the product.**
 
-## D-163 `[ ]` On a phone nobody can be promoted, demoted or removed: the controls are hover-only
+## D-163 `[x]` On a phone nobody can be promoted, demoted or removed: the controls are hover-only
 
 **Severity: high.** Every per-member action in a group is reachable on a computer and reachable on no phone at
 all — and the phone is where this product is used.
@@ -8302,6 +8302,59 @@ shipped surface rather than a fix for this entry.
 *Left alone on purpose:* `MessageList.tsx:1529-1584` carries a third long-press implementation. Folding it in
 would put this batch inside the conversation's own gesture handling, where the critical scroll contracts live.
 It is recorded here so that it is a known third copy rather than a forgotten one.
+
+**Fixed 2026-09-13.** The actions belong to the member now, not to the pointer. Every row that has any action
+draws a «ещё» control at rest — and only such a row: there is nothing to do to yourself, so your own row carries
+none. A finger gets the sheet the chat list has always used; a pointer gets the menu; a long press and a right
+click open the same thing from the row itself. A plain tap still does nothing, deliberately, because that gesture
+belongs to opening the person (D-168).
+
+**What moved, and why none of it is new machinery.**
+
+- `hooks/useRowPressActions.ts` — the gesture, lifted whole out of `ChatListItem.tsx` with its three
+  guards intact: a context menu refused within a second of a touch, refused on a coarse pointer, and the click
+  after a long press swallowed. It holds no state, only refs, because `chat-list-event-cost.spec.ts` pins the
+  chat row at one render per event. It also returns `suppressNextClick`, which the pinned-row drag needs: that
+  drag sets the same flag (`ChatListItem.tsx:190`), and a hook owning the ref privately would have broken it
+  silently.
+- `components/kub/RowActions.tsx` — the menu and the sheet, lifted out of `ChatList.tsx` with the header
+  turned into a slot and the layer into a parameter, and **portalled unconditionally**.
+- `lib/chatMemberRules.ts` — the permission matrix, which had lived inside `members.map()` with a comment
+  naming the SQL trigger and **no test at all**. This change needed the same answers a second time, and two
+  copies of a mirror drift until the interface offers what the server refuses (D-142). Now covered by
+  `tests/unit/chat-member-rules.test.mts`, eleven tests written from
+  `enforce_chat_member_update` rather than from the old client code — which is how it came out that an owner
+  may hand the chat over and the interface cannot express it (the addendum to D-150).
+
+**Proof, by mutation, each half separately and each red for its own named reason:**
+
+| mutation | result | what the failure said |
+| --- | --- | --- |
+| put `opacity-0 group-hover` back on the control | 1 of 3 red | «not drawn» — the opacity assertion |
+| disable the touch branch of the gesture | 1 of 3 red | the menu never appears |
+| render the menu inside the panel instead of portalling | 1 of 3 red | «render inside the information panel» |
+
+All three restored byte-identical, verified by hash. **A fourth mutation was thrown away rather than counted:**
+replacing `return createPortal(` with `return (` left the trailing `document.body,` as a comma
+expression, so the component returned a DOM node and every test died on a timeout. It broke the file, not the
+contract, and a red with the wrong cause proves nothing.
+
+**Regression test:** `tests/e2e/member-actions-reachable.spec.ts`. It measures **computed opacity up the
+ancestor chain** rather than asking `toBeVisible()`, because Playwright's visibility check does not read
+`opacity` — a test written the obvious way would have gone green against the broken build, which is exactly how
+this defect survived. The portal contract is asked of the DOM (`panel.contains(menu)`) rather than of a
+rectangle, because on a phone the panel is the whole screen and a rectangle proves nothing there.
+
+**One thing the tests could not catch, and the pixels did.** The first version of the «ещё» button called the
+menu whatever was pressing it, so a phone got a 272px menu anchored at the fingertip while a long press on the
+same row got the sheet — two idioms for one action on one screen. Every test stayed green, because both carry
+the same test id and the contract is reachability, not shape. It was caught by looking at the frame before
+sending it.
+
+**Still duplicated, deliberately, and recorded so it is not forgotten:** `ChatList.tsx` keeps its own copy of
+the menu and the sheet. Converting it is a separate batch with its own gates — it carries the render-count
+contract and the pinned-row drag — and mixing a proven fix with an unproven refactor in one commit is a bad
+trade for whoever reads it.
 
 ---
 
@@ -8488,3 +8541,33 @@ it. Neither belongs to the person reading.
 Related and separate: `public.chats` is not in the `supabase_realtime` publication, so the panel's
 binding on that table reports SUBSCRIBED and delivers nothing (`ChatInfoPanel.tsx:483-487`). Member and
 invite bindings do work, which is why a manual refresh looks unnecessary and mostly is.
+
+---
+
+## D-173 `[ ]` Coming back to the tab refetches the open conversation seven times
+
+**Severity: medium**, and it is a cost every person pays on every return to the tab, on every device.
+
+**Surface:** the revalidation that runs when the document becomes visible again. Pinned by
+`tests/e2e/chat-list-event-cost.spec.ts:215`: «coming back revalidates the open chat, once», expecting
+`GET messages:list` at most once.
+
+**Measured:** hidden for 16.5s, then visible — **7** requests for the open chat's history against the one the
+contract allows. The list itself behaves: `GET chats` is 1, and `renders` are zero across
+`ChatListItem`, `MessageRow` and everything else, so nothing re-renders. It is purely network cost,
+which is why no screenshot shows it and why only a counting gate could find it. The same round also recorded
+`GET message_hidden_for_users` 7 and `GET messages:count` 6, in step with the history fetches.
+
+**It is not from the D-163 batch, and that was proved rather than argued.** Found while checking whether the
+member-actions work had disturbed the chat list's cost contract. Every source change of that batch was removed —
+the two tracked files reverted to `HEAD`, the three new modules moved out of the tree, with
+`git status` showing no source modifications remaining — and the same test failed identically, `Received: 7`.
+Everything was then restored and both files verified byte-identical by hash. So this predates that work.
+
+**Why it was not already open:** this spec is one of the counting gates, and a run of the whole e2e set stops at
+load on `resumable-media-upload.spec.ts`, so the suite is usually run by named file. Nothing was hiding it;
+nobody had run it lately.
+
+**Proposed:** find what subscribes to visibility and fans out — seven is close to the six-to-eight of a
+per-something loop rather than a double-fire — and give the revalidation one owner, the way the profile fetch
+got one after it was found running three times concurrently during session recovery.

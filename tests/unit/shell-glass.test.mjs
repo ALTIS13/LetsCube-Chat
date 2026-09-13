@@ -276,6 +276,11 @@ const veiled = [
   ["components/kub/KubButton.tsx", 1],
   ["components/kub/KubFilterChip.tsx", 1],
   ["components/kub/KubFeedbackViewport.tsx", 1],
+  // One, from 2026-09-13: the row-action item in its ordinary branch. The
+  // danger branch paints with a `color-mix` of `--kub-danger` rather than a
+  // neutral elevation, which is what that branch has always done and is not
+  // what this table counts.
+  ["components/kub/RowActions.tsx", 1],
   // Two, down from five, and eight, down from nine, on 2026-09-11: the header's
   // way back, its title and its «⋯», and the composer's record button, became
   // capsules. A veil on a capsule button sits under the button's own glass
@@ -285,7 +290,13 @@ const veiled = [
   // Seven since 2026-09-12: the attach menu's items went with D-122, and the
   // sheet that took their place steps its own glass rather than taking the veil.
   ["components/chat/MessageInput.tsx", 7],
-  ["components/chat/ChatInfoPanel.tsx", 20],
+  // Nineteen, down from twenty on 2026-09-13 (D-163). The member row carried
+  // four veils — the row itself and three action buttons revealed on hover —
+  // and now carries two: the row, and one «ещё» button that is always drawn.
+  // The three actions moved into `RowActions.tsx`, which is counted below and
+  // was added to this table in the same change, because a new file carrying
+  // hovers escapes the two checks this table exists for until it is listed.
+  ["components/chat/ChatInfoPanel.tsx", 19],
   // Two, down from eleven on 2026-09-11: the hover cluster, the per-message
   // context menu and its reaction pickers left the bubble for
   // `MessageActionLayer` and `MessageReactions`, which are counted below.

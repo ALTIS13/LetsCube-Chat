@@ -31,6 +31,23 @@ import { CHAT_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 import { resolveOriginalPreviewUrl, useMessageMediaVariantUrls, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 import { isUncompressedMedia } from "@/lib/mediaCompression";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
+import { useRowPressActions } from "@/hooks/useRowPressActions";
+import {
+  RowActionHeader,
+  RowActionMenu,
+  RowActionSheet,
+  rowMenuPlacement,
+  type RowAction,
+  type RowMenuPlacement,
+} from "@/components/kub/RowActions";
+import {
+  canDemoteFromAdmin,
+  canPromoteToAdmin,
+  canRemoveMember,
+  chatRoleLabel,
+  hasAnyMemberAction,
+  type ChatMemberSubject,
+} from "@/lib/chatMemberRules";
 import { currentViewport, type Point, type WindowPlacement } from "@/lib/floatingWindow";
 import { NO_SAFE_AREA_INSETS, readSafeAreaInsets, safeViewport, type SafeAreaInsets } from "@/lib/safeArea";
 import {
@@ -202,6 +219,13 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   // effect the card would be laid out as a window for one frame and become a
   // column in the next, which is a flinch on every open.
   const [columnFits, setColumnFits] = useState(false);
+  // Which member's actions are open, and in which shape. The panel has no
+  // render-count contract of its own, unlike the chat list, so this is
+  // ordinary state rather than a ref.
+  const [memberMenu, setMemberMenu] = useState<
+    { memberId: string; mode: "menu"; placement: RowMenuPlacement } | { memberId: string; mode: "sheet" } | null
+  >(null);
+  const [memberBusyId, setMemberBusyId] = useState<string | null>(null);
   useLayoutEffect(() => {
     const pane = windowRef.current?.closest("[data-kub-conversation-pane]");
     if (!pane) return undefined;
@@ -967,8 +991,82 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     await loadInvites();
   };
 
-  const roleLabel = (role: string) =>
-    role === "owner" ? "Владелец" : role === "admin" ? "Администратор" : "";
+  /** One member's standing against mine, in the shape the rules module reads. */
+  const subjectFor = (member: MemberRow): ChatMemberSubject => ({
+    myRole: (myRole as ChatMemberSubject["myRole"]) ?? null,
+    targetRole: member.chat_role,
+    isSelf: member.id === currentUser?.id,
+  });
+
+  const openMember = memberMenu ? members.find((m) => m.id === memberMenu.memberId) ?? null : null;
+
+  /**
+   * The same three actions the hover icons carried, built once for whoever the
+   * menu is open on. Their gates come from the rules module, so the row and
+   * the menu cannot disagree about who may do what.
+   */
+  const memberActions: RowAction[] = (() => {
+    if (!openMember) return [];
+    const subject = subjectFor(openMember);
+    const name = openMember.full_name ?? "Участник";
+    const actions: RowAction[] = [];
+    if (canPromoteToAdmin(subject)) {
+      actions.push({
+        id: "promote",
+        label: "Сделать администратором",
+        icon: "chevronUp",
+        run: () => setMemberRole(openMember.id, "admin"),
+      });
+    }
+    if (canDemoteFromAdmin(subject)) {
+      actions.push({
+        id: "demote",
+        label: "Снять администратора",
+        icon: "shieldOff",
+        run: () => setMemberRole(openMember.id, "member"),
+      });
+    }
+    if (canRemoveMember(subject)) {
+      actions.push({
+        id: "remove",
+        label: "Удалить из чата",
+        icon: "userRemove",
+        danger: true,
+        run: async () => {
+          const confirmed = await requestAppConfirm({
+            title: "Удалить участника из чата?",
+            description: `${name} потеряет доступ к этому чату.`,
+            confirmLabel: "Удалить",
+            tone: "danger",
+            icon: "userRemove",
+          });
+          if (confirmed) await handleRemoveMember(openMember.id);
+        },
+      });
+    }
+    return actions;
+  })();
+
+  const memberMenuHeader = openMember ? (
+    <RowActionHeader
+      icon={openMember.chat_role === "owner" ? "crown" : openMember.chat_role === "admin" ? "shield" : "user"}
+      iconTone={openMember.chat_role === "owner" ? "pink" : "accent"}
+      title={openMember.full_name ?? openMember.username ?? "Без имени"}
+      subtitle={chatRoleLabel(openMember.chat_role) || undefined}
+    />
+  ) : null;
+
+  /** Runs one action, keeps the menu honest about being busy, then closes it. */
+  const runMemberAction = async (action: RowAction) => {
+    setMemberBusyId(action.id);
+    try {
+      await action.run();
+    } finally {
+      setMemberBusyId(null);
+      setMemberMenu(null);
+    }
+  };
+
 
   const otherUser = !isGroup ? (chat.other_user as Profile | null) : null;
 
@@ -1586,79 +1684,54 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               </div>
             )}
             {members.map((member) => {
-              const isSelf = member.id === currentUser?.id;
-              const isMemberOwner = member.chat_role === "owner";
-              const isMemberAdmin = member.chat_role === "admin";
-              // Promote/demote matrix mirrors the SQL trigger
-              // `enforce_chat_member_update`:
-              //   • owner can change anyone (last-owner trigger guards
-              //     the chat from going ownerless),
-              //   • admin can promote member↔demote admin, but never
-              //     touch owners and never create new owners.
-              const canPromote = !isSelf && member.chat_role === "member" && isOwnerOrAdmin;
-              const canDemote  = !isSelf && isMemberAdmin && isOwnerOrAdmin;
-              const canRemove  = !isSelf && !isMemberOwner && (
-                isOwner || (myRole === "admin" && member.chat_role === "member")
-              );
+              // The promote/demote/remove matrix used to be computed here, with
+              // a comment naming the SQL trigger it mirrored and no test of any
+              // kind. D-163 needed the same answers a second time — for a menu
+              // built for one member rather than a row drawn for each — so it
+              // moved to `lib/chatMemberRules.ts` and is now covered by
+              // `tests/unit/chat-member-rules.test.mts`, written from the
+              // trigger itself rather than from this code. Two copies of a
+              // mirror drift until the interface offers what the server
+              // refuses, which is already a recorded defect here (D-142).
               return (
-                <div key={member.id} className="flex items-center gap-3 px-4 py-2.5 kub-raise-hover group">
-                  <UserAvatar user={member} size="sm" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate flex items-center gap-1 text-[color:var(--kub-text)]">
-                      {isMemberOwner && <KubIcon name="crown" size={12} tone="pink" className="flex-shrink-0" label="Владелец" />}
-                      {isMemberAdmin && <KubIcon name="shield" size={12} tone="accent" className="flex-shrink-0" label="Администратор" />}
-                      <span className="truncate">{member.full_name ?? member.username ?? "Без имени"}</span>
-                      {isSelf && <span className="text-xs flex-shrink-0 text-[color:var(--kub-muted)]">(вы)</span>}
-                    </div>
-                    {(isMemberOwner || isMemberAdmin) && (
-                      <div className="text-xs text-[color:var(--kub-accent-text)]">{roleLabel(member.chat_role)}</div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {canPromote && (
-                      <button
-                        onClick={() => setMemberRole(member.id, "admin")}
-                        title="Сделать администратором"
-                        aria-label="Сделать администратором"
-                        className="p-1.5 rounded-lg kub-raise-hover transition-all text-[color:var(--kub-cyan)]"
-                      >
-                        <KubIcon name="chevronUp" size={14} />
-                      </button>
-                    )}
-                    {canDemote && (
-                      <button
-                        onClick={() => setMemberRole(member.id, "member")}
-                        title="Снять администратора"
-                        aria-label="Снять администратора"
-                        className="p-1.5 rounded-lg kub-raise-hover transition-all text-[color:var(--kub-muted)]"
-                      >
-                        <KubIcon name="shieldOff" size={14} />
-                      </button>
-                    )}
-                    {canRemove && (
-                      <button
-                        onClick={async () => {
-                          const confirmed = await requestAppConfirm({
-                            title: "Удалить участника из чата?",
-                            description: `${member.full_name ?? "Участник"} потеряет доступ к этому чату.`,
-                            confirmLabel: "Удалить",
-                            tone: "danger",
-                            icon: "userRemove",
-                          });
-                          if (confirmed) void handleRemoveMember(member.id);
-                        }}
-                        title="Удалить из чата"
-                        aria-label="Удалить из чата"
-                        className="p-1.5 rounded-lg hover:bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)] transition-all text-[color:var(--kub-danger)]"
-                      >
-                        <KubIcon name="close" size={14} />
-                      </button>
-                    )}
-                  </div>
-                </div>
+                <GroupMemberRow
+                  key={member.id}
+                  member={member}
+                  subject={subjectFor(member)}
+                  onOpenMenu={(position) =>
+                    setMemberMenu({ memberId: member.id, mode: "menu", placement: rowMenuPlacement(position) })
+                  }
+                  onOpenSheet={() => setMemberMenu({ memberId: member.id, mode: "sheet" })}
+                />
               );
             })}
+
+            {/* Portalled, and above the panel. Both are measured requirements,
+                not preferences: the panel carries `backdrop-filter`, which makes
+                it the containing block for a fixed descendant — 379x900 inside a
+                1440x900 viewport as a column — and it stands at z-60 itself. A
+                phone reports neither problem, because there the panel is the
+                whole screen, which is exactly why this is not conditional. */}
+            {openMember && memberMenu && (memberMenu.mode === "menu" ? (
+              <RowActionMenu
+                header={memberMenuHeader}
+                actions={memberActions}
+                placement={memberMenu.placement}
+                busyActionId={memberBusyId}
+                layer={80}
+                onClose={() => setMemberMenu(null)}
+                onRun={runMemberAction}
+              />
+            ) : (
+              <RowActionSheet
+                header={memberMenuHeader}
+                actions={memberActions}
+                busyActionId={memberBusyId}
+                layer={80}
+                onClose={() => setMemberMenu(null)}
+                onRun={runMemberAction}
+              />
+            ))}
             {isOwnerOrAdmin && (
               <div className="mt-3 border-t border-[color:var(--kub-rule)] px-4 pt-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
@@ -2120,4 +2193,92 @@ async function fetchHiddenMessageIdSet(
     return new Set();
   }
   return new Set((data ?? []).map((row) => row.message_id));
+}
+
+/**
+ * One member, and the ways their actions can be reached.
+ *
+ * Its own component because the press gesture is a hook, and a hook cannot be
+ * called inside `members.map()`. The gain is not only legality: the row now
+ * re-renders on its own rather than with the whole list.
+ *
+ * D-163. The three actions used to live in a container carrying
+ * `opacity-0 group-hover:opacity-100`, so on a phone they were drawn at zero
+ * opacity at rest and still at zero after a tap — measured at 390 on
+ * 2026-09-13, both times. They are reachable three ways now: the always-drawn
+ * «ещё» button, a long press, and a right click.
+ *
+ * A plain tap does nothing here on purpose. Opening the person belongs to that
+ * gesture (D-168), and spending it on a menu would make that harder to answer.
+ */
+function GroupMemberRow({
+  member,
+  subject,
+  onOpenMenu,
+  onOpenSheet,
+}: {
+  member: MemberRow;
+  subject: ChatMemberSubject;
+  onOpenMenu: (position: { x: number; y: number }) => void;
+  onOpenSheet: () => void;
+}) {
+  const hasActions = hasAnyMemberAction(subject);
+  const press = useRowPressActions({
+    onMenu: hasActions ? onOpenMenu : undefined,
+    onSheet: hasActions ? onOpenSheet : undefined,
+  });
+  const isMemberOwner = member.chat_role === "owner";
+  const isMemberAdmin = member.chat_role === "admin";
+
+  return (
+    <div
+      className="flex items-center gap-3 px-4 py-2.5 kub-raise-hover"
+      data-testid="chat-info-member"
+      data-member-id={member.id}
+      data-has-actions={hasActions ? "true" : "false"}
+      {...press.handlers}
+    >
+      <UserAvatar user={member} size="sm" />
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium truncate flex items-center gap-1 text-[color:var(--kub-text)]">
+          {isMemberOwner && <KubIcon name="crown" size={12} tone="pink" className="flex-shrink-0" label="Владелец" />}
+          {isMemberAdmin && <KubIcon name="shield" size={12} tone="accent" className="flex-shrink-0" label="Администратор" />}
+          <span className="truncate">{member.full_name ?? member.username ?? "Без имени"}</span>
+          {subject.isSelf && <span className="text-xs flex-shrink-0 text-[color:var(--kub-muted)]">(вы)</span>}
+        </div>
+        {(isMemberOwner || isMemberAdmin) && (
+          <div className="text-xs text-[color:var(--kub-accent-text)]">
+            {isMemberOwner ? "Владелец" : "Администратор"}
+          </div>
+        )}
+      </div>
+
+      {hasActions && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            // A finger gets the sheet, a pointer gets the menu — the same shapes
+            // the chat list has always used, and the same question its gesture
+            // asks (`useRowPressActions` refuses a context menu on a coarse
+            // pointer). Asked once, here, rather than settled twice.
+            //
+            // Caught by looking: the first version of this button called
+            // `onOpenMenu` whatever was pressing, so a phone got a 272px menu
+            // anchored at the fingertip while a long press on the same row got
+            // the sheet. Two idioms for one action, on one screen.
+            const coarse =
+              typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
+            if (coarse) onOpenSheet();
+            else onOpenMenu({ x: event.clientX, y: event.clientY });
+          }}
+          aria-label="Действия с участником"
+          title="Действия с участником"
+          className="p-1.5 rounded-lg kub-raise-hover transition-all text-[color:var(--kub-muted)]"
+        >
+          <KubIcon name="more" size={16} />
+        </button>
+      )}
+    </div>
+  );
 }
