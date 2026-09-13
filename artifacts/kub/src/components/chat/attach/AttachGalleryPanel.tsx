@@ -17,8 +17,13 @@ interface AttachGalleryPanelProps {
   picks: AttachPick[];
   selected: string[];
   onToggle: (id: string) => void;
-  /** Room kept under the grid for the send capsule that floats over it. */
-  reserveBottom: boolean;
+  /**
+   * Room kept under the grid for what floats over it, in pixels, measured from
+   * the floating stack itself. A fixed class was right while only the send
+   * capsule floated; the video ladder (D-175) joins it for some selections and
+   * not others, and a reserve that is sometimes wrong hides the last row.
+   */
+  reserveBottom: number;
 }
 
 /**
@@ -72,7 +77,8 @@ export function AttachGalleryPanel({ entries, picks, selected, onToggle, reserve
     <div
       data-attach-gallery="picked"
       data-attach-arrangement="grid"
-      className={cn("grid grid-cols-3 gap-1.5 px-3", reserveBottom && "pb-24")}
+      className="grid grid-cols-3 gap-1.5 px-3"
+      style={reserveBottom ? { paddingBottom: reserveBottom } : undefined}
     >
       {entries.map((entry) => (
         <button

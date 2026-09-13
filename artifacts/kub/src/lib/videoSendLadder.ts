@@ -185,6 +185,33 @@ export function estimateBytes(source: SourceVideo, height: VideoSendHeight): num
 }
 
 /**
+ * How much smaller a rung has to promise to be before it is worth encoding.
+ *
+ * A tenth. Below that a person waits minutes, spends battery, and receives a
+ * file of nearly the same size that has been through one more generation of
+ * lossy encoding. The number is a judgement rather than a measurement, and it is
+ * named here so it can be argued with.
+ */
+export const WORTH_ENCODING = 0.9;
+
+/**
+ * Whether a rung would actually make this file meaningfully smaller.
+ *
+ * Measured in bytes rather than in pixels, which was the first attempt and was
+ * wrong: aligning 854 down to 848 counts as a smaller picture while changing
+ * nothing anybody can see.
+ *
+ * This lives beside the estimate rather than beside the encoder because two
+ * places have to agree about it — the slider, which must not show a saving it
+ * will not deliver, and the plan, which must not spend the minutes. A rule
+ * written twice is a rule that will disagree with itself.
+ */
+export function worthEncoding(source: SourceVideo, height: VideoSendHeight): boolean {
+  if (!(source.sizeBytes > 0)) return true;
+  return estimateBytes(source, height) <= source.sizeBytes * WORTH_ENCODING;
+}
+
+/**
  * Every estimate this module produces is an estimate.
  *
  * Exported as a constant rather than left as a comment because the number is

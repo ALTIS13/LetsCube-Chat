@@ -46,6 +46,7 @@ import {
   type IncomingFilesSource,
 } from "@/lib/mediaCompression";
 import { photoSendQuality } from "@/lib/mediaQuality";
+import { useVideoSendLadder } from "@/hooks/useVideoSendLadder";
 import { isNativeAndroid } from "@/lib/platform/capabilities";
 import { cn } from "@/lib/utils";
 import { AttachFilePanel, type AttachFileSource } from "./AttachFilePanel";
@@ -55,6 +56,7 @@ import { AttachMoreMenu } from "./AttachMoreMenu";
 import { AttachPlaceholderPanel } from "./AttachPlaceholderPanel";
 import { AttachSendBar } from "./AttachSendBar";
 import { AttachTabs, attachPanelElementId, attachTabElementId } from "./AttachTabs";
+import { AttachVideoProgressRow, AttachVideoQualityRow } from "./AttachVideoQuality";
 import { attachPickKind, type AttachPick } from "./attachTypes";
 
 const PICKER_KINDS: readonly AttachPickerKind[] = ["camera", "library", "library-original", "file"];
@@ -128,14 +130,24 @@ export default function AttachSheet({
   const [dragging, setDragging] = useState(false);
   /** The height the sheet's content asks for, measured; null until it has been. */
   const [fit, setFit] = useState<number | null>(null);
+  /**
+   * How tall the capsule that floats over the grid is, measured rather than
+   * assumed: the video ladder joins it for some selections and not others, and
+   * the room kept under the grid has to be the room it actually takes.
+   */
+  const [floatingHeight, setFloatingHeight] = useState(0);
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
+  const floatingRef = useRef<HTMLDivElement | null>(null);
   const tabRefs = useRef<Partial<Record<AttachTabId, HTMLButtonElement | null>>>({});
   const inputRefs = useRef<Partial<Record<AttachPickerKind, HTMLInputElement | null>>>({});
   const urlsRef = useRef<string[]>([]);
   const nextIdRef = useRef(1);
   const takenIncomingRef = useRef<number | null>(null);
+  /** Read by `requestClose`, which the backdrop and Escape both reach. */
+  const encodingRef = useRef(false);
+  const cancelLadderRef = useRef<() => void>(() => {});
   const dragRef = useRef<{ pointerId: number; startY: number; lastY: number; lastT: number; velocity: number; height: number } | null>(null);
 
   // ── what is picked ─────────────────────────────────────────────────────────
@@ -240,7 +252,40 @@ export default function AttachSheet({
   const offersHd = offersHdPhotos(tab, chosenFiles);
   const selecting = chosen.length > 0;
 
+  // The ladder governs the gallery's videos only. A pick from «Файл» goes as it
+  // is by definition (D-119), so there is nothing there for a quality to change.
+  const videoPicks = selectionScope === "gallery" ? chosen.filter((pick) => pick.kind === "video") : [];
+  const ladder = useVideoSendLadder(videoPicks);
+  const encoding = ladder.progress !== null;
+  const offersLadder = selectionScope === "gallery" && ladder.ready && ladder.stops.length > 1;
+  encodingRef.current = encoding;
+  cancelLadderRef.current = ladder.cancel;
+
+  // What floats over the grid is measured rather than assumed: it is one
+  // capsule for a photograph and two for a video, and a reserve that is
+  // sometimes wrong hides the last row of what was picked.
+  useLayoutEffect(() => {
+    const node = floatingRef.current;
+    if (!node) {
+      setFloatingHeight(0);
+      return undefined;
+    }
+    const measure = () => setFloatingHeight(Math.ceil(node.getBoundingClientRect().height));
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [selecting, offersLadder, encoding]);
+
   const requestClose = useCallback(() => {
+    // While a video is being encoded, closing means «stop waiting» rather than
+    // «throw the selection away»: the encoding stops and the sheet stays with
+    // what was picked still in it. Nothing has been uploaded at this point.
+    if (encodingRef.current) {
+      cancelLadderRef.current();
+      return;
+    }
     if (!gallerySelected.length && !filesSelected.length) {
       onClose();
       return;
@@ -252,8 +297,8 @@ export default function AttachSheet({
     );
   }, [filesSelected.length, gallerySelected.length, onClose]);
 
-  const send = (mode: AttachSendMode) => {
-    if (!chosen.length) return;
+  const send = async (mode: AttachSendMode) => {
+    if (!chosen.length || encoding) return;
     setMenuOpen(false);
     const plan = planAttachSend(chosenFiles, tab === "file" ? "original" : mode);
     if (plan.refused.length) {
@@ -263,8 +308,17 @@ export default function AttachSheet({
       );
     }
     if (!plan.send.length) return;
+    // The encoding happens here rather than downstream, because this is where
+    // the rung was chosen and where a person can still stop it: a browser
+    // encodes at roughly realtime, so the wait belongs in front of them, with
+    // «Отмена», rather than behind a sheet that has already closed. A send asked
+    // for as originals is never encoded — that is what «Отправить без сжатия»
+    // means.
+    const files = plan.compress ? await ladder.prepare(plan.send) : plan.send;
+    // Cancelled: the selection stays where it was and nothing is sent.
+    if (!files) return;
     onSendMedia({
-      files: plan.send,
+      files,
       compress: plan.compress,
       caption: caption.trim(),
       source: chosen[0].source,
@@ -434,7 +488,7 @@ export default function AttachSheet({
   );
 
   const moreMenu = offersOriginal ? (
-    <AttachMoreMenu open={menuOpen} onOpenChange={setMenuOpen} onSendOriginal={() => send("original")} />
+    <AttachMoreMenu open={menuOpen} onOpenChange={setMenuOpen} onSendOriginal={() => void send("original")} />
   ) : null;
 
   const header = phone ? (
@@ -470,15 +524,35 @@ export default function AttachSheet({
   // At the foot: the glass capsule, as the tabs until something is selected and
   // as the caption and send capsule after that — floating over the photos.
   const sendBar = selecting ? (
-    <AttachSendBar
-      sendLabel={mediaSendTitle(chosenFiles)}
-      caption={caption}
-      onCaptionChange={setCaption}
-      onSend={() => send("compressed")}
-      hdAvailable={offersHd}
-      hd={hd}
-      onHdChange={setHd}
-    />
+    <div ref={floatingRef} className="absolute inset-x-3 bottom-3 z-10 flex flex-col gap-2">
+      {/* The ladder above the capsule, and the same box showing the wait once
+          the encoding starts — the control and its consequence in one place. */}
+      {ladder.progress ? (
+        <AttachVideoProgressRow
+          progress={ladder.progress.value}
+          position={ladder.progress.position}
+          onCancel={ladder.cancel}
+        />
+      ) : offersLadder ? (
+        <AttachVideoQualityRow
+          stops={ladder.stops}
+          stop={ladder.stop}
+          onStopChange={ladder.setStop}
+          summary={ladder.summary}
+          videos={ladder.videos}
+        />
+      ) : null}
+      <AttachSendBar
+        sendLabel={mediaSendTitle(chosenFiles)}
+        caption={caption}
+        onCaptionChange={setCaption}
+        onSend={() => void send("compressed")}
+        hdAvailable={offersHd}
+        hd={hd}
+        onHdChange={setHd}
+        busy={encoding}
+      />
+    </div>
   ) : null;
   const bottom = selecting ? null : <div className="flex shrink-0 justify-center px-4 pb-3 pt-1.5">{tabs}</div>;
 
@@ -499,7 +573,7 @@ export default function AttachSheet({
               picks={gallery}
               selected={gallerySelected}
               onToggle={(id) => setGallerySelected((current) => toggleSelection(current, id))}
-              reserveBottom={selecting}
+              reserveBottom={selecting ? floatingHeight + 24 : 0}
             />
           )}
           {tab === "file" && (
@@ -508,7 +582,7 @@ export default function AttachSheet({
               picks={files}
               selected={filesSelected}
               onToggle={(id) => setFilesSelected((current) => toggleSelection(current, id))}
-              reserveBottom={selecting}
+              reserveBottom={selecting ? floatingHeight + 24 : 0}
             />
           )}
           {tab === "location" && (

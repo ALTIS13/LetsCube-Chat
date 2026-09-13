@@ -19,7 +19,8 @@ interface AttachFilePanelProps {
   picks: AttachPick[];
   selected: string[];
   onToggle: (id: string) => void;
-  reserveBottom: boolean;
+  /** Room kept under the rows for what floats over them, in pixels. */
+  reserveBottom: number;
 }
 
 /** The grouped rows of the glass capsule look: one card, hairlines between the rows. */
@@ -37,7 +38,7 @@ const ROW =
  */
 export function AttachFilePanel({ sources, picks, selected, onToggle, reserveBottom }: AttachFilePanelProps) {
   return (
-    <div className={cn("flex flex-col gap-4 pt-1", reserveBottom && "pb-24")}>
+    <div className="flex flex-col gap-4 pt-1" style={reserveBottom ? { paddingBottom: reserveBottom } : undefined}>
       <div className={GROUP} data-attach-file-sources="">
         {sources.map((source, index) => (
           <button
