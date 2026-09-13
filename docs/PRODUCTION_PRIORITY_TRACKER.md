@@ -552,6 +552,70 @@ route on `app.letscube.ru`. Slice 1 had to be cheap to discard, and it is.
 
 ## Last Confirmed Deploy Baseline
 
+**`67454a6`, deployed 2026-09-14.** Voice is a feature people can switch on, and
+three administration defects are closed.
+
+- `letscube-web` runs `l64kyyu1sysev2izzjjbizhe:67454a668fb59ff12b98c3ef02cce1e14895ae08`
+  — the full SHA read off the running container — healthy;
+  `https://app.letscube.ru` answers 200.
+- **Marker calibrated both ways**: «Начать голосовой чат» is 1 in the bundle
+  built here and was 0 in what production served before the push, with
+  «Присоединиться» as the control at 1 both times. The served file went from
+  `index-mSZR-sOQ.js` to `index-Ceyera6g.js`; two mid-rollover reads returned
+  144 bytes and the watch kept going.
+- `letscube-worker` is not redeployed by this push and did not need to be: its
+  `LIVEKIT_*` live in `/srv/letscube/secrets/letscube-infra.env`, which survives
+  a deploy.
+
+### Voice, end to end and in people's hands
+
+An owner or administrator of a group presses «Начать голосовой чат» in
+«Информация о группе»; everybody in the group then sees the capsule under the
+chat header and can join; the administrator can end it, which asks first and
+disconnects the people in it. No SQL, no migration — the policy
+`admins manage voice channels` already allowed exactly this and nobody else.
+
+**The reconciler runs.** It was the last piece not wired, and the four names
+went into the secrets file the worker's entrypoint sources, not Coolify's
+environment UI — which holds *nothing at all* for that application, a fact worth
+recording because looking there first finds no list to add to. Proved rather
+than assumed: a `voice_participants` row was written for a channel the SFU has
+no room for, and the next pass removed it 30 seconds later, logging
+`reconciled: 1, unknown: 0, reaped: 0`.
+
+While adding them, one pre-existing defect in that file: it is sourced by `sh`
+and one value carried a space with no quotes, so its second word ran as a
+command — the worker printed «/run/secrets/letscube-infra.env: Support: not
+found» on every start and that variable had been truncated to its first word
+ever since. Every unquoted value carrying a space is now quoted.
+
+### Found by looking at the rendered pixels
+
+- **D-183**: voice called one thing by two names — «ГОЛОСОВОЙ КАНАЛ» over
+  «Начать голосовой чат», and five gateway refusals saying «канал» beside eleven
+  saying «чат». One word now, Telegram's, because the shipped mechanic is
+  Telegram's. «Завершить голосовой чат» also wore the «×» every dismissable
+  thing wears; it wears a hang-up glyph.
+- **D-184**: `KubModal`'s header badge painted `--kub-cyan` whatever it held, so
+  every destructive dialog in the product showed a red glyph on the accent
+  colour. The modal takes `tone` now and five dialogs pass it, `AppDialogs`
+  among them, so every `requestAppConfirm` follows.
+- **D-134** (high, data loss): «Снять блокировку» deleted every `bans` row for
+  the person, expired history included, on one press with nothing asked. Two
+  questions the register left open were answered against production rather than
+  reasoned about: the audit triggers do keep a trace, and «Снять» in
+  «Блокировки» never had the defect.
+- **D-140**: a refused read in «Блокировки» rendered «Активных банов нет».
+- **D-141**: the users search invited «@никнейм» and the «@» matched nobody.
+- **D-146**: «Базовая роль» printed the legacy field eighteen lines above the
+  global roles of the same person.
+
+Gates at this commit: kub typecheck clean, unit 2203/2203, `voice-call.spec.ts`
+145 passed / 9 skipped / 0 failed across seven projects, production build proved
+by its own `sw.js build 52e6930d4c180f7c` and `built in 14.93s` lines.
+
+### The previous baseline
+
 **`7260ee8`, deployed 2026-09-14**, the fourth deploy of this run: voice slice 2.
 
 **Nothing in it is visible yet, deliberately.** A voice channel is a row in
