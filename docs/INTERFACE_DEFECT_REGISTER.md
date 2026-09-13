@@ -7566,7 +7566,7 @@ are owners by assignment. A global manager sees only the legacy labels (A-17).
 
 **Audit rows:** work-surfaces A-09, A-21 (A-17 for the manager's view).
 
-## D-147 `[ ]` «Открыть оригинал» opens the raw file address in a browser tab, which takes a person out of the Windows and Android apps
+## D-147 `[x]` «Открыть оригинал» opens the raw file address in a browser tab, which takes a person out of the Windows and Android apps
 
 **Severity:** medium, for the installed apps. Found by the chat-functions audit from the
 code; the button is in frame 16.
@@ -7583,7 +7583,30 @@ and T14); no raw address.
 
 **Audit rows:** chat-functions M5; top-10 item 6.
 
-## D-148 `[ ]` «На весь экран» in the video viewer wears the external-link icon and has no name on a phone
+**Fixed** 2026-09-13. The control is decided per shell in
+`artifacts/kub/src/lib/mediaFileAction.ts`, a pure module with the four shells'
+behaviour read off their own sources rather than assumed: Tauri answers a new
+window with `NewWindowResponse::Deny` and hands an http(s) address to
+`opener().open_url()` (`windows-tauri/src-tauri/src/lib.rs`), and Capacitor's
+`Bridge.launchIntent` fires `Intent.ACTION_VIEW` for every host that is not the
+app's own. Everywhere the file can be kept, the control is «Сохранить» with the
+download glyph and saves through `saveMediaAs`, which fetches the bytes and
+hands them to the shell — no address, no tab. The one shell that cannot keep a
+download is Android: neither `@capacitor/android` nor this project's
+`MainActivity` installs a `DownloadListener`, so a WebView drops it silently.
+There the control says «В браузере», wears the external-link glyph, and reports
+«Файл открыт в браузере» after the press. Its word is drawn at every width in
+that shell — a warning hidden below `sm` is a warning nobody on a phone reads —
+and the short label is measured rather than chosen: with the full sentence, a
+video at 390 left the picture's own title 37px wide. Pinned by
+`tests/unit/media-file-action.test.mts` (every target enumerated, so a new shell
+must be decided) and `tests/e2e/media-viewer-actions.spec.ts`, which records what
+the page does with the file and fails if a tab is opened. The Windows and iPhone
+shells are **unverified as shells**: both are on the saving branch by rule, and
+only a Windows build and a device can show that WebView2 and Safari really keep
+the download.
+
+## D-148 `[x]` «На весь экран» in the video viewer wears the external-link icon and has no name on a phone
 
 **Severity:** low, for accessibility. Found by the chat-functions audit; rendered (frame
 17, where a phone shows two identical icons side by side).
@@ -7598,7 +7621,17 @@ name. D-094 fixed the same gap on «Открыть оригинал».
 
 **Audit rows:** chat-functions M6 (with V4).
 
-## D-149 `[ ]` Two stored playback volumes override each other
+**Fixed** 2026-09-13. The button has `aria-label="На весь экран"`
+and a glyph of its own: the icon vocabulary had no fullscreen drawing at all, so
+`fullscreen: { Icon: ArrowsOut }` was added to `components/kub/icons.ts` — every
+existing name would have lied in a different way. Pinned by
+`tests/e2e/media-viewer-actions.spec.ts`, where the two glyphs are compared **in
+the Android shell**, whose file control is the external-link one: that is the
+pair the register recorded, and the first draft of the assertion — comparing the
+fullscreen glyph with whatever stood beside it — passed with the lying icon
+restored, because in a browser the neighbour is a download glyph.
+
+## D-149 `[x]` Two stored playback volumes override each other
 
 **Severity:** low. Found by the chat-functions audit from the code at `f979ec9`, before
 D-118.
@@ -7617,6 +7650,21 @@ is to be checked against `bce98f3`.
 delete the other.
 
 **Audit rows:** chat-functions V6 (V2 for the settings slider).
+
+**Fixed** 2026-09-13. The player owns the volume; the sound
+settings' «Голосовые сообщения» slider is gone, and nothing writes
+`voicePlaybackVolume` any more. A voice bubble takes `mediaPlayback.volume`, so
+one thing writes the element and the finger check (D-118) lives in that one
+place. `artifacts/kub/src/lib/playbackVolume.ts` holds the rules, including the
+inheritance: a volume somebody had set in the settings before this becomes the
+player's once, so the change takes nobody's choice away. Pinned by
+`tests/unit/playback-volume.test.mts` — where zero is the case a truthiness check
+gets wrong, and it is the case that matters — and by
+`tests/e2e/media-viewer-actions.spec.ts`, which reads `audio.volume` off the
+bubble with the two keys deliberately disagreeing: 30% stored by the player, 90%
+by the settings. Restoring the second writer turns three of those red, and the
+mobile one shows why it was worth doing — the settings' 0.9 reached the element
+under a finger, which D-118 forbids.
 
 ## D-150 `[ ]` A group's owner cannot leave it, only delete it for everyone
 
@@ -8566,7 +8614,7 @@ against the wrong reference.
 
 ---
 
-## D-169 `[ ]` A channel is shown as a group, with a «Участники» tab and a group's title
+## D-169 `[x]` A channel is shown as a group, with a «Участники» tab and a group's title
 
 **Severity: low**, until channels are used in earnest.
 
@@ -8576,6 +8624,53 @@ against the wrong reference.
 «Участники» tab and «Удалить групповой чат». `getChatDisplayInfo` already has a «Канал» label
 (`lib/chatDisplay.ts:70-77`) that this panel never uses. The «Топики» row is the one place that excludes
 channels (`:1415`), so the distinction is known here and applied once.
+
+**Closed 2026-09-13.** Two corrections to the account above first, both worth more than the fix.
+
+**«Applied once» was already «applied three times» when this was read.** The settings screen that landed the
+same morning (D-164, `e91bee2`) had added two more channel-aware places on its own — the card's title over the
+settings layer, and the destructive row's label in `lib/chatSettings.ts`. So the card was not ignorant of
+channels; it knew, in three places, and disagreed with itself: «Настройки канала» over a row saying «Удалить
+канал» reached from a card titled «Информация о группе» with a «Участники» tab. Three other surfaces had
+learned it separately too — the chat list's context menu (`ChatList.tsx:294`), its leave and delete
+confirmations (`:423-453`), and the conversation header's «N подписчиков» (`ChatHeader.tsx:167`). Six
+independent answers to one question.
+
+**What actually differs between the two, established from the code rather than assumed.** `chats.type` allows
+`private`, `group` and `channel` (`schema.sql:53`), and that is the whole of it.
+
+- Membership is one table: `chat_members` holds `owner | admin | member` for a channel exactly as for a group.
+  There is no subscriber table and no subscriber role.
+- Posting is one policy: «Chat members can send messages» has no type condition and no role condition, so a
+  channel's members write into it like a group's.
+- Every rule that names a channel names it beside a group — `group_invites`' functions accept
+  `type in ('group','channel')`, and so does the media-variant queue.
+- **Nothing in the product creates one.** `NewGroupModal.tsx:49` inserts `type: "group"`, and no other code
+  path in `artifacts`, `supabase` or the migration backups writes `channel` at all. A channel exists only if
+  somebody put one in the database by hand, which is why «low, until channels are used in earnest» was right.
+
+So the word changes and nothing else does, exactly as the brief anticipated. The words are
+`artifacts/kub/src/lib/chatVocabulary.ts` — one function, no capability invented, because the product has none
+to invent — and `tests/unit/chat-vocabulary.test.mts` holds every phrase in both nouns. The card takes its
+title, its tab, its counted line, its two destructive rows and both of their confirmations, its settings title
+and its description placeholder from there; `chatSettings.ts` takes the members row and the delete row.
+«Удалить групповой чат» on the card root and «Удалить группу» on the settings screen were one button named
+twice, and are one name now.
+
+Proved by `tests/e2e/channel-card.spec.ts`, 24/24 across `chromium-desktop-1440` and `chromium-mobile-390`,
+which asserts a channel's card **beside a group's** so that a rename cannot pass. Mutation: making the
+vocabulary answer «group» for everything turns 5 of 7 unit tests and 2 of the settings tests red; restoring
+the card's literal title turns two rendered tests red.
+
+**This does not answer against the wrong reference.** D-168 warns that this entry «would label a channel the
+way Telegram labels one», and that the target for the surface is Discord's shape rather than Telegram's. What
+was built is not a channel feature of either shape: it is the removal of a card that called the thing in front
+of it by the wrong name. «Подписчики» counts the same `chat_members` rows, and when a channel gains something
+a group has not — a restriction on who may post, a subscriber who is not a member — that is a product decision
+with a migration behind it, and it arrives here on top of the words rather than instead of them.
+
+**Frames:** `output/channel-card/channel-root-light-*.png`, `channel-root-dark-*.png`,
+`channel-settings-dark-*.png`, with `group-root-light-*.png` as the control.
 
 ---
 
@@ -8613,7 +8708,7 @@ The counts that do exist are good and are on the rows themselves («1543 фот�
 
 ---
 
-## D-172 `[ ]` The invitations block explains its own implementation to the reader
+## D-172 `[x]` The invitations block explains its own implementation to the reader
 
 **Severity: low.**
 
@@ -8628,6 +8723,47 @@ it. Neither belongs to the person reading.
 Related and separate: `public.chats` is not in the `supabase_realtime` publication, so the panel's
 binding on that table reports SUBSCRIBED and delivers nothing (`ChatInfoPanel.tsx:483-487`). Member and
 invite bindings do work, which is why a manual refresh looks unnecessary and mostly is.
+
+**Closed 2026-09-13**, and the entry was right about all three of the things it named — plus two more that
+only showed up once the block was read as a whole rather than at that one heading.
+
+- **The sentence and the button both went.** In their place stands the one thing on this list a person can act
+  on: «2 приглашения ждут ответа», and nothing at all when nobody is waiting, because a line announcing that
+  there is nothing to see beside a list showing that there is nothing to see is the same thing said twice.
+- **The empty state named the block's own filter.** «Активных или отклонённых приглашений пока нет» is a
+  description of `visibleInvites`. There are two different facts underneath it, and they are told apart now:
+  «В группу ещё никого не приглашали.» against «Все приглашённые уже в группе.» — the second being what should
+  always have been said to somebody who invited five people and watched all five arrive, since an accepted
+  invitation from a current member is hidden from this list.
+- **The unavailable state named the database.** `GROUP_INVITES_MIGRATION_REQUIRED` read «Приглашения требуют
+  обновления базы данных» — a repair nobody reading it can make, in the one moment they wanted to invite
+  somebody. It reads «Приглашения сейчас недоступны. Попробуйте позже.» now, in all three places that show it
+  (this block, `GroupInviteModal`, and the alert `NewGroupModal` raises when a new group's invites fail).
+- **Found in the rendered pixels, not in the source: an unreadable list was drawn as an empty one.** With the
+  table missing, the block painted its unavailable banner and «В группу ещё никого не приглашали.» directly
+  under it — a fact it had no way of knowing, having read nothing. That is this entry's own defect pointing
+  the other way, and `invitesEmptyText` now refuses to answer when the read failed.
+- **Two chips agreed with the invitee's gender.** «Отказался» and «Принял» are past tenses, so each was wrong
+  for half the people it named; «Пригласил: Анна» likewise. The states are «Ждёт ответа», «В группе», «Уже не
+  в группе», «Отклонено», «Отменено», «Истекло», and the line under a name reads «Кто пригласил: …», which
+  agrees with «кто». Every one of the six states the block really has is kept.
+- One real defect fell out of the rewrite: the chip's colour was chosen from the status alone while its label
+  was chosen from the status **and** the membership, so somebody who accepted and has since left wore the same
+  green as somebody sitting in the chat. Both come from one answer now.
+
+The copy is `artifacts/kub/src/lib/groupInviteCopy.ts` — which words, which tone, and which of the two actions
+each state offers — with `tests/unit/group-invite-copy.test.mts` beside it. The two action rules are unchanged
+from the inline ones they replaced; they are merely testable now. Rendered proof in
+`tests/e2e/channel-card.spec.ts` (24/24 across both viewports). Mutation: restoring the sentence about panel
+reloads, or making the empty text ignore a failed read, each turns a rendered test red.
+
+**Left open, and adjacent:** `INVITE_POLICY_MIGRATION_REQUIRED` («Настройка режима приглашений станет доступна
+после обновления базы данных») is the same defect on the settings screen's invite row rather than in this
+block, and it belongs to D-165's open third part. `expires_at` is still fetched and never shown, which is
+D-170's.
+
+**Frames:** `output/channel-card/invites-light-*.png`, `invites-dark-*.png`,
+`invites-unavailable-light-*.png`.
 
 ---
 
@@ -9216,3 +9352,69 @@ closes the same hole in the group-delete and leave-group dialogs the card alread
 **Proved both ways**, at 390 and at 1440: the confirmation's own button is the element under its centre, and a
 dialog opened from the card starts to the left of the card rather than inside it. Both assertions fail against
 the old build.
+
+## D-180 `[~]` Nobody could see who anybody was: a contact card said «Пользователь» to everyone
+
+**Severity: medium**, and it is the whole of what the owner asked for when he asked for лычки — the rest of
+that request turned out to be already built.
+
+**The owner, 2026-09-13:** «есть роли также глобальные которые у нас отвечают за работников, админов
+приложения и т.п, их мы можем немного видоизменить и сделать по типу лычек как опять же в дискорде, в которых
+написано кто такой, за что получил медальку (достижения, покупка подписки и статус условно премиум) … чем выше
+статус тем красивее иконка».
+
+**What already existed, which is nearly all of it.** `roles` has carried `priority` and `colour` since
+2026-09-04, added at the owner's request to make the ladder Discord-shaped; `lib/roleHierarchy.ts` orders it
+and is tested; the administration panel edits it with swatches and arrows; 27 permission keys hang off it
+through three tiers of `has_permission`. Seven achievements exist with their catalogue, their criteria, their
+granting, their evidence and a settings screen that draws them. Reading `user_achievements` was opened to every
+signed-in account on 2026-09-11. **None of that needed building, and saying otherwise would have been the
+relabelling the owner has twice refused.**
+
+**What was actually missing was one read path.** Measured on production on 2026-09-13, acting as
+`authenticated` with real claims: an ordinary account reads **1 of 13** role rows — its own — and the three
+accounts holding `roles.view` read all 13; the assignments split the same way, 10 accounts seeing only their
+own of 19. So an ordinary account can read its own standing and nobody else's — and `ProfileRoleSummary`, a
+component that has drawn roles as chips for months, was gated on `access.isAdmin` and showed everybody else the
+word «Пользователь», whoever they were looking at.
+
+**One of my own measurements was wrong on the way to that, and the correction is the useful part.** Two probes
+set `request.jwt.claims` and stayed `supabase_admin`, which owns those tables and is not subject to their
+policies. They reported that every account reads every role row and every assignment — a security finding that
+was not one. Both `role` and the claims have to move; with `set_config('role','authenticated')` the answer is
+the one above. A policy measured as its own table's owner is not measured at all.
+
+**Closed for global roles and medals on a contact card (slice 1 of 8).**
+
+- `roles.badge_icon` and `roles.badge_public`, the second defaulting to **false** — a role is private until it
+  is deliberately worn, and `user`, which everybody holds, stays off the strip exactly as Discord does not
+  badge `@everyone`.
+- `public.profile_badges(uuid[])`, a SECURITY DEFINER function returning **presentation fields only**. It can
+  never hand back a permission, an `assigned_by` or an `assigned_at`, which is why this is an RPC rather than a
+  widened policy: `roles.view` keeps meaning what it means, no view is added, and one round trip answers for a
+  whole member list. Its guards are named in the migration, including the 200-id cap without which a
+  definer-rights function is an enumeration tool.
+- «Чем выше статус тем красивее иконка» is the icon's **weight** — filled at 100, bold at 80, regular below —
+  inside the icon set the product already has. No second asset pipeline, and it degrades to a legible glyph if
+  the rule is ever removed.
+
+**Two things the design got wrong, both caught by looking at the rendered strip rather than at the plan.**
+
+1. *The order.* The proposal said one descending sort of `rank` would put roles first and keep the catalogue's
+   order inside the medals. It cannot: a role's rank is its priority (100, 80, 60) and a medal's is
+   `100000 - sort_order` (99 990, 99 985, …), so every medal outranks every role. Rendered, «Ветеран» stood in
+   front of «Владелец». Two sort keys now — kind, then rank. The unit test had pinned the wrong order because
+   it was written from the implementation; the screenshot is what disagreed.
+2. *Two markers.* `KubBadge` draws a dot on every coloured tone, so a chip with an icon wore both. The dot is
+   suppressed where an icon stands.
+
+**The colour stays off the words**, and that is measured rather than preferred: the role tones read 4.05, 4.18
+and 3.82 against the surfaces they sit on, under the 4.5 a body of text needs, and
+`tests/unit/status-badge-contrast.test.mjs` already refuses it. Tone on the dot and the border; the name in
+the text colour.
+
+**Still open, in the order the proposal slices them:** the medals section in the card's full form and the
+`achievements_sync()` call site (slice 2), the badge in the group member list (3), the badge on a message's
+author line (4), per-group roles (5–7, blocked on nothing now that D-164 has landed), and the subscription and
+premium medals (8), which stay undesigned on purpose — a medal with no data behind it is the one thing in that
+document that would be a relabelling.
