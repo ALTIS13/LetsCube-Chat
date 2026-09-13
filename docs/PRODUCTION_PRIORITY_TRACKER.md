@@ -516,45 +516,38 @@ Nothing is redesigned on the strength of one sentence. What changes today: no fu
 started on that surface without first asking what the Discord-shaped one would be.
 ## Last Confirmed Deploy Baseline
 
-**`e91bee2`, deployed 2026-09-13.** Twelve commits: the video send ladder end to
-end, the media pipeline's queue, four of D-177's holes closed on the database,
-the group settings screen, and three defects found while building them.
+**`d8c51a2`, deployed 2026-09-13**, four commits after `e91bee2` earlier the same
+day. A global role is finally visible to somebody other than an administrator; a
+channel is called a channel in the six places that answered that question
+separately; the media viewer says what its controls will actually do on each
+shell; and one place owns the playback volume.
 
-- `letscube-web` runs `l64kyyu1sysev2izzjjbizhe:e91bee210810cc21a694945eb471dac8ce1c185e`,
-  one replica, healthy; the previous one was retired during the rollover.
-- `letscube-worker` runs `fkd10qwlo4qod9e6gtyzzuwk:e91bee21...`, one replica,
-  healthy, logging «mediaVariantsWorker started». It picked the push up on its
-  own about four minutes after the web application did, which is the first time
-  this track has needed it to.
-- **Verified by the served bytes, with the marker calibrated both ways**:
-  `chat-settings-view` is present in the bundle built here and absent from what
-  production served before the push; `attach-video-quality` is the control. The
-  served file went from `index-CKggd6Jy.js` (2 421 500 bytes) to
-  `index-D9OnwLaV.js` (2 861 091). One read mid-rollover returned 146 bytes,
-  which is the «page and assets disagree during a rollover» state and not a
-  failure.
-- `https://app.letscube.ru` answers 200.
+- `letscube-web` runs `l64kyyu1sysev2izzjjbizhe:d8c51a2d0d2db1f11734554a46700cebea6e750c`,
+  one replica, healthy. `https://app.letscube.ru` answers 200.
+- `letscube-worker` stays on `e91bee21…` and correctly did not rebuild: nothing
+  under `artifacts/api-server` changed.
+- **Marker calibrated both ways**: `profile-badges` is in the bundle built here
+  and absent from what production served before the push; `chat-settings-view` is
+  the control. The served file went from `index-D9OnwLaV.js` to
+  `index-Dtg6_FHL.js` (2 869 516 bytes). One mid-rollover read returned 144
+  bytes, which is the rollover state rather than a failure.
 
-**The database was already ahead of the code, deliberately.** Five migrations
-were applied earlier the same day — the variant job queue, the bucket size
-limit, the `media_path` guard, the `media_metadata` shape and the `client_sent_at`
-clamp — each after a verified schema backup and a rehearsal rolled back, and each
-written so the old code keeps working: the queue fills and nobody drains it, the
-guards refuse only what the product never sends. Recorded byte-identical in
-`.migration-backup/supabase/migrations/2026091312*` and `2026091313*`.
+**One migration went with it**, `20260913140000_profile_badges.sql`, applied
+after a verified schema backup and a rehearsal rolled back. It adds two columns
+and one SECURITY DEFINER function returning presentation fields only; the old
+client ignores both.
 
-**The one thing proved after the deploy rather than before.** The server's reuse
-decision reads ffprobe, and until today it had only ever read JSON written by
-hand. The mp4 this product's client really produces was copied into the running
-worker container, probed with the worker's own ffprobe and the worker's own
-arguments, and the answer fed to the shipped module: `h264`,
-`mov,mp4,m4a,3gp,3g2,mj2`, 1280x720, `reused: true`. No production row was
-written to establish it.
+**A correction worth carrying forward.** Two read-only probes of the role
+policies set the JWT claims and stayed `supabase_admin`, which owns those tables
+and is not subject to their policies. They reported that every account could read
+every role and every assignment — a security finding that was not one. With
+`set_config('role','authenticated')` as well, an ordinary account reads 1 of 13
+role rows. **A policy measured as its own table's owner is not measured at all**,
+and every future probe in this project should switch the role, not only the
+claims.
 
-Rollback is a fast-forward of `main` back to `ab69dfe`, plus, if it is ever
-wanted, the four rollback files beside the migrations. The queue rollback is
-safe at any time: the worker keeps its half-hourly scan precisely so that a
-deployment with no queue behaves as it did before the queue existed.
+Rollback is a fast-forward of `main` back to `e91bee2`, plus the badge
+migration's own rollback file if the columns are ever unwanted.
 
 ## Completed Baseline - Do Not Rebuild Without A New Finding
 
