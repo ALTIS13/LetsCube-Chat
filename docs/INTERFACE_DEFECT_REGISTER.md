@@ -7312,7 +7312,7 @@ or a profile page, the alert moves with it.
 **Audit rows:** work-surfaces A-16, A-18, A-28, A-30, A-33, A-38, A-44, A-45, A-49, A-69,
 B-08, B-12, B-15 (top-10 item 10); settings-profile C2, D4.
 
-## D-134 `[ ]` Lifting a ban or a mute deletes the person's whole sanction history
+## D-134 `[x]` Lifting a ban or a mute deletes the person's whole sanction history
 
 **Severity:** high, for moderation records. Found by the work-surfaces audit from the
 code; not reproduced.
@@ -7331,6 +7331,49 @@ restrictions for a «История» section and the action log (work-surfaces 
 does not delete it either.
 
 **Audit rows:** work-surfaces A-18.
+
+**Fixed 2026-09-14, and the two open questions answered by looking at
+production rather than by reasoning.**
+
+*Does the action log keep a trace?* **Yes.** `public.bans` and `public.mutes`
+each carry an after-insert and an after-delete trigger
+(`_audit_bans_after_insert`, `_audit_bans_after_delete`, and the two for mutes),
+so both issuing and lifting already reach `audit_logs`; four `ban_issued` /
+`ban_lifted` rows are there. The history the delete destroyed was the sanctions
+list itself, which is what «История санкций» shows and what somebody deciding a
+second sanction reads.
+
+*Does «Снять» in «Блокировки» (A-49) delete history too?* **No.** It deletes by
+`id`, so it has always ended one restriction and left the rest.
+
+The fix is in `UsersTab`: both menu items now go through `liftSanction`, which
+asks first — «Действующая блокировка … будет снята сразу. Истёкшие блокировки
+останутся в истории санкций.», so the question states both halves — and then
+deletes only rows matching `activeSanctionFilter(now)`.
+
+**The predicate moved to `artifacts/kub/src/lib/sanctions.ts` because two places
+need it.** The query that decides whether «Снять блокировку» appears at all
+already used exactly this filter inline; the delete used none. Had they been
+written separately they could drift, and a button shown for a restriction the
+delete does not match is a button that does nothing while looking like it
+worked. One definition, both callers, and the instant is an argument so a single
+interaction can give the read and the delete the same one.
+
+**No migration.** Ending rather than deleting — `expires_at = now()` — would
+keep even the lifted row, but `bans` and `mutes` have no UPDATE policy at all
+(the grant exists, the policy does not, so RLS refuses every UPDATE), and that
+is a database change with its own rehearsal. Deleting only what is in force
+keeps every expired row and the audit trail, which is what this entry asked for.
+Production holds 0 bans and 0 mutes today, so nothing was at risk while this
+stood open.
+
+`tests/unit/sanctions.test.mts` pins it; four mutations turn it red — dropping
+the null branch (which would make every permanent ban unliftable), moving the
+boundary at exactly `now`, reading an unparsable date as expired, and collapsing
+the two questions into one.
+
+Still to do from this entry's family: D-133 covers the rest of the one-tap
+destructive actions.
 
 ## D-135 `[x]` Sign-out ends the session on one tap
 

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { adminUserQuery, adminUserSearchFilters } from "@/lib/adminUserSearch";
+import { activeSanctionFilter, sanctionLiftPrompt } from "@/lib/sanctions";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import type { AppRole, DynamicRole, LocationRole, Profile } from "@/types/database";
@@ -162,10 +163,13 @@ export function UsersTab() {
     }
     let cancelled = false;
     const ids = rows.map((r) => r.id);
-    const nowIso = new Date().toISOString();
+    // The same predicate the delete below uses, from one definition: a button
+    // shown for a restriction the delete would not match is a button that does
+    // nothing while looking like it worked.
+    const inForce = activeSanctionFilter(new Date());
     Promise.all([
-      supabase.from("bans").select("user_id").in("user_id", ids).or(`expires_at.is.null,expires_at.gt.${nowIso}`),
-      supabase.from("mutes").select("user_id").in("user_id", ids).or(`expires_at.is.null,expires_at.gt.${nowIso}`),
+      supabase.from("bans").select("user_id").in("user_id", ids).or(inForce),
+      supabase.from("mutes").select("user_id").in("user_id", ids).or(inForce),
       supabase.rpc("admin_user_emails", { uids: ids }),
       // RLS on profile_contacts grants SELECT to staff for every row;
       // for non-staff readers it returns only their own row, so admin
@@ -196,16 +200,38 @@ export function UsersTab() {
     return () => { cancelled = true; };
   }, [rows, supabase]);
 
-  const unban = async (uid: string) => {
-    const { error } = await supabase.from("bans").delete().eq("user_id", uid);
-    if (error) { showAppAlert(prefixError("Не удалось снять блокировку", error), "Ошибка"); return; }
-    setStateById((s) => ({ ...s, [uid]: { ...s[uid], banned: false } }));
-  };
+  // D-134. Both of these used to delete every row for the person — expired
+  // history included — on one press with nothing asked. Now they end what is in
+  // force and leave the record of what is over, and they say so first.
+  const liftSanction = async (
+    kind: "ban" | "mute",
+    user: Profile,
+  ): Promise<void> => {
+    const table = kind === "ban" ? "bans" : "mutes";
+    const failure = kind === "ban" ? "Не удалось снять блокировку" : "Не удалось снять мьют";
+    const prompt = sanctionLiftPrompt(kind, user.full_name ?? (user.username ? `@${user.username}` : ""));
+    const confirmed = await requestAppConfirm({
+      title: prompt.title,
+      description: prompt.description,
+      confirmLabel: prompt.confirmLabel,
+      cancelLabel: prompt.cancelLabel,
+      tone: "danger",
+      icon: kind === "ban" ? "unban" : "volume",
+    });
+    if (!confirmed) return;
 
-  const unmute = async (uid: string) => {
-    const { error } = await supabase.from("mutes").delete().eq("user_id", uid);
-    if (error) { showAppAlert(prefixError("Не удалось снять мьют", error), "Ошибка"); return; }
-    setStateById((s) => ({ ...s, [uid]: { ...s[uid], muted: false } }));
+    const { error } = await supabase
+      .from(table)
+      .delete()
+      .eq("user_id", user.id)
+      .or(activeSanctionFilter(new Date()));
+    if (error) { showAppAlert(prefixError(failure, error), "Ошибка"); return; }
+    setStateById((s) => ({
+      ...s,
+      [user.id]: kind === "ban"
+        ? { ...s[user.id], banned: false }
+        : { ...s[user.id], muted: false },
+    }));
   };
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
@@ -891,7 +917,7 @@ export function UsersTab() {
                       </DropdownMenuItem>
                       {canManageSanctions && <DropdownMenuSeparator />}
                       {st.banned && canManageSanctions ? (
-                        <DropdownMenuItem onClick={() => unban(u.id)}>
+                        <DropdownMenuItem onClick={() => void liftSanction("ban", u)}>
                           <KubIcon name="unban" size={14} className="mr-2" /> Снять блокировку
                         </DropdownMenuItem>
                       ) : !st.banned && canManageSanctions ? (
@@ -903,7 +929,7 @@ export function UsersTab() {
                         </DropdownMenuItem>
                       ) : null}
                       {st.muted && canManageSanctions ? (
-                        <DropdownMenuItem onClick={() => unmute(u.id)}>
+                        <DropdownMenuItem onClick={() => void liftSanction("mute", u)}>
                           <KubIcon name="volume" size={14} className="mr-2" /> Снять мьют
                         </DropdownMenuItem>
                       ) : !st.muted && canManageSanctions ? (
