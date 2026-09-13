@@ -195,11 +195,11 @@ test("a source that storage says is gone is fetched once, not on every tick", as
     sourceStatus: 400, // storage answers a missing object with 400 over a 404 body
   });
 
-  await worker.runMediaVariantsTick(backend.supabase);
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
   assert.equal(backend.sourceDownloads(), 1, "the first tick must try");
 
-  await worker.runMediaVariantsTick(backend.supabase);
-  await worker.runMediaVariantsTick(backend.supabase);
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
   assert.equal(
     backend.sourceDownloads(),
     1,
@@ -213,8 +213,8 @@ test("the absent source is written down, honestly, once per kind", async () => {
     sourceStatus: 400,
   });
 
-  await worker.runMediaVariantsTick(backend.supabase);
-  await worker.runMediaVariantsTick(backend.supabase);
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
 
   assert.equal(backend.variants.length, 2, "one row per expected kind, and not one per tick");
   assert.deepEqual(
@@ -239,14 +239,14 @@ test("a source whose bytes are not a picture is decoded once, not on every tick"
     sourceBody: onePixelPng({ corrupt: true }),
   });
 
-  await worker.runMediaVariantsTick(backend.supabase);
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
   assert.equal(backend.sourceDownloads(), 1);
   assert.deepEqual(
     backend.variants.map((row) => row.error_code),
     ["source_unreadable", "source_unreadable"],
   );
 
-  await worker.runMediaVariantsTick(backend.supabase);
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
   assert.equal(
     backend.sourceDownloads(),
     1,
@@ -261,7 +261,7 @@ test("a picture that decodes is still converted, and is not converted twice", as
     sourceBody: onePixelPng(),
   });
 
-  await worker.runMediaVariantsTick(backend.supabase);
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
   assert.deepEqual(
     backend.variants.map((row) => [row.variant_kind, row.status]).sort(),
     [
@@ -270,7 +270,7 @@ test("a picture that decodes is still converted, and is not converted twice", as
     ],
   );
 
-  await worker.runMediaVariantsTick(backend.supabase);
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
   assert.equal(backend.sourceDownloads(), 1, "a converted message was picked up again");
 });
 
@@ -282,8 +282,8 @@ test("a failure that is about the moment is retried on the next tick", async () 
     sourceStatus: 503,
   });
 
-  await worker.runMediaVariantsTick(backend.supabase);
-  await worker.runMediaVariantsTick(backend.supabase);
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
   assert.equal(backend.sourceDownloads(), 2, "a transient failure must not be given up on");
   assert.equal(backend.variants.length, 0);
 });
@@ -298,7 +298,7 @@ test("a recorded failure that is not about the bytes is tried again next tick", 
     uploadStatus: 500,
   });
 
-  await worker.runMediaVariantsTick(backend.supabase);
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
   assert.deepEqual(
     backend.variants.map((row) => [row.status, row.error_code]),
     [
@@ -307,7 +307,7 @@ test("a recorded failure that is not about the bytes is tried again next tick", 
     ],
   );
 
-  await worker.runMediaVariantsTick(backend.supabase);
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
   assert.equal(backend.sourceDownloads(), 2, "a retryable failure was treated as terminal");
 });
 

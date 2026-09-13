@@ -191,7 +191,7 @@ test("a preview marked stale is regenerated at the new size, and the thumb is le
     ],
   });
 
-  await worker.runMediaVariantsTick(backend.supabase);
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
 
   const previews = backend.variants.filter((row) => row.variant_kind === "image_preview");
   assert.equal(previews.length, 1, "the stale row is replaced, not added to");
@@ -229,9 +229,9 @@ test("the backfilled preview settles: a second tick does nothing", async () => {
     ],
   });
 
-  await worker.runMediaVariantsTick(backend.supabase);
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
   const afterFirst = backend.sourceDownloads();
-  await worker.runMediaVariantsTick(backend.supabase);
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
 
   assert.equal(afterFirst, 1, "the first tick reads the original once");
   assert.equal(backend.sourceDownloads(), 1, "the second tick must not read it again");
@@ -251,7 +251,7 @@ test("an untouched ready preview is not regenerated", async () => {
     ],
   });
 
-  await worker.runMediaVariantsTick(backend.supabase);
+  await worker.runMediaVariantsTick(backend.supabase, { scan: true });
 
   assert.equal(backend.sourceDownloads(), 0, "nothing was due, so nothing was fetched");
   assert.equal(backend.uploads.length, 0);

@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -42,7 +43,15 @@ import {
   type VideoSourceProbe,
 } from "./mediaVariantsWorkerHelpers";
 
-const DEFAULT_TICK_MS = 60_000;
+/**
+ * How often the queue is drained. Five seconds rather than the minute the scan
+ * used to take, because the drain is one RPC that usually returns nothing, and
+ * because the wait it replaces was the real cost: a person who sent a video
+ * waited up to a minute before the server so much as looked at it.
+ */
+const DEFAULT_TICK_MS = 5_000;
+/** How often the safety scan runs. See `scanForWork`. */
+const DEFAULT_SCAN_MS = 30 * 60_000;
 const DEFAULT_CANDIDATE_LIMIT = 120;
 const DEFAULT_CANDIDATE_SCAN_LIMIT = 1_200;
 const DEFAULT_PROCESS_LIMIT = 12;
@@ -111,7 +120,18 @@ interface GeneratedVariant {
   sizeBytes: number;
 }
 
+/** What `media_variant_jobs_claim` hands back. */
+interface VariantJob {
+  scope: "message" | "profile" | "chat";
+  target_id: string;
+  attempts: number;
+}
+
 let started = false;
+/** When the safety scan last ran; zero means it has not, so the first tick scans. */
+let lastScanAt = 0;
+/** So a database without the queue says so once rather than every tick. */
+let queueWarningLogged = false;
 
 export function startMediaVariantsWorker(): void {
   if (started) return;
@@ -159,22 +179,108 @@ async function loop(supabase: SupabaseClient): Promise<void> {
  * isolation can hold that, because the helper is only right if the candidate
  * loader consults it.
  */
-export async function runMediaVariantsTick(supabase: SupabaseClient): Promise<void> {
-  await tick(supabase);
+export async function runMediaVariantsTick(
+  supabase: SupabaseClient,
+  options: { scan?: boolean } = {},
+): Promise<void> {
+  await tick(supabase, options);
 }
 
-async function tick(supabase: SupabaseClient): Promise<void> {
+/**
+ * `scan` is a parameter and not a hidden clock, because the clock is module
+ * state: once one tick has scanned, the next half hour of ticks will not, and a
+ * test that drove two ticks in the same process would silently measure the
+ * second behaviour while claiming to measure the first. A caller that means «do
+ * the full pass» says so.
+ */
+async function tick(supabase: SupabaseClient, options: { scan?: boolean } = {}): Promise<void> {
+  const drained = await drainJobQueue(supabase);
+  const scanned = (options.scan ?? dueForScan()) ? await scanForWork(supabase) : 0;
+  if (drained > 0 || scanned > 0) {
+    logger.info({ drained, scanned }, "mediaVariantsWorker generated variants");
+  }
+}
+
+/**
+ * The work the database said there was (D-176).
+ *
+ * Three triggers put a row in `private.media_variant_jobs` the moment a message
+ * arrives with media or a picture changes, so the worker is told rather than
+ * hunting. A claim is taken with a token and `skip locked`; a claim older than
+ * fifteen minutes is taken again, which is how a worker killed mid-transcode
+ * fails to strand its own job.
+ *
+ * A job is finished when nothing is outstanding for its target -- asked of the
+ * database with the same rule the scan uses, not inferred from a return value.
+ * That matters: a variant that failed for a reason that is not terminal must be
+ * tried again, and a job deleted on the strength of "we looked at it" would
+ * never be.
+ */
+async function drainJobQueue(supabase: SupabaseClient): Promise<number> {
+  const claimed = await claimVariantJobs(supabase, processLimit());
+  let processed = 0;
+  for (const job of claimed) {
+    let settled = false;
+    let errorCode = "variant_generation_failed";
+    try {
+      settled = await runVariantJob(supabase, job);
+      processed += 1;
+    } catch (err) {
+      errorCode = classifyVariantError(err);
+      logger.warn(
+        { err: safeStorageFailureDetails(err), scope: job.scope, code: errorCode },
+        "mediaVariantsWorker job failed",
+      );
+    }
+    if (settled) {
+      await finishVariantJob(supabase, job);
+    } else {
+      await retryVariantJob(supabase, job, errorCode);
+    }
+  }
+  return processed;
+}
+
+/**
+ * One job, and whether the target has anything left outstanding afterwards.
+ *
+ * A target that has vanished -- a message deleted, a picture removed -- settles
+ * the job rather than retrying it five times to discover the same thing.
+ */
+async function runVariantJob(supabase: SupabaseClient, job: VariantJob): Promise<boolean> {
+  if (job.scope === "message") {
+    const target = await loadMessageJobTarget(supabase, job.target_id);
+    if (!target) return true;
+    await ensureMessageVariants(supabase, target);
+    return (await loadMessageJobTarget(supabase, job.target_id)) === null;
+  }
+  const owner = await loadAvatarJobTarget(supabase, job.scope, job.target_id);
+  if (!owner) return true;
+  await ensureAvatarVariants(supabase, owner);
+  return (await loadAvatarJobTarget(supabase, job.scope, job.target_id)) === null;
+}
+
+/**
+ * The scan the worker used to live by, kept as a safety net rather than as a
+ * heartbeat.
+ *
+ * It runs every half hour instead of every minute. What it is for: rows that
+ * existed before the queue did, and anything a trigger ever misses. A queue that
+ * is the only path is a queue whose one bad day loses the work in silence.
+ */
+async function scanForWork(supabase: SupabaseClient): Promise<number> {
+  lastScanAt = Date.now();
   const [messages, profiles, chats] = await Promise.all([
     loadMessageCandidates(supabase),
     loadProfileCandidates(supabase),
     loadChatCandidates(supabase),
   ]);
 
-  let processedMessages = 0;
+  let processed = 0;
   for (const message of messages) {
-    if (processedMessages >= processLimit()) break;
+    if (processed >= processLimit()) break;
     const ok = await ensureMessageVariants(supabase, message);
-    if (ok) processedMessages += 1;
+    if (ok) processed += 1;
   }
 
   let processedProfiles = 0;
@@ -191,12 +297,117 @@ async function tick(supabase: SupabaseClient): Promise<void> {
     if (ok) processedChats += 1;
   }
 
-  if (processedMessages > 0 || processedProfiles > 0 || processedChats > 0) {
-    logger.info(
-      { processedMessages, processedProfiles, processedChats },
-      "mediaVariantsWorker generated variants",
+  return processed + processedProfiles + processedChats;
+}
+
+function dueForScan(): boolean {
+  return Date.now() - lastScanAt >= scanEveryMs();
+}
+
+/**
+ * Take jobs, and treat a database that has no queue as an empty one.
+ *
+ * The worker and the migration deploy separately, in either order, so a missing
+ * function must be a quiet nothing rather than a crash loop: the scan below
+ * still finds the work, a minute or thirty later than the queue would have.
+ */
+async function claimVariantJobs(supabase: SupabaseClient, limit: number): Promise<VariantJob[]> {
+  const { data, error } = await supabase.rpc("media_variant_jobs_claim", {
+    p_limit: limit,
+    p_claim_token: randomUUID(),
+    p_now: new Date().toISOString(),
+  });
+  if (error) {
+    if (!queueWarningLogged) {
+      queueWarningLogged = true;
+      logger.warn(
+        { err: safeStorageFailureDetails(error) },
+        "mediaVariantsWorker cannot claim jobs; falling back to the scan",
+      );
+    }
+    return [];
+  }
+  queueWarningLogged = false;
+  return ((data ?? []) as VariantJob[]).filter((job) => job.scope && job.target_id);
+}
+
+async function finishVariantJob(supabase: SupabaseClient, job: VariantJob): Promise<void> {
+  const { error } = await supabase.rpc("media_variant_job_finish", {
+    p_scope: job.scope,
+    p_target_id: job.target_id,
+  });
+  if (error) {
+    logger.warn(
+      { err: safeStorageFailureDetails(error), scope: job.scope },
+      "mediaVariantsWorker could not finish a job",
     );
   }
+}
+
+async function retryVariantJob(
+  supabase: SupabaseClient,
+  job: VariantJob,
+  errorCode: string,
+): Promise<void> {
+  const { error } = await supabase.rpc("media_variant_job_retry", {
+    p_scope: job.scope,
+    p_target_id: job.target_id,
+    p_error: sanitizeVariantErrorCode(errorCode),
+    p_now: new Date().toISOString(),
+  });
+  if (error) {
+    logger.warn(
+      { err: safeStorageFailureDetails(error), scope: job.scope },
+      "mediaVariantsWorker could not reschedule a job",
+    );
+  }
+}
+
+/** One message, with what it still needs, or null when it needs nothing. */
+async function loadMessageJobTarget(
+  supabase: SupabaseClient,
+  id: string,
+): Promise<MessageCandidate | null> {
+  const { data, error } = await supabase
+    .from("messages")
+    .select("id, chat_id, user_id, type, media_bucket, media_path, media_url")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  const row = data as MessageCandidate | null;
+  if (!row) return null;
+  const source = resolveStoragePath(row.media_bucket, row.media_path, row.media_url);
+  if (!source) return null;
+  const existing = await loadExistingVariants(supabase, "message_id", [row.id]);
+  const missingVariantKinds = getAttemptableMessageVariantKinds(row, existing.get(row.id), source);
+  if (missingVariantKinds.length === 0) return null;
+  return { ...row, missingVariantKinds };
+}
+
+/** One picture, or null when every size of it is already made. */
+async function loadAvatarJobTarget(
+  supabase: SupabaseClient,
+  scope: "profile" | "chat",
+  id: string,
+): Promise<AvatarCandidate | null> {
+  const { data, error } = await supabase
+    .from(scope === "profile" ? "profiles" : "chats")
+    .select("id, avatar_url")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  const row = data as { id: string; avatar_url: string | null } | null;
+  if (!row?.avatar_url) return null;
+  const source = resolveStoragePath(MEDIA_BUCKET, null, row.avatar_url);
+  if (!source) return null;
+  const existing = await loadExistingVariants(supabase, avatarOwnerColumn(scope), [row.id]);
+  const attempts = existing.get(row.id);
+  const outstanding = AVATAR_VARIANTS.some((variant) =>
+    shouldAttemptVariantKind(attempts?.get(variant.kind), source),
+  );
+  if (!outstanding) return null;
+  return { scope, id: row.id, avatar_url: row.avatar_url };
 }
 
 async function loadMessageCandidates(supabase: SupabaseClient): Promise<MessageCandidate[]> {
@@ -930,6 +1141,10 @@ function candidateScanLimit(): number {
     process.env["MEDIA_VARIANTS_CANDIDATE_SCAN_LIMIT"],
     DEFAULT_CANDIDATE_SCAN_LIMIT,
   );
+}
+
+function scanEveryMs(): number {
+  return positiveInteger(process.env["MEDIA_VARIANTS_WORKER_SCAN_MS"], DEFAULT_SCAN_MS);
 }
 
 function processLimit(): number {
