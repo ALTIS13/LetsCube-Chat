@@ -10345,3 +10345,73 @@ must not be inside the viewport, and the close button must still work. Putting
 **Found by the same frames and not fixed:** on a 390 phone the bots page's `h1`
 is 6 CSS px wide, so «Мои боты» renders as «М». That is the page header, not the
 feedback viewport, and it predates all of this.
+
+## D-187 `[~]` Nobody could refuse anybody, and nothing could be reported
+
+**Severity:** high, and it was invisible until a form asked. Raised on
+2026-09-14 while filling in the Microsoft Store age-rating questionnaire, which
+asks in plain words whether the application lets people block users and report
+users or content. Both answers were «no», and neither had ever been written down
+as a gap.
+
+**Defect:** moderation in this product was entirely administrative. `bans` and
+`mutes` are issued by staff and enforced by restrictive policies on
+`public.messages`; an ordinary person had nothing at all — no way to stop
+somebody writing to them, and no way to bring a message to anybody's attention.
+The support workflow is a mailbox, not a report: it does not know what message
+you mean.
+
+**The database half is applied to production (2026-09-14),** migration
+`20260914120000_personal_blocks_and_reports.sql`.
+
+- `public.user_blocks` — one row per «I do not want to hear from this person».
+  One-directional and **invisible to the person blocked**, which is why the
+  guard behind it is SECURITY DEFINER: the policy has to see a row the sender
+  may not read.
+- A restrictive INSERT policy on `public.messages`, in the same vocabulary as
+  «block muted/banned from sending», refusing a write into a **private** chat
+  whose other member has blocked the sender. Groups are deliberately outside it:
+  a group is somebody else's room, and silencing a member of one is the
+  administrator's decision, which `mutes` already is.
+- `public.content_reports` — a report about one message or one person, written
+  by anybody and **readable only by staff**. A queue its reporters can read is a
+  queue that says who else complained about whom.
+
+**What the rehearsal caught, which is the point of having one.** Four defects
+before anything reached production:
+
+1. **`anon` held SELECT on both new tables the moment they were created.** This
+   deployment's default privileges grant `anon` and `authenticated` `arwd` on
+   every new table in `public` — read off `pg_default_acl`. A `create table`
+   publishes it, and a narrower `grant` afterwards adds nothing. Both tables now
+   `revoke all … from anon, authenticated` first. The same default privilege
+   would have given every account table-wide UPDATE on a report — somebody
+   else's testimony, rewritable.
+2. The fixture promoted its own reporter: `trg_bootstrap_first_admin` makes the
+   first profile in an empty database an administrator, so on a throwaway copy
+   the reporter *was* staff and the queue check proved nothing. The rehearsal
+   now creates the duty officer first, deliberately, and asserts the fixture's
+   own assumption before testing anything.
+3. The same on production, for the same reason in a different disguise: the
+   first private chat's member is one of this deployment's two administrators.
+   The probe now picks a chat with an ordinary member and says why.
+4. **`insert … returning` is refused for the reporter**, because RETURNING needs
+   the SELECT policy. Postgres reports it as «new row violates row-level
+   security policy», which reads like a failing WITH CHECK and is not one. The
+   contract is a bare insert with no `.select()` chained, and the rehearsal pins
+   it so a client cannot break it quietly.
+
+**Measured on production afterwards**, as `authenticated` with real claims and
+inside a transaction that rolled back: the block is invisible to the person
+blocked and stops their message; the person who blocked can still write; a
+report goes in and does not come back out; staff read the queue. Thirteen rules
+green in the rehearsal, four on production, nothing written.
+
+**Still open:** the interface. Blocking and reporting controls, the list of
+people you have blocked, and the staff queue are being built; the entry closes
+when a person can do this without SQL.
+
+**Not done, deliberately:** blocking does not hide the other person's profile,
+name or existing messages — Telegram does not either, and rewriting a
+conversation somebody may need is a bigger harm than the one being fixed. It
+does not reach groups. And nobody is told they were blocked or reported.
