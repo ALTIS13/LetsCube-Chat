@@ -609,6 +609,60 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+**`b0a407a`, deployed 2026-09-14.** Ten register entries closed, four of them
+found by looking rather than by a scan, plus two things that were believed
+deployed and were not.
+
+- `letscube-web` runs `l64kyyu1sysev2izzjjbizhe:b0a407ad37947642d8851b360accc737764d2e4d`
+  — read off the running container — healthy; `https://app.letscube.ru` answers
+  200.
+- **Marker calibrated both ways**: «Передать права владельца» is 1 in the bundle
+  built here and 0 in what production served before the push, «Покинуть группу»
+  is 1 in both as the control. The served file went `index-Ceyera6g.js` →
+  `index-b_6mrD7o.js`; two mid-rollover reads returned 144 bytes.
+- Gates: kub typecheck clean, unit **2282/2282**, and every e2e spec touched
+  green — `bot-management` 34/34, `member-actions-reachable` 12/12,
+  `plain-failure-messages` 10/10, `round-video-stacking` + `media-original-claim`
+  42/42 across all seven projects including `webkit-mobile-390`.
+
+### Closed
+
+| | |
+| --- | --- |
+| D-097 | «Открыть оригинал» claimed what it could not deliver |
+| D-129 | a round video painted over the header, the pinned bar and the composer |
+| D-132 | errors named migrations, functions and build files on screen |
+| D-133 | eleven far-reaching administration actions ran on one press (bots and administration halves) |
+| D-145 | bot settings saved silently, and the list ignored the bot's picture |
+| D-150 | a group's owner could not leave, only delete for everyone |
+| D-183 | voice called one thing by two names |
+| D-184 | every destructive dialog painted a red glyph on the accent colour |
+| D-185 | the deployed push function was seven weeks old, with no Windows sender |
+| D-186 | a confirmation swallowed the presses meant for what was behind it |
+
+### Three findings worth more than the fixes
+
+**A fix in a commit is not a fix in a database.** Six migrations of 2026-09-11
+sat unapplied for three days while the register called them fixed, among them
+the one that stopped every signed-in account reading every chat's reactions
+(D-104). Found by reading the live policies by hand; `scripts/migration-inventory.*`
+now asks the question, and `docs/operations/deployment-inventory.md` records
+what it cannot answer.
+
+**The same question, asked of the Edge Functions,** found the push function
+dated 2026-07-14 against the repository's 2026-08-31 and missing `wns.ts`
+entirely (D-185). `scripts/function-inventory.mjs` asks it now; as of today all
+22 files match with nothing extra on either side.
+
+**A justification for not doing something is never re-checked.** A pass declined
+a live никнейм lookup on the grounds that `profiles` hides a banned account's
+row from everybody. That policy restricts what a *banned caller* reads, not what
+anybody reads about a banned account — so the lookup was possible all along, and
+the field now answers while the name is typed. The wrong reading is kept beside
+the right one in D-132.
+
+### The previous baseline
+
 **`67454a6`, deployed 2026-09-14.** Voice is a feature people can switch on, and
 three administration defects are closed.
 
