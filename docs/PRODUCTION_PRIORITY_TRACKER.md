@@ -609,6 +609,66 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-14 — `1ed4aa7aacc83358f2eb0a60e233dab2b3420d2b`
+
+Channel headings in the schema, and «Блокировки» narrowed to the rule that
+actually reads it (D-188, D-191).
+
+- `letscube-web` runs image
+  `l64kyyu1sysev2izzjjbizhe:1ed4aa7aacc83358f2eb0a60e233dab2b3420d2b`, read off
+  the running container; one replica after the rollover.
+- **No string marker was available and none was invented.** The change adds no
+  user-visible text: the gate is structural, and `lib/serverChannels.ts` is
+  tree-shaken out because nothing imports it yet — measured, zero occurrences
+  in the built bundle. The evidence is the image tag plus the entry chunk
+  moving from `index-C3vWA54p.js` to `index-DbsyNKkT.js` and settling there.
+- **And the entry filename cannot be predicted from a local build.** The local
+  build of the same commit produced `index-D9Oj_45R.js`, the server's produced
+  `index-DbsyNKkT.js`. The service-worker plugin stamps a fresh build id into
+  the graph every run — three local builds of one tree gave `fdc43de6…`,
+  `f4e2e990…`, `90067c39…` — so the hash proves the bundle **changed** and can
+  never prove it is a particular one. Rounds three and four of the check also
+  disagreed with each other while both replicas were up, which is the ordinary
+  rollover flap.
+- Gates: typecheck clean, unit suite **2361/2361**, production build proved by
+  its own `sw.js build` and `built in` lines.
+- Rollback is a fast-forward of `main` back to `e571438`, plus
+  `20260914140000_channel_categories.rollback.sql` if the schema has to go too.
+
+### 2026-09-14 — `8a929308b10abdc7de975e1f6bfba7a2e1bccb99`
+
+Personal blocking and content reporting reach the interface, the staff queue
+«Жалобы» is mounted behind the database's own rule, and two defects found on the
+way out are fixed (D-189 in the schema, D-190 in the composer).
+
+- `letscube-web` runs image
+  `l64kyyu1sysev2izzjjbizhe:8a929308b10abdc7de975e1f6bfba7a2e1bccb99` — the
+  commit's full SHA, read off the running container rather than trusted from
+  the webhook. One replica; the previous one was retired during the rollover.
+- **Marker calibrated in both directions before the push**: «Пользователь
+  ограничил переписку.» present in the bundle being shipped and absent from the
+  live one, with «Сообщение» as the control that proves the probe can find
+  Cyrillic in that file. After the rollover the live entry carries the marker
+  and the control, 2955068 bytes.
+- The first two rounds of that check returned a 146-byte asset with neither the
+  marker nor the control — «I cannot see», not «not deployed». Keeping a
+  control string is what tells those apart, and taking the asset URL from the
+  page on every round is what keeps the probe pointed at the right file.
+- Gates at that commit: typecheck clean, unit suite 2345/2345, production build
+  proved by its own `sw.js build` and `built in` lines,
+  `blocks-and-reports.spec.ts` 9/9 on `chromium-desktop-1440` and
+  `chromium-mobile-390`, `channel-card.spec.ts` 12/12 after repairing an
+  expectation that had been red since `fd9255c`.
+- Production afterwards: `/`, `/privacy`, `/support`, `/download` all 200;
+  `content_reports` and `user_blocks` both still empty, so nothing this wave
+  wrote anything.
+- Rollback is a fast-forward of `main` back to `5fc15dc`, plus
+  `20260914130000_a_reported_message_may_be_deleted.rollback.sql` and
+  `20260914120000_personal_blocks_and_reports.rollback.sql` in that order if
+  the schema has to go too. Both refuse rather than discarding silently.
+
+### Earlier
+
 **`b0a407a`, deployed 2026-09-14.** Ten register entries closed, four of them
 found by looking rather than by a scan, plus two things that were believed
 deployed and were not.
@@ -884,39 +944,8 @@ Changes applied 2026-09-11, on the owner's approval. Each had a verified schema 
 - `[x]` `20260914120000_personal_blocks_and_reports.sql` (`2b80a6b`). Personal blocking and content/user reporting, the database half of D-187: `public.user_blocks` one-directional and invisible to the person blocked, a SECURITY DEFINER guard `blocked_from_chat` behind a RESTRICTIVE INSERT policy on `public.messages` scoped to private chats, and `public.content_reports` writable by anybody and readable only by `is_manager_or_admin`. Thirteen rehearsal rules on a throwaway copy — a fourteenth added by the repair below — and four on production, each measured as `authenticated` with real claims inside a rolled-back transaction — a policy measured as its own table's owner is not measured at all. Four defects were caught before it reached production, the first of which is a property of this deployment rather than of the migration: `pg_default_acl` grants `anon` and `authenticated` `arwd` on every new table in `public`, so both tables `revoke all … from anon, authenticated` before granting. Backup `/srv/letscube/backups/pre-migrations/20260914-030745-before-blocks-and-reports.schema.dump`.
 - `[x]` `20260914130000_a_reported_message_may_be_deleted.sql`, applied the same day, repairing the one above. `content_reports_message_id_fkey` is ON DELETE SET NULL while `content_reports_message_present` required `(kind = 'message') = (message_id IS NOT NULL)`: a referential action is a write, and the UPDATE it performs re-checks every CHECK, so deleting a reported message was refused — and with `messages_chat_id_fkey` ON DELETE CASCADE that meant an ordinary owner could no longer delete a group holding one. Measured on production in a rolled-back transaction on a temporary pair carrying the two definitions verbatim, then proved on the real table in four rules after the fix: the message id may be cleared, a report about a person still may not carry one, and deleting the reported message leaves the complaint standing. The CHECK is now one-directional, `check (kind = 'message' or message_id is null)`; SET NULL is kept deliberately, because «somebody complained and the message is gone» is the case staff most need to see. Backup `/srv/letscube/backups/pre-migrations/20260914-034240-before-reported-message-may-be-deleted.schema.dump`, 1318216 bytes, sha256 `9c7b8377…cc28f9cc`; migration sha256 `067d0edb…`; rollback beside it, and it refuses to run while any report names a message that has since gone. D-189.
 - `[x]` `20260914140000_channel_categories.sql`, applied to production the same day. Headings for a group's channels, so a group can be shaped like a server: `public.chat_channel_categories` plus a `category_id` on `topics` and on `voice_channels`. **Run as `supabase_admin`, not as `postgres`** — `voice_channels` is owned by `supabase_admin` while `topics`, `chats` and `messages` are owned by `postgres`, the first attempt died on «must be owner of table voice_channels» and rolled the whole transaction back, and `postgres` cannot `set role supabase_admin` here (`pg_has_role` answers false). The new table's owner is set back to `postgres` at the end so it matches its siblings, and the self-check refuses any other owner. The category is scoped to its chat by a composite foreign key on `(chat_id, category_id)` rather than by a trigger, and the delete action names its column — `on delete set null (category_id)` — because a bare `set null` would try to null the NOT NULL `chat_id` and fail the delete, which is D-189 six hours later. Seven rules proved on production in a rolled-back transaction, kept as the rehearsal file beside the migration. Backup `/srv/letscube/backups/pre-migrations/20260914-043011-before-channel-categories.schema.dump`, 1318213 bytes, sha256 `bec5ea79…5ed3c77`. D-191.
+- `[x]` Read-only audit after the day's three migrations, 2026-09-14: RLS on **66/66** tables in `public` and none without it; no RLS-off table reachable by `anon` or `authenticated`; all 47 "block banned" policies RESTRICTIVE; no view readable without `security_invoker`. The three tables added today grant `authenticated` only row-filtered privileges and grant `anon` nothing at all — `chat_channel_categories` SELECT/INSERT/UPDATE/DELETE, `user_blocks` SELECT/INSERT/DELETE, `content_reports` SELECT/INSERT plus the column-level UPDATE on `(status, handled_by, handled_at)`. Policy counts: categories 2 permissive + 4 restrictive, reports 3 + 1, blocks 1 + 1. Row counts afterwards confirm every probe of the day rolled back — 0 categories, 0 blocks, 0 reports, 1 voice channel, 11 topics, 3358 messages.
 - `[x]` Read-only audit alongside: RLS enabled on 61/61 tables in `public`, no RLS-off table readable or writable by anon/authenticated; no view in `public` readable by them without `security_invoker`; all 37 "block banned …" policies RESTRICTIVE, and the 33 permissive "… blocked" policies literally `false` on tables that grant writes to nobody else. Pre-existing and deliberately left: anon reads on tables guarded by "block banned" fail with `42501 permission denied for function is_banned` (HTTP 401) instead of an empty set — access fails closed, which for anon is correct.
-
-## Last Confirmed Deploy Baseline
-
-- **2026-09-14, `8a929308b10abdc7de975e1f6bfba7a2e1bccb99`.** Personal blocking
-  and content reporting reach the interface, the staff queue «Жалобы» is
-  mounted behind the database's own rule, and two defects found on the way out
-  are fixed (D-189 in the schema, D-190 in the composer).
-- `letscube-web` runs image
-  `l64kyyu1sysev2izzjjbizhe:8a929308b10abdc7de975e1f6bfba7a2e1bccb99` — the
-  commit's full SHA, read off the running container rather than trusted from
-  the webhook. One replica; the previous one was retired during the rollover.
-- **Marker calibrated in both directions before the push**: «Пользователь
-  ограничил переписку.» present in the bundle being shipped and absent from the
-  live one, with «Сообщение» as the control that proves the probe can find
-  Cyrillic in that file. After the rollover the live entry carries the marker
-  and the control, 2955068 bytes.
-- The first two rounds of that check returned a 146-byte asset with neither the
-  marker nor the control — «I cannot see», not «not deployed». Keeping a
-  control string is what tells those apart, and taking the asset URL from the
-  page on every round is what keeps the probe pointed at the right file.
-- Gates at that commit: typecheck clean, unit suite 2345/2345, production build
-  proved by its own `sw.js build` and `built in` lines,
-  `blocks-and-reports.spec.ts` 9/9 on `chromium-desktop-1440` and
-  `chromium-mobile-390`, `channel-card.spec.ts` 12/12 after repairing an
-  expectation that had been red since `fd9255c`.
-- Production afterwards: `/`, `/privacy`, `/support`, `/download` all 200;
-  `content_reports` and `user_blocks` both still empty, so nothing this wave
-  wrote anything.
-- Rollback is a fast-forward of `main` back to `5fc15dc`, plus
-  `20260914130000_a_reported_message_may_be_deleted.rollback.sql` and
-  `20260914120000_personal_blocks_and_reports.rollback.sql` in that order if
-  the schema has to go too. Both refuse rather than discarding silently.
 
 ## Priority 3 - Backup And Restore Drill
 
