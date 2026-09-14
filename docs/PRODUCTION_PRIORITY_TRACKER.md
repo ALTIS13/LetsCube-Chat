@@ -609,6 +609,26 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-14 — `5b9dbfe9efef548989cc22a349949f111b0a1740`
+
+Muting a chat becomes a fact of the account, with durations (D-167), and D-194
+is recorded rather than guessed at.
+
+- `letscube-web` runs image
+  `l64kyyu1sysev2izzjjbizhe:5b9dbfe9efef548989cc22a349949f111b0a1740`, one
+  replica after the rollover. Live entry `index-DHhDW6NP.js`, 3001025 bytes.
+- Marker «На 8 часов» absent from the live bundle and present in the built one;
+  «Отключить уведомления» as the control, present in both. Rounds four and five
+  again read a 146-byte asset where the control was also absent.
+- Gates: typecheck clean across all four packages, unit **2460/2460**,
+  `chat-mute.spec.ts` 14/14 across 1440 and 390, production build proved by its
+  own lines.
+- The database was not touched: `chat_notification_preferences` was already
+  there with its policies, and `_notification_push_allowed` already honoured
+  both `push_enabled` and `muted_until`. The whole change is client-side.
+- Rollback is a fast-forward of `main` back to `8b2f120`.
+
+
 ### 2026-09-14 — `5f84709ec6ccbedf7d86e47c944f00df3b7a6b69`
 
 A failed read of the rooms stops taking the rail away and hanging up a live
