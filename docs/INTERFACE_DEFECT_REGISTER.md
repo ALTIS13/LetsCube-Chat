@@ -10864,7 +10864,7 @@ answers the rooms read with a 500 for that one.
 
 ---
 
-## D-194 `[ ]` Escape does not close the conversation in a one-pane window
+## D-194 `[x]` Escape does not close the conversation in a one-pane window
 
 **Severity:** low for a phone, which has no Escape key and a back control in the
 header; real for a desktop window narrowed below `md`, where the same one-pane
@@ -10920,6 +10920,46 @@ not skip, which is why this surfaced at all.
 
 ---
 
+**Found and fixed the same day.** A trace of the event answered it in one run:
+
+```
+capture on window   prevented=false
+bubble on document  prevented=true
+bubble on window    prevented=true
+```
+
+Something between window-capture and document-bubble was calling
+`preventDefault()`. It is **the composer's recorder-mode hint**: measured at the
+moment of the press, one `[data-testid="kub-hint"]` and one
+`[data-radix-popper-content-wrapper]` were mounted. Radix's `DismissableLayer`
+listens on `document` in the capture phase and prevents the keydown for any
+layer it has mounted, and `KubHint`'s `onEscapeKeyDown` dismisses the hint. So
+one Escape was spent on a `role="status"` notice nobody opened, which expires on
+its own — and the conversation could not be closed from the keyboard at all,
+because on a phone that hint is up on arrival. It is the third defect this one
+hint has caused today; D-190 is the second.
+
+Trying to make the hint give the key back does not work: setting its
+`onEscapeKeyDown` to `event.preventDefault()` — Radix's way of saying «I handled
+it, do not dismiss» — left `prevented` true just the same. The layer prevents
+the DOM event whatever its consumer decides.
+
+**So the listener moved to the capture phase**, where it runs before Radix and
+the decision returns to `hasBlockingOverlay` — which is what that check was
+written to be: the one arbiter of whether something else wants this key. Its
+list gained `[role="alertdialog"]` and `[role="listbox"]` on the way, because
+those own Escape too and nothing else was going to refuse for them any more.
+`role="status"` is deliberately **not** on the list.
+
+`tests/e2e/shell-escape.spec.ts` pins both directions: with the hint up Escape
+closes the conversation, and with a confirmation open Escape closes the
+confirmation and leaves the conversation standing. The first test asserts the
+hint actually appeared before pressing, so a run where it never showed cannot
+pass for the wrong reason. Two mutations turn it red — the listener back on the
+bubble phase, and the overlay guard dropped.
+
+---
+
 ## D-167, closed on 2026-09-14 — what was actually wrong
 
 The entry said the mute is «kept in the browser». Measured on production before
@@ -10962,3 +11002,36 @@ of rows, so the invitation read as a fifth way to mute the chat. Photographed at
 while it is open, and only while it is open — a divider under a settled list
 would be a section boundary the card does not have. The e2e measures the
 computed border width in both states, and removing the rule turns it red.
+
+---
+
+## D-195 `[ ]` The attach sheet stopped growing with what is picked, and its test has been red since
+
+**Severity:** medium. Found on 2026-09-14 while checking that the D-194 fix broke
+nothing: two tests of `tests/e2e/attach-sheet.spec.ts` are red, at
+`chromium-mobile-390` **and** `chromium-desktop-1440`, and they are red without
+that fix too — proved by reverting it and re-running.
+
+**Reproduction:** `tests/e2e/attach-sheet.spec.ts:403`, «the sheet is as tall as
+what it holds, grows with picks, and still closes by its handle and its dim».
+
+```
+Error: three picks did not grow the sheet
+Expected: > 377
+Received:   374
+```
+
+**Defect:** the sheet's height with three items picked is **374**, which is
+3 pixels *less* than its empty height of 317 plus the 60 the test requires — and
+in fact barely more than empty. Either the picked rows no longer add height, or
+the sheet is clamped before they can. Not yet diagnosed: this entry records a
+measurement, not a cause.
+
+**Why it matters beyond the number.** The test's name lists three claims and the
+height is the first of them, so «still closes by its handle and its dim» — two
+ways out of a sheet on a phone — **has not been checked since this went red**.
+That is the register's own lesson about a guard failing early: what a long-red
+test stopped checking is worth more than the failure itself.
+
+**Not measured yet:** when it went red, and whether the two closing gestures
+still work. Both need the same run, once the height is understood.

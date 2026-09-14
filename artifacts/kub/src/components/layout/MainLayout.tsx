@@ -48,9 +48,13 @@ export function MainLayout() {
         tagName === "INPUT" ||
         tagName === "TEXTAREA" ||
         target?.isContentEditable;
+      // What legitimately owns Escape: a thing the reader opened and expects it
+      // to close. `role="status"` is deliberately not here — a hint is not
+      // something Escape is spent on, and D-194 is what happens when it is.
       const hasBlockingOverlay = Boolean(
         document.querySelector(
-          '[role="dialog"], [role="menu"], [data-kub-popover="true"], [data-kub-menu="true"]',
+          '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], ' +
+            '[data-kub-popover="true"], [data-kub-menu="true"]',
         ),
       );
 
@@ -60,8 +64,20 @@ export function MainLayout() {
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    // **Capture, not bubble** (D-194). Radix's `DismissableLayer` listens on
+    // `document` in the capture phase and calls `preventDefault()` on the
+    // keydown for **any** layer it has mounted — including `KubHint`, which is
+    // a `role="status"` notice nobody opened and which expires on its own. On a
+    // phone the composer's recorder hint is up on arrival, so a bubble-phase
+    // listener here saw `defaultPrevented` and the conversation could not be
+    // closed from the keyboard at all. Measured: at window-capture the event is
+    // not prevented; by the time it reaches `document` on the way up it is.
+    //
+    // Running first puts the decision back where `hasBlockingOverlay` can make
+    // it, which is what that check was written to be: the one arbiter of
+    // whether something else wants this key.
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [selectedChatId, setSelectedChatId, updateBlocking]);
 
   return (
