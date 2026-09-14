@@ -54,6 +54,16 @@ import {
   validateUsername,
 } from "@/lib/profileValidation";
 import { requestAppConfirm } from "@/lib/appDialogs";
+import { showActionFeedback } from "@/lib/actionFeedback";
+import { usePersonalBlocks, type BlockedPerson } from "@/hooks/usePersonalModeration";
+import {
+  BLOCKS_EMPTY,
+  BLOCKS_HINT,
+  BLOCKS_ROW_LABEL,
+  UNBLOCK_LABEL,
+  blockedCountSummary,
+  unblockPrompt,
+} from "@/lib/personalModeration";
 
 /**
  * The settings screen itself, with no container of its own.
@@ -80,7 +90,7 @@ const THEME_OPTIONS: ReadonlyArray<{ value: Theme; label: string; icon: KubIconN
 ];
 
 /** The heavy sections, which stay unmounted until their row is opened. */
-type DisclosureId = "phone" | "decoration" | "audio" | "application";
+type DisclosureId = "phone" | "decoration" | "audio" | "application" | "blocked";
 
 export interface SettingsScreen {
   ready: boolean;
@@ -111,6 +121,9 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
   const supabase = createClient();
   const { theme, resolvedTheme, setTheme } = useTheme();
   const privacy = usePrivacyPreferences();
+  // The same store the chat surfaces read, so a block made from a conversation
+  // is already in this list when settings is opened next.
+  const blocks = usePersonalBlocks();
   const nativeAndroid = isNativeAndroid();
   const desktopWindows = isDesktopApp();
   const { settings: audioSettings } = useAudioSettings();
@@ -484,6 +497,31 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
     </div>
   );
 
+  /**
+   * Lifting a block from the list, asked first.
+   *
+   * The same question the chat surfaces ask, from the same module, so the two
+   * ways into this action cannot describe it differently.
+   */
+  const unblockPerson = async (person: BlockedPerson) => {
+    const words = unblockPrompt(person.fullName);
+    const confirmed = await requestAppConfirm({
+      title: words.title,
+      description: words.description,
+      confirmLabel: words.confirmLabel,
+      cancelLabel: words.cancelLabel,
+      tone: "danger",
+      icon: "unban",
+    });
+    if (!confirmed) return;
+    const result = await blocks.unblock(person.id);
+    showActionFeedback(
+      result.ok
+        ? { kind: "success", title: "Пользователь разблокирован", key: "personal-block" }
+        : { kind: "error", title: result.error ?? "", key: "personal-block" },
+    );
+  };
+
   const body = (visibleRows: ReadonlySet<SettingsRowId> | null): ReactNode => {
     const shows = (id: SettingsRowId) => visibleRows === null || visibleRows.has(id);
 
@@ -636,6 +674,23 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
           {privacy.error && shows("presence") && (
             <RowNote tone="danger">Не удалось сохранить настройку. Попробуйте ещё раз.</RowNote>
           )}
+          {shows("blocked") && (
+            <DisclosureRow
+              id="blocked"
+              icon="ban"
+              title={BLOCKS_ROW_LABEL}
+              value={blocks.loading ? "…" : blockedCountSummary(blocks.people.length)}
+              open={openSections.has("blocked")}
+              onToggle={toggleSection}
+            >
+              <BlockedPeopleSection
+                people={blocks.people}
+                loading={blocks.loading}
+                error={blocks.error}
+                onUnblock={unblockPerson}
+              />
+            </DisclosureRow>
+          )}
         </SettingsGroup>
       ),
 
@@ -743,7 +798,7 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
     const sectionHasRows: Record<SettingsSectionId, boolean> = {
       profile: ["name", "username", "bio", "phone", "decoration"].some((id) => shows(id as SettingsRowId)),
       notifications: ["push", "push-messages", "push-tasks", "push-invites"].some((id) => shows(id as SettingsRowId)),
-      privacy: shows("presence"),
+      privacy: ["presence", "blocked"].some((id) => shows(id as SettingsRowId)),
       application: ["theme", "audio", "updates"].some((id) => shows(id as SettingsRowId)),
       service: shows("admin"),
     };
@@ -1075,6 +1130,77 @@ function DisclosureRow({
           {children}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Who a person has blocked, and the way back for each of them.
+ *
+ * The whole point of the row: a block made from a conversation is otherwise
+ * only liftable from that same conversation, and a person who blocked somebody
+ * and then hid the chat has no way back at all. `user_blocks` is readable by
+ * its own `blocker_id`, so this list is exactly the reader's own rows.
+ */
+function BlockedPeopleSection({
+  people,
+  loading,
+  error,
+  onUnblock,
+}: {
+  people: readonly BlockedPerson[];
+  loading: boolean;
+  error: string | null;
+  onUnblock: (person: BlockedPerson) => void | Promise<void>;
+}) {
+  if (loading && people.length === 0) {
+    return <p className="text-xs text-[color:var(--kub-muted)]">Загружаем…</p>;
+  }
+  if (error) {
+    return <p className="text-xs leading-snug text-[color:var(--kub-danger-text)]">{error}</p>;
+  }
+  if (people.length === 0) {
+    return <p className="text-xs leading-snug text-[color:var(--kub-muted)]">{BLOCKS_EMPTY}</p>;
+  }
+  return (
+    <div data-testid="blocked-people">
+      <p className="mb-2 text-xs leading-snug text-[color:var(--kub-muted)]">{BLOCKS_HINT}</p>
+      <ul className="divide-y divide-[color:var(--kub-rule)]">
+        {people.map((person) => (
+          <li
+            key={person.id}
+            data-testid="blocked-person"
+            data-blocked-id={person.id}
+            className="flex min-h-11 min-w-0 items-center gap-3 py-1.5"
+          >
+            <UserAvatar
+              user={{ id: person.id, full_name: person.fullName, username: person.username, avatar_url: person.avatarUrl }}
+              size="sm"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm text-[color:var(--kub-text)]">{person.fullName}</span>
+              {person.username && (
+                <span className="block truncate text-xs text-[color:var(--kub-muted)]">@{person.username}</span>
+              )}
+            </span>
+            <button
+              type="button"
+              data-testid="blocked-person-unblock"
+              onClick={() => void onUnblock(person)}
+              // The focus outline is in the same quoted string as the button
+              // class, which is what control-vocabulary.test.mjs reads: it
+              // scans one quoted class list at a time, so a ring written as a
+              // second argument of cn is a control it reports as having none.
+              // Its scanner does not blank comments either, so this note
+              // deliberately quotes no class name (rule 9 of the material
+              // contract, in its other direction).
+              className="kub-button inline-flex h-8 shrink-0 items-center justify-center rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-text)] kub-raise kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+            >
+              {UNBLOCK_LABEL}
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

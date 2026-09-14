@@ -118,6 +118,18 @@ interface MessageInputProps {
   /** The attach sheet (D-122): photos pasted or dropped, which open the sheet as their send step. */
   incomingMedia?: AttachIncoming | null;
   onIncomingMediaTaken?: () => void;
+  /**
+   * One sentence the last send was refused with, shown above the capsules.
+   *
+   * Today there is exactly one: the other member of a private chat has blocked
+   * the sender. It is drawn here rather than only on the bubble because a
+   * refusal that reads «Не удалось отправить» on a grey message is the same
+   * thing a dead network looks like, and this one will not clear by retrying.
+   * The message itself is kept either way — it stays in the conversation with
+   * its text and its «Повторить».
+   */
+  refusal?: string | null;
+  onDismissRefusal?: () => void;
 }
 
 export function MessageInput({
@@ -142,6 +154,8 @@ export function MessageInput({
   onSendMedia,
   incomingMedia = null,
   onIncomingMediaTaken,
+  refusal = null,
+  onDismissRefusal,
 }: MessageInputProps) {
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
@@ -1014,6 +1028,7 @@ export function MessageInput({
       phoneWidth: isPhoneWidth,
       buttonOnScreen: !(hasText || hasAttachments || hasForwardDraft),
       overlayOpen: showAttach || showCamera || showVideoMessage || showVoice || showEmoji,
+      refusalVisible: Boolean(refusal),
     }),
   });
 
@@ -1244,6 +1259,31 @@ export function MessageInput({
               }}
             />
           </>
+        )}
+
+        {/* Why the last send did not go through, above the capsules and with a
+            way to dismiss it. `role="status"` rather than `alert`: it is read
+            after a press the person just made, and an assertive announcement
+            would interrupt whatever they type next. */}
+        {refusal && !holdRecorderState && (
+          <div
+            data-testid="composer-refusal"
+            role="status"
+            className="mb-2 flex items-center gap-2 rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger-text)]"
+          >
+            <KubIcon name="ban" size={14} tone="currentColor" className="shrink-0" />
+            <span className="min-w-0 flex-1 font-medium">{refusal}</span>
+            {onDismissRefusal && (
+              <button
+                type="button"
+                onClick={onDismissRefusal}
+                aria-label="Скрыть"
+                className={cn("kub-icon-action -mr-1 h-6 w-6 shrink-0 rounded-md text-[color:var(--kub-danger-text)]", FOCUS_RING)}
+              >
+                <KubIcon name="close" size={14} tone="currentColor" />
+              </button>
+            )}
+          </div>
         )}
 
         {/* The recording itself is the composer's row now, not a card above it

@@ -1,13 +1,14 @@
 "use client";
 
 import { Link, useLocation, Route, Switch, Redirect } from "wouter";
-import { usePermissionAccess, useRoleAccess } from "@/hooks/useRole";
+import { useCanReadModerationQueue, usePermissionAccess, useRoleAccess } from "@/hooks/useRole";
 import { useAppStore } from "@/store/app.store";
 import { KubIcon, KubLogo, type KubIconName } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { DashboardTab } from "./DashboardTab";
 import { UsersTab } from "./UsersTab";
 import { BansMutesTab } from "./BansMutesTab";
+import { ReportsTab } from "./ReportsTab";
 import { AuditTab } from "./AuditTab";
 import { LocationsTab } from "./LocationsTab";
 import { RolesPermissionsTab } from "./RolesPermissionsTab";
@@ -22,6 +23,15 @@ type TabDef = {
   path: string;
   adminOnly?: boolean;
   supportOnly?: boolean;
+  /**
+   * Shown only to whoever the **database** calls staff.
+   *
+   * `isStaff` is wider than `public.is_manager_or_admin`, which is what reads
+   * these rows, so a permission-only operator would be handed a screen that is
+   * empty for them and looks like a queue with nothing in it. See
+   * `lib/moderationAccess.ts`.
+   */
+  moderationQueue?: boolean;
 };
 
 const TABS: ReadonlyArray<TabDef> = [
@@ -31,6 +41,10 @@ const TABS: ReadonlyArray<TabDef> = [
   { id: "invites",   label: "Инвайты",      icon: "userPlus",   path: "/admin/invites", adminOnly: true },
   { id: "roles",     label: "Роли и права", icon: "shield",     path: "/admin/roles", adminOnly: true },
   { id: "bans",      label: "Блокировки",   icon: "shieldOff",  path: "/admin/bans" },
+  // Beside «Блокировки» because it is the same job, and read by the same
+  // people: `content_reports` is staff-only at the RLS layer through
+  // `is_manager_or_admin`, exactly as `bans` and `mutes` are.
+  { id: "reports",   label: "Жалобы",       icon: "warning",    path: "/admin/reports", moderationQueue: true },
   { id: "ops",       label: "Операции",      icon: "activity",   path: "/admin/ops", adminOnly: true },
   { id: "support",   label: "Поддержка",      icon: "help",       path: "/admin/support", supportOnly: true },
   // Audit log is admin-only at the RLS layer (managers see no rows);
@@ -43,9 +57,11 @@ export function AdminLayout() {
   const [location] = useLocation();
   const currentUser = useAppStore((s) => s.currentUser);
   const { isStaff, isAdmin, checking } = useRoleAccess();
+  const moderationQueue = useCanReadModerationQueue();
+  const canReadReports = moderationQueue.allowed;
   const supportAccess = usePermissionAccess(["support.view"]);
   const canViewSupport = supportAccess.hasPermission("support.view");
-  const accessChecking = checking || supportAccess.checking;
+  const accessChecking = checking || supportAccess.checking || moderationQueue.checking;
 
   if (!currentUser) {
     return (
@@ -71,6 +87,7 @@ export function AdminLayout() {
   const visibleTabs = TABS.filter((tab) => {
     if (tab.supportOnly) return canViewSupport;
     if (!isStaff) return false;
+    if (tab.moderationQueue) return canReadReports;
     return !tab.adminOnly || isAdmin;
   });
   const supportOnlyOperator = canViewSupport && !isStaff;
@@ -171,6 +188,14 @@ export function AdminLayout() {
               {isAdmin ? <RolesPermissionsTab /> : <Redirect to="/admin" />}
             </Route>
             <Route path="/admin/bans" component={BansMutesTab} />
+            {/* Gated rather than mounted bare, unlike the tabs above it. A
+                support-only operator reaches this shell for their own tab, and
+                the reporter's name exists nowhere else in the product — an
+                empty queue would be the wrong answer to give them, and the
+                right one is not to route them here at all. */}
+            <Route path="/admin/reports">
+              {canReadReports ? <ReportsTab /> : <Redirect to="/admin" />}
+            </Route>
             <Route path="/admin/ops">
               {isAdmin ? <OpsReportTab /> : <Redirect to="/admin" />}
             </Route>

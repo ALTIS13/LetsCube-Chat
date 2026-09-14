@@ -104,7 +104,17 @@ import {
   type MessageMediaCounts,
   type MessageMediaKind,
 } from "@/lib/messageMediaSections";
-import { copyWithFeedback } from "@/lib/actionFeedback";
+import { copyWithFeedback, showActionFeedback } from "@/lib/actionFeedback";
+import {
+  BLOCK_LABEL,
+  REPORT_LABEL,
+  UNBLOCK_LABEL,
+  blockPrompt,
+  canBlockInChat,
+  unblockPrompt,
+} from "@/lib/personalModeration";
+import { usePersonalBlocks } from "@/hooks/usePersonalModeration";
+import { requestContentReport } from "./ReportDialog";
 
 /**
  * The voice channel, handed down rather than read here.
@@ -1401,6 +1411,55 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
 
   const otherUser = !isGroup ? (chat.other_user as Profile | null) : null;
 
+  // The same list the header menu reads, from the one store, so the two
+  // surfaces of one conversation cannot disagree about whether this person is
+  // blocked — which is what a per-component fetch would give as soon as one of
+  // them acted.
+  const blocks = usePersonalBlocks();
+  const canBlock = canBlockInChat({
+    chatType: chat.type,
+    isSaved,
+    // The chat's own field rather than `otherUser`, which this component
+    // already narrows to «not a group»: narrowing twice would leave the rule
+    // module deciding nothing.
+    otherUserId: (chat.other_user as Profile | null)?.id,
+    currentUserId,
+  });
+  const isBlocked = Boolean(otherUser?.id && blocks.ids.has(otherUser.id));
+
+  /** «Заблокировать» / «Разблокировать», asked first. See `blockPrompt`. */
+  const handleBlockToggle = async () => {
+    if (!otherUser?.id) return;
+    const words = isBlocked ? unblockPrompt(display.title) : blockPrompt(display.title);
+    const confirmed = await requestAppConfirm({
+      title: words.title,
+      description: words.description,
+      confirmLabel: words.confirmLabel,
+      cancelLabel: words.cancelLabel,
+      tone: "danger",
+      icon: isBlocked ? "unban" : "ban",
+    });
+    if (!confirmed) return;
+    const result = isBlocked
+      ? await blocks.unblock(otherUser.id)
+      : await blocks.block({
+          id: otherUser.id,
+          fullName: otherUser.full_name ?? display.title,
+          username: otherUser.username ?? null,
+          avatarUrl: otherUser.avatar_url ?? null,
+          createdAt: new Date().toISOString(),
+        });
+    showActionFeedback(
+      result.ok
+        ? {
+            kind: "success",
+            title: isBlocked ? "Пользователь разблокирован" : "Пользователь заблокирован",
+            key: "personal-block",
+          }
+        : { kind: "error", title: result.error ?? "", key: "personal-block" },
+    );
+  };
+
   // Фото, видео, GIF, файлы, ссылки, голосовые, видеосообщения, аудио — from
   // the server's totals where there are any, and from the loaded rows where
   // there are not. A section holding nothing is never built, so the card only
@@ -1915,6 +1974,30 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
                 <KubIcon name={isPinned ? "pinOff" : "pin"} size={17} tone="muted" className="shrink-0" />
                 <span className="min-w-0 flex-1 truncate">{isPinned ? "Открепить чат" : "Закрепить чат"}</span>
               </button>
+              {/* Reporting sends something and ends nothing, so it sits with
+                  the ordinary rows above the destructive band. Photographed at
+                  390 with it between «Очистить историю у себя» and
+                  «Заблокировать»: an unmarked row inside a run of red ones
+                  reads as a gap in the run rather than as a kind of its own. */}
+              {canBlock && (
+                <button
+                  type="button"
+                  data-testid="chat-info-report-user"
+                  onClick={() => {
+                    if (!otherUser?.id) return;
+                    requestContentReport({
+                      kind: "user",
+                      targetUserId: otherUser.id,
+                      targetName: display.title,
+                      chatId: chat.id,
+                    });
+                  }}
+                  className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
+                >
+                  <KubIcon name="warning" size={17} tone="muted" className="shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{REPORT_LABEL}</span>
+                </button>
+              )}
               {onClearForMe && (
                 <button
                   onClick={handleClearForMe}
@@ -1924,6 +2007,25 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
                   <span className="min-w-0 flex-1 truncate">
                     {isSaved ? "Очистить избранное у себя" : "Очистить историю у себя"}
                   </span>
+                </button>
+              )}
+              {/* «Заблокировать» carries the danger colour and
+                  «Разблокировать» does not, because one takes something away
+                  and the other gives it back. */}
+              {canBlock && (
+                <button
+                  type="button"
+                  data-testid="chat-info-block-user"
+                  onClick={() => void handleBlockToggle()}
+                  className={isBlocked ? cn(actionRowClass, "text-[color:var(--kub-text)]") : dangerActionRowClass}
+                >
+                  <KubIcon
+                    name={isBlocked ? "unban" : "ban"}
+                    size={17}
+                    tone={isBlocked ? "muted" : undefined}
+                    className="shrink-0"
+                  />
+                  <span className="min-w-0 flex-1 truncate">{isBlocked ? UNBLOCK_LABEL : BLOCK_LABEL}</span>
                 </button>
               )}
               {canHidePrivateChat && (

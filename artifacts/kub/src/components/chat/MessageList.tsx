@@ -13,6 +13,7 @@ import { useAppStore } from "@/store/app.store";
 import {
   canUseHumanMessageControls,
   isIncomingMessage,
+  messageActorDisplayName,
   messageActorGroupingKey,
   resolveMessageActor,
 } from "@/lib/messageActor";
@@ -31,6 +32,8 @@ import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { formatFullTime } from "@/lib/format";
 import { copyWithFeedback } from "@/lib/actionFeedback";
 import { messageActionKind, type MessageActionId } from "@/lib/messageActions";
+import { canReportMessage } from "@/lib/personalModeration";
+import { requestContentReport } from "./ReportDialog";
 import { messageLink } from "@/lib/messageLink";
 import { copyImageToClipboard, mediaDownloadName, saveMediaAs } from "@/lib/messageMediaActions";
 import { QUICK_REACTION } from "@/lib/messageReactions";
@@ -646,10 +649,23 @@ export function MessageList({
       new Date(recipient.last_read_at).getTime() >= new Date(menuMessage.created_at).getTime()
       ? recipient.last_read_at
       : null;
+    // Who a report about this message would name. A bot's message carries no
+    // `user_id`, and `content_reports.target_user_id` references `profiles`, so
+    // there is nobody to name and the item is not offered.
+    const actor = resolveMessageActor(menuMessage);
+    const authorId = actor.kind === "user" ? actor.id : null;
     return {
       own,
       kind,
       readAt,
+      authorId,
+      canReport: canReportMessage({
+        own,
+        localSend,
+        deleted: Boolean(menuMessage.deleted_at),
+        authorId,
+        currentUserId: userId,
+      }),
       recipientId: recipient?.user_id ?? null,
       hasText: kind === "text" ? Boolean(menuMessage.content?.trim()) : Boolean(getVisibleMediaCaption(menuMessage)),
       captionEditable: kind === "photo" || kind === "file" || (kind === "video" && !isRoundVideoMessage(menuMessage)),
@@ -1311,9 +1327,21 @@ export function MessageList({
           captionEditable={menuContext.captionEditable}
           hasText={menuContext.hasText}
           kind={menuContext.kind}
+          canReport={menuContext.canReport}
           onClose={rowActions.closeMenu}
           onLift={setMenuLift}
           onAction={(action) => runMenuAction(action, menuMessage)}
+          onReport={() => {
+            if (!menuContext.authorId) return;
+            rowActions.closeMenu();
+            requestContentReport({
+              kind: "message",
+              targetUserId: menuContext.authorId,
+              targetName: messageActorDisplayName(menuMessage),
+              messageId: menuMessage.id,
+              chatId: menuMessage.chat_id,
+            });
+          }}
           onReact={(emoji) => rowActions.reaction(menuMessage.id, emoji)}
         />
       )}

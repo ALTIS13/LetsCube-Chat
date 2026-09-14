@@ -268,6 +268,7 @@ export type SettingsRowId =
   | "push-tasks"
   | "push-invites"
   | "presence"
+  | "blocked"
   | "theme"
   | "audio"
   | "updates"
@@ -312,6 +313,10 @@ export const SETTINGS_ROWS: readonly SettingsRowMeta[] = [
   { id: "push-tasks", section: "notifications", label: "Задачи", keywords: ["пуш", "push", "таски"] },
   { id: "push-invites", section: "notifications", label: "Приглашения", keywords: ["пуш", "push", "инвайты"] },
   { id: "presence", section: "privacy", label: "Статус «в сети»", keywords: ["онлайн", "presence", "последний вход", "видимость"] },
+  // 2026-09-14. A block a person cannot find again is a trap, so the list of
+  // people they have blocked has to be reachable by search as well as by
+  // scrolling — and a row with no entry here cannot be filtered at all.
+  { id: "blocked", section: "privacy", label: "Заблокированные", keywords: ["блок", "заблокировать", "чёрный список", "черный список", "block", "жалоба"] },
   { id: "theme", section: "application", label: "Тема", keywords: ["тёмная", "темная", "светлая", "dark", "light", "внешний вид", "оформление"] },
   { id: "audio", section: "application", label: "Звук", keywords: ["микрофон", "аудио", "голос", "громкость", "усиление"] },
   { id: "updates", section: "application", label: "Обновления", keywords: ["версия", "update", "загрузка", "приложение"] },

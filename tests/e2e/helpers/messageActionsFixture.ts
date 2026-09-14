@@ -110,6 +110,13 @@ export interface RecordedRequest {
   resource: string;
   search: string;
   body: unknown;
+  /**
+   * The `Prefer` header as it went out. It is the only place a chained
+   * `.select()` on an insert shows: PostgREST is asked for the row back with
+   * `return=representation`, and on `content_reports` that is exactly what
+   * production refuses.
+   */
+  prefer: string;
 }
 
 export interface FixtureOptions {
@@ -126,6 +133,21 @@ export interface FixtureOptions {
    * people a query can reach without one.
    */
   people?: Person[];
+  /**
+   * Who `me` has already blocked. `user_blocks` is readable only by its own
+   * `blocker_id`, so this is exactly what the signed-in person can see, and the
+   * fixture keeps it mutable: a block written through the interface lands here
+   * and a later read finds it.
+   */
+  blocks?: string[];
+  /**
+   * Makes one table call fail, so a refusal path can be measured.
+   *
+   * Answers `undefined` to leave the fixture's own behaviour alone. This is how
+   * a spec asks for SQLSTATE 23505 on a second report, or for the
+   * row-level-security refusal a blocked sender's insert really gets.
+   */
+  rest?: (call: { resource: string; method: string; body: unknown }) => { status: number; body: unknown } | undefined;
 }
 
 export interface Fixture {
@@ -161,6 +183,10 @@ function readBody(route: Route): unknown {
 export async function openFixture(page: Page, options: FixtureOptions): Promise<Fixture> {
   const { me } = options;
   const requests: RecordedRequest[] = [];
+  const blocks: { blocked_id: string; created_at: string }[] = (options.blocks ?? []).map((id) => ({
+    blocked_id: id,
+    created_at: EPOCH,
+  }));
   const fixture: Fixture = {
     requests,
     rpcBodies: (name) => requests.filter((entry) => entry.resource === `rpc/${name}`).map((entry) => (entry.body ?? {}) as Row),
@@ -210,9 +236,13 @@ export async function openFixture(page: Page, options: FixtureOptions): Promise<
     const isRest = url.pathname.startsWith("/rest/v1/");
     const resource = isRest ? url.pathname.slice("/rest/v1/".length) : url.pathname;
     const body = method === "GET" || method === "HEAD" ? null : readBody(route);
-    requests.push({ method, resource, search: url.search, body });
+    requests.push({ method, resource, search: url.search, body, prefer: request.headers().prefer ?? "" });
 
     if (method === "OPTIONS") return route.fulfill({ status: 204 });
+    // A refusal the spec asked for, before anything else answers. It is checked
+    // after the call is recorded, so a spec can still assert what was sent.
+    const failure = isRest ? options.rest?.({ resource, method, body }) : undefined;
+    if (failure) return json(route, failure.body, failure.status);
     if (url.pathname === "/auth/v1/user") {
       return json(route, { id: me.id, aud: "authenticated", role: "authenticated", email: "message-actions-qa@example.invalid", user_metadata: { full_name: me.full_name }, app_metadata: {}, created_at: EPOCH });
     }
@@ -239,7 +269,45 @@ export async function openFixture(page: Page, options: FixtureOptions): Promise<
         );
         return json(route, one(holder ? [holder] : []));
       }
+      // `id=in.(…)` is how a list of people is fetched by id — the blocked-people
+      // list does exactly this. Only the people this fixture was given exist;
+      // every other filter still answers `me`, as it did.
+      const ids = url.searchParams.get("id");
+      if (ids?.startsWith("in.")) {
+        const wanted = new Set(
+          decodeURIComponent(ids.slice(3))
+            .replace(/^\(/, "")
+            .replace(/\)$/, "")
+            .split(",")
+            .map((value) => value.replace(/^"|"$/g, "")),
+        );
+        return json(route, [me, ...(options.people ?? [])].filter((person) => wanted.has(person.id)));
+      }
       return json(route, one([me]));
+    }
+    if (resource === "user_blocks") {
+      if (method === "GET") return json(route, one(blocks));
+      if (method === "POST") {
+        const row = (Array.isArray(body) ? body[0] : body) as { blocked_id?: string } | null;
+        if (row?.blocked_id && !blocks.some((held) => held.blocked_id === row.blocked_id)) {
+          blocks.push({ blocked_id: row.blocked_id, created_at: new Date().toISOString() });
+        }
+        return route.fulfill({ status: 201 });
+      }
+      if (method === "DELETE") {
+        const blockedId = eq("blocked_id");
+        for (let index = blocks.length - 1; index >= 0; index -= 1) {
+          if (!blockedId || blocks[index].blocked_id === blockedId) blocks.splice(index, 1);
+        }
+        return route.fulfill({ status: 204 });
+      }
+      return json(route, single ? null : []);
+    }
+    if (resource === "content_reports") {
+      // 201 and nothing in the body: the insert carries no RETURNING, because
+      // reading the row back needs a SELECT policy the reporter does not have.
+      if (method === "POST") return route.fulfill({ status: 201 });
+      return json(route, single ? null : []);
     }
     if (resource === "chat_members") {
       if (method !== "GET") return json(route, single ? null : []);

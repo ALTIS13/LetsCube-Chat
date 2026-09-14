@@ -254,7 +254,10 @@ const veiled = [
   // forms render. The column form has two of its own, its close and its
   // clear-the-query.
   ["components/sidebar/SettingsModal.tsx", 0],
-  ["components/settings/SettingsScreen.tsx", 2],
+  // Three since 2026-09-14: the «Разблокировать» button on each row of the
+  // blocked-people list, beside the disclosure row and the staff entry that
+  // were already here.
+  ["components/settings/SettingsScreen.tsx", 3],
   ["components/settings/SettingsPanel.tsx", 2],
   ["components/sidebar/FolderEditModal.tsx", 2],
   ["components/sidebar/FolderListModal.tsx", 1],
@@ -324,7 +327,10 @@ const veiled = [
   ["components/chat/MessageList.tsx", 0],
   ["components/chat/GroupInviteModal.tsx", 1],
   ["components/chat/ForwardModal.tsx", 1],
-  ["components/chat/MessageActionLayer.tsx", 7],
+  // Eight since 2026-09-14: «Пожаловаться», the last item of both menu shapes.
+  // It is one element drawn in each, not two, because the phone card and the
+  // desktop card render the same node.
+  ["components/chat/MessageActionLayer.tsx", 8],
   ["components/chat/MessageReactions.tsx", 3],
   ["components/chat/ChatSelectionBar.tsx", 3],
   ["components/chat/MessageDeleteDialog.tsx", 1],

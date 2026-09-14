@@ -27,6 +27,7 @@ import {
   RESUME_REVALIDATE_MIN_INTERVAL_MS,
 } from "@/lib/resumeRevalidation";
 import { canUseHumanMessageControls, isIncomingMessage } from "@/lib/messageActor";
+import { blockedSendRefusal } from "@/lib/personalModeration";
 import { mergeMessagesById } from "@/lib/messageMerge";
 import { isMissingRpcError, rpcAvailability } from "@/lib/rpcAvailability";
 import {
@@ -161,6 +162,16 @@ export function useMessages(
   const [pinnedKey, setPinnedKey] = useState<string | null>(null);
   const [clearedAt, setClearedAt] = useState<string | null>(null);
   const [hiddenMessageIds, setHiddenMessageIds] = useState<Set<string>>(() => new Set());
+  /**
+   * The refusal the composer shows beside itself, or null.
+   *
+   * Only one failure gets here: a private chat's other member has blocked the
+   * sender, so the restrictive policy on `public.messages` refused the insert
+   * (`blockedSendRefusal`). Everything else is reported on the message itself,
+   * where it has always been — the bubble keeps its text and its «Повторить».
+   * A refusal is kept as well as shown: nothing is silently lost either way.
+   */
+  const [sendRefusal, setSendRefusal] = useState<string | null>(null);
   // Per-slice selectors: не подписываемся на весь store (раньше любая
   // мутация — chats, selectedChatId — ререндерила хук). Сами
   // setMessages/addMessage/replaceMessage в zustand стабильны по ссылке.
@@ -218,6 +229,8 @@ export function useMessages(
     setHasMoreOlder(false);
     setOlderError(null);
     setIsTyping(false);
+    // A refusal belongs to the conversation it was refused in.
+    setSendRefusal((current) => (current === null ? current : null));
     if (typingTimer.current) {
       clearTimeout(typingTimer.current);
       typingTimer.current = null;
@@ -227,6 +240,11 @@ export function useMessages(
   useEffect(() => {
     setHiddenMessageIds((current) => (current.size ? new Set() : current));
   }, [chatId]);
+
+  /** Dismisses the refusal beside the composer without sending anything. */
+  const clearSendRefusal = useCallback(() => {
+    setSendRefusal((current) => (current === null ? current : null));
+  }, []);
 
   const rememberHiddenMessageIds = useCallback((ids: Iterable<string>) => {
     const incoming = Array.from(ids).filter(Boolean);
@@ -1095,6 +1113,9 @@ export function useMessages(
       replaceMessage(activeChatId, tempId, ack.data);
       updateChatLastMessage(activeChatId, ack.data);
       touchChatUpdatedAt(activeChatId, ack.data.created_at);
+      // A send that went through is the only thing that can prove a refusal is
+      // over, so it is what clears it.
+      setSendRefusal(null);
       return ack.data;
     }
 
@@ -1132,7 +1153,18 @@ export function useMessages(
       return null;
     }
 
-    const friendlySendError = getMessageAckUserMessage(ack.error);
+    // A blocked sender's insert fails with a row-level-security error, and the
+    // ack mapper answers «Недостаточно прав для отправки сообщения» for it —
+    // which describes the machine's answer rather than what happened. The one
+    // sentence the product says for this is `BLOCKED_SEND_REFUSAL`, and it is
+    // decided by chat type and SQLSTATE alone (`blockedSendRefusal`), never by
+    // reading the Postgres text onto the screen.
+    const refusal = blockedSendRefusal({
+      chatType: useAppStore.getState().chats.find((item) => item.id === activeChatId)?.type ?? null,
+      error: ack.error,
+    });
+    setSendRefusal(refusal);
+    const friendlySendError = refusal ?? getMessageAckUserMessage(ack.error);
     const safeAckError = sanitizeMessageAckError(ack.error);
     console.error("[messages] send failed.", safeAckError.code, safeAckError.name);
     reportError(safeAckError.error, {
@@ -1564,6 +1596,7 @@ export function useMessages(
     pinnedReady: pinnedKey === currentPinnedKey && pinnedReady,
     loading, loadingOlder, hasMoreOlder, olderError, isTyping,
     sendMessage, sendMediaMessage, sendTyping, toggleReaction,
+    sendRefusal, clearSendRefusal,
     retryMessageSend, discardLocalMessage,
     editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, deleteMessagesForEveryone, togglePin, forwardMessage,
     clearChatForMe,

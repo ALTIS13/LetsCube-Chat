@@ -11,8 +11,19 @@ import { getChatDisplayInfo, memberCountLabel } from "@/lib/chatDisplay";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import { getUserPresenceState } from "@/lib/presence";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
+import { showActionFeedback } from "@/lib/actionFeedback";
 import { CAPSULE_CONTROL_GLASS, unreadBadgeLabel, unreadElsewhere } from "@/lib/chatChrome";
 import { FOCUS_RING } from "@/lib/controlSurface";
+import {
+  BLOCK_LABEL,
+  REPORT_LABEL,
+  UNBLOCK_LABEL,
+  blockPrompt,
+  canBlockInChat,
+  unblockPrompt,
+} from "@/lib/personalModeration";
+import { usePersonalBlocks } from "@/hooks/usePersonalModeration";
+import { requestContentReport } from "./ReportDialog";
 import { usePresenceNow } from "@/hooks/usePresenceNow";
 import { useAvatarVariantUrls } from "@/hooks/useMediaVariants";
 import type { ChatWithLastMessage } from "@/types/database";
@@ -51,6 +62,23 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
   const canDeleteGroup = isGroup && myRole === "owner";
   const canHidePrivateChat = !!chat && chat.type === "private" && !display.isSaved;
   const isPinned = Boolean(chat?.is_pinned);
+
+  // Blocking and reporting a person are offered where a person is: a private
+  // chat with somebody else. The database's restrictive policy has exactly that
+  // scope, so a group's menu would be offering something the row cannot do.
+  const blocks = usePersonalBlocks();
+  // Handed over whole, so `canBlockInChat` is the only thing deciding. Narrowing
+  // it here first would make the rule unreachable from the screen: a mutation
+  // of the module would leave the surface correct by accident, which is a rule
+  // that is not actually in force.
+  const otherUser = chat?.other_user ?? null;
+  const canBlock = canBlockInChat({
+    chatType: chat?.type,
+    isSaved: display.isSaved,
+    otherUserId: otherUser?.id,
+    currentUserId: currentUser?.id,
+  });
+  const isBlocked = Boolean(otherUser?.id && blocks.ids.has(otherUser.id));
 
   useEffect(() => {
     if (!showMenu) return;
@@ -161,6 +189,57 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
     setShowMenu(false);
   };
 
+  /**
+   * Ends, or gives back, this person's ability to write to me.
+   *
+   * Asked first, with the danger tone the rest of the product uses for a
+   * far-reaching action, and the question says what actually happens rather
+   * than what «заблокировать» suggests — see `blockPrompt`.
+   */
+  const handleBlockToggle = async () => {
+    if (!canBlock || !otherUser?.id) return;
+    const words = isBlocked ? unblockPrompt(name) : blockPrompt(name);
+    const confirmed = await requestAppConfirm({
+      title: words.title,
+      description: words.description,
+      confirmLabel: words.confirmLabel,
+      cancelLabel: words.cancelLabel,
+      tone: "danger",
+      icon: isBlocked ? "unban" : "ban",
+    });
+    if (!confirmed) return;
+    setShowMenu(false);
+    const result = isBlocked
+      ? await blocks.unblock(otherUser.id)
+      : await blocks.block({
+          id: otherUser.id,
+          fullName: otherUser.full_name ?? name,
+          username: otherUser.username ?? null,
+          avatarUrl: otherUser.avatar_url ?? null,
+          createdAt: new Date().toISOString(),
+        });
+    showActionFeedback(
+      result.ok
+        ? {
+            kind: "success",
+            title: isBlocked ? "Пользователь разблокирован" : "Пользователь заблокирован",
+            key: "personal-block",
+          }
+        : { kind: "error", title: result.error ?? "", key: "personal-block" },
+    );
+  };
+
+  const handleReportUser = () => {
+    if (!canBlock || !otherUser?.id) return;
+    setShowMenu(false);
+    requestContentReport({
+      kind: "user",
+      targetUserId: otherUser.id,
+      targetName: name,
+      chatId,
+    });
+  };
+
   const getSubtitle = () => {
     if (!chat) return "";
     if (display.isSaved) return display.subtitle;
@@ -187,8 +266,25 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
     { icon: "search", label: "Поиск в чате", action: () => { setShowMenu(false); onSearchOpen?.(); } },
     { icon: isPinned ? "pinOff" : "pin", label: isPinned ? "Открепить чат" : "Закрепить чат", action: handlePinToggle },
     { icon: "notifications", label: isMuted ? "Включить уведомления" : "Отключить уведомления", action: () => { toggleMutedChat(chatId); setShowMenu(false); } },
+    // «Пожаловаться» sends something and ends nothing, so it belongs with the
+    // ordinary items rather than inside the destructive run below. Photographed
+    // at 1440 and 390 with it under «Очистить историю у себя»: an unmarked row
+    // inside a run of red ones reads as a gap in the run rather than as a kind
+    // of its own.
+    ...(canBlock
+      ? [{ icon: "warning" as KubIconName, label: REPORT_LABEL, action: handleReportUser }]
+      : []),
     ...(onClearForMe
       ? [{ icon: "delete" as KubIconName, label: display.isSaved ? "Очистить избранное у себя" : "Очистить историю у себя", danger: true, action: handleClearForMe }]
+      : []),
+    ...(canBlock
+      ? [{
+          icon: (isBlocked ? "unban" : "ban") as KubIconName,
+          label: isBlocked ? UNBLOCK_LABEL : BLOCK_LABEL,
+          // Unblocking gives something back, so it is not a destructive item.
+          danger: !isBlocked,
+          action: () => void handleBlockToggle(),
+        }]
       : []),
     ...(canHidePrivateChat
       ? [{ icon: "logout" as KubIconName, label: "Удалить чат у себя", danger: true, action: handleHidePrivateChat }]

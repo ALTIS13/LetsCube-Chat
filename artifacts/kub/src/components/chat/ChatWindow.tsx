@@ -8,6 +8,7 @@ import { MessageInput } from "./MessageInput";
 import { ChatSearchBar } from "./ChatSearchBar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ChatInfoPanel } from "./ChatInfoPanel";
+import { ReportDialogHost } from "./ReportDialog";
 import { ChatSelectionBar } from "./ChatSelectionBar";
 import { ForwardModal } from "./ForwardModal";
 import { MessageDeleteDialogHost, copySelectedMessages, useChatMessageSelection } from "./MessageSelectionChrome";
@@ -149,6 +150,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const {
     messages, pinnedMessages, pinnedReady, loading, loadingOlder, hasMoreOlder, olderError, isTyping,
     sendMessage, sendMediaMessage, sendTyping, toggleReaction,
+    sendRefusal, clearSendRefusal,
     retryMessageSend, discardLocalMessage,
     editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, deleteMessagesForEveryone, togglePin, forwardMessage, clearChatForMe,
     loadOlderMessages, ensureMessageLoaded,
@@ -1408,6 +1410,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onSendMedia={sendMediaFromSheet}
             incomingMedia={mediaSendRequest}
             onIncomingMediaTaken={closeMediaSendRequest}
+            refusal={sendRefusal}
+            onDismissRefusal={clearSendRefusal}
           />
         </div>
       </div>
@@ -1447,6 +1451,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           }}
         />
       )}
+      {/* One picker for every «Пожаловаться» in this pane — the message menus,
+          the header menu and the contact card all sit inside it. */}
+      <ReportDialogHost />
       <MessageDeleteDialogHost
         chatId={chatId}
         messages={conversation}

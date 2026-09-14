@@ -40,6 +40,7 @@ import {
   myReaction,
   reactionCountLabel,
 } from "@/lib/messageReactions";
+import { REPORT_LABEL } from "@/lib/personalModeration";
 import { NO_SAFE_AREA_INSETS, readSafeAreaInsets, type SafeAreaInsets } from "@/lib/safeArea";
 import { cn } from "@/lib/utils";
 import type { MessageWithSender } from "@/types/database";
@@ -190,9 +191,11 @@ export function MessageActionLayer({
   captionEditable,
   hasText,
   kind,
+  canReport,
   onClose,
   onLift,
   onAction,
+  onReport,
   onReact,
 }: {
   request: MessageMenuRequest;
@@ -220,10 +223,23 @@ export function MessageActionLayer({
   captionEditable: boolean;
   hasText: boolean;
   kind: MessageActionContext["kind"];
+  /**
+   * Whether «Пожаловаться» belongs in this menu — `canReportMessage` decides,
+   * and the caller asks it.
+   *
+   * It is a prop of its own rather than a new `MessageActionId`, because the
+   * ids, their labels and the order of both menus are pinned in
+   * `lib/messageActions.ts` by `tests/unit/message-actions.test.mts`, and a
+   * report is not one of Telegram's message actions — it is the one item that
+   * leaves the conversation and files something with the administration. It is
+   * drawn last, under a rule, in both shapes.
+   */
+  canReport: boolean;
   onClose: () => void;
   /** How far the phone menu lifts the message; the list moves the row. */
   onLift: (lift: number) => void;
   onAction: (action: MessageActionId) => void;
+  onReport: () => void;
   onReact: (emoji: string) => void;
 }) {
   const phone = request.shape === "phone";
@@ -465,6 +481,31 @@ export function MessageActionLayer({
     </button>
   );
 
+  /**
+   * The last item of both menus, separated by a rule.
+   *
+   * Danger-toned: it is not destructive, but it is the item nobody should hit
+   * while aiming for «Переслать», and the colour is what keeps it from being
+   * pressed by accident at the foot of a list of ordinary actions.
+   */
+  const reportItem = canReport && (
+    <button
+      type="button"
+      role="menuitem"
+      data-message-action="report"
+      onClick={onReport}
+      className={cn(
+        "kub-interactive flex w-full items-center gap-3 border-t border-[color:var(--kub-rule)] px-4 text-left text-sm text-[color:var(--kub-danger-text)] transition-colors kub-raise-hover",
+        phone ? "min-h-11 py-2" : "min-h-9 py-1.5 pointer-coarse:min-h-11",
+        FOCUS_RING_INSET,
+        PRESS_SINK,
+      )}
+    >
+      <KubIcon name="warning" size={18} tone="currentColor" className="shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{REPORT_LABEL}</span>
+    </button>
+  );
+
   const backRow = (title: string) => (
     <button
       type="button"
@@ -631,6 +672,7 @@ export function MessageActionLayer({
             ))}
           </div>
         )}
+        {reportItem}
       </>
     );
   } else {
@@ -664,6 +706,7 @@ export function MessageActionLayer({
           </div>
         )}
         {desktopMessageActions(context).map(menuItem)}
+        {reportItem}
       </>
     );
   }

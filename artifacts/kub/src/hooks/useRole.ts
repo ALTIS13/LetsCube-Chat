@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { selectAnyLocationPermissionKeys, selectPermissionKeys } from "@/lib/accessSnapshot";
+import { canReadModerationQueue } from "@/lib/moderationAccess";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import type { AppRole } from "@/types/database";
@@ -50,6 +51,26 @@ export function useIsAdmin(): boolean {
 
 export function useIsManagerOrAdmin(): boolean {
   return useRoleAccess().isStaff;
+}
+
+/**
+ * Whether this person may actually read the moderation queue.
+ *
+ * Narrower than `isStaff` on purpose, and the rule is in
+ * `lib/moderationAccess.ts` with the reason: `content_reports`, `bans` and
+ * `mutes` are all read through `public.is_manager_or_admin`, which knows the
+ * legacy role and the four global role keys and nothing about permissions —
+ * while `isStaff` also admits a permission a location role can carry. Somebody
+ * in that gap, shown the queue, reads zero rows for ever, and an empty queue
+ * looks exactly like one you may not read.
+ */
+export function useCanReadModerationQueue(): { allowed: boolean; checking: boolean } {
+  const legacyRole = useRole();
+  const dynamic = useCurrentGlobalRoleAccess(true);
+  return {
+    allowed: canReadModerationQueue({ legacyRole, globalRoleKeys: dynamic.keys }),
+    checking: dynamic.checking,
+  };
 }
 
 export function useRoleAccess(): { isAdmin: boolean; isStaff: boolean; checking: boolean } {
