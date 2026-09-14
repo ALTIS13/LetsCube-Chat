@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { KubButton, KubIcon } from "@/components/kub";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { KubButton, KubIcon, KubSwitch } from "@/components/kub";
 import {
   DEFAULT_AUDIO_DEVICE_ID,
   applyLiveAudioGain,
@@ -14,6 +14,34 @@ import {
   type AudioProcessingMode,
 } from "@/hooks/useAudioSettings";
 import { supportsAudioOutputSelection } from "@/lib/audioOutput";
+import {
+  AUDIO_APPLYING_NOTE,
+  AUDIO_DEFAULT_INPUT_LABEL,
+  AUDIO_DEFAULT_OUTPUT_LABEL,
+  AUDIO_DEVICE_NAMES_NOTE,
+  AUDIO_GAIN_LABEL,
+  AUDIO_GROUP_DEVICES,
+  AUDIO_GROUP_LEVEL,
+  AUDIO_GROUP_PROCESSING,
+  AUDIO_INPUT_LABEL,
+  AUDIO_INTRO_NOTE,
+  AUDIO_LEVEL_METER_LABEL,
+  AUDIO_MODE_GROUP_LABEL,
+  AUDIO_MODE_SEGMENTS,
+  AUDIO_OUTPUT_LABEL,
+  AUDIO_OUTPUT_UNSUPPORTED_NOTE,
+  AUDIO_PROCESSING_HINT,
+  AUDIO_RESET_LABEL,
+  AUDIO_SELF_MONITOR_LABEL,
+  audioDeviceOptions,
+  audioLevelPercent,
+  deviceFallbackNote,
+  micTestLabel,
+  selfMonitorHint,
+  type AudioDeviceChoice,
+  type AudioModeSegment,
+} from "@/lib/audioSettingsSurface";
+import { DISABLED_SINK, FOCUS_RING, PRESS_SINK } from "@/lib/controlSurface";
 import { coarsePointer } from "@/lib/pointer";
 import { cn } from "@/lib/utils";
 
@@ -81,7 +109,7 @@ export function AudioSettingsSection() {
         !inputs.some((device) => device.deviceId === settings.selectedInputDeviceId)
       ) {
         updateSettings({ selectedInputDeviceId: DEFAULT_AUDIO_DEVICE_ID });
-        setDeviceNotice("Выбранный микрофон недоступен. Используется системный.");
+        setDeviceNotice(deviceFallbackNote("input"));
       }
       if (
         settings.selectedOutputDeviceId !== DEFAULT_AUDIO_DEVICE_ID &&
@@ -89,7 +117,7 @@ export function AudioSettingsSection() {
         !outputs.some((device) => device.deviceId === settings.selectedOutputDeviceId)
       ) {
         updateSettings({ selectedOutputDeviceId: DEFAULT_AUDIO_DEVICE_ID });
-        setDeviceNotice("Выбранное устройство вывода недоступно. Используется системное.");
+        setDeviceNotice(deviceFallbackNote("output"));
       }
     } catch {
       setDeviceNotice("Не удалось получить список аудиоустройств.");
@@ -243,7 +271,7 @@ export function AudioSettingsSection() {
       testInputGainRef.current = gain;
       setTesting(true);
       setProcessingNotice(result.deviceFallback
-        ? "Выбранный микрофон недоступен. Используется системный."
+        ? deviceFallbackNote("input")
         : result.fallback
         ? "Часть обработки микрофона не поддерживается этим браузером. Используется стандартный режим."
         : null);
@@ -367,204 +395,174 @@ export function AudioSettingsSection() {
   };
 
   return (
-    <div className="space-y-3">
-      <div className="space-y-3">
-        <div className="flex items-start gap-3">
-          <KubIcon name="microphone" size={16} className="mt-0.5 text-[color:var(--kub-cyan)]" />
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold text-[color:var(--kub-text)]">Звук и голосовые</div>
-            <p className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">
-              Выберите микрофон и наушники, проверьте уровень и настройте обработку голоса. Эти настройки не меняют системную громкость.
-            </p>
+    <div className="space-y-4" data-testid="audio-settings">
+      {/*
+        The row this panel opens from already says «Звук», carries the
+        microphone icon and prints the current value, so the icon, the title
+        «Звук и голосовые» and the two sentences naming the controls below were
+        the panel introducing itself a second time. The one fact left is the one
+        a person cannot read off any control here.
+      */}
+      <p className="px-1 text-xs leading-snug text-[color:var(--kub-muted)]">{AUDIO_INTRO_NOTE}</p>
+
+      <AudioGroup caption={AUDIO_GROUP_DEVICES}>
+        <DeviceRow
+          label={AUDIO_INPUT_LABEL}
+          value={settings.selectedInputDeviceId}
+          options={audioDeviceOptions(DEFAULT_AUDIO_DEVICE_ID, AUDIO_DEFAULT_INPUT_LABEL, inputDevices)}
+          disabled={applying}
+          onChange={(deviceId) => void changeInputDevice(deviceId)}
+        />
+        <DeviceRow
+          label={AUDIO_OUTPUT_LABEL}
+          value={settings.selectedOutputDeviceId}
+          options={audioDeviceOptions(DEFAULT_AUDIO_DEVICE_ID, AUDIO_DEFAULT_OUTPUT_LABEL, outputDevices)}
+          disabled={applying || !outputSelectionSupported}
+          onChange={(deviceId) => void changeOutputDevice(deviceId)}
+        />
+        <AudioNote>{AUDIO_DEVICE_NAMES_NOTE}</AudioNote>
+        {!outputSelectionSupported && <AudioNote>{AUDIO_OUTPUT_UNSUPPORTED_NOTE}</AudioNote>}
+        {deviceNotice && <AudioNote>{deviceNotice}</AudioNote>}
+      </AudioGroup>
+
+      <AudioGroup caption={AUDIO_GROUP_LEVEL}>
+        <SliderRow
+          label={AUDIO_GAIN_LABEL}
+          value={settings.micInputGain}
+          min={0}
+          max={2}
+          step={0.05}
+          onChange={(micInputGain) => updateSettings({ micInputGain })}
+        />
+        <div className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-3 py-2 min-h-11">
+          <KubButton
+            size="sm"
+            variant={testing ? "secondary" : "primary"}
+            onClick={startMicTest}
+            data-testid="audio-mic-test"
+          >
+            {micTestLabel(testing)}
+          </KubButton>
+          <div
+            role="meter"
+            aria-label={AUDIO_LEVEL_METER_LABEL}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={audioLevelPercent(level)}
+            data-testid="audio-level-meter"
+            className="h-2 min-w-0 overflow-hidden rounded-full bg-[var(--kub-surface-3)]"
+          >
+            <div
+              className="h-full rounded-full bg-[var(--kub-cyan)] transition-[width]"
+              style={{ width: `${audioLevelPercent(level)}%` }}
+            />
           </div>
         </div>
-
-        <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] px-3 py-3">
-          <SectionHeader
-            title="Устройства"
-            description="Список появится после разрешения доступа к микрофону. Если браузер не умеет выбирать вывод, звук пойдёт в системное устройство."
+        <SwitchRow
+          label={AUDIO_SELF_MONITOR_LABEL}
+          hint={selfMonitorHint(selfMonitoring, testing)}
+          checked={selfMonitoring}
+          disabled={!testing}
+          testId="audio-self-monitor"
+          onChange={() => void toggleSelfMonitoring()}
+        />
+        {/*
+          The phone branch of D-118, and `send-quality-and-phone-volume.test.mts`
+          reads this exact JSX to prove it is still here — which is why the label
+          is written out rather than taken from the words module.
+        */}
+        {selfMonitoring && !deviceSetsVolume && (
+          <SliderRow
+            label="Громкость прослушивания"
+            value={settings.monitorGain}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(monitorGain) => updateSettings({ monitorGain })}
           />
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <DeviceSelect
-              label="Микрофон"
-              value={settings.selectedInputDeviceId}
-              defaultLabel="Системный микрофон"
-              devices={inputDevices}
-              disabled={applying}
-              onChange={(deviceId) => void changeInputDevice(deviceId)}
-            />
-            <DeviceSelect
-              label="Наушники / динамики"
-              value={settings.selectedOutputDeviceId}
-              defaultLabel="Системный вывод"
-              devices={outputDevices}
-              disabled={applying || !outputSelectionSupported}
-              note={!outputSelectionSupported ? "Браузер не даёт выбрать вывод здесь. Используется системное устройство." : null}
-              onChange={(deviceId) => void changeOutputDevice(deviceId)}
-            />
-          </div>
-        </div>
+        )}
+        {applying && <AudioNote>{AUDIO_APPLYING_NOTE}</AudioNote>}
+        {error && <AudioNote tone="danger">{error}</AudioNote>}
+        {monitorError && <AudioNote tone="danger">{monitorError}</AudioNote>}
+      </AudioGroup>
 
-        <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] px-3 py-3">
+      <AudioGroup caption={AUDIO_GROUP_PROCESSING}>
+        <div className="min-w-0 px-3 py-2">
           {/*
-            «Голосовые сообщения» stood here and is gone (D-149). It wrote a
-            second stored volume to the very element the player writes to, so
-            which of the two a person heard was decided by whichever had written
-            last — and that depended on how playback had been started. The
-            player's own slider, in the playback bar, is the one volume now; a
-            value set here before is inherited by it once, so nothing anybody
-            had chosen is thrown away. The microphone's gain stays: no system
-            control sets it.
+            A track with flush segments, which is how this product draws a
+            one-of-N choice: the theme radiogroup two rows above this panel and
+            «Лимит кэша» in `StorageSection`, a sibling inside another
+            disclosure on the same screen, are both `rounded-lg border
+            the page ground at .5 of a rem of padding. That token belongs here
+            and only here —
+            on the well a segment is cut into, never on a box holding rows.
           */}
-          <SectionHeader
-            title="Громкость"
-            description="Микрофон влияет на проверку и голосовые записи."
-          />
-          <div className="mt-3 grid gap-3">
-            <SliderRow
-              label="Микрофон"
-              value={settings.micInputGain}
-              min={0}
-              max={2}
-              step={0.05}
-              onChange={(micInputGain) => updateSettings({ micInputGain })}
-            />
+          <div
+            role="radiogroup"
+            aria-label={AUDIO_MODE_GROUP_LABEL}
+            data-testid="audio-mode-picker"
+            className="flex w-full min-w-0 gap-0.5 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] p-0.5"
+          >
+            {AUDIO_MODE_SEGMENTS.map((segment) => (
+              <ModeSegment
+                key={segment.mode}
+                segment={segment}
+                active={settings.processingMode === segment.mode}
+                busy={applying}
+                onSelect={
+                  segment.selectable
+                    ? () => void changeProcessingMode(segment.mode)
+                    : undefined
+                }
+              />
+            ))}
           </div>
         </div>
+        <SwitchRow
+          label="Убрать шум"
+          hint="Снижает шум вентиляторов и комнаты."
+          checked={settings.noiseSuppression}
+          disabled={applying}
+          testId="audio-noise-suppression"
+          onChange={(noiseSuppression) => void changeProcessingToggle("noiseSuppression", noiseSuppression)}
+        />
+        <SwitchRow
+          label="Убрать эхо"
+          hint="Полезно без наушников."
+          checked={settings.echoCancellation}
+          disabled={applying}
+          testId="audio-echo-cancellation"
+          onChange={(echoCancellation) => void changeProcessingToggle("echoCancellation", echoCancellation)}
+        />
+        <SwitchRow
+          label="Выравнивать голос"
+          hint="Автоматически держит уровень."
+          checked={settings.autoGainControl}
+          disabled={applying}
+          testId="audio-auto-gain"
+          onChange={(autoGainControl) => void changeProcessingToggle("autoGainControl", autoGainControl)}
+        />
+        <AudioNote>{AUDIO_PROCESSING_HINT}</AudioNote>
+        {processingNotice && <AudioNote>{processingNotice}</AudioNote>}
+      </AudioGroup>
 
-        <div className="rounded-xl px-3 py-3 bg-[var(--kub-bg)] border border-[color:var(--kub-border-color)]">
-          <SectionHeader
-            title="Проверка и обработка"
-            description="Запустите проверку, чтобы увидеть уровень микрофона и сразу услышать изменения."
-          />
-          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <KubButton size="sm" variant={testing ? "secondary" : "primary"} onClick={startMicTest}>
-              {testing ? "Остановить" : "Проверка микрофона"}
-            </KubButton>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--kub-surface-3)]">
-              <div
-                className="h-full rounded-full bg-[var(--kub-cyan)] transition-[width]"
-                style={{ width: `${Math.round(level * 100)}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="mt-3 rounded-lg px-3 py-2 kub-raise">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <span className="min-w-0 text-xs font-semibold text-[color:var(--kub-text)]">Как звучит голос</span>
-              <span className="shrink-0 text-[12px] text-[color:var(--kub-muted)]">
-                {processingModeLabel(settings.processingMode)}
-              </span>
-            </div>
-            <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
-              <ModeButton
-                active={settings.processingMode === "clean"}
-                label="Чистый голос"
-                onClick={() => void changeProcessingMode("clean")}
-              />
-              <ModeButton
-                active={settings.processingMode === "raw"}
-                label="Без обработки"
-                onClick={() => void changeProcessingMode("raw")}
-              />
-              <ModeButton
-                active={settings.processingMode === "custom"}
-                label="Вручную"
-                disabled
-                onClick={() => undefined}
-              />
-            </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              <ToggleRow
-                label="Убрать шум"
-                description="Снижает шум вентиляторов и комнаты."
-                checked={settings.noiseSuppression}
-                disabled={applying}
-                onChange={(noiseSuppression) => void changeProcessingToggle("noiseSuppression", noiseSuppression)}
-              />
-              <ToggleRow
-                label="Убрать эхо"
-                description="Полезно без наушников."
-                checked={settings.echoCancellation}
-                disabled={applying}
-                onChange={(echoCancellation) => void changeProcessingToggle("echoCancellation", echoCancellation)}
-              />
-              <ToggleRow
-                label="Выравнивать голос"
-                description="Автоматически держит уровень."
-                checked={settings.autoGainControl}
-                disabled={applying}
-                onChange={(autoGainControl) => void changeProcessingToggle("autoGainControl", autoGainControl)}
-              />
-            </div>
-            <p className="mt-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
-              Если слышите эхо, используйте наушники. Если голос звучит с артефактами, попробуйте режим «Без обработки».
-            </p>
-          </div>
-
-          <label className="mt-3 flex min-w-0 items-start gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
-            <input
-              type="checkbox"
-              checked={selfMonitoring}
-              disabled={!testing}
-              onChange={() => void toggleSelfMonitoring()}
-              className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--kub-cyan)] disabled:opacity-50"
-            />
-            <span className="min-w-0 flex-1">
-              <span className="block text-xs font-semibold text-[color:var(--kub-text)]">Слышать свой микрофон</span>
-              <span className="mt-0.5 block text-xs leading-relaxed text-[color:var(--kub-muted)]">
-                {selfMonitoring
-                  ? "Идёт только в выбранные наушники/динамики. Используйте наушники, чтобы избежать эха."
-                  : "Доступно во время проверки микрофона."}
-              </span>
-            </span>
-          </label>
-
-          {selfMonitoring && !deviceSetsVolume && (
-            <SliderRow
-              label="Громкость прослушивания"
-              value={settings.monitorGain}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(monitorGain) => updateSettings({ monitorGain })}
-            />
-          )}
-
-          {applying && (
-            <div className="mt-2 text-xs text-[color:var(--kub-muted)]">
-              Применяем настройки…
-            </div>
-          )}
-          {deviceNotice && (
-            <div className="mt-2 text-xs text-[color:var(--kub-muted)]">
-              {deviceNotice}
-            </div>
-          )}
-          {processingNotice && (
-            <div className="mt-2 text-xs text-[color:var(--kub-muted)]">
-              {processingNotice}
-            </div>
-          )}
-          {error && (
-            <div className="mt-2 text-xs text-[color:var(--kub-danger-text)]">
-              {error}
-            </div>
-          )}
-          {monitorError && (
-            <div className="mt-2 text-xs text-[color:var(--kub-danger-text)]">
-              {monitorError}
-            </div>
-          )}
-        </div>
-
+      <div className="overflow-hidden rounded-xl kub-raise">
         <button
           type="button"
+          data-testid="audio-reset"
           onClick={() => void resetAudioSettings()}
-          // D-047: 162x16 before this, the smallest target on the screen.
-          className="kub-button inline-flex items-center text-xs font-semibold text-[color:var(--kub-accent-text)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
+          className={cn(
+            // D-047 said this was 162x16, the smallest target on the screen,
+            // and answered it with `kub-button`. It is a row now, like every
+            // other action on this screen, so the 44px is `min-h-11` and holds
+            // on a pointer as well as on a finger.
+            "kub-button grid w-full min-w-0 grid-cols-[1.125rem_minmax(0,1fr)] items-center gap-3 px-3 py-2 min-h-11 text-left kub-interactive transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] kub-raise-hover",
+            FOCUS_RING,
+            PRESS_SINK,
+          )}
         >
-          Сбросить настройки звука
+          <KubIcon name="rotate" size={16} className="text-[color:var(--kub-muted)]" />
+          <span className="min-w-0 text-sm text-[color:var(--kub-text)]">{AUDIO_RESET_LABEL}</span>
         </button>
       </div>
     </div>
@@ -641,94 +639,154 @@ function debugMicTrack(stream: MediaStream) {
   });
 }
 
-function ModeButton({
-  active,
-  label,
-  disabled = false,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
+/**
+ * A caption and a list of rows, which is the one object the settings screen is
+ * made of — `SettingsGroup` draws the four groups outside this panel exactly
+ * like this, and nothing on the screen is drawn any other way.
+ *
+ * No perimeter: the step of material is what separates it from the panel it
+ * sits on (rule 11 of the material contract). The three boxes that stood here
+ * before were filled from the page-ground token and outlined — the page's own
+ * ground,
+ * painted inside a panel, which is why the section read as a hole rather than
+ * as part of the screen.
+ */
+function AudioGroup({ caption, children }: { caption: string; children: ReactNode }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
+    <section data-audio-group={caption}>
+      <h4 className="mb-1.5 px-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-[color:var(--kub-muted)]">
+        {caption}
+      </h4>
+      <div className="overflow-hidden rounded-xl divide-y divide-[color:var(--kub-rule)] kub-raise">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+/** A sentence that belongs to the group above it, drawn as one of its rows. */
+function AudioNote({ children, tone = "muted" }: { children: ReactNode; tone?: "muted" | "danger" }) {
+  return (
+    <p
       className={cn(
-        // D-047: 288x36 before this.
-        // `h-9` rather than `min-h-9`: index.css now lives in @layer
-        // components, so a `min-h-*` utility outranks `.kub-button`'s own
-        // min-height and the touch minimum never reached this control.
-        // Measured: with `min-h-9` the coarse box stayed 36px.
-        "kub-button h-9 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors disabled:cursor-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
-        active
-          ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
-          // Периметр остаётся: это сегмент переключателя, то есть мишень, а не
-          // коробка, на которую смотрят. И ступень тут уже занята наведением —
-          // положить такую же на покое значит уравнять их, и наведение
-          // перестанет существовать, ровно как измеренные 1.002 в правиле 5
-          // контракта материала.
-          : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] kub-raise-hover",
+        "px-3 py-2 text-xs leading-snug",
+        tone === "danger" ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-muted)]",
       )}
     >
-      {label}
-    </button>
+      {children}
+    </p>
   );
 }
 
-function SectionHeader({ title, description }: { title: string; description: string }) {
-  return (
-    <div>
-      <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-accent-text)]">
-        {title}
-      </div>
-      <p className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">
-        {description}
-      </p>
-    </div>
-  );
-}
-
-function DeviceSelect({
+/**
+ * A device choice: the caption, then the select under it at the row's full
+ * width — the shape `ChannelManageModal` gives every select it draws.
+ *
+ * Two things were measured before settling on it, both at 1440, where the
+ * settings screen is a **296px** row inside a ~350px column:
+ *
+ *  - The two selects used to sit side by side under a two-column grid keyed on
+ *    the sm breakpoint. That
+ *    breakpoint answers a question about the window when the question is about
+ *    the column, so at 1440 each select was ~130px and both device names came
+ *    out as «Системный м…».
+ *  - One select beside its caption does not fit either: the caption column and
+ *    the gap take 116, leaving 156, and «Системный микрофон» needs 133 of text
+ *    plus 16 of padding and ~20 for the browser's own arrow. It clipped into
+ *    the arrow. A caption sized to its own text leaves 11px of slack with Inter
+ *    loaded and none without it.
+ *
+ * Under the caption the select gets 272px at 1440 and more everywhere else, so
+ * the layout is the same at every width and nothing depends on a font being
+ * present.
+ */
+function DeviceRow({
   label,
   value,
-  defaultLabel,
-  devices,
+  options,
   disabled,
-  note,
   onChange,
 }: {
   label: string;
   value: string;
-  defaultLabel: string;
-  devices: AudioDeviceOption[];
+  options: readonly AudioDeviceChoice[];
   disabled?: boolean;
-  note?: string | null;
   onChange: (deviceId: string) => void;
 }) {
   return (
-    <label className="block min-w-0 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] px-3 py-2">
-      <span className="mb-1 block text-xs font-semibold text-[color:var(--kub-text)]">{label}</span>
+    <label className="block min-w-0 px-3 py-2">
+      <span className="mb-1 block min-w-0 text-sm text-[color:var(--kub-text)]">{label}</span>
       <select
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        className="h-9 w-full min-w-0 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 text-xs text-[color:var(--kub-text)] outline-none disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
+        className={cn(
+          "kub-field h-9 w-full min-w-0 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 text-xs text-[color:var(--kub-text)] outline-none",
+          FOCUS_RING,
+          DISABLED_SINK,
+        )}
       >
-        <option value={DEFAULT_AUDIO_DEVICE_ID}>{defaultLabel}</option>
-        {devices
-          .filter((device) => device.deviceId !== DEFAULT_AUDIO_DEVICE_ID)
-          .map((device) => (
-            <option key={`${device.kind}:${device.deviceId}`} value={device.deviceId}>
-              {device.label}
-            </option>
-          ))}
+        {options.map((option) => (
+          <option key={option.deviceId} value={option.deviceId}>
+            {option.label}
+          </option>
+        ))}
       </select>
-      {note && <span className="mt-1 block text-[12px] leading-relaxed text-[color:var(--kub-muted)]">{note}</span>}
     </label>
+  );
+}
+
+/**
+ * One segment of the processing picker.
+ *
+ * `custom` is the state the three switches below put the settings into, not a
+ * choice — so it never takes a press, and it is drawn filled while it is the
+ * state and sunk while it is not. The sink is written out rather than taken
+ * from `DISABLED_SINK` precisely because it must not apply when the segment is
+ * both disabled and current: a `disabled:` variant outranks the plain fill
+ * beside it, and the accent would never reach a pixel.
+ */
+function ModeSegment({
+  segment,
+  active,
+  busy,
+  onSelect,
+}: {
+  segment: AudioModeSegment;
+  active: boolean;
+  busy: boolean;
+  onSelect?: () => void;
+}) {
+  const selectable = Boolean(onSelect);
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      disabled={!selectable || busy}
+      data-audio-mode={segment.mode}
+      onClick={onSelect}
+      className={cn(
+        // `min-h-11`, not `h-9`. Measured at 1440, where the settings column is
+        // 296px wide: a segment gets 87px and «Без обработки» needs 98.9, so the
+        // label wraps — and a fixed `h-9` clipped the second line off the bottom
+        // of the pill. A minimum lets it grow instead. 11 is 44px, exactly what
+        // `.kub-button` asks of a coarse pointer, so the `min-h-*` that outranks
+        // that class here agrees with it rather than defeating it (which is the
+        // trap `touch-target-system.test.mjs` guards, and why it allows >= 11).
+        "kub-button min-h-11 min-w-0 flex-1 rounded-md px-2 py-1.5 text-[12px] font-semibold leading-tight transition-colors",
+        FOCUS_RING,
+        active
+          ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
+          : selectable
+          ? "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
+          : "bg-[var(--kub-inset)] bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] text-[color:var(--kub-muted)] cursor-not-allowed",
+        selectable && PRESS_SINK,
+        selectable && !active && DISABLED_SINK,
+      )}
+    >
+      {segment.label}
+    </button>
   );
 }
 
@@ -748,11 +806,11 @@ function SliderRow({
   onChange: (value: number) => void;
 }) {
   return (
-    <label className="block">
-      <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-        <span className="font-semibold text-[color:var(--kub-text)]">{label}</span>
-        <span className="tabular-nums text-[color:var(--kub-muted)]">{formatAudioPercent(value)}</span>
-      </div>
+    <label className="block min-w-0 px-3 py-2">
+      <span className="mb-1 flex items-center justify-between gap-3 text-sm">
+        <span className="min-w-0 text-[color:var(--kub-text)]">{label}</span>
+        <span className="shrink-0 tabular-nums text-xs text-[color:var(--kub-muted)]">{formatAudioPercent(value)}</span>
+      </span>
       <input
         type="range"
         min={min}
@@ -769,42 +827,50 @@ function SliderRow({
   );
 }
 
-function ToggleRow({
+/**
+ * An on/off row.
+ *
+ * `KubSwitch` rather than a bare checkbox input: the product says
+ * on and off with a switch everywhere else, and the two checkboxes that stood
+ * here rendered as large accent squares that matched nothing on the screen.
+ * The switch is a `<button role="switch">`, which a `<label>` cannot be
+ * associated with, so the words reach it through `aria-label` and
+ * `aria-describedby` instead.
+ */
+function SwitchRow({
   label,
-  description,
+  hint,
   checked,
   disabled = false,
+  testId,
   onChange,
 }: {
   label: string;
-  description?: string;
+  hint?: string;
   checked: boolean;
   disabled?: boolean;
+  testId?: string;
   onChange: (checked: boolean) => void;
 }) {
+  const hintId = useId();
   return (
-    <label className="flex min-w-0 items-start gap-2 rounded-lg px-3 py-2 bg-[var(--kub-bg)] border border-[color:var(--kub-border-color)]">
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--kub-cyan)] disabled:opacity-60"
-      />
+    <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 min-h-11">
       <span className="min-w-0">
-        <span className="block text-xs font-semibold text-[color:var(--kub-text)]">{label}</span>
-        {description && (
-          <span className="mt-0.5 block text-[12px] leading-relaxed text-[color:var(--kub-muted)]">
-            {description}
+        <span className="block text-sm text-[color:var(--kub-text)]">{label}</span>
+        {hint && (
+          <span id={hintId} className="mt-0.5 block text-xs leading-snug text-[color:var(--kub-muted)]">
+            {hint}
           </span>
         )}
       </span>
-    </label>
+      <KubSwitch
+        aria-label={label}
+        aria-describedby={hint ? hintId : undefined}
+        checked={checked}
+        disabled={disabled}
+        data-testid={testId}
+        onCheckedChange={onChange}
+      />
+    </div>
   );
-}
-
-function processingModeLabel(mode: AudioProcessingMode): string {
-  if (mode === "clean") return "Чистый голос";
-  if (mode === "raw") return "Без обработки";
-  return "Настроено вручную";
 }

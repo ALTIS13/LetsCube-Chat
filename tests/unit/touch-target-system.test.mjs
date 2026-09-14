@@ -254,13 +254,24 @@ const OPTED_IN = [
   },
   {
     file: "artifacts/kub/src/components/sidebar/AudioSettingsSection.tsx",
+    // The three stacked pills became segments of one track on 2026-09-14, and
+    // the opt-in moved with them. `min-h-11` rather than the `h-9` that was
+    // here: measured at 1440, where the settings column gives a segment 87px
+    // and «Без обработки» needs 98.9, the label wraps and a fixed height
+    // clipped the second line. 11 is 44px, the same number `.kub-button` asks
+    // of a coarse pointer, so this `min-h-*` agrees with the class it outranks
+    // rather than defeating it — which is what the test below allows at >= 11.
     what: "the three processing modes, which were 288x36",
-    expect: [/"kub-button h-9 rounded-lg px-2 py-1\.5/],
+    expect: [/"kub-button min-h-11 min-w-0 flex-1 rounded-md px-2 py-1\.5/],
   },
   {
     file: "artifacts/kub/src/components/sidebar/AudioSettingsSection.tsx",
+    // It was a text link and is a row now, so the 44px is the row's own
+    // `min-h-11` and holds on a pointer as well as on a finger — a stronger
+    // answer to D-047 than the coarse-pointer bargain it used to rely on. The
+    // class stays beside it so this file keeps one language for "a target".
     what: "the audio reset, which was 162x16 — the smallest target on the screen",
-    expect: [/className="kub-button inline-flex items-center text-xs font-semibold/],
+    expect: [/"kub-button grid w-full min-w-0 grid-cols-\[1\.125rem_minmax\(0,1fr\)\] items-center gap-3 px-3 py-2 min-h-11/],
   },
   {
     file: "artifacts/kub/src/components/sidebar/AudioSettingsSection.tsx",
