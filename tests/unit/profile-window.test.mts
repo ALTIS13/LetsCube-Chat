@@ -561,7 +561,14 @@ test("every action and confirmation the card carried is still on it", () => {
     // The one «Общие медиа» entry became a row per kind; the family is checked
     // in its own test below, and reaching the media at all is checked here.
     ["общие медиа", /onClick=\{\(\) => openMediaSection\(section\.kind\)\}[\s\S]{0,600}?section\.countedLabel/],
-    ["уведомления", /onClick=\{\(\) => toggleMutedChat\(chat\.id\)\}[\s\S]{0,600}?Включить уведомления/],
+    // D-167: the row is no longer a toggle over `localStorage`, so its words
+    // are no longer written here. It draws what `chatMuteMenuEntries` decides —
+    // one row at rest carrying what the account holds, five once it is opened
+    // into the durations — and the words themselves are pinned in
+    // `tests/unit/chat-mute.test.mts`. What is pinned here is still the
+    // binding: the row the person presses is wired to the handler that writes,
+    // the same way «Покинуть группу» is pinned below.
+    ["уведомления", /chatMuteMenuEntries\(muteState, muteChoiceOpen, Date\.now\(\)\)\.map[\s\S]{0,900}?applyMute\(entry\.id === "unmute" \? "off" : entry\.id\)/],
     ["Закрепить чат", /onClick=\{handlePinToggle\}[\s\S]{0,400}?Открепить чат[\s\S]{0,40}?Закрепить чат/],
     ["Очистить историю у себя", /onClick=\{handleClearForMe\}[\s\S]{0,500}?Очистить историю у себя/],
     ["Удалить чат у себя", /onClick=\{handleHidePrivateChat\}[\s\S]{0,400}?Удалить чат у себя/],

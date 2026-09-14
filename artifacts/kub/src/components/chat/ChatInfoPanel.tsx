@@ -109,6 +109,12 @@ import {
 } from "@/lib/personalModeration";
 import { usePersonalBlocks } from "@/hooks/usePersonalModeration";
 import { requestContentReport } from "./ReportDialog";
+import { useChatMute } from "@/hooks/useChatMute";
+import {
+  chatMuteChoiceTitle,
+  chatMuteMenuEntries,
+  type ChatMuteOptionId,
+} from "@/lib/chatMute";
 
 /**
  * The voice channel, handed down rather than read here.
@@ -228,7 +234,7 @@ const MEDIA_SECTION_ICONS: Record<MessageMediaKind, KubIconName> = {
 };
 
 export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPanelProps) {
-  const { currentUser, setSelectedChatId, chats, setChats, setMessages, mutedChatIds, toggleMutedChat } = useAppStore();
+  const { currentUser, setSelectedChatId, chats, setChats, setMessages } = useAppStore();
   const supabase = createClient();
   // The identity, not the object. The store hands back a fresh `currentUser`
   // whenever anything on the profile changes, and the media loaders are keyed
@@ -248,8 +254,12 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
       | "owner" | "admin" | "member" | undefined) ?? null;
   const canHidePrivateChat = chat.type === "private" && !isSaved;
   const isPinned = Boolean(chat.is_pinned);
-  const isMuted = mutedChatIds.includes(chat.id);
+  // D-167: what the account holds, read from `chat_notification_preferences`,
+  // rather than what this browser once wrote to `ng_muted`.
+  const { state: muteState, setMute } = useChatMute(chat.id);
 
+  /** Whether the notifications row has opened into its durations. */
+  const [muteChoiceOpen, setMuteChoiceOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("info");
   const [view, setView] = useState<CardView>("root");
   const [mediaSection, setMediaSection] = useState<MessageMediaKind | null>(null);
@@ -1356,6 +1366,25 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
     );
   };
 
+  /**
+   * D-167: the write, and what is said about it either way.
+   *
+   * The bare `catch {}` this replaces is why a mute that never reached the
+   * account looked exactly like one that did. The store puts the previous row
+   * back when the write is refused, so the row above cannot keep claiming a
+   * mute nobody holds, and the sentence here says what happened.
+   */
+  const applyMute = async (option: ChatMuteOptionId | "off") => {
+    const at = Date.now();
+    setMuteChoiceOpen(false);
+    const result = await setMute(option);
+    showActionFeedback(
+      result.ok
+        ? { kind: "success", title: chatMuteChoiceTitle(option, at), key: `chat-mute:${chat.id}` }
+        : { kind: "error", title: result.error ?? "", key: `chat-mute:${chat.id}` },
+    );
+  };
+
   // Фото, видео, GIF, файлы, ссылки, голосовые, видеосообщения, аудио — from
   // the server's totals where there are any, and from the loaded rows where
   // there are not. A section holding nothing is never built, so the card only
@@ -1769,23 +1798,61 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
               </div>
             )}
             <div className="px-4 py-3 space-y-1">
-              <button
-                onClick={() => toggleMutedChat(chat.id)}
-                className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
-              >
-                <KubIcon name={isMuted ? "notificationsOff" : "notifications"} size={17} tone={isMuted ? "accent" : "muted"} className="shrink-0" />
-                <span className="min-w-0 flex-1 truncate">
-                  {isMuted ? "Включить уведомления" : "Отключить уведомления"}
-                </span>
-              </button>
-              {isGroup && canSendInvites && (
+              {/* D-167. One row at rest, carrying what the account actually
+                  holds on its right — «Включены», «Отключены до 21:00»,
+                  «Отключены навсегда» — and opening into the durations in
+                  place, which is how every other choice on this card behaves.
+                  No perimeter and no fill of its own: the rows are separated by
+                  the material, which is rule 11. */}
+              {chatMuteMenuEntries(muteState, muteChoiceOpen, Date.now()).map((entry) => (
                 <button
-                  onClick={() => setInviteOpen(true)}
+                  key={entry.id}
+                  onClick={() => {
+                    if (entry.id === "back") return setMuteChoiceOpen(false);
+                    if (entry.id === "mute") return setMuteChoiceOpen(true);
+                    void applyMute(entry.id === "unmute" ? "off" : entry.id);
+                  }}
+                  data-chat-mute-row={entry.id}
                   className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
                 >
-                  <KubIcon name="userPlus" size={17} tone="muted" className="shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">Пригласить пользователя</span>
+                  <KubIcon
+                    name={entry.id === "back" ? "chevronLeft" : entry.id === "unmute" ? "notificationsOff" : entry.id === "mute" ? "notifications" : "clock"}
+                    size={17}
+                    tone={entry.id === "unmute" ? "accent" : "muted"}
+                    className="shrink-0"
+                  />
+                  {/* Two lines, not a value on the right. The card is a 380px
+                      column and «Отключены до завтра, 0:45» beside a label left
+                      «Включить уведом…» cut mid-word — photographed at 1440 and
+                      390 before this was changed. It is also the shape the chat
+                      header's menu and the list's menu already use, so the three
+                      surfaces draw one thing. */}
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="min-w-0 truncate">{entry.label}</span>
+                    {entry.detail ? (
+                      <span className="min-w-0 truncate text-xs text-[color:var(--kub-muted)]" data-chat-mute-detail="true">
+                        {entry.detail}
+                      </span>
+                    ) : null}
+                  </span>
                 </button>
+              ))}
+              {isGroup && canSendInvites && (
+                // Divided from the durations while the choice is open, and not
+                // otherwise. Photographed at 1440 and 390 before this line
+                // existed: «Навсегда» and «Пригласить пользователя» stood in one
+                // undivided run, so the invitation read as a fifth way to mute
+                // the chat. The rule is `--kub-rule`, the card's own divider,
+                // not a perimeter — the choice is closed off, not boxed in.
+                <div className={muteChoiceOpen ? "mt-1 border-t border-[color:var(--kub-rule)] pt-1" : undefined}>
+                  <button
+                    onClick={() => setInviteOpen(true)}
+                    className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
+                  >
+                    <KubIcon name="userPlus" size={17} tone="muted" className="shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">Пригласить пользователя</span>
+                  </button>
+                </div>
               )}
             </div>
             {/* Who is in the group's voice room, and a way in.

@@ -39,6 +39,13 @@ interface ChatListItemProps {
   /** Notifications are off for this chat. Falls back to `chat.is_muted`. */
   isMuted?: boolean;
   /**
+   * What the row's crossed-out bell means in words — «до 21:00», «навсегда»
+   * (D-167). A glyph has no room for a sentence, so it carries one as its label
+   * instead; the menus and the contact card print it. A plain string, so the
+   * memo comparison below still holds while the chat is unchanged.
+   */
+  muteLabel?: string | null;
+  /**
    * The other person in a private chat is online. The list works this out from
    * one clock for every row, so a tick of that clock renders only the rows whose
    * answer changed. Falls back to `presenceNow`.
@@ -63,6 +70,7 @@ export const ChatListItem = memo(function ChatListItem({
   chat,
   isSelected,
   isMuted: isMutedProp,
+  muteLabel,
   isOtherOnline: isOtherOnlineProp,
   onClick,
   onContextMenuOpen,
@@ -100,6 +108,7 @@ export const ChatListItem = memo(function ChatListItem({
   const showGroupReadIndicator = Boolean(groupReadInfo && groupReadInfo.readCount > 0);
   const hasUnread = (chat.unread_count ?? 0) > 0;
   const isMuted = isMutedProp ?? chat.is_muted;
+  const muteTitle = muteLabel ? `Уведомления отключены ${muteLabel}` : "Уведомления отключены";
   const isPinned = chat.is_pinned;
   // The row is what a person drags, so the row is what has to say so. Named
   // per chat because every pinned row carries its own copy.
@@ -331,7 +340,7 @@ export const ChatListItem = memo(function ChatListItem({
               <KubIcon name="pin" size={11} className="text-[color:var(--kub-muted)]" />
             )}
             {isMuted && (
-              <span title="Уведомления отключены" aria-label="Уведомления отключены" className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[color:var(--kub-muted)]">
+              <span title={muteTitle} aria-label={muteTitle} className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[color:var(--kub-muted)]">
                 <KubIcon name="notificationsOff" size={15} />
               </span>
             )}

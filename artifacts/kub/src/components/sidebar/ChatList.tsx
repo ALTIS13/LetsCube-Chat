@@ -16,6 +16,16 @@ import { readSafeAreaInsets } from "@/lib/safeArea";
 import { isUserOnline } from "@/lib/presence";
 import { usePresenceNow } from "@/hooks/usePresenceNow";
 import { useAvatarVariantUrls } from "@/hooks/useMediaVariants";
+import { useChatMutes } from "@/hooks/useChatMute";
+import { showActionFeedback } from "@/lib/actionFeedback";
+import {
+  chatMuteChoiceTitle,
+  chatMuteDetail,
+  chatMuteFor,
+  chatMuteMenuEntries,
+  chatMuteState,
+  type ChatMuteOptionId,
+} from "@/lib/chatMute";
 import type { ChatWithLastMessage } from "@/types/database";
 
 interface ChatListProps {
@@ -37,6 +47,10 @@ type ChatMenuState =
 interface ChatAction {
   id: string;
   label: string;
+  /** A second line — when a timed mute ends. Null on every other row. */
+  detail?: string | null;
+  /** Stays open after the press: the row opened a step, it did not finish. */
+  keepOpen?: boolean;
   icon: KubIconName;
   danger?: boolean;
   disabled?: boolean;
@@ -53,9 +67,15 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
   const setChats = useAppStore((s) => s.setChats);
   const setMessages = useAppStore((s) => s.setMessages);
   const setSelectedChatId = useAppStore((s) => s.setSelectedChatId);
-  const toggleMutedChat = useAppStore((s) => s.toggleMutedChat);
+  const setChatMute = useAppStore((s) => s.setChatMute);
+  // D-167. The list is the surface that is always mounted, so this is where the
+  // account's rows are read and kept current; the header and the card read the
+  // same snapshot through the same shared load.
+  const chatMutes = useChatMutes();
   const requestChatPanel = useAppStore((s) => s.requestChatPanel);
   const [openMenu, setOpenMenu] = useState<ChatMenuState | null>(null);
+  /** Whether the open menu has stepped into the durations. */
+  const [muteChoiceOpen, setMuteChoiceOpen] = useState(false);
   const [busyActionId, setBusyActionId] = useState<string | null>(null);
   const [draggedPinnedChatId, setDraggedPinnedChatId] = useState<string | null>(null);
 
@@ -105,6 +125,16 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
   // every render of the list, which is what made every row render for a change
   // to any one of them (D-088).
   const mutedSet = useMemo(() => new Set(mutedChatIds), [mutedChatIds]);
+  // What each crossed-out bell means, in words. Built per muted chat rather than
+  // per row, so an unmuted row is handed `null` and compares equal as before.
+  const muteLabels = useMemo(() => {
+    const at = Date.now();
+    const labels: Record<string, string | null> = {};
+    for (const chatId of mutedChatIds) {
+      labels[chatId] = chatMuteDetail(chatMuteState(chatMuteFor(chatMutes, chatId), at), at);
+    }
+    return labels;
+  }, [chatMutes, mutedChatIds]);
   const avatarProfileIds = useMemo(() => {
     const ids = new Set<string>();
     for (const chat of chats) {
@@ -116,9 +146,16 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
   }, [chats]);
   const avatarVariants = useAvatarVariantUrls(avatarProfileIds);
 
-  const closeMenu = useCallback(() => setOpenMenu(null), []);
+  // The durations close with the menu they were opened from, and a menu opened
+  // on another row starts at its first step rather than halfway through the
+  // previous row's choice.
+  const closeMenu = useCallback(() => {
+    setOpenMenu(null);
+    setMuteChoiceOpen(false);
+  }, []);
 
   const openDesktopMenu = useCallback((chatId: string, position: { x: number; y: number }) => {
+    setMuteChoiceOpen(false);
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     // Read where the pointer opened it: on an iPad, or an iPhone held
@@ -141,8 +178,28 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
   }, []);
 
   const openMobileSheet = useCallback((chatId: string) => {
+    setMuteChoiceOpen(false);
     setOpenMenu({ chatId, mode: "sheet" });
   }, []);
+
+  /**
+   * D-167: writes the choice and says what the account now holds.
+   *
+   * The confirmation names the end, because the row this was pressed from shows
+   * a glyph and a glyph cannot say «до завтра, 9:00». A refusal says so instead,
+   * and the store has already put the previous row back, so the list cannot go
+   * on drawing a bell that is crossed out over a chat that is still delivering.
+   */
+  const applyMute = useCallback(async (chatId: string, option: ChatMuteOptionId | "off") => {
+    const at = Date.now();
+    setMuteChoiceOpen(false);
+    const result = await setChatMute(chatId, option);
+    showActionFeedback(
+      result.ok
+        ? { kind: "success", title: chatMuteChoiceTitle(option, at), key: `chat-mute:${chatId}` }
+        : { kind: "error", title: result.error ?? "", key: `chat-mute:${chatId}` },
+    );
+  }, [setChatMute]);
 
   const updateChatList = useCallback((updater: (current: ChatWithLastMessage[]) => ChatWithLastMessage[]) => {
     const next = sortChatsForSidebar(updater(useAppStore.getState().chats), currentUser?.id ?? null);
@@ -256,8 +313,28 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
         | "member"
         | undefined) ?? null;
     const isPinned = Boolean(chat.is_pinned);
-    const isMuted = mutedChatIds.includes(chat.id);
     const groupLabel = chat.type === "channel" ? "канал" : "группу";
+
+    // D-167. One row at rest, five once it has been opened — the same entries
+    // the chat header and the contact card draw, from the one decision in
+    // `lib/chatMute.ts`. While the durations are open they are the whole menu:
+    // a list that kept «Удалить чат у себя» beside «На 1 час» would be two
+    // questions at once.
+    const at = Date.now();
+    const muteState = chatMuteState(chatMuteFor(chatMutes, chat.id), at);
+    const muteActions: ChatAction[] = chatMuteMenuEntries(muteState, muteChoiceOpen, at).map((entry) => ({
+      id: `mute-${entry.id}`,
+      icon: (entry.id === "back" ? "chevronLeft" : entry.id === "unmute" ? "notificationsOff" : entry.id === "mute" ? "notifications" : "clock") as KubIconName,
+      label: entry.label,
+      detail: entry.detail,
+      keepOpen: entry.id === "back" || entry.id === "mute",
+      run: () => {
+        if (entry.id === "back") return setMuteChoiceOpen(false);
+        if (entry.id === "mute") return setMuteChoiceOpen(true);
+        return applyMute(chat.id, entry.id === "unmute" ? "off" : entry.id);
+      },
+    }));
+    if (muteChoiceOpen) return muteActions;
     const pinnedIndex = orderedPinnedChatIds.indexOf(chat.id);
 
     const selectChat = () => onChatSelect(chat.id);
@@ -353,12 +430,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
       }
     }
 
-    actions.push({
-      id: "mute",
-      icon: isMuted ? "notificationsOff" : "notifications",
-      label: isMuted ? "Включить уведомления" : "Отключить уведомления",
-      run: () => toggleMutedChat(chat.id),
-    });
+    for (const action of muteActions) actions.push(action);
 
     actions.push({
       id: "clear",
@@ -479,16 +551,17 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
 
     return actions;
   }, [
+    applyMute,
+    chatMutes,
     clearChatLocally,
     currentUser?.id,
     movePinnedChat,
-    mutedChatIds,
+    muteChoiceOpen,
     onChatSelect,
     orderedPinnedChatIds,
     removeChatLocally,
     requestChatPanel,
     supabase,
-    toggleMutedChat,
     updateChatList,
   ]);
 
@@ -498,7 +571,9 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
   const runAction = async (action: ChatAction) => {
     if (action.disabled || busyActionId) return;
     setBusyActionId(action.id);
-    setOpenMenu(null);
+    // A row that opened a step keeps the menu; every other row finished
+    // something and the menu has nothing left to say.
+    if (!action.keepOpen) setOpenMenu(null);
     try {
       await action.run();
     } finally {
@@ -535,6 +610,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
             chat={chat}
             isSelected={selectedChatId === chat.id}
             isMuted={mutedSet.has(chat.id)}
+            muteLabel={muteLabels[chat.id] ?? null}
             isOtherOnline={chat.type === "private" && isUserOnline(chat.other_user, presenceNow)}
             onClick={onChatSelect}
             onContextMenuOpen={openDesktopMenu}
@@ -723,7 +799,16 @@ function ChatActionButton({
         tone={action.danger ? "currentColor" : "muted"}
         className={cn("shrink-0", busy && "animate-spin")}
       />
-      <span className="min-w-0 flex-1 truncate">{busy ? "Выполняем..." : action.label}</span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="min-w-0 truncate">{busy ? "Выполняем..." : action.label}</span>
+        {/* When a timed mute ends, on the row that would otherwise say only
+            «Включить уведомления». */}
+        {action.detail && !busy ? (
+          <span className="min-w-0 truncate text-xs text-[color:var(--kub-muted)]" data-chat-mute-detail="true">
+            {action.detail}
+          </span>
+        ) : null}
+      </span>
     </button>
   );
 }

@@ -7,6 +7,28 @@ import { sameData, shareById } from '@/lib/structuralSharing'
 import type { Profile, ChatWithLastMessage, MessageWithSender } from '@/types/database'
 import { sameActorClientMessage } from '@/lib/messageActor'
 import { isHeartbeatOnlyProfileChange } from '@/lib/profileChange'
+import {
+  CHAT_MUTE_CACHE_KEY,
+  CHAT_MUTE_OFF,
+  EMPTY_CHAT_MUTES,
+  MUTE_SIGNED_OUT,
+  applyCachedMutes,
+  applyLocalMute,
+  applyMutesError,
+  applyServerMutes,
+  chatMuteFor,
+  chatMutePreferenceFor,
+  chatMutesForUser,
+  mutedChatIdsAt,
+  muteRefusalText,
+  readCachedMutes,
+  serializeCachedMutes,
+  type ChatMuteOptionId,
+  type ChatMutePreference,
+  type ChatMutePreferenceRow,
+  type ChatMuteSnapshot,
+} from '@/lib/chatMute'
+import { mapPgError } from '@/lib/errors'
 
 interface AppState {
   // Current user
@@ -90,9 +112,28 @@ interface AppState {
   messageDeleteRequest: { chatId: string; ids: string[] } | null
   setMessageDeleteRequest: (request: { chatId: string; ids: string[] } | null) => void
 
-  // Mute
+  // Mute — the account's rows in `chat_notification_preferences`, not a note in
+  // one browser (D-167). `mutedChatIds` is derived from them at an instant,
+  // because a timed mute stops being one with nothing happening.
+  chatMutes: ChatMuteSnapshot
   mutedChatIds: string[]
-  toggleMutedChat: (chatId: string) => void
+  /** Point the snapshot at a person; a different one empties it. */
+  syncChatMuteUser: (userId: string | null) => void
+  /** Show what this browser remembered — only until the account answers. */
+  applyCachedChatMutes: (userId: string | null, raw: string | null) => void
+  /** The account's own answer, which replaces whatever was on screen. */
+  applyServerChatMutes: (userId: string | null, rows: ChatMutePreferenceRow[] | null) => void
+  setChatMutesError: (userId: string | null, message: string) => void
+  /** Re-derive the ids — for the moment a timed mute lifts. */
+  refreshChatMutes: () => void
+  /**
+   * Write one chat's choice and say whether it landed. «off» lifts the mute.
+   *
+   * Resolves rather than returning void: the surfaces have to be able to show a
+   * refusal, and the screen must not keep claiming a mute the account does not
+   * have.
+   */
+  setChatMute: (chatId: string, option: ChatMuteOptionId | "off") => Promise<{ ok: boolean; error: string | null }>
 
   // Mark chat read (zero out unread_count in store)
   markChatRead: (chatId: string) => void
@@ -181,7 +222,7 @@ function latestTimestamp(a: string | null | undefined, b: string | null | undefi
   return bMs > aMs ? b : a;
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   currentUser: null,
   /**
    * Shallow-compare significant fields and DROP no-op writes.
@@ -358,19 +399,71 @@ export const useAppStore = create<AppState>((set) => ({
   setMessageDeleteRequest: (request) =>
     set({ messageDeleteRequest: request && request.ids.length ? request : null }),
 
-  mutedChatIds: typeof window !== 'undefined'
-    ? JSON.parse(localStorage.getItem('ng_muted') ?? '[]')
-    : [],
-  toggleMutedChat: (chatId) =>
+  // Nothing is read from storage here. The old seed was
+  // `localStorage.getItem('ng_muted')` — a bare array of chat ids with nobody's
+  // name on it, shown to whoever opened the browser next. The cache is applied
+  // through `applyCachedChatMutes`, which knows whose it is and stands aside as
+  // soon as the account answers.
+  chatMutes: EMPTY_CHAT_MUTES,
+  mutedChatIds: [],
+
+  syncChatMuteUser: (userId) =>
+    set((state) => commitChatMutes(state, chatMutesForUser(state.chatMutes, userId))),
+
+  applyCachedChatMutes: (userId, raw) =>
+    set((state) => commitChatMutes(state, applyCachedMutes(state.chatMutes, readCachedMutes(raw), userId))),
+
+  applyServerChatMutes: (userId, rows) =>
     set((state) => {
-      const wasMuted = state.mutedChatIds.includes(chatId);
-      const next = wasMuted
-        ? state.mutedChatIds.filter((id) => id !== chatId)
-        : [...state.mutedChatIds, chatId];
-      if (typeof window !== 'undefined') localStorage.setItem('ng_muted', JSON.stringify(next));
-      void persistChatPushPreference(state.currentUser?.id ?? null, chatId, !wasMuted);
-      return { mutedChatIds: next };
+      const next = applyServerMutes(state.chatMutes, userId, rows);
+      writeChatMuteCache(next);
+      return commitChatMutes(state, next);
     }),
+
+  setChatMutesError: (userId, message) =>
+    set((state) => commitChatMutes(state, applyMutesError(state.chatMutes, userId, message))),
+
+  refreshChatMutes: () => set((state) => commitChatMutes(state, state.chatMutes)),
+
+  setChatMute: async (chatId, option) => {
+    const userId = get().currentUser?.id ?? null;
+    if (!userId) return { ok: false, error: MUTE_SIGNED_OUT };
+    const muting = option !== 'off';
+    const pref: ChatMutePreference = muting ? chatMutePreferenceFor(option, Date.now()) : CHAT_MUTE_OFF;
+
+    // Optimistic, because the control that starts this is a menu item that
+    // closes behind the press — the same reason `personalBlocksStore` is. The
+    // row that was there is kept so a refusal can put it back: a screen that
+    // keeps a mute the account does not have is this defect in miniature.
+    const before = chatMuteFor(get().chatMutes, chatId);
+    set((state) => commitChatMutes(state, applyLocalMute(state.chatMutes, userId, chatId, pref)));
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from('chat_notification_preferences')
+        .upsert(
+          {
+            chat_id: chatId,
+            user_id: userId,
+            push_enabled: pref.pushEnabled,
+            muted_until: pref.mutedUntil,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'chat_id,user_id' },
+        );
+      if (error) throw error;
+      writeChatMuteCache(get().chatMutes);
+      return { ok: true, error: null };
+    } catch (error) {
+      // The cause goes to the log, where somebody who can act on it reads it;
+      // the screen gets one sentence about the situation. The bare `catch {}`
+      // this replaces is why a half-applied mute was invisible.
+      console.error('[chat-mute] upsert failed.', (error as { code?: string })?.code ?? '', (error as { message?: string })?.message ?? '');
+      set((state) => commitChatMutes(state, applyLocalMute(state.chatMutes, userId, chatId, before)));
+      return { ok: false, error: muteRefusalText(muting, mapPgError(error)) };
+    }
+  },
 
   // Opening a chat with nothing unread used to rebuild the whole list anyway,
   // which rendered every row of the sidebar on every chat switch.
@@ -413,24 +506,36 @@ export const useAppStore = create<AppState>((set) => ({
   closeSettings: () => set((state) => (state.settingsOpen ? { settingsOpen: false } : state)),
 }))
 
-async function persistChatPushPreference(userId: string | null, chatId: string, muted: boolean) {
-  if (!userId) return;
+/**
+ * Put a snapshot in, and re-derive the ids from it at this instant.
+ *
+ * The array is kept by identity when nothing in it changed: the sidebar renders
+ * a row per change of that identity, and the timer that exists to notice a
+ * lifted mute fires whether or not one lifted (D-088).
+ */
+function commitChatMutes(state: AppState, next: ChatMuteSnapshot): Partial<AppState> {
+  const ids = mutedChatIdsAt(next, Date.now());
+  const same =
+    ids.length === state.mutedChatIds.length && ids.every((id, index) => id === state.mutedChatIds[index]);
+  if (same && next === state.chatMutes) return state;
+  return { chatMutes: next, mutedChatIds: same ? state.mutedChatIds : ids };
+}
+
+/**
+ * Remember the account's answer so the next cold start is not blank.
+ *
+ * Written under the account's own id, which is the whole difference from
+ * `ng_muted`: a cache that cannot say whose it is has to be shown to everybody
+ * or to nobody, and it was shown to everybody.
+ */
+function writeChatMuteCache(state: ChatMuteSnapshot): void {
+  if (typeof window === 'undefined') return;
   try {
-    const supabase = createClient();
-    await supabase
-      .from("chat_notification_preferences")
-      .upsert(
-        {
-          chat_id: chatId,
-          user_id: userId,
-          push_enabled: !muted,
-          muted_until: null,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "chat_id,user_id" },
-      );
+    const serialized = serializeCachedMutes(state);
+    if (serialized === null) localStorage.removeItem(CHAT_MUTE_CACHE_KEY);
+    else localStorage.setItem(CHAT_MUTE_CACHE_KEY, serialized);
   } catch {
-    // Local mute remains effective for the current device. DB-backed push mute
-    // starts working as soon as the push preference migration is applied.
+    // A browser refusing storage is not a reason to fail a mute; the account
+    // has the row and the next read brings it back.
   }
 }

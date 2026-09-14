@@ -9256,7 +9256,7 @@ owner's approval and a backup, per section 10 of the handoff.
 
 ---
 
-## D-167 `[ ]` Muting a chat is all-or-nothing and kept in the browser, while the table for it exists
+## D-167 `[x]` Muting a chat is all-or-nothing and kept in the browser, while the table for it exists
 
 **Severity: medium.**
 
@@ -10861,3 +10861,104 @@ restoring `ready: voice.ready`, not drawing the sentence, wording it as «Кан
 нет», and — the one that needed an end-to-end test because no unit reaches a
 React hook — `const failed = false` in the hook itself. The spec's fixture
 answers the rooms read with a 500 for that one.
+
+---
+
+## D-194 `[ ]` Escape does not close the conversation in a one-pane window
+
+**Severity:** low for a phone, which has no Escape key and a back control in the
+header; real for a desktop window narrowed below `md`, where the same one-pane
+shell is what a person gets and the keyboard is the only pointerless way out.
+
+**Reproduction:** `tests/e2e/chat-list-event-cost.spec.ts` at
+`chromium-mobile-390`, the test at `:243`. Its `leaveChat` helper blurs the
+active element, presses Escape and asserts the composer dock is gone. It fails —
+and passes at `chromium-desktop-1440` with the same code. Two of that spec's
+tests are red on 390 for this one reason, and were red before the day's work:
+proved by swapping the changed files for their `HEAD` versions and re-running.
+
+**Surface:** `artifacts/kub/src/components/layout/MainLayout.tsx:40-65` — one
+`keydown` listener on `window`, not width-gated:
+
+```ts
+if (event.key === "Escape" && !isEditable && !hasBlockingOverlay && selectedChatId) {
+  event.preventDefault();
+  setSelectedChatId(null);
+}
+```
+
+**What has been measured, so the next person does not repeat it.** At the moment
+of the press, on 390, with the conversation open:
+
+| | |
+| --- | --- |
+| `document.activeElement` | `BODY` — so `isEditable` is false |
+| `[role="dialog"], [role="menu"], [data-kub-popover="true"], [data-kub-menu="true"]` | **`[]`** — so `hasBlockingOverlay` is false |
+| after the press | the conversation is **still open** — photographed, not inferred |
+
+So the two guards that could refuse are both false, `selectedChatId` is
+obviously set, and the handler still does not close the chat. What is left is
+`event.defaultPrevented` set by an earlier listener, or `updateBlocking`, or the
+listener not being attached in this shell at all. **None of those has been
+measured yet**, and the entry is open rather than guessed at.
+
+**A false trail worth recording**, because it cost two probes: a first reading
+said the chat list had six rows and no `[data-testid="chat-window"]`, which read
+as «the chat closed but its composer dock stayed behind, painted over the
+list» — a much worse defect than the real one. Both halves were wrong.
+`data-testid="chat-window"` **does not exist anywhere in the product**, so
+counting zero of them measured nothing; and on a phone both panes live in the
+DOM with one hidden, so the list's rows are always there. The screenshot
+Playwright had already written settled it in one look. *Count only what you have
+confirmed exists, and look at the picture before building a theory from
+`querySelectorAll`.*
+
+**Also noticed while measuring, and not part of this:** the same spec's test at
+`:305` skips itself on mobile with «a phone has one pane: leaving a chat is the
+test above», so the author knew the shells differ here. The test at `:243` does
+not skip, which is why this surfaced at all.
+
+---
+
+## D-167, closed on 2026-09-14 — what was actually wrong
+
+The entry said the mute is «kept in the browser». Measured on production before
+the fix, the truth was worse and the whole server half was already built:
+
+- `public.chat_notification_preferences (chat_id, user_id, push_enabled, muted_until)`
+  exists with four own-row policies. **It held 0 rows.**
+- The upsert the client already performed **goes in**, and the same person
+  **reads it back** — measured as `authenticated` with real claims inside a
+  rolled-back transaction.
+- `public._notification_push_allowed`, the gate every push passes, already reads
+  it: refusing on `push_enabled is not true` **and** on
+  `muted_until > now()`. **Timed mutes were honoured by the server and nothing
+  wrote them.**
+
+**So the defect was not «the mute is local», it was «the screen and the server
+disagree, and the screen is the one that is wrong».** Muting on a phone really
+did suppress push everywhere, while a second device read `localStorage` and
+displayed «Отключить уведомления» — telling the person the chat was *not* muted.
+Clearing the browser's data removed every mute from the interface and none from
+the server. And `persistChatPushPreference` ended in a bare `catch {}`, so a
+refused write left a mute that worked on one device and nowhere else with
+nothing anywhere saying so.
+
+**Fixed** by making the account the source: the interface reads the table, the
+cache is refused once an answer has come back and refused outright when it
+carries another account's id, four durations write the column the gate already
+honours, every surface names when the mute ends, and a refused write puts the
+previous state back and says one plain sentence. Twenty mutations, twenty red.
+
+**One decision worth keeping:** the old `ng_muted` key is not read, not migrated
+and not deleted. It is a bare array of chat ids with nobody's name on it, so
+pushing it to the server on boot would be writing unverified data from a
+possibly shared browser. Reading it was the defect.
+
+**And one defect found in the fix's own pixels**, before it shipped: on the group
+card the four durations and «Пригласить пользователя» stood in one undivided run
+of rows, so the invitation read as a fifth way to mute the chat. Photographed at
+1440 and 390. The choice is closed off by the card's own `--kub-rule` divider
+while it is open, and only while it is open — a divider under a settled list
+would be a section boundary the card does not have. The e2e measures the
+computed border width in both states, and removing the rule turns it red.

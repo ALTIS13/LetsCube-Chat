@@ -23,6 +23,12 @@ import {
   unblockPrompt,
 } from "@/lib/personalModeration";
 import { usePersonalBlocks } from "@/hooks/usePersonalModeration";
+import { useChatMute } from "@/hooks/useChatMute";
+import {
+  chatMuteChoiceTitle,
+  chatMuteMenuEntries,
+  type ChatMuteOptionId,
+} from "@/lib/chatMute";
 import { requestContentReport } from "./ReportDialog";
 import { usePresenceNow } from "@/hooks/usePresenceNow";
 import { useAvatarVariantUrls } from "@/hooks/useMediaVariants";
@@ -38,13 +44,17 @@ interface ChatHeaderProps {
 }
 
 export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForMe, mediaPlayback }: ChatHeaderProps) {
-  const { chats, setChats, setSelectedChatId, setMessages, mutedChatIds, toggleMutedChat, currentUser } = useAppStore();
+  const { chats, setChats, setSelectedChatId, setMessages, currentUser } = useAppStore();
   const supabase = createClient();
   const [showMenu, setShowMenu] = useState(false);
   const [deletingChat, setDeletingChat] = useState(false);
   const [deleteGroupOpen, setDeleteGroupOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const isMuted = mutedChatIds.includes(chatId);
+  // D-167: the account's own row, not a note in this browser. The menu opens
+  // into the durations rather than toggling, so the one item that used to lie
+  // about the state now says what the account holds and offers how long.
+  const { state: muteState, setMute } = useChatMute(chatId);
+  const [muteChoiceOpen, setMuteChoiceOpen] = useState(false);
   const presenceNow = usePresenceNow();
 
   const display = chat
@@ -229,6 +239,27 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
     );
   };
 
+  /**
+   * Writes the choice, then says what the account now holds.
+   *
+   * The sentence names the end — «Уведомления отключены до завтра, 9:00» — so
+   * the one duration measured from the wall clock rather than from now is read
+   * before it surprises anybody. A refusal says so instead, and the store has
+   * already put the old row back, so the menu behind it cannot go on claiming a
+   * mute that was never written.
+   */
+  const applyMute = async (option: ChatMuteOptionId | "off") => {
+    const at = Date.now();
+    setShowMenu(false);
+    setMuteChoiceOpen(false);
+    const result = await setMute(option);
+    showActionFeedback(
+      result.ok
+        ? { kind: "success", title: chatMuteChoiceTitle(option, at), key: `chat-mute:${chatId}` }
+        : { kind: "error", title: result.error ?? "", key: `chat-mute:${chatId}` },
+    );
+  };
+
   const handleReportUser = () => {
     if (!canBlock || !otherUser?.id) return;
     setShowMenu(false);
@@ -262,10 +293,26 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
   // button is drawn only below `md`, where the chat list is not beside it.
   const unreadLabel = unreadBadgeLabel(unreadElsewhere(chats, chatId));
 
-  const menuItems: Array<{ icon: KubIconName; label: string; danger?: boolean; disabled?: boolean; action: () => void }> = [
+  type MenuItem = { icon: KubIconName; label: string; detail?: string | null; danger?: boolean; disabled?: boolean; action: () => void };
+
+  // One row while the menu is at rest, five while it is open into the durations
+  // — the same entries the contact card and the chat list draw, from the one
+  // decision in `lib/chatMute.ts`.
+  const muteItems: MenuItem[] = chatMuteMenuEntries(muteState, muteChoiceOpen, Date.now()).map((entry) => ({
+    icon: (entry.id === "back" ? "chevronLeft" : entry.id === "unmute" ? "notificationsOff" : entry.id === "mute" ? "notifications" : "clock") as KubIconName,
+    label: entry.label,
+    detail: entry.detail,
+    action: () => {
+      if (entry.id === "back") return setMuteChoiceOpen(false);
+      if (entry.id === "mute") return setMuteChoiceOpen(true);
+      void applyMute(entry.id === "unmute" ? "off" : entry.id);
+    },
+  }));
+
+  const menuItems: MenuItem[] = muteChoiceOpen ? muteItems : [
     { icon: "search", label: "Поиск в чате", action: () => { setShowMenu(false); onSearchOpen?.(); } },
     { icon: isPinned ? "pinOff" : "pin", label: isPinned ? "Открепить чат" : "Закрепить чат", action: handlePinToggle },
-    { icon: "notifications", label: isMuted ? "Включить уведомления" : "Отключить уведомления", action: () => { toggleMutedChat(chatId); setShowMenu(false); } },
+    ...muteItems,
     // «Пожаловаться» sends something and ends nothing, so it belongs with the
     // ordinary items rather than inside the destructive run below. Photographed
     // at 1440 and 390 with it under «Очистить историю у себя»: an unmarked row
@@ -396,7 +443,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setShowMenu(!showMenu)}
+                onClick={() => { setShowMenu(!showMenu); setMuteChoiceOpen(false); }}
                 className={cn(
                   "kub-icon-action kub-interactive group/capsule relative h-11 w-11 rounded-full text-[color:var(--kub-text)]",
                   FOCUS_RING,
@@ -410,7 +457,9 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
               </button>
               {showMenu && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+                  {/* Closing the menu closes the durations with it: a menu that
+                      reopened on step two would be a state nobody chose. */}
+                  <div className="fixed inset-0 z-40" onClick={() => { setShowMenu(false); setMuteChoiceOpen(false); }} />
                   <div
                     role="menu"
                     data-kub-menu="true"
@@ -420,11 +469,12 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
                     // From `sm` it drops from the capsule, 4px under its 44px.
                     className="kub-glass-strong fixed inset-x-3 bottom-[calc(0.75rem+var(--kub-safe-bottom))] z-50 max-h-[min(70vh,480px)] overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] py-1 sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-12 sm:w-60"
                   >
-                    {menuItems.map(({ icon, label, danger, disabled, action }) => (
+                    {menuItems.map(({ icon, label, detail, danger, disabled, action }) => (
                       <button
                         key={label}
                         onClick={action}
                         disabled={disabled}
+                        data-chat-menu-item={label}
                         className={cn(
                           "flex min-w-0 items-center gap-3 w-full px-4 py-2.5 text-left text-sm whitespace-nowrap transition-colors kub-raise-hover disabled:cursor-not-allowed disabled:opacity-60",
                           danger ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-text)]"
@@ -436,8 +486,18 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
                           tone={danger ? "currentColor" : "muted"}
                           className="shrink-0"
                         />
-                        <span className="min-w-0 flex-1 truncate text-left">
-                          {disabled && label === "Удалить групповой чат" ? "Удаление..." : label}
+                        <span className="flex min-w-0 flex-1 flex-col text-left">
+                          <span className="min-w-0 truncate">
+                            {disabled && label === "Удалить групповой чат" ? "Удаление..." : label}
+                          </span>
+                          {/* When a timed mute ends, on the row that would otherwise
+                              say only «Включить уведомления» — the state of the
+                              chat is half of what that row is for. */}
+                          {detail ? (
+                            <span className="min-w-0 truncate text-xs text-[color:var(--kub-muted)]" data-chat-mute-detail="true">
+                              {detail}
+                            </span>
+                          ) : null}
                         </span>
                       </button>
                     ))}
