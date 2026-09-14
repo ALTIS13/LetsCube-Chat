@@ -7444,7 +7444,7 @@ about what the sender sees afterwards, and an answer for the Windows and Android
 shells. None of that exists today. No estimate, no place in the queue, and no
 part of the current change.
 
-## D-131 `[ ]` «Местоположение» sends exact coordinates on one tap, with no map and no confirmation
+## D-131 `[x]` «Местоположение» sends exact coordinates on one tap, with no map and no confirmation — closed by D-122's attach sheet
 
 **Severity:** high, for privacy: a mistaken tap tells the chat where a person is. Found by
 the chat-functions audit from the code; the resulting bubble is in frames 12 and 32.
@@ -7462,6 +7462,19 @@ and a bubble with a small map and the address. The map provider is the owner's c
 (owner summary, question 7).
 
 **Audit rows:** chat-functions S6; the audit's owner question 7.
+
+**Closed on 2026-09-14, and it was fixed two days earlier under another number.**
+`faa32bc` — the attach-sheet merge, filed as D-122 — replaced the one-tap item
+with `AttachLocationPanel`. The place is shown first, and the only thing that
+sends is one row reading «Отправить геопозицию» over «С точностью до N м»; it is
+disabled until a position has actually been read, says «Определяем…» while it is
+being read and «Не удалось определить» with a «Повторить» when it cannot be.
+`tests/e2e/attach-sheet.spec.ts:114` pins the accuracy in the subtitle. Verified
+by reading the shipped component, not by trusting the commit message.
+
+The map itself is still not there, and that half is the owner's to answer — the
+provider is question 7 of the owner summary. What the entry was raised for, a
+tap that sent an exact position with nothing shown and nothing asked, is gone.
 
 ## D-132 `[x]` Errors and unavailable features show server, database and build internals
 
@@ -11241,3 +11254,35 @@ was only ever built for the service.
 and `callback_data`, so a URL button cannot exist in this database, and the
 public `BotDocsPage` never promised one. The parser refuses it rather than
 drawing a shape the schema forbids.
+
+---
+
+## Audit note, 2026-09-14 — entries fixed under another number
+
+D-128 and D-131 were both closed today after being found fixed days earlier by
+work filed under a different entry: D-128 by D-163's commit `14854cc`, D-131 by
+D-122's attach-sheet merge `faa32bc`. Twice in one day is a pattern rather than
+a coincidence, and the reason is worth stating once: **an entry whose fix arrives
+under another number is closed by nobody, because whoever fixed it was reading
+the other number.**
+
+So the register's open count has been wrong, and the way to find the rest is
+mechanical. Of the 34 entries open before these two closed, **18 are named by at
+least one commit**. Most of those are the docs commits that filed them, but
+seven are named by a `fix` or a `feat`:
+
+| entry | commit that names it |
+| --- | --- |
+| D-111 | `f91eed3 feat(chat): option C …` |
+| D-130 | `ed6648d Merge the recording work … (D-130)`, `cde8635 fix(chat): …` |
+| D-133 | `a99a5c7 fix(admin): ask before the far-reaching press …` |
+| D-157 | `84963d1 feat(search): the filter row says it continues …` |
+| D-158 | `05fc53f feat(hints): two things the interface could do and never said` |
+| D-168 | `d424f96 feat(chat): a member list says who its people are …` |
+| D-182 | `e6006f5 feat(voice): slice 1 …` |
+
+**None of those seven has been verified**, and a commit naming an entry is not
+evidence that it closed it — D-133 is explicitly partial, and several of these
+may have fixed one half of a two-part entry. The next audit pass reads each
+entry's stated defect against the shipped source, the way D-128 and D-131 were
+read, and closes only what it can see is gone.
