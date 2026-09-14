@@ -248,6 +248,29 @@ begin
   end if;
   raise notice 'the kind and the subject agree';
 
+
+  -- 12. And the message a report names may be deleted afterwards.
+  --
+  -- Added on 2026-09-14 by 20260914130000_a_reported_message_may_be_deleted.sql,
+  -- which is a repair of the migration this file rehearses. `message_id` is
+  -- ON DELETE SET NULL and the original CHECK read
+  -- `(kind = 'message') = (message_id is not null)`; a referential action is a
+  -- write, the UPDATE it performs re-checks every CHECK, so the delete was
+  -- refused — and `messages_chat_id_fkey` is ON DELETE CASCADE, which put the
+  -- refusal in front of an ordinary owner deleting their own group.
+  --
+  -- The complaint outlives the evidence on purpose, so this asserts both: the
+  -- delete goes through, and the report is still there afterwards.
+  perform set_config('role', v_owner, true);
+  delete from public.messages where id = v_message;
+  if not exists (
+    select 1 from public.content_reports
+     where reporter_id = v_anna and kind = 'message' and message_id is null
+  ) then
+    raise exception 'the complaint did not survive the deletion of its message';
+  end if;
+  raise notice 'a reported message can be deleted, and the complaint stays';
+
   raise notice 'ALL BLOCK AND REPORT RULES PASSED';
 end
 $rehearsal$;
