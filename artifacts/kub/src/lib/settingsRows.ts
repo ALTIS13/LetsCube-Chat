@@ -8,9 +8,16 @@
  * print beside its label, which is the whole reason the screen fits in one
  * scan now.
  *
- * Everything here is pure and free of imports so `node --test` can reach it.
- * None of it decides *what a setting does* — only how the current value reads.
+ * Everything here is pure so `node --test` can reach it; the one import is
+ * `plainMessages.ts`, which imports nothing either. None of it decides *what a
+ * setting does* — only how the current value reads.
  */
+
+import {
+  PUSH_ROW_UNAVAILABLE_BROWSER,
+  PUSH_ROW_UNAVAILABLE_DEVICE,
+  PUSH_ROW_UNAVAILABLE_NOW,
+} from "./plainMessages.ts";
 
 export type SettingsPushStatus =
   | "unsupported"
@@ -60,17 +67,22 @@ export function pushStatusSummary(status: SettingsPushStatus, platform: Settings
     case "unsupported":
       return "Браузер не поддерживает";
     case "native_unavailable":
-      if (platform.nativeAndroid) return "Android push через Firebase/FCM";
+      // D-132 (F2). «Android push через Firebase/FCM» named the delivery
+      // network in the one line this row has for its value, to somebody who
+      // cannot choose one. The row says whether they are available.
+      if (platform.nativeAndroid) return PUSH_ROW_UNAVAILABLE_DEVICE;
       if (platform.desktopWindows) return "Системные уведомления, пока приложение запущено";
       return "Системные уведомления пока настроены только для Android";
     case "denied":
       if (platform.nativeAndroid) return "Заблокировано в настройках приложения Android";
       if (platform.desktopWindows) return "Заблокировано в настройках приложения Windows";
       return "Заблокировано в настройках браузера";
+    // The same two build states the `usePush` messages used to spell out: a
+    // missing signing key and a missing preference store (D-132, F2).
     case "missing_vapid":
-      return "Нужен VAPID public key в конфигурации";
+      return PUSH_ROW_UNAVAILABLE_BROWSER;
     case "migration_missing":
-      return "Нужно обновление базы данных";
+      return PUSH_ROW_UNAVAILABLE_NOW;
     case "inactive":
       return "Выключены";
     case "active":

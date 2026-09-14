@@ -15,6 +15,12 @@ import {
   themeSummary,
   visibleSettingsSections,
 } from "../../artifacts/kub/src/lib/settingsRows.ts";
+import {
+  INTERNALS_PATTERN,
+  PUSH_ROW_UNAVAILABLE_BROWSER,
+  PUSH_ROW_UNAVAILABLE_DEVICE,
+  PUSH_ROW_UNAVAILABLE_NOW,
+} from "../../artifacts/kub/src/lib/plainMessages.ts";
 
 /**
  * The settings screen is one column of rows, and each row's right-hand side is
@@ -35,7 +41,11 @@ test("the push row says what push is doing on this platform, not what it could d
     pushStatusSummary("native_unavailable", WINDOWS),
     "Системные уведомления, пока приложение запущено",
   );
-  assert.equal(pushStatusSummary("native_unavailable", ANDROID), "Android push через Firebase/FCM");
+  // D-132 (settings-profile F2): this read «Android push через Firebase/FCM»,
+  // which named the delivery network rather than saying whether the row's
+  // subject works here. Corrected to the sentence the row shows now, not
+  // relaxed — the assertion is still an equality against one exact string.
+  assert.equal(pushStatusSummary("native_unavailable", ANDROID), PUSH_ROW_UNAVAILABLE_DEVICE);
   assert.equal(
     pushStatusSummary("native_unavailable", BROWSER),
     "Системные уведомления пока настроены только для Android",
@@ -46,8 +56,18 @@ test("the push row says what push is doing on this platform, not what it could d
   assert.equal(pushStatusSummary("denied", BROWSER), "Заблокировано в настройках браузера");
 
   assert.equal(pushStatusSummary("unsupported", BROWSER), "Браузер не поддерживает");
-  assert.equal(pushStatusSummary("missing_vapid", BROWSER), "Нужен VAPID public key в конфигурации");
-  assert.equal(pushStatusSummary("migration_missing", BROWSER), "Нужно обновление базы данных");
+  // The other two build states the row used to spell out: a missing signing
+  // key and a missing preference store (D-132, F2).
+  assert.equal(pushStatusSummary("missing_vapid", BROWSER), PUSH_ROW_UNAVAILABLE_BROWSER);
+  assert.equal(pushStatusSummary("migration_missing", BROWSER), PUSH_ROW_UNAVAILABLE_NOW);
+  // And none of the three explains the machine any more.
+  for (const status of ["native_unavailable", "missing_vapid", "migration_missing"] as const) {
+    for (const platform of [ANDROID, BROWSER, WINDOWS]) {
+      const summary = pushStatusSummary(status, platform);
+      assert.doesNotMatch(summary, INTERNALS_PATTERN, summary);
+      assert.doesNotMatch(summary, /firebase|fcm|vapid|google-services|json/iu, summary);
+    }
+  }
 });
 
 test("the push row prints a state, not an invitation", () => {

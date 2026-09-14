@@ -1,8 +1,16 @@
 import { mapPgError } from "@/lib/errors";
+import { TASK_RECURRENCE_UNAVAILABLE } from "@/lib/plainMessages";
 import type { TaskRecurrence, TaskRecurrenceFrequency } from "@/types/database";
 
-export const RECURRING_TASKS_REQUIRED_MESSAGE =
-  "Повторяемые задачи требуют обновления базы данных.";
+/**
+ * D-132 (work-surfaces T-F7). This read «Повторяемые задачи требуют
+ * обновления базы данных.» on the task form, where the reader is somebody
+ * creating a task. The name is unchanged because `useRecurringTasks` compares
+ * against it; only the words are, and they live in `plainMessages.ts` because
+ * this module reaches `mapPgError` through the `@/` alias, which no
+ * `node --test` process resolves.
+ */
+export const RECURRING_TASKS_REQUIRED_MESSAGE = TASK_RECURRENCE_UNAVAILABLE;
 
 export const RECURRENCE_FREQUENCY_LABEL: Record<TaskRecurrenceFrequency, string> = {
   daily: "Каждый день",

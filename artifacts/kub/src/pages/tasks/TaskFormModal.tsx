@@ -40,10 +40,16 @@ import {
 } from "@/lib/recurringTasks";
 import {
   LOCATION_ROLE_LABEL,
-  LOCATION_ROUTING_REQUIRED_MESSAGE,
   TASK_TARGET_ROLE_LABEL,
   mapLocationRoutingError,
 } from "@/lib/locationRouting";
+import {
+  TASK_RECURRENCE_UNAVAILABLE,
+  TASK_RECURRENCE_UNAVAILABLE_DETAIL,
+  TASK_ROUTING_UNAVAILABLE,
+  TASK_ROUTING_UNAVAILABLE_DETAIL,
+  plainMessage,
+} from "@/lib/plainMessages";
 
 type ChatOption = ChatWithLastMessage;
 type RecurrenceEndMode = "never" | "date" | "count";
@@ -623,8 +629,11 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
             )}
           </div>
         ) : (
+          // D-132 (T-F7). `recurring.message` comes from `mapRecurringTasksError`,
+          // which can still answer with the cause; `plainMessage` refuses it
+          // here rather than rewriting a mapper another track compares against.
           <div className="rounded-lg px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)] kub-raise">
-            {recurring.message ?? RECURRING_TASKS_REQUIRED_MESSAGE} Существующее создание задач продолжит работать без повторения.
+            {plainMessage(recurring.message, TASK_RECURRENCE_UNAVAILABLE)} {TASK_RECURRENCE_UNAVAILABLE_DETAIL}
           </div>
         )}
       </div>
@@ -750,7 +759,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
           </div>
         ) : (
           <div className="rounded-lg px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)] kub-raise">
-            {routing.error ?? LOCATION_ROUTING_REQUIRED_MESSAGE} Старое создание задач продолжит работать без этих полей.
+            {plainMessage(routing.error, TASK_ROUTING_UNAVAILABLE)} {TASK_ROUTING_UNAVAILABLE_DETAIL}
           </div>
         )}
       </div>

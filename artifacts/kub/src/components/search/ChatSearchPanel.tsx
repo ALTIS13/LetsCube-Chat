@@ -7,6 +7,7 @@ import { useChatMessageSearch } from "@/hooks/useChatMessageSearch";
 import { requestChatMessageJump } from "@/lib/chatJumpEvents";
 import { chatSearchResultTitle, formatSearchDate } from "@/lib/chatMessageSearch";
 import { visibleConversation } from "@/lib/deletedMessages";
+import { SEARCH_LOADED_MESSAGES_ONLY } from "@/lib/plainMessages";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app.store";
 import type { MessageWithSender } from "@/types/database";
@@ -186,7 +187,8 @@ export function ChatSearchPanel({ chatId }: { chatId: string }) {
               {allTopics ? "Все темы" : "Текущая тема"}
             </button>
           )}
-          {rpcMissing && <span>Поиск сейчас выполняется по загруженным сообщениям.</span>}
+          {/* The same sentence the chat's own bar shows; see D-132 (P3). */}
+          {rpcMissing && <span>{SEARCH_LOADED_MESSAGES_ONLY}</span>}
         </div>
       )}
 

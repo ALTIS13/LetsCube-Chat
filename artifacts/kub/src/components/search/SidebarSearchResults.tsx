@@ -29,6 +29,12 @@ import {
 } from "@/lib/searchQuery";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app.store";
+import {
+  SEARCH_FILTERS_UNAVAILABLE,
+  SEARCH_FILTERS_UNAVAILABLE_DETAIL,
+  SEARCH_HISTORY_UNAVAILABLE,
+  SEARCH_HISTORY_UNAVAILABLE_DETAIL,
+} from "@/lib/plainMessages";
 
 export function SidebarSearchResults({ query }: { query: string }) {
   const trimmedQuery = query.trim();
@@ -184,15 +190,19 @@ export function SidebarSearchResults({ query }: { query: string }) {
         )}
       </div>
 
+      {/* D-132 (chat-functions O1). Both of these told the person at the search
+          box that a database update was needed — a repair nobody reading a
+          search result can make. What survives is the half they can act on:
+          which kinds of thing the search still covers. */}
       {search.migrationMissing && parsed.filters.type !== "command" && (
         <div className="kub-raise mx-3 mt-3 rounded-xl px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
-          Поиск по всей истории требует обновления базы данных. Сейчас доступны видимые чаты, загруженные сообщения, пользователи, задачи и локации.
+          {SEARCH_HISTORY_UNAVAILABLE} {SEARCH_HISTORY_UNAVAILABLE_DETAIL}
         </div>
       )}
 
       {search.filtersLimited && (
         <div className="kub-raise mx-3 mt-3 rounded-xl px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
-          Расширенные фильтры по всей истории требуют обновления базы данных. Сейчас поиск применяет доступные локальные фильтры.
+          {SEARCH_FILTERS_UNAVAILABLE} {SEARCH_FILTERS_UNAVAILABLE_DETAIL}
         </div>
       )}
 

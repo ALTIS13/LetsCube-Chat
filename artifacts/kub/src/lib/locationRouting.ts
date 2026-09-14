@@ -1,7 +1,17 @@
 import { mapPgError } from "@/lib/errors";
+import { TASK_ROUTING_UNAVAILABLE } from "@/lib/plainMessages";
 import type { LocationRole, TaskTargetRole } from "@/types/database";
 
-export const LOCATION_ROUTING_REQUIRED_MESSAGE = "Локации требуют обновления базы данных.";
+/**
+ * D-132 (work-surfaces T-F7), and deliberately the same sentence the
+ * administration shows for the same failure — see the note on
+ * `TASK_ROUTING_UNAVAILABLE`. `LocationsTab` runs this through
+ * `plainAdminMessage`, which used to replace it and now passes it through, so a
+ * different wording here would quietly change that screen too.
+ *
+ * The name is unchanged because `useTaskRouting` compares against it.
+ */
+export const LOCATION_ROUTING_REQUIRED_MESSAGE = TASK_ROUTING_UNAVAILABLE;
 export const LOCATION_ROUTING_STORAGE_KEY = "kub.taskRouting.enabled";
 export const LOCATION_ROUTING_STORAGE_EVENT = "kub:task-routing-storage";
 

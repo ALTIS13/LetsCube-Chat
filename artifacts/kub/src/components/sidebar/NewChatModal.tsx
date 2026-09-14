@@ -58,8 +58,15 @@ export function NewChatModal({ onClose, onRefetch }: NewChatModalProps) {
         {searching && <KubIcon name="spinner" size={14} className="text-[color:var(--kub-cyan)]" />}
       </div>
 
+      {/* D-132 (chat-functions A3). The words are `useCreateChat`'s now — this
+          box used to print `err.message` or a `JSON.stringify` of whatever was
+          thrown. `role="alert"` because nothing else on the screen moves when a
+          tap on a person fails: the list stays exactly as it was. */}
       {error && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger-text)] border border-[color:var(--kub-danger)]/30">
+        <div
+          role="alert"
+          className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger-text)] border border-[color:var(--kub-danger)]/30"
+        >
           <KubIcon name="alert" size={13} />
           {error}
         </div>

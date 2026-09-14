@@ -9,11 +9,12 @@
  * plain sentence can drift back into naming a migration file the moment
  * somebody debugging wants the cause on screen.
  *
- * The module imports nothing on purpose. `requestAppConfirm` pulls in the icon
- * vocabulary, which pulls in React; the tone here is therefore its own two
- * values rather than `AppDialogTone`, and it is structurally the same type, so
- * a prompt can be spread into `requestAppConfirm` at the call site. The icon
- * stays at the call site too, for the same reason.
+ * The module imports nothing but `plainMessages.ts`, which itself imports
+ * nothing. `requestAppConfirm` pulls in the icon vocabulary, which pulls in
+ * React; the tone here is therefore its own two values rather than
+ * `AppDialogTone`, and it is structurally the same type, so a prompt can be
+ * spread into `requestAppConfirm` at the call site. The icon stays at the call
+ * site too, for the same reason.
  *
  * Shape of a question, taken from Telegram's alert and from the entry:
  *   - the title IS the question;
@@ -27,6 +28,8 @@
  * came to be one-tap in the first place: nothing on screen said the press left
  * the screen.
  */
+
+import { INTERNALS_PATTERN, plainMessage } from "./plainMessages.ts";
 
 export type AdminConfirmTone = "default" | "danger";
 
@@ -463,32 +466,22 @@ export const ADMIN_UNAVAILABLE_MESSAGES: readonly string[] = [
 ];
 
 /**
- * The words that must never reach one of these screens.
+ * The words that must never reach one of these screens, and the filter that
+ * refuses them.
  *
- * Written as a pattern rather than a list of the exact strings that were
- * removed, so that a new sentence naming a different table or a different file
- * is caught by the same rule.
+ * Both were declared here when the administration was the only surface that
+ * needed them. The rest of D-132 — starting a chat, saving a никнейм, the
+ * phone, push, search and the task form — needs the same rule, and a pattern
+ * kept in two places drifts: one copy learns about a new internal and the
+ * other keeps letting it through. So they moved to `plainMessages.ts`, which
+ * imports nothing for the same reason this module does, and these two names
+ * are aliases of them.
+ *
+ * Nothing about the administration's behaviour changed: the expression there
+ * is byte-for-byte the one this module declared, and `plainAdminMessage` is
+ * `plainMessage`. The two names are kept because they are what the five tabs
+ * and `tests/unit/admin-prompts.test.mts` call, and renaming a call site
+ * proves nothing.
  */
-export const ADMIN_INTERNALS_PATTERN =
-  /баз[аыуе] данных|обновлени[ея] базы|миграц|migration|\bsql\b|таблиц|серверн(?:ая|ой) функци|функци[яию]|\.sql|PGRST|admin_ops_security_report|legacy|backend/iu;
-
-/**
- * The last filter in front of a message on its way to the screen.
- *
- * The shared mappers — `mapRolesPermissionsError`, `mapLocationRoutingError`,
- * `mapPgError` — still answer «требуют обновления базы данных» for a missing
- * object, and they are owned by other tracks: the same sentinels are compared
- * against in hooks, and the tasks surfaces of D-132 are a separate fix. So the
- * administration screens do not change those mappers, they refuse the result:
- * anything carrying an internal is replaced here with the section's plain
- * sentence, and the original is what goes to the log.
- *
- * It is a filter, not a lookup, because the failure being described is a
- * missing object nobody enumerated — a mapper that learns a new internal
- * tomorrow is caught by the same call.
- */
-export function plainAdminMessage(message: string | null | undefined, unavailable: string): string {
-  const text = (message ?? "").trim();
-  if (!text) return unavailable;
-  return ADMIN_INTERNALS_PATTERN.test(text) ? unavailable : text;
-}
+export const ADMIN_INTERNALS_PATTERN = INTERNALS_PATTERN;
+export const plainAdminMessage = plainMessage;

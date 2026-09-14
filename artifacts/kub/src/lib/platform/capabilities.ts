@@ -1,4 +1,5 @@
 import { Capacitor } from "@capacitor/core";
+import { ANDROID_PUSH_UNAVAILABLE } from "../plainMessages";
 import { detectDistributionTarget, supportsPwaInstallForTarget } from "./distribution";
 import { isDesktopApp } from "./desktop";
 
@@ -107,6 +108,15 @@ export function locationPermissionHelp(): string {
     : "Разрешите доступ к геолокации в настройках браузера.";
 }
 
+/**
+ * D-132 (settings-profile F2).
+ *
+ * This named three build prerequisites — a local `google-services.json`, an
+ * unapplied migration and «backend FCM credentials» — to every signed-in person
+ * who opened the notification settings of the Android application. None of the
+ * three is theirs, and the list is exactly as useful to them as the silence it
+ * replaced. What it describes now goes to the log beside the call that failed.
+ */
 export function nativePushPendingMessage(): string {
-  return "Android push работает через Firebase/FCM. Для доставки нужны локальный google-services.json, применённая migration user_push_devices и backend FCM credentials.";
+  return ANDROID_PUSH_UNAVAILABLE;
 }

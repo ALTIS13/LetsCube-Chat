@@ -6,6 +6,7 @@ import { mapPgError } from "@/lib/errors";
 import { requestChatMessageJump } from "@/lib/chatJumpEvents";
 import { safeOpenChat } from "@/lib/safeOpenChat";
 import { isNativeAndroid, isNativeApp, nativePushPendingMessage, supportsBrowserPush } from "@/lib/platform/capabilities";
+import { BROWSER_PUSH_UNAVAILABLE, PUSH_UNAVAILABLE } from "@/lib/plainMessages";
 import { isDesktopApp } from "@/lib/platform/desktop";
 import { registerDesktopNotificationNavigationListener } from "@/lib/platform/desktopNotifications";
 import {
@@ -72,9 +73,14 @@ export function usePush() {
   const browserReconcileInFlightRef = useRef(false);
   const browserLastReconciledAtRef = useRef(0);
 
+  // D-132 (settings-profile F2). This said a database update was needed, to a
+  // person who cannot apply one. The status is unchanged — `migration_missing`
+  // is still how the rest of the hook and the settings row know what happened —
+  // and the sentence now describes the situation instead of the repair.
   const markMigrationMissing = useCallback(() => {
+    console.error("push preferences storage is not available on this deployment");
     setStatus("migration_missing");
-    setMessage("Для push-уведомлений нужно обновление базы данных.");
+    setMessage(PUSH_UNAVAILABLE);
   }, []);
 
   const loadPreferences = useCallback(async () => {
@@ -140,8 +146,11 @@ export function usePush() {
       return;
     }
     if (!VAPID_PUBLIC) {
+      // D-132 (F2): the VAPID key is a build secret, not something a reader
+      // configures. The name of it goes to the log.
+      console.error("browser push is unconfigured: VAPID public key is absent");
       setStatus("missing_vapid");
-      setMessage("VAPID public key не настроен.");
+      setMessage(BROWSER_PUSH_UNAVAILABLE);
       return;
     }
     setStatus("inactive");
@@ -309,8 +318,11 @@ export function usePush() {
       return;
     }
     if (!VAPID_PUBLIC) {
+      // D-132 (F2): the VAPID key is a build secret, not something a reader
+      // configures. The name of it goes to the log.
+      console.error("browser push is unconfigured: VAPID public key is absent");
       setStatus("missing_vapid");
-      setMessage("VAPID public key не настроен.");
+      setMessage(BROWSER_PUSH_UNAVAILABLE);
       return;
     }
     try {
@@ -620,10 +632,10 @@ async function registerNativeDeviceToken(
 
   if (error) {
     if (looksLikeSchemaMissing(error)) {
-      return {
-        status: "migration_missing",
-        message: "Нужно применить migration user_push_devices/register_push_device для Android push.",
-      };
+      // D-132 (F2): this named two database objects to the owner of an Android
+      // phone. The cause goes to the log beside the call that produced it.
+      console.error("register_push_device is not available on this deployment:", error);
+      return { status: "migration_missing", message: PUSH_UNAVAILABLE };
     }
     return { status: "native_error", message: mapPgError(error) };
   }

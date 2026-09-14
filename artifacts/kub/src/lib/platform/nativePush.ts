@@ -1,5 +1,6 @@
 import { PushNotifications } from "@capacitor/push-notifications";
 import { isNativeAndroid } from "./capabilities";
+import { ANDROID_PUSH_UNAVAILABLE, PUSH_ENABLE_FAILED } from "../plainMessages";
 import { parseMessageNotificationProjection } from "../messageNotificationProjection";
 
 export type NativePushResultStatus =
@@ -25,8 +26,9 @@ type PluginListenerHandle = Awaited<ReturnType<PushNotificationsPlugin["addListe
 
 const NATIVE_PUSH_TIMEOUT_MS = 20_000;
 
+/** D-132 (F2): see the note on `nativePushPendingMessage` in `capabilities.ts`. */
 export function nativePushSetupMessage(): string {
-  return "Android push работает через Firebase/FCM. Для доставки нужны локальный google-services.json, применённая migration user_push_devices и backend FCM credentials.";
+  return ANDROID_PUSH_UNAVAILABLE;
 }
 
 export function nativePushPermissionHelp(): string {
@@ -188,10 +190,12 @@ async function waitForRegistration(
     };
 
     const timeoutId = window.setTimeout(() => {
-      finish({
-        status: "native_setup_missing",
-        message: "Не удалось зарегистрировать устройство для push-уведомлений. Проверьте настройку Firebase/FCM.",
-      });
+      // D-132 (F2): «Проверьте настройку Firebase/FCM» asked the reader to check
+      // something they cannot see, on a device where they could not act on the
+      // answer. The state is what it is — registration did not finish — and the
+      // log carries the rest.
+      console.error("native push registration timed out after", NATIVE_PUSH_TIMEOUT_MS, "ms");
+      finish({ status: "native_setup_missing", message: PUSH_ENABLE_FAILED });
     }, NATIVE_PUSH_TIMEOUT_MS);
 
     Promise.all([
@@ -241,9 +245,20 @@ function getNotificationTarget(data: unknown): string | null {
   return null;
 }
 
+/**
+ * The provider's own words, read for the status they imply and then dropped.
+ *
+ * D-132 (F2). The text this reads is an Android/Firebase message in English;
+ * matching on it is the only way to tell a missing delivery configuration from
+ * a refused permission, so the matching stays. What changed is that the text
+ * itself no longer travels to the screen: the caller gets the status and a
+ * sentence about the situation, and `console.error` keeps the original for
+ * whoever can act on it.
+ */
 function mapNativePushSetupError(error: unknown): NativePushResult {
   const text = getErrorText(error);
   const lower = text.toLowerCase();
+  if (text) console.error("native push setup error:", text);
   if (
     lower.includes("firebase") ||
     lower.includes("fcm") ||
@@ -251,18 +266,12 @@ function mapNativePushSetupError(error: unknown): NativePushResult {
     lower.includes("missing") ||
     lower.includes("default firebaseapp")
   ) {
-    return {
-      status: "native_setup_missing",
-      message: "Firebase/FCM не настроен для Android push. Проверьте google-services.json и backend credentials.",
-    };
+    return { status: "native_setup_missing", message: ANDROID_PUSH_UNAVAILABLE };
   }
   if (lower.includes("permission") || lower.includes("denied")) {
     return { status: "native_denied", message: nativePushPermissionHelp() };
   }
-  return {
-    status: "native_error",
-    message: "Не удалось включить Android push. Проверьте настройки приложения и попробуйте ещё раз.",
-  };
+  return { status: "native_error", message: PUSH_ENABLE_FAILED };
 }
 
 function getErrorText(error: unknown): string {

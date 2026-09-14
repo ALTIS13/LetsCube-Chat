@@ -4,6 +4,7 @@ import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { SearchFilterChips } from "@/components/search/SearchShared";
 import { useChatMessageSearch } from "@/hooks/useChatMessageSearch";
 import { formatSearchDate } from "@/lib/chatMessageSearch";
+import { SEARCH_LOADED_MESSAGES_ONLY } from "@/lib/plainMessages";
 import { mediaLabelForMessage } from "@/lib/searchQuery";
 import type { MessageWithSender } from "@/types/database";
 
@@ -119,9 +120,10 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
             {allTopics ? "Все темы" : "Текущая тема"}
           </button>
         )}
-        {rpcMissing && (
-          <span>Поиск сейчас выполняется по загруженным сообщениям.</span>
-        )}
+        {/* D-132 (chat-functions P3). The sentence is shared with the list
+            column's panel and the global results, so one limitation cannot be
+            described three ways on three screens. */}
+        {rpcMissing && <span>{SEARCH_LOADED_MESSAGES_ONLY}</span>}
       </div>
 
       {canSearch && total > 0 && (

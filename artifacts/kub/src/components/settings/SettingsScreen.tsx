@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useId, useRef, useState, type ReactNode } from "react";
+import { Fragment, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import type { Theme } from "@/hooks/useTheme";
 import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
@@ -41,11 +41,16 @@ import {
 } from "@/lib/settingsRows";
 import {
   PROFILE_LIMITS,
+  type ProfileField,
+  type ProfileSaveFailure,
   normalizeBio,
   normalizeFullName,
   normalizeUsername,
   profileDraftDirty,
+  profileSaveFailure,
   validateFullName,
+  usernameAvailability,
+  usernameAvailabilityNote,
   validateUsername,
 } from "@/lib/profileValidation";
 import { requestAppConfirm } from "@/lib/appDialogs";
@@ -128,6 +133,15 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * What the last «Сохранить» said about one particular field (D-132, B5/C4).
+   *
+   * Separate from `error`, which is the banner under the header: a failure that
+   * belongs to a field belongs under that field, and a person who typed a
+   * никнейм somebody else already has should not have to look at the top of the
+   * screen to find out.
+   */
+  const [saveFailure, setSaveFailure] = useState<ProfileSaveFailure | null>(null);
   const [saved, setSaved] = useState(false);
   const [openSections, setOpenSections] = useState<ReadonlySet<DisclosureId>>(() => new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -148,18 +162,115 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
     });
   };
 
+  /**
+   * The никнейм's own rules, checked as it is typed (D-132, C4).
+   *
+   * Length, the allowed characters and the reserved list are decided here and
+   * need nobody's permission, yet `validateUsername` was consulted only after
+   * «Сохранить» — so a person could type `привет!` and learn about it a screen
+   * and a press later. Whether the name is already *taken* is a different
+   * question and genuinely cannot be answered from the client; see the note in
+   * `profileValidation.ts`.
+   */
+  const usernameRuleError = validateUsername(username, { allowReserved: isAdmin });
+
+  /**
+   * Is this никнейм free? Asked while it is typed (D-132, C4).
+   *
+   * One request per pause, not per keystroke, and only for a name that already
+   * passes its own rules and is not the one this person already holds — so
+   * nothing is asked about `при`, about `привет!`, or about the name in the
+   * field when the screen opens.
+   *
+   * The answer is attached to the exact value it was asked about, and a later
+   * answer for an older value is dropped: without that, typing `an`, `ann`,
+   * `anna` can leave `anna` wearing the verdict on `ann`.
+   */
+  const [usernameChecking, setUsernameChecking] = useState(false);
+  const [usernameTaken, setUsernameTaken] = useState<{ value: string; taken: boolean } | null>(null);
+  const probedUsername = normalizeUsername(username);
+  const myUsername = normalizeUsername(currentUser?.username ?? "");
+  const shouldProbeUsername =
+    Boolean(probedUsername) && !usernameRuleError && probedUsername !== myUsername;
+
+  useEffect(() => {
+    if (!shouldProbeUsername) {
+      setUsernameChecking(false);
+      setUsernameTaken(null);
+      return;
+    }
+    let cancelled = false;
+    setUsernameChecking(true);
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("username", probedUsername)
+          .maybeSingle();
+        if (cancelled) return;
+        setUsernameChecking(false);
+        // A refused or failed lookup says nothing: the field stays quiet rather
+        // than claiming a name is free on the strength of a question that was
+        // never answered.
+        if (error) {
+          console.error("username availability:", error);
+          setUsernameTaken(null);
+          return;
+        }
+        setUsernameTaken({ value: probedUsername, taken: Boolean(data) });
+      })();
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      setUsernameChecking(false);
+    };
+  }, [shouldProbeUsername, probedUsername, supabase]);
+
+  const usernameState = usernameAvailability({
+    value: username,
+    ruleError: usernameRuleError,
+    current: currentUser?.username,
+    checking: usernameChecking,
+    taken: usernameTaken && usernameTaken.value === probedUsername ? usernameTaken.taken : null,
+  });
+  const usernameNote = usernameAvailabilityNote(usernameState);
+  const fieldError = (field: ProfileField): string | null => {
+    if (saveFailure?.field === field) return saveFailure.message;
+    if (field === "username") return usernameRuleError;
+    return null;
+  };
+
+  /**
+   * A field stops being told it is wrong once it is edited.
+   *
+   * «Это имя пользователя уже занято» is about the name that was sent, not the
+   * one now being typed; leaving it under a field somebody is halfway through
+   * changing is the same defect in a different place.
+   */
+  const clearFieldFailure = (field: ProfileField) => {
+    setSaveFailure((current) => (current && current.field === field ? null : current));
+  };
+
   const handleSave = async () => {
     if (!currentUser) return;
     const fullNameError = validateFullName(fullName);
     const usernameError = validateUsername(username, { allowReserved: isAdmin });
-    if (fullNameError || usernameError) {
-      setError(fullNameError ?? usernameError);
+    // Under the field that is wrong, not in the banner under the header (B5).
+    if (fullNameError) {
+      setSaveFailure({ field: "fullName", message: fullNameError });
+      return;
+    }
+    if (usernameError) {
+      setSaveFailure({ field: "username", message: usernameError });
       return;
     }
     const cleanFullName = normalizeFullName(fullName);
     const cleanUsername = normalizeUsername(username);
     setSaving(true);
     setError(null);
+    setSaveFailure(null);
     // Phone is intentionally NOT updated here — it lives in the
     // RLS-protected `profile_contacts` table and is managed by
     // `<PhoneSection />` below after OTP verification.
@@ -178,7 +289,16 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
       .select("*")
       .single();
     setSaving(false);
-    if (err) { setError(mapPgError(err)); return; }
+    if (err) {
+      // D-132 (settings-profile C4). A taken никнейм came back as «Такая запись
+      // уже существует.» — `mapPgError`'s answer to SQLSTATE 23505, which is
+      // true of a row and says nothing about the field. The mapper belongs to
+      // another track, so the decision is refused here instead: the cause goes
+      // to the log, and what reaches the screen names the никнейм.
+      console.error("profile save error:", err);
+      setSaveFailure(profileSaveFailure(err, mapPgError(err), Boolean(cleanUsername)));
+      return;
+    }
     if (data) setCurrentUser(data);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -378,9 +498,10 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
               label="Имя"
               required
               value={fullName}
-              onChange={setFullName}
+              onChange={(value) => { setFullName(value); clearFieldFailure("fullName"); }}
               placeholder="Ваше имя"
               maxLength={PROFILE_LIMITS.fullNameMax}
+              error={fieldError("fullName")}
             />
           )}
           {shows("username") && (
@@ -390,9 +511,11 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
               icon="atSign"
               label="Никнейм"
               value={username}
-              onChange={(value) => setUsername(normalizeUsername(value))}
+              onChange={(value) => { setUsername(normalizeUsername(value)); clearFieldFailure("username"); }}
               placeholder="буквы, цифры, точка, _"
               maxLength={PROFILE_LIMITS.usernameMax}
+              error={fieldError("username")}
+              note={fieldError("username") ? null : usernameNote}
             />
           )}
           {shows("bio") && (
@@ -634,7 +757,10 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
     ready: true,
     saving,
     saved,
-    error,
+    // The banner keeps only what belongs to no single field — an avatar upload
+    // that failed, a presence write that failed, a save whose cause is the
+    // network rather than something typed.
+    error: error ?? (saveFailure && saveFailure.field === null ? saveFailure.message : null),
     isStaff,
     save: handleSave,
     requestClose,
@@ -740,6 +866,8 @@ function TextFieldRow({
   placeholder,
   maxLength,
   required,
+  error,
+  note,
 }: {
   idPrefix: string;
   field: "name" | "username" | "bio";
@@ -750,45 +878,104 @@ function TextFieldRow({
   placeholder?: string;
   maxLength: number;
   required?: boolean;
+  /**
+   * What is wrong with this field (D-132, settings-profile B5). It is drawn
+   * under this row rather than in the banner at the top of the screen, which is
+   * where «Такая запись уже существует.» used to appear — two sections away
+   * from the input that caused it.
+   */
+  error?: string | null;
+  /**
+   * A line under the field that is not a refusal — «Проверяем…», «Свободно» —
+   * or a refusal the field knows before the save does. Drawn in the same place
+   * as `error`, and never beside it: two lines under one input, one saying the
+   * name is free and one saying it is wrong, is worse than either alone.
+   */
+  note?: { text: string; tone: "muted" | "danger" } | null;
 }) {
   const id = `${idPrefix}-${field}`;
+  const errorId = `${id}-error`;
   const counterVisible = shouldShowCounter(value.length, maxLength);
   return (
-    <div className={FIELD_ROW_GRID}>
-      <RowIcon name={icon} tone="muted" />
-      <label
-        htmlFor={id}
-        className="min-w-0 truncate text-sm text-[color:var(--kub-text)]"
-      >
-        {label}
-        {required && <span className="text-[color:var(--kub-danger-text)]"> *</span>}
-      </label>
-      <div className="flex min-w-0 items-center gap-2">
-        {counterVisible && (
-          <span className="shrink-0 tabular-nums text-[12px] text-[color:var(--kub-muted)]">
-            {value.length}/{maxLength}
-          </span>
-        )}
-        <input
-          id={id}
-          data-testid={`settings-field-${field}`}
-          type="text"
-          value={value}
-          maxLength={maxLength}
-          placeholder={placeholder}
-          onChange={(event) => onChange(event.target.value)}
-          className={cn(
-            // D-047: 232x36 before this. The input is its own box here - it
-            // carries the border a finger aims at - so `kub-field` is the right
-            // opt-in, and the rule's own requirement that the field fill the box
-            // is satisfied by construction.
-            "kub-field h-9 w-full min-w-0 rounded-lg border border-transparent bg-[var(--kub-surface)] px-2.5 text-sm text-[color:var(--kub-text)] outline-none",
-            "placeholder:text-[color:var(--kub-muted)]",
-            "transition-[border-color,box-shadow] duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)]",
-            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
+    <div className="min-w-0">
+      <div className={FIELD_ROW_GRID}>
+        <RowIcon name={icon} tone="muted" />
+        <label
+          htmlFor={id}
+          className="min-w-0 truncate text-sm text-[color:var(--kub-text)]"
+        >
+          {label}
+          {required && <span className="text-[color:var(--kub-danger-text)]"> *</span>}
+        </label>
+        <div className="flex min-w-0 items-center gap-2">
+          {counterVisible && (
+            <span className="shrink-0 tabular-nums text-[12px] text-[color:var(--kub-muted)]">
+              {value.length}/{maxLength}
+            </span>
           )}
-        />
+          <input
+            id={id}
+            data-testid={`settings-field-${field}`}
+            type="text"
+            value={value}
+            maxLength={maxLength}
+            placeholder={placeholder}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
+            onChange={(event) => onChange(event.target.value)}
+            className={cn(
+              // D-047: 232x36 before this. The input is its own box here - it
+              // carries the border a finger aims at - so `kub-field` is the right
+              // opt-in, and the rule's own requirement that the field fill the box
+              // is satisfied by construction.
+              "kub-field h-9 w-full min-w-0 rounded-lg border border-transparent bg-[var(--kub-surface)] px-2.5 text-sm text-[color:var(--kub-text)] outline-none",
+              "placeholder:text-[color:var(--kub-muted)]",
+              "transition-[border-color,box-shadow] duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)]",
+              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
+              error && "border-[color:var(--kub-danger)]",
+            )}
+          />
+        </div>
       </div>
+      {error && (
+        // The same grid, so the sentence belongs to this row rather than
+        // floating under the icon column. It takes the caption's cell as well
+        // as the input's: in the list column the input is about 165px wide, and
+        // a sentence confined to that wraps three times. Which field it is
+        // about is not in doubt — the input directly above it is outlined.
+        <div className={cn(FIELD_ROW_GRID, "min-h-0 py-0 pb-2")}>
+          <span aria-hidden="true" />
+          <p
+            id={errorId}
+            data-testid={`settings-field-${field}-error`}
+            role="alert"
+            className="col-span-2 min-w-0 text-[12px] leading-snug text-[color:var(--kub-danger-text)]"
+          >
+            {error}
+          </p>
+        </div>
+      )}
+      {!error && note && (
+        // The same grid and the same cell as the refusal above, so a name that
+        // is free and a name that is wrong are read in one place rather than
+        // two. `role="status"` rather than `alert`: «Свободно» is not an
+        // interruption.
+        <div className={cn(FIELD_ROW_GRID, "min-h-0 py-0 pb-2")}>
+          <span aria-hidden="true" />
+          <p
+            data-testid={`settings-field-${field}-note`}
+            role="status"
+            className={cn(
+              "col-span-2 min-w-0 text-[12px] leading-snug",
+              note.tone === "danger"
+                ? "text-[color:var(--kub-danger-text)]"
+                : "text-[color:var(--kub-muted)]",
+            )}
+          >
+            {note.text}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

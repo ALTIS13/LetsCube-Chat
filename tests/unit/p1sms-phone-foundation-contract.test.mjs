@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
+import { PHONE_CODE_UNAVAILABLE } from "../../artifacts/kub/src/lib/plainMessages.ts";
+
 const GATEWAY = new URL("../../supabase/functions/phone-verification-gateway/index.ts", import.meta.url);
 const HOOK = new URL("../../supabase/functions/auth-send-sms/index.ts", import.meta.url);
 const ADAPTER = new URL("../../supabase/functions/auth-send-sms/p1sms.mjs", import.meta.url);
@@ -231,7 +233,24 @@ test("phone UI keeps provider routing out of user-facing delivery copy", async (
   const source = await readFile(PHONE_SECTION, "utf8");
   assert.match(source, /Код отправлен на номер/u);
   assert.match(source, /Код подтверждения \(4 цифры\)/u);
-  assert.match(source, /Сервис доставки кода не настроен/u);
+  // D-132 (settings-profile D5). This used to require the sentence «Сервис
+  // доставки кода не настроен. Обратитесь к администратору.» — a deployment
+  // state described to somebody who cannot change one, and a referral to an
+  // administrator who cannot change it from any screen either. Corrected to the
+  // constant the section shows now, and tightened rather than relaxed: the
+  // section must not name a service, a provider or a configuration at all.
+  assert.match(source, /CODE_DELIVERY_UNAVAILABLE_MESSAGE = PHONE_CODE_UNAVAILABLE/u);
+  assert.equal(PHONE_CODE_UNAVAILABLE, "Не удалось отправить код. Попробуйте позже.");
+  // Rendered text only. The note explaining what was removed quotes the old
+  // sentence, as the administration tabs do, so the scan skips comment lines
+  // and reads the string literals that are left.
+  for (const line of source.split(String.fromCharCode(10))) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) continue;
+    for (const [, text] of trimmed.matchAll(/"([^"]{12,})"/gu)) {
+      assert.doesNotMatch(text, /не настроен|сервис доставки|обратитесь к админ/iu, text);
+    }
+  }
   assert.doesNotMatch(source, /Telegram|Телеграм/u);
   assert.doesNotMatch(source, /Код из SMS/u);
   assert.doesNotMatch(source, /SMS-провайдер не настроен/u);

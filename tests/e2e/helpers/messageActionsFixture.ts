@@ -27,8 +27,8 @@ export interface Person {
   updated_at: string;
 }
 
-export function person(id: string, fullName: string): Person {
-  return { id, full_name: fullName, username: null, avatar_url: null, bio: null, role: "user", online_at: EPOCH, created_at: EPOCH, updated_at: EPOCH };
+export function person(id: string, fullName: string, username: string | null = null): Person {
+  return { id, full_name: fullName, username, avatar_url: null, bio: null, role: "user", online_at: EPOCH, created_at: EPOCH, updated_at: EPOCH };
 }
 
 export function membership(chatId: string, who: Person, role: string, lastReadAt: string | null): Row {
@@ -119,6 +119,13 @@ export interface FixtureOptions {
   messages: Row[];
   /** Answers a database function; undefined leaves the default, `null` with 200. */
   rpc?: (name: string, body: Row) => RpcAnswer | undefined;
+  /**
+   * Everybody else this deployment has, for the lookups that ask about a person
+   * rather than about a chat — «is this никнейм taken?» being the first of them.
+   * The members of the chats are found through `memberships`; these are the
+   * people a query can reach without one.
+   */
+  people?: Person[];
 }
 
 export interface Fixture {
@@ -220,7 +227,20 @@ export async function openFixture(page: Page, options: FixtureOptions): Promise<
       return json(route, answer.body, answer.status ?? 200);
     }
 
-    if (resource === "profiles") return json(route, one([me]));
+    if (resource === "profiles") {
+      // A lookup by никнейм is its own question: the settings screen asks
+      // whether a name is free while it is being typed, and a route that
+      // answered `me` to every filter would report every name taken. Only the
+      // people this fixture was given exist.
+      const username = eq("username");
+      if (username) {
+        const holder = [me, ...(options.people ?? [])].find(
+          (person) => (person as Row).username === username,
+        );
+        return json(route, one(holder ? [holder] : []));
+      }
+      return json(route, one([me]));
+    }
     if (resource === "chat_members") {
       if (method !== "GET") return json(route, single ? null : []);
       const chatId = eq("chat_id");

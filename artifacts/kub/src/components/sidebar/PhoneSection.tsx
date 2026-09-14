@@ -7,13 +7,26 @@ import { KubBadge, KubButton, KubIcon } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import type { ProfileContact } from "@/types/database";
 import { mapPgError } from "@/lib/errors";
+import { PHONE_CODE_UNAVAILABLE } from "@/lib/plainMessages";
 import { subscribeByTable } from "@/lib/realtimeTableChannels";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 const RESEND_WAIT_MS = 120_000;
 const PHONE_FORMAT_HINT = "Введите номер в международном формате, например +79991234567.";
-const CODE_DELIVERY_UNAVAILABLE_MESSAGE =
-  "Сервис доставки кода не настроен. Обратитесь к администратору.";
+/**
+ * D-132 (settings-profile D5). This read «Сервис доставки кода не настроен.
+ * Обратитесь к администратору.» — a deployment state, described to somebody who
+ * cannot change one, and a referral to an administrator who cannot change it
+ * from any screen this product has either. The gateway answers
+ * `delivery_unavailable` and `not_configured` for a provider that is down as
+ * well as for one that was never set up, and the first of those really does
+ * clear by itself, which is why «позже» is honest here.
+ *
+ * The code is in `plainMessages.ts` rather than in this file so that a
+ * `node --test` process can read it; this component cannot be imported without
+ * React.
+ */
+const CODE_DELIVERY_UNAVAILABLE_MESSAGE = PHONE_CODE_UNAVAILABLE;
 
 /**
  * Settings → Phone section.
@@ -175,6 +188,10 @@ export function PhoneSection() {
     setBusy(null);
     if (claimError || claimData?.ok !== true) {
       const claimErrorCode = await readPhoneGatewayErrorCode(claimData, claimError);
+      // The cause stays reachable, in the one place a person who can act on it
+      // reads it (D-132). The number is not logged: `claimErrorCode` is the
+      // gateway's own code, never the claim.
+      console.error("phone gateway begin failed:", claimErrorCode);
       if (claimErrorCode === "delivery_unavailable" || claimErrorCode === "not_configured") {
         setStage("unsupported");
         setCode("");

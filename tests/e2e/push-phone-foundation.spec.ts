@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip } from "./helpers/auth";
+import { PHONE_CODE_UNAVAILABLE } from "../../artifacts/kub/src/lib/plainMessages";
 
 test.describe("LETSCUBE push and phone production foundation", () => {
   test("settings expose push preferences and require OTP for phone changes", async ({ page }) => {
@@ -58,7 +59,12 @@ test.describe("LETSCUBE push and phone production foundation", () => {
 
     await page.getByText("Push-уведомления").scrollIntoViewIfNeeded();
     await expect(page.getByText("Push-уведомления")).toBeVisible();
-    await expect(page.getByText(/Firebase\/FCM|Android-приложении/i).first()).toBeVisible();
+    // D-132 (settings-profile F2). This used to require «Firebase/FCM» on
+    // screen — the delivery network named to the owner of a phone, beside a
+    // local build file and a migration. Corrected to the state the row reports
+    // now, and tightened: none of those three names may appear at all.
+    await expect(page.getByText(/недоступн/i).first()).toBeVisible();
+    await expect(page.getByText(/Firebase|FCM|google-services|migration/i)).toHaveCount(0);
     await expect(page.getByText(/следующем этапе/i)).toHaveCount(0);
     await expect(page.getByText(/настройках браузера/i)).toHaveCount(0);
   });
@@ -96,9 +102,12 @@ test.describe("LETSCUBE push and phone production foundation", () => {
 
     await phoneInput.fill("+1 (555) 123-45-67");
     await page.getByRole("button", { name: /Подтвердить номер|Изменить номер/ }).click();
-    await expect(
-      page.getByText("Сервис доставки кода не настроен. Обратитесь к администратору."),
-    ).toBeVisible();
+    // D-132 (settings-profile D5). This required «Сервис доставки кода не
+    // настроен. Обратитесь к администратору.» — a deployment state described to
+    // somebody who cannot change one. Corrected to the sentence the section
+    // shows now, and it must not go back to describing a service.
+    await expect(page.getByText(PHONE_CODE_UNAVAILABLE)).toBeVisible();
+    await expect(page.getByText(/не настроен|обратитесь к админ/i)).toHaveCount(0);
     await expect(page.getByText(/Twilio|account SID|missing Twilio/i)).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Сохранить без/ })).toHaveCount(0);
     expect(phoneFlowCalls).toEqual(["gateway:begin"]);
