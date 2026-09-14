@@ -10346,7 +10346,7 @@ must not be inside the viewport, and the close button must still work. Putting
 is 6 CSS px wide, so «Мои боты» renders as «М». That is the page header, not the
 feedback viewport, and it predates all of this.
 
-## D-187 `[~]` Nobody could refuse anybody, and nothing could be reported
+## D-187 `[x]` Nobody could refuse anybody, and nothing could be reported
 
 **Severity:** high, and it was invisible until a form asked. Raised on
 2026-09-14 while filling in the Microsoft Store age-rating questionnaire, which
@@ -10407,11 +10407,203 @@ blocked and stops their message; the person who blocked can still write; a
 report goes in and does not come back out; staff read the queue. Thirteen rules
 green in the rehearsal, four on production, nothing written.
 
-**Still open:** the interface. Blocking and reporting controls, the list of
-people you have blocked, and the staff queue are being built; the entry closes
-when a person can do this without SQL.
+**The interface shipped the same day.** «Заблокировать» in the header menu of a
+private chat and on the contact card, both behind a question that describes what
+the row actually does and no more; «Заблокированные» in «Конфиденциальность»,
+which also answers a search for «заблокирован» and «чёрный список», because a
+block nobody can find again is a trap rather than a setting; «Пожаловаться» as
+the last item of the message menu and beside the block on a person, with one
+reason picker for both; and the refused send saying «Пользователь ограничил
+переписку.» beside the composer while the message stays in the conversation with
+its words and a «Повторить».
+
+The staff side is «Жалобы» in the administration, gated on
+`canReadModerationQueue` rather than on `isStaff` — see D-188 for why those are
+not the same rule, and `lib/moderationAccess.ts` for the rule itself.
 
 **Not done, deliberately:** blocking does not hide the other person's profile,
 name or existing messages — Telegram does not either, and rewriting a
 conversation somebody may need is a bigger harm than the one being fixed. It
 does not reach groups. And nobody is told they were blocked or reported.
+
+---
+
+## D-188 `[ ]` «Блокировки» is offered to people the database will answer with a shorter list
+
+**Severity:** medium. Found on 2026-09-14 while gating the new «Жалобы» tab,
+which is the same job for the same people; recorded rather than fixed, because
+taking a tab away from somebody who can open it today is a decision about people
+and not about a new screen.
+
+**Surface:** `artifacts/kub/src/pages/admin/AdminLayout.tsx` — the tab strip
+filter and `<Route path="/admin/bans" component={BansMutesTab} />`, which is
+mounted bare. The tab carries no `adminOnly`, so it is shown to everybody the
+client calls `isStaff`.
+
+**Defect:** `isStaff` and the policy that actually reads these rows are two
+different rules, and the client's is the wider one. Measured on production on
+2026-09-14:
+
+- `public.is_manager_or_admin(uid)` is `profiles.role in ('admin','manager')`
+  **or** `has_global_role(uid, 'owner' | 'tech_admin' | 'admin' | 'manager')`.
+- `useRoleAccess().isStaff` is that, **plus** anybody holding one of
+  `STAFF_ACCESS_PERMISSIONS` — `users.view`, `location_members.view`,
+  `tasks.create`, `tasks.assign`, `tasks.manage`, `chats.moderate` — which a
+  location role can carry with no global role at all.
+
+**Observable consequence, and it is not an empty screen.** `bans` and `mutes`
+each carry two read policies, read off `pg_policies` the same day:
+`managers read all bans` (`is_manager_or_admin`) and `user reads own bans`.
+Somebody in the gap therefore opens «Блокировки» and is shown **their own
+sanctions, if any, presented as the whole list** — a list that is complete in
+appearance and wrong in fact. That is worse than the empty queue the new
+«Жалобы» tab would have shown, because nothing about it looks unusual.
+
+**Evidence:** on this deployment, 18 accounts, of which 5 satisfy the database
+predicate; global role keys in use are `owner`×3, `tech_admin`×2, `user`×14. So
+the gap is reachable in principle and nobody is standing in it today — which is
+exactly why this is cheap to fix later and was not fixed in passing.
+
+**The fix, when it is taken:** `moderationQueue: true` on the tab, the same flag
+«Жалобы» already uses, and `canReadReports` on the route — the rule is
+`artifacts/kub/src/lib/moderationAccess.ts`, pinned by
+`tests/unit/moderation-access.test.mts`, and mirrors the database function
+exactly. Deciding who loses the tab is the part that needs the owner, not the
+code.
+
+**Related:** D-187 (the queue this rule was written for) and D-140 (a failed
+read must not render as nothing — this is the same rule one step earlier, at the
+point where the screen is offered rather than where it fails).
+
+---
+
+## D-189 `[x]` A reported message could not be deleted, and neither could the chat holding it
+
+**Severity:** high, and it was shipped by this project six hours earlier. Found
+on 2026-09-14 by reading the constraint list back off production instead of off
+the migration that wrote it.
+
+**Surface:** `public.content_reports`, created by
+`20260914120000_personal_blocks_and_reports.sql`. Two of its own objects
+contradict each other:
+
+```
+content_reports_message_id_fkey  FOREIGN KEY (message_id)
+  REFERENCES messages(id) ON DELETE SET NULL
+content_reports_message_present  CHECK ((kind = 'message') = (message_id IS NOT NULL))
+```
+
+**Defect:** `ON DELETE SET NULL` performs an UPDATE on the referencing row, and
+an UPDATE re-checks every CHECK. The moment a reported message is deleted,
+Postgres sets `message_id` to null and the CHECK refuses the new row — and the
+refusal propagates outwards, so **the delete itself fails**.
+
+**Evidence**, measured on production inside a transaction that rolled back, on a
+temporary pair carrying those two definitions verbatim:
+
+```
+MECHANISM: the delete was REFUSED -> new row for relation "probe_rep"
+           violates check constraint "probe_message_present"
+```
+
+**Observable consequence, and not for an administrator.**
+`messages_chat_id_fkey` is `ON DELETE CASCADE`, and «Удалить группу» is an
+ordinary control — `ChatHeader.tsx:96`, `ChatInfoPanel.tsx:1010` and
+`ChatList.tsx:461` all run `from("chats").delete()`. So an owner whose group held
+one reported message could no longer delete their own group, and the sentence
+they would have got names a table they have never heard of. Nobody had reported
+anything yet (0 rows), so it was never reachable in the wild.
+
+**Fixed** by `20260914130000_a_reported_message_may_be_deleted.sql`, applied to
+production the same day after a verified schema backup
+(`/srv/letscube/backups/pre-migrations/20260914-034240-before-reported-message-may-be-deleted.schema.dump`,
+1318216 bytes, sha256 `9c7b8377…cc28f9cc`; migration sha256 `067d0edb…`). Only
+one half of the CHECK was ever a rule:
+
+- a report that is **not** about a message must not carry a message id — real,
+  and rehearsal rule 11 pins it;
+- a report about a message must carry one — true when it is filed, and not
+  something the row can promise for ever.
+
+So the constraint is now `check (kind = 'message' or message_id is null)`. The
+complaint deliberately outlives the evidence: `SET NULL` rather than `CASCADE`,
+because «somebody complained and the message is gone» is exactly the case staff
+need to be able to see.
+
+**Proved afterwards on production**, as four rules in one rolled-back
+transaction against the real table and a real message: a report goes in; the
+message id may now be cleared, which is the exact UPDATE the referential action
+performs; a report about a *person* still may not carry a message id; and
+deleting the reported message succeeds with the complaint still standing. Row
+counts unchanged afterwards — 0 reports, 0 blocks, 3358 messages.
+
+**The client half is part of the same defect.** `reportedMessageView` had four
+answers, and a report whose message id is gone would have fallen into
+`unreadable` — «Текст сообщения недоступен: его видят только участники чата» —
+which blames the reader for an absence that is not theirs. It now has a fifth,
+`gone`, with its own sentence, and the tab asks `reportedMessageNotice` for the
+words instead of choosing between them with nested ternaries, so a sixth state
+cannot inherit the fifth one's sentence. Five mutations turn
+`tests/unit/content-report-queue.test.mts` red, including deleting the new
+branch and giving `gone` the reader-blaming sentence.
+
+**The general lesson,** which is worth more than the fix: a referential action
+is a write, and a write meets every constraint on the table it writes. A CHECK
+that spans the same column a foreign key nulls is a contradiction the schema
+will only report at the moment somebody deletes something.
+
+---
+
+## D-190 `[x]` The hint about the microphone covered the sentence saying why the message did not send
+
+**Severity:** medium, and it was found by looking at the pixels rather than by
+any test. Raised on 2026-09-14 while reviewing the block-and-report screens on a
+390-point viewport, both themes.
+
+**Surface:** `artifacts/kub/src/components/chat/MessageInput.tsx` — the refusal
+banner (`data-testid="composer-refusal"`) and the recorder-mode hint, which is
+anchored to the round button with `side="top"`.
+
+**Defect:** both occupy the strip directly above the capsules, and the hint is
+drawn over it. Measured on a 390-point viewport, with the rule below removed:
+
+| | x | y | w | h |
+| --- | --- | --- | --- | --- |
+| the refusal banner | 12 | 718 | 366 | 62 |
+| the recorder hint | 54 | 696 | 320 | 80 |
+
+The hint covers the banner almost exactly. On screen everything survived but the
+icon and the first letter of «Пользователь».
+
+**Consequence:** the one sentence explaining why a message did not arrive was
+unreadable at the moment it was written. The information was not lost — the
+bubble itself also carries it, beside «Повторить» — but the banner is where a
+person looks, and a red pill with one letter in it reads as a glitch.
+
+**Fixed** in `lib/recordingGesture.ts`: `RecorderModeHintInput` gained
+`refusalVisible`, and `shouldOfferRecorderModeHint` refuses while it is set —
+the same rule `feedbackVisible` already carried, one case wider. The banner
+wins, and not because it is newer: a hint about a gesture is worth reading
+whenever, a sentence about a message that did not arrive is worth reading now.
+`useHint` withdraws on `enabled: false`, so the plate leaves rather than merely
+not appearing.
+
+**Three mutations turn `tests/unit/interface-hints.test.mts` red**: dropping the
+guard, not passing the key from the composer, and — the one that needed its own
+assertion — passing the key with `false` wired into it, which satisfies the
+existing «these are the inputs» list while restoring the defect exactly.
+
+**Two things this cost, both worth writing down.**
+
+1. **`document.elementFromPoint` is not a test for «is this covered».** The
+   first version of the e2e check asked what was at the middle of the banner and
+   got «the banner» while the hint sat over the whole of it — because the hint
+   stopped taking presses when D-186 was fixed, so hit-testing walks straight
+   through it. The instrument answered a different question than the one asked.
+   Overlap of the two boxes is the right measure, and
+   `tests/e2e/blocks-and-reports.spec.ts` now takes it.
+2. **The assertion was green against the defect for a second reason first**: it
+   ran the instant the refusal appeared, and the hint is offered a beat later.
+   The capture script that produced the screenshots waited 700ms, which is why
+   its pixels showed what four test runs did not. Both directions are now
+   proved: green with the rule, red without it.

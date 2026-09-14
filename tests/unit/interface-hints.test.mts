@@ -185,6 +185,7 @@ const offering: RecorderModeHintInput = {
   phoneWidth: true,
   buttonOnScreen: true,
   overlayOpen: false,
+  refusalVisible: false,
 };
 
 test("the composer hint is offered on a resting phone composer in voice mode", () => {
@@ -199,6 +200,10 @@ test("each condition on the composer hint is load-bearing", () => {
     ["a recording under way, when the button is not a switch", { recording: true }],
     ["the composer's own plate already up", { feedbackVisible: true }],
     ["a sheet open over the composer, where the plate would take its taps", { overlayOpen: true }],
+    // Measured on a 390-point viewport on 2026-09-14: the plate covered the
+    // refusal banner down to its icon and one letter, so the only sentence
+    // saying why the message did not arrive was unreadable.
+    ["the refusal banner up, which is the sentence worth reading now", { refusalVisible: true }],
     ["video already chosen, which is proof it was found", { mode: "video" }],
   ];
 
@@ -278,7 +283,18 @@ test("the composer hands the predicate every condition it judges", () => {
     "overlayOpen",
     "phoneWidth",
     "recording",
+    "refusalVisible",
   ]);
+
+  // And `refusalVisible` is bound to the banner rather than to a constant.
+  // Passing the key with `false` wired into it satisfies the list above and
+  // restores the defect — measured on 2026-09-14, that mutation stayed green
+  // through every other check in this file.
+  assert.match(
+    blankComments(read(COMPOSER)),
+    /refusalVisible:\s*Boolean\(refusal\)/u,
+    "the composer passes refusalVisible without reading the refusal",
+  );
 });
 
 // ── mutation: each guarantee is proved by breaking it ───────────────────────

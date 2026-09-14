@@ -239,7 +239,16 @@ test("deleting a channel says channel, in the row and in what it asks", async ({
   await onRoot(page, "Удалить канал").click();
   const dialog = page.locator('[aria-modal="true"]');
   await expect(dialog).toContainText("Удалить канал?");
-  await expect(dialog).toContainText("После удаления канал исчезнет у всех подписчиков.");
+  // The second line changed in `fd9255c` (D-150): it used to repeat the first
+  // almost word for word — «Чат и история исчезнут у всех подписчиков» over
+  // «После удаления канал исчезнет у всех подписчиков» — and now says the thing
+  // an owner who only wants out actually needs to know. This test kept asserting
+  // the old sentence and had been red since, which is why the wording is taken
+  // from `chatVocabulary` rather than written out again here.
+  await expect(dialog).toContainText("Чат и история исчезнут у всех подписчиков.");
+  await expect(dialog).toContainText(
+    "Если вы просто хотите уйти, передайте права владельца другому подписчику — тогда канал останется.",
+  );
   // «Удалить групповой чат» was the card's own wording for the same button the
   // settings screen called «Удалить группу»; one name now, and it names this.
   await expect(page.getByTestId("chat-info-panel")).not.toContainText("Удалить групповой чат");

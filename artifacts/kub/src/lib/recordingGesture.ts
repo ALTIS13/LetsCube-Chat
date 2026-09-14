@@ -386,6 +386,21 @@ export interface RecorderModeHintInput {
    * nobody can reach is teaching nobody and intercepting somebody.
    */
   overlayOpen: boolean;
+  /**
+   * The composer is already saying why the last send did not go through.
+   *
+   * Added on 2026-09-14, after looking at the pixels rather than at the
+   * tests: the refusal a block produces — «Пользователь ограничил переписку.»
+   * — is drawn directly above the capsules, and this plate hangs over the
+   * same strip. On a 390-point viewport the plate covered all of it but the
+   * icon and one letter.
+   *
+   * The banner wins, and not merely because it is newer: a hint about a
+   * gesture is worth reading whenever, while a sentence explaining why a
+   * message did not arrive is worth reading now. This is the same rule as
+   * `feedbackVisible` one case wider.
+   */
+  refusalVisible: boolean;
 }
 
 /**
@@ -402,12 +417,12 @@ export interface RecorderModeHintInput {
  *
  * The rest is ordinary courtesy: not while something is recording, not under a
  * sheet that has opened over the composer, not on top of the composer's own
- * feedback plate, and not once the person has reached `video`, which is proof
- * they found it.
+ * feedback plate **or its refusal banner**, and not once the person has
+ * reached `video`, which is proof they found it.
  */
 export function shouldOfferRecorderModeHint(input: RecorderModeHintInput): boolean {
   if (!input.coarsePointer || !input.phoneWidth) return false;
   if (!input.buttonOnScreen || input.overlayOpen) return false;
-  if (input.recording || input.feedbackVisible) return false;
+  if (input.recording || input.feedbackVisible || input.refusalVisible) return false;
   return input.mode === "voice";
 }
