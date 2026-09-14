@@ -36,7 +36,14 @@ import {
  * **What the server half still owes this file**, measured rather than guessed —
  * see fact 4 in `botChatSurfaces.ts`:
  *
- *   `public.bot_callback_press(p_message_id uuid, p_data text) returns jsonb`,
+ *   `public.bot_callback_press(p_message_id uuid, p_data text)`, which exists
+ *   since `20260914150000_bot_press_and_bot_chat.sql` and returns the
+ *   **callback id** rather than the bot's answer. That is not a compromise:
+ *   `private.bot_callback_answers` is revoked from every role including
+ *   `service_role`, so there is no answer to return yet. `readCallbackAnswer`
+ *   already falls back to «Готово» for anything that is not an object, which
+ *   is the honest thing to say about a press that went through and has not
+ *   been answered.
  *   `security definer`, granted to `authenticated`. It must mint the callback
  *   id itself and pass `auth.uid()` as the actor, then call the existing
  *   `public.bot_update_enqueue_internal(bot_id, 'callback_query', p_message_id,

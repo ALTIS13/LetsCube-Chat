@@ -6918,7 +6918,7 @@ D-123; it can land first.
 **Audit rows:** work-surfaces T-D13 (section 1.2 of the audit calls it T-D14; the table
 row is T-D13); section 4, «Location administrator»; top-10 item 2.
 
-## D-125 `[ ]` A bot's inline keyboard is never drawn, so its question cannot be answered
+## D-125 `[x]` A bot's inline keyboard is never drawn, so its question cannot be answered
 
 **Severity:** high, for every chat with a bot. Found by the chat-functions audit from the
 client and the Bot API; rendered on the fixture (frame 32).
@@ -6941,7 +6941,32 @@ open their link (Telegram: core.telegram.org/bots/features, audit source T61).
 
 **Audit rows:** chat-functions K1; top-10 item 8.
 
-## D-126 `[ ]` A bot's commands are stored but never offered in its chat
+**Done on 2026-09-14, and why this stays open.** The client half is built: a bot's
+`bot_reply_markup` is parsed by `artifacts/kub/src/lib/botChatSurfaces.ts` and drawn under
+the bubble by `artifacts/kub/src/components/chat/BotInlineKeyboard.tsx`, in the bot's own
+rows, with a press saying so on that button alone and a failure putting the button back.
+
+What it cannot do is deliver the press, and the reason is not in the client.
+`public.bot_update_enqueue_internal` is the only writer of `private.bot_updates`; its
+`callback_query` branch is already written and already checks that the actor is a member
+of the chat, and it is `revoke all … from authenticated` / `grant execute … to
+service_role`. It also takes the actor's id **as an argument** rather than reading
+`auth.uid()`, so opening that grant as it stands would let one member of a chat forge a
+press as another. What is needed is a thin wrapper — `public.bot_callback_press(p_message_id
+uuid, p_data text)`, `security definer`, granted to `authenticated`, passing `auth.uid()`
+as the actor — and a way to read the bot's `answerCallbackQuery` back, which today lands in
+`private.bot_callback_answers` and is revoked from every role. The client already calls
+that name and already says «Кнопки этого бота пока не работают.» while nothing answers to
+it, so the surface comes back on its own the moment the wrapper exists.
+
+**Two corrections to this entry, both measured.** «URL buttons open their link» cannot
+happen: `private.bot_inline_keyboard_valid` counts the keys of each button and requires
+exactly two, named `text` and `callback_data`, so a `{text, url}` button cannot be stored.
+The parser refuses one, and `artifacts/kub/src/pages/public/BotDocsPage.tsx` promises
+callback buttons only — the Bot API's `callbackButtonSchema` agrees. And the bot's answer
+cannot be shown «as a toast» until the second half above exists.
+
+## D-126 `[x]` A bot's commands are stored but never offered in its chat
 
 **Severity:** medium. Found by the chat-functions audit from the code; not rendered.
 
@@ -6958,7 +6983,24 @@ audit source T62).
 
 **Audit rows:** chat-functions K2; top-10 item 8.
 
-## D-127 `[ ]` A bot found in search cannot be opened
+**Closed on 2026-09-14.** A button inside the field's capsule opens the list; «/» in the
+field filters the same list, by the name's prefix and in the order the bot registered them
+(`bot_commands.sort_order`). Choosing a row fills the field with «/команда » and does not
+send — a command that takes an argument would be unusable from a menu that sent on the
+choice. `artifacts/kub/src/components/chat/BotCommandMenu.tsx`,
+`artifacts/kub/src/hooks/useBotChat.ts`, decisions in
+`artifacts/kub/src/lib/botChatSurfaces.ts`.
+
+This one needed nothing new from the server: `public.bot_commands` carries `grant select …
+to authenticated` under the policy «members and owners read bot commands», so a chat member
+can already read them. Two consequences worth recording. A bot's commands are only readable
+**once you share a chat with it**, so there is no way to preview them from search — which is
+correct, and is the reason this depends on D-127. And no bot table is in the
+`supabase_realtime` publication, so a bot that replaces its commands is seen the next time
+the chat is opened, not at once; a poll would cost every chat in the product a request for a
+fact that changes perhaps once in a bot's life.
+
+## D-127 `[x]` A bot found in search cannot be opened
 
 **Severity:** high, for bots: search is where people find one, and the result leads
 nowhere. Found by the chat-functions audit; rendered on the fixture (frame 33).
@@ -6973,6 +7015,31 @@ composer until the person starts it, as Telegram's «Start» (audit source T62).
 exists, leave bots out of the results.
 
 **Audit rows:** chat-functions A11, K4; top-10 item 8.
+
+**Half done on 2026-09-14.** Tapping a bot now opens the chat with it when one exists:
+`chat_bot_members` is readable by an ordinary account, so the chats shared with that bot are
+found, intersected with the reader's own memberships — a bot's owner sees chats they are not
+in — and a private one is preferred over a group. Before this, even an existing bot chat
+could not be reached from search at all. «Запустить» is in place too: in a chat holding a
+bot that the reader has never written in, the whole composer is one button, and it sends
+`/start`. Both in `artifacts/kub/src/components/search/SearchShared.tsx`,
+`artifacts/kub/src/components/chat/MessageInput.tsx` and
+`artifacts/kub/src/lib/botCallback.ts`.
+
+**What is left is creating a chat that does not exist yet, and it is a server gap.**
+`public.chat_bot_members` carries `grant select … to authenticated` and nothing else — no
+INSERT grant, no INSERT policy, and no RPC anywhere that inserts into it. The only
+`insert into public.chat_bot_members` in the repository is in the rollout smoke SQL, run as
+`service_role`. What is needed is `public.open_or_create_bot_chat(p_bot_id uuid) returns
+uuid`, `security definer`, granted to `authenticated` — the bot's counterpart of
+`open_or_create_private_chat`. The client already calls that name and says «Чат с ботом пока
+недоступен.» while nothing answers to it.
+
+**One thing to settle when that RPC is written:** a private chat with a bot has no second
+human, and `getChatDisplayInfo` takes a private chat's title from the other member, falling
+back to `chats.name`. So such a chat will show whatever `name` the RPC writes, with the
+subtitle «Личный чат», rather than the bot's display name. Noted rather than fixed here —
+it cannot be reproduced until a bot chat can be created.
 
 ## D-128 `[x]` A group's member actions appear only under a mouse pointer — the same defect as D-163
 
@@ -11131,3 +11198,46 @@ edge breaks two width tests, and turning the handle back into a flex column
 breaks the new «the handle sits on the seam and takes no width of its own»,
 which measures that the panes are not pushed apart and that the grip is centred
 on the edge it drags.
+
+---
+
+## D-125, D-126 and D-127, closed on 2026-09-14 — one gap seen three ways
+
+These were filed as three interface defects. They are one: **the bot platform
+was built entirely from the bot's side.** A bot can send an inline keyboard,
+register its commands and be put into a chat, and every one of those paths is
+`service_role`. Nothing let the person act, which is why a keyboard could not be
+pressed, a command list could not be seen and a bot could not be opened.
+
+Measured on production rather than off the migration files:
+
+- `public.bot_update_enqueue_internal` is the only writer of
+  `private.bot_updates`. Its `callback_query` branch is complete and already
+  checks membership, the bot's presence and the history window — but it takes
+  the actor **inside `p_context`** and trusts its caller. That is exactly why it
+  could only be `service_role`: opening it would let one member of a chat press
+  a button in another member's name.
+- `public.chat_bot_members` grants `authenticated` SELECT and nothing else.
+- `private.bot_callback_answers` is revoked from **every** role, `service_role`
+  included.
+
+`20260914150000_bot_press_and_bot_chat.sql` adds the two wrappers that were
+missing and nothing else. Neither takes an actor: both read `auth.uid()` and
+refuse without one, which is the whole reason they exist rather than a grant on
+the internal function. `bot_callback_press` also checks that the data belongs to
+a button actually on that message — the internal branch bounds the length and
+nothing else, so without it a member could send a bot any string at all.
+
+**What is still not there, and is not pretended away:** the bot's *answer* to a
+press cannot be read by anyone, so a successful press says «Готово» rather than
+what the bot replied. `readCallbackAnswer` already returns that for anything
+that is not an object, so the day `bot_callback_answers` becomes readable the
+sentence improves with no client change. That gap is recorded here rather than
+filed as a fourth entry, because it is the same gap: the answer, like the press,
+was only ever built for the service.
+
+**And D-125's own proposal was wrong.** It said a URL button opens its link.
+`private.bot_inline_keyboard_valid` requires each button to carry exactly `text`
+and `callback_data`, so a URL button cannot exist in this database, and the
+public `BotDocsPage` never promised one. The parser refuses it rather than
+drawing a shape the schema forbids.
