@@ -9342,7 +9342,7 @@ therefore showing a state the product cannot be in. Corrected in five of the six
 (`chat-list-event-cost.spec.ts`) was being edited by another agent at the time and is noted here so it is not
 forgotten.
 
-## D-166 `[ ]` Every membership change is already recorded per chat, and no chat can show it
+## D-166 `[x]` Every membership change is already recorded per chat, and no chat can show it
 
 **Severity: medium**, and unusually cheap to fix.
 
@@ -11692,3 +11692,44 @@ stable reference, or it will re-fetch on every heartbeat echo.
 
 **Not fixed now** because it costs nothing today and the careless version of the
 fix is worse than the defect.
+
+---
+
+## D-166 — how it was closed, 2026-09-15
+
+Closed by `20260915140000_a_group_says_who_came_and_went.sql`, and **not** by
+the route the entry proposed. Loosening `audit_logs` would hand a group's
+members a slice of a global audit table; Telegram and Discord both show these
+lines to everybody in the room instead.
+
+The channel used was already built and never used: `messages.type` accepts
+`'system'`, `messages_sender_shape_check` *requires* such a row to carry
+`user_id IS NULL` and `bot_id IS NULL`, `enqueue_message_notifications` returns
+null on its first line for one so nothing is pushed, and the client already
+draws it — `resolveMessageActor` answers `{ kind: "system" }`, `MessageList`
+routes on `type` before touching a sender, and `SystemMessageNotice` renders a
+centred pill. No client can write one, so it is a trigger.
+
+Six lines, measured in a rolled-back rehearsal on production:
+
+| event | line |
+| --- | --- |
+| somebody else adds them | «АКТЁР добавил(а) в группу: УЧАСТНИК» |
+| removed by that person | «АКТЁР исключил(а) из группы: УЧАСТНИК» |
+| they join themselves | «УЧАСТНИК присоединился(ась) к группе» |
+| they leave themselves | «УЧАСТНИК вышел(а) из группы» |
+| the service adds them | «УЧАСТНИК присоединился(ась) к группе» |
+| the service removes them | «УЧАСТНИК больше не в группе» |
+
+The first rehearsal read «АКТЁР добавил(а) УЧАСТНИК», which is ungrammatical —
+Russian wants the accusative for a direct object and SQL has no declension. A
+colon now introduces a name that would otherwise be an object, which licenses
+the nominative for every name.
+
+**Four silences, each deliberate:** role changes (both products keep those in an
+admin log, and one ownership handover moves two rows), private chats and
+therefore every bot chat, a group's own creation, and a chat being deleted.
+
+**Left open by this:** a group's members still cannot read the *history* of who
+came and went before today — the service lines start now. The record in
+`audit_logs` remains unreadable to them, and deliberately so.
