@@ -34,6 +34,25 @@ export const FOLDER_RAIL_WIDTH = 72;
 /** Telegram's `dialogsSmallColumnWidth()`: padding 10 + avatar 46 + padding 10. */
 export const CHAT_LIST_COLLAPSED_WIDTH = 66;
 
+/**
+ * Everything in the left region that is **not** the list: the 72px folder rail
+ * and the region's own right hairline.
+ *
+ * `.kub-left-region` is `calc(72px + var(--kub-chat-list-width) + 1px)`, so the
+ * region is always this much wider than the column the width names. The handle
+ * has to subtract it, and the first version did not — it read the pointer's
+ * distance from the region's own left edge and wrote that straight into the
+ * column's width, with a comment saying the rail «is already in it and the
+ * arithmetic does not have to know the rail exists». It is in it, which is
+ * exactly why the arithmetic does have to take it out.
+ *
+ * The cost was 73px of lag on every frame: grabbing the handle without moving
+ * jumped the list 73px wider, and dragging left crossed the collapse threshold
+ * while the pointer was still deep inside the list. The owner reported it as
+ * «сразу становятся аватарками без возможности вытянуть обратно» (D-196).
+ */
+export const CHAT_LIST_REGION_CHROME = 73;
+
 /** Telegram's `columnMinimalWidthLeft`. */
 export const CHAT_LIST_MIN_WIDTH = 260;
 

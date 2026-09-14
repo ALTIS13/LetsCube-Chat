@@ -264,7 +264,19 @@ async function avatarLefts(page: Page) {
   );
 }
 
-/** Drags the handle so the list's right edge lands at `width`, and lets go. */
+/**
+ * Drags the handle so the **column** is `width` wide, and lets go.
+ *
+ * The pointer goes to `region.x + REGION_CHROME + width`, not `region.x +
+ * width`. That second form is what this helper did until 2026-09-14, and it is
+ * the defect it was supposed to catch: the region is the rail plus the column
+ * plus a hairline, so aiming at the region's own left edge asks for a column
+ * 73px wider than the number. The product agreed with it — it wrote the
+ * region's width into the column's variable — so the test passed while the
+ * handle lagged the pointer by 73px on every frame (D-196).
+ */
+const REGION_CHROME = 73;
+
 async function dragListTo(page: Page, width: number, { release = true } = {}) {
   const handle = page.getByTestId("chat-list-resizer");
   const box = await handle.boundingBox();
@@ -272,7 +284,7 @@ async function dragListTo(page: Page, width: number, { release = true } = {}) {
   if (!box || !region) throw new Error("the handle or the left region has no box");
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await page.mouse.move(region.x + width, box.y + box.height / 2, { steps: 12 });
+  await page.mouse.move(region.x + REGION_CHROME + width, box.y + box.height / 2, { steps: 12 });
   if (release) await page.mouse.up();
   await page.waitForTimeout(120);
 }
@@ -280,6 +292,32 @@ async function dragListTo(page: Page, width: number, { release = true } = {}) {
 test.describe("the computer's shell: a folder rail, a side list and a list that narrows", () => {
   test.beforeEach(async ({ request }) => {
     await requireFixtureServer(request);
+  });
+
+  test("the handle sits on the seam and takes no width of its own", async ({ page }) => {
+    test.skip(!isDesktop(page), "there is nothing to drag below `md`");
+    await boot(page);
+
+    const region = await page.locator("[data-kub-left-region]").boundingBox();
+    const pane = await page.locator("[data-kub-panes] > div").last().boundingBox();
+    const handle = await page.getByTestId("chat-list-resizer").boundingBox();
+    if (!region || !pane || !handle) throw new Error("a box is missing");
+
+    // No gap between the two panes. The handle used to be a flex sibling 6px
+    // wide, and those 6px were a band of the application's own ground — a black
+    // strip down the seam in the dark theme, which is what the owner saw. A
+    // grip is drawn on the edge, not wedged between the panes.
+    expect(
+      Math.abs(pane.x - (region.x + region.width)),
+      "the handle is pushing the panes apart",
+    ).toBeLessThanOrEqual(1);
+
+    // And it is over the seam, not beside it.
+    expect(
+      Math.abs(handle.x + handle.width / 2 - (region.x + region.width)),
+      "the grip is not centred on the edge it drags",
+    ).toBeLessThanOrEqual(2);
+ 
   });
 
   test("the folder rail is 72pt, carries the counts, and is the only folder surface on a computer", async ({ page }) => {

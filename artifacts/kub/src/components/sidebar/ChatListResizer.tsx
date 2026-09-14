@@ -6,6 +6,7 @@ import { FOCUS_RING_INSET } from "@/lib/controlSurface";
 import {
   CHAT_LIST_MAX_WIDTH,
   CHAT_LIST_MIN_WIDTH,
+  CHAT_LIST_REGION_CHROME,
   DESKTOP_CHAT_LIST_STORAGE_KEY,
   chatListNarrowRatio,
   effectiveChatListWidth,
@@ -99,9 +100,12 @@ export function ChatListResizer() {
     if (event.button !== 0) return;
     const region = document.querySelector<HTMLElement>("[data-kub-left-region]");
     if (!region) return;
-    // Measured from the region's own left edge, so the rail's 72px is already
-    // in it and the arithmetic does not have to know the rail exists.
-    originRef.current = region.getBoundingClientRect().left;
+    // Measured from where the **column** starts, which is the region's left
+    // edge plus the rail and the region's hairline. Taking the region's edge
+    // alone wrote the region's width into the column's variable and left the
+    // handle 73px behind the pointer on every frame — see
+    // `CHAT_LIST_REGION_CHROME`.
+    originRef.current = region.getBoundingClientRect().left + CHAT_LIST_REGION_CHROME;
     startXRef.current = event.clientX;
     movedRef.current = false;
     draggingRef.current = true;
@@ -163,7 +167,15 @@ export function ChatListResizer() {
       aria-valuemin={CHAT_LIST_MIN_WIDTH}
       aria-valuemax={CHAT_LIST_MAX_WIDTH}
       data-testid="chat-list-resizer"
-      className={`group relative hidden w-1.5 shrink-0 cursor-col-resize touch-none select-none md:block ${FOCUS_RING_INSET}`}
+      // **No width in the layout.** As a flex sibling this used to take 6px
+      // between the two panes, and those 6px were a band of the application's
+      // own ground — a black strip down the seam in the dark theme, which is
+      // what the owner saw. Telegram's grip is not a column between the panes;
+      // it sits **on** the edge. So does this one: absolute, centred on the
+      // region's right border, which is where `left` puts it by repeating the
+      // region's own width expression. The border stays the region's.
+      style={{ left: `calc(72px + var(--kub-chat-list-width) + 1px)` }}
+      className={`group absolute inset-y-0 z-20 hidden w-[9px] -translate-x-1/2 cursor-col-resize touch-none select-none md:block ${FOCUS_RING_INSET}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}

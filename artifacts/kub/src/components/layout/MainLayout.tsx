@@ -121,7 +121,10 @@ export function MainLayout() {
           // the bar. The owner saw exactly that on 2026-09-12. The room
           // belongs INSIDE the scroller instead, as end padding, so content
           // passes under the capsule and is seen around it.
-          className="flex flex-1 overflow-hidden"
+          // `relative` for the resizer, which hangs off the region's right
+          // border rather than standing between the panes as a column of its
+          // own. See `ChatListResizer`.
+          className="relative flex flex-1 overflow-hidden"
           data-kub-panes=""
         >
           <div

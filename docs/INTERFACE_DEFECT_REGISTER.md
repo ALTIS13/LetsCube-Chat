@@ -11035,3 +11035,57 @@ test stopped checking is worth more than the failure itself.
 
 **Not measured yet:** when it went red, and whether the two closing gestures
 still work. Both need the same run, once the height is understood.
+
+---
+
+## D-196 `[x]` The handle between the panes was a black strip, and it dragged 73 pixels behind the pointer
+
+**Severity:** high, and reported by the owner on 2026-09-14 with a screenshot:
+«она чёрная и её видно явно в отличии от telegram где полосочка … "вшита" в
+грань и работает плавно, у нас она почему-то теперь не позволяет плавно менять
+размер в группах, пользователи сразу становятся аватарками без возможности
+вытянуть обратно».
+
+Two defects in one control, and the second one is why it felt broken.
+
+**One: it was a column, not a grip.** `ChatListResizer` was a flex sibling
+between the left region and the conversation, `w-1.5` — six pixels of layout
+between the two panes, showing the application's own ground through the gap. In
+the dark theme that is a black strip down the seam. Telegram's grip is not a
+column between the panes; it sits **on** the edge and takes no width. This one
+does now: absolute, nine pixels wide, centred on the region's right border by
+repeating the region's own width expression in `left`. The border stays the
+region's.
+
+**Two: the arithmetic wrote the region's width into the column's variable.**
+`.kub-left-region` is `calc(72px + var(--kub-chat-list-width) + 1px)` — the
+folder rail, the column, and a hairline. The handle measured the pointer's
+distance from the **region's** left edge and wrote that straight into
+`--kub-chat-list-width`, under a comment saying the rail «is already in it and
+the arithmetic does not have to know the rail exists». It is in it, which is
+exactly why the arithmetic had to take it out.
+
+The cost was 73 pixels of lag on every frame: grabbing the handle and moving
+three pixels jumped the list 73px wider, and dragging left crossed
+`CHAT_LIST_COLLAPSE_BELOW` while the pointer was still deep inside the list —
+so the column dropped to the strip of avatars long before the handle reached the
+point where that is meant to happen, and pulling back out needed the pointer
+73px further right than the grip. That is exactly «сразу становятся аватарками
+без возможности вытянуть обратно».
+
+**And the test agreed with the defect, which is why nothing caught it.**
+`dragListTo` in `tests/e2e/desktop-shell.spec.ts` moved the pointer to
+`region.x + width` — the same off-by-the-rail as the product — so the two errors
+cancelled and sixteen tests passed over a control that did not work. The helper
+now aims at `region.x + REGION_CHROME + width`, which is where the column's edge
+actually is.
+
+*A test written against the same misunderstanding as the code cannot find it.
+The number to aim a drag at is the thing being measured, not the box it is
+inside.*
+
+**Pinned by two mutations, each red:** restoring the origin to the region's own
+edge breaks two width tests, and turning the handle back into a flex column
+breaks the new «the handle sits on the seam and takes no width of its own»,
+which measures that the panes are not pushed apart and that the grip is centred
+on the edge it drags.
