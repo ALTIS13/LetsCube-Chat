@@ -195,8 +195,18 @@ export function ChatAvatar({ chat, size = "md", className, showOnline, isSaved: 
       )}
       {showOnline && (
         <span
-          className="absolute bottom-0 right-0 h-2 w-2 rounded-full"
+          // The dot's centre rides the avatar's rim at 45 degrees, rather
+          // than the corner of the square the avatar is drawn in.
+          // `bottom-0 right-0` puts the centre at (W-4, W-4), which is
+          // sqrt(2)*(W/2-4) from the middle: under a pixel outside the rim at
+          // 32px, and eleven outside it at 80px, where it stops reading as a
+          // badge on the avatar and starts reading as a stray mark beside it.
+          // 14.645% is (1 - sqrt(2)/2)/2, so the centre lands on the circle at
+          // every size.
+          className="absolute h-2 w-2 rounded-full"
           style={{
+            right: "calc(14.645% - 4px)",
+            bottom: "calc(14.645% - 4px)",
             background: "var(--tg-online)",
             boxShadow: "0 0 0 2px var(--tg-sidebar)",
           }}
@@ -300,8 +310,18 @@ export function UserAvatar({
       )}
       {showOnline && (
         <span
-          className="absolute bottom-0 right-0 h-2 w-2 rounded-full"
+          // The dot's centre rides the avatar's rim at 45 degrees, rather
+          // than the corner of the square the avatar is drawn in.
+          // `bottom-0 right-0` puts the centre at (W-4, W-4), which is
+          // sqrt(2)*(W/2-4) from the middle: under a pixel outside the rim at
+          // 32px, and eleven outside it at 80px, where it stops reading as a
+          // badge on the avatar and starts reading as a stray mark beside it.
+          // 14.645% is (1 - sqrt(2)/2)/2, so the centre lands on the circle at
+          // every size.
+          className="absolute h-2 w-2 rounded-full"
           style={{
+            right: "calc(14.645% - 4px)",
+            bottom: "calc(14.645% - 4px)",
             background: "var(--tg-online)",
             boxShadow: "0 0 0 2px var(--tg-header)",
           }}

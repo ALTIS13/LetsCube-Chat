@@ -259,19 +259,34 @@ test("a row with more than it can show counts the rest instead of dropping them"
   await expect(row(page, PETR)).toContainText("+2");
 });
 
-test("somebody wearing nothing keeps the row they always had", async ({ page }) => {
+test("somebody wearing nothing still wears no strip", async ({ page }) => {
   await openMembers(page);
 
   const plain = row(page, OLGA);
   await expect(plain).toBeVisible();
-  // No strip, and no line to put one on. An empty strip would render as nothing
-  // at all — and «Без роли» would be a claim where there is only a gap.
+  // No strip: an empty one would render as nothing at all, and «Без роли»
+  // would be a claim where there is only a gap. That half of the original
+  // assertion is unchanged.
   await expect(plain.getByTestId("chat-info-member-badges")).toHaveCount(0);
-  await expect(plain.getByTestId("chat-info-member-standing")).toHaveCount(0);
+
+  // **The other half was reversed on purpose, by D-168.**
+  //
+  // This test used to require `chat-info-member-standing` to be absent from an
+  // ordinary member's row, and to prove it by the row being shorter. D-168 is
+  // the register entry for exactly that state — «an ordinary member's row
+  // carries nothing at all» — and its answer is not the «Без роли» this test
+  // rightly refused: it is the person's own nickname, which is a fact rather
+  // than a claim, plus the presence sentence when presence can be read.
+  //
+  // So the second line is now drawn for everybody, and what survives from the
+  // original is the rule underneath it: the line is never *empty*. Measured at
+  // 1440 on 2026-09-15, this costs an undecorated row 52 -> 70 points, and a
+  // decorated one is still the taller of the two.
+  const line = plain.getByTestId("chat-info-member-standing");
+  await expect(line).toHaveCount(1);
+  expect((await line.innerText()).trim().length).toBeGreaterThan(0);
   await expect(row(page, ANNA).getByTestId("chat-info-member-standing")).toHaveCount(1);
 
-  // And the row is really shorter, rather than merely emptier: an invisible
-  // second line would cost every ordinary member height for nothing.
   const heights = await page.evaluate(
     (ids) =>
       ids.map(
@@ -281,7 +296,10 @@ test("somebody wearing nothing keeps the row they always had", async ({ page }) 
     [OLGA.id, ANNA.id],
   );
   expect(heights[0]).toBeGreaterThan(0);
-  expect(heights[0]).toBeLessThan(heights[1]);
+  expect(
+    heights[0],
+    "a chip strip should still make a row taller than a plain second line",
+  ).toBeLessThan(heights[1]);
 });
 
 test("the badge's colour never reaches the words", async ({ page }) => {

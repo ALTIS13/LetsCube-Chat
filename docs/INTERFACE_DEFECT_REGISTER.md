@@ -9362,6 +9362,53 @@ audit_logs» using `is_admin(auth.uid())` (`:44-47`), so a chat owner who is not
 administrator cannot read their own group's history. That policy change is a database change and needs the
 owner's approval and a backup, per section 10 of the handoff.
 
+### Measured on production, read-only, 2026-09-15 — and it still cannot ship
+
+Every figure below was read with `select` / `pg_policies` / `information_schema` only; the one behavioural
+probe ran inside `begin; … rollback;`. Nothing was written.
+
+**The record is richer than the entry says, and thinner in one place that matters.** 69 `chat_member_added`,
+103 `chat_member_removed` and 12 `chat_member_role_changed`, all `target_kind = 'chat'` with
+`target_id = chat_id`, the diff carrying `user_id` and `role` (and `from`/`to` for a role change). But
+`actor_id` is nullable and **32 of the 103 removals have no actor at all** (67 of 69 additions do). So a
+service line built on this must be able to say «Борис вышел» without naming who did it — the record does not
+always know.
+
+**The entry's cited policy is stale, though its conclusion holds.** `20260505_audit_logs.sql:42-47` really does
+create «admins read audit_logs» with `is_admin(auth.uid())`, but that is not what is live. The one policy on
+the table today is `audit_logs select by permission`: `has_permission(auth.uid(), 'audit.view')`, held by
+**5 of 18 profiles**. A fix aimed at the migration's policy name would miss.
+
+**Proved rather than reasoned.** Inside a rolled-back transaction, as `authenticated` with
+`request.jwt.claims.sub` set to a real ordinary member of a chat that has a membership row — `auth.uid()`
+confirmed to be that person, `is_chat_member` true — the read returned **0 of the 1 row that exists for that
+chat, and 0 of the whole table**. An ordinary member cannot see their own group's history. 29 (chat, member)
+pairs are in that position today.
+
+**A second channel exists, is already rendered, and is the one worth using.** `messages.type` allows
+`'system'`, and `messages_sender_shape_check` requires such a row to have `user_id IS NULL` and
+`bot_id IS NULL` — a first-class service-message shape. It is readable by everyone who can read the chat
+(`Chat members can view messages` is `is_chat_member(chat_id)`), and the client **already draws it exactly as
+this entry describes a service line**: `SystemMessageNotice` in `components/chat/MessageList.tsx:169-178`,
+centred, a quiet pill on `--kub-chat-chip`, no bubble and no avatar. Three such messages exist in production,
+all from May 2026; nothing has written one since.
+
+**But no client can ever write one.** The only permissive INSERT policy on `messages` is
+`auth.uid() = user_id AND bot_id IS NULL AND is_chat_member(chat_id)`, and a system message must have
+`user_id IS NULL`. `auth.uid() = NULL` is never true. A membership service line therefore has to be written by
+a trigger on `chat_members` (SECURITY DEFINER, beside the audit triggers that already fire there) or by the
+service role.
+
+**So both routes are database changes and this entry cannot be closed from the client.** Loosening
+`audit_logs` would also be the weaker of the two: it would hand a group's members a slice of a *global* audit
+table, and Telegram and Discord both show these lines to everyone in the room rather than to owners. The
+trigger writing a `system` message is the one that matches the mechanic, needs no new read path, and lands in
+a surface that is already built. Left for the owner's approval and a backup, per section 10 of the handoff.
+
+The client-side half the entry names is confirmed as described: `hooks/useAuditLogs.ts:62-72` filters by
+`actor_id`, `action` and `created_at` and never by `target_id`, and the only surface is the administration
+panel.
+
 ---
 
 ## D-167 `[x]` Muting a chat is all-or-nothing and kept in the browser, while the table for it exists
@@ -9383,7 +9430,7 @@ and notifications off — rather than one binary row.
 
 ---
 
-## D-168 `[ ]` A member row shows a role and nothing else, and cannot be opened
+## D-168 `[x]` A member row shows a role and nothing else, and cannot be opened
 
 **Severity: medium.**
 
@@ -9456,6 +9503,54 @@ shape Telegram has: **D-164** proposes a group settings screen of that kind, **D
 way Telegram labels one, and **D-170** measures the absence of a Telegram-style invite link. The gaps they
 measure are real; what a fix should look like is now an open question, and copying Telegram would be answering
 against the wrong reference.
+
+**Closed on 2026-09-15.** All four complaints are answered, and none of it needed the migration the entry's
+second half describes: **every fact the row was missing was already on the wire.** `loadMembers` asked for
+`profiles(*)`, so `username` and `online_at` arrived on every row and were discarded; `chat_members.joined_at`
+is `not null` in production and was simply never selected.
+
+- *«the row is a `<div>` — not pressable, with no way to reach the person».* The person's area is a real
+  `<button>` now, so a keyboard reaches it and Enter works, and a plain press opens the person — the gesture
+  `useRowPressActions` has carried an unused `onActivate` for all along. It opens a fourth layer of the same
+  card, riding the machinery the gallery and the settings screen already use: the header's back arrow and
+  Escape needed no change to carry it. From there «Открыть чат» calls `useCreateChat`'s RPC, which is the flow
+  the global search already established for «a person was activated».
+- *«an ordinary member's row carries nothing at all».* Every row now has a second line: the chat role where
+  there is one, otherwise `@username`, plus the presence sentence when presence can be read. At most two
+  facts — a role, a nickname and a presence sentence together is longer than the strip `d424f96` photographed
+  and rejected at 390. The join date is on the card rather than the row, for the same reason: a row is
+  scanned, a card is read.
+- *«there is no presence dot».* `showOnline` is passed, from `lib/presence.ts` against the product's own
+  30-second tick (`usePresenceNow`), the one the chat list and the chat header already read. It is passed
+  **only when presence could be read**: `usePrivacyPreferences` writes `online_at = null` when somebody turns
+  the setting off, and an unlit dot beside them would say «не в сети», which is a claim nobody made.
+- *«the list has no order».* Owner, administrator, then everybody else, then name by
+  `localeCompare("ru-RU", { sensitivity: "base" })`, then id. **Discord's order rather than Telegram's, and
+  the reason is measurable:** `useHeartbeat` rewrites `online_at` every 60 seconds and the panel re-reads on
+  every membership change, so a presence-first list would reorder under a finger already travelling toward a
+  row. Role order is also total and stable; presence order gives a different list every minute from unchanged
+  data.
+
+**And a defect found while closing it, in the read itself.** `loadMembers` destructured `{ data }` and dropped
+`error` on the floor, so a refused member read left the list at its previous value — on a first open, empty —
+and drew the same nothing a group with nobody in it draws. That is D-140 and D-193 in a surface neither of them
+named. The two facts now say different things, and the refusal keeps whatever rows are already on screen.
+
+**What this reverses, deliberately.** D-180's `member-badges.spec.ts` required an ordinary member's row to have
+*no* second line and proved it by the row being shorter. That test recorded the state this entry is about; its
+assertion is updated and the rule underneath it is kept — the line is never *empty*. Measured at 1440: an
+undecorated row goes 52 to 70 points, and a decorated one is still the taller of the two.
+
+Evidence: `lib/chatMemberList.ts` (the decisions, importing nothing but `plainMessages.ts`),
+`tests/unit/chat-member-list.test.mts` (18 cases, 11 mutations each proved applied and each turning it red),
+`tests/e2e/group-member-list.spec.ts` (19 cases on `chromium-desktop-1440` and `chromium-mobile-390`, five
+browser mutations, each hashed on what the dev server actually served). Screenshots in `output/group-members/`.
+
+**An observation left for somebody else.** The presence dot is `bottom-0 right-0` on the avatar's square
+wrapper (`components/ui/ChatAvatar.tsx:301-310`), which for a circle is outside the rim. At `sm` the offset is
+invisible; at `xl`, on the person's card, the dot reads as floating beside the avatar rather than on it. Not
+touched here: that component is pinned at one dot size by `tests/unit/edge-vocabulary.test.mjs` and belongs to
+nobody's current task.
 
 ---
 
@@ -11512,3 +11607,42 @@ branch. Measured, not assumed.
 **What a fix needs:** the tab already loads `dynamicRolesByUser` and has
 `dynamicRoleRank`, so the data is present; the missing piece is ranking the
 target the way the database now does, rather than reading one column.
+
+---
+
+## D-201 `[x]` The presence dot floats beside the avatar instead of sitting on it
+
+**Severity:** low and cosmetic, but on every avatar the product draws at `md`
+and above, in both themes.
+
+**Surface:** `artifacts/kub/src/components/ui/ChatAvatar.tsx` — both the chat
+avatar and `UserAvatar`, each drawing
+`absolute bottom-0 right-0 h-2 w-2 rounded-full`.
+
+**Defect:** the dot is anchored to the corner of the **square** the avatar is
+drawn in, while the avatar is a **circle** inscribed in that square. An 8px dot
+at `bottom-0 right-0` has its centre at `(W-4, W-4)`, which is `sqrt(2)·(W/2-4)`
+from the middle — so how far outside the rim it lands grows with the avatar:
+
+| size | width | centre distance | rim radius | outside by |
+| --- | --- | --- | --- | --- |
+| `sm` | 32 | 16.97 | 16 | 0.97px |
+| `md` | 48 | 28.28 | 24 | 4.3px |
+| `lg` | 64 | 39.60 | 32 | 7.6px |
+| `xl` | 80 | 50.91 | 40 | 10.9px |
+
+**Consequence:** at `sm` the dot's own radius hides the error and it reads as a
+badge. At `xl` — the size the person's card uses — it sits nearly eleven pixels
+clear of the rim and reads as a stray green mark floating beside the avatar
+rather than anything attached to it. Seen in the card capture taken for D-168.
+
+**Fix:** the inset is now `calc(14.645% - 4px)` on both axes, `14.645%` being
+`(1 - sqrt(2)/2)/2`, which puts the dot's **centre** on the circle at every
+size. Measured on the rendered list afterwards rather than trusted: the dot's
+centre is 14.87px from a 16px-radius avatar's centre, at 42.3° — on the rim,
+lower right.
+
+**Not changed:** `ChatListItem.tsx` draws its own dot the same way on a 32px
+avatar, where the error is under a pixel, and `edge-vocabulary.test.mjs` embeds
+that exact class string inside a mutation it needs to find. Left as it is
+rather than break a guard for an invisible difference.

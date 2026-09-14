@@ -4,7 +4,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } fr
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
-import { KubBadge, KubIcon, KubModal, KubStableSkeleton, type KubIconName } from "@/components/kub";
+import { KubBadge, KubButton, KubIcon, KubModal, KubNotice, KubStableSkeleton, type KubIconName } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
@@ -35,6 +35,21 @@ import {
 } from "@/lib/voiceChannel";
 import { ProfileBadgeChip } from "@/components/profile/ProfileBadgeChip";
 import { ProfileRoleSummary } from "@/components/profile/ProfileRoleSummary";
+import {
+  chatMemberRowFacts,
+  formatJoinedAt,
+  formatUsername,
+  memberDisplayName,
+  memberListFailure,
+  sortChatMembers,
+  MEMBERS_EMPTY,
+  MEMBERS_UNAVAILABLE_DETAIL,
+  type ChatMemberRowFacts,
+} from "@/lib/chatMemberList";
+import { getUserPresenceState } from "@/lib/presence";
+import { usePresenceNow } from "@/hooks/usePresenceNow";
+import { useCreateChat } from "@/hooks/useCreateChat";
+import { CHAT_OPEN_FAILED } from "@/lib/plainMessages";
 import { KUB_ICON_NAMES } from "@/components/kub/icons";
 import { useProfileBadges } from "@/hooks/useProfileBadges";
 import {
@@ -182,7 +197,11 @@ type Tab = "info" | "members";
  * sub-view is only the contents of the row that was pressed. What is left of
  * the push is the same push: one layer at a time, a back control, Escape to pop.
  */
-type CardView = "root" | "gallery" | "settings";
+// `member` is the fourth, added by D-168: a member row had no way to reach the
+// person it draws. It rides the same machinery deliberately — the header's back
+// arrow, Escape, and the title bar all key off `view !== "root"` and needed no
+// change to carry it.
+type CardView = "root" | "gallery" | "settings" | "member";
 
 const MEDIA_PAGE_SIZE = 24;
 
@@ -217,7 +236,16 @@ const MEDIA_KIND_MESSAGE_TYPES: Record<MessageMediaKind, readonly MediaMessageTy
   audio: ["audio"],
 };
 
-type MemberRow = Profile & { chat_role: "owner" | "admin" | "member" };
+/**
+ * `joined_at` arrives as of D-168. It is `not null` on `chat_members` in
+ * production and was simply never selected; it is optional here because a row
+ * built from anything but that query — a fixture, a test — has no reason to
+ * carry it, and `formatJoinedAt` says so rather than guessing.
+ */
+type MemberRow = Profile & {
+  chat_role: "owner" | "admin" | "member";
+  joined_at?: string | null;
+};
 type InviteWithProfiles = {
   id: string;
   invitee_id: string;
@@ -455,6 +483,10 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
     writeProfileWindowPlacement(placementRef.current);
   };
   const [members, setMembers] = useState<MemberRow[]>([]);
+  /** Set when the member read was refused, so the tab can say so (D-168). */
+  const [membersError, setMembersError] = useState<string | null>(null);
+  /** Whose card is open, if any (D-168). */
+  const [memberCardId, setMemberCardId] = useState<string | null>(null);
   const [invites, setInvites] = useState<InviteWithProfiles[]>([]);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
@@ -552,20 +584,49 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
     channel: voice?.channel ?? null,
   });
 
+  /**
+   * The member list, in an order (D-168).
+   *
+   * Two things changed here and both were defects rather than polish.
+   *
+   * `error` used to be dropped on the floor — `const { data } = await …` — so a
+   * refused read left `members` at its previous value, which on a first open is
+   * the empty array, and the panel drew an empty list. A group with nobody in
+   * it and a list nobody was allowed to fetch are different facts and the
+   * surface has to say which (D-140, D-193). The error is kept and the tab
+   * prints it.
+   *
+   * `joined_at` is selected because the person's card shows it. It costs
+   * nothing: it is a column of the row already being read.
+   *
+   * The sort is applied here rather than in the render so the list has one
+   * order, whether it arrived from this query or from a realtime refresh.
+   */
   const loadMembers = useCallback(async () => {
     if (!isGroup) {
       setMembers([]);
+      setMembersError(null);
       return;
     }
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("chat_members")
-      .select("role, profile:profiles(*)")
+      .select("role, joined_at, profile:profiles(*)")
       .eq("chat_id", chat.id);
-    if (data) {
-      setMembers(
-        data.map((m) => ({ ...(m.profile as Profile), chat_role: m.role as "owner" | "admin" | "member" }))
-      );
+    if (error) {
+      console.error("loadMembers error:", error);
+      setMembersError(memberListFailure(mapPgError(error)));
+      return;
     }
+    setMembersError(null);
+    setMembers(
+      sortChatMembers(
+        (data ?? []).map((m) => ({
+          ...(m.profile as Profile),
+          chat_role: m.role as "owner" | "admin" | "member",
+          joined_at: (m as { joined_at?: string | null }).joined_at ?? null,
+        })),
+      ),
+    );
   }, [chat.id, isGroup, supabase]);
 
   const loadInvites = useCallback(async () => {
@@ -1460,7 +1521,9 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
       ? (activeSection?.label ?? "Общие медиа")
       : view === "settings"
         ? settingsTitle
-        : rootTitle;
+        : view === "member"
+          ? "Профиль"
+          : rootTitle;
   const mediaGridItems = useMemo(
     () => media.filter((m) => m.type === "image" || m.type === "video"),
     [media],
@@ -1492,6 +1555,57 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
     }
     return strips;
   }, [members, memberBadges.rows]);
+  /**
+   * What each row says, projected once per answer (D-168).
+   *
+   * `presenceNow` is the product's own 30-second tick, the one `ChatList` and
+   * `ChatHeader` already read presence against. Without it «в сети» would be
+   * decided at the moment the list was fetched and never revised, so a person
+   * who closed the application would stay lit until something unrelated
+   * re-rendered the panel.
+   *
+   * Presence is taken from `lib/presence.ts` rather than recomputed: the
+   * threshold and the wording live there, and a second copy of a threshold ends
+   * with the dot and the sentence disagreeing on one row.
+   */
+  const presenceNow = usePresenceNow();
+  const memberRowFacts = useMemo(() => {
+    const facts = new Map<string, ChatMemberRowFacts>();
+    for (const member of members) {
+      facts.set(
+        member.id,
+        chatMemberRowFacts({
+          member,
+          roleLabel: chatRoleLabel(member.chat_role, words.possessive),
+          presence: getUserPresenceState(member, presenceNow),
+        }),
+      );
+    }
+    return facts;
+  }, [members, presenceNow, words.possessive]);
+  const memberCard = memberCardId ? members.find((m) => m.id === memberCardId) ?? null : null;
+  /**
+   * The card's one action: the private conversation with this person (D-168).
+   *
+   * `useCreateChat` is reused rather than re-derived — it holds the single
+   * SECURITY DEFINER RPC that returns the existing private chat or creates one
+   * atomically, and the plain-Russian failure the search surface already shows.
+   * A second copy here would be the race that RPC exists to close.
+   */
+  const { openPrivateChat, loading: openingMemberChat } = useCreateChat();
+  const openMemberChat = useCallback(
+    async (memberId: string) => {
+      const chatId = await openPrivateChat(memberId);
+      if (!chatId) {
+        showAppAlert(CHAT_OPEN_FAILED, "Чат недоступен");
+        return;
+      }
+      setView("root");
+      setMemberCardId(null);
+      onClose();
+    },
+    [onClose, openPrivateChat],
+  );
   const visibleInvites = useMemo(
     () => invites.filter((invite) => !(invite.status === "accepted" && memberIdSet.has(invite.invitee_id))),
     [invites, memberIdSet],
@@ -2325,6 +2439,26 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
                 </button>
               </div>
             )}
+            {/* The two different facts, said differently (D-140, D-193, and the
+                read that used to drop its own error — see `loadMembers`). A
+                refused list keeps whatever rows are already on screen and puts
+                the refusal above them, because an answer that came late is
+                still better than a list replaced by an apology. */}
+            {membersError && (
+              <div className="px-4 pb-2" data-testid="chat-info-members-error">
+                <KubNotice tone="danger" title={membersError}>
+                  {MEMBERS_UNAVAILABLE_DETAIL}
+                </KubNotice>
+              </div>
+            )}
+            {!membersError && members.length === 0 && (
+              <div
+                className="px-4 py-6 text-center text-sm text-[color:var(--kub-muted)]"
+                data-testid="chat-info-members-empty"
+              >
+                {MEMBERS_EMPTY}
+              </div>
+            )}
             {members.map((member) => {
               // The promote/demote/remove matrix used to be computed here, with
               // a comment naming the SQL trigger it mirrored and no test of any
@@ -2340,11 +2474,22 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
                   key={member.id}
                   member={member}
                   subject={subjectFor(member)}
+                  facts={
+                    memberRowFacts.get(member.id) ?? {
+                      name: memberDisplayName(member),
+                      secondary: formatUsername(member.username),
+                      showOnlineDot: false,
+                    }
+                  }
                   // Scoped to this chat on purpose: the strip beside it may
                   // carry a «Владелец» of its own, which is LETSCUBE's owner
                   // rather than this group's (D-180).
                   roleLabel={chatRoleLabel(member.chat_role, words.possessive)}
                   badges={memberBadgeStrips.get(member.id) ?? null}
+                  onOpen={() => {
+                    setMemberCardId(member.id);
+                    setView("member");
+                  }}
                   onOpenMenu={(position) =>
                     setMemberMenu({ memberId: member.id, mode: "menu", placement: rowMenuPlacement(position) })
                   }
@@ -2820,6 +2965,36 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
           />
         )}
       </div>
+      {/* The person, the fourth layer of the same card (D-168).
+
+          Built here rather than by importing `SearchProfilePreview`, and that
+          was a decision rather than an oversight. That sheet is the search's:
+          its back control is labelled «Назад к результатам», which is a lie in
+          a chat panel, and its `global-search-profile-back` id is pinned by the
+          search's own specs. Rewording it would edit a file this task does not
+          own to say something only this caller needs. What is reused is the
+          thing worth reusing — the flow it established, card first and
+          «Открыть чат» second, which is already how this product answers «a
+          person was activated». */}
+      <div
+        className="kub-subview absolute inset-0 overflow-y-auto"
+        data-state={view === "member" ? "current" : "ahead"}
+        data-testid="chat-info-member-card"
+        inert={view !== "member"}
+      >
+        {memberCard && (
+          <MemberCard
+            member={memberCard}
+            isSelf={memberCard.id === currentUser?.id}
+            roleLabel={chatRoleLabel(memberCard.chat_role, words.possessive)}
+            presenceLabel={getUserPresenceState(memberCard, presenceNow).label}
+            showOnlineDot={getUserPresenceState(memberCard, presenceNow).isOnline}
+            badges={memberBadgeStrips.get(memberCard.id) ?? null}
+            opening={openingMemberChat}
+            onOpenChat={() => void openMemberChat(memberCard.id)}
+          />
+        )}
+      </div>
       </div>
       <KubModal
         open={leaveGroupOpen}
@@ -3074,6 +3249,110 @@ async function fetchHiddenMessageIdSet(
 }
 
 /**
+ * The person a member row opens (D-168).
+ *
+ * What the entry asked for is the bottom half of this: the row itself «carries
+ * nothing at all — no username, no last seen, no join date». Two of those three
+ * belong on the row, where they are scanned; the join date belongs here, where
+ * it is read. `d424f96` established the same division for badges — one on the
+ * row, the whole strip on the person's own card — after photographing a
+ * three-line row at 390 points, and this follows it rather than re-litigating
+ * it.
+ *
+ * No perimeter anywhere in here, per rule 11 of the material contract: the card
+ * is a layer of the panel, not a box inside it, and the one thing that does
+ * carry a line is `KubNotice`, which rule 11 lists as a line that means
+ * something.
+ */
+function MemberCard({
+  member,
+  isSelf,
+  roleLabel,
+  presenceLabel,
+  showOnlineDot,
+  badges,
+  opening,
+  onOpenChat,
+}: {
+  member: MemberRow;
+  isSelf: boolean;
+  roleLabel: string;
+  /** «в сети», «был(а) 12 мин назад» — empty when presence cannot be read. */
+  presenceLabel: string;
+  showOnlineDot: boolean;
+  badges: BadgeStrip | null;
+  opening: boolean;
+  onOpenChat: () => void;
+}) {
+  return (
+    <div
+      className="flex flex-col items-center px-5 py-6 text-center"
+      data-member-card-id={member.id}
+    >
+      <UserAvatar user={member} size="xl" showOnline={showOnlineDot} />
+      <div className="mt-4 max-w-full text-lg font-bold text-[color:var(--kub-text)] [overflow-wrap:anywhere]">
+        {memberDisplayName(member)}
+      </div>
+      <div
+        className="mt-1 max-w-full truncate text-sm text-[color:var(--kub-muted)]"
+        data-testid="member-card-username"
+      >
+        {formatUsername(member.username)}
+      </div>
+      {roleLabel && (
+        <div className="mt-2 text-sm font-semibold text-[color:var(--kub-accent-text)]">
+          {roleLabel}
+        </div>
+      )}
+      {/* Said only when it can be. A person who turned presence off writes
+          `online_at = null`, and «не в сети» would report that refusal as a
+          fact about where they are. */}
+      {presenceLabel && (
+        <div className="mt-1 text-sm text-[color:var(--kub-muted)]" data-testid="member-card-presence">
+          {presenceLabel}
+        </div>
+      )}
+      <div className="mt-1 text-xs text-[color:var(--kub-muted)]" data-testid="member-card-joined">
+        {formatJoinedAt(member.joined_at)}
+      </div>
+      {badges && (
+        <div className="mt-4 flex max-w-full flex-wrap items-center justify-center gap-1.5">
+          {badges.shown.map((badge) => (
+            <ProfileBadgeChip key={`${badge.kind}:${badge.key}`} badge={badge} />
+          ))}
+          {badges.hidden > 0 && (
+            <KubBadge tone="muted" pill>
+              +{badges.hidden}
+            </KubBadge>
+          )}
+        </div>
+      )}
+      {member.bio && (
+        <p className="mt-4 max-w-sm text-sm leading-relaxed text-[color:var(--kub-muted)] [overflow-wrap:anywhere]">
+          {member.bio}
+        </p>
+      )}
+      <div className="mt-6 w-full max-w-xs">
+        <KubButton
+          variant="primary"
+          fullWidth
+          // Your own row opens your own card, because hiding it would make the
+          // list inconsistent for exactly one reader. The action that makes no
+          // sense there is the one that is refused, not the card.
+          disabled={isSelf}
+          loading={opening}
+          leftIcon={<KubIcon name="chatBubble" size={14} />}
+          onClick={onOpenChat}
+          data-testid="member-card-open-chat"
+        >
+          Открыть чат
+        </KubButton>
+      </div>
+    </div>
+  );
+}
+
+/**
  * One member, and the ways their actions can be reached.
  *
  * Its own component because the press gesture is a hook, and a hook cannot be
@@ -3086,28 +3365,41 @@ async function fetchHiddenMessageIdSet(
  * 2026-09-13, both times. They are reachable three ways now: the always-drawn
  * «ещё» button, a long press, and a right click.
  *
- * A plain tap does nothing here on purpose. Opening the person belongs to that
- * gesture (D-168), and spending it on a menu would make that harder to answer.
+ * A plain tap opens the person, as of D-168. That is what this comment used to
+ * reserve the gesture for: the row was a `<div>` with no activation at all, so
+ * there was no way from a member list to the member. It is a `<button>` now —
+ * a real one, so a keyboard reaches it and Enter works — with the «ещё»
+ * control as its sibling rather than its child, because a button inside a
+ * button is not a thing the parser will build.
  */
 function GroupMemberRow({
   member,
   subject,
+  facts,
   roleLabel,
   badges,
+  onOpen,
   onOpenMenu,
   onOpenSheet,
 }: {
   member: MemberRow;
   subject: ChatMemberSubject;
+  /** The name, the second line and the dot — decided in `lib/chatMemberList.ts`. */
+  facts: ChatMemberRowFacts;
   /** «Владелец группы», «Администратор канала», or empty for an ordinary member. */
   roleLabel: string;
   /** What this person wears, or null when they wear nothing at all. */
   badges: BadgeStrip | null;
+  onOpen: () => void;
   onOpenMenu: (position: { x: number; y: number }) => void;
   onOpenSheet: () => void;
 }) {
   const hasActions = hasAnyMemberAction(subject);
   const press = useRowPressActions({
+    // Ungated, unlike the two below: an ordinary member looking at another
+    // ordinary member has no action to take on them and must still be able to
+    // open them. That asymmetry is the whole of D-168's first sentence.
+    onActivate: onOpen,
     onMenu: hasActions ? onOpenMenu : undefined,
     onSheet: hasActions ? onOpenSheet : undefined,
   });
@@ -3116,13 +3408,35 @@ function GroupMemberRow({
 
   return (
     <div
-      className="flex items-center gap-3 px-4 py-2.5 kub-raise-hover"
+      className="flex items-center gap-3 px-4 kub-raise-hover"
       data-testid="chat-info-member"
       data-member-id={member.id}
       data-has-actions={hasActions ? "true" : "false"}
       {...press.handlers}
     >
-      <UserAvatar user={member} size="sm" />
+      {/* The gesture stays on the row and this button carries no handler of its
+          own — its click bubbles into `press.onClick`, and Enter on a focused
+          button is a click.
+
+          The first version put `press.handlers` here instead, and
+          `member-actions-reachable`'s long-press test went red at once:
+          `page.dispatchEvent` targets the row element, and an event dispatched
+          on a parent never reaches a child's React handler. A real finger would
+          mostly have landed on this button and the gesture would have looked
+          fine — which is exactly the kind of regression that ships. The test
+          was right and the markup was wrong. */}
+      <button
+        type="button"
+        className="flex min-w-0 flex-1 items-center gap-3 py-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--kub-cyan)]"
+        data-testid="chat-info-member-open"
+        aria-label={`Открыть профиль: ${memberDisplayName(member)}`}
+      >
+      {/* The dot the entry records as missing: `showOnline` has existed on this
+          avatar since it was written and nobody passed it. It is passed only
+          when presence could actually be read — a person who turned the setting
+          off writes `online_at = null`, and an unlit dot beside them would say
+          «не в сети», which is a claim nobody made. */}
+      <UserAvatar user={member} size="sm" showOnline={facts.showOnlineDot} />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium truncate flex items-center gap-1 text-[color:var(--kub-text)]">
           {/* The accessible name is the scoped one, so a screen reader hears
@@ -3130,27 +3444,34 @@ function GroupMemberRow({
               two things this glyph would otherwise be read as (D-180). */}
           {isMemberOwner && <KubIcon name="crown" size={12} tone="pink" className="flex-shrink-0" label={roleLabel} />}
           {isMemberAdmin && <KubIcon name="shield" size={12} tone="accent" className="flex-shrink-0" label={roleLabel} />}
-          <span className="truncate">{member.full_name ?? member.username ?? "Без имени"}</span>
+          <span className="truncate">{facts.name}</span>
           {subject.isSelf && <span className="text-xs flex-shrink-0 text-[color:var(--kub-muted)]">(вы)</span>}
         </div>
-        {/* The second line, which used to be two words for two of the three
-            chat roles and nothing for anybody else — so an administrator of
-            LETSCUBE and somebody who arrived yesterday read identically
-            (D-180). The chat's own role still comes first, because it is what
-            this list is about; the standing and the medals stand beside it.
+        {/* The second line. D-180 gave it to whoever held a chat role or wore a
+            badge and left it off everybody else, which is precisely what D-168
+            then recorded: «an ordinary member's row carries nothing at all».
+            It is now drawn for every row, because every row has something true
+            to put on it — a role or a nickname, and the presence sentence when
+            presence can be read.
 
-            Nothing is drawn when there is nothing to say. A person with no chat
-            role and no badge keeps the single-line row they have always had:
-            an empty strip would add height to every row for a fact nobody
-            has. */}
-        {(roleLabel || badges) && (
-          <div
-            className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
-            data-testid="chat-info-member-standing"
-          >
-            {roleLabel && (
-              <span className="truncate text-xs text-[color:var(--kub-accent-text)]">{roleLabel}</span>
-            )}
+            That reverses D-180's «a member wearing nothing renders no line»,
+            deliberately and with the earlier measurement in hand. What it does
+            not reverse is the reason behind it: an *empty* line is still never
+            drawn. `chatMemberRowFacts` returns a sentence or the panel's own
+            «Без имени пользователя», never "". */}
+        <div
+          className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
+          data-testid="chat-info-member-standing"
+        >
+            <span
+              className={cn(
+                "truncate text-xs",
+                roleLabel ? "text-[color:var(--kub-accent-text)]" : "text-[color:var(--kub-muted)]",
+              )}
+              data-testid="chat-info-member-secondary"
+            >
+              {facts.secondary}
+            </span>
             {badges && (
               <span
                 className="flex min-w-0 flex-wrap items-center gap-1.5"
@@ -3167,8 +3488,8 @@ function GroupMemberRow({
               </span>
             )}
           </div>
-        )}
       </div>
+      </button>
 
       {hasActions && (
         <button
