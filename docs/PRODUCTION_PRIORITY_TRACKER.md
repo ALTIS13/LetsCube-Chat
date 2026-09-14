@@ -609,6 +609,37 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-14 — `2b1a11e75ca66c6a042fd4e9c8698b9eb79e6f13`
+
+Shared media becomes a place in a sequence, and a failed page stops looking like
+the end of the list (D-171).
+
+- `letscube-web` runs image
+  `l64kyyu1sysev2izzjjbizhe:2b1a11e75ca66c6a042fd4e9c8698b9eb79e6f13`, one
+  replica. Live entry `index-mWTUgV58.js`, 3018945 bytes.
+- Marker «Сентябрь» — the capitalised month, which only the new grouping module
+  holds — absent from the live bundle and present in the committed source;
+  «Проверить микрофон» as the control, present in both because it shipped an
+  hour earlier. Rounds four and five read a 146-byte asset with the control
+  also absent, the seventh time today.
+- Gates: typecheck clean, unit **2534/2534** with no re-run needed,
+  `shared-media-browsing.spec.ts` 14/14 at both 1440 and 390, adjacent
+  `media-viewer-zoom` and `channel-card` 20/20.
+
+**This commit also repaired `main`.** `ed04007` had committed 128 lines of this
+work's in-flight `tests/unit/profile-window.test.mts` — a misattribution made
+while sorting three agents' files by reading a grep count of `bot|media|viewer`
+as though it had counted only `bot`. Between `ed04007` and `2b1a11e` the unit
+suite was **red at HEAD**: the test asserted `tailShown` three times against a
+`ChatInfoPanel.tsx` that had none. Production was never affected, because the
+deploy does not run the suite — but anybody checking out `main` in that window
+would have found it broken, and nothing would have told them why.
+
+*The rule that failed is one already written down: an empty result means
+unknown. A grep that printed nothing was read as confirmation of the opposite
+of what it was asked.*
+
+
 ### 2026-09-14 — `7a9f9da40651641619408873751ad5f3d0c65773`
 
 The bot surfaces, the sound settings and the switch that drew a black box
