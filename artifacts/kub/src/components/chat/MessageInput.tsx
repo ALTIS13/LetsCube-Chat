@@ -57,6 +57,15 @@ import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor
 import { forwardDraftTitle } from "@/lib/messageActions";
 import { CAPSULE_CONTROL_GLASS, CAPSULE_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING } from "@/lib/controlSurface";
+import { BotCommandMenu } from "./BotCommandMenu";
+import {
+  BOT_COMMANDS_LABEL,
+  BOT_START_LABEL,
+  botCommandDraft,
+  botCommandQuery,
+  matchBotCommands,
+  type BotCommand,
+} from "@/lib/botChatSurfaces";
 import { locationMessageText, type AttachIncoming, type AttachSendRequest } from "@/lib/attachSheet";
 import { ComposerRecordingRow, type ComposerRecordingPreview } from "./ComposerRecordingRow";
 import {
@@ -130,6 +139,19 @@ interface MessageInputProps {
    */
   refusal?: string | null;
   onDismissRefusal?: () => void;
+  /**
+   * The bot this chat holds, if it holds one (D-126, D-127).
+   *
+   * Absent in every other chat, so nothing about an ordinary composer changes:
+   * no menu button, no «/» list, no «Запустить». `commands` is what the bot
+   * registered with `setMyCommands`, read from `public.bot_commands`;
+   * `needsStart` is `botChatNeedsStart` decided by the chat, not here.
+   */
+  bot?: {
+    commands: readonly BotCommand[];
+    needsStart: boolean;
+    onStart: () => void | Promise<void>;
+  } | null;
 }
 
 export function MessageInput({
@@ -156,10 +178,14 @@ export function MessageInput({
   onIncomingMediaTaken,
   refusal = null,
   onDismissRefusal,
+  bot = null,
 }: MessageInputProps) {
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
+  /** The «Команды» button's own list. «/» opens the same list without it. */
+  const [showCommands, setShowCommands] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [sheetWebcamShot, setSheetWebcamShot] = useState<AttachIncoming | null>(null);
   const cameraForSheetRef = useRef(false);
   const [showVoice, setShowVoice] = useState(false);
@@ -219,6 +245,43 @@ export function MessageInput({
   const setEditingMessage = useAppStore((s) => s.setEditingMessage);
   const isEditing = editingMessage !== null && editingMessage.chat_id === chatId;
   const muteState = useMuteState(chatId);
+
+  /**
+   * The command list, and which of the two doors is open (D-126).
+   *
+   * «/» wins over the button: someone who has started typing a command is
+   * answering the list, and re-opening the full one under their fingers would
+   * move the row they were aiming at. While editing a message the list is shut
+   * altogether — «/» in an edit is a slash in the text being corrected.
+   */
+  const commandQuery = isEditing ? null : botCommandQuery(text);
+  const botCommands = bot?.commands ?? [];
+  const commandMenuVariant: "menu" | "typed" | null =
+    !bot || bot.needsStart ? null : commandQuery !== null ? "typed" : showCommands ? "menu" : null;
+  const commandMatches =
+    commandMenuVariant === "typed" ? matchBotCommands(botCommands, commandQuery) : botCommands;
+
+  const chooseCommand = useCallback(
+    (command: BotCommand) => {
+      // Fills the field and stops. `botCommandDraft` leaves the trailing space
+      // an argument would go after; the caret follows the text, so the next
+      // keystroke continues the command rather than landing before it.
+      setText(botCommandDraft(command));
+      setShowCommands(false);
+      setTimeout(() => textareaRef.current?.focus(), 0);
+    },
+    [],
+  );
+
+  const startBot = useCallback(async () => {
+    if (!bot || starting) return;
+    setStarting(true);
+    try {
+      await bot.onStart();
+    } finally {
+      setStarting(false);
+    }
+  }, [bot, starting]);
   const preEditTextRef = useRef<string | null>(null);
   const composerSendScopeRef = useRef<ReturnType<typeof createComposerSendScope> | null>(null);
   if (!composerSendScopeRef.current) composerSendScopeRef.current = createComposerSendScope(chatId);
@@ -1299,6 +1362,18 @@ export function MessageInput({
           </div>
         )}
 
+        {/* The bot's commands, above the capsules and below everything else the
+            composer stacks there — a reply, a forward, a refusal all outrank a
+            list of what could be typed next (D-126). */}
+        {commandMenuVariant && (
+          <BotCommandMenu
+            commands={botCommands}
+            matches={commandMatches}
+            variant={commandMenuVariant}
+            onChoose={chooseCommand}
+          />
+        )}
+
         {/* The composer is three capsules floating over the conversation, the
             way Telegram draws it on iOS 26: a round attach button, a field
             capsule holding the text and the emoji button, and a round send or
@@ -1306,7 +1381,41 @@ export function MessageInput({
             between the two round buttons, so nothing is re-parented, the
             textarea keeps its ref and its sizing, and the composer measures
             the way it always has. The field's rim takes the accent while the
-            text has focus: that rim is the field's focus indicator. */}
+            text has focus: that rim is the field's focus indicator.
+
+            In a bot chat nobody has written in, all three are replaced by one
+            «Запустить» — Telegram's «Start» (D-127). */}
+        {bot?.needsStart ? (
+          // Telegram's «Start»: before the person has said anything, the whole
+          // composer is one button. Nothing else is offered — a bot that has
+          // not been started has no reason to be sent a photo or a voice note,
+          // and the attach sheet behind an unstarted bot is a way to send into
+          // a conversation that does not exist yet.
+          <div className="relative flex items-end">
+            <button
+              type="button"
+              data-testid="bot-start-button"
+              onClick={() => void startBot()}
+              disabled={starting}
+              className={cn(
+                "kub-interactive relative flex h-11 w-full items-center justify-center rounded-full text-sm font-semibold uppercase tracking-wide transition-all",
+                FOCUS_RING,
+                starting
+                  ? "text-[color:var(--kub-muted)] opacity-60"
+                  : "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan hover:brightness-110",
+              )}
+            >
+              {starting ? (
+                <>
+                  <KubGlassLayer className={CAPSULE_GLASS} />
+                  <KubIcon name="spinner" size={18} className="relative animate-spin" />
+                </>
+              ) : (
+                BOT_START_LABEL
+              )}
+            </button>
+          </div>
+        ) : (
         <div className="group/composer relative flex items-end gap-2">
           {recording && holdRecorderState ? (
             <ComposerRecordingRow
@@ -1338,6 +1447,30 @@ export function MessageInput({
             <KubIcon name="attach" size={22} className="relative" />
           </button>
 
+          {bot && (
+            // Inside the field's capsule rather than beside it, where the
+            // emoji button already lives: the glass layer spans from one round
+            // button to the other, so a control placed here reads as part of
+            // the field. Telegram puts its bot menu at the same end of the
+            // field, and for the same reason — it is about what to type.
+            <button
+              type="button"
+              data-testid="bot-commands-button"
+              data-bot-commands-open={showCommands ? "true" : "false"}
+              onClick={() => { setShowCommands(!showCommands); setShowEmoji(false); setShowAttach(false); }}
+              className={cn(
+                "kub-interactive relative ml-1 flex h-11 w-9 flex-shrink-0 items-center justify-center rounded-full transition-colors hover:text-[color:var(--kub-cyan)]",
+                FOCUS_RING,
+                showCommands ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]",
+              )}
+              aria-label={BOT_COMMANDS_LABEL}
+              aria-expanded={showCommands}
+              title={BOT_COMMANDS_LABEL}
+            >
+              <KubIcon name="menu" size={20} />
+            </button>
+          )}
+
           <textarea
             ref={textareaRef}
             value={text}
@@ -1350,7 +1483,13 @@ export function MessageInput({
             onBlur={() => onFocusChange?.(false)}
             placeholder="Сообщение…"
             rows={1}
-            className="relative min-w-0 flex-1 bg-transparent resize-none outline-none text-base sm:text-sm leading-6 py-2.5 pl-4 max-h-[140px] overflow-y-auto text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]"
+            className={cn(
+              "relative min-w-0 flex-1 bg-transparent resize-none outline-none text-base sm:text-sm leading-6 py-2.5 max-h-[140px] overflow-y-auto text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]",
+              // The field's own left inset, unless the bot menu is standing in
+              // it — then the button is the inset, and a second one would open
+              // a 52px hole between the capsule's edge and the first letter.
+              bot ? "pl-1" : "pl-4",
+            )}
           />
 
           <button
@@ -1443,6 +1582,7 @@ export function MessageInput({
             </KubHint>
           )}
         </div>
+        )}
       </div>
       </div>
     </div>

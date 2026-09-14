@@ -41,6 +41,8 @@ import {
   resolveMessageActor,
 } from "@/lib/messageActor";
 import { QuickReactionButton, ReactionChip } from "./MessageReactions";
+import { BotInlineKeyboard } from "./BotInlineKeyboard";
+import { parseBotInlineKeyboard } from "@/lib/botChatSurfaces";
 
 type TextLayoutKind = "short" | "regular" | "link" | "longToken" | "preformatted" | "media";
 type MetaPlacement = "inline" | "anchored";
@@ -1169,6 +1171,21 @@ export function MessageBubble({
     ? "kub-message-own bg-[var(--kub-message-out)] border border-transparent text-[color:var(--kub-text)]"
     : "bg-[var(--kub-message-in)] border border-transparent text-[color:var(--kub-text)]";
 
+  /**
+   * The buttons a bot laid out under this message (D-125).
+   *
+   * Only for a bot that still exists: `resolveMessageActor` answers
+   * `deleted_bot` for a message whose bot is gone or whose state is `deleted`,
+   * and a bot in that state cannot receive an update, so its buttons could only
+   * ever fail. The database's own CHECK already ties `bot_reply_markup` to
+   * `bot_id`, so this is the second gate rather than the first, and it is the
+   * one that distinguishes a live bot from a dead one.
+   */
+  const botKeyboard = useMemo(
+    () => (actor.kind === "bot" ? parseBotInlineKeyboard(message.bot_reply_markup) : null),
+    [actor.kind, message.bot_reply_markup],
+  );
+
   // Soft-delete: render an inert placeholder bubble in the same slot so the
   // surrounding date separators / scroll position stay stable.  No reply
   // tail, no context menu, no reactions — it's a stub, not a message.
@@ -1529,6 +1546,14 @@ export function MessageBubble({
 
             {hasReactions ? renderReactionsBottomLayer() : renderReactionsRow()}
           </div>
+
+          {/* Under the bubble and inside the stack, so the keyboard takes the
+              bubble's width and moves with it — the message and its buttons are
+              one object, which is what Telegram's arrangement says and what the
+              register's D-125 asked for. Outside the bubble's own box because
+              the bubble measures its footer against its content, and a block of
+              buttons inside it would be measured as text. */}
+          {botKeyboard && <BotInlineKeyboard messageId={message.id} keyboard={botKeyboard} />}
 
         </div>
       </div>

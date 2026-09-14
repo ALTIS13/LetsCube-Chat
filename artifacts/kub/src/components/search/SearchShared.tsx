@@ -9,6 +9,13 @@ import { EDGE_ARROW_CLASS, useEdgeScroll } from "@/hooks/useEdgeScroll";
 import type { GlobalSearchResult, GlobalSearchResultType } from "@/hooks/useGlobalSearch";
 import { useRoleAccess } from "@/hooks/useRole";
 import { showAppAlert } from "@/lib/appDialogs";
+import { createBotChat, findBotChats } from "@/lib/botCallback";
+import {
+  BOT_CHAT_OPEN_FAILED,
+  BOT_CHAT_UNAVAILABLE,
+  chooseBotChat,
+} from "@/lib/botChatSurfaces";
+import { CHAT_OPEN_SIGNED_OUT } from "@/lib/plainMessages";
 import { requestChatMessageJump } from "@/lib/chatJumpEvents";
 import { FOCUS_RING, PRESS_FILLED, PRESS_SINK_RAISED } from "@/lib/controlSurface";
 import { safeOpenChat } from "@/lib/safeOpenChat";
@@ -510,6 +517,59 @@ export function useSearchResultActions({ onAfterOpen }: { onAfterOpen?: () => vo
     onAfterOpen?.();
   }, [onAfterOpen]);
 
+  /**
+   * Opening a bot found in search (D-127).
+   *
+   * Two halves, and only one of them works on this deployment today:
+   *
+   *   - **A chat that already exists opens.** `chat_bot_members` is readable by
+   *     an ordinary account, so the chats shared with this bot can be found and
+   *     one of them opened, and that needs nothing new from the server. Before
+   *     this, even an existing bot chat could not be reached from search.
+   *   - **A chat that does not exist has to be created**, and
+   *     `public.chat_bot_members` has SELECT and no other verb for
+   *     `authenticated` — no INSERT grant, no INSERT policy, and no RPC that
+   *     does it. So the create is asked for by name and, while nothing answers
+   *     to that name, the person is told plainly rather than shown a modal that
+   *     describes the deployment. `lib/botCallback.ts` carries the exact
+   *     signature the server half needs.
+   *
+   * Deliberately not `openPrivateChat`: that RPC takes a `target_user_id` and
+   * joins `profiles`, and a bot is neither. `bot-client-integration-contract`
+   * pins that the two are not confused.
+   */
+  const openBotFromSearch = useCallback(
+    async (botId: string) => {
+      const me = useAppStore.getState().currentUser?.id;
+      if (!me) {
+        showAppAlert(CHAT_OPEN_SIGNED_OUT, "Бот");
+        return;
+      }
+      const { candidates, mine } = await findBotChats(botId, me);
+      let chatId = chooseBotChat(candidates, mine);
+      if (!chatId) {
+        const created = await createBotChat(botId);
+        if (created.kind === "missing") {
+          showAppAlert(BOT_CHAT_UNAVAILABLE, "Бот");
+          return;
+        }
+        if (created.kind === "failed") {
+          showAppAlert(BOT_CHAT_OPEN_FAILED, "Бот");
+          return;
+        }
+        chatId = created.chatId;
+      }
+      const opened = await safeOpenChat(chatId, {
+        unavailableMessage: BOT_CHAT_OPEN_FAILED,
+        unavailableTitle: "Бот",
+      });
+      if (!opened) return;
+      setLocation("/");
+      closeAfterOpen();
+    },
+    [closeAfterOpen, setLocation],
+  );
+
   const activateResult = useCallback(
     async (result: GlobalSearchResult) => {
       if (result.resultType === "command") {
@@ -533,7 +593,7 @@ export function useSearchResultActions({ onAfterOpen }: { onAfterOpen?: () => vo
       }
 
       if (result.resultType === "bot") {
-        showAppAlert("Запуск чата с ботом пока недоступен.", "Бот");
+        await openBotFromSearch(result.id);
         return;
       }
 
@@ -578,7 +638,7 @@ export function useSearchResultActions({ onAfterOpen }: { onAfterOpen?: () => vo
         }
       }
     },
-    [closeAfterOpen, isStaff, setLocation, setMobileSection, setSearchQuery],
+    [closeAfterOpen, isStaff, openBotFromSearch, setLocation, setMobileSection, setSearchQuery],
   );
 
   const openPreviewChat = useCallback(async () => {

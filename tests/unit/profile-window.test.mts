@@ -776,35 +776,82 @@ test("the sub-view has no «Показать ещё» button", () => {
 
 test("more is fetched when the end of the list comes into view, not on a scroll offset", () => {
   const observer = panelSource.match(
-    /const observer = new IntersectionObserver\([\s\S]*?\n {2}\}, \[view, sectionHasMore, activeMediaSection\]\);/,
+    /const observer = new IntersectionObserver\([\s\S]*?\n {2}\}, \[view, sectionHasMore, activeMediaSection, activeSection\?\.loadedCount\]\);/,
   );
   assert.ok(observer, "nothing watches the end of the list");
   assert.match(observer[0], /observer\.observe\(node\)/, "the sentinel is never observed");
   assert.match(observer[0], /observer\.disconnect\(\)/, "the observer outlives the sub-view");
   assert.match(observer[0], /root: mediaScrollerRef\.current/, "the observer watches the page, not the list's scroller");
-  // Polling offsets is the thing this replaced.
-  assert.doesNotMatch(panelSource, /scrollTop/, "the list is back to reading scroll offsets");
-  assert.doesNotMatch(panelSource, /onScroll=/, "the list is back to reading scroll offsets");
+  // The loader is reached through a ref, not through this effect's
+  // dependencies. Keyed on the callback instead, every page re-fired the load
+  // before the observer had a frame to say the sentinel had moved out of view,
+  // and the list loaded itself to the end with nobody scrolling — measured on
+  // the fixture at sixty pictures and three pages. See the e2e spec's «the end
+  // of the list offers no press».
+  assert.match(observer[0], /void loadMoreRef\.current\(\)/, "the observer does not load the next page");
+  // Over the code, not over the prose about it. The comment above this effect
+  // names the dependency list it replaced, and a scan that reads comments would
+  // fail on the explanation — rule 9 of the interface material, met here in a
+  // different file.
+  assert.doesNotMatch(
+    panelSource.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, ""),
+    /\[sentinelVisible/,
+    "a second effect loads on a stale visibility flag again",
+  );
+  // Polling offsets is the thing this replaced, and that is still the contract.
+  // It used to be enforced by forbidding the strings `scrollTop` and
+  // `onScroll=` anywhere in the file, which D-171 made too blunt: the month
+  // marker follows the scroll and must, because the month a reader is inside
+  // is not a thing an observer on the end of the list can answer. So what is
+  // pinned now is the thing that actually mattered — that nothing in a scroll
+  // listener loads a page.
+  const listeners = [...panelSource.matchAll(/addEventListener\("scroll", (\w+)/g)].map((m) => m[1]);
+  assert.deepEqual(listeners, ["readMonthMarker"], "something other than the month marker listens to the scroll");
+  const marker = panelSource.match(/const readMonthMarker = useCallback\([\s\S]*?\n {2}\}, \[[^\]]*\]\);/);
+  assert.ok(marker, "the month marker is gone");
+  assert.doesNotMatch(marker[0], /loadMedia|loadLinks|loadMoreActiveSection/, "the scroll listener loads pages");
+  assert.doesNotMatch(panelSource, /onScroll=/, "a page can be loaded from a React scroll handler again");
 });
 
 test("the affordance exists only while the open section has more to load", () => {
-  const sentinel = panelSource.match(
-    /\{activeSection && sectionHasMore && \(\s*\n\s*<div ref=\{sentinelRef\}[\s\S]*?\n {10}\)\}/,
-  );
-  assert.ok(sentinel, "the end of the list is not gated on the section having more");
-  // Nothing is left behind when the section is complete: no empty row, no
-  // disabled control, no permanent spinner.
-  assert.match(sentinel[0], /data-testid="chat-info-media-sentinel"/);
+  // D-171 replaced one element doing two jobs — an observer target that was
+  // also a «Загрузить ещё» button — with five distinct answers to «what is at
+  // the end of this list», decided in `lib/sharedMediaBrowsing.ts`. Two of them
+  // carry the sentinel; the other three are a refusal, a server with nothing
+  // further to give, and a complete list, which draws nothing at all.
   assert.match(
     panelSource,
-    /const sectionHasMore = activeSection\?\.hasMore === true && !autoLoadStalled;/,
-    "«more» is no longer asked of the section that is open",
+    /\{tailShown && activeSection && \(tail\.kind === "more" \|\| tail\.kind === "loading"\) && \(/,
+    "the end of the list is not gated on the tail state",
+  );
+  // One element across the load, and the reason is mechanical rather than a
+  // matter of focus this time: the observer is attached in an effect keyed on
+  // `sectionHasMore`, so a second element swapped in when a page starts leaves
+  // it watching a detached node and the list stops at two pages forever.
+  assert.equal(
+    (panelSource.match(/ref=\{sentinelRef\}/g) ?? []).length,
+    1,
+    "the observer's target is swapped out mid-load",
+  );
+  assert.equal((panelSource.match(/data-testid="chat-info-media-sentinel"/g) ?? []).length, 1);
+  assert.match(
+    panelSource,
+    /const sectionHasMore = activeSection\?\.hasMore === true && !autoLoadStalled && !sectionFailed;/,
+    "a refused page is retried automatically on every scroll",
   );
   assert.match(
     panelSource,
     /const sectionLoading = activeSection\?\.kind === "link" \? loadingLinks : loadingMedia;/,
     "one loading flag stands for two different queries again",
   );
+  assert.match(
+    panelSource,
+    /const sectionFailed = activeSection\?\.kind === "link" \? linksFailed : mediaFailed;/,
+    "one failure flag stands for two different queries",
+  );
+  // Nothing is left behind when the section is complete: `mediaTailState`
+  // answers «complete» and no branch below renders for it.
+  assert.doesNotMatch(panelSource, /tail\.kind === "complete"/, "the complete list draws something");
 });
 
 test("one request at a time, and none at all once one comes back empty", () => {
@@ -843,23 +890,50 @@ test("a page is asked for by cursor, not by how many rows survived", () => {
   assert.doesNotMatch(panelSource, /loadMedia\(false, media\.length\)/, "paging is back on the list's length");
 });
 
-test("a reader who never scrolls can still reach the rest", () => {
-  const sentinel = panelSource.match(
-    /\{activeSection && sectionHasMore && \(\s*\n\s*<div ref=\{sentinelRef\}[\s\S]*?\n {10}\)\}/,
+test("a page that did not arrive says so rather than looking like the end", () => {
+  // This test used to say «a reader who never scrolls can still reach the
+  // rest» and pinned the «Загрузить ещё» button as the answer, on the reasoning
+  // that «nothing scrolls into view when a reader tabs». That reasoning is
+  // wrong: focusing an element scrolls it into view unless `preventScroll` is
+  // passed, so tabbing to the last tile moves the sentinel into the observer's
+  // 200px margin and the page loads. It is measured rather than argued, in
+  // `tests/e2e/shared-media-browsing.spec.ts` — «tabbing to the end of the grid
+  // loads the next page» — because a claim about focus behaviour belongs in a
+  // browser and not in a source scan.
+  //
+  // What is pinned here is the contract that replaced it: a refusal is a state
+  // of its own, with its own sentence and its own control, and it is never the
+  // thing the complete list draws (which is nothing at all). D-140 and D-193
+  // are the same defect on other surfaces.
+  const failed = panelSource.match(
+    /\{tailShown && tail\.kind === "failed" && \(\s*\n[\s\S]*?\n {10}\)\}/,
   );
-  assert.ok(sentinel, "the end of the list is gone");
-  // Nothing scrolls into view when a reader tabs, so an observer alone leaves
-  // the rest of the list unreachable from the keyboard.
-  assert.match(sentinel[0], /onClick=\{\(\) => void loadMoreActiveSection\(\)\}/, "there is no control to press");
-  assert.match(sentinel[0], /Загрузить ещё/, "the control has no label");
-  // One element across the load: unmounting the button somebody just pressed
-  // drops their focus to the document.
-  assert.equal((sentinel[0].match(/<button/g) ?? []).length, 1, "the control is swapped out mid-load");
-  assert.match(sentinel[0], /aria-busy=\{sectionLoading\}/, "a screen reader is not told a page is loading");
-  // The indicator is a skeleton, which is where this codebase already answers
-  // `prefers-reduced-motion` — see `.kub-skeleton` in index.css.
+  assert.ok(failed, "a refused page is drawn as nothing again");
+  assert.match(failed[0], /\{tail\.message\}/, "the failure has no sentence");
+  assert.match(failed[0], /data-testid="chat-info-media-retry"/, "there is no way to ask again");
+  assert.match(failed[0], /onClick=\{retryActiveSection\}/, "the control asks for nothing");
+  assert.match(failed[0], /\{tail\.action\}/, "the control has no label");
+  // And the empty list distinguishes «nothing here» from «could not read».
+  const empty = panelSource.match(/data-testid="chat-info-media-empty"[\s\S]*?\n {12}<\/div>/);
+  assert.ok(empty, "the empty list is gone");
+  assert.match(empty[0], /\{sectionEmpty\.title\}/, "the empty list hard-codes its own claim again");
+  assert.match(empty[0], /sectionEmpty\.retry/, "an unreadable list offers no way to ask again");
+  assert.match(panelSource, /const sectionEmpty = mediaEmptyState\(sectionFailed\);/);
+  // The loading state still answers `prefers-reduced-motion` through the
+  // skeleton, and still tells a screen reader a page is on its way.
+  const sentinel = panelSource.match(
+    /\{tailShown && activeSection && \(tail\.kind === "more" \|\| tail\.kind === "loading"\) && \(\s*\n[\s\S]*?\n {10}\)\}/,
+  );
+  assert.ok(sentinel, "nothing is drawn while a page is on its way");
   assert.match(sentinel[0], /KubStableSkeleton/, "the loading indicator animates without a reduced-motion answer");
-  assert.match(sentinel[0], /Загружаем ещё…/, "nothing says a page is on its way");
+  assert.match(
+    sentinel[0],
+    /role=\{tail\.kind === "loading" \? "status" : undefined\}/,
+    "a screen reader is not told a page is loading",
+  );
+  // Neither of the two states the observer watches offers a press: paging
+  // happens because the reader arrived, not because they pressed.
+  assert.doesNotMatch(sentinel[0], /<button/, "the sentinel is a button pretending to be a sentinel again");
 });
 
 test("opening a kind fetches that kind once its total is known", () => {

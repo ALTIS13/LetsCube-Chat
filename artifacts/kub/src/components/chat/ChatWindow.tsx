@@ -58,6 +58,8 @@ import { KUB_CHAT_MESSAGE_JUMP_EVENT, requestChatMessageJump, type ChatMessageJu
 import { getChatDisplayInfo, isSavedChat } from "@/lib/chatDisplay";
 import { reportError } from "@/lib/monitoring";
 import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
+import { useBotChat } from "@/hooks/useBotChat";
+import { BOT_START_COMMAND, botChatNeedsStart } from "@/lib/botChatSurfaces";
 // One copy of "is this a voice note / a round video", shared with the profile
 // card's shared-media sections. A second copy drifts, and then playback and the
 // gallery disagree about the same row.
@@ -166,6 +168,23 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, deleteMessagesForEveryone, togglePin, forwardMessage, clearChatForMe,
     loadOlderMessages, ensureMessageLoaded,
   } = useMessages(chatId, messageTopicId, messageGeneralTopicIds);
+
+  /**
+   * The bot this chat holds, if it holds one (D-126, D-127).
+   *
+   * `needsStart` is decided over `messages` and not over `conversation`: a
+   * message the reader deleted for themselves is still a message they sent, and
+   * a composer that turned back into «Запустить» after a cleared chat would
+   * offer to start a bot that has been running for months. `hasMoreOlder` is
+   * what makes the inference sound — see `botChatNeedsStart`.
+   */
+  const botChat = useBotChat(chatId);
+  const botNeedsStart = botChat.ready && botChatNeedsStart({
+    hasBot: botChat.botId !== null,
+    currentUserId: userId,
+    messages,
+    historyComplete: !hasMoreOlder,
+  });
 
   useEffect(() => { markChatRead(chatId); }, [chatId, markChatRead]);
   // What the conversation shows: a private chat draws no deleted message, since
@@ -1581,6 +1600,19 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onIncomingMediaTaken={closeMediaSendRequest}
             refusal={sendRefusal}
             onDismissRefusal={clearSendRefusal}
+            bot={
+              botChat.botId
+                ? {
+                    commands: botChat.commands,
+                    needsStart: botNeedsStart,
+                    // «Запустить» sends `/start`, which is the whole of what
+                    // Telegram's Start does: the bot learns about the person
+                    // from an ordinary message, and the composer comes back
+                    // because `botChatNeedsStart` now finds one from them.
+                    onStart: () => { handleSend(BOT_START_COMMAND); },
+                  }
+                : null
+            }
           />
         </div>
       </div>
