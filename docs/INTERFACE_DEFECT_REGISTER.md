@@ -11021,11 +11021,25 @@ Expected: > 377
 Received:   374
 ```
 
-**Defect:** the sheet's height with three items picked is **374**, which is
-3 pixels *less* than its empty height of 317 plus the 60 the test requires — and
-in fact barely more than empty. Either the picked rows no longer add height, or
-the sheet is clamped before they can. Not yet diagnosed: this entry records a
-measurement, not a cause.
+**Defect, and the first reading of it here was wrong.** This entry originally
+said the sheet was «barely more than empty». It is not: 317 empty, 374 with
+three picks, so it grows by **57px** and the test wants more than 60. Correcting
+that is the point of re-reading a measurement before acting on it — «it stopped
+growing» and «it grows three pixels less than a threshold» call for completely
+different work.
+
+What is measured so far, on `chromium-mobile-390`: the picks sit in a
+**three-column** grid, `112.66px` per column with a `6px` gap, each pick
+`113×113`, and the container holds five cells — two entry buttons and the three
+picks — measuring 307px. Two entries and three picks in three columns is two
+rows, and two rows of 113 with a gap between them is 232, which does not
+reconcile with a 57px growth on its own. **So the arithmetic is not understood
+yet**, and neither the product nor the threshold should be touched until it is.
+
+Three things it could be, none of them confirmed: the entry row shrinking when
+picks join it, a maximum height the sheet reaches before the second row is
+fully drawn, or a threshold written against a grid that had a different column
+count. The last one would make this a stale test rather than a defect.
 
 **Why it matters beyond the number.** The test's name lists three claims and the
 height is the first of them, so «still closes by its handle and its dim» — two
