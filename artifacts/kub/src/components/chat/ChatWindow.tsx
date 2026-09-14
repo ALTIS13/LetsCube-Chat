@@ -350,7 +350,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   // all besides the one general channel. Read here rather than in the rail's
   // own section below, because the capsule under the header is drawn
   // differently once a list of rooms is on screen — see `capsuleChannel`.
-  const railOffered = voiceEnabled && railIsOffered(serverChannels.channels, serverChannels.categories);
+  const railOffered =
+    voiceEnabled && railIsOffered(serverChannels.channels, serverChannels.categories, serverChannels.failed);
   const voiceDirectory = useMemo(() => {
     const names = new Map<string, string>();
     const faces = new Map<string, string | null>();
@@ -505,6 +506,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     // open for anyone else. Both, because a control that does nothing is worse
     // than no control and a dialog that trusts its caller is worse than both.
     onManageChannels: canManageTopics ? manageChannels : undefined,
+    // A read that failed keeps the rail on screen and says so, instead of
+    // taking the channels away with no sentence anywhere. See
+    // `ServerChannelsView.failed`.
+    failed: serverChannels.failed,
+    onRetry: serverChannels.refresh,
   };
 
   /**
@@ -526,7 +532,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         // differ for as long as a read takes, and reading the wrong one hangs
         // up a live call on the way back to the conversation it is in.
         chatId: voice.chatId,
-        ready: voice.ready,
+        // A read that failed is not evidence that the room is gone. `ready`
+        // means «an answer came back», and an error is an answer that says
+        // nothing about this group — see `ServerChannelsView.failed`.
+        ready: voice.ready && !voice.failed,
         supported: voice.supported,
         channel: voice.channel,
       })

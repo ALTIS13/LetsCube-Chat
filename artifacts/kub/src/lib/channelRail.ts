@@ -189,7 +189,18 @@ export function withGeneralChannel(channels: readonly ServerChannel[]): ServerCh
 export function railIsOffered(
   channels: readonly (ServerChannel & { archived?: boolean })[],
   categories: readonly ChannelCategory[],
+  /**
+   * True when the last read errored.
+   *
+   * The rail stays, and says so. Without this a failed read of `voice_channels`
+   * takes the whole rail off the screen — `channels` holds nothing but the
+   * conversation — and a person watching their channels disappear is told
+   * nothing at all. That is D-140 one surface further on: an empty answer and
+   * an answer nobody could get are not the same answer.
+   */
+  failed = false,
 ): boolean {
+  if (failed) return true;
   if (categories.length > 0) return true;
   return channels.some(
     (channel) => channel.archived !== true && !(channel.kind === "text" && channel.isGeneral === true),
@@ -333,6 +344,12 @@ export function channelsShownWhileCollapsed(
 // ---------------------------------------------------------------------------
 
 /** The rail's width as a column, in CSS pixels. */
+/** What the rail says in place of a list it could not read. */
+export const CHANNEL_RAIL_UNREADABLE = "Не удалось загрузить каналы.";
+
+/** And the way to ask again, because the read is worth retrying by hand. */
+export const CHANNEL_RAIL_RETRY = "Повторить";
+
 export const CHANNEL_RAIL_WIDTH = 224;
 
 /**

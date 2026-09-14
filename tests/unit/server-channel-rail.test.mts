@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 
 import {
   CHANNEL_RAIL_WIDTH,
@@ -9,6 +10,8 @@ import {
   channelsShownWhileCollapsed,
   currentTextChannelId,
   paneFitsChannelRail,
+  CHANNEL_RAIL_RETRY,
+  CHANNEL_RAIL_UNREADABLE,
   railIsOffered,
   seatLabel,
   textChannelFromTopic,
@@ -166,6 +169,42 @@ test("a second text channel, a room, or a heading each earn the rail", () => {
   // A heading somebody has made and not filled yet is a thing they are in the
   // middle of doing; a rail that waits for the first channel hides it.
   assert.equal(railIsOffered(withGeneralChannel([]), [categoryFromRow({ id: "c1", name: "Голос" })]), true);
+});
+
+test("a read that failed keeps the rail, and the rail says so", () => {
+  // D-193. `useServerChannels` turned an error into `[]`, so a failed read of
+  // `voice_channels` looked exactly like a group with no rooms — and a group
+  // whose only extra channels were rooms lost its whole rail, with no sentence
+  // anywhere saying why. An empty answer and an answer nobody could get are not
+  // the same answer.
+  const onlyTheConversation = withGeneralChannel([]);
+  assert.equal(railIsOffered(onlyTheConversation, []), false, "the fixture is not the case being tested");
+  assert.equal(railIsOffered(onlyTheConversation, [], true), true);
+
+  // And the sentence is about the read rather than about the group: «пусто»
+  // would be a claim, and this is an admission.
+  assert.match(CHANNEL_RAIL_UNREADABLE, /не удалось/iu);
+  assert.doesNotMatch(CHANNEL_RAIL_UNREADABLE, /пуст|нет каналов/iu);
+  assert.ok(CHANNEL_RAIL_RETRY.length > 0, "a read worth retrying has no way to retry it");
+});
+
+test("the rail draws that sentence, and the composer half holds its fire", () => {
+  // Two source facts, because both live inside React and neither returns a
+  // value a test can call. The second is the serious one: with `ready` true and
+  // the rooms empty, `voiceCallLostItsChannel` reads «this chat has no such
+  // room» and hangs up a live call — on a network blip.
+  const rail = readFileSync("artifacts/kub/src/components/chat/ChannelRail.tsx", "utf8");
+  assert.ok(rail.includes("{CHANNEL_RAIL_UNREADABLE}"), "the rail stopped saying the read failed");
+  assert.ok(
+    rail.includes('data-testid="channel-rail-unreadable"'),
+    "the sentence lost the handle a test can find it by",
+  );
+
+  const window = readFileSync("artifacts/kub/src/components/chat/ChatWindow.tsx", "utf8");
+  assert.ok(
+    window.includes("ready: voice.ready && !voice.failed,"),
+    "a failed read is being read as evidence that the room is gone",
+  );
 });
 
 test("an archived extra channel does not earn a rail listing one row", () => {

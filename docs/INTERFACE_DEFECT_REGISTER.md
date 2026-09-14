@@ -10792,3 +10792,60 @@ are still counted as their code points, because that is also what
 asserts the **old** behaviour still reproduces before checking the new one — a
 test for a case that has quietly stopped occurring is a test that proves
 nothing. Three mutations turn it red, including the exact `slice` it replaced.
+
+---
+
+## D-193 `[x]` A failed read of the rooms took the rail away, and hung up a live call
+
+**Severity:** high. Found on 2026-09-14 in the interface audit, hours after the
+rail shipped, by reading the new hook's error handling rather than by any test.
+
+**Surface:** `artifacts/kub/src/hooks/useServerChannels.ts` — the two reads it
+owns turned an error into an empty list:
+
+```ts
+const voice = channelRead.error ? [] : (channelRead.data ?? []).map(...)
+// ...
+setRead({ supported, chatId, categories, voice, participants });
+// and, for every read that came back at all:
+ready: true
+```
+
+**Defect:** an empty list and a failed read were the same answer. Two
+consequences, and the second is far worse than the first.
+
+1. **The rail vanishes.** `railIsOffered` sees nothing but the conversation, so
+   a group whose extra channels are all rooms loses its whole channel list on a
+   network blip — and nothing anywhere says why. That is D-140 one surface
+   further on.
+2. **A live call is hung up.** `voiceCallLostItsChannel` fires on «this chat has
+   no such room», guarded by `ready` and `supported` and by the read's own
+   `chatId` matching the call's chat. After a failed read all three guards pass:
+   `ready` is true, the error is not «table absent» so `supported` stays true,
+   and `chatId` is set. The room is simply missing, so the call ends.
+
+**And the reader this replaced was safe only by accident.** The single-channel
+`useVoiceChannel` returned `{ ...EMPTY, ready: true, supported }` on an error,
+and `EMPTY.chatId` is null — so the hang-up rule's third guard caught it. The
+rewrite carried `chatId` through on every path, which is more correct in every
+other way and removed the accident that was holding this up. **A guard nothing
+states is a guard nothing protects.**
+
+**Fixed** by making the failure an answer of its own: `ServerChannelsView.failed`
+is true when the rooms read errored and the table exists. `ChatWindow` passes
+`ready: voice.ready && !voice.failed` to the hang-up rule, so a read that could
+not be made is not evidence that the room is gone. `railIsOffered` keeps the
+rail while `failed`, and the rail draws «Не удалось загрузить каналы.» above the
+list with «Повторить» beside it — above rather than instead of, because a failed
+read says nothing about the channels already on screen.
+
+**The sentence is an admission, not a claim.** «Каналов нет» would be the
+product asserting something it does not know; the test refuses any wording that
+says so.
+
+**Five mutations, five red**, four in `server-channel-rail.test.mts` and the
+fifth in the spec: dropping the `failed` short-circuit from `railIsOffered`,
+restoring `ready: voice.ready`, not drawing the sentence, wording it as «Каналов
+нет», and — the one that needed an end-to-end test because no unit reaches a
+React hook — `const failed = false` in the hook itself. The spec's fixture
+answers the rooms read with a 500 for that one.

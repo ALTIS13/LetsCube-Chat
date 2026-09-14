@@ -6,6 +6,8 @@ import { TinyUserAvatar } from "./MessageReactions";
 import { CAPSULE_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING, FOCUS_RING_INSET, PRESS_SINK } from "@/lib/controlSurface";
 import {
+  CHANNEL_RAIL_RETRY,
+  CHANNEL_RAIL_UNREADABLE,
   CHANNEL_RAIL_WIDTH,
   channelsShownWhileCollapsed,
   seatLabel,
@@ -80,6 +82,16 @@ export interface ChannelRailProps {
   onJoinVoice: (channel: ServerChannel) => void;
   /** Opens the management surface. Absent means no administrator control is drawn. */
   onManageChannels?: () => void;
+  /**
+   * True when the last read of the rooms errored.
+   *
+   * The rail stays and says so rather than emptying: an empty list and a list
+   * nobody could read are different facts, and a person watching their
+   * channels disappear with no sentence anywhere is the worst of the two.
+   */
+  failed?: boolean;
+  /** Asks for the read again. Absent draws no retry. */
+  onRetry?: () => void;
 }
 
 /** The list itself, shared by the column and the sheet. */
@@ -95,6 +107,8 @@ function ChannelRailList({
   onSelectText,
   onJoinVoice,
   onManageChannels,
+  failed,
+  onRetry,
 }: ChannelRailProps) {
   const [collapsed, setCollapsed] = useState<readonly string[]>([]);
   const canManage = canManageChannels(role);
@@ -122,6 +136,29 @@ function ChannelRailList({
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar px-2 pb-4 pt-2" data-testid="channel-rail-list">
+      {/* Above the list, not instead of it: a read that failed says nothing
+          about the channels already on screen, and taking them away would
+          lose what is still true. */}
+      {failed && (
+        <div
+          role="status"
+          data-testid="channel-rail-unreadable"
+          className="mb-2 flex items-center gap-2 rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-2.5 py-2 text-xs text-[color:var(--kub-danger-text)]"
+        >
+          <KubIcon name="warning" size={14} tone="currentColor" className="shrink-0" />
+          <span className="min-w-0 flex-1">{CHANNEL_RAIL_UNREADABLE}</span>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              data-testid="channel-rail-retry"
+              className={cn("shrink-0 rounded-md px-1.5 py-0.5 font-semibold", FOCUS_RING)}
+            >
+              {CHANNEL_RAIL_RETRY}
+            </button>
+          )}
+        </div>
+      )}
       {groups.map((group) => {
         const categoryId = group.category?.id ?? null;
         const folded = categoryId !== null && collapsed.includes(categoryId);

@@ -609,6 +609,37 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-14 — `1e26453edc57ccf22b0d2c21c9b860c4980f72da`
+
+A group is a server: a rail of rooms beside the conversation, «Каналы» on the
+settings screen, and the one-room mechanic retired rather than left beside it
+(D-191, D-192).
+
+- `letscube-web` runs image
+  `l64kyyu1sysev2izzjjbizhe:1e26453edc57ccf22b0d2c21c9b860c4980f72da`, read off
+  the running container; one replica after the rollover.
+- **The marker was calibrated in both directions with one string each way**, and
+  the second is the better one. «Каналы видят все участники группы» was absent
+  from the live bundle and present in the built one — an addition. «Начать
+  голосовой чат» was present in the live bundle and **absent** from the built
+  one — a removal, which is the half a marker usually cannot prove.
+- **And the control string earned its keep.** Rounds three to five of the check
+  read a 146-byte asset, where the removal marker said `retired_gone=True` — a
+  true answer from a file that contains nothing at all. The control «Голосовой
+  чат» read false in exactly those rounds, which is the only thing that told an
+  empty answer from a real one. A removal marker without a control is a marker
+  that reports success mid-rollover.
+- Round six: `index-O7m58HS7.js`, 2991622 bytes, addition present, removal gone,
+  control present.
+- Gates: typecheck clean, unit suite **2428/2428**, production build proved by
+  its own lines, and every touched e2e spec green — `server-channel-rail` 13
+  passed with 17 skipped by width, `server-channels-admin` 24/24,
+  `blocks-and-reports` 18/18, `voice-call` 18/18 after six tests of the retired
+  mechanic were replaced by three that assert it is gone.
+- Rollback is a fast-forward of `main` back to `88e1802`, plus
+  `20260914140000_channel_categories.rollback.sql` if the schema has to go too.
+
+
 ### 2026-09-14 — `1ed4aa7aacc83358f2eb0a60e233dab2b3420d2b`
 
 Channel headings in the schema, and «Блокировки» narrowed to the rule that

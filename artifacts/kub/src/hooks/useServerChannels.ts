@@ -45,6 +45,25 @@ export interface ServerChannelsView {
   /** False until the first read has come back, so an empty rail is not drawn as «пусто». */
   ready: boolean;
   /**
+   * True when the last read came back as an error rather than as rows.
+   *
+   * **An empty list and a failed read are not the same answer**, and until
+   * 2026-09-14 this hook returned the same thing for both: an error became
+   * `[]`, `ready` became true, and `chatId` was set. Two consequences, and
+   * the second is the serious one:
+   *
+   *   - the rail vanishes, because `railIsOffered` sees nothing but the
+   *     conversation, and a person watching their channels disappear is told
+   *     nothing at all (D-140, and now D-193);
+   *   - `voiceCallLostItsChannel` reads «this chat has no such room» and
+   *     **hangs up a live call**. The single-channel reader this replaced was
+   *     safe only by accident: it left `chatId` null on error, and the rule
+   *     compares that against the call's chat before it fires.
+   *
+   * A read that could not be made is not evidence about the group.
+   */
+  failed: boolean;
+  /**
    * The chat this answer was read for, and null before the first read.
    *
    * Opening another conversation changes the argument without clearing what is
@@ -69,6 +88,7 @@ const NO_PARTICIPANTS: ReadonlyMap<string, string[]> = new Map();
 const EMPTY: ServerChannelsView = {
   supported: true,
   ready: false,
+  failed: false,
   chatId: null,
   categories: [],
   channels: [],
@@ -80,6 +100,7 @@ const EMPTY: ServerChannelsView = {
 /** What was read from the two tables this hook owns. */
 interface ServerChannelsRead {
   supported: boolean;
+  failed: boolean;
   chatId: string;
   categories: ChannelCategory[];
   voice: ServerChannel[];
@@ -128,6 +149,11 @@ export function useServerChannels(
       // is the same day seen from the other side: the rail still draws, every
       // channel is simply uncategorised.
       const supported = !(channelRead.error && classifyVoiceChannelWriteError(channelRead.error) === "unsupported");
+      // A table this deployment does not have is not a failure; every other
+      // error is. The categories table is read the same way for the same
+      // reason — the rail still draws without it, so its absence alone must
+      // not be reported as a failed read.
+      const failed = Boolean(channelRead.error) && supported;
       const categories = categoryRead.error
         ? []
         : ((categoryRead.data as unknown as ChannelCategoryRow[] | null) ?? []).map(categoryFromRow);
@@ -151,7 +177,7 @@ export function useServerChannels(
         }
       }
 
-      setRead({ supported, chatId, categories, voice, participants });
+      setRead({ supported, failed, chatId, categories, voice, participants });
     })();
 
     return () => {
@@ -220,6 +246,7 @@ export function useServerChannels(
     return {
       supported: read.supported,
       ready: true,
+      failed: read.failed,
       chatId: read.chatId,
       categories: read.categories,
       channels,

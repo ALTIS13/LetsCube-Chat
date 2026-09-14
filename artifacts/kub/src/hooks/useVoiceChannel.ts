@@ -41,6 +41,8 @@ export interface VoiceChannelView {
    * would end a call that nobody ended. Both are decided against this field.
    */
   chatId: string | null;
+  /** True when the last read errored, so «no room here» is not an answer. */
+  failed: boolean;
   channel: VoiceChannelSummary | null;
   /** Ids only. Names come from the chat's member list, through `resolveVoiceParticipants`. */
   participantIds: string[];
@@ -60,6 +62,7 @@ export function useVoiceChannel(
     return {
       supported: channels.supported,
       ready: channels.ready,
+      failed: channels.failed,
       chatId: channels.chatId,
       channel: room
         ? {

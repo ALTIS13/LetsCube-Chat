@@ -91,6 +91,13 @@ interface Shape {
   role?: string;
   /** The fixture signs in on the dark theme; the captures need both. */
   theme?: "dark" | "light";
+  /**
+   * Answer the rooms read with a 500 instead of rows.
+   *
+   * Not «no rooms»: the point of the test below is that the two are different
+   * answers and the interface used to give the same one for both.
+   */
+  roomsFail?: boolean;
 }
 
 /**
@@ -100,11 +107,13 @@ interface Shape {
  */
 function tablesFor(shape: Shape) {
   const forum = shape.forum !== false;
+  const roomsFail = shape.roomsFail === true;
   return (call: { resource: string; method: string }) => {
     if (call.method !== "GET") return undefined;
     if (call.resource === "chat_channel_categories") return { status: 200, body: forum ? CATEGORIES : [] };
     if (call.resource === "topics") return { status: 200, body: forum ? TOPICS : [] };
     if (call.resource === "voice_channels") {
+      if (roomsFail) return { status: 500, body: { message: "upstream said no" } };
       return { status: 200, body: forum ? ROOMS : ROOMS.filter((room) => room.id === ROOM_LOBBY) };
     }
     if (call.resource === "voice_participants") return { status: 200, body: OCCUPANTS };
@@ -237,6 +246,23 @@ test.describe("the channel rail", () => {
     const box = await rail.boundingBox();
     expect(box, "the rail column has no box").not.toBeNull();
     expect(Math.round(box!.width)).toBe(224);
+  });
+
+  test("a rooms read that failed keeps the rail and says so", async ({ page }, testInfo) => {
+    test.skip(!paneIsWide(testInfo), "the sentence is the same in both shapes");
+    // D-193. The read used to become `[]`, so a 500 looked exactly like a group
+    // with no rooms — and a group whose only extra channels are rooms lost its
+    // whole rail with nothing on screen saying why.
+    await openGroup(page, { forum: false, roomsFail: true });
+
+    const rail = page.getByTestId("channel-rail");
+    await expect(rail).toBeVisible();
+    const notice = page.getByTestId("channel-rail-unreadable");
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText("Не удалось загрузить каналы.");
+    // An admission, not a claim about the group.
+    await expect(notice).not.toContainText("нет");
+    await expect(page.getByTestId("channel-rail-retry")).toBeVisible();
   });
 
   test("uncategorised channels stand above the headings, text above voice", async ({ page }, testInfo) => {
