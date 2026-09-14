@@ -7164,7 +7164,7 @@ ones a decoded clip gives, and the mutation above proves that engine sees the
 defect too. `media-viewer-actions.spec.ts` has the same WebKit limitation today
 and fails there for the same reason; that is not this entry's to fix.
 
-## D-130 `[ ]` A held recording cannot be cancelled, and releasing parks it in the tray instead of sending
+## D-130 `[x]` A held recording cannot be cancelled, and releasing parks it in the tray instead of sending
 
 **Severity:** medium, for everyone who records voice or round video. Found by the
 chat-functions audit from the code; the hold state is in frame 22.
@@ -11286,3 +11286,37 @@ evidence that it closed it — D-133 is explicitly partial, and several of these
 may have fixed one half of a two-part entry. The next audit pass reads each
 entry's stated defect against the shipped source, the way D-128 and D-131 were
 read, and closes only what it can see is gone.
+
+---
+
+## D-130, closed on 2026-09-14 — the third entry fixed under another number
+
+Read against the shipped source rather than against the commit that names it,
+which is the method the audit note above sets out. All three of its complaints
+are gone, and the first was answered by the owner choosing a different mechanic
+rather than the one the entry proposed.
+
+*«a sideways slide is ignored, so an accidental recording cannot be abandoned».*
+`lib/recordingGesture.ts` records the owner's own words — «них просто кнопка
+посередине - отмена» — and says plainly what follows: «there is no cancel
+threshold … cancelling is no longer a distance, it is a button». A centred
+«Отмена» catches the release, with 12px of padding outside its own box for a
+finger that lands just off it. `RecordingRelease` carries `cancel` as one of its
+five outcomes.
+
+*«every release … raises the modal «Запись слишком короткая или пустая.»».* That
+modal is gone; `recordingGesture.ts:309` names it as the thing the short-press
+hint replaced, and the sentence survives only as an inline `setLocalError` in
+`VoiceRecorder.tsx`, which is a line under the control rather than a box over
+the conversation.
+
+*«a second recording is refused with another modal».* One `showAppAlert` is left
+on this path and it is for the three device failures — permission refused, no
+microphone, a browser without recording. Those are worth a modal: a person
+cannot act on them from the composer, and the alternative is a control that
+silently does nothing.
+
+**Not closed by this:** nothing about the tray's «Готово к отправке» is claimed
+here, because `RecordingRelease` has a `send` outcome and a `lock` outcome and
+the entry's own wording conflates staging with failing. If parking is still
+wrong for some release, that is a new entry with its own reproduction.
