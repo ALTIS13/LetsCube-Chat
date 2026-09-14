@@ -609,6 +609,26 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-14 — `5f84709ec6ccbedf7d86e47c944f00df3b7a6b69`
+
+A failed read of the rooms stops taking the rail away and hanging up a live
+call (D-193), found in the interface audit hours after the rail shipped.
+
+- `letscube-web` runs image
+  `l64kyyu1sysev2izzjjbizhe:5f84709ec6ccbedf7d86e47c944f00df3b7a6b69`, one
+  replica after the rollover.
+- Marker «Не удалось загрузить каналы.» absent from the live bundle and present
+  in the built one; «Каналы видят все участники группы» as the control.
+  Afterwards `index-Dd9LBD4G.js`, 2992440 bytes, both present. Rounds four and
+  five read a 146-byte asset where the control was also absent, which is again
+  what told an empty answer from a real one.
+- Gates: typecheck clean, unit **2430/2430**, `server-channel-rail` and
+  `voice-call` 50 passed with 18 skipped by width across 1440 and 390, and the
+  new surfaces green at the viewports nobody had checked — 51 passed across 360,
+  412 and 1920, and `server-channels-admin` 12/12 on `webkit-mobile-390`.
+- Rollback is a fast-forward of `main` back to `1e26453`.
+
+
 ### 2026-09-14 — `1e26453edc57ccf22b0d2c21c9b860c4980f72da`
 
 A group is a server: a rail of rooms beside the conversation, «Каналы» on the
