@@ -40,7 +40,7 @@ const TABS: ReadonlyArray<TabDef> = [
   { id: "locations", label: "Локации",      icon: "mapPin",     path: "/admin/locations", adminOnly: true },
   { id: "invites",   label: "Инвайты",      icon: "userPlus",   path: "/admin/invites", adminOnly: true },
   { id: "roles",     label: "Роли и права", icon: "shield",     path: "/admin/roles", adminOnly: true },
-  { id: "bans",      label: "Блокировки",   icon: "shieldOff",  path: "/admin/bans" },
+  { id: "bans",      label: "Блокировки",   icon: "shieldOff",  path: "/admin/bans", moderationQueue: true },
   // Beside «Блокировки» because it is the same job, and read by the same
   // people: `content_reports` is staff-only at the RLS layer through
   // `is_manager_or_admin`, exactly as `bans` and `mutes` are.
@@ -187,7 +187,20 @@ export function AdminLayout() {
             <Route path="/admin/roles">
               {isAdmin ? <RolesPermissionsTab /> : <Redirect to="/admin" />}
             </Route>
-            <Route path="/admin/bans" component={BansMutesTab} />
+            {/* Behind the same rule as «Жалобы», and for a sharper reason.
+                `bans` and `mutes` each carry two read policies —
+                `managers read all bans` (`is_manager_or_admin`) and
+                `user reads own bans`. Somebody who is `isStaff` in the client
+                but not staff to the database therefore opened this screen and
+                was shown *their own* sanctions as if they were the whole
+                list: a list complete in appearance and wrong in fact, with no
+                error anywhere to notice. Measured on production on
+                2026-09-14: 18 accounts, 5 staff to the database, 7 holding a
+                staff permission, **2 in the gap** — so this was happening to
+                real people rather than being latent. D-188. */}
+            <Route path="/admin/bans">
+              {canReadReports ? <BansMutesTab /> : <Redirect to="/admin" />}
+            </Route>
             {/* Gated rather than mounted bare, unlike the tabs above it. A
                 support-only operator reaches this shell for their own tab, and
                 the reporter's name exists nowhere else in the product — an

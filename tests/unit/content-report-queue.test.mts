@@ -585,3 +585,22 @@ test("the queue is mounted in exactly one place, behind the staff gate", () => {
     "the tab strip separated the two moderation tabs",
   );
 });
+
+test("«Блокировки» is behind the same rule, because the same policy reads it", () => {
+  // Measured on production on 2026-09-14 rather than reasoned: 18 accounts, 5
+  // staff to the database, 7 holding one of STAFF_ACCESS_PERMISSIONS, and two
+  // in the gap between them. Those two opened this screen and were shown their
+  // own sanctions as though they were the whole list -- `bans` and `mutes` each
+  // carry `managers read all bans` AND `user reads own bans`, so the read
+  // succeeded and returned almost nothing. A list complete in appearance and
+  // wrong in fact is worse than the empty queue «Жалобы» would have shown,
+  // because nothing about it looks unusual. D-188.
+  assert.match(LAYOUT, /id: "bans".*path: "\/admin\/bans".*moderationQueue: true/u);
+  const route = LAYOUT.indexOf('<Route path="/admin/bans">');
+  const gate = LAYOUT.indexOf('{canReadReports ? <BansMutesTab /> : <Redirect to="/admin" />}');
+  assert.ok(route > 0 && gate > route && gate - route < 1200, "the bans route lost its gate");
+  assert.ok(
+    !LAYOUT.includes('<Route path="/admin/bans" component={BansMutesTab} />'),
+    "the bans route went back to being mounted with no gate at all",
+  );
+});

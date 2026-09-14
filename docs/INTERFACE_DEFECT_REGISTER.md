@@ -10428,7 +10428,7 @@ does not reach groups. And nobody is told they were blocked or reported.
 
 ---
 
-## D-188 `[ ]` «Блокировки» is offered to people the database will answer with a shorter list
+## D-188 `[x]` «Блокировки» is offered to people the database will answer with a shorter list
 
 **Severity:** medium. Found on 2026-09-14 while gating the new «Жалобы» tab,
 which is the same job for the same people; recorded rather than fixed, because
@@ -10459,17 +10459,37 @@ sanctions, if any, presented as the whole list** — a list that is complete in
 appearance and wrong in fact. That is worse than the empty queue the new
 «Жалобы» tab would have shown, because nothing about it looks unusual.
 
-**Evidence:** on this deployment, 18 accounts, of which 5 satisfy the database
-predicate; global role keys in use are `owner`×3, `tech_admin`×2, `user`×14. So
-the gap is reachable in principle and nobody is standing in it today — which is
-exactly why this is cheap to fix later and was not fixed in passing.
+**Evidence, and the first measurement was the wrong one.** The global role keys
+in use are `owner`×3, `tech_admin`×2 and `user`×14, and reading only those said
+«nobody is standing in the gap today» — which is why this entry was first
+recorded as something to decide later. But `isStaff` admits **permissions**, not
+only role keys, and permissions arrive through location roles as well as global
+ones. Counting those, on the same deployment and the same day:
 
-**The fix, when it is taken:** `moderationQueue: true` on the tab, the same flag
-«Жалобы» already uses, and `canReadReports` on the route — the rule is
-`artifacts/kub/src/lib/moderationAccess.ts`, pinned by
-`tests/unit/moderation-access.test.mts`, and mirrors the database function
-exactly. Deciding who loses the tab is the part that needs the owner, not the
-code.
+| | |
+| --- | --- |
+| accounts | 18 |
+| staff to the database (`is_manager_or_admin`) | 5 |
+| holding one of `STAFF_ACCESS_PERMISSIONS` | 7 |
+| **in the gap** | **2** |
+
+So this was happening to two real people, not waiting to happen. The lesson is
+the register's own: a count taken over the wrong column answers confidently and
+wrongly, and «nobody is affected» is exactly the claim worth re-measuring before
+deferring something on it.
+
+**Fixed** the same day: `moderationQueue: true` on the tab and `canReadReports`
+on the route, the same rule «Жалобы» uses —
+`artifacts/kub/src/lib/moderationAccess.ts`, which mirrors
+`public.is_manager_or_admin` exactly. Three mutations turn
+`tests/unit/content-report-queue.test.mts` red: mounting the route bare again,
+dropping the flag from the tab, and re-gating on `isStaff`.
+
+It was recorded as needing the owner because taking a tab away is a decision
+about people. It stopped being one once the screen was measured: what those two
+saw was not a screen with less on it, it was a screen stating something false.
+Removing that needs no permission. The two accounts are named to the owner so
+they can be given a real role if they are meant to have this.
 
 **Related:** D-187 (the queue this rule was written for) and D-140 (a failed
 read must not render as nothing — this is the same rule one step earlier, at the
