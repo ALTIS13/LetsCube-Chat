@@ -6974,7 +6974,7 @@ exists, leave bots out of the results.
 
 **Audit rows:** chat-functions A11, K4; top-10 item 8.
 
-## D-128 `[ ]` A group's member actions appear only under a mouse pointer
+## D-128 `[x]` A group's member actions appear only under a mouse pointer — the same defect as D-163
 
 **Severity:** high on phones and tablets, where owners and administrators cannot promote,
 demote or remove a member. Found by the chat-functions audit; rendered on the fixture
@@ -6987,6 +6987,18 @@ demote or remove a member. Found by the chat-functions audit; rendered on the fi
 **Defect:** a touchscreen has no hover, so the three buttons are never shown there.
 Removal asks «Удалить участника из чата?» once pressed. Not checked by the audit: whether
 the invisible buttons still take a tap at their position.
+
+**Closed on 2026-09-14 as a duplicate**, not by a fix of its own. **D-163** is
+the same three controls, the same class list and the same surface, found again
+later and fixed in `14854cc` — the container carrying
+`opacity-0 group-hover:opacity-100` is gone, and the only occurrence of that
+class list left in `ChatInfoPanel.tsx` is inside the comment that explains the
+fix. Verified by grep on the day this was closed.
+
+Worth noting rather than deleting: the register carried the same defect twice
+for three days and the open count was wrong by one the whole time. An entry
+whose fix arrives under another number is not closed by anybody, because the
+person fixing it is reading the other number.
 
 **Proposed:** a muted «владелец» or «админ» on the right of the row; a tap opens the
 member's profile; long press, swipe or ⋯ offers «Назначить администратором» and «Удалить
