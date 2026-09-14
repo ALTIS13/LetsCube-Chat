@@ -885,6 +885,38 @@ Changes applied 2026-09-11, on the owner's approval. Each had a verified schema 
 - `[x]` `20260914130000_a_reported_message_may_be_deleted.sql`, applied the same day, repairing the one above. `content_reports_message_id_fkey` is ON DELETE SET NULL while `content_reports_message_present` required `(kind = 'message') = (message_id IS NOT NULL)`: a referential action is a write, and the UPDATE it performs re-checks every CHECK, so deleting a reported message was refused — and with `messages_chat_id_fkey` ON DELETE CASCADE that meant an ordinary owner could no longer delete a group holding one. Measured on production in a rolled-back transaction on a temporary pair carrying the two definitions verbatim, then proved on the real table in four rules after the fix: the message id may be cleared, a report about a person still may not carry one, and deleting the reported message leaves the complaint standing. The CHECK is now one-directional, `check (kind = 'message' or message_id is null)`; SET NULL is kept deliberately, because «somebody complained and the message is gone» is the case staff most need to see. Backup `/srv/letscube/backups/pre-migrations/20260914-034240-before-reported-message-may-be-deleted.schema.dump`, 1318216 bytes, sha256 `9c7b8377…cc28f9cc`; migration sha256 `067d0edb…`; rollback beside it, and it refuses to run while any report names a message that has since gone. D-189.
 - `[x]` Read-only audit alongside: RLS enabled on 61/61 tables in `public`, no RLS-off table readable or writable by anon/authenticated; no view in `public` readable by them without `security_invoker`; all 37 "block banned …" policies RESTRICTIVE, and the 33 permissive "… blocked" policies literally `false` on tables that grant writes to nobody else. Pre-existing and deliberately left: anon reads on tables guarded by "block banned" fail with `42501 permission denied for function is_banned` (HTTP 401) instead of an empty set — access fails closed, which for anon is correct.
 
+## Last Confirmed Deploy Baseline
+
+- **2026-09-14, `8a929308b10abdc7de975e1f6bfba7a2e1bccb99`.** Personal blocking
+  and content reporting reach the interface, the staff queue «Жалобы» is
+  mounted behind the database's own rule, and two defects found on the way out
+  are fixed (D-189 in the schema, D-190 in the composer).
+- `letscube-web` runs image
+  `l64kyyu1sysev2izzjjbizhe:8a929308b10abdc7de975e1f6bfba7a2e1bccb99` — the
+  commit's full SHA, read off the running container rather than trusted from
+  the webhook. One replica; the previous one was retired during the rollover.
+- **Marker calibrated in both directions before the push**: «Пользователь
+  ограничил переписку.» present in the bundle being shipped and absent from the
+  live one, with «Сообщение» as the control that proves the probe can find
+  Cyrillic in that file. After the rollover the live entry carries the marker
+  and the control, 2955068 bytes.
+- The first two rounds of that check returned a 146-byte asset with neither the
+  marker nor the control — «I cannot see», not «not deployed». Keeping a
+  control string is what tells those apart, and taking the asset URL from the
+  page on every round is what keeps the probe pointed at the right file.
+- Gates at that commit: typecheck clean, unit suite 2345/2345, production build
+  proved by its own `sw.js build` and `built in` lines,
+  `blocks-and-reports.spec.ts` 9/9 on `chromium-desktop-1440` and
+  `chromium-mobile-390`, `channel-card.spec.ts` 12/12 after repairing an
+  expectation that had been red since `fd9255c`.
+- Production afterwards: `/`, `/privacy`, `/support`, `/download` all 200;
+  `content_reports` and `user_blocks` both still empty, so nothing this wave
+  wrote anything.
+- Rollback is a fast-forward of `main` back to `5fc15dc`, plus
+  `20260914130000_a_reported_message_may_be_deleted.rollback.sql` and
+  `20260914120000_personal_blocks_and_reports.rollback.sql` in that order if
+  the schema has to go too. Both refuse rather than discarding silently.
+
 ## Priority 3 - Backup And Restore Drill
 
 Status: `[!]` follow-ups deferred by user on 2026-06-22.
