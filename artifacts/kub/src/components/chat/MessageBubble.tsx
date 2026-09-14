@@ -22,6 +22,8 @@ import { FormattedText, isLocationPreviewMessage } from "@/lib/formatText";
 import { KubIcon } from "@/components/kub";
 import type { MediaViewerItem } from "./MediaViewer";
 import { useChatMediaPlayback, VideoCircleProgressRing, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
+import { ROUND_VIDEO_OPEN_CLASS, ROUND_VIDEO_PLAYBACK_CLASS } from "@/lib/conversationStacking";
+import { mediaOriginality } from "@/lib/mediaOriginality";
 import type { MessageDeliveryState } from "@/lib/messageDelivery";
 import {
   getGroupReadReceiptAriaLabel,
@@ -1367,6 +1369,9 @@ export function MessageBubble({
                     type: "image",
                     url: message.media_url!,
                     title: message.content ?? "Фото",
+                    // What the stored file is, read from the row rather than
+                    // inferred from the absence of a flag (D-097).
+                    originality: mediaOriginality(message.media_metadata),
                     ...(uncompressedMedia
                       ? {
                         original: true,
@@ -1385,7 +1390,15 @@ export function MessageBubble({
                   posterUrl={videoPosterUrl}
                   durationLabel={parseVideoMessageDuration(message.content, message)}
                   playbackItem={createPlaybackItemFromMessage(message, isMe, videoPlaybackUrl ?? message.media_url)}
-                  onOpen={() => onOpenMedia?.({ type: "video", url: message.media_url!, title: message.content ?? "Видео-сообщение" })}
+                  onOpen={() => onOpenMedia?.({
+                    type: "video",
+                    url: message.media_url!,
+                    title: message.content ?? "Видео-сообщение",
+                    // A round message's metadata carries neither the flag nor a
+                    // picked size, so this is «unknown» and the viewer says
+                    // nothing — which is the honest answer, not an oversight.
+                    originality: mediaOriginality(message.media_metadata),
+                  })}
                 />
               ) : (
                 <MediaWithCaption caption={mediaCaption}>
@@ -1400,6 +1413,7 @@ export function MessageBubble({
                       type: "video",
                       url: message.media_url!,
                       title: message.content ?? "Видео",
+                      originality: mediaOriginality(message.media_metadata),
                       ...(uncompressedMedia ? { original: true } : {}),
                     })}
                   />
@@ -1902,11 +1916,27 @@ function RoundVideoMessage({
         testId="video-message-progress-ring"
         className={cn(isActiveMedia ? "opacity-100" : "opacity-80")}
       />
+      {/*
+        No z-index, deliberately, and the same for the corner button below
+        (D-129). The wrapper is `relative` with none of its own, so it is not a
+        stacking context and the `z-10`/`z-20` these two used to carry were
+        measured against the page — where the chat header, the pinned capsule,
+        the phone's search panel and the composer all sit at `z-index: auto`,
+        because tree order is how the chat screen decides paint order and rule
+        12 of docs/operations/interface-material.md records what changing that
+        costs. A circle scrolled halfway under the header was therefore drawn
+        over it, and over the composer.
+
+        Tree order does the same job inside the circle at no such price: the
+        ring is rendered first, this button second and the corner button last,
+        all three positioned, so the engine already paints them in that order.
+        The rule is `lib/conversationStacking.ts`.
+      */}
       <button
         type="button"
         onClick={togglePlayback}
         className={cn(
-          "group relative z-10 block h-full w-full overflow-hidden rounded-full bg-black shadow-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
+          ROUND_VIDEO_PLAYBACK_CLASS,
           isActiveMedia && "ring-2 ring-[color:var(--kub-cyan)]"
         )}
         aria-label={isActivePlaying ? "Пауза видео-сообщения" : "Воспроизвести видео-сообщение"}
@@ -1936,7 +1966,7 @@ function RoundVideoMessage({
       <button
         type="button"
         onClick={onOpen}
-        className="absolute right-1 top-1 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white backdrop-blur transition-colors hover:bg-black/80"
+        className={ROUND_VIDEO_OPEN_CLASS}
         aria-label="Открыть видео в просмотрщике"
       >
         <KubIcon name="externalLink" size={14} />

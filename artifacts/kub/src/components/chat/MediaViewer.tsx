@@ -13,6 +13,7 @@ import {
 import { createPortal } from "react-dom";
 import { showActionFeedback } from "@/lib/actionFeedback";
 import { mediaFileAction, mediaFileName } from "@/lib/mediaFileAction";
+import { mediaFileActionName, originalityNote, type MediaOriginality } from "@/lib/mediaOriginality";
 import { saveMediaAs } from "@/lib/messageMediaActions";
 import { getCurrentDistributionTarget } from "@/lib/platform/capabilities";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,12 @@ export interface MediaViewerItem {
   title?: string;
   /** Sent without compression: `url` is the original, as it was picked. */
   original?: boolean;
+  /**
+   * What the stored file is, where the caller read a message row and knows
+   * (D-097). Absent means unknown, and the viewer then claims nothing — which
+   * is what every caller that only knows `original` gets, unchanged.
+   */
+  originality?: MediaOriginality;
   /** A lighter picture to show while an original photo loads. */
   previewUrl?: string;
 }
@@ -78,6 +85,14 @@ export function MediaViewer({ media, onClose }: MediaViewerProps) {
   if (typeof document === "undefined") return null;
 
   const title = media.title || (media.type === "image" ? "Фото" : "Видео");
+  // D-097. `original` was a boolean, so a compressed copy and a message that
+  // says nothing about itself were the same absent badge — and the control over
+  // them both said «Сохранить» without saying what it would save. The caller
+  // that reads a message row now answers with three states; one that does not
+  // still passes the boolean and still claims nothing.
+  const originality: MediaOriginality = media.originality ?? (media.original ? "original" : "unknown");
+  const note = originalityNote(originality);
+  const fileActionName = mediaFileActionName(fileAction, originality);
   // The zoom stage pads itself, so a zoomed picture can run to the frame's edge
   // while one at rest keeps exactly the margin it had.
   const zoomable = media.type === "image" && !loadError;
@@ -129,10 +144,37 @@ export function MediaViewer({ media, onClose }: MediaViewerProps) {
       >
         <div className="flex h-12 flex-shrink-0 items-center gap-2 border-b border-white/10 bg-black/80 px-3 text-white">
           <KubIcon name={media.type === "image" ? "image" : "video"} size={18} />
-          {media.original ? (
+          {note ? (
             <div className="flex min-w-0 flex-1 items-baseline gap-2">
               <span className="min-w-0 truncate text-sm font-semibold">{title}</span>
-              <span className="shrink-0 text-xs font-medium text-white/70">Оригинал</span>
+              {/*
+                A word at every width, and the sentence behind it. A copy is
+                what a person gets when they press «Сохранить», so hiding the
+                fact below `sm` would hide it from the shell it matters most on
+                (D-147 states the same rule for a control that leaves the app).
+                It costs the title, which is why `min-w-0 truncate` is on the
+                line above and why the narrow spelling exists at all: measured
+                in the busiest header the viewer draws, the title keeps 210px at
+                1440, 128px at 390 and 98px at 360.
+              */}
+              <span
+                data-testid="media-viewer-originality"
+                data-originality={originality}
+                title={note.sentence}
+                className="shrink-0 text-xs font-medium text-white/70"
+              >
+                {/*
+                  Two spellings of one fact, neither of them hidden. Measured at
+                  360 with a video — the busiest header the viewer draws — the
+                  full phrase left the picture's own name 51px, which is an
+                  ellipsis with four characters in front of it. «Копия» is the
+                  opposite of «Оригинал», so the narrow pair still reads as a
+                  pair, and why it is a copy is in the `title` above and in the
+                  file control's accessible name, which does not depend on width.
+                */}
+                <span className="sm:hidden">{note.compactBadge}</span>
+                <span className="hidden sm:inline">{note.badge}</span>
+              </span>
             </div>
           ) : (
             <div className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</div>
@@ -142,8 +184,8 @@ export function MediaViewer({ media, onClose }: MediaViewerProps) {
             data-testid="media-viewer-file-action"
             data-action-kind={fileAction.kind}
             onClick={handleFile}
-            aria-label={fileAction.accessibleName}
-            title={fileAction.accessibleName}
+            aria-label={fileActionName}
+            title={fileActionName}
             className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 text-sm text-white/80 transition-colors hover:bg-white/10 hover:text-white"
           >
             <KubIcon name={fileAction.icon} size={16} />
