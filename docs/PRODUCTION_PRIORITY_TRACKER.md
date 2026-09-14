@@ -609,6 +609,42 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-14 — `7a9f9da40651641619408873751ad5f3d0c65773`
+
+The bot surfaces, the sound settings and the switch that drew a black box
+(D-125, D-126, D-127, D-137), on top of the two server doors a person needs
+into a bot.
+
+- `letscube-web` runs image
+  `l64kyyu1sysev2izzjjbizhe:7a9f9da40651641619408873751ad5f3d0c65773`, one
+  replica. Live entry `index-Dmou5OAt.js`, 3009628 bytes.
+- **The marker was calibrated against the committed source, not the local
+  build**, and that mattered this time: a third agent's work was still
+  uncommitted in the tree, so the local `dist` held code the deploy would not.
+  Coolify builds the pushed commit; the marker has to come from the same place.
+  «Проверить микрофон» absent from the live bundle and present in the committed
+  source, «Убрать шум» as the control, present in both.
+- **No removal marker, and none was invented.** «Проверка микрофона» survives
+  inside an error sentence — «…не поддерживается этим браузером» — so it stays
+  in the bundle and cannot prove a removal.
+- Rounds four and five read a 146-byte asset where the control was also absent:
+  the sixth time today that string separated «I cannot see» from «not
+  deployed».
+- Gates: typecheck clean, unit **2532/2533** with the one failure re-run alone
+  and green (`android-release-signing` times out at 25s under full-suite load —
+  11/11 by itself, verified rather than taken on the agent's word), production
+  build proved by `public-product-assets` accepting the `dist`,
+  `bot-chat-surfaces` + `audio-settings-vocabulary` **40 passed** across 1440
+  and 390.
+- Those e2e runs used a **fresh** dev server. Both long-running fixture servers
+  were serving `app.store.ts?t=` after hot updates, which this file records as
+  breaking any spec that imports the store by URL.
+- Rollback is a fast-forward of `main` back to `fd3b9e5`, plus
+  `20260914150000_bot_press_and_bot_chat.rollback.sql` if the two wrappers have
+  to go too — it says plainly that removing them makes every inline keyboard a
+  question nobody can answer again.
+
+
 ### 2026-09-14 — `df11bbe9a4ce2530642172f1ca8460f2c3b12a26`
 
 The handle between the panes stops being a black strip and stops dragging 73px
