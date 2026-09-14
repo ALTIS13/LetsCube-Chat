@@ -11373,3 +11373,142 @@ silently does nothing.
 here, because `RecordingRelease` has a `send` outcome and a `lock` outcome and
 the entry's own wording conflates staging with failing. If parking is still
 wrong for some release, that is a new entry with its own reproduction.
+
+---
+
+## D-197 `[x]` Three of the five staff accounts could not ban or mute anybody, and two of them are the owners
+
+**Severity:** highest. Moderation was unavailable to the majority of the people
+who are supposed to do it, and unrecoverable from inside the product.
+
+**Surface:** `public.enforce_sanction_matrix()` (trigger
+`trg_enforce_sanction_matrix_bans` / `_mutes`) and
+`public.enforce_role_change_matrix()` on production; the client side is
+`artifacts/kub/src/pages/admin/UsersTab.tsx:367` and
+`artifacts/kub/src/pages/admin/BanModal.tsx:61`.
+
+**Defect:** two layers guarded the write and did not agree about who staff is.
+RLS (`managers insert bans`) asks `is_manager_or_admin`, which knows the legacy
+`profiles.role` column **and** the four global role keys. The BEFORE INSERT
+trigger, which runs after RLS has admitted the row, knew only
+`profiles.role in ('admin','manager')` and never consulted `has_global_role`.
+The trigger runs last, so it decided.
+
+**Evidence:** the population, read off production —
+
+    rls_says_staff | trigger_says_staff | people
+    f              | f                  | 13
+    t              | f                  |  3     <-- the gap
+    t              | t                  |  2
+
+and the behaviour, measured with impersonated claims inside a rolled-back
+transaction: the ban insert was refused with «Только администратор или менеджер
+может применять санкции» for a gap account and succeeded for a
+`profiles.role='admin'` control.
+
+**Consequence:** a moderator opens «Пользователи», fills in a reason and a
+duration, presses the red button, and is told they are not an administrator
+while holding «Владелец». `enforce_role_change_matrix` has the identical shape,
+so the control that would grant the legacy column is behind the same wall. The
+only way out was SQL.
+
+**Fix:** `20260915120000_sanctions_see_the_whole_role_system.sql`. Both triggers
+now rank people through `public.roles.priority` via `has_global_role`, so the
+legacy column keeps working and the global roles participate. The **target**
+side is ranked too — widening only the caller would newly let a manager sanction
+an owner. DELETE is guarded as well; it carried no matrix at all, so a person
+who could not issue a sanction could still lift one.
+
+**Verified:** rehearsed on production with the defect reproduced first and every
+control measured in both phases, then applied after a verified schema backup.
+Afterwards RLS and the matrix agree for all 18 accounts and four triggers exist.
+
+**Left open deliberately:** the client's `canSanction` still reads the legacy
+column for the target, so a manager would see an enabled button for an owner and
+get a refusal rather than a disabled control. Every staff account measures rank
+100 today, so that branch is unreachable on this deployment — recorded as
+D-200 rather than built.
+
+---
+
+## D-198 `[x]` A refused read told a banned person they were not banned
+
+**Severity:** high. Structural rather than currently firing — `bans` and `mutes`
+both hold 0 rows today.
+
+**Surface:** `artifacts/kub/src/hooks/useBanState.ts` and
+`artifacts/kub/src/hooks/useMuteState.ts`.
+
+**Defect:** both read with `const { data } = await …` and never destructured
+`error`, so a refused read produced `data = null`, an empty row list, and
+`banned: false` / `muted: false` — the same answer as a successful read that
+found nothing.
+
+**Consequence:** fifteen tables carry restrictive «block banned» policies, and
+those answer with **emptiness rather than an error**. So a banned person whose
+read fails is handed the whole product with every list empty and every write
+rejected, the «Вы заблокированы» overlay never appears, and no screen anywhere
+says why.
+
+**Fix:** a refusal now keeps the last known verdict, reports itself through the
+`listReadView` vocabulary that already existed for this defect class (D-140),
+and is retried with backoff instead of being settled as an answer. The decision
+moved to `artifacts/kub/src/lib/sanctionRead.ts` because a choice made inside a
+hook that needs Supabase and Realtime cannot be reached by `node --test`.
+
+**Verified:** `tests/unit/sanction-read.test.mts`, proved by three mutations — a
+refusal reporting «ready», a refusal blanking the verdict, and the expiry
+comparison written so an unreadable date becomes a sanction that never ends.
+
+---
+
+## D-199 `[x]` The repository could not reproduce the published Android release
+
+**Severity:** high for release operations; invisible in the product.
+
+**Surface:** `android/version.properties`.
+
+**Defect:** the catalogue has served android **0.1.4 build 5** since
+2026-09-04. `main` carried `VERSION_NAME=0.1.2 / VERSION_CODE=3` and the
+integration branch `0.1.3 / 4`. The bump that made the published build lives on
+`codex/android-release-0.1.4`, which was never merged.
+
+**Evidence:** the published APK embeds `VITE_APP_COMMIT`; reading it out of the
+artifact downloaded from the catalogue gives `ff5892d39ca9`, whose subject is
+«release(android): cut 0.1.4 build 5 to restore push» and which
+`git merge-base --is-ancestor` puts on neither `main` nor the integration
+branch.
+
+**Consequence:** a build from `main` produced `versionCode 3`, and Android
+refuses to install a lower versionCode over build 5. The update path was broken
+at the repository, not at the device.
+
+**Fix:** bumped to `0.1.5 / 6`, cut, published and verified; the three unit
+assertions that pin the canonical version were updated with it. That the version
+is hardcoded in three separate test files is part of why it drifted.
+
+---
+
+## D-200 `[ ]` The users tab offers a manager a button the database will refuse
+
+**Severity:** low while it is unreachable; it becomes real the moment anybody is
+given `manager` without `admin`.
+
+**Surface:** `artifacts/kub/src/pages/admin/UsersTab.tsx:367` —
+
+    const canSanction = (target: Profile) =>
+      target.id !== currentUser?.id && (isAdmin || target.role !== "admin");
+
+**Defect:** the target test reads the legacy `profiles.role` column, while the
+database (after D-197) ranks the target through `public.roles.priority`. A
+manager therefore sees «Заблокировать…» enabled for somebody who is an owner by
+global role only, and gets «Менеджер не может применять санкции к
+администратору» after filling in the form.
+
+**Why it is not urgent:** every one of the five staff accounts measures
+`effective_global_role_priority = 100` today, so no account takes the manager
+branch. Measured, not assumed.
+
+**What a fix needs:** the tab already loads `dynamicRolesByUser` and has
+`dynamicRoleRank`, so the data is present; the missing piece is ranking the
+target the way the database now does, rather than reading one column.

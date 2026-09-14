@@ -609,6 +609,61 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-15 — `a826465f59e7f274484324d8dc5e00f967924eaa`
+
+Moderation stops being refused to the people who hold it (D-197), and a refused
+ban read stops reading as an acquittal (D-198). Android **0.1.5 build 6** cut,
+published and verified the same night (D-199).
+
+- `letscube-web` runs image
+  `l64kyyu1sysev2izzjjbizhe:a826465f59e7f274484324d8dc5e00f967924eaa`, read off
+  the running container, healthy, one replica. Live entry moved from
+  `index-mWTUgV58.js` to `index-CAQ3ZNvU.js`, 3,019,624 bytes.
+- Marker «read refused» — the string the new refusal path introduces —
+  **calibrated in both directions**: absent from the live bundle before the push
+  and present in the bundle being shipped; «LETSCUBE» as the control, present in
+  both. Rounds four and five read a 144-byte asset with the control also absent,
+  which is the documented mid-rollover state and not a failed deploy.
+- Gates: typecheck clean, unit **2560/2560**, server **98/98** against a fresh
+  `artifacts/api-server/dist`, production build proved by its own output
+  (`sw.js` build `6d6df174a40d4a09`) rather than by its exit code.
+
+**The database change was applied separately and first**, under
+`.migration-backup/supabase/migrations/20260915120000_sanctions_see_the_whole_role_system.sql`:
+one transaction, a verified schema backup taken beforehand (1,328,659 bytes,
+sha256 `69e209c45270acc1d84118544b86bd51e5d123bf445644c664bcdefada19ce74`, with
+the completion marker present), a rehearsal on production that reproduced the
+defect, applied the fix and rolled back, and a self-check that raises rather
+than committing a half-applied state.
+
+**Android 0.1.5 build 6.** Published to the stable catalogue and read back from
+outside: the downloaded artifact is byte-identical to the signed build,
+7,220,933 bytes, sha256
+`4723feb19fe5a34bcbff2d45c8489b2299259ce29812a19217960b55794c6f44`. Before
+publishing it was measured against the published 0.1.4 downloaded from the same
+catalogue and hash-checked against its manifest: the **signer certificate
+matches** (SHA-256 `ac8249647e3e32b32e7dba283c6c7bc835f293401a3cf82115901ce74f4a0839`
+on both), so the update installs rather than being refused as a different app;
+the four Firebase string resources are present and hash-equal, so push survives;
+and a probe calibrated in both directions found this tree's commit and today's
+features in the new bundle only. The AAB gradle also produced is deliberately
+unpublished — store submission is not tasked.
+
+**Windows and the PWA needed no release, and that was measured rather than
+assumed.** The Tauri shell loads `https://app.letscube.ru/`
+(`windows-tauri/src-tauri/src/lib.rs:31`), so an installed client already
+carries every web change; the only commits under `windows-tauri/` since the
+0.2.14 cut are QA-only. Cutting a version there would push an update carrying
+nothing to everyone who installed it. The PWA revalidates `sw.js` on every start
+(`no-cache, no-store, must-revalidate`) and applies through `KUB_SKIP_WAITING`.
+
+**Three deploys before this one are not recorded here.** `ca04e21`, `bf0a769`
+and the commits between them reached production on 2026-09-13 and 2026-09-14;
+the rolling «Current:» line that held `ca04e21` was removed by a later edit and
+nothing replaced it, so the baseline section skips from `2b1a11e` to this entry.
+Recorded as a gap rather than back-filled from memory.
+
+
 ### 2026-09-14 — `2b1a11e75ca66c6a042fd4e9c8698b9eb79e6f13`
 
 Shared media becomes a place in a sequence, and a failed page stops looking like
