@@ -313,7 +313,11 @@ const veiled = [
   // A group has rooms now, made and removed in «Каналы» on the settings screen,
   // so the card creates nothing and the three rows are gone. The one hover the
   // day added and kept is elsewhere on the card.
-  ["components/chat/ChatInfoPanel.tsx", 16],
+  // 17 since D-171. The «Загрузить ещё» button at the end of the media list
+  // went — paging is the observer's now — and the two controls that replaced it
+  // are the ones a refusal needs: «Повторить» under an empty list that could
+  // not be read, and «Повторить» beside a page that did not arrive.
+  ["components/chat/ChatInfoPanel.tsx", 17],
   // Two, down from eleven on 2026-09-11: the hover cluster, the per-message
   // context menu and its reaction pickers left the bubble for
   // `MessageActionLayer` and `MessageReactions`, which are counted below.

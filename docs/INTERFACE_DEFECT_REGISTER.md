@@ -9536,7 +9536,7 @@ only the status is (`:1719`).
 
 ---
 
-## D-171 `[ ]` Shared media has no dates, and the viewer shows one item with no sense of place
+## D-171 `[x]` Shared media has no dates, and the viewer shows one item with no sense of place
 
 **Severity: low to medium**, and it is the difference between browsing and hunting.
 
@@ -9550,6 +9550,59 @@ move.
 
 The counts that do exist are good and are on the rows themselves («1543 фотографии»), from
 `chat_media_counts` (`:631-642`), hedged as `24+` when the function is unavailable.
+
+**Closed 2026-09-14.** The counts stayed exactly as they were; the three mechanics around them are
+new, and each is a mechanic rather than a relabelling of what was there.
+
+- **The viewer is a place in a sequence.** It took `media: MediaViewerItem | null` — a detached copy
+  of one row, which cannot answer «which of how many» even in principle. The panel holds an **index**
+  now and hands the viewer a `sequence`, so the header carries «12 из 1543 · 27 сентября», the stage
+  carries an arrow at each edge, and ArrowLeft/ArrowRight and a swipe do exactly what the arrows do —
+  one `step()` behind all three. A step past the last loaded picture asks for the next page and lands
+  on it when it arrives, rather than stopping. Hedged «12 из 24+» when nobody counted, which is the
+  same hedge the row that opened it printed. Nothing changed for the two callers that open a single
+  picture: without a `sequence` the header is the same 48px row it always was.
+- **The grid is divided by month**, newest first, «Сентябрь» inside this year and «Сентябрь 2025»
+  outside it, with an undated row kept under «Без даты» rather than dropped — dropping it would make
+  the grid disagree with the count on the row that opened it. The headings are static and a floating
+  pill names the month the reader is **inside**, which is the question a heading that has scrolled
+  past the top can no longer answer; it appears with the scroll and fades 900ms after it stops.
+- **Paging is not a button pretending to be a sentinel.** One element was both the observer's target
+  and a «Загрузить ещё» button. The end of the list has five answers now — complete, more, loading,
+  failed, exhausted — and only the two a person can act on draw a control.
+
+**Three defects fell out of it, none of them in the entry:**
+
+- **A refused page was drawn as the end of the list.** `loadMedia` and `loadLinks` both discarded
+  their `error`. A refusal produced an empty page, the automatic loader marked the section stalled
+  and the control at the end vanished — so an expired session and a complete gallery of 24 photos out
+  of 1543 were the same picture. This is D-140 and D-193 on a third surface.
+- **A section with a total and no rows drew nothing at all.** With the server's counts in hand a
+  section exists because the chat holds ninety-six files; pressing that row with the query refused
+  left a non-null section with empty `items`, and the markup rendered an empty grid under a title,
+  with no sentence anywhere. Found in the rendered pixels by the spec, not by reading the code.
+- **The list loaded itself to the end with nobody scrolling.** The automatic loader sat in an effect
+  keyed on `[sentinelVisible, loadMoreActiveSection]`, and the callback is rebuilt on every page — so
+  each page re-fired the effect while the flag still held the value the observer had not yet had a
+  frame to correct. Measured on the fixture: sixty pictures, three pages, no scroll, and the count
+  landing on 48 or 60 depending on how the race went. The observer drives the load directly now and
+  is rebuilt whenever the answer could have changed, so every trigger is a fresh measurement instead
+  of a remembered boolean.
+
+The decisions and the words are `artifacts/kub/src/lib/sharedMediaBrowsing.ts`, which imports nothing
+but `plainMessages.ts`, with `tests/unit/shared-media-browsing.test.mts` beside it (28 tests).
+Rendered proof in `tests/e2e/shared-media-browsing.spec.ts` (14/14 at 1440 and at 390), on the
+message-actions fixture — invented people, generated pictures, no production media anywhere near it.
+Twenty-two mutations, one per guarantee, each proved applied by hashing the file: all twenty-two turn
+something red. Two of them were green first and both were gaps rather than redundancy — the swipe
+rule had no test, and the «stepping past the end loads» test was not isolating what it claimed,
+because `click()` scrolls its target into view and a click on the last tile fetched the next page
+underneath the assertion.
+
+**Left open, and adjacent:** there is still no fast scroll, which this entry names. The month marker
+is the navigation the grid has; a draggable scrubber is a separate mechanic and was not built.
+
+**Frames:** `output/shared-media/{dark,light}-{grid,marker,viewer,tail-failed}-chromium-{desktop-1440,mobile-390}.png`.
 
 ---
 

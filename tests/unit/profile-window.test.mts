@@ -776,7 +776,7 @@ test("the sub-view has no «Показать ещё» button", () => {
 
 test("more is fetched when the end of the list comes into view, not on a scroll offset", () => {
   const observer = panelSource.match(
-    /const observer = new IntersectionObserver\([\s\S]*?\n {2}\}, \[view, sectionHasMore, activeMediaSection, activeSection\?\.loadedCount\]\);/,
+    /const observer = new IntersectionObserver\([\s\S]*?\n {2}\}, \[view, sectionHasMore, activeMediaSection, activeSection\?\.loadedCount, sectionLoading\]\);/,
   );
   assert.ok(observer, "nothing watches the end of the list");
   assert.match(observer[0], /observer\.observe\(node\)/, "the sentinel is never observed");

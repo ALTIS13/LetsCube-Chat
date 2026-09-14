@@ -16,6 +16,13 @@ import { mediaFileAction, mediaFileName } from "@/lib/mediaFileAction";
 import { mediaFileActionName, originalityNote, type MediaOriginality } from "@/lib/mediaOriginality";
 import { saveMediaAs } from "@/lib/messageMediaActions";
 import { getCurrentDistributionTarget } from "@/lib/platform/capabilities";
+import {
+  mediaPositionLabel,
+  mediaStepOffered,
+  mediaSwipeStep,
+  planMediaStep,
+  type MediaSequenceState,
+} from "@/lib/sharedMediaBrowsing";
 import { cn } from "@/lib/utils";
 import {
   TAP_SLOP_PX,
@@ -54,27 +61,118 @@ export interface MediaViewerItem {
   previewUrl?: string;
 }
 
+/**
+ * Where this item sits among the others the caller holds (D-171).
+ *
+ * Optional, and absent is the old behaviour exactly: a viewer opened on one
+ * picture from a bubble or a profile card has no sequence, draws no position,
+ * offers no arrows and keeps the header it always had. Only a caller that knows
+ * about a run of items — the shared-media sub-view — hands one over.
+ *
+ * `state` is the whole answer to «where am I», and the decisions taken from it
+ * live in `lib/sharedMediaBrowsing.ts` rather than here: what the label says,
+ * whether a direction has anywhere to go, whether a step moves or asks for
+ * another page, and how far a finger travels before it is a step.
+ */
+export interface MediaViewerSequence {
+  state: MediaSequenceState;
+  /** Show the item at this index. The caller owns which item that is. */
+  onSelect: (index: number) => void;
+  /**
+   * The reader reached the end of what is loaded. The caller fetches the next
+   * page; when it lands, a larger `state.loaded` is what lets the step happen.
+   */
+  onNeedMore: () => void;
+  /** The item's own date, already worded — «14 сентября». */
+  stamp?: string | null;
+}
+
 interface MediaViewerProps {
   media: MediaViewerItem | null;
   onClose: () => void;
+  sequence?: MediaViewerSequence;
 }
 
-export function MediaViewer({ media, onClose }: MediaViewerProps) {
+export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [loadError, setLoadError] = useState(false);
+  // Lifted out of the picture so the frame can hide the arrows and stop
+  // answering swipes while it is zoomed: zoomed, a drag is a pan and
+  // `claimsDrag` stops it propagating, and an arrow sitting over the edge of a
+  // magnified photo covers the part somebody zoomed in to see.
+  const [zoomed, setZoomed] = useState(false);
+  useEffect(() => {
+    setZoomed(false);
+  }, [media?.url]);
 
   useEffect(() => {
     setLoadError(false);
   }, [media?.url]);
 
+  /**
+   * A step, whichever control asked for it.
+   *
+   * One function behind the arrows, the keys and the swipe, so the three
+   * cannot disagree about what «next» means — which is the whole of mechanic 1:
+   * arrow keys and swipes do the same thing the controls do.
+   */
+  const step = useCallback((delta: -1 | 1) => {
+    if (!sequence) return;
+    const plan = planMediaStep(sequence.state, delta);
+    if (plan.kind === "move") sequence.onSelect(plan.index);
+    else if (plan.kind === "load") sequence.onNeedMore();
+  }, [sequence]);
+
   useEffect(() => {
     if (!media) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (!sequence || event.defaultPrevented) return;
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
+      // A focused video answers the arrows itself, by seeking. Taking them off
+      // it would be taking away the only keyboard control it has.
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "VIDEO" || target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        step(-1);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        step(1);
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [media, onClose]);
+  }, [media, onClose, sequence, step]);
+
+  /**
+   * A swipe on the frame, which is where the picture deliberately leaves an
+   * unclaimed drag to be answered.
+   *
+   * `ZoomableImage` claims a one-finger drag only while zoomed; at rest it
+   * moves nothing and lets the event propagate, which is the arrangement that
+   * keeps a pan and a swipe from ever answering the same finger. Tracked as a
+   * pointer pair rather than with touch events, so a trackpad drag works the
+   * same way.
+   */
+  const swipeRef = useRef<{ id: number; x: number; y: number } | null>(null);
+  const handleFramePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!sequence || zoomed || event.pointerType === "mouse") {
+      swipeRef.current = null;
+      return;
+    }
+    swipeRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
+  };
+  const handleFramePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = swipeRef.current;
+    swipeRef.current = null;
+    if (!start || start.id !== event.pointerId || zoomed) return;
+    const delta = mediaSwipeStep(event.clientX - start.x, event.clientY - start.y);
+    if (delta) step(delta);
+  };
 
   // Decided once per shell rather than per press, and above the early returns
   // because a hook may not be skipped. What it decides, and why the four shells
@@ -96,6 +194,22 @@ export function MediaViewer({ media, onClose }: MediaViewerProps) {
   // The zoom stage pads itself, so a zoomed picture can run to the frame's edge
   // while one at rest keeps exactly the margin it had.
   const zoomable = media.type === "image" && !loadError;
+  // «12 из 1543», and the item's own date beside it. Only for a caller that
+  // holds a run: a single picture is not a place in anything.
+  const position = sequence ? mediaPositionLabel(sequence.state) : null;
+  const canStepBack = sequence ? mediaStepOffered(sequence.state, -1) : false;
+  const canStepForward = sequence ? mediaStepOffered(sequence.state, 1) : false;
+  // Hidden while zoomed: an arrow over the edge of a magnified photo covers the
+  // part somebody zoomed in to see, and the drag it would take is the pan.
+  //
+  // A direction with nowhere to go draws nothing rather than a disabled
+  // control. Hiding it by fading it to nothing was the first spelling and it is
+  // the thing `control-vocabulary.test.mjs` refuses on principle — an opacity
+  // on a translucent surface shows what is behind it — and the principle holds
+  // here for a second reason: the two arrows are absolutely positioned at
+  // opposite edges, so one going does not move the other, and a control that is
+  // present but does nothing is worse than no control at all.
+  const showArrows = Boolean(sequence) && !zoomed;
 
   const handleFile = () => {
     if (fileAction.kind === "save") {
@@ -141,11 +255,22 @@ export function MediaViewer({ media, onClose }: MediaViewerProps) {
       <div
         className="relative flex h-full max-h-[calc(100vh-24px)] w-full max-w-[min(1280px,calc(100vw-24px))] flex-col overflow-hidden rounded-xl border border-white/10 bg-black shadow-2xl sm:max-h-[calc(100vh-48px)] sm:max-w-[min(1440px,calc(100vw-48px))]"
         onClick={(event) => event.stopPropagation()}
+        onPointerDown={handleFramePointerDown}
+        onPointerUp={handleFramePointerUp}
+        onPointerCancel={() => { swipeRef.current = null; }}
       >
         <div className="flex h-12 flex-shrink-0 items-center gap-2 border-b border-white/10 bg-black/80 px-3 text-white">
           <KubIcon name={media.type === "image" ? "image" : "video"} size={18} />
+          {/*
+            One column for the name and the place, so the place is a second
+            line instead of a competitor for the width the title already fights
+            for. Without a sequence the column holds exactly what the header
+            held before and the row is the same 48px — every other caller of
+            this viewer opens a single item and sees no change at all.
+          */}
+          <div className="flex min-w-0 flex-1 flex-col justify-center">
           {note ? (
-            <div className="flex min-w-0 flex-1 items-baseline gap-2">
+            <div className="flex min-w-0 items-baseline gap-2">
               <span className="min-w-0 truncate text-sm font-semibold">{title}</span>
               {/*
                 A word at every width, and the sentence behind it. A copy is
@@ -177,8 +302,32 @@ export function MediaViewer({ media, onClose }: MediaViewerProps) {
               </span>
             </div>
           ) : (
-            <div className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</div>
+            <div className="min-w-0 truncate text-sm font-semibold">{title}</div>
           )}
+          {position && (
+            /*
+              The answer to «где я». The date beside it is the same date the
+              grid groups by, so the two surfaces agree about which month this
+              picture is in — and it is dropped below `sm`, where the position
+              is the fact worth the width and «14 сентября» is not.
+            */
+            <div
+              data-testid="media-viewer-position"
+              className="flex min-w-0 items-baseline gap-1.5 text-xs leading-tight text-white/60"
+            >
+              <span className="shrink-0">{position}</span>
+              {sequence?.stamp ? (
+                // A separator, because two facts with only a gap between them
+                // read as one string — photographed at 1440 as «3 из 60  27
+                // сентября» before this was added.
+                <span className="hidden min-w-0 truncate sm:inline">
+                  <span aria-hidden="true" className="mr-1.5 text-white/40">·</span>
+                  {sequence.stamp}
+                </span>
+              ) : null}
+            </div>
+          )}
+          </div>
           <button
             type="button"
             data-testid="media-viewer-file-action"
@@ -225,7 +374,45 @@ export function MediaViewer({ media, onClose }: MediaViewerProps) {
           </button>
         </div>
 
-        <div className={cn("flex min-h-0 flex-1 items-center justify-center bg-black", !zoomable && "p-2 sm:p-4")}>
+        <div className={cn("relative flex min-h-0 flex-1 items-center justify-center bg-black", !zoomable && "p-2 sm:p-4")}>
+          {/*
+            The two controls that move through the run, at the edges of the
+            stage rather than in the header.
+
+            The header is 48px holding a name, a badge, a file action, a
+            fullscreen control and a close — measured at 360 the name already
+            keeps only 98px there, and two more 36px buttons would leave it
+            none. At the edge they cost the header nothing and land where a
+            hand already reaches on a phone. 44px square is the coarse-pointer
+            floor this product holds everything to.
+
+            Both stay on screen while a page is on its way: `mediaStepOffered`
+            answers «is there anywhere to go», and `planMediaStep` answers what
+            the press does. A control that vanished for the second a request
+            takes would move out from under the finger reaching for it.
+          */}
+          {showArrows && canStepBack && (
+            <button
+              type="button"
+              data-testid="media-viewer-prev"
+              onClick={() => step(-1)}
+              aria-label="Предыдущее"
+              className="absolute left-1 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white/85 transition-colors hover:bg-black/70 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:left-3"
+            >
+              <KubIcon name="chevronLeft" size={22} />
+            </button>
+          )}
+          {showArrows && canStepForward && (
+            <button
+              type="button"
+              data-testid="media-viewer-next"
+              onClick={() => step(1)}
+              aria-label="Следующее"
+              className="absolute right-1 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white/85 transition-colors hover:bg-black/70 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:right-3"
+            >
+              <KubIcon name="chevronRight" size={22} />
+            </button>
+          )}
           {loadError ? (
             <div className="max-w-sm rounded-xl border border-white/10 bg-white/5 p-5 text-center text-white">
               <KubIcon name="warning" size={24} className="mx-auto mb-3 text-white/70" />
@@ -251,6 +438,7 @@ export function MediaViewer({ media, onClose }: MediaViewerProps) {
               previewUrl={media.previewUrl}
               title={title}
               onError={() => setLoadError(true)}
+              onZoomChange={setZoomed}
             />
           ) : (
             <video
@@ -304,11 +492,18 @@ function ZoomableImage({
   previewUrl,
   title,
   onError,
+  onZoomChange,
 }: {
   url: string;
   previewUrl?: string;
   title: string;
   onError: () => void;
+  /**
+   * Whether the picture is magnified, reported up so the frame can take its
+   * arrows away and stop answering swipes. Optional, because the two other
+   * callers of this viewer open one picture and have nothing to hide.
+   */
+  onZoomChange?: (zoomed: boolean) => void;
 }) {
   // An original can be tens of megabytes. Until it has loaded, the preview the
   // conversation already drew is laid behind the empty picture — as the stage's
@@ -547,6 +742,13 @@ function ZoomableImage({
   };
 
   const zoomed = isZoomed(zoom);
+
+  // Reported after the render that changed it, so the frame's arrows and the
+  // picture's scale never disagree by a frame. `isZoomed` is the single
+  // definition of "magnified" and both sides read it from here.
+  useEffect(() => {
+    onZoomChange?.(zoomed);
+  }, [onZoomChange, zoomed]);
 
   return (
     <div

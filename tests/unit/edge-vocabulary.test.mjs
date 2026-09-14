@@ -269,7 +269,25 @@ test("the perimeter count only ever shrinks", () => {
   //     what was added beside it.
   //
   // The count before the dialog was 196, so this is exactly those four.
-  assert.ok(total <= 200, `perimeters on the sheet-edge colour grew to ${total}; the ceiling is 200`);
+  //
+  // 194 since 2026-09-14, and lowered by measurement rather than by taste. The
+  // sound settings were rebuilt in the settings screen's own row vocabulary and
+  // gave up six of their eight: three boxes that were a group of rows drawn as
+  // a card, the two label boxes around the device selects, and the row around a
+  // checkbox that is a switch now. Each is separated by a step of material
+  // instead, which is what rule 11 says a nested box inside a sheet is
+  // separated by. The two that stay are both targets — the device field, and
+  // the picker's track, whose selected, hovered and unavailable states all
+  // speak in that line — and `tests/unit/audio-settings-surface.test.mts` names
+  // them individually, so the pair cannot quietly become a different pair.
+  //
+  // 194 and not 193: the worktree measures 193 today because concurrent,
+  // uncommitted work on `components/chat/ChatInfoPanel.tsx` has removed one
+  // more. That one is not this change's to ratchet — it lands with its own
+  // commit, and a ceiling taken down on its behalf would go red the moment it
+  // was revised. Measured against HEAD for every file but the sound settings:
+  // exactly 194.
+  assert.ok(total <= 194, `perimeters on the sheet-edge colour grew to ${total}; the ceiling is 194`);
 });
 
 /**
@@ -340,7 +358,22 @@ test("a well keeps the border that is carrying it in the dark theme", () => {
 test("what is aimed at keeps its edge, whatever it measured", () => {
   const row = read(FILES.find((f) => f.rel === "pages/tasks/TaskListRow.tsx"));
   assert.ok(row.includes(EDGE_COLOUR), "the task row lost the border its hover, selection and deleted states colour");
-  const segment = read(FILES.find((f) => f.rel === "components/sidebar/AudioSettingsSection.tsx"));
+  // The specimen was `components/sidebar/AudioSettingsSection.tsx` until
+  // 2026-09-14. Nothing this test protects was about that file: what it holds
+  // is that an **inactive segment** keeps the sheet-edge colour and carries no
+  // resting veil, and the sound settings stopped drawing that shape when their
+  // three stacked pills became a track with flush segments — the shape the
+  // theme picker and «Лимит кэша» already used, where the line is the track's
+  // and the segments inside it have none of their own.
+  //
+  // So it keeps its shape and takes a specimen that still draws it: the
+  // invite-policy picker on the chat settings view, «Только администраторы» /
+  // «Все участники». The channel management dialog draws the same shape twice,
+  // which is what the perimeter ratchet above counts, but it also carries two
+  // «Отмена»-shaped buttons whose class list matches this predicate — and
+  // `find` takes the first, so it would hand this assertion a button that never
+  // had an edge to lose. The picker here is the file's only match.
+  const segment = read(FILES.find((f) => f.rel === "components/chat/ChatSettingsView.tsx"));
   const inactive = strings(segment).find((s) => s.includes("kub-raise-hover") && s.includes("var(--kub-muted)"));
   assert.ok(inactive?.includes(EDGE_COLOUR), "the inactive segment lost its edge");
   assert.equal(

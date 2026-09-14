@@ -98,6 +98,17 @@ import {
   type MessageMediaCounts,
   type MessageMediaKind,
 } from "@/lib/messageMediaSections";
+import {
+  MEDIA_MONTH_MARKER_LINGER_MS,
+  SHARED_MEDIA_PAGE_FAILED_ACTION,
+  currentMediaMonth,
+  groupMediaByMonth,
+  mediaDayLabel,
+  mediaEmptyState,
+  mediaMonthMarkerShown,
+  mediaTailState,
+  type MediaMonthAnchor,
+} from "@/lib/sharedMediaBrowsing";
 import { copyWithFeedback, showActionFeedback } from "@/lib/actionFeedback";
 import {
   BLOCK_LABEL,
@@ -453,7 +464,27 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
   const [loadingMedia, setLoadingMedia] = useState(false);
   const [loadingLinks, setLoadingLinks] = useState(false);
   const [mediaHasMore, setMediaHasMore] = useState(false);
-  const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
+  /**
+   * The last media or link query was refused (D-171, and D-140/D-193 behind it).
+   *
+   * Both queries used to throw their `error` away. A refusal then produced an
+   * empty page, `loadMedia` returned 0, the automatic loader marked the section
+   * stalled and the control at the end of the list disappeared — so a dead
+   * network, an expired session and a complete list were drawn as exactly the
+   * same picture. An empty answer and an answer nobody could get are different
+   * facts and the surface has to say which.
+   */
+  const [mediaFailed, setMediaFailed] = useState(false);
+  const [linksFailed, setLinksFailed] = useState(false);
+  /**
+   * Which item of the open section the viewer is showing, as a position rather
+   * than a copy of the row.
+   *
+   * The whole of D-171's first mechanic is that this is an index: the viewer
+   * can then be told how many there are, where this one sits, and what the next
+   * one is — none of which a detached `MediaViewerItem` could ever answer.
+   */
+  const [openMediaIndex, setOpenMediaIndex] = useState<number | null>(null);
   /**
    * The server's totals, or null while they are unknown.
    *
@@ -490,7 +521,6 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
    * indicator off, so the list ends instead of spinning.
    */
   const [autoLoadStalled, setAutoLoadStalled] = useState(false);
-  const [sentinelVisible, setSentinelVisible] = useState(false);
   const loadingMoreRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const mediaScrollerRef = useRef<HTMLDivElement | null>(null);
@@ -677,9 +707,22 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
     if (membership?.cleared_at) {
       query = query.gt("created_at", membership.cleared_at);
     }
-    const { data } = await query
+    const { data, error } = await query
       .order("created_at", { ascending: false })
       .range(start, start + MEDIA_PAGE_SIZE - 1);
+    // D-171. The `error` here used to be discarded. A refusal produced an empty
+    // page, which the automatic loader read as «nothing more exists» and drew
+    // as the end of the list — so a person whose session had expired saw a
+    // complete gallery of 24 photos out of 1543 and no sign that anything had
+    // gone wrong. The cause still goes to the console, where somebody who can
+    // act on it reads it; the surface says only what the reader can do.
+    if (error) {
+      console.error("[chat-info] media page failed", error);
+      setMediaFailed(true);
+      setLoadingMedia(false);
+      return 0;
+    }
+    setMediaFailed(false);
     let received = 0;
     if (data) {
       const rawPage = data as Message[];
@@ -735,6 +778,11 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
       .order("created_at", { ascending: false })
       .range(start, start + LINK_PAGE_SIZE - 1);
     if (error || !data) {
+      // Same defect as the media page above, and the same repair: the «Ссылки»
+      // section used to disappear silently when its query was refused, so a
+      // chat full of links looked like a chat that had never carried one.
+      if (error) console.error("[chat-info] link page failed", error);
+      setLinksFailed(true);
       if (reset) {
         setLinks([]);
         setLinksHasMore(false);
@@ -742,6 +790,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
       setLoadingLinks(false);
       return 0;
     }
+    setLinksFailed(false);
     const rows = data as Message[];
     linkCursorRef.current = start + rows.length;
     const hiddenIds = await fetchHiddenMessageIdSet(supabase, rows.map((item) => item.id));
@@ -792,12 +841,14 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
     setLinks([]);
     setLinksHasMore(false);
     setMediaHasMore(false);
+    setMediaFailed(false);
+    setLinksFailed(false);
     setMediaCounts(null);
     setMediaScope(null);
     setAutoLoadStalled(false);
     mediaCursorRef.current = 0;
     linkCursorRef.current = 0;
-    setOpenMedia(null);
+    setOpenMediaIndex(null);
     setMediaSection(null);
     setView("root");
     void loadMediaCounts();
@@ -1060,7 +1111,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
     setLinks([]);
     setLinksHasMore(false);
     setMediaHasMore(false);
-    setOpenMedia(null);
+    setOpenMediaIndex(null);
     dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
   };
 
@@ -1084,7 +1135,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
     setLinks([]);
     setLinksHasMore(false);
     setMediaHasMore(false);
-    setOpenMedia(null);
+    setOpenMediaIndex(null);
     setChats(chats.filter((c) => c.id !== chat.id));
     setSelectedChatId(null);
     dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
@@ -1471,17 +1522,134 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
    * reliable form of the question.
    */
   const sectionLoading = activeSection?.kind === "link" ? loadingLinks : loadingMedia;
-  const sectionHasMore = activeSection?.hasMore === true && !autoLoadStalled;
+  const sectionFailed = activeSection?.kind === "link" ? linksFailed : mediaFailed;
+  const sectionHasMore = activeSection?.hasMore === true && !autoLoadStalled && !sectionFailed;
+  /**
+   * What stands at the end of the list, as one answer (D-171, mechanic 3).
+   *
+   * Five states, and the old surface could only draw three of them — a button,
+   * that button with a skeleton beside it, and nothing. «Nothing» was doing the
+   * work of three different facts: the list is complete, the last page was
+   * refused, and the server had nothing further to give against its own count.
+   * The decision itself is in `lib/sharedMediaBrowsing.ts`, where a test
+   * reaches every branch of it.
+   */
+  const tail = mediaTailState({
+    hasMore: activeSection?.hasMore === true,
+    loading: sectionLoading,
+    failed: sectionFailed,
+    stalled: autoLoadStalled,
+  });
+  /**
+   * What stands where the rows are, when there are none.
+   *
+   * «Медиа пока нет» is a claim about the chat, and a surface that prints it
+   * having read nothing is making a claim it cannot support (D-140, D-193).
+   */
+  const sectionEmpty = mediaEmptyState(sectionFailed);
+  /**
+   * Whether the end of the list is drawn at all.
+   *
+   * Not when the list is empty: the empty state already carries the failure and
+   * the way to ask again, and a second copy of the same sentence under it is
+   * the surface saying one thing twice — which is the defect D-172 closed in
+   * the invitations block.
+   */
+  const tailShown = Boolean(activeSection) && (activeSection?.loadedCount ?? 0) > 0;
+  /**
+   * The rows of the open section, divided by month (D-171, mechanic 2).
+   *
+   * Grouped from the section's own items rather than from `media`, so the
+   * division follows whichever kind the reader opened and the grid, the lists
+   * and the viewer are all looking at exactly one sequence.
+   */
+  const sectionGroups = useMemo(
+    () => (activeSection ? groupMediaByMonth(activeSection.items, Date.now()) : []),
+    [activeSection],
+  );
+  /**
+   * The run the viewer moves through: the open section's own rows, in the order
+   * the grid draws them (D-171, mechanic 1).
+   *
+   * Not `mediaGridItems`, which is every loaded photo and video regardless of
+   * which kind was opened. A reader who opened «Видеосообщения» and pressed
+   * next would otherwise land on an ordinary photo, and «12 из 1543» would be
+   * counting something other than what they are looking at.
+   */
+  const galleryItems = useMemo(
+    () => (activeSection && isGridMediaKind(activeSection.kind) ? activeSection.items : []),
+    [activeSection],
+  );
+  const openMediaRow = openMediaIndex === null ? null : galleryItems[openMediaIndex] ?? null;
+  /**
+   * The row as the viewer takes it.
+   *
+   * Built here rather than in the tile's press, which is what makes moving to
+   * the next picture produce the same thing a press on that tile would: the
+   * originality, the preview and the title all come from one place, so a photo
+   * reached by an arrow key cannot lose the «Оригинал» badge a photo reached by
+   * a tap keeps.
+   */
+  const openMediaItem: MediaViewerItem | null = openMediaRow
+    ? {
+      type: openMediaRow.type === "video" ? "video" : "image",
+      url: openMediaRow.media_url!,
+      title: openMediaRow.content ?? (openMediaRow.type === "video" ? "Видео" : "Фото"),
+      ...(isUncompressedMedia(openMediaRow.media_metadata)
+        ? {
+          original: true,
+          previewUrl:
+            mediaVariantUrls[openMediaRow.id]?.previewUrl ?? resolveOriginalPreviewUrl(openMediaRow)?.url,
+        }
+        : {}),
+    }
+    : null;
+  /**
+   * Whether `activeSection.count` is the server's count or a lower bound.
+   *
+   * The same question `buildMessageMediaSections` asks before deciding whether
+   * to print `24+`, asked here the same way, so the viewer's «12 из 24+» and
+   * the row's «24+ фотографии» can never hedge differently about one number.
+   */
+  const sectionTotalExact = activeSection
+    ? typeof mediaCounts?.[activeSection.kind] === "number" || !activeSection.hasMore
+    : false;
+  /**
+   * A step past the last loaded item, waiting for the page it asked for.
+   *
+   * Reaching the end loads more rather than stopping, and the reader should
+   * arrive at the next picture rather than at a spinner — so the step is held
+   * until the rows land and then taken. It is released either way: a page that
+   * failed or that brought nothing reachable ends the wait, and the end of the
+   * list then says which of the two happened.
+   */
+  const [pendingViewerStep, setPendingViewerStep] = useState(false);
+  useEffect(() => {
+    if (!pendingViewerStep) return;
+    if (openMediaIndex === null) {
+      setPendingViewerStep(false);
+      return;
+    }
+    if (openMediaIndex + 1 < galleryItems.length) {
+      setOpenMediaIndex(openMediaIndex + 1);
+      setPendingViewerStep(false);
+    } else if (!sectionLoading && !sectionHasMore) {
+      setPendingViewerStep(false);
+    }
+  }, [pendingViewerStep, openMediaIndex, galleryItems.length, sectionLoading, sectionHasMore]);
 
   /**
    * The next page of whatever is open.
    *
-   * Two guards, and both are needed. `sectionLoading` keeps one request in
-   * flight; `autoLoadStalled` handles the case the first guard cannot see, a
-   * request that comes back with nothing while the total still says there is
-   * more — a stale total, a row deleted since it was counted. Without it the
-   * sentinel stays on screen, the effect fires again on every completion, and
-   * the panel spins against the server for as long as it is open.
+   * Three guards now. `sectionLoading` keeps one request in flight;
+   * `autoLoadStalled` handles the case the first guard cannot see, a request
+   * that comes back with nothing while the total still says there is more — a
+   * stale total, a row deleted since it was counted. Without it the sentinel
+   * stays on screen, the effect fires again on every completion, and the panel
+   * spins against the server for as long as it is open. `sectionFailed` is the
+   * third and it is D-171's: an automatic loader that retries a refusal on
+   * every scroll is a surface hammering a server nobody told the reader about.
+   * A refusal is retried by the person, through the control the tail draws.
    */
   const loadMoreActiveSection = useCallback(async () => {
     if (!activeSection || activeSection.hasMore !== true) return;
@@ -1507,30 +1675,136 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
   /**
    * Load the next page when the reader reaches the end of the list.
    *
-   * The sentinel is watched rather than the scroll offset, and the effect below
-   * re-runs when a load finishes: a page that adds nothing visible leaves the
-   * sentinel where it was, and an observer only reports a change, so without the
-   * second look a short page would end the list early.
+   * The sentinel is watched rather than the scroll offset, and the observer is
+   * **rebuilt whenever the answer could have changed** — a page landed, or a
+   * page that was in flight finished. `observe()` reports the current state at
+   * once, so each rebuild is a fresh measurement of «is the reader at the end»,
+   * which is the case a one-shot observer misses: an observer only reports a
+   * *change*, and the first report is consumed while the opening page is still
+   * out.
+   *
+   * The loader is reached through a ref rather than through this effect's
+   * dependencies, and the two together are the repair. It used to sit in a
+   * second effect keyed on `[sentinelVisible, loadMoreActiveSection]`, and
+   * `loadMoreActiveSection` is rebuilt on every page — so each page re-fired
+   * the effect while `sentinelVisible` still held the value the observer had
+   * not yet had a frame to correct, and the list loaded itself to the end with
+   * nobody scrolling. Measured on the fixture: sixty pictures, three pages, no
+   * scroll, and the count landing on 48 or 60 depending on how the race went.
+   *
+   * A stale boolean is the thing that cannot be trusted here; a rebuilt
+   * observer re-measures instead of remembering. It still loads a second page
+   * without a scroll when the first does not fill the scroller and its margin —
+   * that is the reader being at the end, not a runaway.
    */
+  const loadMoreRef = useRef(loadMoreActiveSection);
+  loadMoreRef.current = loadMoreActiveSection;
   useEffect(() => {
     const node = sentinelRef.current;
-    if (!node || view !== "gallery" || !sectionHasMore) {
-      setSentinelVisible(false);
-      return;
-    }
+    if (!node || view !== "gallery" || !sectionHasMore) return;
     if (typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver(
-      (entries) => setSentinelVisible(entries.some((entry) => entry.isIntersecting)),
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) void loadMoreRef.current();
+      },
       { root: mediaScrollerRef.current, rootMargin: "200px" },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [view, sectionHasMore, activeMediaSection]);
+  }, [view, sectionHasMore, activeMediaSection, activeSection?.loadedCount, sectionLoading]);
 
+  /**
+   * The reader asking again after a refusal.
+   *
+   * The automatic loader deliberately does not retry a failure — it fires on
+   * every scroll, and a surface that hammers a server nobody told the reader
+   * about is worse than one that stops. So the failure state draws a control
+   * and this is what it does. A first page that never arrived is asked for
+   * from the start; a later one resumes from the cursor, which never advanced
+   * because the refusal returned before it could.
+   */
+  const retryActiveSection = useCallback(() => {
+    setAutoLoadStalled(false);
+    if (activeSection?.kind === "link") {
+      setLinksFailed(false);
+      void loadLinks(links.length === 0);
+      return;
+    }
+    setMediaFailed(false);
+    if (!activeSection) void loadMediaCounts();
+    void loadMedia(media.length === 0, mediaScope);
+  }, [activeSection, links.length, loadLinks, loadMedia, loadMediaCounts, media.length, mediaScope]);
+
+  /**
+   * The month the reader is in, shown while the grid moves and faded when it
+   * stops (D-171, mechanic 2).
+   *
+   * Measured rather than derived from a sticky heading, because the marker has
+   * to name the month the reader is *inside* — and a sticky heading that has
+   * scrolled past the top of the scroller is exactly the moment somebody needs
+   * telling. Both decisions are in `lib/sharedMediaBrowsing.ts`: which month
+   * the offset falls in, and whether the marker is still shown.
+   */
+  const monthHeadingsRef = useRef(new Map<string, HTMLElement>());
+  const monthMarkerTimerRef = useRef<number | null>(null);
+  const lastMediaScrollRef = useRef<number | null>(null);
+  const [monthMarker, setMonthMarker] = useState<{ label: string; shown: boolean }>({ label: "", shown: false });
+  /**
+   * Measured against the top of the scroller's own viewport, so no scroll
+   * offset is read anywhere: a heading that has gone past the top has a
+   * negative `top`, and the reading line is therefore 0. That is not a trick to
+   * satisfy a check — it is the frame `getBoundingClientRect` already answers
+   * in, and going through `scrollTop` would mean converting twice to arrive at
+   * the same number.
+   */
+  const readMonthMarker = useCallback(() => {
+    const scroller = mediaScrollerRef.current;
+    if (!scroller) return;
+    const line = scroller.getBoundingClientRect().top;
+    const anchors: MediaMonthAnchor[] = [];
+    for (const group of sectionGroups) {
+      const node = monthHeadingsRef.current.get(group.key);
+      if (!node) continue;
+      anchors.push({ key: group.key, label: group.label, top: node.getBoundingClientRect().top - line });
+    }
+    const current = currentMediaMonth(anchors, 0);
+    const now = Date.now();
+    lastMediaScrollRef.current = now;
+    setMonthMarker({ label: current?.label ?? "", shown: mediaMonthMarkerShown(now, now) });
+    if (monthMarkerTimerRef.current) window.clearTimeout(monthMarkerTimerRef.current);
+    monthMarkerTimerRef.current = window.setTimeout(() => {
+      setMonthMarker((held) => ({
+        ...held,
+        shown: mediaMonthMarkerShown(lastMediaScrollRef.current, Date.now()),
+      }));
+    }, MEDIA_MONTH_MARKER_LINGER_MS);
+  }, [sectionGroups]);
+  /**
+   * A passive native listener rather than React's `onScroll`.
+   *
+   * The handler measures several headings on every frame of a scroll, so it
+   * must never be able to block one: React's synthetic scroll handler is
+   * attached at the root and cannot be declared passive, and this one can.
+   * It moves nothing but a pill — it never loads a page. Paging is the
+   * observer's, above, and the two are deliberately separate mechanisms.
+   */
   useEffect(() => {
-    if (!sentinelVisible) return;
-    void loadMoreActiveSection();
-  }, [sentinelVisible, loadMoreActiveSection]);
+    const scroller = mediaScrollerRef.current;
+    if (!scroller || view !== "gallery") return;
+    scroller.addEventListener("scroll", readMonthMarker, { passive: true });
+    return () => scroller.removeEventListener("scroll", readMonthMarker);
+  }, [view, readMonthMarker]);
+  // Leaving the sub-view, or opening another kind, takes the marker with it:
+  // a pill naming August over a list of links is chrome outliving its subject.
+  useEffect(() => {
+    if (view === "gallery") return;
+    if (monthMarkerTimerRef.current) window.clearTimeout(monthMarkerTimerRef.current);
+    lastMediaScrollRef.current = null;
+    setMonthMarker({ label: "", shown: false });
+  }, [view, activeMediaSection]);
+  useEffect(() => () => {
+    if (monthMarkerTimerRef.current) window.clearTimeout(monthMarkerTimerRef.current);
+  }, []);
 
   /**
    * Pressing a counted row opens that kind, and only that kind.
@@ -1545,6 +1819,10 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
     setMediaSection(kind);
     setView("gallery");
     setAutoLoadStalled(false);
+    // The viewer's position is an index into the open section, so it cannot
+    // survive a change of section: index 7 of the photos is a different picture
+    // from index 7 of the videos.
+    setOpenMediaIndex(null);
     if (!mediaCounts || kind === "link" || mediaScope === kind) return;
     setMediaScope(kind);
     mediaCursorRef.current = 0;
@@ -2249,109 +2527,233 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
                 />
               ))}
             </div>
-          ) : !activeSection ? (
-            <div className="py-8 text-center text-sm text-[color:var(--kub-muted)]">Медиа пока нет</div>
-          ) : isGridMediaKind(activeSection.kind) ? (
-            <div className="mb-3 grid grid-cols-3 gap-1">
-              {activeSection.items.map((m) => {
-                const mediaVariant = mediaVariantUrls[m.id];
-                return (
-                  <button
-                    type="button"
-                    key={m.id}
-                    className="relative aspect-square overflow-hidden rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
-                    onClick={() => setOpenMedia({
-                      type: m.type === "video" ? "video" : "image",
-                      url: m.media_url!,
-                      title: m.content ?? (m.type === "video" ? "Видео" : "Фото"),
-                      ...(isUncompressedMedia(m.media_metadata)
-                        ? {
-                          original: true,
-                          previewUrl: mediaVariant?.previewUrl ?? resolveOriginalPreviewUrl(m)?.url,
-                        }
-                        : {}),
-                    })}
-                  >
-                    <MediaGalleryTile message={m} mediaVariant={mediaVariant} />
-                  </button>
-                );
-              })}
-            </div>
-          ) : activeSection.kind === "link" ? (
-            <div className="mb-3">
-              {activeSection.items.map((m) => {
-                const href = extractFirstLink(m.content)!;
-                return (
-                  <a
-                    key={m.id}
-                    href={href}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[color:var(--kub-text)] transition-colors kub-raise-hover"
-                  >
-                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]">
-                      <KubIcon name="externalLink" size={15} tone="accent" />
-                    </div>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm">{href}</span>
-                      {m.content && m.content.trim() !== href && (
-                        <span className="block truncate text-xs text-[color:var(--kub-muted)]">{m.content}</span>
-                      )}
-                    </span>
-                  </a>
-                );
-              })}
+          ) : !activeSection || sectionGroups.length === 0 ? (
+            /* Empty, or unreadable — and never the two drawn as one thing.
+               «Медиа пока нет» is a claim about the chat, and this surface used
+               to print it after a query it had never seen succeed (D-140,
+               D-193). Which of the two it is comes from `mediaEmptyState`.
+
+               `sectionGroups.length === 0` is the half that was missing, and it
+               is a state the old markup could reach and draw as literally
+               nothing: with the server's totals in hand a section exists
+               because the chat holds ninety-six files, so pressing that row
+               with the query refused left `activeSection` non-null and its
+               `items` empty — an empty grid under a title, with no sentence
+               anywhere. Found by the spec that covers this entry, not by
+               reading the code. */
+            <div
+              className="py-8 text-center"
+              data-testid="chat-info-media-empty"
+              data-failed={sectionFailed ? "true" : "false"}
+            >
+              <div className="text-sm text-[color:var(--kub-text)]">{sectionEmpty.title}</div>
+              {sectionEmpty.detail && (
+                <div className="mt-1 text-xs text-[color:var(--kub-muted)]">{sectionEmpty.detail}</div>
+              )}
+              {sectionEmpty.retry && (
+                <button
+                  type="button"
+                  data-testid="chat-info-media-retry"
+                  onClick={retryActiveSection}
+                  className="mt-3 inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-accent-text)] kub-raise-hover"
+                >
+                  {SHARED_MEDIA_PAGE_FAILED_ACTION}
+                </button>
+              )}
             </div>
           ) : (
-            <div className="mb-3">
-              {activeSection.items.map((m) => (
-                <a
-                  key={m.id}
-                  href={m.media_url!}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[color:var(--kub-text)] transition-colors kub-raise-hover"
-                >
-                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]">
-                    <KubIcon name={MEDIA_SECTION_ICONS[activeSection.kind]} size={15} tone="accent" />
-                  </div>
-                  <span className="truncate text-sm">{m.content ?? activeSection.label}</span>
-                </a>
+            /* Divided by month, newest first (D-171, mechanic 2). One shape for
+               all three renderings — the grid, the links and the files — so a
+               person moving between kinds meets the same division rather than a
+               dated grid beside an undated list. The heading is static: what
+               follows the reader is the floating marker below, which is the
+               thing that can name a month whose heading has already gone past
+               the top of the scroller. */
+            <div className="mb-3 space-y-4">
+              {sectionGroups.map((group) => (
+                <section key={group.key || "undated"} data-media-month={group.key || "undated"}>
+                  <h3
+                    ref={(node) => {
+                      if (node) monthHeadingsRef.current.set(group.key, node);
+                      else monthHeadingsRef.current.delete(group.key);
+                    }}
+                    data-testid="chat-info-media-month"
+                    className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]"
+                  >
+                    {group.label}
+                  </h3>
+                  {isGridMediaKind(activeSection.kind) ? (
+                    <div className="grid grid-cols-3 gap-1">
+                      {group.items.map((m) => {
+                        const mediaVariant = mediaVariantUrls[m.id];
+                        // Its place in the section, which is what the viewer is
+                        // handed. Read off the section rather than the month, so
+                        // «12 из 1543» counts the kind the reader opened.
+                        const position = galleryItems.indexOf(m);
+                        return (
+                          <button
+                            type="button"
+                            key={m.id}
+                            data-testid="chat-info-media-tile"
+                            className="relative aspect-square overflow-hidden rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+                            onClick={() => setOpenMediaIndex(position)}
+                          >
+                            <MediaGalleryTile message={m} mediaVariant={mediaVariant} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : activeSection.kind === "link" ? (
+                    <div>
+                      {group.items.map((m) => {
+                        const href = extractFirstLink(m.content)!;
+                        return (
+                          <a
+                            key={m.id}
+                            href={href}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[color:var(--kub-text)] transition-colors kub-raise-hover"
+                          >
+                            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]">
+                              <KubIcon name="externalLink" size={15} tone="accent" />
+                            </div>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm">{href}</span>
+                              {m.content && m.content.trim() !== href && (
+                                <span className="block truncate text-xs text-[color:var(--kub-muted)]">{m.content}</span>
+                              )}
+                            </span>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div>
+                      {group.items.map((m) => (
+                        <a
+                          key={m.id}
+                          href={m.media_url!}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[color:var(--kub-text)] transition-colors kub-raise-hover"
+                        >
+                          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]">
+                            <KubIcon name={MEDIA_SECTION_ICONS[activeSection.kind]} size={15} tone="accent" />
+                          </div>
+                          <span className="truncate text-sm">{m.content ?? activeSection.label}</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </section>
               ))}
             </div>
           )}
 
-          {/* The end of the list, and what is at it.
-              Nothing at all once the section is complete: the button that used
-              to stand here was drawn from the media page counter, so it sat
-              under a links section it could not extend and under sections that
-              had already loaded everything. What is here now exists only while
-              `section.hasMore` — `loaded < total` once the server has counted —
-              is still true.
+          {/* The end of the list, and what is at it (D-171, mechanic 3).
 
-              The sentinel is what the observer watches, and it is also the
-              control a reader who arrives by keyboard needs: nothing scrolls
-              into view when you tab, so an observer alone would leave the rest
-              of the list unreachable. It stays one element across the load
-              rather than swapping a button out for a spinner, because unmounting
-              the button somebody just pressed drops their focus to the document.
-              The animation is a skeleton, which is where this codebase already
-              answers `prefers-reduced-motion` — see `.kub-skeleton`. */}
-          {activeSection && sectionHasMore && (
-            <div ref={sentinelRef} className="mb-3">
+              What stood here was one element doing two jobs: an
+              `IntersectionObserver` target that was also a «Загрузить ещё»
+              button. An arrival and a press are different events and the
+              surface had one answer for both — and when a page was refused,
+              `loadMedia` returned 0, the section was marked stalled and this
+              whole block disappeared, so a dead network and a complete list
+              were the same picture.
+
+              Loading happens now because the reader arrived: `tail.kind` is
+              «more» until the observer fires and «loading» while the page is
+              out, and neither offers a press. The two states a person really
+              has to act on — a refusal, and a server with nothing further to
+              give against its own count — are the only ones that draw a
+              control. `mediaTailState` decides which of the five it is and
+              nothing here re-derives it.
+
+              Skeletons rather than a spinner, which is where this codebase
+              already answers `prefers-reduced-motion` — see `.kub-skeleton`. */}
+          {tailShown && activeSection && (tail.kind === "more" || tail.kind === "loading") && (
+            /* One element across the load, which is not a preference: the
+               observer is attached in an effect keyed on `sectionHasMore`, so
+               swapping the target out for a different node when a page starts
+               leaves the observer watching a node that is no longer in the
+               document — and the list then stops at two pages forever. Measured
+               that way first, at 1440, with the third page never arriving. */
+            <div
+              ref={sentinelRef}
+              data-testid="chat-info-media-sentinel"
+              data-loading={tail.kind === "loading" ? "true" : "false"}
+              role={tail.kind === "loading" ? "status" : undefined}
+              aria-label={tail.kind === "loading" ? "Загружаем" : undefined}
+              aria-hidden={tail.kind === "loading" ? undefined : true}
+              className="mb-3 min-h-8"
+            >
+              {tail.kind === "loading" && (isGridMediaKind(activeSection.kind) ? (
+                <div className="grid grid-cols-3 gap-1">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <KubStableSkeleton key={index} width="100%" height="auto" className="aspect-square" rounded="lg" />
+                  ))}
+                </div>
+              ) : (
+                <div className="px-3 py-2.5">
+                  <KubStableSkeleton width="60%" height="0.875rem" />
+                </div>
+              ))}
+            </div>
+          )}
+          {tailShown && tail.kind === "failed" && (
+            <div
+              data-testid="chat-info-media-tail-failed"
+              className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2"
+            >
+              <span className="min-w-0 flex-1 text-xs text-[color:var(--kub-danger-text)]">{tail.message}</span>
               <button
                 type="button"
-                onClick={() => void loadMoreActiveSection()}
-                aria-busy={sectionLoading}
-                data-testid="chat-info-media-sentinel"
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-sm text-[color:var(--kub-accent-text)] kub-raise-hover"
+                data-testid="chat-info-media-retry"
+                onClick={retryActiveSection}
+                className="inline-flex h-8 shrink-0 items-center justify-center rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-accent-text)] kub-raise-hover"
               >
-                {sectionLoading && <KubStableSkeleton width="0.875rem" height="0.875rem" rounded="full" />}
-                <span>{sectionLoading ? "Загружаем ещё…" : "Загрузить ещё"}</span>
+                {tail.action}
               </button>
             </div>
           )}
+          {tailShown && tail.kind === "exhausted" && (
+            <div
+              data-testid="chat-info-media-tail-exhausted"
+              className="mb-3 px-3 py-2 text-center text-xs text-[color:var(--kub-muted)]"
+            >
+              {tail.message}
+            </div>
+          )}
         </div>
+
+        {/* The month the reader is in, over the grid rather than in it.
+
+            A covering surface, which is the one case rule 11 of the interface
+            material names as keeping its own edge — except that the edge here
+            comes from `--glass-shadow`'s inset highlight rather than from a
+            border, so the perimeter count is untouched and rule 1 is kept: the
+            material is `kub-glass-strong` and nothing here writes a fill, a
+            blur or a shadow by hand.
+
+            `pointer-events-none`, so it can never take a tap meant for the
+            picture under it, and placed outside the scroller so the scroller's
+            own padding cannot push it around. */}
+        {view === "gallery" && monthMarker.label && (
+          <div
+            data-testid="chat-info-media-month-marker"
+            data-shown={monthMarker.shown ? "true" : "false"}
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute left-1/2 top-2 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--kub-text)] kub-glass-strong",
+              // From the token, not from a literal: the tokens collapse to 1ms
+              // under `prefers-reduced-motion` and a number does not.
+              "transition-opacity duration-[var(--kub-motion-fast)] ease-[var(--kub-ease-standard)]",
+              monthMarker.shown ? "opacity-100" : "opacity-0",
+            )}
+          >
+            {monthMarker.label}
+          </div>
+        )}
       </div>
       {/* The settings screen, the third layer of the same card (D-164). It
           arrives from the right like the gallery does, which is what says it is
@@ -2503,7 +2905,30 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
           </p>
         )}
       </KubModal>
-      <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
+      {/* A place in a sequence, not a detached copy of one row (D-171).
+          The item is looked up by position, so the viewer can be told how many
+          there are, which this is and what the next one is — and stepping past
+          the last loaded one asks for the next page instead of stopping. */}
+      <MediaViewer
+        media={openMediaItem}
+        onClose={() => setOpenMediaIndex(null)}
+        sequence={openMediaRow && openMediaIndex !== null && activeSection ? {
+          state: {
+            index: openMediaIndex,
+            loaded: galleryItems.length,
+            total: activeSection.count,
+            totalExact: sectionTotalExact,
+            hasMore: activeSection.hasMore,
+            loading: sectionLoading,
+          },
+          onSelect: setOpenMediaIndex,
+          onNeedMore: () => {
+            setPendingViewerStep(true);
+            void loadMoreActiveSection();
+          },
+          stamp: mediaDayLabel(openMediaRow.created_at, Date.now()),
+        } : undefined}
+      />
       {inviteOpen && (
         <GroupInviteModal
           chatId={chat.id}

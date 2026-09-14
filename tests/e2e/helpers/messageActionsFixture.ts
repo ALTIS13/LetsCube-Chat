@@ -336,11 +336,29 @@ export async function openFixture(page: Page, options: FixtureOptions): Promise<
       const createdAt = url.searchParams.get("created_at");
       const before = createdAt?.startsWith("lt.") ? decodeURIComponent(createdAt.slice(3)) : null;
       const withoutDeleted = url.searchParams.get("deleted_at") === "is.null";
+      // The shared-media queries, which no spec asked of this fixture before
+      // D-171: `.in("type", […])` narrows to the message types one kind can be
+      // built from, and `.not("media_url", "is", null)` drops a row whose
+      // attachment is gone. Unfiltered, the media grid was handed every text
+      // message in the chat.
+      const typeFilter = url.searchParams.get("type");
+      const wantedTypes = typeFilter?.startsWith("in.")
+        ? new Set(
+          decodeURIComponent(typeFilter.slice(3))
+            .replace(/^\(/, "")
+            .replace(/\)$/, "")
+            .split(",")
+            .map((value) => value.replace(/^"|"$/g, "")),
+        )
+        : null;
+      const withMedia = url.searchParams.get("media_url") === "not.is.null";
       let rows = options.messages.filter((row) =>
         (!chatId || row.chat_id === chatId) &&
         (!id || row.id === id) &&
         (pinned === null || String(row.pinned) === pinned) &&
         (!withoutDeleted || !row.deleted_at) &&
+        (!wantedTypes || wantedTypes.has(String(row.type))) &&
+        (!withMedia || Boolean(row.media_url)) &&
         (before === null || String(row.created_at) < before),
       );
       if ((request.headers().prefer ?? "").includes("count=")) {
@@ -349,8 +367,14 @@ export async function openFixture(page: Page, options: FixtureOptions): Promise<
       if ((url.searchParams.get("order") ?? "").startsWith("created_at.desc")) {
         rows = [...rows].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
       }
+      // `.range(from, to)` in this version of postgrest-js is `offset` and
+      // `limit` on the query string, not a `Range` header. Without the offset
+      // every page of the shared-media list is page one.
+      const offset = Number(url.searchParams.get("offset") ?? 0);
+      const start = Number.isFinite(offset) && offset > 0 ? offset : 0;
       const limit = Number(url.searchParams.get("limit") ?? rows.length);
-      return json(route, one(rows.slice(0, Number.isFinite(limit) ? limit : rows.length)));
+      const end = start + (Number.isFinite(limit) ? limit : rows.length);
+      return json(route, one(rows.slice(start, end)));
     }
     if (resource === "reactions") {
       const messageId = eq("message_id");
