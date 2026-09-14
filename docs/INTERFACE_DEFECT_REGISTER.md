@@ -11646,3 +11646,49 @@ lower right.
 avatar, where the error is under a pixel, and `edge-vocabulary.test.mjs` embeds
 that exact class string inside a mutation it needs to find. Left as it is
 rather than break a guard for an invisible difference.
+
+---
+
+## D-202 `[ ]` Three meanings of «staff» meet on the folders screen
+
+**Severity:** low today and latent — all 8 folders on this deployment are
+`personal`, so nobody is currently losing a control. The disagreement is real
+and was proved against production.
+
+**Surfaces:**
+
+- `artifacts/kub/src/hooks/useFolders.ts:91` — `role === "admin" || role ===
+  "manager"`, the **legacy column only**, used by `canManageFolder` to decide
+  whether a `shared` folder shows edit and delete.
+- `artifacts/kub/src/components/sidebar/FolderEditModal.tsx:39` — the **wide**
+  client `isStaff`, which decides whether the scope selector offers «shared» at
+  all.
+- The database: `folders insert/update/delete scope-aware` all ask
+  `is_manager_or_admin(auth.uid())`.
+
+**Consequence:** one of the three accounts from D-197 is offered the shared
+scope by the modal, the database accepts the insert, and then the folder has no
+edit and no delete control because `useFolders` says they are not staff. Proved
+by an insert inside a rolled-back transaction: `SHARED FOLDER INSERT SUCCEEDED`
+where the interface hides both operations.
+
+**The obvious fix is wrong, and this is the part worth keeping.** Reaching for
+`useIsManagerOrAdmin()` swaps one mismatch for its mirror image: that predicate
+is **wider** than `is_manager_or_admin`, because it also admits anybody holding
+one of `STAFF_ACCESS_PERMISSIONS`, which a *location* role can carry with no
+global role at all. `lib/moderationAccess.ts` exists for exactly this gap and
+says so in its own header. Using `isStaff` here would start showing controls the
+database then refuses — the same defect pointing the other way.
+
+**What a fix needs:** the predicate that already mirrors the database is
+`canReadModerationQueue` in `lib/moderationAccess.ts`; it is named for the queue
+but it is really «matches `is_manager_or_admin`», and folders want the same
+rule. So the fix is to generalise that name rather than write a fourth spelling
+of one predicate — and then give `useFolders` the caller's global role keys,
+which it does not read today. That last part is the actual cost, and it has to
+respect the anti-storm rule the comment at `useFolders.ts:80` records: the hook
+subscribes to primitives only, so a new dependency must be a primitive or a
+stable reference, or it will re-fetch on every heartbeat echo.
+
+**Not fixed now** because it costs nothing today and the careless version of the
+fix is worse than the defect.

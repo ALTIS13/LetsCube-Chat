@@ -609,6 +609,45 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-15 — `8cb48f203fd6d4efb451da4807db801b8bd43f91`
+
+A member row says who somebody is and opens them (D-168), and two defects caught
+in the rendered pixels rather than in the code: the presence dot floating beside
+the avatar (D-201) and a row announcing a missing username beside a presence
+that already filled the line.
+
+- `letscube-web` runs image
+  `l64kyyu1sysev2izzjjbizhe:8cb48f203fd6d4efb451da4807db801b8bd43f91`, read off
+  the running container, healthy, one replica — the previous one is gone. Live
+  entry moved from `index-CAQ3ZNvU.js` to `index-BOJop3WX.js`, 3,024,433 bytes.
+- Marker `calc(14.645% - 4px)` — the dot's new inset — calibrated in **four**
+  directions before the push: control `LETSCUBE` present in both bundles, the
+  marker in the shipping one only, and `zzz-never-shipped` in neither. Rounds
+  four and five read a 144-byte asset, the documented mid-rollover state.
+- Gates: typecheck clean, unit **2562/2562**, e2e **27/27** on
+  `chromium-desktop-1440` and **33/33** on `chromium-mobile-390` with the
+  did-not-run guard, production build proved by its own output (`sw.js` build
+  `926eedacb75001a7`), `git diff --check` clean.
+
+**An ASCII marker was chosen deliberately.** The first calibration asked whether
+«Дата входа неизвестна» was in the bundle and got «no» for both files, which
+read as «the string was not built». It was built: the probe read the file as
+`latin1`, so a needle made of Cyrillic code points could never match. `grep -rl`
+found the string in the very file the probe had just declared free of it. The
+ASCII needle in the same probe matched correctly, which is what exposed it — one
+needle working and one not, in one file. Recorded as a memory; the general rule
+it belongs to is «an empty result means unknown».
+
+**The rendered pixels caught what the tests did not.** Both visual defects
+passed every assertion as written — the dot because nothing measured its
+position, and the copy because the e2e assertion was
+`/Без имени пользователя|был|сети/`, an alternation that passes whichever of the
+two the product draws. The dot's position was then measured rather than
+eyeballed: a first reading of the downscaled capture put it on the *left*, and
+measuring the green pixels against the avatar's bounding box gave 14.87px from a
+16px-radius centre at 42.3°, which is the lower-right rim.
+
+
 ### 2026-09-15 — `a826465f59e7f274484324d8dc5e00f967924eaa`
 
 Moderation stops being refused to the people who hold it (D-197), and a refused
