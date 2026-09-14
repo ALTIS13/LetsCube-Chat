@@ -5908,12 +5908,79 @@ send dialog; a phone compresses a picture picked through «Файл».
 **Fixed** 2026-09-11 by D-119 in `bce98f3`: a pick from «Файл» is staged as it is on every
 device, and says so under its name. The attach sheet of D-122 keeps the rule.
 
-## D-097 `[ ]` «Открыть оригинал» on a compressed photo opens the compressed copy
+## D-097 `[x]` «Открыть оригинал» on a compressed photo opens the compressed copy
 
 **Severity:** low; wording.
 
 **Defect:** for a compressed photo no original exists on the server, so the label
 promises something that is not there.
+
+**Measured, not assumed** (2026-09-14). The control acts on `media.url`, which
+every caller sets to `message.media_url`; `window.fetch` was recorded in the page
+and the press reached for exactly that address and nothing else. And
+`message.media_url` is the only file there is: `stageFiles` in `ChatWindow.tsx`
+uploads `prepareChatImageAttachment`'s output, so for an ordinary photo send the
+picked file never leaves the sender's device. **The control was already opening
+the best file that exists** — what was wrong was the claim, and it survived
+D-147's rename: the header marked an uncompressed send «Оригинал» and said
+nothing at all about a copy, so «Сохранить» on a 4 MB photograph quietly handed
+over a 380 KB WebP.
+
+**Fixed** 2026-09-14 by saying it. `lib/mediaOriginality.ts` reads
+`media_metadata` into three states, and the third is the point: `uncompressed`
+is the sender's own answer and wins; a copy is only called one where the
+metadata proves a re-encode — `optimized`, a picked size larger than the stored
+one, or a stored type that is not the picked one; everything else is **unknown**
+and the interface claims nothing. A legacy row, a round message (whose metadata
+carries none of those fields), a photograph the canvas could not make smaller
+and anything opened from a surface that does not read a message row all land
+there, and the viewer is silent for all of them — which is why
+`media-viewer-actions.spec.ts` still reads «Сохранить» unchanged.
+
+In the viewer the badge is now the state's own word — «Оригинал» or «Сжатая
+копия» — with the sentence «Оригинал остался у отправителя: в чат отправлена
+сжатая копия.» as its `title`, and the file control's accessible name gains what
+the press will hand over: «Сохранить сжатую копию», «Открыть сжатую копию в
+браузере». D-147's own answer is untouched — which shell this is, whether the
+press leaves the app, and the visible label — and an unknown message keeps
+D-147's wording exactly.
+
+**Measured cost, and the second spelling it bought.** The badge is drawn at
+every width, for the reason D-147 gives about a warning hidden below `sm`, and
+it is paid for out of the title. In the worst header the viewer draws — a video,
+the one kind with a fourth control — the full phrase left the picture's own name
+**75px at 390** and **51px at 360**, and 51px is four characters and an
+ellipsis. So below `sm` the word is «Копия», which is 47px narrower and is the
+exact opposite of «Оригинал», so the narrow pair still reads as a pair; why it
+is a copy is in the `title` and in the control's accessible name, neither of
+which depends on width. «Оригинал» is short enough for 360 as it is and has one
+spelling. Measured again after the change, in that same video header: **98px**
+of title at 360, **128px** at 390 and **210px** at 1440 (where the badge is the
+full 85px phrase). A photo and every desktop width were never tight. The e2e
+fails below 60px and asserts that exactly one spelling is drawn, so neither a
+longer word nor a hidden one can slip back in — both were proved red.
+
+**Deliberately not done.** No original is invented. Keeping one for a compressed
+send means uploading the picked file beside the copy — a second upload on every
+phone, a second object per photo in the public `media` bucket, and a retention
+decision — which is a product change, not a wording fix, and needs the owner.
+**No server or worker change was needed for this entry, and none was made.** The
+conversation's own bubbles are also left alone: the corner chip still marks an
+original, and stamping «Сжатая копия» on every other photo in a chat would put a
+chip on nearly all of them.
+
+**Regression tests:** `tests/unit/media-originality.test.mts` (5, on the metadata
+shapes `buildAttachmentMediaMetadata` actually writes) and
+`tests/e2e/media-original-claim.spec.ts` (3 cases across all six Chromium
+viewports and WebKit 390), which records what `fetch` reached for rather than
+trusting the label. Seven mutations, each red: unknown collapsing into
+«compressed»; `uncompressed` no longer winning; the size proof widened out of
+reach; the control's name never speaking; the badge drawn for an original only;
+the badge hidden below `sm`; the compact spelling put back to the full phrase.
+
+On WebKit the video case holds the clip's bytes rather than serving them, for
+the codec reason recorded under D-129; the header is drawn from the message row,
+not from the video, so it is the same header either way.
 
 ## D-098 `[x]` An original photo, and every video, left with the place it was taken
 
@@ -6927,7 +6994,7 @@ member's profile; long press, swipe or ⋯ offers «Назначить адми�
 
 **Audit rows:** chat-functions B15; top-10 item 7.
 
-## D-129 `[ ]` A round video scrolled under the chrome paints over the header, the pinned bar, the search results and the composer
+## D-129 `[x]` A round video scrolled under the chrome paints over the header, the pinned bar, the search results and the composer
 
 **Severity:** medium: broken rendering in every chat that holds a round video. Found by
 the chat-functions audit from the code; visible in fixture frames 13, 20 and 28.
@@ -6949,6 +7016,74 @@ list, or drop the circle's inner z-indexes. Check option C of the chat screen
 (`design/chat-chrome-c`), which rebuilt that chrome, for the same overlap.
 
 **Audit rows:** chat-functions M8; top-10 item 5.
+
+**Reproduced** 2026-09-14 on the mocked message-actions fixture, with a round
+video the spec records in a canvas. The instrument is `elementFromPoint`, which
+names the box the engine actually painted on top — the same one rule 12 used
+when the chat header turned out not to exist on WebKit. Scrolled half under the
+header stack, twelve probe points inside that stack returned the circle's own
+overlay at 1440 and at 390, in both themes; the pinned capsule read «ЗА…» with an
+orange circle over the rest of it, and the same happened against the composer
+dock from below. That first reproduction was Chromium only — the WebKit clip
+problem below was not solved yet — and WebKit is covered by the first mutation
+listed further down, where the engine fails the same nine checks.
+
+**Fixed** 2026-09-14 by **dropping the circle's inner z-indexes**, which is the
+second of the two options the entry offered. The first — a stacking level for
+the chrome stack and the composer dock — was rejected on evidence already in the
+repository rather than on taste:
+
+- `ChatWindow.tsx` and rule 12 of `docs/operations/interface-material.md` both
+  record that a `z-index` on either chrome box makes it a stacking context and
+  clamps every `fixed` overlay hosted in that subtree — this header's phone
+  menu, its modals, the composer's camera and video recorder, a bubble's context
+  menu. On a phone the header's menu opens exactly where the composer is, so
+  whichever of the two boxes lost would have its full-screen dialog covered by
+  the other. That is D-062 arriving by another road, and it cost the iPhone its
+  only way out of a conversation for a whole stage.
+- The product's vocabulary has no level for chrome: 45 the bubble's portalled
+  reaction overflow, 60 a docked panel, 70 the support window, 80 the update
+  banner, 90 the media viewer, 95 a modal, 100 the ban screen. A chrome level
+  would also have to be argued against `PinnedMessage`'s own `z-30` dropdown and
+  `ChatHeader`'s `z-40`/`z-50` menu, which live **inside** the chrome and would
+  be re-based inside the new context — three more numbers to defend for one
+  circle.
+- The two numbers bought nothing that tree order does not already give. All
+  three of the circle's children are positioned — the ring `absolute`, the
+  playback button `relative`, the corner button `absolute` — inside a wrapper at
+  `z-index: auto`, so the engine paints them in markup order: ring under the
+  video, corner button over it. Removing `z-10` and `z-20` is a deletion, and
+  the layering is unchanged.
+
+`lib/conversationStacking.ts` is the rule, with the two class strings the
+component now imports, so the markup and the rule cannot drift. It states the
+half nobody had written down: while the chrome sits at `auto`, **any** positive
+z-index inside the scrolling list beats all of it, so content that scrolls
+carries none and a surface that must stand above the chrome leaves the list
+first — which is what the reaction overflow, the menus and the viewer already do.
+
+Option C of the chat screen (`design/chat-chrome-c`) needed no separate check:
+it is the shipping chrome, and it is what the frames above photograph.
+
+**Regression tests:** `tests/unit/conversation-stacking.test.mts` (7, including a
+source scan of `RoundVideoMessage` that blanks comments first — rule 9, and the
+note explaining the fix turned the scan red on its first run) and
+`tests/e2e/round-video-stacking.spec.ts` (3 × 1440, 390, 360 and WebKit 390).
+Six mutations, each red: `z-10` back on the playback button (9 e2e runs red,
+WebKit among them, and the corner button stops being reachable — the two numbers
+only ever worked as a pair); `z-20` back on the corner button; the parser
+ignoring variants; the raise check allowing a negative level; the corner button
+made `static`.
+
+**Not covered:** the frames on `webkit-mobile-390` are a black circle rather
+than a clip. Playwright's WebKit on this workstation decodes neither the VP8
+WebM nor an H.264 MP4 that Chromium's MediaRecorder can produce — both answer
+`MEDIA_ERR_SRC_NOT_SUPPORTED`, while `canPlayType` says «probably» for each — so
+the spec holds the response there instead of letting the source error into the
+bubble's «Не удалось загрузить видео» panel. The boxes hit-tested are the same
+ones a decoded clip gives, and the mutation above proves that engine sees the
+defect too. `media-viewer-actions.spec.ts` has the same WebKit limitation today
+and fails there for the same reason; that is not this entry's to fix.
 
 ## D-130 `[ ]` A held recording cannot be cancelled, and releasing parks it in the tray instead of sending
 
@@ -7249,7 +7384,7 @@ and a bubble with a small map and the address. The map provider is the owner's c
 
 **Audit rows:** chat-functions S6; the audit's owner question 7.
 
-## D-132 `[ ]` Errors and unavailable features show server, database and build internals
+## D-132 `[x]` Errors and unavailable features show server, database and build internals
 
 **Severity:** medium. Found by all three audits from the code; most of these states need a
 failing server and were not rendered.
@@ -7303,6 +7438,148 @@ operators, not explained on screen.
 **Audit rows:** chat-functions A3, P3, O1; settings-profile B5, C4, D5, F2; work-surfaces
 T-F7, A-31, A-34, A-47, A-54.
 
+**Administration half fixed 2026-09-14; the other six surfaces closed the same
+day, and the entry closes with them.**
+
+- `LocationsTab.tsx` (A-31) — «Локации требуют обновления базы данных» became
+  «Локации сейчас недоступны. Попробуйте позже.», with one line about what still
+  works. The retry button said «Проверить обновление базы»; it says «Проверить
+  ещё раз».
+- `InvitesTab.tsx` with `lib/registrationInvite.ts` (A-34) — the two constants
+  that named `20260622_registration_invite_codes.sql` and
+  `20260622_registration_invite_mode_settings.sql` are now «Приглашения временно
+  недоступны» and «Режим регистрации временно недоступен». The second is the one
+  that mattered most and the entry did not say so: it is what
+  `mapRegistrationInviteError` answers for `invite_not_configured`, which the
+  **public registration form** shows — a stranger trying to create an account was
+  being handed the name of a migration file in this project. The file names are
+  kept in a comment in `registrationInvite.ts`, where the person who can act on
+  them reads them.
+- `RolesPermissionsTab.tsx` (A-47) — the panel no longer names the migration or
+  the legacy role keys the product falls back to.
+- `OpsReportTab.tsx` (A-54) — the callout named `admin_ops_security_report` and
+  the path of the SQL file to apply by hand; it now says «Живые метрики сейчас
+  недоступны». Two more sentences on the same tab said the same thing about the
+  invite metrics and the registration-mode status, and went with it.
+
+Three more instances in the same tabs, not named by this entry but the same
+sentence in files this change already had open:
+`UsersTab.tsx` — the location filter note and the admin-profile failure;
+`RolesPermissionsTab.tsx` — «После применения migration её можно удалить
+полностью» under an unused role.
+
+**The mappers were not changed, and that is deliberate.**
+`mapRolesPermissionsError` and `mapLocationRoutingError` live in modules other
+tracks own — the same sentinels are compared against inside hooks, and T-F7 is a
+separate fix — so the administration screens refuse their answer instead of
+rewriting them: `plainAdminMessage` in `lib/adminPrompts.ts` replaces anything
+carrying an internal with the section's plain sentence and the original goes to
+`console.error`. It is a pattern rather than a list of the exact strings removed,
+so a mapper that learns a new internal tomorrow is caught by the same call; and
+it passes through everything a person can act on, because replacing «Недостаточно
+прав» with «недоступно» would lose the one failure an administrator can fix.
+
+`tests/unit/admin-prompts.test.mts` pins every sentence against that pattern,
+pins the filter in both directions, and scans the five tabs for string literals
+naming a migration, a table or a `.sql` file. Two Playwright specs asserted the
+old text and were corrected rather than relaxed: `admin-ops-report.spec.ts` used
+to require that the callout **contain** `admin_ops_security_report` and now
+requires that it does not, and `roles-visibility.spec.ts` matched the old invites
+sentence.
+
+**The other six surfaces fixed 2026-09-14, on the administration's pattern rather
+than a second one.** `ADMIN_INTERNALS_PATTERN` and `plainAdminMessage` moved to
+`lib/plainMessages.ts`, which imports nothing; `adminPrompts.ts` now aliases them,
+the expression is byte-identical, and `tests/unit/admin-prompts.test.mts` passes
+unedited. The unit test asserts *identity*, not equality — two regular expressions
+that merely look alike are exactly the drift the move was for.
+
+- **Starting a chat** (A3) — «Not logged in» is «Сессия не найдена. Войдите снова.»,
+  the mapper's answer is filtered, and `JSON.stringify(err)` is gone from the screen
+  entirely. `plainFailure` is `plainMessage` plus one thing: when `mapPgError`
+  recognised nothing it answers «…выполнить операцию», and a surface that knows it
+  was opening a chat can say so. The administration deliberately keeps the old
+  behaviour there, which is why this is a second function and not a change to the
+  first.
+- **Saving a никнейм** (B5, C4) — `profileSaveFailure` in `profileValidation.ts`
+  refuses «Такая запись уже существует.» for a 23505 the save can attribute, and
+  returns the field along with the sentence, so «Это имя пользователя уже занято.»
+  lands under the никнейм instead of in the banner under the header. The claim is
+  narrowed twice: the save must have sent a никнейм, and where Postgres named a
+  column or a constraint it must be that one.
+
+  **C4 asked for it to be caught where it is typed, and it now is — both halves.**
+  `validateUsername` was only ever consulted inside `handleSave`; it runs as the
+  field is typed now, so length, the allowed characters and the reserved list answer
+  immediately.
+
+  **Taken-ness answers too, and the first pass was wrong to say it could not.**
+  That pass declined it on this reasoning: «`profiles` carries the restrictive
+  policy «block banned reads (self only on profiles)», so a name held by a banned
+  account is invisible to everybody else, the probe would report it free, and the
+  save would fail anyway.» Read again on production on 2026-09-14, that policy is
+  `(NOT is_banned(uid())) OR (id = uid())` — it restricts what a **banned caller**
+  may read, not the visibility of a banned account's row. An ordinary caller reads
+  every profile, so the lookup answers correctly. The wrong reading is left here on
+  purpose: a justification for not doing something is exactly the kind of claim
+  that is never checked again.
+
+  A debounced lookup now says «Проверяем…», «Свободно» or «Это имя пользователя
+  уже занято» under the input. Nothing is asked about the name you already hold,
+  about a name that breaks its own rules, or about an empty field; an answer is
+  attached to the value it was asked about, so `an`, `ann`, `anna` cannot leave
+  `anna` wearing the verdict on `ann`; and a refused or failed lookup says nothing
+  at all, because an empty result means "I do not know" and must not read as
+  «Свободно». Case is not folded, because `profiles_username_key` is
+  `btree(username)` on plain `text` — measured, not assumed, and worth knowing on
+  its own: «Olga» and «olga» really are two different никнеймы in this product.
+- **Phone** (D5) — «Сервис доставки кода не настроен. Обратитесь к администратору.»
+  is «Не удалось отправить код. Попробуйте позже.». It described a deployment state
+  to somebody who cannot change one, then sent them to an administrator who cannot
+  change it from any screen this product has either.
+- **Push** (F2) — the sentence naming `google-services.json`, a migration and
+  «backend FCM credentials» is «Push-уведомления на этом устройстве пока
+  недоступны.», with no «позже», because an Android build with no delivery
+  configuration will not start working by waiting. The VAPID key and the preference
+  store lost their names too, in `usePush.ts` and in the settings row's summary
+  (`lib/settingsRows.ts`, which the entry did not cite but which printed «Android
+  push через Firebase/FCM» in the one line that row has for its value). The
+  `PushStatus` values are untouched: only the words were the defect.
+- **Search** (P3, O1) — «требует обновления базы данных» is «Поиск по всей истории
+  сейчас недоступен.», keeping the half a person can act on: which kinds of thing
+  the search still covers. `ChatSearchPanel.tsx` carried the same sentence as
+  `ChatSearchBar.tsx` and now shares the constant, so the list column and the chat
+  cannot describe one limitation two ways.
+- **Tasks** (T-F7) — the two sentinels keep their names, because `useRecurringTasks`
+  and `useTaskRouting` compare against them; only the words moved, into
+  `plainMessages.ts` where a `node --test` process can read them (both modules reach
+  `mapPgError` through the `@/` alias, which nothing outside Vite resolves). The form
+  runs the mappers' answers through `plainMessage` rather than rewriting a mapper
+  another track owns.
+
+`LOCATION_ROUTING_REQUIRED_MESSAGE` is deliberately the same sentence as
+`ADMIN_LOCATIONS_UNAVAILABLE`, and a test pins them equal. While it named the
+database, `plainAdminMessage` replaced it on the administration screen; now that it
+does not, the filter passes it through — so a different wording here would quietly
+have changed that screen too. The mutation that gives the task form its own wording
+is red for exactly that reason.
+
+Two instances of the same sentence survive elsewhere in the product. Neither is an
+audit row of this entry, and both are in files this change was told not to open:
+`hooks/useTaskSoftDelete.ts` («Удаление задач требует обновления базы данных.») and
+`lib/groupInvites.ts` through `components/chat/ChatInfoPanel.tsx`, which this file
+already records under the group-information audit. A third,
+`ROLES_PERMISSIONS_REQUIRED_MESSAGE`, is compared against but never rendered: its
+only reader is `RolesPermissionsTab`, which refuses it, while `ProfileRoleSummary`
+and `UsersTab` read `available` and never `error`.
+
+Gates: kub typecheck clean, unit 2276/2276, four Playwright tests on the mocked
+fixture at 1440 and again at 390. Seven mutations red, among them copying the
+pattern back into `adminPrompts.ts`, giving the task form its own wording for the
+failure the administration also shows, and dropping the field from the profile
+save's answer. Not photographed: the phone row and the push row need a signed-in
+production session, so what is proved for those two is the words and the wiring.
+
 ## D-133 `[ ]` Destructive and far-reaching actions run on one tap, with no confirmation
 
 **Severity:** high in administration, where three of these are P1 in the audit; medium
@@ -7346,6 +7623,90 @@ or a profile page, the alert moves with it.
 
 **Audit rows:** work-surfaces A-16, A-18, A-28, A-30, A-33, A-38, A-44, A-45, A-49, A-69,
 B-08, B-12, B-15 (top-10 item 10); settings-profile C2, D4.
+
+**Administration and bot halves fixed 2026-09-14, in two separate passes. The
+entry stays open: the two settings rows are untouched.**
+
+Every administration action this entry names now asks first, through the
+`requestAppConfirm` that `components/AppDialogs.tsx` already renders — no second
+dialog was built. Telegram's shape throughout: the title is the question, one
+line says what stops working or whom it reaches, the confirming button names the
+action, and «Отмена» is the way out.
+
+- `RolesPermissionsTab.tsx` — «Снять» on a global role assignment (A-45), and
+  «Сохранить права» (A-44). The second is the one worth reading twice:
+  `role_set_permissions` **replaces** the set, so one stray checkbox took access
+  away from everybody holding the role, and the button said «Сохранить». The
+  question now says «Отмеченный набор полностью заменит текущие права, а не
+  дополнит их», with the number of assignments affected — or, when the
+  location-role usage read has failed, without a number rather than with a
+  guess.
+- `BansMutesTab.tsx` — «Снять» asks (A-49), and no longer appears on a row that
+  has already expired. The expiry is decided once, in `canLiftSanctionRow`, and
+  the list filter now calls it too: written separately, the chip saying «истёк»
+  and the button offering to end the restriction could disagree about one row.
+- `UsersTab.tsx` — bulk «Назначить роль» and «Назначить локацию» (A-16), in the
+  shape «Снять роль» beside them already used. `unban` / `unmute` /
+  `liftSanction` were left exactly as D-134 left them.
+- `LocationsTab.tsx` — «Архивировать» (A-28) and «Убрать» a member (A-30).
+- `InvitesTab.tsx` — the registration-mode switch (A-33) and «Отозвать» (A-38),
+  which is also no longer offered on a link whose date has passed. A link at its
+  use limit is deliberately still revocable: that is a state this entry does not
+  name, and its row reads «Использован», not «Истёк».
+- `SupportTab.tsx` — closing intake, or its public half (A-69). The switch only
+  edits a draft, so the question hangs off «Сохранить», which is the press that
+  reaches people; a save that withdraws nothing asks nothing, or the dialog
+  stops being read by the third rate limit.
+
+**The words live in `artifacts/kub/src/lib/adminPrompts.ts`, which imports
+nothing.** That is the point: a confirmation written inline in a `.tsx` cannot be
+reached by `node --test`, and a rule that cannot be reached from a test is a gap
+in the module boundary rather than a gap in the suite. The tone stays two string
+values rather than `AppDialogTone`, because importing that type pulls in the icon
+vocabulary and then React. `tests/unit/admin-prompts.test.mts` pins the words and
+the two predicates directly, and reads the five tabs for the wiring; eleven
+mutations turn it red, among them deleting `if (!confirmed) return;` from
+«Сохранить права», putting «Снять» back on an expired row, and renaming a confirm
+button to «Подтвердить».
+
+**The three bot rows are done as of 2026-09-14** — `BotSettingsPanel.tsx`:
+«Убрать» the bot's picture (B-08), «Удалить webhook» (B-12) and removing a
+developer (B-15). Each went through `requestAppConfirm` with `tone: "danger"`,
+so all three are the same dialog the administration rows now use rather than a
+second one grown beside it, and their words live in
+`artifacts/kub/src/lib/botSettingsCopy.ts` for the same reason
+`adminPrompts.ts` exists.
+
+Three things the entry's shape decided, and worth repeating:
+
+- **The line follows the control above it.** «Удалить webhook» sits under a
+  «Удалить ожидающие обновления» checkbox, and the two outcomes differ in the
+  thing a person would mind — read off
+  `bot_management_webhook_delete_internal`, unacknowledged `bot_updates` are
+  deleted only when `p_drop_pending_updates` is true. So the question says
+  «Обновления останутся в очереди…» or «…будут удалены без доставки» depending
+  on the box, rather than one sentence that is half wrong either way.
+- **The one that reaches somebody else names them.** Removing a developer prints
+  the person's name and what *they* lose, not what the owner is doing; a
+  developer the server named with nothing printable becomes «Разработчик» rather
+  than a gap.
+- **Reversible is still worth asking about.** «Убрать» the picture can be undone
+  by another upload, and it sat one tap from «Заменить картинку», which is
+  exactly how it was reached by accident. The line says where the bot changes
+  and that the picture can be loaded again.
+
+`tests/unit/bot-settings-copy.test.mts` pins the words; the three questions and
+both «Отмена» paths are proved on the screen in `tests/e2e/bot-management.spec.ts`
+at 1440 and 390. Three of the pass's eight mutations belong to these rows and
+turn that pair red: deleting the `requestAppConfirm` guard from the developer
+row, renaming a confirm button to «Подтвердить», and making the webhook question
+stop reading the checkbox above it. The other five are under D-145.
+
+Still open, and in neither this pass nor the administration one:
+`components/sidebar/SettingsModal.tsx` — «Удалить фото» (settings-profile C2);
+`components/sidebar/PhoneSection.tsx` — «Удалить» a verified number
+(settings-profile D4). Both are settings surfaces, owned elsewhere. A-18 in
+`UsersTab.tsx` was closed earlier by D-134.
 
 ## D-134 `[x]` Lifting a ban or a mute deletes the person's whole sanction history
 
@@ -7735,7 +8096,7 @@ every event and the operator's name on the row.
 
 **Audit rows:** work-surfaces A-60, A-63, A-65, A-67, A-69.
 
-## D-145 `[ ]` Bot settings save silently, need the secret retyped to save the webhook, and the list ignores the bot's picture
+## D-145 `[x]` Bot settings save silently, need the secret retyped to save the webhook, and the list ignores the bot's picture
 
 **Severity:** low, for bot owners and developers. Found by the work-surfaces audit from
 the code; the pages are rendered (frames `bots-owner-*`).
@@ -7753,6 +8114,92 @@ stored secret can be kept when other webhook fields change; draw the bot's own p
 the list.
 
 **Audit rows:** work-surfaces B-03, B-12, B-19.
+
+**Fixed 2026-09-14.** Three separate things, and the middle one was a decision
+rather than a change.
+
+**A save says so, in the product's own confirmation.** Every one of the panel's
+actions went through a `run()` that caught failures and did nothing at all on
+success — nine buttons that changed the server and told nobody, which leaves
+pressing the button again as the only way to find out whether the first press
+landed. `run()` now takes the action's name and hands `showActionFeedback` the
+line for it: «Сохранено» with what was saved on the second line for the three
+save buttons, and what actually happened for the rest, because «Сохранено» after
+«Убрать» would confirm the wrong thing. Nothing new was built for this — the
+toast queue and `KubFeedbackViewport` were already mounted at the root and
+already used by `copyWithFeedback`. The one action that stays silent is a token
+rotation: it ends by putting the new token in a dialog shown exactly once, and a
+toast over the top of it would cover the only copy.
+
+**A failure is printed inside the box whose button produced it.** One banner
+above the tabs carried every error, so a save pressed at the foot of «Webhook»
+reported itself at the top of the screen — and, because the banner sat outside
+the tabs, an error from «Основное» stayed on the screen while a person read
+«API». `Section` takes an `error` now and draws it after its own controls, which
+is where the buttons are; the panel keeps one message per section rather than
+one for the panel. The e2e test measures the box rather than the wording, because
+the defect was a position: the message really did exist before, just nowhere near
+the press.
+
+**The stored signing secret cannot be kept, and the field now says so.** This is
+the decision the entry asked for, and it was taken by reading the two ends rather
+than the panel. The gateway's `PUT /bots/:botId/webhook` parses
+`webhookInputSchema`, where `secret` is required on a `.strict()` object, so an
+absent secret is `validation_failed` before anything else is looked at; and
+`bot_management_webhook_set_internal` raises `bot_webhook_input_invalid` on a
+null `p_secret_ciphertext` before reaching an upsert that writes
+`secret_ciphertext = excluded.secret_ciphertext` unconditionally. The browser
+could not resend it either: the value is sealed with `BOT_WEBHOOK_ENCRYPTION_KEY`,
+which only the gateway process holds, and the detail route returns
+`webhook: { configured, url }` with no ciphertext in it — so the client has never
+had the secret to keep. Keeping it would take a nullable ciphertext parameter and
+a branch in that function, which is a production migration with its own
+rehearsal, and it would buy an address-only edit at the cost of a function that
+can now be called in a way that leaves a webhook's secret unspecified.
+
+So the interface stops pretending the field is optional and explains itself
+instead, under the field, in `BOT_WEBHOOK_SECRET_HINT`: the server does not
+return the saved secret, so enter it again on every save — *even if only the
+address is changing*. That last clause is the half that made this read as a bug:
+a person who has only moved the URL sees a filled address, an empty secret and a
+dead «Сохранить webhook», with nothing connecting the three.
+
+**The list draws the bot's own picture.** `BotRow` drew `KubIcon name="bot"` for
+every bot and never read `avatar_url` — while the settings header one pane to the
+right drew the picture, so an owner could see their own upload and its absence at
+once. Both now go through `components/bots/BotAvatar.tsx`, a wrapper over
+`MessageActorAvatar`, which is what chat already uses for a bot. Two things came
+with it that a local `<img>` would not have: a picture that 404s falls back to
+the robot instead of leaving an empty square (a bot avatar lives in Storage
+behind a policy, so that is a real state), and a bot looks the same in the list,
+in its settings and in a conversation. The settings header's bare `<img>` is gone
+for the same reason.
+
+**Not fixed, and found while looking at the pixels:** on a computer the
+confirmation card overlaps the panel's tab strip. Measured at 1440: the card
+occupies y 108–169, the tabs y 147–191, and `document.elementFromPoint` at the
+centre of «Диагностика» returns `div.kub-feedback-card` — so for the 2400 ms a
+success is shown, a click on that tab lands on the toast. The cause is in
+`components/kub/KubFeedbackViewport.tsx`, whose offset was measured against the
+staff area's 56px header over a 45px navigation strip; this page stacks a 56px
+header over a taller tab strip, which that measurement did not cover. At 390 the
+strip sits lower and there is no overlap. It is a defect of the shared viewport
+rather than of this panel, so it is recorded here and left for its own entry.
+
+Also seen at 390 and left alone as out of scope: the bots page header truncates
+«Мои боты» to a single glyph. The `h1` measures 6 CSS px, because «Документация»
+and «Создать бота» take the whole trailing row and the title column has no
+minimum. Pre-existing — this pass did not touch `KubHeader` or the header
+composition.
+
+`tests/unit/bot-settings-copy.test.mts` pins the words, the section each action
+reports into, and both halves of the secret hint;
+`tests/e2e/bot-management.spec.ts` proves the screen at 1440 and 390. Five of the
+pass's eight mutations belong to this entry and turn that pair red: dropping the
+success toast, moving the error back into a banner above the tabs, giving the
+list a bot with its `avatar_url` blanked, sending «Запросить удаление» to report
+into «Состояние», and cutting the «даже если меняется только адрес» clause out of
+the hint. The other three are under D-133.
 
 ## D-146 `[x]` Administration shows a legacy role that contradicts a person's real role
 
@@ -7904,7 +8351,7 @@ by the settings. Restoring the second writer turns three of those red, and the
 mobile one shows why it was worth doing — the settings' 0.9 reached the element
 under a finger, which D-118 forbids.
 
-## D-150 `[ ]` A group's owner cannot leave it, only delete it for everyone
+## D-150 `[x]` A group's owner cannot leave it, only delete it for everyone
 
 **Severity:** low. Found by the chat-functions audit from the code; the delete
 confirmation is in frame 11.
@@ -7924,6 +8371,46 @@ sentence (audit source T50). The audit put this to the owner; the owner summary 
 as the default under the standing rule.
 
 **Audit rows:** chat-functions B14; top-10 item 7.
+
+**Fixed 2026-09-14, the half that needs no migration — which is the half that
+matters.** An owner's member menu now offers «Передать права владельца». The rule
+`canTransferOwnership` had been in `chatMemberRules.ts` since 2026-09-13, tested,
+with nothing calling it; this is the control the addendum said was the only thing
+missing.
+
+It is two writes, in the one order the trigger accepts: the new owner is made
+first, because `enforce_chat_member_update` refuses to demote the **last** owner
+— read off production again on 2026-09-14, where `caller_role = 'owner'` takes
+the full-control branch. They are not one transaction, and the failure is
+reported rather than hidden: if the second write fails the chat has two owners,
+which the trigger allows, nothing is lost, and either of them can finish it. The
+message says exactly that.
+
+Once the handover lands, `myRole` is `admin` and «Покинуть группу» appears on its
+own — the row was always `isGroup && !isOwner`.
+
+**The confirmation stopped saying the same thing twice.** `deleteAftermath` read
+«После удаления группа исчезнет у всех участников» directly under
+«Чат и история исчезнут у всех участников». It now says the thing an owner who
+only wants out actually needs: that handing the group over leaves it standing.
+
+**Found and fixed while photographing it:** the member menu marked the row
+«Выполняем…» *before* raising its question, so every confirmation in that menu —
+the handover and «Удалить из чата» — sat over a row claiming to be doing
+something nobody had agreed to. `RowAction` takes a `confirm` now, and
+`runMemberAction` asks before it sets the busy state.
+
+`tests/e2e/member-actions-reachable.spec.ts` proves the whole path on the mocked
+fixture: the control appears for an owner and not for an administrator, nothing
+is written before the question is answered, the two writes arrive in the right
+order with the right bodies, and «Выполняем…» is absent while the question is up.
+Four unit mutations turn the words red, among them an administrator being allowed
+to create an owner.
+
+**Not done, and deliberately:** the rest of the entry's proposal — an
+administrator inheriting after a week, and «Удалить группу» moving into
+«Управление группой» — is a scheduled job and a navigation change, neither of
+which this control needs.
 
 **Addendum, 2026-09-13.** Ownership transfer is possible in the database and impossible from the interface. The
 trigger `enforce_chat_member_update` admits an owner promoting another member to owner
@@ -9820,6 +10307,41 @@ untouched. Windows delivery stays off until those three values exist, which is
 the owner's to supply.
 
 **What found it is now a check:** `scripts/migration-inventory.*` asks the same
-question of migrations, and `docs/operations/migration-inventory.md` records the
+question of migrations, and `docs/operations/deployment-inventory.md` records the
 procedure. The functions have no equivalent script yet — the comparison here was
 a hash of each directory, and it is worth writing down as one.
+
+## D-186 `[x]` A confirmation takes the presses meant for what is behind it
+
+**Severity:** medium while a toast is up, which is 2.4 seconds after every
+action that confirms itself. Found on 2026-09-14 by looking at the 1440 frames
+taken for D-145, not by a test.
+
+**Surface:** `artifacts/kub/src/components/kub/KubFeedbackViewport.tsx:69` (the
+offset) and `:87` (the card's `pointer-events-auto`).
+
+**Defect:** on the bots page the card sat at y 108–169 and the tab strip at
+147–191, and `document.elementFromPoint` at the centre of «Диагностика» returned
+`div.kub-feedback-card`. So for as long as a confirmation was up, a press on the
+tab went into the toast.
+
+The offset was not careless — it was measured, and its comment says so: the
+staff area stacks a 56px header on a 45px strip, «so anything above 101px sits
+on top of the tabs», and 108px clears it. The bots page stacks its tabs lower,
+at 147. **A number tuned against one layout is a promise about every other
+layout, and this one could not keep it.**
+
+**Fixed 2026-09-14, by removing the need for the number rather than changing
+it.** The card is `pointer-events-none` and its close button is
+`pointer-events-auto`, so a press over the card body reaches whatever is
+underneath and a press on the ✕ still dismisses it. Nothing moved, so the
+placement is unchanged everywhere it was already right.
+
+`tests/e2e/bot-management.spec.ts` asks the browser rather than comparing two
+rectangles: with a confirmation up, `elementFromPoint` at the centre of the card
+must not be inside the viewport, and the close button must still work. Putting
+`pointer-events-auto` back turns it red.
+
+**Found by the same frames and not fixed:** on a 390 phone the bots page's `h1`
+is 6 CSS px wide, so «Мои боты» renders as «М». That is the page header, not the
+feedback viewport, and it predates all of this.
