@@ -609,6 +609,35 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-14 — `df11bbe9a4ce2530642172f1ca8460f2c3b12a26`
+
+The handle between the panes stops being a black strip and stops dragging 73px
+behind the pointer (D-196), and Escape stops being spent on a hint nobody
+opened (D-194, deployed as `78c7fd1` an hour earlier).
+
+- `letscube-web` runs image
+  `l64kyyu1sysev2izzjjbizhe:df11bbe9a4ce2530642172f1ca8460f2c3b12a26`, one
+  replica. Live entry `index-CVfDE49D.js`, 3001177 bytes.
+- **The marker was calibrated in all three directions this time**: the new
+  handle's class list absent from the live bundle and present in the built one,
+  the retired flex column present in the live bundle and **absent** from the
+  built one, and «Ширина списка чатов» present in both as the control. Rounds
+  four and five again read a 146-byte asset where the control was also absent —
+  the fifth time today that string was the only thing separating «I cannot see»
+  from «not deployed».
+- Gates: typecheck clean, unit **2460/2460**, `desktop-shell.spec.ts` 34 passed
+  with 2 skipped across 1440 and 1920, `shell-escape.spec.ts` 4/4 across 1440
+  and 390, `chat-list-event-cost.spec.ts` 8 passed with 1 skipped at 390 — two
+  of those were red before D-194.
+- Rollback is a fast-forward of `main` back to `9cc2f50`.
+
+**Two register entries opened rather than fixed**, both measured: D-195 (two
+tests of `attach-sheet.spec.ts` red at both viewports, pre-existing — three
+picks grow the sheet to 374 where the test wants more than 377, so «still closes
+by its handle and its dim» has not been checked since) and the note in D-196
+that its own test had agreed with the defect for as long as the defect existed.
+
+
 ### 2026-09-14 — `5b9dbfe9efef548989cc22a349949f111b0a1740`
 
 Muting a chat becomes a fact of the account, with durations (D-167), and D-194
