@@ -10607,3 +10607,85 @@ existing «these are the inputs» list while restoring the defect exactly.
    The capture script that produced the screenshots waited 700ms, which is why
    its pixels showed what four test runs did not. Both directions are now
    proved: green with the rule, red without it.
+
+---
+
+## D-191 `[~]` A group could have as many rooms as it liked, and the interface read one
+
+**Severity:** high, and it is the shape of the feature rather than a slip in it.
+Raised by the owner on 2026-09-14: «это должен быть не один канал голосовой куда
+все подключаются, а как в discord … его систему каналов на серверах с настройкой
+прав».
+
+**Surface:** `artifacts/kub/src/hooks/useVoiceChannel.ts:100` — `.limit(1)`.
+
+**Defect:** the database has carried the server shape since the voice work and
+the interface used a fraction of it. Measured on production the same day:
+
+- `public.voice_channels` carries `chat_id`, `name`, `position`,
+  `max_participants`, `speak_role` and `archived`, with
+  «admins manage voice channels» = `is_chat_admin(chat_id)` FOR ALL — so an
+  owner or an administrator could always have made a second room, a third, and
+  a room only administrators may speak in. There has never been a control that
+  makes one.
+- `public.topics` is the same shape for text, with the same two policies, and is
+  drawn as a horizontal strip of capsules under the header — a forum's shape,
+  where one conversation has threads beside it.
+
+So the product had one room everybody piles into, which is the mechanic the
+owner objected to, and a permission column nothing reads.
+
+**What a server does differently, and it is mechanics rather than wording:**
+
+1. a voice channel is a **place, not a call** — it exists when empty, it is
+   named, joining is one click with nothing to ring and nobody to accept;
+2. **who is inside is public to the group**, listed under the channel's own
+   name, so the rail answers «где все» without anybody being asked;
+3. **switching rooms is one click on another room**, not leave then join;
+4. **headings group the rooms** and collapse, which is what keeps a list
+   readable past about six of them.
+
+**The database half shipped first**, migration
+`20260914140000_channel_categories.sql`, applied to production after a verified
+schema backup
+(`pre-migrations/20260914-043011-before-channel-categories.schema.dump`, sha256
+`bec5ea79…5ed3c77`). It adds `public.chat_channel_categories` and a
+`category_id` on both channel tables.
+
+**Two things about it are worth reading before changing it.**
+
+*The composite foreign key.* A category belongs to one chat and a channel in
+another chat must not point at it. That is not a CHECK — it spans two tables —
+and a trigger would be a rule living where nobody looks. A unique key on
+`(chat_id, id)` makes it a schema fact: `foreign key (chat_id, category_id)
+references chat_channel_categories (chat_id, id)`, and under the default MATCH
+SIMPLE a null `category_id` satisfies it outright, which is what an
+uncategorised channel needs.
+
+*The delete action names its column.* `on delete set null (category_id)`, not a
+bare `set null`, which would try to null the NOT NULL `chat_id` and fail the
+delete — D-189 exactly, six hours later, in a file written by somebody who had
+just fixed it. Deleting a heading therefore leaves its rooms alive and
+uncategorised, which is also the right product answer: losing a heading is an
+inconvenience, losing a room full of history is not.
+
+**Proved on production** in a transaction that rolled back, seven rules: an
+administrator makes a heading and reads it back; an ordinary member reads it and
+may not make one; somebody outside the group reads nothing; a channel of the
+chat goes under it; a channel of **another** chat is refused by the foreign key;
+deleting the heading keeps the channel and only uncategorises it; and `anon`
+holds nothing on the new table. Kept as
+`.migration-backup/supabase/rehearsal/20260914140000_channel_categories.test.sql`,
+which picks its people out of what is there rather than making them — creating
+an account on this deployment needs an invitation, so a fixture that inserts
+into `auth.users` cannot run here at all.
+
+**The arrangement and the rules** are `artifacts/kub/src/lib/serverChannels.ts`,
+pinned by `tests/unit/server-channels.test.mts`; fourteen mutations turn it red,
+among them putting uncategorised channels last, dropping a channel whose heading
+has gone, interleaving text and voice by position, collapsing «полно» and
+«слушать можно, говорить нельзя» into one refusal, and cutting a name in code
+units rather than characters.
+
+**Still open:** the rail that lists the channels and the surfaces that create
+them. The entry closes when a group can be given a second room without SQL.
