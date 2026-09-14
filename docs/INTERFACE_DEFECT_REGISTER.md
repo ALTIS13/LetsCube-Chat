@@ -7909,7 +7909,7 @@ bottom navigation cannot be reached while the sheet is open — the sheet is a f
 backdrop click is unreachable there too, the panel covering the overlay edge to edge;
 below `md` the doors are three, not four.
 
-## D-137 `[ ]` Notification category switches look on and do nothing until device push is enabled
+## D-137 `[x]` Notification category switches look on and do nothing until device push is enabled
 
 **Severity:** medium. Found by the settings audit; rendered (frames p05, l01, a01).
 
@@ -7926,6 +7926,34 @@ notifications they want before granting the device permission.
 **Proposed:** let the categories be set before the device switch is on, since they are
 stored preferences, and draw a disabled switch dimmed, with no box. Part of the
 «Уведомления и звуки» screen in the parity work.
+
+**Fixed on 2026-09-14, and the box was worse than «a dark 44px square» reads.**
+Photographed on the settings screen at 390 in the dark theme: each of the three
+switches sat inside a hard near-black rectangle while «Статус «в сети»» two
+groups below — the same component, enabled — had none. The paint was on the
+**button**, which `.kub-switch` sizes to the 44px a finger needs; the button is
+a hit area, not a surface, and painting it draws a box around a switch that is
+24 tall.
+
+Both halves are done, and they are the two the entry proposed.
+
+*The categories are settable.* `disabled={loadingPreferences || pushStatus !== "active"}`
+became `disabled={loadingPreferences}` on all three. They are stored preferences
+in `notification_preferences`, `_notification_push_allowed` reads them whenever a
+push is made, and the row directly above already says the permission is missing —
+so nothing here has to repeat it. Telegram lets the categories be set the same
+way for the same reason.
+
+*The disabled look moved from the box to the switch.* The inset and the sink
+veil are now on the track, with the thumb losing its brightness and keeping its
+position — the stored value is still worth reading while the switch is
+unavailable. **Deliberately not `disabled:opacity-*`**: `control-vocabulary.test.mjs`
+refuses a faded disabled control by name, and it is right to — fading says
+«loading» where the inset says «not yours to press».
+
+Five mutations turn `tests/unit/switch-disabled-state.test.mts` red, including
+restoring the box, removing the track's inset, fading instead, and gating a
+category on the device permission again.
 
 **Audit rows:** settings-profile B6, F3; top-10 item 6.
 

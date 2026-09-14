@@ -621,13 +621,21 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
               )}
             </SettingsRow>
           )}
+          {/* D-137. These three are **stored preferences**, not device state:
+              they live in `notification_preferences` and the push gate reads
+              them whenever a push is made. They used to be disabled until
+              «Push-уведомления» was active, which meant a person could not
+              say what they wanted before granting the browser permission —
+              and the row above already states that the permission is missing,
+              so nothing here has to repeat it. Telegram lets the categories
+              be set the same way, for the same reason. */}
           {pushStatus !== "native_unavailable" && (
             <>
               {shows("push-messages") && (
                 <PreferenceSwitchRow
                   label="Сообщения"
                   checked={pushPreferences.message_push_enabled}
-                  disabled={loadingPreferences || pushStatus !== "active"}
+                  disabled={loadingPreferences}
                   onChange={(value) => void setPushPreference("message_push_enabled", value)}
                 />
               )}
@@ -635,7 +643,7 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
                 <PreferenceSwitchRow
                   label="Задачи"
                   checked={pushPreferences.task_push_enabled}
-                  disabled={loadingPreferences || pushStatus !== "active"}
+                  disabled={loadingPreferences}
                   onChange={(value) => void setPushPreference("task_push_enabled", value)}
                 />
               )}
@@ -643,7 +651,7 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
                 <PreferenceSwitchRow
                   label="Приглашения"
                   checked={pushPreferences.invite_push_enabled}
-                  disabled={loadingPreferences || pushStatus !== "active"}
+                  disabled={loadingPreferences}
                   onChange={(value) => void setPushPreference("invite_push_enabled", value)}
                 />
               )}
