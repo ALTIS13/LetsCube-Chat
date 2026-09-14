@@ -4,6 +4,7 @@ import { FOCUS_RING } from "@/lib/controlSurface";
 import type { ChatSettingsRow, ChatSettingsRowId } from "@/lib/chatSettings";
 import type { InvitePolicy } from "@/lib/groupInvites";
 import { cn } from "@/lib/utils";
+import { ChannelsSettingsRow } from "./ChannelsSettingsRow";
 
 interface ChatSettingsViewProps {
   rows: readonly ChatSettingsRow[];
@@ -135,6 +136,15 @@ export function ChatSettingsView({
           as a second edge. `tests/unit/edge-vocabulary.test.mjs` refuses the
           heavier one here by name. */}
       <div className="flex flex-col gap-1 border-t border-[color:var(--kub-rule)] pt-3">
+        {/* First, and above the rows `chatSettingsRows` builds.
+            Two reasons, and the second is the load-bearing one. What a group's
+            channels *are* is structural — it is the shape of the place, where
+            the rows below are rules about it — so it reads first. And the row
+            cannot be one of `chatSettingsRows`' own: that module belongs to
+            another track in this stage, and the danger row has to stay at the
+            foot, which it does only while nothing is appended after the map.
+            The row draws nothing for anyone who may not manage channels. */}
+        <ChannelsSettingsRow />
         {rows.map((row) => {
           if (row.id === "delete") {
             return (

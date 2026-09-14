@@ -111,20 +111,42 @@ two docker networks attached, LiveKit's STUN probe cancelled itself and fell
 back to the node IP — right here, but a fallback that happens to be right is not
 a configuration.
 
-## Turning it on for a group
+## Rooms, and who makes them
 
-A voice channel is a row, and since 2026-09-14 the product writes it: an owner
-or an administrator of a **group** opens «Информация о группе» and presses
-«Начать голосовой чат» under «Голосовой чат». The same section then offers
-«Завершить голосовой чат», which asks first and deletes the row. Nothing else
-in the interface creates or removes one, and nobody but an owner or an
-administrator is offered either control — `admins manage voice channels` is
-`is_chat_admin(chat_id)` as both USING and WITH CHECK, so a member's write is
-refused by the database as well as unoffered by the interface.
+**A group has rooms, not a voice chat.** That changed on 2026-09-14, and the
+change was almost entirely in the interface: `voice_channels` has carried
+`chat_id`, `name`, `position`, `max_participants`, `speak_role` and `archived`
+since this feature shipped, with «admins manage voice channels» =
+`is_chat_admin(chat_id)` FOR ALL as both USING and WITH CHECK. An administrator
+could always have had as many rooms as they liked. What the client did was read
+`.limit(1)` and offer one control that made one room.
 
-The insert carries `chat_id`, `name`, `created_by` and `max_participants` and
-nothing else: `participant_count` and `active_since` belong to the SFU's
-webhooks and are not in the client's column grant.
+Rooms are made, renamed, reordered and removed in **«Каналы»** on the group's
+settings screen, which draws nothing at all for anybody who is not an owner or
+an administrator of that group. The same dialog holds the headings that group
+them (`public.chat_channel_categories`, added the same day) and each room's two
+settings:
+
+- **how many seats** — `max_participants`, which the SFU enforces. The gateway
+  compares the row's `participant_count` against it before it mints a token, so
+  a full room refuses at the token rather than at the SDK;
+- **who may speak** — `speak_role`, and it is not decorative. The gateway
+  computes `canPublish` from the member's role against it and mints the token
+  with that claim, so somebody below the bar joins, hears everything and cannot
+  be heard. That is a real state and the interface says so in those words
+  («Остальные смогут зайти и слушать»), not as «нельзя войти».
+
+**Removing a room sets `archived = true`; it is not a DELETE.** Messages and the
+row survive, which is what lets the question promise that nothing is lost.
+Whoever is inside is disconnected by `voiceCallLostItsChannel` on the next read
+of the chat's rooms — the SFU's own room closes 60 seconds after the last person
+leaves, and no client call closes it sooner.
+
+**Where a room is joined:** the channel rail, which lists every room with the
+people inside it, live. On a pane too narrow for a column it is a sheet behind a
+capsule under the header. The group card still names one room and offers the way
+in, but **only while the group has exactly one** — naming whichever came first
+beside a rail listing three is not a fact about the group.
 
 The equivalent by hand, for a deployment being set up before anybody is an
 administrator of anything:
@@ -134,19 +156,18 @@ insert into public.voice_channels (chat_id, name, created_by, max_participants)
 values ('<a group chat id>', 'Общий голос', '<a member id>', 10);
 ```
 
-Delete the row and the capsule and the panel section disappear again. Anybody
-in the call who is looking at that conversation is disconnected with it — which
-is what the confirmation promises — but slice 2 has nothing outside the
-conversation that watches, so somebody reading a **different** chat keeps
-hearing the call until they come back. The room on the SFU is created by the
-gateway on the first token request and closes 60 seconds after the last person
-leaves; there is no client call that closes it sooner.
+`participant_count` and `active_since` are deliberately not written by any
+client: they belong to the SFU's webhooks, and the column grant does not include
+them.
 
 One consequence worth knowing: **asking for a token creates the room**, so
 `voice_channels.active_since` is set for a minute after anyone presses join even
 if they never connect. Nothing in the interface reads that column — occupancy
 comes from `participant_count` — so it shows nobody a call that is not
-happening; it only costs the reconciler one extra question per tick.
+happening; it only costs the reconciler one extra question per tick. The
+reconciler sweeps at most 64 channels that have somebody in them per tick
+(`VOICE_RECONCILER_CHANNEL_LIMIT`), which is a bound on *occupied* rooms rather
+than on how many a group may have.
 
 ## Proved in production, 2026-09-14
 
@@ -178,10 +199,15 @@ place as the staging state. No real user's group has one.
 
 ## Not done
 
-**Nothing outside the conversation watches the channel.** An administrator
-ending a voice chat disconnects everyone who is looking at that group, because
-that chat's own view sees the row go; a person reading another chat keeps the
-call until they come back to it. The bar that would follow them is slice 3.
+**Nothing outside the conversation watches the rooms.** Removing a room
+disconnects everyone who is looking at that group, because that chat's own view
+sees the row go; a person reading another chat keeps the call until they come
+back to it. The bar that would follow them is slice 3.
+
+**No per-channel notification settings, and no per-channel unread.** A server's
+channel list marks the channels with something new in them, and mutes them one
+at a time; `chat_members.last_read_at` is per chat, so neither is possible yet.
+D-167 is the register entry for the mute half.
 
 **No TURN.** The case it would serve was measured working over ICE/TCP instead.
 If a network ever turns up that blocks 7881 as well, TURN/TLS needs a hostname

@@ -15,9 +15,20 @@ import { MessageDeleteDialogHost, copySelectedMessages, useChatMessageSelection 
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
 import { ChatMediaPlaybackBar, ChatMediaPlaybackProvider, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 import { TopicStrip } from "./TopicStrip";
+import { ChannelRail, ChannelRailSheet, ChannelRailTrigger } from "./ChannelRail";
+import { ChannelManageDialogHost, requestChannelManage } from "./ChannelManageModal";
 import { VoiceCallCapsule } from "./VoiceCallCapsule";
 import { useTopics } from "@/hooks/useTopics";
+import { useServerChannels } from "@/hooks/useServerChannels";
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
+import {
+  capsuleNamesARoom,
+  currentTextChannelId,
+  paneFitsChannelRail,
+  railIsOffered,
+  topicIdForChannel,
+} from "@/lib/channelRail";
+import type { ServerChannel } from "@/lib/serverChannels";
 import {
   joinVoiceChannel,
   leaveVoiceCall,
@@ -318,17 +329,28 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     | "owner" | "admin" | "member" | null;
   const canManageTopics = myRole === "owner" || myRole === "admin";
 
-  // The voice channel, and the call.
+  // The channels, and the call.
   //
-  // Two hooks with very different lifetimes, deliberately. `useVoiceChannel`
-  // belongs to this conversation and dies with it — it is the chat's own view
-  // of who is in the room, read from the database for everyone outside the
-  // call. `useVoiceCall` reads module state that outlives every component, so
-  // opening another conversation unmounts this whole tree without touching the
-  // connection or the microphone.
+  // Two readers with very different lifetimes, deliberately.
+  // `useServerChannels` belongs to this conversation and dies with it — it is
+  // the group's own view of its rooms and of who is in each, read from the
+  // database for everyone outside the call. `useVoiceCall` reads module state
+  // that outlives every component, so opening another conversation unmounts
+  // this whole tree without touching the connection or the microphone.
+  //
+  // `useVoiceChannel` reads nothing any more: it is the derivation that names
+  // **one** room for the two surfaces that only ever knew about one, and which
+  // room it names is decided against the call rather than against the list —
+  // see the note there, and `voiceCallLostItsChannel`.
   const voiceEnabled = chat?.type === "group";
-  const voice = useVoiceChannel(voiceEnabled ? chatId : null, voiceEnabled);
   const call = useVoiceCall();
+  const serverChannels = useServerChannels(voiceEnabled ? chatId : null, voiceEnabled, topics);
+  const voice = useVoiceChannel(serverChannels, call.channelId);
+  // Whether this group gets the rail instead of the topic strip: anything at
+  // all besides the one general channel. Read here rather than in the rail's
+  // own section below, because the capsule under the header is drawn
+  // differently once a list of rooms is on screen — see `capsuleChannel`.
+  const railOffered = voiceEnabled && railIsOffered(serverChannels.channels, serverChannels.categories);
   const voiceDirectory = useMemo(() => {
     const names = new Map<string, string>();
     const faces = new Map<string, string | null>();
@@ -350,8 +372,23 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         : resolveVoiceParticipants(voice.participantIds, voiceDirectory.names),
     [call.participants, call.phase, inThisChannel, voice.participantIds, voiceDirectory.names],
   );
+  /**
+   * The channel the capsule under the header speaks for, which is now a
+   * question it did not use to have: `capsuleNamesARoom`.
+   *
+   * One room, or a call — the capsule names it, exactly as it did. Several
+   * rooms and no call — nothing, because the room it would name is whichever
+   * one came first rather than a fact about the group. Photographed in the
+   * rail's first capture as «Курилка · Никого нет · Присоединиться» beside a
+   * rail listing three rooms and saying where everybody was.
+   *
+   * `voice.channel` itself is untouched: `voiceCallLostItsChannel` reads it to
+   * decide whether an administrator ended the call, and it has to keep seeing
+   * the room the call is in whatever the capsule draws.
+   */
+  const capsuleChannel = capsuleNamesARoom(serverChannels.channels, call.channelId) ? voice.channel : null;
   const voiceCapsule = voiceCapsuleState({
-    channel: voice.channel,
+    channel: capsuleChannel,
     phase: call.phase,
     callChannelId: call.channelId,
     participants: voiceParticipants,
@@ -370,6 +407,105 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const toggleVoiceMute = useCallback(() => {
     void setVoiceMuted(!voiceCallSnapshot().micMuted);
   }, []);
+
+  // ── The channel rail ─────────────────────────────────────────────────────
+  //
+  // It replaces the topic strip for a group that has anything besides the one
+  // general channel, which is the shape change the owner asked for: a forum's
+  // horizontal capsules become a server's vertical list. `railOffered` is
+  // decided above, beside the capsule that changes with it.
+  const [railOpen, setRailOpen] = useState(false);
+  // Whether there is room for the rail as a column, measured against the pane
+  // and never against the viewport — for the reason `ChatInfoPanel` measures
+  // the pane: the chat list is dragged by hand, so one window width gives many
+  // pane widths, and a breakpoint would put a 224px column into a 336px pane at
+  // exactly `md`. Only the ANSWER is state, so a drag re-renders this once, when
+  // the pane crosses the width at which the shape actually changes.
+  //
+  // `useLayoutEffect`, so the answer is in before the browser paints: in an
+  // effect the conversation would be laid out full width for one frame and lose
+  // 224px in the next, which is a flinch on every open.
+  const paneRef = useRef<HTMLDivElement>(null);
+  const [railFitsColumn, setRailFitsColumn] = useState(false);
+  useLayoutEffect(() => {
+    const pane = paneRef.current;
+    if (!pane) return undefined;
+    const read = () => {
+      const next = paneFitsChannelRail(pane.getBoundingClientRect().width);
+      setRailFitsColumn((current) => (current === next ? current : next));
+    };
+    read();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    // The pane, not the rail: the rail takes its width out of the pane, so the
+    // pane's own width is the same number either way and this cannot feed itself.
+    const observer = new ResizeObserver(read);
+    observer.observe(pane);
+    return () => observer.disconnect();
+  }, []);
+  // A window widened while the sheet is open has nowhere to put it.
+  useEffect(() => {
+    if (railFitsColumn) setRailOpen(false);
+  }, [railFitsColumn]);
+
+  const railTextChannelId = currentTextChannelId(serverChannels.channels, selectedTopicId);
+  const railTextChannel = serverChannels.channels.find((channel) => channel.id === railTextChannelId) ?? null;
+  // Who is in a room. The SDK while connected, the table otherwise — the same
+  // split `voiceParticipants` makes for the capsule, applied per room, because
+  // only one of these rooms can be the one this client is connected to.
+  const occupantsOf = useCallback(
+    (channelId: string) =>
+      channelId === call.channelId && (call.phase === "connected" || call.phase === "reconnecting")
+        ? renameVoiceParticipants(call.participants, voiceDirectory.names)
+        : resolveVoiceParticipants(serverChannels.participants.get(channelId) ?? [], voiceDirectory.names),
+    [call.channelId, call.participants, call.phase, serverChannels.participants, voiceDirectory.names],
+  );
+  const occupiedRooms = serverChannels.channels.filter(
+    (channel) => channel.kind === "voice" && occupantsOf(channel.id).length > 0,
+  ).length;
+  const selectChannel = useCallback(
+    (channel: ServerChannel) => {
+      // `null` for the general channel: the store holds the general stream as
+      // null and `useTopics` resets anything else to it within a render.
+      setSelectedTopicId(topicIdForChannel(channel));
+      setRailOpen(false);
+    },
+    [setSelectedTopicId],
+  );
+  const joinVoiceRoom = useCallback(
+    (channel: ServerChannel) => {
+      if (!chat) return;
+      // One click on another room is the whole switch: `joinVoiceChannel`
+      // leaves the room it finds this client in before it joins the next.
+      void joinVoiceChannel({ channelId: channel.id, chatId: chat.id, channelName: channel.name });
+      setRailOpen(false);
+    },
+    [chat],
+  );
+  // Creating, renaming, reordering and deleting channels is `ChannelManageModal`,
+  // built beside this rail and raised through an event rather than mounted per
+  // surface — so the settings screen and the rail open one dialog with one
+  // state rather than two copies of it. The rail knows only this callback; the
+  // dialog decides for itself whether this reader may see it.
+  const manageChannels = useCallback(() => {
+    requestChannelManage({ chatId, chatName: chat?.name ?? null, role: myRole });
+    setRailOpen(false);
+  }, [chat?.name, chatId, myRole]);
+  const railProps = {
+    groups: serverChannels.groups,
+    currentTextChannelId: railTextChannelId,
+    occupantsOf,
+    faces: voiceDirectory.faces,
+    selfId: userId,
+    role: myRole,
+    callChannelId: call.channelId,
+    joining: call.phase === "joining",
+    onSelectText: selectChannel,
+    onJoinVoice: joinVoiceRoom,
+    // The rail draws the control for an administrator; the dialog refuses to
+    // open for anyone else. Both, because a control that does nothing is worse
+    // than no control and a dialog that trusts its caller is worse than both.
+    onManageChannels: canManageTopics ? manageChannels : undefined,
+  };
 
   /**
    * An administrator ended the voice chat, so this client's call ends too.
@@ -1180,6 +1316,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         // raw file text, so the prefix fails it even inside a sentence — which
         // is how both the first spelling of this attribute and the first
         // attempt at this very comment were caught.
+        ref={paneRef}
         className="kub-chat-screen relative flex h-full w-full min-w-0 overflow-hidden"
         data-kub-conversation-pane=""
         style={{
@@ -1205,6 +1342,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           </div>
         </div>
       )}
+      {/* The rail before the conversation, as a server puts it. In flow, so the
+          conversation loses exactly its width and the chrome measured inside
+          that column is unaffected — the header, the composer and the scroll
+          insets all belong to the conversation, not to the pane. */}
+      {railOffered && railFitsColumn && <ChannelRail {...railProps} />}
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {loading ? (
           <div className="flex-1 flex items-center justify-center chat-bg">
@@ -1319,10 +1461,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             />
           )}
 
-          {/* Above the topic strip, because the voice channel is about the
-              chat and the topic strip is about the conversation (section 4.1). */}
+          {/* Above the rail's trigger, because the call is about the chat and
+              the trigger is about the conversation (section 4.1). Once the rail
+              is offered this draws only a call this client is in: joining is
+              the rail's job — see `capsuleChannel`. */}
           <VoiceCallCapsule
-            channel={voice.channel}
+            channel={capsuleChannel}
             participants={voiceParticipants}
             faces={voiceDirectory.faces}
             selfId={userId}
@@ -1332,11 +1476,27 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onToggleMute={toggleVoiceMute}
           />
 
-          {isForum && (
+          {/* The strip survives exactly where the rail is not offered: a forum
+              whose only channel is the conversation. Everything else — a second
+              text channel, a room, a heading — gets the rail instead, which is
+              the shape change rather than a rename of this one. */}
+          {isForum && !railOffered && (
             <TopicStrip
               topics={topics}
               canManage={canManageTopics}
               onCreate={createTopic}
+            />
+          )}
+
+          {/* Where the strip was, when the pane has no room for a column: the
+              channel being read, and how many rooms have somebody in them. */}
+          {railOffered && !railFitsColumn && railTextChannel && (
+            <ChannelRailTrigger
+              channelName={railTextChannel.name}
+              emoji={railTextChannel.emoji}
+              occupiedRooms={occupiedRooms}
+              open={railOpen}
+              onOpen={() => setRailOpen(true)}
             />
           )}
 
@@ -1421,7 +1581,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           onClose={() => setShowInfo(false)}
           onClearForMe={clearChatForMe}
           voice={{
-            channel: voice.channel,
+            // The same rule the capsule uses, and for the same reason: with
+            // several rooms in the group, naming one of them here would be
+            // naming whichever came first, which is not a fact about the
+            // group. The rail is where a choice between rooms is made.
+            channel: capsuleChannel,
             participants: voiceParticipants,
             faces: voiceDirectory.faces,
             inCall: inThisChannel && (call.phase === "connected" || call.phase === "reconnecting"),
@@ -1436,6 +1600,22 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           }}
         />
       )}
+      {/* Out here rather than inside the chrome stack: the sheet is `fixed`,
+          and a stack that ever gains a `backdrop-filter` of its own would
+          become its containing block (rule 3). Its siblings here — the contact
+          card, the viewer, the dialogs — are placed for the same reason. */}
+      {railOffered && !railFitsColumn && railOpen && (
+        <ChannelRailSheet {...railProps} onClose={() => setRailOpen(false)} />
+      )}
+      {/* The dialog the rail's control asks for. Mounted here because the one
+          in the settings screen only exists while that screen is open, and the
+          rail's control is offered while it is not. The host claims the event
+          once per document, so the two never answer one request twice.
+          Unconditional on purpose: the claim is taken by whichever host mounts
+          first and a host that loses it never asks again, so this one has to be
+          in place from the moment the conversation opens rather than from the
+          moment the rail is first offered. */}
+      <ChannelManageDialogHost />
       {forwardingMessages && (
         <ForwardModal
           messages={forwardingMessages}

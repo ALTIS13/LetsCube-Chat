@@ -250,7 +250,26 @@ test("the perimeter count only ever shrinks", () => {
   // 197 since 2026-09-11. The chat screen's option C took the outline off the
   // incoming bubble and the composer's well, and gave the date, a system notice
   // and the history band a fill instead of an outline.
-  assert.ok(total <= 197, `perimeters on the sheet-edge colour grew to ${total}; the ceiling is 197`);
+  //
+  // 200 since 2026-09-14, and raised by argument rather than by arithmetic. The
+  // channel management dialog adds four class lists carrying the sheet-edge
+  // colour, and each one is a perimeter rule 11 names as keeping its edge:
+  //
+  //   - its field well, `bg-[var(--kub-inset)]` — the exception the test below,
+  //     "a well keeps the border that is carrying it in the dark theme", exists
+  //     for;
+  //   - its two inactive segments, the kind picker and the speak-role picker —
+  //     the same shape `AudioSettingsSection`'s inactive segment has, which the
+  //     test below pins as keeping the edge **and** as not carrying a resting
+  //     veil;
+  //   - «Новый канал» / «Новый раздел», a target. It carried `kub-raise` beside
+  //     `kub-raise-hover` first, and a probe read `background-image` off it at
+  //     rest and found the hover's own single layer already there — the defect
+  //     that same test names. The border is what replaced the resting veil, not
+  //     what was added beside it.
+  //
+  // The count before the dialog was 196, so this is exactly those four.
+  assert.ok(total <= 200, `perimeters on the sheet-edge colour grew to ${total}; the ceiling is 200`);
 });
 
 /**

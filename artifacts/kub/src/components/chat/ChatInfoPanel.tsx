@@ -29,13 +29,7 @@ import {
 import { GroupInviteModal } from "./GroupInviteModal";
 import { VoiceChannelRow } from "./VoiceChannelRow";
 import {
-  classifyVoiceChannelWriteError,
-  newVoiceChannelDraft,
-  voiceChannelControl,
-  voiceChannelEndConfirmation,
-  voiceChannelEndRefusalText,
   voiceChannelRowOffer,
-  voiceChannelStartRefusalText,
   type VoiceChannelSummary,
   type VoiceParticipant,
 } from "@/lib/voiceChannel";
@@ -135,9 +129,8 @@ export interface ChatInfoVoice {
   refusal: string | null;
   /**
    * False where this deployment has no voice tables at all, and false until the
-   * first read has come back. Both are states in which an administrator must be
-   * offered nothing rather than a control that is about to be wrong — see
-   * `voiceChannelControl`.
+   * first read has come back. Both are states in which the row must draw
+   * nothing rather than a way into a room it cannot describe yet.
    */
   supported: boolean;
   ready: boolean;
@@ -275,9 +268,6 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
   const [destructiveError, setDestructiveError] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   /** Starting a voice chat, ending one, the question before the end, and its refusal. */
-  const [voiceWriteBusy, setVoiceWriteBusy] = useState(false);
-  const [voiceEndOpen, setVoiceEndOpen] = useState(false);
-  const [voiceWriteError, setVoiceWriteError] = useState<string | null>(null);
 
   // --- The card as a window ------------------------------------------------
   // It used to be a 320px column welded to the right edge for as long as it was
@@ -520,20 +510,6 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
     chatType: chat.type,
     myRole,
     channel: voice?.channel ?? null,
-  });
-  // And what an administrator may do to the channel itself: start one where
-  // there is none, end the one there is. Telegram's mechanic, and the only
-  // thing in the product that writes `public.voice_channels` — until this
-  // existed a channel could be turned on with SQL and nothing else.
-  // «I have looked» means «I have looked at *this* chat»: an answer read for the
-  // conversation this card was open on a moment ago is not evidence about this
-  // one, and acting on it would end somebody else's voice chat.
-  const voiceControl = voiceChannelControl({
-    chatType: chat.type,
-    myRole,
-    hasChannel: Boolean(voice?.channel),
-    supported: voice?.supported ?? false,
-    ready: (voice?.ready ?? false) && (voice?.viewChatId ?? null) === chat.id,
   });
 
   const loadMembers = useCallback(async () => {
@@ -1029,86 +1005,6 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
     setChats(chats.filter((c) => c.id !== chat.id));
     setSelectedChatId(null);
     onClose();
-  };
-
-  /**
-   * Start a voice chat: one row in `public.voice_channels`, and nothing else.
-   *
-   * No migration and no function stands behind this. The policy «admins manage
-   * voice channels» is ALL commands with `is_chat_admin(chat_id)` as both USING
-   * and WITH CHECK, and `authenticated` holds `select, insert, delete` on the
-   * table — so an administrator's insert is already allowed through PostgREST
-   * and a member's is already refused. `participant_count` and `active_since`
-   * are deliberately not written: they belong to the SFU's webhooks, and the
-   * grant on this table does not include them.
-   *
-   * `.select("id")` is what makes an RLS refusal legible rather than silent.
-   */
-  const handleStartVoice = async () => {
-    if (!voice || voiceWriteBusy) return;
-    setVoiceWriteError(null);
-    setVoiceWriteBusy(true);
-    const draft = newVoiceChannelDraft();
-    const { data, error } = await supabase
-      .from("voice_channels" as never)
-      .insert({
-        chat_id: chat.id,
-        name: draft.name,
-        max_participants: draft.maxParticipants,
-        created_by: currentUserId,
-      } as never)
-      .select("id")
-      .maybeSingle();
-    setVoiceWriteBusy(false);
-    if (error) {
-      console.error("start voice channel failed:", error);
-      setVoiceWriteError(voiceChannelStartRefusalText(classifyVoiceChannelWriteError(error)));
-      return;
-    }
-    if (!data) {
-      // An insert the policy refused with no error to show for it. Same shape
-      // as the group delete above, and the same honest reading of it.
-      setVoiceWriteError(voiceChannelStartRefusalText("forbidden"));
-      return;
-    }
-    voice.onRefresh();
-  };
-
-  /**
-   * End it for everyone.
-   *
-   * A DELETE of the channel row, which cascades its participants. The room on
-   * the SFU closes 60 seconds after the last person leaves and there is no
-   * client call that closes it sooner, so what disconnects the people in it is
-   * `voiceCallLostItsChannel` in `ChatWindow` — this only removes the row.
-   */
-  const handleEndVoice = async () => {
-    if (!voice || voiceWriteBusy) return;
-    const channelId = voice.channel?.id;
-    if (!channelId) {
-      setVoiceEndOpen(false);
-      return;
-    }
-    setVoiceWriteError(null);
-    setVoiceWriteBusy(true);
-    const { data, error } = await supabase
-      .from("voice_channels" as never)
-      .delete()
-      .eq("id", channelId)
-      .select("id")
-      .maybeSingle();
-    setVoiceWriteBusy(false);
-    if (error) {
-      console.error("end voice channel failed:", error);
-      setVoiceWriteError(voiceChannelEndRefusalText(classifyVoiceChannelWriteError(error)));
-      return;
-    }
-    if (!data) {
-      setVoiceWriteError(voiceChannelEndRefusalText("forbidden"));
-      return;
-    }
-    setVoiceEndOpen(false);
-    voice.onRefresh();
   };
 
   const handlePinToggle = async () => {
@@ -1663,7 +1559,6 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
   });
 
   /** The question ending a voice chat asks, and the words it is answered with. */
-  const voiceEndWords = voiceChannelEndConfirmation();
 
   const actionRowClass = cn(
     "kub-button inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 text-left kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
@@ -1893,28 +1788,29 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
                 </button>
               )}
             </div>
-            {voice && (voiceOffer.offered || voiceControl === "start") && (
+            {/* Who is in the group's voice room, and a way in.
+                «Начать голосовой чат» and «Завершить голосовой чат» used to sit
+                here, and they were the one-room mechanic: a group had a voice
+                chat or it did not. A group has **rooms** now, made and removed
+                in one place — «Каналы» on the settings screen — so a second
+                creator here would be two ways to make a thing that differ in
+                what they can make. The row that is left answers «кто сейчас в
+                голосе», and only while naming one room is a fact about the
+                group: `ChatWindow` hands it `capsuleChannel`, which is null as
+                soon as there is a choice to make. */}
+            {voice && voiceOffer.offered && (
               <VoiceChannelRow
-                channel={voiceOffer.offered ? voiceOffer.channel : null}
+                channel={voiceOffer.channel}
                 participants={voice.participants}
                 faces={voice.faces}
                 selfId={currentUserId}
-                full={voiceOffer.offered ? voiceOffer.full : false}
+                full={voiceOffer.full}
                 inCall={voice.inCall}
                 busy={voice.busy}
                 refusal={voice.refusal}
-                control={voiceControl}
-                controlBusy={voiceWriteBusy}
-                controlRefusal={voiceWriteError}
                 rowClassName={actionRowClass}
-                dangerRowClassName={dangerActionRowClass}
                 onJoin={voice.onJoin}
                 onLeave={voice.onLeave}
-                onStart={() => void handleStartVoice()}
-                onEnd={() => {
-                  setVoiceWriteError(null);
-                  setVoiceEndOpen(true);
-                }}
               />
             )}
             {/* What this chat holds, counted, one kind per line.
@@ -2538,51 +2434,6 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
           <p className="text-sm text-[color:var(--kub-muted)]">
             {words.deleteAftermath}
           </p>
-        )}
-      </KubModal>
-      {/* Ending a voice chat asks first, because it reaches other people: the
-          administrator pressing it disconnects everyone who is in the call.
-          Same dialog as «Покинуть группу?» and «Удалить группу?» above —
-          portalled and at `z-[95]` by `KubModal` itself (D-179). */}
-      <KubModal
-        open={voiceEndOpen}
-        onClose={() => {
-          if (!voiceWriteBusy) setVoiceEndOpen(false);
-        }}
-        title={voiceEndWords.title}
-        description={voiceEndWords.description}
-        icon={<KubIcon name="headset" size={18} tone="danger" />}
-        tone="danger"
-        size="sm"
-        mobileSheet={false}
-        footer={(
-          <>
-            <button
-              type="button"
-              onClick={() => setVoiceEndOpen(false)}
-              disabled={voiceWriteBusy}
-              className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-muted)] kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
-            >
-              Отмена
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleEndVoice()}
-              disabled={voiceWriteBusy}
-              data-testid="chat-info-voice-end-confirm"
-              className="inline-flex h-9 items-center justify-center rounded-lg bg-[var(--kub-action-danger-background)] px-3 text-sm font-semibold text-[color:var(--kub-action-danger-foreground)] hover:bg-[var(--kub-action-danger-hover)] active:brightness-95 disabled:bg-[var(--kub-inset)] disabled:shadow-none disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
-            >
-              {voiceWriteBusy ? voiceEndWords.busyLabel : voiceEndWords.confirmLabel}
-            </button>
-          </>
-        )}
-      >
-        {voiceWriteError ? (
-          <div className="rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-danger-text)]">
-            {voiceWriteError}
-          </div>
-        ) : (
-          <p className="text-sm text-[color:var(--kub-muted)]">{voiceEndWords.aftermath}</p>
         )}
       </KubModal>
       <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />

@@ -5,7 +5,7 @@ import type { Topic } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { KubButton, KubIcon, KubModal } from "@/components/kub";
 import { cn } from "@/lib/utils";
-import { TOPIC_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
+import { CHANNEL_NAME_MAX, channelNameRemaining, normalizeChannelName } from "@/lib/serverChannels";
 
 const QUICK_EMOJI = ["💬", "📌", "🔥", "⚙️", "🐛", "📢", "🎉", "❓", "💡", "📦"];
 
@@ -20,11 +20,22 @@ export function TopicCreateModal({ onClose, onCreate }: TopicCreateModalProps) {
   const [emoji, setEmoji] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  /**
+   * The same cut every other channel name gets.
+   *
+   * `normalizeChannelName` collapses runs of whitespace, trims, and cuts **by
+   * code point** — `char_length` in Postgres counts characters where
+   * `String.length` counts UTF-16 code units, and an emoji costs two of those.
+   * The line it replaced was `limitText`, which slices code units, plus a
+   * length check the field's own `maxLength` had already made unreachable.
+   *
+   * A name of nothing but spaces now stops here rather than at the hook.
+   */
   const handleSubmit = async () => {
-    if (!name.trim() || busy) return;
-    if (name.trim().length > TOPIC_NAME_MAX_LENGTH) return;
+    const cleaned = normalizeChannelName(name);
+    if (!cleaned || busy) return;
     setBusy(true);
-    const created = await onCreate(name, emoji);
+    const created = await onCreate(cleaned, emoji);
     setBusy(false);
     if (created) {
       setSelectedTopicId(created.id);
@@ -53,12 +64,20 @@ export function TopicCreateModal({ onClose, onCreate }: TopicCreateModalProps) {
         <input
           autoFocus
           value={name}
-          onChange={(e) => setName(limitText(e.target.value, TOPIC_NAME_MAX_LENGTH))}
+          data-testid="topic-create-name"
+          onChange={(e) => setName(e.target.value)}
           placeholder="Общее, Релизы, Оффтоп…"
-          maxLength={TOPIC_NAME_MAX_LENGTH}
+          maxLength={CHANNEL_NAME_MAX}
           onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
           className="w-full text-sm rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-text)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
         />
+        {/* Only near the limit: a counter that is always there is a counter
+            nobody reads, and the number is the one the constraint counts. */}
+        {channelNameRemaining(name) <= 16 && (
+          <div className="mt-1 text-right text-[11px] tabular-nums text-[color:var(--kub-muted)]">
+            {channelNameRemaining(name)}
+          </div>
+        )}
       </div>
 
       <div>

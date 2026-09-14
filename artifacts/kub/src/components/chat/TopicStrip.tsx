@@ -24,7 +24,11 @@ export function TopicStrip({ topics, canManage, onCreate }: TopicStripProps) {
     // is a leaf outside the scroller, so it stays put while the topics scroll,
     // and the creation dialog opened from here is not laid out against a
     // frosted box (rule 3).
-    <div className="relative mx-2 mt-1 flex-shrink-0 rounded-full md:mx-4">
+    // The testid is how `tests/e2e/server-channel-rail.spec.ts` proves the rail
+    // *replaces* this strip rather than standing beside it. Without a name on
+    // this box the absence could only be asserted through the capsule labels,
+    // and «Общие» is a word the rail draws too.
+    <div className="relative mx-2 mt-1 flex-shrink-0 rounded-full md:mx-4" data-testid="topic-strip">
       <KubGlassLayer className={CAPSULE_GLASS} />
       <div className="relative flex items-center gap-1 overflow-x-auto rounded-full px-2 py-1.5 no-scrollbar">
         <button

@@ -1,26 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import type { RealtimeChannel } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/client";
-import { subscribeByTable } from "@/lib/realtimeTableChannels";
+import { useMemo } from "react";
+import { voiceChannelForCall } from "@/lib/channelRail";
 import type { VoiceChannelSummary } from "@/lib/voiceChannel";
+import type { ServerChannelsView } from "@/hooks/useServerChannels";
 
 /**
- * A chat's voice channel and who is in it, for everyone **outside** the call.
+ * One of this chat's voice rooms, for the surfaces that only ever knew about
+ * one: the capsule under the header and the group information panel.
  *
- * Section 3.1 of docs/proposals/2026-09-13-voice-channels.md: the client never
- * writes either table. `voice_participants` has no INSERT, UPDATE or DELETE
- * policy at all, so every write here would be refused — the rows arrive from
- * the SFU's own webhooks and from the reconciler, which is what makes the list
- * correct when a client vanishes without saying so. This hook only reads.
+ * **This hook no longer reads anything.** It used to do the reading itself, and
+ * it did it as `.limit(1)` — which is how a product whose database has allowed
+ * many rooms per group since the voice work came to look like it had exactly
+ * one. `useServerChannels` reads them all now, and this is the derivation that
+ * keeps the two single-channel surfaces working unchanged while the rail draws
+ * the rest.
  *
- * Somebody who is **in** the call reads the SDK instead (`useVoiceCall`), which
- * is faster and cannot go stale. This is the chat's own view of it.
+ * Which room it names is the load-bearing part, and it is
+ * `voiceChannelForCall`: **the room the call is in wins.** `VoiceCallCapsule`
+ * needs that to draw the call you are in rather than the first room in the
+ * list, and `voiceCallLostItsChannel` needs it more sharply — it reads «this
+ * chat's channel is not the one I am in» as «an administrator ended the voice
+ * chat» and hangs up. With one room that could not misfire. With several,
+ * naming the first would end a live call the moment anybody joined the second.
  */
 
 export interface VoiceChannelView {
-  /** Whether this deployment has the voice tables at all — see `tableIsAbsent`. */
+  /** Whether this deployment has the voice tables at all. */
   supported: boolean;
   /** Whether the first read has come back, so an empty list is not drawn as «никого». */
   ready: boolean;
@@ -28,13 +34,11 @@ export interface VoiceChannelView {
    * The chat this answer was actually read for, and null when it was not read
    * at all — before the first read, and after one that failed.
    *
-   * Opening another conversation changes `chatId` without clearing what is
+   * Opening another conversation changes the chat without clearing what is
    * held, so for a moment this view is the **previous** chat's answer. That is
    * harmless where it only names a capsule, and dangerous where a decision is
    * made from it: «this group has no channel» read off another group's answer
-   * would end a call that nobody ended, and «this group has one» would offer an
-   * administrator a control that deletes a different conversation's channel.
-   * Both are decided against this field rather than against the argument.
+   * would end a call that nobody ended. Both are decided against this field.
    */
   chatId: string | null;
   channel: VoiceChannelSummary | null;
@@ -43,150 +47,33 @@ export interface VoiceChannelView {
   refresh: () => void;
 }
 
-const EMPTY: VoiceChannelView = {
-  supported: true,
-  ready: false,
-  chatId: null,
-  channel: null,
-  participantIds: [],
-  refresh: () => undefined,
-};
-
 /**
- * The two ways PostgREST says «that table does not exist here».
- *
- * This matters on the day the client half of slice 2 is deployed and the
- * migration is not, which is a state this feature is deliberately built to pass
- * through: the gateway, the reconciler and the migration are three separate
- * pieces of work. A deployment without the tables must show no voice row and no
- * error — not a red box on the information panel of every group in the product.
+ * @param channels every channel this chat has, from `useServerChannels`.
+ * @param callChannelId the room this client's call is in, or null.
  */
-function tableIsAbsent(code: string | null | undefined): boolean {
-  return code === "42P01" || code === "PGRST205" || code === "PGRST202";
-}
-
-interface ChannelRow {
-  id: string;
-  name: string;
-  participant_count: number | null;
-  max_participants: number | null;
-}
-
-export function useVoiceChannel(chatId: string | null, enabled: boolean): VoiceChannelView {
-  const supabase = createClient();
-  const [view, setView] = useState<VoiceChannelView>(EMPTY);
-  const [nonce, setNonce] = useState(0);
-
-  const refresh = useCallback(() => setNonce((value) => value + 1), []);
-
-  useEffect(() => {
-    if (!enabled || !chatId) {
-      setView(EMPTY);
-      return;
-    }
-    let cancelled = false;
-
-    void (async () => {
-      // `as any` on the table name: `voice_channels` is not in the generated
-      // database types, because those are generated from a schema this
-      // migration has not been applied to yet. The same cast is what
-      // `lib/achievements.ts` and `lib/support/userTickets.ts` already use for
-      // tables added after the last type generation.
-      const channelRead = await supabase
-        .from("voice_channels" as any)
-        .select("id,name,participant_count,max_participants")
-        .eq("chat_id", chatId)
-        .eq("archived", false)
-        .limit(1);
-      if (cancelled) return;
-
-      if (channelRead.error) {
-        setView({
-          ...EMPTY,
-          ready: true,
-          supported: !tableIsAbsent(channelRead.error.code),
-        });
-        return;
-      }
-
-      const row = (channelRead.data as unknown as ChannelRow[] | null)?.[0] ?? null;
-      if (!row) {
-        setView({ ...EMPTY, ready: true, chatId, refresh });
-        return;
-      }
-
-      const channel: VoiceChannelSummary = {
-        id: row.id,
-        name: row.name,
-        participantCount: Math.max(0, row.participant_count ?? 0),
-        maxParticipants: Math.max(1, row.max_participants ?? 10),
-      };
-
-      // Both are read, and where they disagree the **row's** counter wins.
-      //
-      // That is the one the gateway compares against `max_participants` before
-      // it mints (step 4 of section 3.4), so it is the number the decision will
-      // actually be made on. Showing the list's length instead would let the
-      // capsule say «9 из 10» and the join come back «В канале уже максимум
-      // участников» — the interface contradicting the server about the only
-      // thing the reader was using it for. Section 3.2 recomputes the counter
-      // from the list on every write, so a disagreement is a ghost the
-      // reconciler clears within its period.
-      const participantsRead = await supabase
-        .from("voice_participants" as any)
-        .select("user_id")
-        .eq("channel_id", row.id);
-      if (cancelled) return;
-
-      const ids = participantsRead.error
-        ? []
-        : ((participantsRead.data as unknown as { user_id: string }[] | null) ?? []).map((entry) => entry.user_id);
-
-      setView({
-        supported: true,
-        ready: true,
-        chatId,
-        channel,
-        participantIds: ids,
-        refresh,
-      });
-    })();
-
-    return () => {
-      cancelled = true;
+export function useVoiceChannel(
+  channels: ServerChannelsView,
+  callChannelId: string | null,
+): VoiceChannelView {
+  return useMemo(() => {
+    const room = voiceChannelForCall(channels.channels, callChannelId);
+    return {
+      supported: channels.supported,
+      ready: channels.ready,
+      chatId: channels.chatId,
+      channel: room
+        ? {
+            id: room.id,
+            name: room.name,
+            participantCount: Math.max(0, room.participantCount ?? 0),
+            // The same floor the single-channel read carried: a row without a
+            // limit is drawn as the column's own default rather than as a room
+            // that cannot hold anybody.
+            maxParticipants: Math.max(1, room.maxParticipants ?? 10),
+          }
+        : null,
+      participantIds: room ? [...(channels.participants.get(room.id) ?? [])] : [],
+      refresh: channels.refresh,
     };
-  }, [chatId, enabled, nonce, refresh, supabase]);
-
-  // Realtime, one channel per table (`realtimeTableChannels.ts:1-38`: a binding
-  // to a table outside the publication silently kills every other binding on
-  // its channel while still reporting SUBSCRIBED). Both tables are bound
-  // separately and either one changing re-reads both, which costs two small
-  // queries and removes every chance of the two views disagreeing.
-  const channelId = view.channel?.id ?? null;
-  useEffect(() => {
-    if (!enabled || !chatId || !view.supported) return;
-    const opened = subscribeByTable<(payload: unknown) => void, RealtimeChannel>(
-      supabase.realtime,
-      `voice:chat:${chatId}`,
-      [
-        { event: "*", schema: "public", table: "voice_channels", filter: `chat_id=eq.${chatId}`, handler: refresh },
-        ...(channelId
-          ? [
-              {
-                event: "*" as const,
-                schema: "public",
-                table: "voice_participants",
-                filter: `channel_id=eq.${channelId}`,
-                handler: refresh,
-              },
-            ]
-          : []),
-      ],
-    );
-    return () => {
-      for (const entry of opened) void supabase.removeChannel(entry.channel);
-    };
-  }, [chatId, channelId, enabled, refresh, supabase, view.supported]);
-
-  return view;
+  }, [callChannelId, channels]);
 }

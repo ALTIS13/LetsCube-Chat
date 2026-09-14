@@ -307,11 +307,13 @@ const veiled = [
   // gone. The binding on `group_invites` delivers, so the list was already
   // current every time it was pressed, and it stood beside a sentence saying
   // exactly that.
-  // 17 since 2026-09-14: «Завершить голосовой чат?» is a third confirmation on
-  // this card, and its «Отмена» carries the veil like the two beside it. Its
-  // «Завершить» does not — a danger button paints its own hover, exactly as
-  // «Покинуть» and «Удалить» already do.
-  ["components/chat/ChatInfoPanel.tsx", 17],
+  // 16 since 2026-09-14, and it went 15 -> 17 -> 16 within the day. «Начать
+  // голосовой чат», «Завершить голосовой чат» and the confirmation behind the
+  // second were the one-room mechanic: a group had a voice chat or it did not.
+  // A group has rooms now, made and removed in «Каналы» on the settings screen,
+  // so the card creates nothing and the three rows are gone. The one hover the
+  // day added and kept is elsewhere on the card.
+  ["components/chat/ChatInfoPanel.tsx", 16],
   // Two, down from eleven on 2026-09-11: the hover cluster, the per-message
   // context menu and its reaction pickers left the bubble for
   // `MessageActionLayer` and `MessageReactions`, which are counted below.

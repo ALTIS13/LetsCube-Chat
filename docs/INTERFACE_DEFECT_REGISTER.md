@@ -10630,7 +10630,7 @@ existing «these are the inputs» list while restoring the defect exactly.
 
 ---
 
-## D-191 `[~]` A group could have as many rooms as it liked, and the interface read one
+## D-191 `[x]` A group could have as many rooms as it liked, and the interface read one
 
 **Severity:** high, and it is the shape of the feature rather than a slip in it.
 Raised by the owner on 2026-09-14: «это должен быть не один канал голосовой куда
@@ -10707,5 +10707,88 @@ has gone, interleaving text and voice by position, collapsing «полно» and
 «слушать можно, говорить нельзя» into one refusal, and cutting a name in code
 units rather than characters.
 
-**Still open:** the rail that lists the channels and the surfaces that create
-them. The entry closes when a group can be given a second room without SQL.
+**The interface shipped the same day.** A **channel rail**: a vertical list of
+the group's channels beside the conversation, with the headings collapsing,
+`#` for text and a speaker for voice, the seat count where a room has a limit,
+and — under each voice room — **who is inside it, live, with their faces**. That
+last one is the part a server is recognisable by and the rail would be wrong
+without it. Clicking a text channel reads it; clicking a voice room joins it;
+clicking another room moves you, without leaving first. On a pane too narrow for
+a column it is a sheet behind a capsule under the header, decided by the
+measured pane width rather than by a breakpoint — at 768 a breakpoint would put
+a 224px column into a 336px pane.
+
+Rooms and headings are made, renamed, reordered and removed in «Каналы» on the
+group's settings screen, which draws nothing for anybody who is not an owner or
+an administrator. A room's two settings are its seat count and **who may
+speak** — `speak_role`, which was never decorative: the gateway computes
+`canPublish` from the member's role against it and mints the token with that
+claim. Somebody below the bar joins, hears everything and cannot be heard, and
+the dialog says exactly that rather than «нельзя войти».
+
+**Removing a room archives it rather than deleting it**, which is what lets the
+question promise that nothing is lost, and removing a heading keeps its rooms —
+the foreign key only ever nulled the heading.
+
+**Two hazards that only existed once there was more than one room**, both found
+by the people building it rather than by the brief:
+
+1. `voiceCallLostItsChannel` reads «this chat's room is not the one I am in» as
+   «an administrator ended it». With one room that question had no content; with
+   several it would have hung up on a live call the moment somebody else joined
+   a second room. The rule now names the **call's** room.
+2. The capsule under the header named `rooms[0]`. Beside a rail listing three
+   rooms, «Курилка · Никого нет · Присоединиться» is naming whichever came
+   first, which is not a fact about the group. It names a room when a call is
+   running in one, or when the group has exactly one, and otherwise says
+   nothing. The group card's row follows the same rule.
+
+**And the one-room mechanic was retired rather than left beside the new one.**
+«Начать голосовой чат» and «Завершить голосовой чат» on the group card, and the
+confirmation behind the second, are gone: a group had a voice chat or it did
+not, and two creators that differ in what they can make is worse than one. Six
+e2e tests that drove them went with them, replaced by three that assert they are
+gone — including one that watches the network and fails if the card ever writes
+`voice_channels` again at all.
+
+---
+
+## D-192 `[x]` Cutting a name to its limit could send bytes the database cannot store
+
+**Severity:** medium, and it reaches four user-facing fields. Found on
+2026-09-14 while wiring the channel surfaces: the agent building them noticed
+that `useTopics.createTopic` cut a name with `limitText`, which slices UTF-16
+code units, while the constraint behind it counts characters. Following it back
+found something worse than a short name.
+
+**Surface:** `artifacts/kub/src/lib/entityLimits.ts` — `limitText` was
+`value.slice(0, maxLength)`. Its callers are a group's name
+(`NewGroupModal.tsx:163`), a chat's name (`ChatInfoPanel.tsx:2431`), a folder's
+name (`FolderEditModal.tsx:246`) and a text channel's name
+(`useTopics.ts:99` and `:114`).
+
+**Defect, in two parts, both measured in node rather than argued:**
+
+1. **It can cut a surrogate pair in half.** `limitText("a" + "🧊".repeat(70), 64)`
+   ends in the lone high surrogate `d83e`. That string does not round-trip
+   through UTF-8 — `Buffer.from(cut, "utf8").toString("utf8") !== cut` — so what
+   leaves the client is a JSON body holding bytes Postgres cannot store as
+   written. The single leading letter is what puts the code-unit boundary in the
+   middle of a pair; a name of emoji alone happens to survive, which is why it
+   had not been noticed.
+2. **It gives fewer characters than the limit promises.** `char_length` counts
+   characters and `String.length` counts code units, so forty emoji were cut to
+   32 characters against a limit of 64 while the counter beside the field said
+   64.
+
+**Fixed** by cutting on `Array.from`, which iterates code points, so a pair is
+never split — the same cut `normalizeChannelName` and `normalizeReportNote`
+already make, and the reason is the same in all three: **agree with the
+database, which is the thing the number has to agree with.** Grapheme clusters
+are still counted as their code points, because that is also what
+`char_length` does.
+
+`tests/unit/entity-limits.test.mts` pins both halves, and the surrogate test
+asserts the **old** behaviour still reproduces before checking the new one — a
+test for a case that has quietly stopped occurring is a test that proves
+nothing. Three mutations turn it red, including the exact `slice` it replaced.
