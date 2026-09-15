@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { KubIcon } from "./KubIcon";
+import { isTopModalLayer, popModalLayer, pushModalLayer } from "@/lib/modalStack";
 import { cn } from "@/lib/utils";
 
 interface KubModalProps {
@@ -85,13 +86,33 @@ export function KubModal({
      * than this dialog is simply not this dialog's to answer.
      */
     const openedAt = performance.now();
+    /**
+     * And only the modal on top answers (2026-09-15).
+     *
+     * Every open modal adds this listener to `window`, so one Escape was
+     * answered by all of them. Below `md` the settings are a `KubModal` rather
+     * than a column, so a confirmation raised inside them closed itself *and*
+     * the settings screen underneath, in a single press. Found by a test that
+     * pressed Escape over «Удалить фото профиля?» and then looked for the
+     * control it had come from; the same test passed at 1440, where there is
+     * only one modal to answer.
+     *
+     * The stack is in `lib/modalStack.ts` — an ordering rule regresses
+     * silently, and one made inside a component that needs React cannot be
+     * reached by `node --test`.
+     */
+    const layer = pushModalLayer(`kub-modal:${Math.random().toString(36).slice(2)}`);
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (e.timeStamp <= openedAt) return;
+      if (!isTopModalLayer(layer)) return;
       onClose();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      popModalLayer(layer);
+    };
   }, [open, onClose]);
 
   if (!open) return null;

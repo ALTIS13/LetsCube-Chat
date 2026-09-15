@@ -54,6 +54,7 @@ import {
   validateUsername,
 } from "@/lib/profileValidation";
 import { requestAppConfirm } from "@/lib/appDialogs";
+import { avatarRemovalPrompt } from "@/lib/settingsPrompts";
 import { showActionFeedback } from "@/lib/actionFeedback";
 import { usePersonalBlocks, type BlockedPerson } from "@/hooks/usePersonalModeration";
 import {
@@ -392,6 +393,13 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
 
   const handleRemoveAvatar = async () => {
     if (!currentUser) return;
+    // D-133 (settings-profile C2). It removed the photograph on the press, in a
+    // header where the button sits beside the person's own name.
+    const confirmed = await requestAppConfirm({
+      ...avatarRemovalPrompt(),
+      icon: "delete",
+    });
+    if (!confirmed) return;
     setError(null);
     const { error: err } = await supabase
       .from("profiles")

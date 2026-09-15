@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { requestAppConfirm } from "@/lib/appDialogs";
+import { phoneRemovalPrompt } from "@/lib/settingsPrompts";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { KubBadge, KubButton, KubIcon } from "@/components/kub";
@@ -247,6 +249,14 @@ export function PhoneSection() {
   };
 
   const removePhone = async () => {
+    // D-133 (settings-profile D4). It reached the gateway on the press, and the
+    // verification it undoes is rate-limited on the way back: 120 seconds
+    // between sends, five an hour, ten a day.
+    const confirmed = await requestAppConfirm({
+      ...phoneRemovalPrompt(),
+      icon: "delete",
+    });
+    if (!confirmed) return;
     reset();
     setBusy("save");
     const { data, error: removeError } = await supabase.functions.invoke(

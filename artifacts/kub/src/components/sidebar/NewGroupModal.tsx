@@ -23,14 +23,28 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * People to invite, before anybody has typed a word.
+   *
+   * This used to answer an empty list until the field had something in it, so
+   * the step opened as a blank box with a disabled «Далее» under it and nothing
+   * on screen saying what to do. Combined with the rule below — that a group
+   * could not be created without at least one invitee — that is a dead end, and
+   * the owner of this deployment reached it: «я сейчас не могу создать группу
+   * как тех админ, чего уж говорить об обычных пользователях».
+   *
+   * `Profiles are viewable by everyone` is the live read policy, so there is no
+   * reason to show nothing: an unfiltered page of people is exactly what
+   * Telegram's own «New Group» opens with.
+   */
   useEffect(() => {
-    if (!query.trim()) { setResults([]); return; }
+    const term = query.trim();
     const t = setTimeout(async () => {
-      const { data } = await supabase.from("profiles").select("*")
-        .neq("id", userId ?? "")
-        .or(`full_name.ilike.%${query}%,username.ilike.%${query}%`).limit(20);
+      let request = supabase.from("profiles").select("*").neq("id", userId ?? "");
+      if (term) request = request.or(`full_name.ilike.%${term}%,username.ilike.%${term}%`);
+      const { data } = await request.order("full_name", { ascending: true }).limit(20);
       setResults((data as Profile[]) ?? []);
-    }, 300);
+    }, term ? 300 : 0);
     return () => clearTimeout(t);
   }, [query, userId, supabase]);
 
@@ -38,7 +52,11 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
     setSelected((s) => s.find((u) => u.id === user.id) ? s.filter((u) => u.id !== user.id) : [...s, user]);
 
   const handleCreate = async () => {
-    if (!userId || !groupName.trim() || selected.length === 0) return;
+    // No `selected.length === 0` here any more. A group with nobody else in it
+    // yet is a real thing — it is what Discord creates by default, and people
+    // can be invited afterwards from the group's own information screen, which
+    // is where the invite control already lives.
+    if (!userId || !groupName.trim()) return;
     if (groupName.trim().length > CHAT_NAME_MAX_LENGTH) {
       setError(`Название группы не должно быть длиннее ${CHAT_NAME_MAX_LENGTH} символов.`);
       return;
@@ -63,7 +81,16 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
     onRefetch?.();
     setLoading(false);
     onClose();
-    if (inviteResults.failed === 0) {
+    if (selected.length === 0) {
+      // Nothing was sent, so nothing is claimed. The sentence also says where
+      // to go next, because the invite control is on a screen the person has
+      // not opened yet.
+      showAppAlert(
+        "Группа создана. Пригласить участников можно в информации о группе.",
+        "Новая группа",
+        "checkCircle",
+      );
+    } else if (inviteResults.failed === 0) {
       showAppAlert("Группа создана. Приглашения отправлены.", "Новая группа", "checkCircle");
     } else if (inviteResults.migrationRequired) {
       showAppAlert(GROUP_INVITES_MIGRATION_REQUIRED, "Новая группа");
@@ -88,10 +115,11 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
         step === "pick" ? (
           <KubButton
             fullWidth
-            disabled={selected.length === 0}
             onClick={() => setStep("name")}
           >
-            Далее (приглашений: {selected.length})
+            {selected.length === 0
+              ? "Пропустить и назвать группу"
+              : `Далее (приглашений: ${selected.length})`}
           </KubButton>
         ) : (
           <KubButton
