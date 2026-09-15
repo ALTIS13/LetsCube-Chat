@@ -1,8 +1,10 @@
 import { KubBadge, KubIcon } from "@/components/kub";
 import type {
+  SupportOperator,
   SupportQueueFilter,
   SupportTicket,
 } from "@/lib/support/operatorApi";
+import { supportAssigneeLabel } from "@/lib/support/operatorRules";
 import { cn } from "@/lib/utils";
 import { FOCUS_RING, PRESS_FILLED, PRESS_SINK } from "@/lib/controlSurface";
 
@@ -52,6 +54,17 @@ interface SupportQueueProps {
   onFilterChange: (filter: SupportQueueFilter) => void;
   onSelect: (ticketId: string) => void;
   onReload: () => void;
+  /** Who is reading, so a row assigned to them says so. */
+  currentUserId: string;
+  /**
+   * The operator directory, for putting a name on «Назначено».
+   *
+   * Often empty, and legitimately: `support_operator_directory` refuses anybody
+   * without `support.transfer` or `support.manage` (production, 2026-09-15), and
+   * `SupportTab` turns that refusal into an empty list. The label falls back to
+   * «Назначено оператору» rather than inventing one.
+   */
+  operators: readonly SupportOperator[];
 }
 
 export function SupportQueue({
@@ -63,6 +76,8 @@ export function SupportQueue({
   onFilterChange,
   onSelect,
   onReload,
+  currentUserId,
+  operators,
 }: SupportQueueProps) {
   return (
     <section
@@ -169,8 +184,15 @@ export function SupportQueue({
                   >
                     {STATUS_LABEL[ticket.status]}
                   </KubBadge>
-                  <span className="truncate text-[12px] text-[color:var(--kub-muted)]">
-                    {ticket.assignedOperatorId ? "Назначено оператору" : "Общий пул"}
+                  <span
+                    data-testid="support-queue-assignee"
+                    className="truncate text-[12px] text-[color:var(--kub-muted)]"
+                  >
+                    {supportAssigneeLabel({
+                      assignedOperatorId: ticket.assignedOperatorId,
+                      currentUserId,
+                      operators,
+                    })}
                   </span>
                 </span>
               </button>

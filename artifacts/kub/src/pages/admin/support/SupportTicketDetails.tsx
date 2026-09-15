@@ -6,6 +6,15 @@ import type {
   SupportPermission,
   SupportTicketDetails as SupportTicketDetailsModel,
 } from "@/lib/support/operatorApi";
+import { PERMISSION_LABEL } from "@/lib/rolePermissions";
+import {
+  SUPPORT_ACTION_TEXT_BOUNDS,
+  supportActionBlocker,
+  supportActionFieldHint,
+  supportActionFieldLabel,
+  supportActorLabel,
+  supportReplyNotice,
+} from "@/lib/support/operatorRules";
 import { SupportConversation } from "./SupportConversation";
 
 export type SupportWorkflowAction =
@@ -66,17 +75,28 @@ export function SupportTicketDetails({
   const canReopen =
     (canReply || canManage) &&
     (ticket.status === "resolved" || ticket.status === "closed");
-  const replyAvailable =
-    canControl && !["closed", "spam"].includes(ticket.status);
+  // D-144 (A-63). Two branches used to answer four situations, so a **closed**
+  // ticket — closed by this very operator, who holds every permission — was
+  // told «Сначала примите обращение…». The rule and its four answers are in
+  // `lib/support/operatorRules.ts`; the permission is named from the catalogue
+  // rather than by a second name for it.
+  const replyNotice = supportReplyNotice({
+    canReply,
+    canControl,
+    status: ticket.status,
+    replyPermissionLabel: PERMISSION_LABEL["support.reply"] ?? "support.reply",
+  });
   const activeOperators = useMemo(
     () => operators.filter((operator) => operator.id !== currentUserId),
     [currentUserId, operators],
   );
 
+  const actionBlocker = action
+    ? supportActionBlocker({ action, comment, operatorId })
+    : null;
+
   const executeAction = async () => {
-    if (!action) return;
-    if (action === "transfer" && !operatorId) return;
-    if (comment.trim().length < 3) return;
+    if (!action || actionBlocker) return;
     const succeeded = await onAction(action, {
       comment,
       operatorId,
@@ -131,8 +151,7 @@ export function SupportTicketDetails({
         <SupportConversation
           conversationKey={ticket.id}
           messages={details.messages}
-          canReply={canReply}
-          replyAvailable={replyAvailable}
+          notice={replyNotice}
           busy={busyAction === "reply"}
           onReply={onReply}
         />
@@ -238,6 +257,7 @@ export function SupportTicketDetails({
                   <label className="mt-2 block">
                     <span className="text-xs text-[color:var(--kub-muted)]">Оператор</span>
                     <select
+                      data-testid="support-action-operator"
                       value={operatorId}
                       onChange={(event) => setOperatorId(event.target.value)}
                       className="mt-1 h-10 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2 text-sm text-[color:var(--kub-text)]"
@@ -254,15 +274,24 @@ export function SupportTicketDetails({
                 ) : null}
                 <label className="mt-2 block">
                   <span className="text-xs text-[color:var(--kub-muted)]">
-                    {action === "resolve" || action === "close" ? "Итог" : "Причина"}
+                    {supportActionFieldLabel(action)}
                   </span>
                   <textarea
+                    data-testid="support-action-comment"
                     value={comment}
                     onChange={(event) => setComment(event.target.value)}
                     rows={3}
-                    maxLength={4_000}
+                    /* Per action, not one number for five functions: transfer,
+                       return and escalate are refused above 1000 characters. */
+                    maxLength={SUPPORT_ACTION_TEXT_BOUNDS[action].max}
                     className="mt-1 w-full resize-y rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2 py-2 text-sm text-[color:var(--kub-text)]"
                   />
+                  <span
+                    data-testid="support-action-hint"
+                    className="mt-1 block text-[12px] leading-5 text-[color:var(--kub-muted)]"
+                  >
+                    {supportActionFieldHint(action)}
+                  </span>
                 </label>
                 {action === "return" ? (
                   <label className="mt-2 flex items-center gap-2 text-xs text-[color:var(--kub-text)]">
@@ -274,6 +303,14 @@ export function SupportTicketDetails({
                     Срочно нужен оператор
                   </label>
                 ) : null}
+                {actionBlocker ? (
+                  <p
+                    data-testid="support-action-blocker"
+                    className="mt-2 text-[12px] leading-5 text-[color:var(--kub-warn)]"
+                  >
+                    {actionBlocker}
+                  </p>
+                ) : null}
                 <div className="mt-3 flex justify-end gap-2">
                   <KubButton type="button" size="sm" variant="ghost" onClick={() => setAction(null)}>
                     Отмена
@@ -282,7 +319,7 @@ export function SupportTicketDetails({
                     type="button"
                     size="sm"
                     loading={busyAction === action}
-                    disabled={comment.trim().length < 3 || (action === "transfer" && !operatorId)}
+                    disabled={actionBlocker !== null}
                     onClick={() => void executeAction()}
                   >
                     Подтвердить
@@ -344,7 +381,18 @@ export function SupportTicketDetails({
               История действий
             </h3>
             <ol className="mt-2 space-y-2">
-              {details.events.map((event) => (
+              {details.events.map((event) => {
+                // D-144 (A-67). `actor_user_id` was read off the row all along
+                // and never drawn, so a transfer and a closure read as things
+                // that happened rather than things somebody did — on the one
+                // surface whose whole point is that it is a record.
+                const actor = supportActorLabel({
+                  actorUserId: event.actorUserId,
+                  currentUserId,
+                  operators,
+                  requesterUserId: ticket.requesterUserId,
+                });
+                return (
                 <li
                   key={event.id}
                   className="border-l-2 border-[color:var(--kub-rule)] pl-3 text-xs"
@@ -352,7 +400,8 @@ export function SupportTicketDetails({
                   <p className="font-semibold text-[color:var(--kub-text)]">
                     {eventLabel(event.eventType)}
                   </p>
-                  <p className="mt-0.5 text-[color:var(--kub-muted)]">
+                  <p data-testid="support-event-meta" className="mt-0.5 text-[color:var(--kub-muted)]">
+                    {actor ? `${actor} · ` : ""}
                     {formatDateTime(event.createdAt)}
                   </p>
                   {eventSummary(event.payload) ? (
@@ -361,7 +410,8 @@ export function SupportTicketDetails({
                     </p>
                   ) : null}
                 </li>
-              ))}
+                );
+              })}
             </ol>
           </section>
         </aside>

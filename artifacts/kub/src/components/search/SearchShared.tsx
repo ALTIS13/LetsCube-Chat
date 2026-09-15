@@ -26,6 +26,7 @@ import {
   type SearchEntityFilter,
 } from "@/lib/searchQuery";
 import { cn } from "@/lib/utils";
+import { LOCATION_RESULT_PATH, canOpenLocationResult } from "@/lib/searchResultAccess";
 import { useAppStore } from "@/store/app.store";
 import type { Profile } from "@/types/database";
 
@@ -509,7 +510,7 @@ export function useSearchResultActions({ onAfterOpen }: { onAfterOpen?: () => vo
   const currentUser = useAppStore((s) => s.currentUser);
   const setMobileSection = useAppStore((s) => s.setMobileSection);
   const setSearchQuery = useAppStore((s) => s.setSearchQuery);
-  const { isStaff } = useRoleAccess();
+  const { isStaff, isAdmin, checking: roleChecking } = useRoleAccess();
   const { openPrivateChat, loading: openingChat } = useCreateChat();
   const [previewProfile, setPreviewProfile] = useState<PreviewProfile | null>(null);
 
@@ -630,15 +631,27 @@ export function useSearchResultActions({ onAfterOpen }: { onAfterOpen?: () => vo
       }
 
       if (result.resultType === "location") {
-        if (isStaff) {
-          setLocation("/admin/locations");
+        // D-139, the second half of the same rule. The list already drops
+        // what cannot be opened (`openableSearchResults`); this stops a row
+        // that was drawn before the role read finished from acting. The gate
+        // was `isStaff` and the route is `isAdmin`, so a manager used to be
+        // navigated and silently redirected back to the dashboard.
+        if (canOpenLocationResult({ isStaff, isAdmin, checking: roleChecking })) {
+          setLocation(LOCATION_RESULT_PATH);
           closeAfterOpen();
-        } else {
-          showAppAlert("Локация недоступна для вашего профиля.", "Нет доступа");
         }
       }
     },
-    [closeAfterOpen, isStaff, openBotFromSearch, setLocation, setMobileSection, setSearchQuery],
+    [
+      closeAfterOpen,
+      isAdmin,
+      isStaff,
+      openBotFromSearch,
+      roleChecking,
+      setLocation,
+      setMobileSection,
+      setSearchQuery,
+    ],
   );
 
   const openPreviewChat = useCallback(async () => {

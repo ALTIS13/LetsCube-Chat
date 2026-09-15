@@ -210,7 +210,7 @@ export function LocationsTab() {
       setError("Выберите пользователя и локацию.");
       return;
     }
-    await runAction(
+    const ok = await runAction(
       "assign-member",
       () => dynamicRoles.available && selectedDynamicRole
         ? supabase.rpc("location_member_assign_role", {
@@ -227,6 +227,13 @@ export function LocationsTab() {
           }),
       "Назначение сохранено.",
     );
+    // D-142 (A-29). The three selects were cleared whatever came back, so a
+    // refused assignment — a person already in the location, a primary
+    // administrator who is not one, a read that timed out — had to be entered
+    // again from nothing, with the error message on screen saying only that it
+    // had failed. `createLocation` a few lines up already kept its fields on a
+    // failure; this is the same rule, not a new one.
+    if (!ok) return;
     setAssignUserId("");
     setAssignPrimaryAdminId("");
     setAssignRole("staff");

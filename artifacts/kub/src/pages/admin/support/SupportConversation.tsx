@@ -1,14 +1,21 @@
 import { useState } from "react";
 import { KubButton, KubIcon, KubNotice } from "@/components/kub";
 import type { SupportTicketMessage } from "@/lib/support/operatorApi";
+import type { SupportReplyNotice } from "@/lib/support/operatorRules";
 import { useConversationScroll } from "@/lib/support/useConversationScroll";
 import { cn } from "@/lib/utils";
 
 interface SupportConversationProps {
   conversationKey: string;
   messages: SupportTicketMessage[];
-  canReply: boolean;
-  replyAvailable: boolean;
+  /**
+   * Why there is no composer, or null when there is one.
+   *
+   * Two booleans stood here — `canReply` and `replyAvailable` — and between
+   * them they could not say that a ticket was closed, which is the commonest
+   * reason of the four. `supportReplyNotice` decides; this component draws.
+   */
+  notice: SupportReplyNotice | null;
   busy: boolean;
   onReply: (body: string) => Promise<boolean>;
 }
@@ -16,8 +23,7 @@ interface SupportConversationProps {
 export function SupportConversation({
   conversationKey,
   messages,
-  canReply,
-  replyAvailable,
+  notice,
   busy,
   onReply,
 }: SupportConversationProps) {
@@ -106,14 +112,19 @@ export function SupportConversation({
       </div>
 
       <div className="flex-shrink-0 border-t border-[color:var(--kub-border-color)] p-3">
-        {!canReply ? (
-          <p className="rounded-lg bg-[var(--kub-inset)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
-            Для ответа требуется право «Ответы поддержки».
-          </p>
-        ) : !replyAvailable ? (
-          <KubNotice tone="warn" className="text-xs">
-            Сначала примите обращение или откройте назначенное вам обращение.
-          </KubNotice>
+        {notice ? (
+          notice.tone === "muted" ? (
+            <p
+              data-testid="support-reply-notice"
+              className="rounded-lg bg-[var(--kub-inset)] px-3 py-2 text-xs text-[color:var(--kub-muted)]"
+            >
+              {notice.text}
+            </p>
+          ) : (
+            <KubNotice tone="warn" className="text-xs" data-testid="support-reply-notice">
+              {notice.text}
+            </KubNotice>
+          )
         ) : (
           <div className="flex items-end gap-2">
             <label className="min-w-0 flex-1">

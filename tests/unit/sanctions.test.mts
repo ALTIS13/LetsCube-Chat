@@ -10,6 +10,7 @@ import {
   activeSanctionFilter,
   isSanctionActive,
   sanctionLiftPrompt,
+  sanctionNoticeTarget,
 } from "../../artifacts/kub/src/lib/sanctions.ts";
 
 const NOW = new Date("2026-09-14T09:00:00.000Z");
@@ -76,4 +77,35 @@ test("a person with no name is still described, not left blank", () => {
     assert.match(prompt.description, /этого пользователя/);
     assert.doesNotMatch(prompt.description, /для\s+будет/);
   }
+});
+
+// Where a sanction notice leads (D-139).
+//
+// `ban_issued` opened `/admin`. `AdminLayout` sends anybody who is neither
+// staff nor a support operator back to `/`, and the notice's only recipient is
+// never either: `public._notify_bans_after_insert`, read off production on
+// 2026-09-15, posts it to `new.user_id` and to nobody else. The server had
+// already decided this — it builds a push `url` for `chat_added`, `mute_issued`
+// and the task kinds, and leaves it null for `ban_issued`.
+
+test("a ban leads nowhere, whatever is in its payload", () => {
+  assert.equal(sanctionNoticeTarget("ban_issued", null), null);
+  // A chat id in the payload must not turn it into a chat notice: a ban is
+  // account-wide and the `bans` trigger does not write one.
+  assert.equal(sanctionNoticeTarget("ban_issued", "chat-1"), null);
+});
+
+test("a mute still opens the chat it was issued in", () => {
+  assert.deepEqual(sanctionNoticeTarget("mute_issued", "chat-1"), { kind: "chat", chatId: "chat-1" });
+});
+
+test("a mute without a chat leads nowhere rather than somewhere arbitrary", () => {
+  assert.equal(sanctionNoticeTarget("mute_issued", null), null);
+  assert.equal(sanctionNoticeTarget("mute_issued", "   "), null);
+  assert.equal(sanctionNoticeTarget("mute_issued", undefined), null);
+});
+
+test("no other kind is claimed by this rule", () => {
+  assert.equal(sanctionNoticeTarget("chat_added", "chat-1"), null);
+  assert.equal(sanctionNoticeTarget("task_assigned", "chat-1"), null);
 });

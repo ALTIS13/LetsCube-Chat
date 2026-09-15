@@ -28,12 +28,12 @@ import {
 import type { GroupInviteStatus } from "@/lib/groupInvites";
 import type { Notification } from "@/types/database";
 import { parseMessageNotificationProjection } from "@/lib/messageNotificationProjection";
+import { sanctionNoticeTarget } from "@/lib/sanctions";
 
 type NotificationTarget =
   | { kind: "chat"; chatId: string }
   | { kind: "message"; chatId: string; messageId: string }
   | { kind: "tasks"; taskId?: string }
-  | { kind: "admin" }
   | { kind: "route"; route: string }
   | { kind: "group_invite"; status: GroupInviteStatus; chatId?: string }
   | null;
@@ -227,12 +227,6 @@ export function NotificationBell() {
     if (target?.kind === "tasks") {
       setOpen(false);
       setLocation(target.taskId ? `/tasks?task=${encodeURIComponent(target.taskId)}` : "/tasks");
-      return;
-    }
-
-    if (target?.kind === "admin") {
-      setOpen(false);
-      setLocation("/admin");
       return;
     }
 
@@ -1022,18 +1016,22 @@ function navigateTarget(
       const taskId = payloadString(item.payload, "task_id");
       return { kind: "tasks", taskId };
     }
-    case "chat_added":
-    case "mute_issued": {
+    case "chat_added": {
       const chatId = payloadString(item.payload, "chat_id");
       return chatId ? { kind: "chat", chatId } : null;
     }
+    case "mute_issued":
+    case "ban_issued":
+      // D-139. `ban_issued` opened `/admin`, which its only recipient —
+      // the banned person, measured on production — cannot reach, so the
+      // press bounced back to `/`. `sanctionNoticeTarget` carries the
+      // measurement and keeps the mute's chat.
+      return sanctionNoticeTarget(item.kind, payloadString(item.payload, "chat_id"));
     case "group_invite": {
       const payload = parseGroupInvitePayload(item.payload);
       const status = payload.invite_id ? localStatuses[payload.invite_id] ?? payload.status ?? "pending" : payload.status ?? "pending";
       return { kind: "group_invite", status, chatId: payload.chat_id };
     }
-    case "ban_issued":
-      return { kind: "admin" };
     default: {
       if (item.kind.includes("message")) {
         const projection = parseMessageNotificationProjection(item.payload);

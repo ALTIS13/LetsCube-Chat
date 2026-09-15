@@ -28,6 +28,7 @@ import {
   typeFilterToDataType,
 } from "@/lib/searchQuery";
 import { cn } from "@/lib/utils";
+import { openableSearchResults } from "@/lib/searchResultAccess";
 import { useAppStore } from "@/store/app.store";
 import {
   SEARCH_FILTERS_UNAVAILABLE,
@@ -44,7 +45,7 @@ export function SidebarSearchResults({ query }: { query: string }) {
   const setSearchQuery = useAppStore((s) => s.setSearchQuery);
   const [activeIndex, setActiveIndex] = useState(0);
   const { canAccessTasks } = useTaskAccessGate({ enabled: trimmedQuery.length > 0 });
-  const { isStaff } = useRoleAccess();
+  const { isStaff, isAdmin, checking: roleChecking } = useRoleAccess();
   const {
     activateResult,
     openingChat,
@@ -112,7 +113,17 @@ export function SidebarSearchResults({ query }: { query: string }) {
     return mergeSearchResults(localFirst, remoteResults, 32);
   }, [commandResults, localChatResults, parsed.filters.from, parsed.filters.has.length, parsed.filters.type, search.results]);
 
-  const grouped = useMemo(() => groupSearchResults(results), [results]);
+  // D-139. A location is readable by every member of it, so search finds
+  // one for people who cannot open `/admin/locations` — a row that led to
+  // «Нет доступа» for an ordinary account and to a silent redirect for a
+  // manager. The rule is a copy of `AdminLayout`'s own gate; see
+  // `lib/searchResultAccess.ts`.
+  const openable = useMemo(
+    () => openableSearchResults(results, { isStaff, isAdmin, checking: roleChecking }),
+    [isAdmin, isStaff, results, roleChecking],
+  );
+
+  const grouped = useMemo(() => groupSearchResults(openable), [openable]);
 
   // Only while nothing is filtered. Once a type is chosen the set is narrowed
   // to it, so every other count would read 0 — which is unknown stated as

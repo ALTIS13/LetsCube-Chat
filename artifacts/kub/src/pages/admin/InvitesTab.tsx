@@ -20,7 +20,15 @@ import {
   registrationModePrompt,
 } from "@/lib/adminPrompts";
 import { InfoHint } from "@/components/settings/InfoHint";
-import { getRoleLabel, mapRolesPermissionsError } from "@/lib/rolePermissions";
+import {
+  INVITE_CRITICAL_ROLE_PERMISSION,
+  grantableGlobalRoles,
+  inviteCriticalRoleRefusal,
+  resolveLocationRoleId,
+  withheldGlobalRoles,
+  withheldGlobalRolesNote,
+} from "@/lib/inviteRoleGrants";
+import { PERMISSION_LABEL, getRoleLabel, mapRolesPermissionsError } from "@/lib/rolePermissions";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { DynamicRole, RegistrationInviteListRow, RegistrationInviteModeRow } from "@/types/database";
@@ -91,9 +99,28 @@ export function InvitesTab() {
     void loadInviteMode();
   }, [loadInviteMode]);
 
+  // D-142 (A-37). `registration_invite_create` refuses `owner` and `tech_admin`
+  // to anybody without `system.manage`, so those two are not put on the list to
+  // be refused later. The rule, and the production function body it copies, are
+  // in `lib/inviteRoleGrants.ts`; `systemAccess` is the same permission read the
+  // registration-mode switch above already asks for.
+  const grantAccess = useMemo(
+    () => ({ permissions: systemAccess.permissionKeys, checking: systemAccess.checking }),
+    [systemAccess.checking, systemAccess.permissionKeys],
+  );
   const globalRoles = useMemo(
-    () => roles.roles.filter((role) => role.scope === "global" && role.is_active),
-    [roles.roles],
+    () => grantableGlobalRoles(roles.roles, grantAccess),
+    [grantAccess, roles.roles],
+  );
+  const withheldRolesNote = useMemo(
+    () =>
+      grantAccess.checking
+        ? null
+        : withheldGlobalRolesNote(
+            withheldGlobalRoles(roles.roles, grantAccess).map((role) => getRoleLabel(role)),
+            PERMISSION_LABEL[INVITE_CRITICAL_ROLE_PERMISSION] ?? INVITE_CRITICAL_ROLE_PERMISSION,
+          ),
+    [grantAccess, roles.roles],
   );
   const locationRoles = useMemo(
     () => roles.roles.filter((role) => role.scope === "location" && role.is_active),
@@ -115,16 +142,27 @@ export function InvitesTab() {
       .sort((a, b) => getProfileName(a.profile).localeCompare(getProfileName(b.profile), "ru-RU"));
   }, [routing.members, selectedLocation]);
 
+  // D-142 (A-36). This used to list `locationRoleId` among its own dependencies
+  // and refill it whenever it was empty, so «Автоматически» — the empty value —
+  // snapped back to a role the instant it was chosen. The option is gone (see
+  // `resolveLocationRoleId` for why it never named a different outcome) and the
+  // decision is a rule rather than an effect that fights the person.
   useEffect(() => {
     if (!locationId) {
       setLocationRoleId("");
       setPrimaryAdminId("");
       return;
     }
-    if (locationRoleId) return;
-    const staffRole = locationRoles.find((role) => role.key === "location_staff") ?? locationRoles[0] ?? null;
-    setLocationRoleId(staffRole?.id ?? "");
-  }, [locationId, locationRoleId, locationRoles]);
+    setLocationRoleId((current) => resolveLocationRoleId(current, locationRoles));
+  }, [locationId, locationRoles]);
+
+  // A role withheld while the form was open must not stay selected: the select
+  // no longer lists it, and `registration_invite_create` would refuse it.
+  useEffect(() => {
+    if (!globalRoleId) return;
+    if (globalRoles.some((role) => role.id === globalRoleId)) return;
+    setGlobalRoleId("");
+  }, [globalRoleId, globalRoles]);
 
   useEffect(() => {
     if (selectedLocationRole?.key === "location_staff") return;
@@ -259,7 +297,13 @@ export function InvitesTab() {
         )}
         {!systemAccess.checking && !systemAccess.hasPermission("system.manage") && (
           <div className="kub-raise rounded-xl px-3 py-2 text-xs text-[color:var(--kub-muted)]">
-            Переключать режим регистрации может только пользователь с правом «Управление системой».
+            {/* The permission's own label, not a second name for it. «Управление
+                системой» stood here and appears nowhere in the catalogue: an
+                administrator looking for it in «Роли и права» reads «Менять
+                технические настройки». Same defect as D-144's A-63, same fix. */}
+            {`Переключать режим регистрации может только тот, кому разрешено «${
+              PERMISSION_LABEL["system.manage"] ?? "system.manage"
+            }».`}
           </div>
         )}
       </KubPanel>
@@ -357,6 +401,14 @@ export function InvitesTab() {
                 </option>
               ))}
             </select>
+            {withheldRolesNote && (
+              <span
+                data-testid="invite-global-role-withheld"
+                className="text-[12px] leading-5 text-[color:var(--kub-muted)]"
+              >
+                {withheldRolesNote}
+              </span>
+            )}
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-xs font-medium uppercase tracking-wide text-[color:var(--kub-muted)]">
@@ -384,14 +436,23 @@ export function InvitesTab() {
               className={selectClassName}
               value={locationRoleId}
               onChange={(event) => setLocationRoleId(event.target.value)}
-              disabled={!locationId}
+              disabled={!locationId || locationRoles.length === 0}
             >
-              <option value="">Автоматически</option>
-              {locationRoles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {getRoleLabel(role)}
-                </option>
-              ))}
+              {/* With no roles to choose from — the roles feature unavailable —
+                  the select would otherwise render empty, which reads as broken.
+                  It says what the server will do instead: measured on production,
+                  `registration_invite_create` resolves an absent role to
+                  `location_staff`. This is the one place an empty value stays,
+                  and nothing can snap it back because there is nothing else. */}
+              {locationRoles.length === 0 ? (
+                <option value="">По умолчанию — сотрудник локации</option>
+              ) : (
+                locationRoles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {getRoleLabel(role)}
+                  </option>
+                ))
+              )}
             </select>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -600,7 +661,17 @@ function mapInviteError(error: unknown): string {
   if (text.includes("invite_global_role_invalid")) return "Выбранная глобальная роль недоступна.";
   if (text.includes("invite_location_invalid")) return "Выбранная локация недоступна.";
   if (text.includes("invite_location_role_invalid")) return "Выбранная роль в локации недоступна.";
-  if (text.includes("invite_critical_role_forbidden")) return "Критические роли может выдавать только тех. администратор.";
+  // D-142 (A-37). This named a role — «только тех. администратор» — and the
+  // database names a permission. Measured on production: the function asks
+  // `has_permission(auth.uid(), 'system.manage')`, which a global «Администратор»
+  // can also hold. The roles are no longer offered to somebody who lacks it, so
+  // reaching this line means the permission went away between the render and the
+  // press; the sentence has to be true about the server either way.
+  if (text.includes("invite_critical_role_forbidden")) {
+    return inviteCriticalRoleRefusal(
+      PERMISSION_LABEL[INVITE_CRITICAL_ROLE_PERMISSION] ?? INVITE_CRITICAL_ROLE_PERMISSION,
+    );
+  }
   if (text.includes("permission") || text.includes("42501")) return "Недостаточно прав для управления инвайтами.";
   // D-132 (A-34). `mapRolesPermissionsError` belongs to a shared module and
   // can still answer «требуют обновления базы данных» here; the screen refuses

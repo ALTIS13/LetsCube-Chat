@@ -78,3 +78,37 @@ export function sanctionLiftPrompt(
       cancelLabel: "Отмена",
     };
 }
+
+/** Where a sanction notice in the notification centre leads, if anywhere. */
+export type SanctionNoticeTarget = { readonly kind: "chat"; readonly chatId: string } | null;
+
+/**
+ * What opens when somebody presses their own ban or mute notice (D-139).
+ *
+ * `ban_issued` used to open `/admin`, which nobody who receives one can reach:
+ * `AdminLayout` redirects anybody who is neither staff nor a support operator
+ * straight back to `/`, so the press bounced. And it is not a near miss for a
+ * staff member either — measured on production on 2026-09-15,
+ * `public._notify_bans_after_insert` posts the notice to `new.user_id` and to
+ * nobody else, so its only recipient is ever the banned person. Two such rows
+ * exist today.
+ *
+ * The server had already decided this. Its own push payload builds a `url` for
+ * `chat_added`, `mute_issued`, the task kinds — and for `ban_issued` leaves it
+ * null, because «Вы заблокированы» is the whole message and there is nothing to
+ * open. The client invented a destination the server never claimed.
+ *
+ * A mute is different and keeps its behaviour: it is issued in a chat, and that
+ * chat is where the person finds out what it means. Without a `chat_id` in the
+ * payload it too leads nowhere rather than somewhere arbitrary.
+ */
+export function sanctionNoticeTarget(
+  kind: string,
+  chatId: string | null | undefined,
+): SanctionNoticeTarget {
+  if (kind === "mute_issued") {
+    const chat = (chatId ?? "").trim();
+    return chat ? { kind: "chat", chatId: chat } : null;
+  }
+  return null;
+}

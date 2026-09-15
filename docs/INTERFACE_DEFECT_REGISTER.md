@@ -8272,7 +8272,34 @@ the step.
 
 **Audit rows:** settings-profile D3 (with D2); top-10 item 8.
 
-## D-139 `[ ]` A location found in search, and a ban notification, lead to a refusal or a bounce
+**Verified against the shipped code on 2026-09-15 and still open — three of its
+four complaints stand, the fourth is overstated.** Left for its own batch: the
+fix is a redesign of the code step on a different surface from the administration
+work this batch covers, and it needs its own frames.
+
+Standing, read off `PhoneSection.tsx`:
+
+- `placeholder="1234"` is still on the code field, still exactly as long as a
+  real code.
+- The badge is `{storedPhone && (verified ? «Подтверждён» : «Не подтверждён»)}`
+  with no reference to `stage` or to `dirty`. While a different number is being
+  entered, «Подтверждён» is on screen, and the line that would have said which
+  number it refers to — «Сохранённый номер: …» — is hidden precisely then, by
+  `{storedPhone && !dirty && …}`. So the badge floats free and reads as a claim
+  about the number in the field.
+- «Удалить» is `{storedPhone && …}` and sits in the same flex row as
+  «Подтвердить», «Отмена» and the resend button, during the code step.
+
+Overstated: «whether a code went in» *is* said — `sendCode` sets «Код отправлен
+на номер +7…». What is true is narrower and still worth fixing: `verifyCode`
+calls `reset()` first, so a wrong code replaces that line with an error and the
+number the code went to is gone from the screen.
+
+One thing to settle before building the proposal's four digit cells with
+auto-submit: the gateway limits attempts, so an auto-submitted typo spends one.
+Telegram's behaviour is the proposal; the cost of it here has not been measured.
+
+## D-139 `[x]` A location found in search, and a ban notification, lead to a refusal or a bounce
 
 **Severity:** medium. Found by the work-surfaces audit from the code.
 
@@ -8292,6 +8319,66 @@ location's own page (D-123) instead of the admin tab. Stop routing a ban notice 
 `/admin`.
 
 **Audit rows:** work-surfaces E-08, E-09.
+
+**Fixed 2026-09-15. Both halves were real, and the first one was worse than the
+entry knew.**
+
+*The location result.* `public.locations` carries one read policy, measured
+read-only on production that day:
+
+    is_admin(auth.uid())
+    or exists (select 1 from location_members lm
+                where lm.location_id = locations.id and lm.user_id = auth.uid())
+
+— so every member of a location finds their own location by name, and the rows
+really are offered outside the administration. The entry describes the refusal an
+ordinary account got. It does not describe what a **manager** got, which is
+worse: the gate in `SearchShared` was `isStaff`, and `/admin/locations` is mounted
+behind `isAdmin` (`AdminLayout`, the `adminOnly` tab flag and the route's own
+`{isAdmin ? <LocationsTab /> : <Redirect to="/admin" />}`). A manager is `isStaff`
+and not `isAdmin`, so the press navigated, redirected to the dashboard, and said
+nothing at all.
+
+The rule is therefore a copy of the *route's* gate rather than of a neighbouring
+idea of «staff» — the same lesson `lib/serverRoleAccess.ts` records for the RLS
+predicates, one layer up. `lib/searchResultAccess.ts` carries it, and the row is
+dropped where the list is assembled rather than only refused where it is pressed:
+a row nobody can open should not be taking up a place and a keyboard stop.
+`activateResult` keeps the same check as the second half, so a list built before
+the role read finished cannot act for a frame.
+
+The proposal's other suggestion — open the location's own page instead — is D-123,
+still open and measured on 2026-09-15 to have nothing to call. Until it exists,
+the honest answer is not to offer a row that leads nowhere.
+
+*The ban notice.* `ban_issued` opened `/admin`, which its recipient cannot reach.
+And it is not a near miss for a staff member either: measured on production,
+`public._notify_bans_after_insert` posts the notice to `new.user_id` and to
+nobody else, so the only person who ever receives one is the banned person. Two
+such rows exist today.
+
+The server had already decided this. Its push payload builds a `url` for
+`chat_added`, `mute_issued` and the task kinds, and for `ban_issued` leaves it
+null — «Вы заблокированы» is the whole message, and the person is already looking
+at the «Вы заблокированы» overlay. The client had invented a destination the
+server never claimed. `sanctionNoticeTarget` in `lib/sanctions.ts` now answers for
+both sanction kinds: a mute keeps the chat it was issued in, a ban leads nowhere,
+and neither leads somewhere arbitrary when the payload has no chat. The
+`{ kind: "admin" }` target and its handler are deleted rather than left unused.
+
+**Proof.** Seven mutations turn `tests/unit/search-result-access.test.mts` and
+`tests/unit/sanctions.test.mts` red: gating the row on `isStaff` as it shipped (3
+failures), acting while the roles are being read (1), drawing the row and refusing
+it on the press (1), and letting a ban notice lead into the administration again
+(1). Each file restored byte-identically, verified by SHA-256, and green
+afterwards.
+
+**Not verified in a browser.** Both halves are pinned as rules and wired, and
+neither is photographed: reaching the location row needs a signed-in account that
+is a member of a location and not an administrator, and reaching the ban notice
+needs an account that is banned. This track does not photograph production
+screens, and no fixture for either exists yet. What is proved is the rule and the
+wiring, not the rendered pixels.
 
 ## D-140 `[x]` In «Блокировки» a failed load reads as "no bans", and every realtime reload blanks the tab
 
@@ -8362,7 +8449,7 @@ typed" early return — stayed green, and the answer was to delete that line
 rather than write a test that pretends to reach it: both branches below it
 already decline, so it was a guard no test could turn red.
 
-## D-142 `[ ]` Administration forms offer what they then refuse, and drop what was entered
+## D-142 `[x]` Administration forms offer what they then refuse, and drop what was entered
 
 **Severity:** medium. Found by the work-surfaces audit from the code; the invitation form
 is rendered (frames `admin-owner-*-10-invites-*`).
@@ -8385,7 +8472,91 @@ choice or remove it; keep the form's values when the call fails.
 
 **Audit rows:** work-surfaces A-29, A-36, A-37.
 
-## D-143 `[ ]` On a phone the support workspace can leave the screen and the address disagreeing, and a failed ticket load has no way back
+**Fixed 2026-09-15**, and the entry's own account of the server was wrong on the
+part that mattered most.
+
+*A-37, and the measurement that changed the fix.* The entry says «Критические
+роли может выдавать только тех. администратор», which is also the sentence the
+screen has been showing on the refusal. `public.registration_invite_create`,
+read off production read-only that day, says something else:
+
+    if v_global_role.key in ('owner', 'tech_admin')
+       and not public.has_permission(auth.uid(), 'system.manage') then
+      raise exception 'invite_critical_role_forbidden' using errcode = '42501';
+
+A **permission**, not a role. `public.has_permission` (read the same day) admits
+`owner` and `tech_admin` unconditionally, **and** anybody holding a global role
+whose `role_permissions` carry the key, **and** the legacy `profiles.role`
+column through `_legacy_role_has_permission`. A gate built from the entry's
+sentence would have hidden the two roles from a global «Администратор» granted
+`system.manage`, whom the database accepts. The rule, the function body and this
+reasoning are in `artifacts/kub/src/lib/inviteRoleGrants.ts`; the screen already
+asked for exactly that permission for the switch above the form, so nothing new
+is fetched. The refusal message now names the permission as the catalogue names
+it, and so does the note under the select: «Роли «Владелец» и «Тех.
+администратор» может выдать только тот, кому разрешено «Менять технические
+настройки».» Nothing critical is offered while the permission read is in flight,
+and a role withheld while the form is open is cleared from the select rather
+than left selected.
+
+*One more of the same defect, found while fixing this one and fixed with it.*
+The note under the registration switch read «…с правом «Управление системой»».
+No such right exists under that name: `PERMISSION_LABEL` calls it «Менять
+технические настройки», and `rolePermissions.ts` records that the old
+noun-phrase labels were replaced deliberately. An administrator looking that
+name up in «Роли и права» would not find it. Exactly D-144's A-63, one screen
+over.
+
+*A-36, and why «Автоматически» was removed rather than repaired.* The effect
+listed `locationRoleId` among its own dependencies and refilled every empty
+value, so the option snapped back the instant it was chosen. But the option
+never named a different outcome: `registration_invite_create` resolves an absent
+`p_location_role_id` to `location_staff` itself — the same role the preselect was
+already showing. What it did cost was «Основной администратор», which is enabled
+only while the chosen role is `location_staff`: with the empty value chosen, the
+screen also stopped sending `p_primary_admin_id`, although the server under that
+same branch calls `_location_assert_admin_member` and would have accepted one.
+An option that changes nothing, cannot be kept and switches off a working field
+is not a choice. The decision moved to `resolveLocationRoleId`, so it cannot go
+back to fighting a deliberate one.
+
+Removing it opened a small hole that had to be closed with it: with the roles
+feature unavailable, `locationRoles` is empty and the select would have rendered
+with no options at all, which reads as broken. It now carries one disabled
+option, «По умолчанию — сотрудник локации», which is what the function does.
+
+*A-29.* `assignMember` cleared its three selects after `runAction` whatever came
+back. `createLocation`, twenty lines above it in the same file, already kept its
+fields on a failure; this is that rule, not a new one.
+
+**Proof.** Five mutations turn `tests/unit/invite-role-grants.test.mts` red:
+offering the critical roles to everybody (4 failures), taking the register at
+its word and gating on `tech_admin` alone (4), offering them while the
+permission read is in flight (1), the old refill behaviour (1), and taking the
+first location role instead of `location_staff` (1). Five more turn the browser
+tests red — `tests/e2e/admin-invite-form-rules.spec.ts` and
+`tests/e2e/admin-location-assignment.spec.ts` — including putting
+«Автоматически» back, leaving the select empty when there are no location roles,
+and clearing the assignment form whatever the server said. Each file restored
+byte-identically, verified by SHA-256, and green again afterwards.
+
+**One mutation stayed green, and it is recorded rather than papered over.**
+Restoring the *old effect* — `if (locationRoleId) return;` with the value among
+its own dependencies — leaves every test passing, because with «Автоматически»
+gone the empty value is unreachable from the interface. The load-bearing half is
+the option's removal, which is red. The effect rewrite is defence, and the one
+input that would tell the two apart — a location role archived while the form is
+open — cannot be produced through this fixture, so it is untested by anything but
+the unit test on the rule itself.
+
+**Frames** (fictional data, mocked backend, no production screen):
+`output/admin-invites/withheld-roles-{dark,light}-chromium-{desktop-1440,mobile-390}.png`
+and `output/admin-locations/refused-assignment-{dark,light}-chromium-{desktop-1440,mobile-390}.png`.
+The note's grammar was fixed from the frame rather than from a test: it first
+read «"Владелец" и "Тех. администратор" может выдать…», where the roles parse as
+the subject.
+
+## D-143 `[~]` On a phone the support workspace can leave the screen and the address disagreeing, and a failed ticket load has no way back
 
 **Severity:** medium, for support operators on phones. Found by the work-surfaces audit;
 the stacked headers are rendered (frame `admin-owner-phone-17-support-ticket-a.png`), the
@@ -8405,7 +8576,54 @@ header; the details become that ticket's info page.
 
 **Audit rows:** work-surfaces A-70.
 
-## D-144 `[ ]` Support ticket actions hide their rules and misstate the ticket
+**Two of the three halves fixed 2026-09-15; the stacked headers are not, and the
+entry stays open for them.**
+
+*The address.* The back arrow the proposal asks for already existed — `md:hidden`
+in the ticket's own header, «Назад к очереди» — so what was left was the part the
+entry marked «inferred, not reproduced». It reproduces. `selectedTicketId` was
+state seeded once from `window.location.search` by a `useState` initialiser, and
+nothing read the address again, so a browser or Android back press moved the URL
+and left the ticket on screen. The address is the only copy now:
+`useSearch()` from wouter 3.9 subscribes to `location.search`, which
+`useLocation` does not — it reports the path. `selectTicket` and `closeDetails`
+are navigations and nothing else.
+
+Whatever belonged to the ticket that was open is now dropped when the open ticket
+changes, by any of the three routes rather than only the two that went through
+the component. The candidate list matters most of the three: it is another
+person's name, telephone and address, looked up for one ticket, and a back press
+used to carry it to the next.
+
+That rearrangement paid for a wart it did not create. The reopen path lands on a
+*different* ticket, and its receipt — «Обращение снова открыто.» — was written and
+then wiped in the same tick by the navigation that followed, so nobody had ever
+seen it. It survives the move it caused now.
+
+*The failed load.* `loadDetails` failing left `details` null, and the pane fell
+through to «Выберите обращение» — an invitation to choose, after a choice had
+been made and failed. On a phone the queue is hidden the moment a ticket is
+selected, so there was nothing on the screen to press. There is now a real
+failure state with «Повторить» and «Назад к очереди».
+
+*Still open:* five header bands above an open ticket on a phone. Measured on the
+390 frame below: the administration's title row, its tab strip, the «Поддержка»
+row, the notice band and the ticket's own header. The proposal's answer —
+`/admin/support/:ticket` as a genuinely pushed page — is a routing change with
+its own contracts and is not this batch.
+
+**Proof.** Two mutations turn `tests/e2e/support-workspace-rules.spec.ts` red:
+reading the address once at mount (1 failure — back leaves the ticket on screen
+with the URL changed), and letting a failed load fall back to «Выберите
+обращение» (1). Both restored byte-identically, verified by SHA-256, and green
+again afterwards. The forward button is asserted as well as the back one,
+because a rule read in one direction is half a rule.
+
+**Frames:** `output/support-workspace/unavailable-{dark,light}-chromium-{desktop-1440,mobile-390}.png`.
+Fictional data, mocked backend, injected session; no production screen was
+opened.
+
+## D-144 `[x]` Support ticket actions hide their rules and misstate the ticket
 
 **Severity:** low to medium, for support operators. Found by the work-surfaces audit from
 the code; the action grid is rendered (frames `admin-owner-*-17-support-ticket-*`).
@@ -8432,6 +8650,91 @@ closed ticket, say that it is closed; use the permission's real name; put the ac
 every event and the operator's name on the row.
 
 **Audit rows:** work-surfaces A-60, A-63, A-65, A-67, A-69.
+
+**Fixed 2026-09-15, and a sixth defect came out of measuring the fifth.**
+
+Every bound was read off the function the press actually calls rather than
+copied from the component, and that is how this turned up: the editor's textarea
+carried `maxLength={4_000}` for all five actions, and only two of the five
+functions accept that much.
+
+    support_ticket_transfer        length(v_comment) not between 3 and 1000
+    support_ticket_return_to_pool  length(v_reason)  not between 3 and 1000
+    support_ticket_escalate        length(v_reason)  not between 3 and 1000
+    support_ticket_resolve         length(v_summary) not between 3 and 4000
+    support_ticket_close           length(v_summary) not between 3 and 4000
+
+So 1500 characters of reason for a transfer could be typed in full and came back
+as `invalid_support_transfer`. Not in the entry; it exists because one number was
+written once for a screen that calls five different functions. The ceiling is per
+action now.
+
+*A-65.* The minimum was right and silent. Both bounds are on screen before
+anything is typed — «От 3 до 1000 символов. Текст попадёт в историю обращения.» —
+and «Подтвердить» carries the reason it cannot be pressed, in the order the
+editor is filled: the colleague first, because the select is above the text.
+
+*A-69.* Checked against `support_settings_update_v2` on production before being
+copied, and the predicate turned out to be **right**: closed message 3..500,
+tickets 1..50 and 1..500 with the day not below the quarter-hour, messages 1..200
+and 1..5000 with the same relation. Silence was the whole defect. Worth recording
+that the older `support_settings_update`, still present on the deployment, takes
+no message limits at all — a mirror built from that one would have refused two
+fields the product really does save. The client calls the `_v2`, which is why the
+function was read by the name in `operatorApi.ts` rather than by the obvious one.
+One extra branch was added rather than mirrored: `Number("")` from an emptied
+number input is `NaN`, and `NaN < 1` is false, so a bare comparison let it
+through to `invalid_support_settings`.
+
+*A-63.* Two booleans answered four situations, so a **closed** ticket — closed by
+this very operator, holding every permission — was told «Сначала примите
+обращение или откройте назначенное вам обращение». It says it is closed now, with
+«Открыть заново» beside it, and spam says spam. The permission is named as the
+catalogue names it: «Отвечать в обращениях», not «Ответы поддержки», which exists
+nowhere an administrator could look it up.
+
+*A-67 and A-60.* `actor_user_id` was read off every event row all along and never
+drawn, on the one surface whose whole point is that it is a record. It now says
+«Вы», the colleague's name, «Клиент» for the requester, or nothing at all for a
+`ticket_created` from the guest form — a name is not invented for an event nobody
+caused. A queue row says «Назначено вам» or «Назначено: Мария Соколова».
+
+The fallback in both is «Назначено оператору» / «Оператор», and it is the
+ordinary case rather than an edge: `support_operator_directory` refuses anybody
+without `support.transfer` or `support.manage` (production, 2026-09-15), and
+`SupportTab` turns that refusal into an empty list — so a plain operator holding
+only `support.view` and `support.reply` cannot resolve a colleague's name at all.
+That is the one thing the browser test could only reach because the fixture takes
+the permission set as an argument; no QA account on this deployment is shaped
+like that operator.
+
+The rules are in `artifacts/kub/src/lib/support/operatorRules.ts` — a plain
+module with no React, so `node --test` reaches every branch. The same boundary
+lesson as `lib/listReadState.ts`: a rule that can only be exercised by mounting a
+page is not tested, and moving it is cheaper than building a harness around it.
+
+**Proof.** `tests/unit/support-operator-rules.test.mts` is turned red by eight
+mutations: one ceiling for five functions (3 failures), no reason for the
+disabled button (3), the closed branch removed (1), the permission under its old
+name (2), the settings blocker silenced (2), a bare numeric comparison (1), the
+queue row unnamed (2), the history actor unnamed (2). Six more turn
+`tests/e2e/support-workspace-rules.spec.ts` red, each for its own named reason.
+Every file restored byte-identically, verified by SHA-256, and green afterwards.
+
+One test failure was a finding rather than a harness fault and is kept here
+because it would recur: the first version of the blocker built «Опишите
+причина» by lower-casing the field's label. `toLocaleLowerCase` is not a
+declension, and a sentence assembled by folding case is only right by accident.
+The accusative is written out.
+
+**Frames:** `output/support-workspace/{queue-assignees,transfer-editor,closed-ticket,settings-blocker}-{dark,light}-chromium-{desktop-1440,mobile-390}.png`.
+Fictional data, mocked backend, injected session; no production screen was
+opened.
+
+**Noticed from the frames and deliberately not fixed here:** pressing «Передать»
+opens the editor below the fold of its own column, and nothing scrolls it into
+view, so on a 1440×900 desktop «Подтвердить» is off screen at the moment it
+appears. The frame is taken with it scrolled to. It belongs to its own entry.
 
 ## D-145 `[x]` Bot settings save silently, need the secret retyped to save the webhook, and the list ignores the bot's picture
 

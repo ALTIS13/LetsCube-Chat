@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Redirect, useLocation } from "wouter";
+import { Redirect, useLocation, useSearch } from "wouter";
 import { KubButton, KubGlassLayer, KubIcon, KubSwitch } from "@/components/kub";
 import { usePermissionAccess } from "@/hooks/useRole";
 import {
@@ -36,6 +36,7 @@ import {
 import { useAppStore } from "@/store/app.store";
 import { requestAppConfirm } from "@/lib/appDialogs";
 import { supportIntakeClosurePrompt } from "@/lib/adminPrompts";
+import { supportSettingsBlocker } from "@/lib/support/operatorRules";
 import { SupportQueue } from "./support/SupportQueue";
 import {
   SupportTicketDetails,
@@ -67,9 +68,13 @@ export function SupportTab() {
   const access = usePermissionAccess(SUPPORT_PERMISSIONS);
   const [filter, setFilter] = useState<SupportQueueFilter>("pool");
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
-  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(() =>
-    readTicketFromLocation(),
-  );
+  // D-143. The open ticket used to be state seeded once from the address, and
+  // nothing read the address again — so the browser's back button, and Android's,
+  // moved the URL while the screen stayed on the ticket it was already showing.
+  // The address is the only copy now. `useSearch` subscribes to `location.search`
+  // (wouter 3.9), which `useLocation` alone does not: it reports the path.
+  const search = useSearch();
+  const selectedTicketId = useMemo(() => readTicketFromSearch(search), [search]);
   const [details, setDetails] = useState<SupportTicketDetailsModel | null>(null);
   const [operators, setOperators] = useState<SupportOperator[]>([]);
   const [customerCandidates, setCustomerCandidates] = useState<SupportCustomerCandidate[]>([]);
@@ -186,19 +191,32 @@ export function SupportTab() {
   }, [canView, loadDetails, loadQueue, selectedTicketId]);
 
   const selectTicket = useCallback((ticketId: string) => {
-    setSelectedTicketId(ticketId);
-    setCustomerCandidates([]);
-    setNotice(null);
-    setActionError(null);
     setLocation(`/admin/support?ticket=${encodeURIComponent(ticketId)}`);
   }, [setLocation]);
 
   const closeDetails = useCallback(() => {
-    setSelectedTicketId(null);
-    setDetails(null);
-    setCustomerCandidates([]);
     setLocation("/admin/support");
   }, [setLocation]);
+
+  /**
+   * Whatever belonged to the ticket that was open, dropped when the open ticket
+   * changes — by a press on a queue row, by «Назад к очереди», or by the back
+   * button, which used to do none of this because it went around the component.
+   * The candidate list matters most: it is another person's name, telephone and
+   * address, looked up for one ticket and shown beside whichever was next.
+   *
+   * A notice the operator has not read yet survives the move it caused: the
+   * reopen path lands on a different ticket than the one acted on, and its
+   * receipt — «Обращение снова открыто.» — used to be written and then wiped in
+   * the same tick by the navigation, so nobody ever saw it.
+   */
+  const pendingNoticeRef = useRef<string | null>(null);
+  useEffect(() => {
+    setCustomerCandidates([]);
+    setActionError(null);
+    setNotice(pendingNoticeRef.current);
+    pendingNoticeRef.current = null;
+  }, [selectedTicketId]);
 
   const refreshAfterAction = useCallback(async (ticketId: string) => {
     await Promise.all([
@@ -240,11 +258,12 @@ export function SupportTab() {
         setNotice("Обращение закрыто.");
       } else {
         const reopenedId = await reopenSupportTicket(ticketId);
-        setNotice("Обращение снова открыто.");
         if (reopenedId && reopenedId !== ticketId) {
+          pendingNoticeRef.current = "Обращение снова открыто.";
           selectTicket(reopenedId);
           return true;
         }
+        setNotice("Обращение снова открыто.");
       }
       await refreshAfterAction(ticketId);
       return true;
@@ -424,12 +443,14 @@ export function SupportTab() {
               error={queueError}
               onFilterChange={(next) => {
                 setFilter(next);
-                setSelectedTicketId(null);
                 setDetails(null);
-                setLocation("/admin/support");
+                // The address closes the ticket; nothing else holds it now.
+                closeDetails();
               }}
               onSelect={selectTicket}
               onReload={() => void loadQueue()}
+              currentUserId={userId}
+              operators={operators}
             />
           </div>
 
@@ -452,6 +473,45 @@ export function SupportTab() {
                 onAction={runWorkflowAction}
                 onLookupCustomer={lookupCustomer}
               />
+            ) : selectedTicketId ? (
+              // D-143. A ticket that will not load used to land here, on the
+              // «Выберите обращение» placeholder — and on a phone the queue is
+              // hidden the moment a ticket is selected, so there was nothing on
+              // the screen to press and no way back short of the browser's own
+              // back button. An invitation to choose is also the wrong sentence:
+              // a choice had been made and it failed.
+              <div
+                data-testid="support-ticket-unavailable"
+                className="flex flex-1 flex-col items-center justify-center px-6 text-center"
+              >
+                <KubIcon name="warning" size={34} tone="danger" />
+                <p className="mt-4 text-sm font-semibold text-[color:var(--kub-text)]">
+                  Обращение не открылось
+                </p>
+                <p className="mt-1 max-w-sm text-xs text-[color:var(--kub-muted)]">
+                  Оно могло быть передано другому оператору или закрыто. Попробуйте ещё раз
+                  или вернитесь к очереди.
+                </p>
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                  <KubButton
+                    type="button"
+                    size="sm"
+                    leftIcon={<KubIcon name="rotate" size={14} />}
+                    onClick={() => void loadDetails(selectedTicketId)}
+                  >
+                    Повторить
+                  </KubButton>
+                  <KubButton
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    leftIcon={<KubIcon name="back" size={14} />}
+                    onClick={closeDetails}
+                  >
+                    Назад к очереди
+                  </KubButton>
+                </div>
+              </div>
             ) : (
               <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
                 <KubIcon name="chatBubble" size={34} tone="muted" />
@@ -611,6 +671,7 @@ function SupportSettingsDialog({
   onClose,
   onSave,
 }: SupportSettingsDialogProps) {
+  const blocker = supportSettingsBlocker(value);
   return (
     <div
       role="dialog"
@@ -725,6 +786,19 @@ function SupportSettingsDialog({
             </div>
           </div>
         </div>
+        {/* D-144 (A-69). The same five conditions decided this button before,
+            written inline and saying nothing; `supportSettingsBlocker` is that
+            predicate checked against `support_settings_update_v2` on production
+            and given words. The gate turned out to be right — the silence was
+            the whole defect. */}
+        {blocker ? (
+          <p
+            data-testid="support-settings-blocker"
+            className="mt-4 text-xs text-[color:var(--kub-warn)]"
+          >
+            {blocker}
+          </p>
+        ) : null}
         <div className="mt-5 flex justify-end gap-2">
           <KubButton type="button" variant="ghost" onClick={onClose}>
             Отмена
@@ -732,13 +806,7 @@ function SupportSettingsDialog({
           <KubButton
             type="button"
             loading={busy}
-            disabled={
-              value.closedMessage.trim().length < 3 ||
-              value.ticketLimit15m < 1 ||
-              value.ticketLimitDay < value.ticketLimit15m ||
-              value.messageLimit5m < 1 ||
-              value.messageLimitDay < value.messageLimit5m
-            }
+            disabled={blocker !== null}
             onClick={() => void onSave()}
           >
             Сохранить
@@ -749,9 +817,8 @@ function SupportSettingsDialog({
   );
 }
 
-function readTicketFromLocation(): string | null {
-  if (typeof window === "undefined") return null;
-  const value = new URLSearchParams(window.location.search).get("ticket");
+function readTicketFromSearch(search: string): string | null {
+  const value = new URLSearchParams(search).get("ticket");
   return value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
     ? value
     : null;
