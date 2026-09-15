@@ -385,7 +385,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     void refetchTopics();
   }, [refreshServerChannels, refetchTopics]);
   const railOffered =
-    voiceEnabled && railIsOffered(serverChannels.channels, serverChannels.categories, channelsUnreadable);
+    voiceEnabled && railIsOffered(serverChannels.channels, serverChannels.categories, channelsUnreadable, canManageTopics);
   const voiceDirectory = useMemo(() => {
     const names = new Map<string, string>();
     const faces = new Map<string, string | null>();

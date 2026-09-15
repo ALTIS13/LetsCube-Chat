@@ -455,3 +455,28 @@ test("a full room and a room you may not speak in are different answers", () => 
 test("somebody who is not a member of the group joins nothing", () => {
   assert.equal(voiceJoinVerdict({ channel: voiceChannelFromRow(voiceRow("v1", "n")), role: null }), "not-a-member");
 });
+
+/**
+ * A group that has no channels yet still offers a way to make one.
+ *
+ * Reported by the owner on 2026-09-15: «не вижу в уже созданной группе такой
+ * опции». Every group made before channels existed has nothing but its general
+ * conversation, so the rail was not offered — and the rail is where the «+»
+ * lives. The only other door was a pencil in the information panel's header,
+ * three screens away. A feature reachable only from a place nobody finds is not
+ * reachable.
+ */
+test("somebody who can shape the channels is offered the rail to shape them in", () => {
+  const onlyGeneral = [
+    { id: GENERAL_CHANNEL_ID, kind: "text", name: "Общий", isGeneral: true, position: 0, categoryId: null },
+  ] as Parameters<typeof railIsOffered>[0];
+
+  // A member of such a group still gets the strip: one row is not a rail.
+  assert.equal(railIsOffered(onlyGeneral, [], false, false), false);
+  // An administrator gets the rail, because that is where a channel is made.
+  assert.equal(railIsOffered(onlyGeneral, [], false, true), true);
+
+  // And the older answers are unchanged: a failed read still keeps the rail on
+  // screen for everybody, and a heading on its own still counts.
+  assert.equal(railIsOffered(onlyGeneral, [], true, false), true);
+});

@@ -199,8 +199,25 @@ export function railIsOffered(
    * an answer nobody could get are not the same answer.
    */
   failed = false,
+  /**
+   * True when this person may create channels here.
+   *
+   * Without this a group that has no channels yet offers **no way to make its
+   * first one**. The rail is where the «+» lives, the rail appears only once
+   * something besides the conversation exists, and so an administrator opening
+   * a group made before channels existed sees a topic strip and nothing else.
+   * The only other door is a pencil in the information panel's header, three
+   * screens away, which the owner of this deployment reported not finding:
+   * «не вижу в уже созданной группе такой опции».
+   *
+   * Discord shows the channel list to everybody, always. This is the narrow
+   * version of that: the rail for somebody who can shape it, the strip for
+   * somebody who would only be looking at one row.
+   */
+  canManage = false,
 ): boolean {
   if (failed) return true;
+  if (canManage) return true;
   if (categories.length > 0) return true;
   return channels.some(
     (channel) => channel.archived !== true && !(channel.kind === "text" && channel.isGeneral === true),

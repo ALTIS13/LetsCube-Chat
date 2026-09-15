@@ -335,7 +335,7 @@ test("a refused channel read keeps the rail standing and says so", () => {
   assert.match(window, /const channelsUnreadable = serverChannels\.failed \|\| listReadFailed\(topicsView\)/u);
   assert.match(
     window,
-    /railIsOffered\(serverChannels\.channels, serverChannels\.categories, channelsUnreadable\)/u,
+    /railIsOffered\(serverChannels\.channels, serverChannels\.categories, channelsUnreadable, canManageTopics\)/u,
   );
   assert.match(window, /failed: channelsUnreadable/u);
   // Both reads are asked again together, or a retry repairs half the screen.

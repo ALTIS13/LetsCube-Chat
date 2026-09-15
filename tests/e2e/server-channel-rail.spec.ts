@@ -98,6 +98,15 @@ interface Shape {
    * answers and the interface used to give the same one for both.
    */
   roomsFail?: boolean;
+  /**
+   * A group with nothing in it at all: no headings, no topics, no rooms.
+   *
+   * This is every group made before channels existed, and it is the shape the
+   * owner reported on 2026-09-15 — «не вижу в уже созданной группе такой
+   * опции». `forum: false` is not the same thing: it still answers with one
+   * room, which is enough to earn a rail on its own.
+   */
+  bare?: boolean;
 }
 
 /**
@@ -106,7 +115,8 @@ interface Shape {
  * a table to the fixture backend without touching a file other specs share.
  */
 function tablesFor(shape: Shape) {
-  const forum = shape.forum !== false;
+  const bare = shape.bare === true;
+  const forum = !bare && shape.forum !== false;
   const roomsFail = shape.roomsFail === true;
   return (call: { resource: string; method: string }) => {
     if (call.method !== "GET") return undefined;
@@ -114,6 +124,7 @@ function tablesFor(shape: Shape) {
     if (call.resource === "topics") return { status: 200, body: forum ? TOPICS : [] };
     if (call.resource === "voice_channels") {
       if (roomsFail) return { status: 500, body: { message: "upstream said no" } };
+      if (bare) return { status: 200, body: [] };
       return { status: 200, body: forum ? ROOMS : ROOMS.filter((room) => room.id === ROOM_LOBBY) };
     }
     if (call.resource === "voice_participants") return { status: 200, body: OCCUPANTS };
@@ -327,6 +338,24 @@ test.describe("the channel rail", () => {
     expect(askedForTheGeneralRow, "the conversation was fetched as a topic of its own").toBe(false);
   });
 
+  test("a group with nothing in it still offers its owner a way to make a channel", async ({ page }, testInfo) => {
+    test.skip(!paneIsWide(testInfo), "the shape is not what is being checked");
+    // Every group made before channels existed: no headings, no topics, no
+    // rooms. Reported by the owner — «не вижу в уже созданной группе такой
+    // опции» — and this is why: the rail is where the «+» lives, and the rail
+    // was offered only once something besides the conversation existed. The
+    // only other door was a pencil in the information panel's header.
+    await openGroup(page, { bare: true, role: "owner" });
+
+    await expect(page.getByTestId("channel-rail")).toBeVisible();
+    await expect(page.getByTestId("channel-rail-manage").first()).toBeVisible();
+    // And the conversation is still there to read while it is the only thing in
+    // the group — the rail invents that row, so an empty rail never happens.
+    await expect(
+      page.locator('[data-testid="channel-rail-text"][data-channel-id="general"]'),
+    ).toBeVisible();
+  });
+
   test("a plain group with a room gets a rail, and the conversation is in it", async ({ page }, testInfo) => {
     test.skip(!paneIsWide(testInfo), "the shape is not what is being checked");
     await openGroup(page, { forum: false });
@@ -513,4 +542,13 @@ test.describe("the channel rail", () => {
     // control reaches it, which is the whole of the seam between the two.
     await expect(page.getByTestId("channel-manage-dialog")).toBeVisible();
   });
+});
+
+test("a bare group's rail, photographed for the report that asked for it", async ({ page }, testInfo) => {
+  test.skip(!paneIsWide(testInfo), "the column is what is being photographed");
+  await openGroup(page, { bare: true, role: "owner", theme: "dark" });
+  await expect(page.getByTestId("channel-rail")).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `output/bare-group-rail/rail-${testInfo.project.name}.png`, fullPage: false });
 });
