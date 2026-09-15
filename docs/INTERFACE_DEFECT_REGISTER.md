@@ -12165,7 +12165,7 @@ transcode keeps the minute untouched. D-176's bound and backoff are unchanged.
 
 ---
 
-## D-206 `[ ]` Five media e2e specs were already red, three of them from one day's wave
+## D-206 `[x]` Five media e2e specs were already red, three of them from one day's wave
 
 **Severity:** medium for the suite's honesty; no product defect is claimed for
 three of the five.
@@ -12311,3 +12311,79 @@ today found already closed, after D-113, D-114 and D-122. A commit that fixes on
 defect often closes a neighbouring entry nobody thought to re-read, and the
 register says so itself: a commit naming an entry is not evidence it closed it —
 and the converse holds too.
+
+---
+
+## D-206 — closed 2026-09-15, and one of its two suspicions was wrong
+
+All five triaged against the shipped code. **57 passed / 6 skipped / 0 failed**
+across three projects, where 1440 alone had been 5 failed / 13 passed.
+
+The «Оригинал» strict-mode violation was a **test** defect, and the entry was
+right to record it as unconfirmed — because confirming it took a measurement.
+With the word temporarily changed, the page reports `display` and box for both
+spans: at 1440 one is `display:none` width 0 and the other `inline` width 38,
+and at 360 they swap. Exactly one spelling is drawn at any width; `getByText`
+matched both only because it does not filter by visibility.
+
+**Behind that violation sat an older breakage the entry did not suspect.**
+Further down the same helper the spec clicked «Открыть оригинал» and waited for
+a new tab. D-147 removed both, and D-097 then made the control name the file.
+The spec has therefore been red since **D-147**, not since D-097 — the second
+span only moved where it fell over. A strict-mode failure is a poor diagnosis
+precisely because it stops the test before the real disagreement.
+
+---
+
+## D-209 `[ ]` «SD» does not reach the photograph: the 1280 cap never binds
+
+**Severity:** a product question rather than a defect, and it is open. Recorded
+because the composition had never been written down.
+
+**Measured from the shipped constants**, 2026-09-15:
+
+| source | SD as shipped | what a 1280 long side would give | `balanced`, the old default |
+| --- | --- | --- | --- |
+| 4:3 | **1440×1080** | 1280×960 | 1920×1440 |
+| 3:2 | 1620×1080 | 1280×853 | 1920×1280 |
+| 16:9 | **1920×1080** | 1280×720 | **1920×1080 — identical** |
+| square | 1280×1280 | 1280×1280 | 1920×1920 |
+
+The long-side cap binds only below an aspect ratio of 1280/1080 = 1.185, which
+is narrower than 4:3. So for every ordinary photograph the D-116 floor of 1080
+decides, SD carries between 1.27× and 2.25× the pixels it would at 1280, and a
+16:9 photograph goes at pixel-for-pixel what the old default gave it.
+
+**Why nobody saw it:** 1280 and 1080 had never appeared in one call.
+`photo-send-quality.test.mts` pins the profile, `photo-encoding.test.mts` pins
+the floor and passes 1920 everywhere, and D-174's byte proof compares HD to SD
+relatively rather than against a number.
+
+The composition is now written down in `tests/unit/photo-send-size.test.mts`,
+**as a record rather than an endorsement**, naming the two places that change if
+the answer is «SD means 1280 on the long side». The product was not touched.
+
+---
+
+## D-210 `[ ]` Three more specs that cannot run and do not say so
+
+**Severity:** low individually; the pattern is the point. Same class as the two
+sign-in specs D-206 fixed.
+
+- `media-viewer-actions.spec.ts:441` looks for `getByText("Громкость", { exact: true })`
+  and no such exact text exists any more — the audio rework left «Громкость
+  прослушивания» and a `title="Громкость"` on a control. Probably another stale
+  test after that rework, **but it was not run down**, because settling it needs
+  the audio-settings entries.
+- `media-viewer-zoom.spec.ts` needs `VITE_PUBLIC_PREVIEW_FIXTURE=1`
+  (`App.tsx:496`). Without it `/__qa/public-preview` answers `index.html` and the
+  spec fails eight times without ever saying the flag is missing.
+- **`pnpm run format:check` does not pass on HEAD**, on roughly twenty files
+  nobody in this session touched. So biome is not currently a gate, and any
+  report that claims it as one is wrong.
+
+**The shape worth fixing once:** a spec whose prerequisite is absent should
+refuse loudly, naming the prerequisite. `tests/e2e/helpers/backend-identity.ts`
+now does that for the backend a spec is pointed at; the same is needed for a
+missing feature flag, and `public-home-routing.spec.ts` already contains a
+working example of failing loudly rather than skipping.
