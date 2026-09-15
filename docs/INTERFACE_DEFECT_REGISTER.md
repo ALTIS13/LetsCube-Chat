@@ -12228,3 +12228,54 @@ own path and therefore the one that cannot drift.
 **Not fixed now**, deliberately: there is nothing left to back-fill, so any fix
 would ship untested end to end. A warning naming this entry is in the script's
 header instead, where the next person to run it will actually read it.
+
+---
+
+## D-208 `[ ]` Every photograph, voice message, video and avatar is readable by anyone with the address
+
+**Severity:** highest of anything open. Real user media, live, no credentials
+needed.
+
+**Surface:** the `media` bucket. `storage.buckets` says `public = true`, and it
+holds **all 771 objects** — every photograph, voice message, video and avatar in
+the product. `chat-media`, the private bucket with a size cap and a MIME
+allowlist, holds **zero**, because `stagedAttachments.ts:92` sets
+`CHAT_MEDIA_BUCKET = "media"`.
+
+**Measured, and calibrated in both directions:** an anonymous request with no
+token for one real object returned **200 and 5,666 bytes of `image/webp`**; an
+invented path in the same bucket returned **400**. So the probe distinguishes,
+and the bytes really do come out.
+
+**The ten RLS policies on `storage.objects` are correct** — the audit proves
+them so, measured as `authenticated` rather than as the table's owner. They
+govern the authenticated route. The bytes leave by the public one.
+
+**Why it is worse than «somebody needs the URL».** Preview paths are
+*derivable*: `variants/messages/{chat_id}/{message_id}/{kind}` is four leaf
+names from two ids any member of the chat already holds. The original's path
+carries a random UUID, and its own previews undo that. There is also no
+revocation of any kind — leaving a chat, deleting the message and being banned
+all change nothing.
+
+**What is NOT the defect:** the missing MIME allowlist. Sending an arbitrary
+file is a shipped feature (`attachSheet.ts:179` sets `accept: null`,
+`messages.type` carries `'file'`), and `chat-media`'s allowlist is itself
+missing `video/quicktime` — what an iPhone sends — and `audio/wav`. Copying it
+across would refuse iPhone video and every file attachment. See the audit's
+appendix; F-5 collapses into this entry.
+
+**The fix, in an order that cannot be reversed**, with the counts measured:
+the client stops using `getPublicUrl` at its seven call sites and resolves from
+the path columns (293 of 313 media messages already have one); signed URLs get a
+lifetime and a refresh, which is the real work; the 20 legacy `media_url`-only
+messages and the 16 avatar URLs are back-filled; **and only then** the bucket
+becomes private. Any other order takes every image in the product off the screen
+until the client catches up.
+
+Signed URLs are proved to work here: a signature returns 200 and a tampered
+token returns 400.
+
+**Waiting on the owner**, because the last step is outward-facing and breaks
+things until the first has shipped. The first three steps are safe to build at
+any time.

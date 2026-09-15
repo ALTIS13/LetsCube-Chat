@@ -839,3 +839,88 @@ Named plainly, so the gaps are not mistaken for clean results.
 
 F-1 is the largest finding and the one not to rush: read B-2 first, because the
 product currently depends on the behaviour that makes it a finding.
+
+---
+
+# Appendix, 2026-09-15 — two corrections and a plan that can be executed
+
+Added after the audit, by measuring the things a fix would depend on. Nothing
+here changed the database or the product.
+
+## Correction 1 — F-5's missing MIME allowlist is not a defect, and adding one would break a shipped feature
+
+F-5 reads the absence of `allowed_mime_types` on `media` as a hole, and points
+at the APK, the EXE and the PDF as evidence that «any account can host arbitrary
+files». The first half is right about the *public* part. The second half is
+wrong about the allowlist, and acting on it would break the product.
+
+**Sending an arbitrary file is a feature.** `lib/attachSheet.ts:179` returns
+`accept: null` for the document source, `messages.type` carries `'file'`, and
+`messagePreview.ts:15` draws «Файл» for it. So those three objects are ordinary
+attachments, not abuse.
+
+**And `chat-media`'s allowlist — the one F-7 calls «configured properly» — is
+itself incomplete for what this product accepts.** Measured against what the
+public bucket actually holds:
+
+| declared type | objects | in `chat-media`'s allowlist |
+| --- | --- | --- |
+| `image/webp`, `image/png`, `image/jpeg`, `image/gif` | 628 | yes |
+| `video/mp4`, `video/webm` | 63 | yes |
+| `audio/webm` | 67 | yes |
+| **`video/quicktime`** | 4 | **no** |
+| **`audio/wav`** | 5 | **no** |
+| `application/pdf` | 1 | yes |
+| `application/vnd.android.package-archive`, `application/x-msdownload`, `application/octet-stream` | 3 | no — and they are legitimate file attachments |
+
+`video/quicktime` is what an iPhone sends. Copying that allowlist onto `media`
+would refuse iPhone video uploads and every file attachment, which is a worse
+outcome than the finding it was meant to close.
+
+**So F-5 collapses into F-1.** The problem is that the bucket is public, not
+that it accepts what the product sends.
+
+## Correction 2 — the object count a fix has to carry is smaller than it looks
+
+| what | count |
+| --- | --- |
+| messages with media | 313 |
+| …that already carry `media_path` | **293** |
+| …that carry only a legacy `media_url` | **20** |
+| profiles with an avatar URL | 10 |
+| chats with an avatar URL | 6 |
+
+So 293 of 313 can be addressed from the path columns today. Only twenty need
+their path recovered, and it is recoverable — a public URL contains the path it
+was built from.
+
+## The mechanism the plan depends on, proved rather than assumed
+
+Signed URLs work on this deployment. Measured through the storage service, with
+the path held in a shell variable and never printed:
+
+    POST /storage/v1/object/sign/<bucket>/<path>   → a signedURL with a token
+    GET  with that signature                        → 200, 6718 bytes
+    GET  with the token replaced by nonsense        → 400
+
+That last line is the one worth having: the signature is actually verified, so a
+private bucket plus signed URLs is a real boundary rather than a longer address.
+
+## The order, and why it cannot be reversed
+
+1. **The client stops depending on public URLs.** Seven call sites build them
+   with `getPublicUrl`, and the resolution has to move to the path columns so
+   the twenty legacy rows and the sixteen avatars are the only special cases.
+2. **Signed URLs get a lifetime and a refresh.** This is the real work: a signed
+   URL expires, so an `<img>` that lives longer than the TTL needs re-signing.
+3. **The twenty legacy paths and the sixteen avatar URLs are back-filled** into
+   path columns.
+4. **Only then does the bucket become private**, which is one row in
+   `storage.buckets`.
+
+Done in any other order, every photograph, voice message, video and avatar in
+the product disappears at once and stays gone until the client catches up.
+
+**Not started, and deliberately: this is the owner's call, because step 4 is
+outward-facing and breaks things until step 1 has shipped.** Steps 1–3 are safe
+to build at any time and change nothing visible while the bucket stays public.
