@@ -6300,7 +6300,7 @@ never fires. Afterwards production measured 392 audit rows, 0
 `message_deleted_by_staff`, 0 `message_deletions`, and a trigger body with no
 `chat_kind` in it — unchanged.
 
-## D-106 `[ ]` The chat list event-cost spec runs without the flag its count depends on
+## D-106 `[x]` The chat list event-cost spec runs without the flag its count depends on
 
 **Severity:** low; a test defect. Found by agent L.
 
@@ -12279,3 +12279,35 @@ token returns 400.
 **Waiting on the owner**, because the last step is outward-facing and breaks
 things until the first has shipped. The first three steps are safe to build at
 any time.
+
+---
+
+## D-106 — closed 2026-09-15, and it was closed by somebody else's work
+
+Not fixed here: **already fixed by D-173**, and the entry had gone stale.
+
+The entry says the spec «does not refuse to run without [the flag]» and that on
+such a server «its "comes back once" check fails on seven fetches of the list».
+D-173 split that bucket in two — the conversation's history and the list's
+per-chat previews had shared one label because both are a `GET` on `messages` —
+and gave the previews their own bound:
+
+```ts
+const previewBudget = backend.requests.includes("POST rpc/chat_list_summaries")
+  ? 0
+  : Object.keys(CHAT).length;
+```
+
+So the spec now counts either path and says which it saw, exactly as its header
+claims.
+
+**Measured rather than read.** A dev server was started deliberately *without*
+`VITE_CHAT_LIST_SUMMARIES_RPC_ENABLED`, and the whole spec ran **9 of 9** at
+1440, logging `list summaries: compatibility queries` on every measurement — the
+fallback path the entry said it breaks on.
+
+**The lesson is the entry, not the spec.** This is the fourth register entry
+today found already closed, after D-113, D-114 and D-122. A commit that fixes one
+defect often closes a neighbouring entry nobody thought to re-read, and the
+register says so itself: a commit naming an entry is not evidence it closed it —
+and the converse holds too.
