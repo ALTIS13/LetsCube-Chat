@@ -5,7 +5,15 @@ import { createClient } from "@/lib/supabase/client";
 import { KubBadge, KubButton, KubIcon, KubModal } from "@/components/kub";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
 import { useAppStore } from "@/store/app.store";
-import { useIsManagerOrAdmin, usePermissionAccess } from "@/hooks/useRole";
+import { useMatchesIsManagerOrAdmin, usePermissionAccess } from "@/hooks/useRole";
+import { useIsLocationAdmin } from "@/hooks/useLocationAdmin";
+import {
+  canAssignTask,
+  canCancelTask,
+  canConfirmTask,
+  canEditTask,
+  type TaskActionActor,
+} from "@/lib/taskActionAccess";
 import { TASK_CLAIM_PERMISSION_KEYS, TASK_DELETE_PERMISSION_KEYS } from "@/hooks/useTaskAccess";
 import { useTaskSoftDelete } from "@/hooks/useTaskSoftDelete";
 import {
@@ -59,7 +67,12 @@ const LOCATION_RECURRENCE_MANAGE_KEYS = ["tasks.manage", "tasks.manage_admin_tas
 export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted }: Props) {
   const supabase = createClient();
   const currentUser = useAppStore((s) => s.currentUser);
-  const isStaff = useIsManagerOrAdmin();
+  // `public.is_manager_or_admin(auth.uid())`, which is what `task_confirm`,
+  // `task_reject`, `task_assign` and `task_cancel` ask. Deliberately not
+  // `useIsManagerOrAdmin()`, the client's own wide `isStaff`: that one also
+  // admits a holder of one of `STAFF_ACCESS_PERMISSIONS`, and no RLS policy or
+  // task RPC knows anything about permissions (D-202, and `lib/taskActionAccess.ts`).
+  const { allowed: isManagerOrAdmin } = useMatchesIsManagerOrAdmin();
   const { softDeleteTask } = useTaskSoftDelete();
   const { task, events, loading, refetch } = useTask(taskId);
   const {
@@ -90,6 +103,12 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
   const locationClaimAccess = usePermissionAccess(TASK_CLAIM_PERMISSION_KEYS, {
     locationId: task?.location_id ?? null,
     locationOnly: true,
+    enabled: Boolean(task?.id && task.location_id),
+  });
+  // The third branch of `task_update_v3`'s authorization. Asked of the database
+  // rather than copied, because `is_location_admin` also reads the legacy
+  // `location_members.role` column — see `hooks/useLocationAdmin.ts`.
+  const { isLocationAdmin } = useIsLocationAdmin(task?.location_id ?? null, {
     enabled: Boolean(task?.id && task.location_id),
   });
 
@@ -150,14 +169,20 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
   const canDeleteTask =
     !taskIsDeleted &&
     (deleteAccess.hasAnyPermission(TASK_DELETE_PERMISSION_KEYS) || locationDeleteAccess.hasPermission("tasks.delete"));
-  const canConfirmReject = !taskIsDeleted && isStaff && task.status === "waiting_confirmation" && !isAssignee;
-  const canCancel =
-    !taskIsDeleted &&
-    isStaff &&
-    !["confirmed", "rejected", "cancelled"].includes(task.status);
-  // Staff can (re)assign while the task hasn't been picked up yet. Server
-  // RPC `task_assign` enforces both the role and the source-status check.
-  const canAssign = !taskIsDeleted && isStaff && (task.status === "new" || task.status === "assigned");
+  // One copy per RPC of the gate that RPC applies, in `lib/taskActionAccess.ts`
+  // together with the production function bodies. `taskIsDeleted` stays here:
+  // none of the four RPCs looks at `deleted_at`, so refusing a deleted task is
+  // the client's own narrowing and does not belong in a module that claims to
+  // mirror the database.
+  const actor: TaskActionActor = {
+    isManagerOrAdmin,
+    isCreator,
+    isAssignee,
+    isLocationAdmin,
+  };
+  const canConfirmReject = !taskIsDeleted && canConfirmTask(actor, task.status);
+  const canCancel = !taskIsDeleted && canCancelTask(actor, task.status);
+  const canAssign = !taskIsDeleted && canAssignTask(actor, task.status);
   const canClaimGlobal = claimAccess.hasAnyPermission(TASK_CLAIM_PERMISSION_KEYS);
   const canClaimLocation = locationClaimAccess.hasAnyPermission(TASK_CLAIM_PERMISSION_KEYS);
   const canClaimManagerPool =
@@ -172,13 +197,11 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
     !task.created_for_admin &&
     (canClaimGlobal || canClaimLocation) &&
     canClaimManagerPool;
-  // Creator OR staff can edit a task that hasn't been finalised. Server
-  // RPC `task_update` re-checks this and the manager-can't-touch-admin
-  // guard if the assignee changes.
-  const canEdit =
-    !taskIsDeleted &&
-    (isCreator || isStaff) &&
-    !["confirmed", "cancelled"].includes(task.status);
+  // The creator, staff, **or** an administrator of the task's own location —
+  // the last branch is one `task_update_v3` has always accepted and this modal
+  // never offered (D-124). `task_update_v3` re-checks all three, plus the
+  // manager-can't-touch-admin guard if the assignee changes.
+  const canEdit = !taskIsDeleted && canEditTask(actor, task.status);
   const hasTaskActions =
     canClaim ||
     canAssign ||
@@ -186,7 +209,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
     canCancel ||
     canConfirmReject ||
     (isAssignee && ["assigned", "accepted", "in_progress", "rejected"].includes(task.status)) ||
-    (isStaff && task.status === "waiting_confirmation" && isAssignee) ||
+    (isManagerOrAdmin && task.status === "waiting_confirmation" && isAssignee) ||
     canDeleteTask;
 
   // supabase.rpc(...) returns a thenable PostgrestBuilder, not a real Promise,
@@ -691,7 +714,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
               </KubButton>
             </>
           )}
-          {isStaff && task.status === "waiting_confirmation" && isAssignee && (
+          {isManagerOrAdmin && task.status === "waiting_confirmation" && isAssignee && (
             <span className="text-[12px] self-center text-[color:var(--kub-muted)]">
               Подтвердить должен другой администратор или менеджер
             </span>

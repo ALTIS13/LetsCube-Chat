@@ -6231,12 +6231,74 @@ one-call toggle still works — run in PGlite by
 
 ## D-105 `[ ]` A global administrator deleting the other person's message in their own private chat is audited as staff
 
-**Severity:** low. Found with D-102.
+**Severity:** low, and the entry asked whether the row is wrong or merely terse.
+Measured on production 2026-09-15: **wrong, in every case it can fire.** Found
+with D-102.
 
-**Defect:** `trg_audit_messages_admin_delete` records `message_deleted_by_staff`
-whenever a global administrator or manager deletes a message that is not theirs,
-and with D-102 that includes the other person's message in the administrator's
-own private chat.
+**Surface:** `public._audit_messages_admin_delete()`, the AFTER UPDATE OF
+`deleted_at` trigger `trg_audit_messages_admin_delete` on `public.messages`.
+
+**Defect:** the trigger records `message_deleted_by_staff` whenever the caller
+`is_manager_or_admin` and is not the author. It never asks *why* the delete was
+permitted, and that turns out to be the whole question — because only one path
+can reach it, and on that path the caller was not acting as staff.
+
+**Measured.** Exactly two functions assign `messages.deleted_at`:
+`bot_message_command_internal`, granted to `service_role` only, so `auth.uid()`
+is null and the trigger's own `caller is not null` guard skips it; and
+`delete_messages_for_everyone`, granted to `authenticated`. A direct
+`UPDATE public.messages` cannot be a third — the only permissive UPDATE policy
+is `Users can edit own messages` (`user_id = auth.uid()`), so the caller is
+always the author and `caller is distinct from new.user_id` skips it. And
+`delete_messages_for_everyone` splits on the chat: in a **private** chat every
+member may delete anybody's message, while in a group it refuses any message
+that is not your own. So the trigger's two guards admit one situation only — a
+private chat, where the caller acted as an ordinary participant.
+
+**Consequence:** the row names an action that was not taken in a staff capacity;
+the identical act by a non-staff participant produces no row at all, so the
+table audits the person rather than the act; and the payload carries `chat_id`
+and the other party's id from a private conversation into a table
+`audit_logs select by permission` opens to anybody holding `audit.view` — 5 of
+18 accounts, against 27 private chats.
+
+**Nothing is lost by removing it, and that is the part worth keeping.**
+`delete_messages_for_everyone` already writes `private.message_deletions`
+(`message_id, chat_id, deleted_by, author_id, chat_type, deleted_at`) for every
+delete. That table lives in the `private` schema, which `authenticated` cannot
+even USAGE, and only `postgres` holds privileges on it. The complete, closed
+record already exists; the `audit_logs` row is a second copy that is both
+mislabelled and readable by five people. It was found by the rehearsal dying on
+`message_deletions_pkey`, not by reading the source.
+
+**Nothing to backfill:** `message_deleted_by_staff` has **0** rows against 392
+audit rows in total, and `private.message_deletions` has 0 rows, so nobody has
+ever used delete-for-everyone here. The label has never actually been written.
+
+**Proposed, written and rehearsed, NOT applied and NOT in the repository.** The
+fix narrows rather than widens: skip the audit when the chat is private, and add
+`chat_type` to the payload so the rows that can still be produced say what they
+are. The trigger is kept rather than dropped, for the day a moderator can remove
+a message from a group. Files were written to the session scratchpad as
+`20260915160000_a_private_delete_is_not_a_staff_action.{sql,rollback.sql,rehearsal.sql}`
+and still need to be moved under `.migration-backup/supabase/`, which another
+agent held at the time.
+
+**Rehearsed on production inside one rolled-back transaction**, both phases with
+a control:
+
+| step | measured |
+| --- | --- |
+| BEFORE: private delete by staff wrote audit rows | 1 |
+| AFTER: private delete by staff wrote audit rows | 0 |
+| CONTROL: group delete still audited | 1 |
+| CONTROL: the row now names the chat kind | `group` |
+
+The BEFORE phase is what makes the rest mean anything — it reproduces the defect
+against the body that is live today, so an AFTER of 0 cannot be a trigger that
+never fires. Afterwards production measured 392 audit rows, 0
+`message_deleted_by_staff`, 0 `message_deletions`, and a trigger body with no
+`chat_kind` in it — unchanged.
 
 ## D-106 `[ ]` The chat list event-cost spec runs without the flag its count depends on
 
@@ -6893,7 +6955,60 @@ location administrator before exposing it.
 **Audit rows:** work-surfaces E-10, A-32; top-10 item 2; the audit's owner questions 1
 and 2.
 
-## D-124 `[ ]` Task actions check global staff status, so a location administrator cannot confirm, reject, assign or cancel their location's tasks
+**Measured on production, 2026-09-15, and the last sentence of the proposal is
+the one that settles it: the screen has nothing to call.** That verification was
+done before building, and it came back negative on every write.
+
+The population is real, which the entry could not confirm — it says «production
+membership was not checked». 4 locations, 16 memberships, 10 distinct people,
+and two of them hold management grants with **no global role at all**:
+
+| person | location role | locations | global rank | `is_manager_or_admin` |
+| --- | --- | --- | --- | --- |
+| `3e7836d4` | `location_admin` | 2 | 10 (`user`) | false |
+| `f31ebd8e` | `location_manager` | 3 | 10 (`user`) | false |
+
+The grants are real too: impersonated inside a rolled-back transaction,
+`3e7836d4` measures `has_location_permission(…, 'location_members.manage') =
+true`, `tasks.manage = true`, `is_location_admin = true`.
+
+**But every write a location page would need is gated on the global predicate,
+and the grant is honoured by nothing.** Read off production:
+
+- `location_member_assign` → `if not public.is_admin(v_caller)`
+- `location_member_remove` → `if not public.is_admin(v_caller)`
+- `location_member_set_primary_admin` → `if not public.is_admin(v_caller)`
+- `location_member_assign_role` → `_require_permission('location_members.manage')`,
+  and `_require_permission` calls `has_permission`, which is **global only** —
+  it folds in `owner`/`tech_admin`, global role permissions and the legacy
+  column, and never looks at `location_members`.
+
+`public.location_members` additionally carries `insert blocked`,
+`update blocked` and `delete blocked` (`with check false` / `using false`), so
+there is no direct-table route around the RPCs either. Behaviourally, as
+`3e7836d4`:
+
+    location_member_assign_role(...) : REFUSED -> insufficient_permission
+
+The one consumer that *does* honour the location grant is `is_location_admin`,
+and it grants **visibility**, not management: the SELECT policy
+`location_members select scoped` admits `is_location_admin(location_id,
+auth.uid())`, and the same impersonated session reads 11 rows. So the
+`location_members.manage` grant on `location_admin` is decorative — it opens a
+list and authorises nothing on it.
+
+**Scaled down rather than built,** on the measurement. A location page is not a
+client defect and cannot be fixed on the client: the missing half is four server
+functions that never learned the location dimension, the way `task_claim`,
+`task_soft_delete` and `task_update_v3` did. Building the screen first would
+produce «Сотрудники» whose every control returns `insufficient_permission` —
+D-202's defect at the scale of a whole page. **What this needs first is an
+owner decision** (is `location_admin` meant to manage its own location's
+members, or is the grant a mistake in the role catalogue?) and then a migration,
+not a screen. D-124 was independent of this and did land first, as the entry
+predicted.
+
+## D-124 `[x]` Task actions check global staff status, so a location administrator cannot confirm, reject, assign or cancel their location's tasks
 
 **Severity:** high, for location administrators and the staff whose work waits on them.
 Found by the work-surfaces audit from the code; rendered on the fixture.
@@ -6917,6 +7032,108 @@ D-123; it can land first.
 
 **Audit rows:** work-surfaces T-D13 (section 1.2 of the audit calls it T-D14; the table
 row is T-D13); section 4, «Location administrator»; top-10 item 2.
+
+---
+
+### How it was closed, 2026-09-15 — and the proposal above is wrong
+
+**The server functions check no such thing.** That clause — «the grants the
+server functions check» — was the one part of this entry nobody had measured,
+and it is false. `public.tasks` carries `insert/update/delete blocked` at RLS,
+so the SECURITY DEFINER functions are the only authority there is, and three of
+the four ask the *global* predicate:
+
+| action | server gate, read off production | location-aware? |
+| --- | --- | --- |
+| `task_confirm` | `is_manager_or_admin(caller)`, `status = waiting_confirmation`, `assignee <> caller` | no |
+| `task_reject` | identical to confirm | no |
+| `task_assign` | `is_manager_or_admin(caller)`, `status in (new, assigned)` | no |
+| `task_cancel` | `created_by = caller` **or** `is_manager_or_admin(caller)` | no |
+| `task_update_v3` | creator, **or** `is_manager_or_admin`, **or** `location_id is not null and is_location_admin(location_id, caller)` | **yes** |
+
+Measured behaviourally, impersonating the one account holding `location_admin`
+on two locations with no global role, inside a rolled-back transaction, with a
+control that had to succeed:
+
+    loc_perm(tasks.manage)=true   is_manager_or_admin=false   is_location_admin=true
+    task_confirm : REFUSED -> Подтверждать может только администратор или менеджер
+    task_assign  : REFUSED -> Только администратор или менеджер может назначать задачи
+    task_cancel  : SUCCEEDED (creator branch)
+    CONTROL, an account the server does call staff:
+    task_confirm : SUCCEEDED
+
+So building the proposal would have drawn «Подтвердить», «Отклонить» and
+«Назначить исполнителя» for somebody the database refuses — **D-202's defect
+pointing the other way**, which is precisely the mistake that entry was closed
+to stop. The person would have got a refusal after filling in a form instead of
+a control that was never offered. That is worse, not better.
+
+**What was actually wrong, and it is two gates drawn too narrow, not four too
+narrow.** The same measurement found the client refusing two things the server
+accepts:
+
+- **cancel forgot the creator.** `canCancel` read `isStaff && …`, so whoever
+  created a task is not offered «Отменить задачу» on it unless they are also
+  staff — while `task_cancel` accepts them, as the probe above shows.
+  `canEdit` already carried the creator branch; cancel never did.
+- **edit forgot the location.** `canEdit` read `(isCreator || isStaff)`, so a
+  location administrator gets «Редактировать» only on tasks they created —
+  while `task_update_v3` has always accepted them for any task at their
+  location. This is the «sees only «Редактировать», and only on tasks they
+  created» in the defect text above: the second half of that sentence was the
+  bug, not the first.
+
+**And a third mismatch, latent.** The gate was `useIsManagerOrAdmin()`, which is
+the client's wide `isStaff` — a strict superset of `is_manager_or_admin`,
+because it also admits a holder of one of `STAFF_ACCESS_PERMISSIONS`. Measured
+across all 18 profiles the two agree today (5 staff, 13 not), so nothing was
+visibly wrong; it is the same disagreement D-202 recorded, on another screen.
+
+**Fixed** in `artifacts/kub/src/lib/taskActionAccess.ts` — one copy per RPC of
+the gate that RPC applies, with the five production function bodies quoted in
+its header — wired into `pages/tasks/TaskDetailModal.tsx`. The global predicate
+is **not** respelled: the module takes it as a boolean and the modal gets it
+from `useMatchesIsManagerOrAdmin()`, the existing `lib/serverRoleAccess.ts`.
+
+`is_location_admin` is **not** copied either, and that is deliberate. It ORs a
+global permission, a location permission **and** the legacy
+`location_members.role` text column, and on this deployment the account holding
+`location_manager` satisfies it through the legacy branch alone —
+`location_members.manage` and `tasks.manage` both measure false for them while
+`is_location_admin` measures true. A client copy built on permission keys would
+therefore be *narrower* than the database and would hide the control from them.
+The function is `security definer` and granted to `authenticated`, so
+`hooks/useLocationAdmin.ts` asks the database instead, gated on the task
+actually having a location.
+
+**Verified:** `tests/unit/task-action-access.test.mts`, 12 tests, **proved by 9
+mutations, all caught**, baseline green before and after. Seven restore or
+invert the module (drop cancel's creator branch; drop edit's location branch;
+widen confirm and widen assign to a location admin — the proposal above, which
+must go red; drop the own-task guard; and swap the two lock-status lists, which
+differ by `rejected`). **Two mutate the component, and both were green on the
+first pass** — a perfect module while the screen computes its own answer is
+exactly the «a declaration is not a surface» hole, so a bounded wiring section
+was added and both now go red.
+
+**Left open deliberately, as D-205.** A location administrator still cannot
+confirm, reject or assign — which is now *correct*, because the database refuses
+them, and the interface no longer promises otherwise. Whether it *should* refuse
+them is a product question about the role catalogue rather than a defect in a
+screen, it is the same question D-123 raises one table over, and both need an
+owner decision before any migration. Closing this entry `[x]` means the
+interface no longer disagrees with the server; it does not mean the role does
+everything its grants suggest.
+
+**Not covered, and not faked:** nothing renders this modal in a browser. There
+is no live task on this deployment to render it against — all 40 `tasks` rows
+are soft-deleted, the last on 2026-07-13 — and no DEV task fixture exists, so
+the wiring is held by a source guard, which is the weakest kind of test here and
+is scoped to four exact expressions for that reason. **No pixels were captured
+and none could be.** Nothing visible changed on this deployment either: with no
+live task the modal is unreachable, and all 18 accounts measure the same under
+the old wide predicate and the new one (5 staff, 13 not), so the swap moves
+nobody today.
 
 ## D-125 `[x]` A bot's inline keyboard is never drawn, so its question cannot be answered
 
@@ -11847,3 +12064,50 @@ goes red.
 carries refusals that are not sends. `blockedSendRefusal` in
 `lib/personalModeration.ts` keeps its name, because that one really is about
 sending.
+
+---
+
+## D-205 `[ ]` Half the task RPCs learned about locations and half did not, so a location role's task grants are partly decorative
+
+**Severity:** low while the feature is dormant — 0 live tasks, all 40 rows
+soft-deleted, the last on 2026-07-13. It becomes real the moment tasks are used
+again at a location. Split out of D-124 the way D-200 was split out of D-197:
+the client half of D-124 is fixed and closed, and this is the half that cannot
+be fixed on the client.
+
+**Surface:** `public.task_confirm`, `task_reject`, `task_assign`, `task_cancel`
+against `public.task_claim`, `task_soft_delete`, `task_update_v3`.
+
+**Defect:** `public.roles` grants `location_admin` the keys
+`tasks.manage`, `tasks.assign`, `tasks.create`, `tasks.claim`,
+`tasks.view_admin_tasks` and `location_members.manage` for its location, and
+`location_manager` a smaller set. Three task RPCs honour that —
+`task_claim` asks `has_location_permission(…, 'tasks.claim' | 'tasks.manage' |
+'tasks.assign' | 'tasks.create')`, `task_soft_delete` goes through
+`_task_can_soft_delete`, and `task_update_v3` carries an
+`is_location_admin(coalesce(p_location_id, v_task.location_id), v_caller)`
+branch. The other four never learned the dimension and ask
+`is_manager_or_admin(caller)`, which knows global roles and the legacy
+`profiles.role` column and nothing about locations.
+
+**Consequence:** somebody holding `tasks.manage` for a location may claim a task
+there, edit it and delete it, but may not confirm, reject or assign it, and may
+cancel only what they created. Measured behaviourally on production inside a
+rolled-back transaction, with a control that succeeded — see the D-124 closure
+note for the four lines. There is no interface bug left to fix: the client now
+mirrors each RPC exactly, so the person sees precisely the controls the database
+will accept.
+
+**Why this is not simply «widen the four».** It is a product question, not a
+repair. Either the role catalogue means what it says — in which case four
+functions need a location branch, and `tasks.manage` for a location has to be
+defined against `created_for_admin`, `target_role` and `route_admin_id` routing,
+which `_task_assert_location_routing` already guards — or the grants on
+`location_admin` are wrong and should be trimmed. **Both are owner decisions**,
+and the same question is open one table over in D-123, where all four
+`location_members` write RPCs require global `is_admin` while `location_admin`
+holds `location_members.manage`. The two should be decided together.
+
+**Do not widen only the caller side.** D-197 is the precedent: the sanction
+matrix was widened on both the caller and the target because ranking one alone
+would have opened a worse hole than it closed.

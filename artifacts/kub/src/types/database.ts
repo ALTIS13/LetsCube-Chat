@@ -1699,6 +1699,18 @@ export interface Database {
         Args: { p_user_id: string; p_location_id: string; p_permission_key: string }
         Returns: boolean
       }
+      /**
+       * Whether this person administers that location. Not expressible as a
+       * permission lookup: it ORs a global `locations.manage`, a location
+       * `location_members.manage`, **and** the legacy `location_members.role`
+       * text column, and on production the `location_manager` account
+       * satisfies it through the legacy branch alone. So the client asks the
+       * database rather than copying it — see `lib/taskActionAccess.ts`.
+       */
+      is_location_admin: {
+        Args: { p_location_id: string; p_user_id?: string }
+        Returns: boolean
+      }
       role_create: {
         Args: {
           p_key: string
