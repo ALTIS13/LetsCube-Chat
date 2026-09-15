@@ -5,16 +5,29 @@ import type { Topic } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { CAPSULE_GLASS } from "@/lib/chatChrome";
+import { CHANNEL_RAIL_RETRY, CHANNEL_RAIL_UNREADABLE } from "@/lib/channelRail";
 import { TopicCreateModal } from "./TopicCreateModal";
 import { cn } from "@/lib/utils";
 
 interface TopicStripProps {
-  topics: Topic[];
+  topics: readonly Topic[];
   canManage: boolean;
   onCreate: (name: string, emoji: string | null) => Promise<Topic | null>;
+  /**
+   * True when the last read of the channels was refused (F-6).
+   *
+   * The strip is what a forum gets where the rail is not offered, and it is
+   * exactly the case a refused read produces: `topics` holds nothing, so there
+   * is nothing but «Общие» to draw and the group looks like a group that
+   * never had a channel. The rail says this above its list; the strip says it
+   * in the only room it has, beside the one chip it can still draw.
+   */
+  unreadable?: boolean;
+  /** Asks for the read again. Absent draws no retry. */
+  onRetry?: () => void;
 }
 
-export function TopicStrip({ topics, canManage, onCreate }: TopicStripProps) {
+export function TopicStrip({ topics, canManage, onCreate, unreadable, onRetry }: TopicStripProps) {
   const { selectedTopicId, setSelectedTopicId } = useAppStore();
   const [creating, setCreating] = useState(false);
   const visibleTopics = topics.filter((topic) => !topic.is_general);
@@ -62,6 +75,26 @@ export function TopicStrip({ topics, canManage, onCreate }: TopicStripProps) {
             </button>
           );
         })}
+        {unreadable && (
+          <div
+            role="status"
+            data-testid="topic-strip-unreadable"
+            className="flex min-w-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-2.5 py-1 text-xs text-[color:var(--kub-danger-text)]"
+          >
+            <KubIcon name="warning" size={11} tone="currentColor" className="shrink-0" />
+            <span className="min-w-0">{CHANNEL_RAIL_UNREADABLE}</span>
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                data-testid="topic-strip-retry"
+                className="shrink-0 font-semibold underline underline-offset-2"
+              >
+                {CHANNEL_RAIL_RETRY}
+              </button>
+            )}
+          </div>
+        )}
         {canManage && (
           <button
             onClick={() => setCreating(true)}

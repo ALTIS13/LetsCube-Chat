@@ -92,3 +92,88 @@ test.describe("a reaction is one call to the server", () => {
     expect(fixture.rpcBodies("set_message_reaction"), "a function the server lacks was asked for again").toHaveLength(1);
   });
 });
+
+/**
+ * F-7 of the 2026-09-15 survey: the refusal that could not be reached.
+ *
+ * The toggle painted its guess, sent both writes, logged whatever came back and
+ * left the guess standing. «На это сообщение больше реакций поставить нельзя.»
+ * had been written and translated in `errors.ts` since the message-action
+ * migrations and no path could raise it, so the person saw their reaction
+ * change, was told nothing, and found the old one back after a reload.
+ */
+test.describe("a reaction the server refuses", () => {
+  test.use({ hasTouch: false, isMobile: false, viewport: { width: 1440, height: 900 } });
+  test.beforeEach(async ({ request }) => {
+    await requireFixtureServer(request);
+  });
+
+  /** The message with a reaction of mine already on it, so the rollback has something to restore. */
+  function groupWithMyReaction(
+    rpc: (name: string, body: Row) => ReturnType<typeof missingFunction> | undefined,
+  ) {
+    return {
+      ...group(rpc),
+      messages: [
+        message(MESSAGE, GROUP_CHAT, ANYA, TEXT, SENT, {
+          reactions: [{ id: "reaction-mine", message_id: MESSAGE, user_id: ME.id, emoji: "👍", created_at: SENT }],
+        }),
+      ],
+    };
+  }
+
+  const refusal = {
+    status: 400,
+    body: { code: "P0001", details: null, hint: null, message: "reaction_limit_reached" },
+  };
+
+  test("is taken back off the screen, and said in words", async ({ page }) => {
+    const fixture = await openFixture(page, groupWithMyReaction((name) =>
+      name === "set_message_reaction" ? refusal : undefined,
+    ));
+    const bubble = await openChat(page, GROUP_NAME, TEXT);
+    const row = page.locator(`[data-message-id="${MESSAGE}"]`);
+    await expect(row.locator('[data-reaction-chip="👍"]')).toBeVisible();
+
+    const menu = await openDesktopMenu(page, bubble);
+    await menu.getByRole("button", { name: "Поставить реакцию ❤️" }).click();
+
+    // The sentence that could not be reached. It also marks the moment the
+    // refusal was handled, which the next two assertions are measured from.
+    await expect(page.getByTestId("composer-refusal")).toHaveText(
+      /На это сообщение больше реакций поставить нельзя\./,
+    );
+
+    // What the guess drew is undone, and what was there before is back — not
+    // «the new one removed», which would leave the message with no reaction at
+    // all although the server still holds one.
+    //
+    // **The window matters.** Realtime never answers in this fixture, so the
+    // chat revalidates itself after REOPENED_CHAT_REVALIDATE_FALLBACK_MS (2.5s)
+    // and repaints the message from the server. Measured patiently, this test
+    // passes with no rollback at all — proved by putting the defect back and
+    // watching it stay green. The rollback happens with the sentence, so a
+    // second and a bit is generous for it and well short of the repair.
+    const promptly = { timeout: 1_200 };
+    await expect(row.locator('[data-reaction-chip="❤️"]')).toHaveCount(0, promptly);
+    await expect(row.locator('[data-reaction-chip="👍"]')).toBeVisible(promptly);
+
+    // A refusal is an answer: it does not send the older three requests after it.
+    expect(fixture.restCalls("reactions"), "a refused toggle tried to write anyway").toEqual([]);
+  });
+
+  test("does not make the person read Postgres", async ({ page }) => {
+    await openFixture(page, groupWithMyReaction((name) =>
+      name === "set_message_reaction"
+        ? { status: 403, body: { code: "42501", details: null, hint: null, message: 'new row violates row-level security policy for table "reactions"' } }
+        : undefined,
+    ));
+    const bubble = await openChat(page, GROUP_NAME, TEXT);
+    const menu = await openDesktopMenu(page, bubble);
+    await menu.getByRole("button", { name: "Поставить реакцию ❤️" }).click();
+
+    const banner = page.getByTestId("composer-refusal");
+    await expect(banner).toHaveText(/Недостаточно прав для этого действия\./);
+    await expect(banner, "the raw message reached the screen").not.toContainText("row-level security");
+  });
+});

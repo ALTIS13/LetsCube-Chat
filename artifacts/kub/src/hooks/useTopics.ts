@@ -6,6 +6,18 @@ import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import type { Topic } from "@/types/database";
 import { TOPIC_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
+import { CHANNEL_RAIL_UNREADABLE } from "@/lib/channelRail";
+import { mapPgError } from "@/lib/errors";
+import {
+  heldListCleared,
+  heldListPending,
+  heldListRefused,
+  heldListStarted,
+  heldListSucceeded,
+  listReadView,
+  type HeldList,
+} from "@/lib/listReadState";
+import { plainFailure } from "@/lib/plainMessages";
 
 /**
  * Loads and watches the topic list for a forum chat.
@@ -15,12 +27,21 @@ import { TOPIC_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
  *
  * For non-forum chats the hook is a no-op: `topics` stays empty and
  * selectedTopicId stays null, so the rest of the UI behaves like before.
+ *
+ * **A refused read is not a forum with no channels** (F-6). This hook read
+ * `const { data } = await …` and wrote `data ?? []`, so a chat whose `topics`
+ * read was refused — which the restrictive «block banned» policy on that table
+ * does silently, with no error at all, and a missing grant does loudly — drew
+ * itself as an ordinary conversation: no strip, no rail, nothing anywhere
+ * saying a channel list existed. The read's answer is now carried out of here,
+ * and `ChatWindow` folds it into the rail's own `failed`, which has said this
+ * for the rooms since 2026-09-14.
  */
 export function useTopics(chatId: string | null, isForum: boolean) {
   const supabase = useMemo(() => createClient(), []);
   const rt = useMemo(() => getRealtimeClient(), []);
-  const [topics, setTopics] = useState<Topic[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [read, setRead] = useState<HeldList<Topic>>(() => heldListPending<Topic>());
+  const topics = read.rows;
   // Two slices, not the store. A selector-less read subscribes the chat window
   // that calls this hook to every change anywhere in the store, so every
   // message, receipt and read in the chat list rendered the open conversation
@@ -28,23 +49,39 @@ export function useTopics(chatId: string | null, isForum: boolean) {
   const selectedTopicId = useAppStore((s) => s.selectedTopicId);
   const setSelectedTopicId = useAppStore((s) => s.setSelectedTopicId);
 
-  const fetchTopics = useCallback(async () => {
-    if (!chatId || !isForum) { setTopics([]); return; }
+  const fetchTopics = useCallback(async (options: { background?: boolean } = {}) => {
+    // Not a forum, or no chat open: there is nothing here to read, which is a
+    // different fact from a read that failed and must not be told as one.
+    if (!chatId || !isForum) { setRead(heldListCleared<Topic>()); return; }
     bumpFetch("useTopics");
-    setLoading(true);
-    const { data } = await supabase
+    const background = options.background === true;
+    setRead((previous) => heldListStarted(previous, { background }));
+    const { data, error } = await supabase
       .from("topics")
       .select("*")
       .eq("chat_id", chatId)
       .eq("archived", false)
       .order("is_general", { ascending: false }) // general first
       .order("position", { ascending: true });
-    setTopics((data ?? []) as Topic[]);
-    setLoading(false);
+    if (error) {
+      // The read said nothing about this forum's channels, so the channels are
+      // left exactly as they were and the surface is told the answer is old.
+      // What the mapper made of it goes to the log, where somebody who can act
+      // on a policy name reads it; the screen gets the product's sentence.
+      if (import.meta.env.DEV) console.error("[useTopics] read refused", error);
+      setRead((previous) =>
+        heldListRefused(previous, {
+          subject: chatId,
+          message: plainFailure(mapPgError(error), CHANNEL_RAIL_UNREADABLE),
+        }),
+      );
+      return;
+    }
+    setRead(heldListSucceeded((data ?? []) as Topic[], chatId));
   }, [chatId, isForum, supabase]);
 
   // Initial load + when chat changes.
-  useEffect(() => { fetchTopics(); }, [fetchTopics]);
+  useEffect(() => { void fetchTopics(); }, [fetchTopics]);
 
   // Keep legacy/general messages visible by default. If the selected topic was
   // removed, fall back to the pseudo-topic "Общие" (`selectedTopicId = null`).
@@ -68,7 +105,8 @@ export function useTopics(chatId: string | null, isForum: boolean) {
     const debouncedFetch = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
-        void fetchTopics();
+        // A notification, not somebody asking: it may not blank what is there.
+        void fetchTopics({ background: true });
       }, 250);
     };
     const refetchIfRelevant = (payload: { new?: Partial<Topic>; old?: Partial<Topic> }) => {
@@ -127,5 +165,16 @@ export function useTopics(chatId: string | null, isForum: boolean) {
     if (error) console.error("archiveTopic:", error);
   }, [supabase]);
 
-  return { topics, loading, createTopic, renameTopic, archiveTopic, refetch: fetchTopics };
+  return {
+    topics,
+    loading: read.loading,
+    /** The refused read's sentence, or null. Already in a person's words. */
+    error: read.error,
+    /** `loading | unavailable | stale | ready` — see `lib/listReadState.ts`. */
+    view: listReadView(read),
+    createTopic,
+    renameTopic,
+    archiveTopic,
+    refetch: fetchTopics,
+  };
 }

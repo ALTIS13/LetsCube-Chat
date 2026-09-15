@@ -1,3 +1,4 @@
+import { isMissingRpcError } from "./rpcAvailability.ts";
 import { selectRussianPluralForm } from "./messageMediaSections.ts";
 
 /**
@@ -14,6 +15,15 @@ import { selectRussianPluralForm } from "./messageMediaSections.ts";
  * picture shown before the server answers, and the three requests — look up,
  * delete, insert — a client still makes where that function is not deployed.
  *
+ * The limit itself is the database's, not this file's (F-7 of the 2026-09-15
+ * survey). It was a constant here while `private.reaction_limit_per_message(user)`
+ * held it there, already parameterised for the subscription, and
+ * `public.reaction_limit_per_message()` was published for the client to ask —
+ * so the day a subscriber's limit becomes 2, a constant of 1 would still paint
+ * their first reaction away. It is asked for once and remembered; until the
+ * answer lands, or where the function is not deployed, the rule is the one the
+ * product ships with.
+ *
  * Kept free of React and Supabase so `node --test` can load it.
  */
 
@@ -21,6 +31,95 @@ import { selectRussianPluralForm } from "./messageMediaSections.ts";
 export const QUICK_REACTION = "❤️";
 
 export const SET_REACTION_RPC = "set_message_reaction";
+
+/** `public.reaction_limit_per_message()` — the caller's own limit, and nobody else's. */
+export const REACTION_LIMIT_RPC = "reaction_limit_per_message";
+
+/**
+ * How many different reactions one person may put on one message, until the
+ * database says otherwise. One, as the owner decided and as
+ * `private.reaction_limit_per_message` returns today.
+ */
+export const DEFAULT_REACTION_LIMIT = 1;
+
+/**
+ * A limit is a whole number of reactions, at least one.
+ *
+ * Bounded above because a nonsense answer must not become the rule: the
+ * subscription being planned is «up to three», so anything past a hundred is a
+ * wrong answer rather than a generous one, and the shipped default is kept.
+ */
+export function parseReactionLimit(data: unknown): number | null {
+  const raw =
+    typeof data === "number" ? data : typeof data === "string" && data.trim() !== "" ? Number(data) : Number.NaN;
+  if (!Number.isFinite(raw)) return null;
+  const whole = Math.floor(raw);
+  if (whole < 1 || whole > 100) return null;
+  return whole;
+}
+
+/** The limit in force for the signed-in account, and whose turn it is to go and ask. */
+export interface ReactionLimitSource {
+  /** What to plan with now. Read it after `claimRead`, which is what notices a new account. */
+  value(): number;
+  /**
+   * True for the one caller that should ask the database; false for everyone
+   * else. The account is passed because the limit belongs to it: signing in as
+   * somebody else forgets the answer rather than planning by their entitlement.
+   */
+  claimRead(userId: string): boolean;
+  /** The database's answer, or its refusal. Returns the limit in force afterwards. */
+  accept(result: { data?: unknown; error?: unknown } | null | undefined): number;
+}
+
+/**
+ * The limit, asked for at most a few times per account.
+ *
+ * An answer settles it: an entitlement does not change under a person's hands,
+ * and a reload — or another account — is what picks up a new one. A server
+ * without the function settles it too, that deployment having neither this
+ * function nor the RPC the toggle prefers, both being of the same migration;
+ * any other refusal leaves one more attempt for the next toggle, bounded so a
+ * refusing server does not turn every tap into two requests forever.
+ */
+export function createReactionLimit(options: { attempts?: number } = {}): ReactionLimitSource {
+  const maxAttempts = options.attempts ?? 3;
+  let limit = DEFAULT_REACTION_LIMIT;
+  let attempts = 0;
+  let asking = false;
+  let settled = false;
+  let owner: string | null = null;
+  return {
+    value: () => limit,
+    claimRead(userId) {
+      if (userId !== owner) {
+        owner = userId;
+        limit = DEFAULT_REACTION_LIMIT;
+        attempts = 0;
+        asking = false;
+        settled = false;
+      }
+      if (settled || asking || attempts >= maxAttempts) return false;
+      asking = true;
+      attempts += 1;
+      return true;
+    },
+    accept(result) {
+      asking = false;
+      const answered = parseReactionLimit(result?.error ? undefined : result?.data);
+      if (answered !== null) {
+        limit = answered;
+        settled = true;
+        return limit;
+      }
+      if (result?.error && isMissingRpcError(result.error)) settled = true;
+      return limit;
+    },
+  };
+}
+
+/** The application's one record of the limit. */
+export const reactionLimit = createReactionLimit();
 
 /** What `set_message_reaction` returns: every reaction on the message after the change. */
 export function parseReactionRows(data: unknown): ReactionRowLike[] | null {
@@ -58,14 +157,94 @@ export interface ReactionTogglePlan {
   add: string | null;
 }
 
+/**
+ * The same toggle `set_message_reaction` makes, planned here so the screen can
+ * show it before the server answers.
+ *
+ * Choosing the emoji you already have removes that row and nothing else.
+ * Choosing another keeps the newest `limit - 1` of yours, so the new one fits,
+ * and removes the rest — which at a limit of one is all of them. Both halves
+ * are the RPC's own rule, read off `20260911142000_one_reaction_per_person.sql`;
+ * a plan that differed from it would paint a picture the next answer undoes.
+ */
 export function planReactionToggle(
   reactions: readonly ReactionRowLike[] | null | undefined,
   userId: string,
   emoji: string,
+  limit: number = DEFAULT_REACTION_LIMIT,
 ): ReactionTogglePlan {
   const mine = (reactions ?? []).filter((reaction) => reaction.user_id === userId);
-  const hadThis = mine.some((reaction) => reaction.emoji === emoji);
-  return { remove: mine.map((reaction) => reaction.id), add: hadThis ? null : emoji };
+  const sameEmoji = mine.filter((reaction) => reaction.emoji === emoji);
+  if (sameEmoji.length) return { remove: sameEmoji.map((reaction) => reaction.id), add: null };
+  const keep = Math.max(0, boundedLimit(limit) - 1);
+  const newestFirst = [...mine].sort(
+    (a, b) => createdAtMs(b) - createdAtMs(a) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0),
+  );
+  const kept = new Set(newestFirst.slice(0, keep).map((reaction) => reaction.id));
+  return { remove: mine.filter((reaction) => !kept.has(reaction.id)).map((reaction) => reaction.id), add: emoji };
+}
+
+/** `greatest(limit, 1)`, as the RPC reads it, and the shipped default for nonsense. */
+function boundedLimit(limit: number): number {
+  if (!Number.isFinite(limit)) return DEFAULT_REACTION_LIMIT;
+  return Math.max(1, Math.floor(limit));
+}
+
+/** `order by created_at desc, id desc`, with an unreadable date sorting oldest. */
+function createdAtMs(reaction: ReactionRowLike): number {
+  const parsed = Date.parse(reaction.created_at);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/** What the older three-request toggle deletes before it inserts. */
+export type ReactionDeleteScope =
+  | { kind: "none" }
+  | { kind: "mine" }
+  | { kind: "ids"; ids: string[] };
+
+/**
+ * Which rows the delete takes, where `set_message_reaction` is not deployed.
+ *
+ * At a limit of one, replacing a reaction takes every row of this person's on
+ * this message rather than the ids on screen — a stray row the client never saw
+ * would otherwise outlive the next choice, and the RPC clears it too (it keeps
+ * the newest `limit - 1`, which is none). Anything else takes exactly the rows
+ * the plan names: sweeping them all is how a subscriber with a limit of two
+ * would lose their first reaction on adding a second.
+ */
+export function reactionDeleteScope(
+  plan: ReactionTogglePlan,
+  limit: number = DEFAULT_REACTION_LIMIT,
+): ReactionDeleteScope {
+  if (!plan.remove.length) return { kind: "none" };
+  if (plan.add && boundedLimit(limit) === 1) return { kind: "mine" };
+  return { kind: "ids", ids: plan.remove };
+}
+
+/** What a call to `set_message_reaction` came back as, and so what to do next. */
+export type ReactionRpcOutcome =
+  | { kind: "rows"; rows: ReactionRowLike[] }
+  | { kind: "missing" }
+  | { kind: "refused"; error: unknown }
+  | { kind: "unreadable" };
+
+/**
+ * The RPC's answer, sorted into the four things it can be.
+ *
+ * `refused` is the one this used to lose. The toggle painted its guess, logged
+ * whatever came back and left the guess standing, so «На это сообщение больше
+ * реакций поставить нельзя.» — written, translated and waiting in `errors.ts` —
+ * could not be reached by any path, and the person found their old reaction
+ * back after a reload.
+ */
+export function reactionRpcOutcome(
+  result: { data?: unknown; error?: unknown } | null | undefined,
+): ReactionRpcOutcome {
+  if (result?.error) {
+    return isMissingRpcError(result.error) ? { kind: "missing" } : { kind: "refused", error: result.error };
+  }
+  const rows = parseReactionRows(result?.data);
+  return rows ? { kind: "rows", rows } : { kind: "unreadable" };
 }
 
 /**

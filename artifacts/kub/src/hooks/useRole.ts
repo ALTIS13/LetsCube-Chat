@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { selectAnyLocationPermissionKeys, selectPermissionKeys } from "@/lib/accessSnapshot";
+import { legacyRoleHasPermission } from "@/lib/legacyRolePermissions";
 import { canReadModerationQueue } from "@/lib/moderationAccess";
+import { matchesIsAdmin, matchesIsManagerOrAdmin } from "@/lib/serverRoleAccess";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import type { AppRole } from "@/types/database";
@@ -54,15 +56,46 @@ export function useIsManagerOrAdmin(): boolean {
 }
 
 /**
+ * `public.is_manager_or_admin(auth.uid())`, evaluated on the client.
+ *
+ * Narrower than `isStaff` on purpose: that predicate also admits a permission a
+ * location role can carry, and no RLS policy knows anything about permissions.
+ * Gate a control on this one whenever the policy behind the control asks
+ * `is_manager_or_admin` — the moderation queue, and the `shared` branch of the
+ * `folders` policies. The rule itself, and the production function body it
+ * copies, are in `lib/serverRoleAccess.ts`.
+ */
+export function useMatchesIsManagerOrAdmin(): { allowed: boolean; checking: boolean } {
+  const legacyRole = useRole();
+  const dynamic = useCurrentGlobalRoleAccess(true);
+  return {
+    allowed: matchesIsManagerOrAdmin({ legacyRole, globalRoleKeys: dynamic.keys }),
+    checking: dynamic.checking,
+  };
+}
+
+/**
+ * `public.is_admin(auth.uid())`, evaluated on the client — one role key
+ * narrower than the above, and the gate on the `system` branch of `folders`.
+ * Not to be confused with `useIsAdmin()`, which is the wide client predicate.
+ */
+export function useMatchesIsAdmin(): { allowed: boolean; checking: boolean } {
+  const legacyRole = useRole();
+  const dynamic = useCurrentGlobalRoleAccess(true);
+  return {
+    allowed: matchesIsAdmin({ legacyRole, globalRoleKeys: dynamic.keys }),
+    checking: dynamic.checking,
+  };
+}
+
+/**
  * Whether this person may actually read the moderation queue.
  *
- * Narrower than `isStaff` on purpose, and the rule is in
- * `lib/moderationAccess.ts` with the reason: `content_reports`, `bans` and
- * `mutes` are all read through `public.is_manager_or_admin`, which knows the
- * legacy role and the four global role keys and nothing about permissions —
- * while `isStaff` also admits a permission a location role can carry. Somebody
- * in that gap, shown the queue, reads zero rows for ever, and an empty queue
- * looks exactly like one you may not read.
+ * `content_reports`, `bans` and `mutes` are all read through
+ * `public.is_manager_or_admin`, so this is that predicate under the name of the
+ * screen it guards; `lib/moderationAccess.ts` carries the reason. Somebody in
+ * the gap between it and `isStaff`, shown the queue, reads zero rows for ever,
+ * and an empty queue looks exactly like one you may not read.
  */
 export function useCanReadModerationQueue(): { allowed: boolean; checking: boolean } {
   const legacyRole = useRole();
@@ -418,47 +451,4 @@ function useCurrentGlobalRoleAccess(shouldLoad: boolean): { keys: Set<string>; c
   }, [accessSnapshot.checking, accessSnapshot.snapshot, currentUserId, shouldLoad, supabase]);
 
   return state;
-}
-
-function legacyRoleHasPermission(role: AppRole | null, permissionKey: string): boolean {
-  if (!role) return false;
-  if (role === "admin") {
-    return [
-      "audit.view",
-      "chats.invite",
-      "chats.invite_any",
-      "chats.manage_invites",
-      "chats.manage_roles",
-      "chats.moderate",
-      "location_members.manage",
-      "location_members.view",
-      "locations.manage",
-      "locations.view",
-      "roles.view",
-      "tasks.assign",
-      "tasks.create",
-      "tasks.manage",
-      "tasks.manage_admin_tasks",
-      "tasks.manage_all_locations",
-      "tasks.view",
-      "tasks.view_admin_tasks",
-      "tasks.view_all_locations",
-      "users.assign_roles",
-      "users.manage",
-      "users.view",
-    ].includes(permissionKey);
-  }
-  if (role === "manager") {
-    return [
-      "chats.invite",
-      "location_members.view",
-      "locations.view",
-      "tasks.assign",
-      "tasks.create",
-      "tasks.manage",
-      "tasks.view",
-      "users.view",
-    ].includes(permissionKey);
-  }
-  return ["chats.invite"].includes(permissionKey);
 }

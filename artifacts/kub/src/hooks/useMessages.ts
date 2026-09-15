@@ -9,6 +9,15 @@ import { mapPgError } from "@/lib/errors";
 import { reportError } from "@/lib/monitoring";
 import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 import { isSavedChat } from "@/lib/chatDisplay";
+import {
+  LIST_READ_PENDING,
+  listReadCleared,
+  listReadRefused,
+  listReadStarted,
+  listReadSucceeded,
+  listReadView,
+  type ListReadProgress,
+} from "@/lib/listReadState";
 import { scheduleMarkChatDelivered, scheduleMarkChatRead } from "@/lib/deliveryReceipts";
 import {
   createMessageSendTimeoutContext,
@@ -17,7 +26,15 @@ import {
 } from "@/lib/messageAckError";
 import { FORWARD_RPC, forwardInsertPayload, forwardRpcArgs, type ForwardMessageResult } from "@/lib/messageForward";
 import { MESSAGE_SELECT_WITH_JOINS } from "@/lib/messageProjection";
-import { SET_REACTION_RPC, applyReactionPlan, parseReactionRows, planReactionToggle } from "@/lib/messageReactions";
+import {
+  REACTION_LIMIT_RPC,
+  SET_REACTION_RPC,
+  applyReactionPlan,
+  planReactionToggle,
+  reactionDeleteScope,
+  reactionLimit,
+  reactionRpcOutcome,
+} from "@/lib/messageReactions";
 import { rememberReactionUse } from "@/lib/recentReactions";
 import { attachKnownSender } from "@/lib/realtimeMessage";
 import { applyProfileToChats } from "@/lib/chatProfilePatch";
@@ -158,20 +175,42 @@ export function useMessages(
   const [olderError, setOlderError] = useState<string | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState<MessageWithSender[]>([]);
-  const [pinnedReady, setPinnedReady] = useState(false);
-  const [pinnedKey, setPinnedKey] = useState<string | null>(null);
+  /**
+   * How well the pinned messages are known, and which conversation they answer
+   * (D-140, F-6 of the 2026-09-15 survey).
+   *
+   * The failure branch used to `setPinnedMessages([])` and `setPinnedReady(true)`:
+   * it asserted the empty answer was the final one, and since the banner is
+   * drawn only while there are rows, the failure removed the one thing that
+   * could have shown it. `listReadState` is the vocabulary this project already
+   * wrote for that class, and `ListReadProgress` is its shape for a list a hook
+   * re-reads. The rows stay in their own state, as `useChats` keeps its own:
+   * realtime edits, hides and pins apply to them one at a time.
+   *
+   * `subject` is the chat-and-topic key this read answers — the `pinnedKey` the
+   * hook already carried, under the name the module gives it.
+   */
+  const [pinnedRead, setPinnedRead] = useState<ListReadProgress>(LIST_READ_PENDING);
   const [clearedAt, setClearedAt] = useState<string | null>(null);
   const [hiddenMessageIds, setHiddenMessageIds] = useState<Set<string>>(() => new Set());
   /**
    * The refusal the composer shows beside itself, or null.
    *
-   * Only one failure gets here: a private chat's other member has blocked the
+   * Two failures get here. A private chat's other member has blocked the
    * sender, so the restrictive policy on `public.messages` refused the insert
-   * (`blockedSendRefusal`). Everything else is reported on the message itself,
-   * where it has always been — the bubble keeps its text and its «Повторить».
-   * A refusal is kept as well as shown: nothing is silently lost either way.
+   * (`blockedSendRefusal`); and, since F-7 of the 2026-09-15 survey, a reaction
+   * the database refused — which had no way of being said at all. Everything
+   * else about a send is reported on the message itself, where it has always
+   * been: the bubble keeps its text and its «Повторить». A refusal is kept as
+   * well as shown, so nothing is silently lost either way.
+   *
+   * It is this line rather than a second one because the chat window has one
+   * place that says why what you just did was refused, and two would be two
+   * vocabularies for one idea. The name is now narrower than the thing it
+   * holds; renaming it is two lines in `ChatWindow.tsx` and `MessageInput.tsx`,
+   * neither of which this change owns.
    */
-  const [sendRefusal, setSendRefusal] = useState<string | null>(null);
+  const [actionRefusal, setActionRefusal] = useState<string | null>(null);
   // Per-slice selectors: не подписываемся на весь store (раньше любая
   // мутация — chats, selectedChatId — ререндерила хук). Сами
   // setMessages/addMessage/replaceMessage в zustand стабильны по ссылке.
@@ -222,15 +261,20 @@ export function useMessages(
     // Each of these is a render of the conversation when it changes value, so
     // one that already holds its reset value is left alone.
     setPinnedMessages((current) => (current.length ? [] : current));
-    setPinnedReady(false);
-    setPinnedKey(null);
+    // A refusal belongs to the conversation it was refused in, and so does the
+    // fact that this one has been read before.
+    setPinnedRead((current) =>
+      current.loading && !current.loadedOnce && !current.error && current.subject === null
+        ? current
+        : LIST_READ_PENDING,
+    );
     setClearedAt(null);
     setLoadingOlder(false);
     setHasMoreOlder(false);
     setOlderError(null);
     setIsTyping(false);
     // A refusal belongs to the conversation it was refused in.
-    setSendRefusal((current) => (current === null ? current : null));
+    setActionRefusal((current) => (current === null ? current : null));
     if (typingTimer.current) {
       clearTimeout(typingTimer.current);
       typingTimer.current = null;
@@ -242,8 +286,8 @@ export function useMessages(
   }, [chatId]);
 
   /** Dismisses the refusal beside the composer without sending anything. */
-  const clearSendRefusal = useCallback(() => {
-    setSendRefusal((current) => (current === null ? current : null));
+  const clearActionRefusal = useCallback(() => {
+    setActionRefusal((current) => (current === null ? current : null));
   }, []);
 
   const rememberHiddenMessageIds = useCallback((ids: Iterable<string>) => {
@@ -635,13 +679,13 @@ export function useMessages(
 
   const fetchPinnedMessages = useCallback(async () => {
     if (!chatId) {
+      // Nothing to read, which is the one place an empty list is the answer.
       setPinnedMessages([]);
-      setPinnedReady(true);
-      setPinnedKey(null);
+      setPinnedRead(listReadCleared());
       return;
     }
-    setPinnedReady(false);
     const fetchKey = getPinnedKey(chatId, topicId);
+    setPinnedRead((current) => listReadStarted(current, { background: false }));
     let localClearedAt = clearedAtRef.current;
     const user = currentUserRef.current;
     if (user) {
@@ -664,9 +708,12 @@ export function useMessages(
       .limit(50);
     if (error) {
       console.error("Pinned messages fetch error:", error);
-      setPinnedMessages([]);
-      setPinnedReady(true);
-      setPinnedKey(fetchKey);
+      // A refused read is not an empty one (D-140). The rows already on screen
+      // are older than the database but true, and blanking them would replace
+      // something true with something false — so they stay, and the refusal
+      // goes into `pinnedView` instead. `listReadRefused` is also what decides
+      // whether they are still this conversation's rows at all.
+      setPinnedRead((current) => listReadRefused(current, { subject: fetchKey, message: mapPgError(error) }));
       return;
     }
     const pinnedRows = (data ?? []) as unknown as MessageWithSender[];
@@ -677,8 +724,7 @@ export function useMessages(
       pinnedRows.filter((message) => !effectiveHiddenIds.has(message.id)),
       effectiveHiddenIds,
     )));
-    setPinnedKey(fetchKey);
-    setPinnedReady(true);
+    setPinnedRead(listReadSucceeded(fetchKey));
     // `clearedAt` is read through its ref: as a dependency, the message fetch
     // setting it made this whole fetch run a second time for any chat that had
     // ever been cleared.
@@ -1115,7 +1161,7 @@ export function useMessages(
       touchChatUpdatedAt(activeChatId, ack.data.created_at);
       // A send that went through is the only thing that can prove a refusal is
       // over, so it is what clears it.
-      setSendRefusal(null);
+      setActionRefusal(null);
       return ack.data;
     }
 
@@ -1163,7 +1209,7 @@ export function useMessages(
       chatType: useAppStore.getState().chats.find((item) => item.id === activeChatId)?.type ?? null,
       error: ack.error,
     });
-    setSendRefusal(refusal);
+    setActionRefusal(refusal);
     const friendlySendError = refusal ?? getMessageAckUserMessage(ack.error);
     const safeAckError = sanitizeMessageAckError(ack.error);
     console.error("[messages] send failed.", safeAckError.code, safeAckError.name);
@@ -1477,6 +1523,13 @@ export function useMessages(
   //
   // The guess is shown before the server answers either way: a reaction used to
   // appear only after the refetch.
+  //
+  // A refusal takes the guess back and says why (F-7 of the 2026-09-15 survey).
+  // Both writes used to log their error and carry on — the delete's refusal did
+  // not stop the insert, and nothing ever undid the paint — so the person saw
+  // their reaction change, was told nothing, and found the old one back after a
+  // reload. `mapPgError` already had the sentence for the one refusal reactions
+  // can produce; no path could reach it.
   const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
     const user = currentUserRef.current;
     if (!user) return;
@@ -1484,6 +1537,7 @@ export function useMessages(
     const shown = activeChatId
       ? (useAppStore.getState().messages[activeChatId] ?? []).find((message) => message.id === messageId)
       : undefined;
+    const painted = shown ? shown.reactions : null;
     const showReactions = (reactions: unknown) => {
       if (!activeChatId) return;
       const current = useAppStore.getState().messages[activeChatId] ?? [];
@@ -1491,58 +1545,79 @@ export function useMessages(
         message.id === messageId ? { ...message, reactions: reactions as MessageWithSender["reactions"] } : message,
       ));
     };
+    /** Put the reactions back as they were, and say in a person's words why. */
+    const refuse = (error: unknown) => {
+      console.error("Reaction error:", error);
+      if (shown) showReactions(painted);
+      setActionRefusal(mapPgError(error));
+    };
+
+    // The limit is the database's. Asking does not hold up this toggle: the
+    // rule the product ships with paints now, and the answer — one request an
+    // account — is what the next toggle plans by. A rejected request releases
+    // the claim like any other refusal, so a dead network does not leave the
+    // limit unasked for the rest of the session.
+    if (reactionLimit.claimRead(user.id)) {
+      void supabase.rpc(REACTION_LIMIT_RPC).then(
+        (result) => { reactionLimit.accept(result); },
+        (error: unknown) => { reactionLimit.accept({ error }); },
+      );
+    }
+    const limit = reactionLimit.value();
 
     if (shown) {
-      const guess = planReactionToggle(shown.reactions, user.id, emoji);
+      const guess = planReactionToggle(shown.reactions, user.id, emoji, limit);
       showReactions(applyReactionPlan(shown.reactions, user.id, guess, { messageId, createdAt: new Date().toISOString() }));
       if (guess.add) rememberReactionUse(guess.add);
     }
 
-    const toggleAsBefore = async () => {
+    /** The three requests a server without `set_message_reaction` still needs. Answers with the refusal, or null. */
+    const toggleAsBefore = async (): Promise<unknown | null> => {
       let mine = shown?.reactions?.filter((reaction) => reaction.user_id === user.id) ?? null;
       if (!mine) {
         const { data, error: lookupError } = await supabase.from("reactions")
           .select("id,message_id,user_id,emoji,created_at")
           .eq("message_id", messageId).eq("user_id", user.id);
-        if (lookupError) {
-          console.error("Reaction lookup error:", lookupError);
-          return;
-        }
+        if (lookupError) return lookupError;
         mine = (data ?? []) as NonNullable<MessageWithSender["reactions"]>;
       }
-      const plan = planReactionToggle(mine, user.id, emoji);
+      const plan = planReactionToggle(mine, user.id, emoji, limit);
       if (!shown && plan.add) rememberReactionUse(plan.add);
-      if (plan.remove.length) {
-        // Every row of this person on this message, not only the ones on
-        // screen: that is what keeps a stray second row from outliving the next
-        // choice.
-        const { error } = await supabase.from("reactions").delete()
+      const scope = reactionDeleteScope(plan, limit);
+      if (scope.kind !== "none") {
+        let removal = supabase.from("reactions").delete()
           .eq("message_id", messageId).eq("user_id", user.id);
-        if (error) console.error("Reaction removal error:", error);
+        if (scope.kind === "ids") removal = removal.in("id", scope.ids);
+        const { error } = await removal;
+        // The insert used to run anyway. It then met the database's limit, and
+        // two console lines stood for one visibly wrong screen.
+        if (error) return error;
       }
       if (plan.add) {
         const { error } = await supabase.from("reactions").insert({ message_id: messageId, user_id: user.id, emoji: plan.add });
-        if (error) console.error("Reaction insert error:", error);
+        if (error) return error;
       }
+      return null;
     };
 
     if (rpcAvailability.shouldTry(SET_REACTION_RPC)) {
-      const { data, error } = await supabase.rpc(SET_REACTION_RPC, { p_message_id: messageId, p_emoji: emoji });
-      if (!error) {
+      const outcome = reactionRpcOutcome(await supabase.rpc(SET_REACTION_RPC, { p_message_id: messageId, p_emoji: emoji }));
+      if (outcome.kind === "missing") {
+        rpcAvailability.markMissing(SET_REACTION_RPC);
+        const failure = await toggleAsBefore();
+        if (failure) return refuse(failure);
+      } else {
+        // It answered, refusal included, so the server has it.
         rpcAvailability.markPresent(SET_REACTION_RPC);
-        const rows = parseReactionRows(data);
-        if (rows) {
-          showReactions(rows);
+        if (outcome.kind === "rows") {
+          showReactions(outcome.rows);
           return;
         }
-      } else if (isMissingRpcError(error)) {
-        rpcAvailability.markMissing(SET_REACTION_RPC);
-        await toggleAsBefore();
-      } else {
-        console.error("Reaction error:", error);
+        if (outcome.kind === "refused") return refuse(outcome.error);
       }
     } else {
-      await toggleAsBefore();
+      const failure = await toggleAsBefore();
+      if (failure) return refuse(failure);
     }
 
     const { data: updatedMsg } = await supabase.from("messages")
@@ -1565,9 +1640,9 @@ export function useMessages(
     forgetClearedAt(chatId);
     setClearedAt(nextClearedAt);
     setMessages(chatId, []);
+    // This emptiness is the person's own doing, not a refused read.
     setPinnedMessages([]);
-    setPinnedKey(getPinnedKey(chatId, topicId));
-    setPinnedReady(true);
+    setPinnedRead(listReadSucceeded(getPinnedKey(chatId, topicId)));
     return { ok: true, error: null };
   }, [chatId, supabase, setMessages]);
 
@@ -1584,19 +1659,37 @@ export function useMessages(
   }, [chatMessages, generalTopicIds, hiddenMessageIds, topicId]);
 
   const currentPinnedKey = getPinnedKey(chatId, topicId);
+  /** Whether what is held was read for the conversation now on screen. */
+  const pinnedAnswersThisChat = pinnedRead.subject === currentPinnedKey;
   const visiblePinnedMessages = useMemo(() => {
-    if (pinnedKey !== currentPinnedKey) return EMPTY_MESSAGES;
+    if (!pinnedAnswersThisChat) return EMPTY_MESSAGES;
     if (!hiddenMessageIds.size) return pinnedMessages;
     return sanitizeHiddenReplies(pinnedMessages.filter((message) => !hiddenMessageIds.has(message.id)), hiddenMessageIds);
-  }, [currentPinnedKey, hiddenMessageIds, pinnedKey, pinnedMessages]);
+  }, [hiddenMessageIds, pinnedAnswersThisChat, pinnedMessages]);
+
+  /**
+   * The four states a list read can be in, for the pinned banner (D-140).
+   *
+   * `stale` means the rows on screen are true but older than the database;
+   * `unavailable` means the read was refused and nothing has ever loaded, which
+   * is what used to be drawn as «there is nothing pinned». Held for another
+   * conversation, it reads as `loading` — the read for this one is on its way,
+   * and a refusal in the chat you just left says nothing about this one.
+   */
+  const visiblePinnedError = pinnedAnswersThisChat ? pinnedRead.error : null;
+  const pinnedView = listReadView(
+    pinnedAnswersThisChat ? pinnedRead : { loading: true, error: null, loadedOnce: false },
+  );
 
   return {
     messages: visibleMessages,
     pinnedMessages: visiblePinnedMessages,
-    pinnedReady: pinnedKey === currentPinnedKey && pinnedReady,
+    pinnedReady: pinnedAnswersThisChat && !pinnedRead.loading,
+    pinnedError: visiblePinnedError,
+    pinnedView,
     loading, loadingOlder, hasMoreOlder, olderError, isTyping,
     sendMessage, sendMediaMessage, sendTyping, toggleReaction,
-    sendRefusal, clearSendRefusal,
+    actionRefusal, clearActionRefusal,
     retryMessageSend, discardLocalMessage,
     editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, deleteMessagesForEveryone, togglePin, forwardMessage,
     clearChatForMe,

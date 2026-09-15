@@ -240,6 +240,50 @@ export const TASK_RECURRENCE_UNAVAILABLE_DETAIL = "Задачу можно со�
 export const TASK_ROUTING_UNAVAILABLE = "Локации сейчас недоступны. Попробуйте позже.";
 export const TASK_ROUTING_UNAVAILABLE_DETAIL = "Задачу можно создать как обычно, без этих полей.";
 
+// ---------------------------------------------------------------------------
+// Lists that could not be read (F-6, and D-140 before it)
+// ---------------------------------------------------------------------------
+
+/**
+ * What a list says instead of «ничего нет» when the read was refused.
+ *
+ * Three surfaces said the opposite of the truth: the task list said the person
+ * was caught up, the chat list said they had no conversations, and a forum drew
+ * itself as an ordinary chat. Each one is the sentence a refused read is
+ * allowed to be, and each names the thing that could not be read, because
+ * «Не удалось загрузить» on its own leaves the reader to guess what is missing
+ * from a screen that looks complete.
+ *
+ * No «попробуйте позже» and no «ещё раз» in the sentence itself: every one of
+ * these surfaces draws a «Повторить» beside it, and a promise repeated in words
+ * beside a control that already makes it is noise.
+ */
+export const CHATS_UNAVAILABLE = "Не удалось загрузить чаты.";
+export const TASKS_UNAVAILABLE = "Не удалось загрузить задачи.";
+
+/**
+ * The last resort, for a list with no better name for itself and for a refusal
+ * that arrives with no words at all. `listReadState.ts` puts it in place of an
+ * empty message, because an empty one reads as success.
+ */
+export const LIST_UNAVAILABLE = "Не удалось загрузить список.";
+
+/**
+ * What stands above rows that are still true and are no longer current.
+ *
+ * The administration's sanctions and complaints tabs already print these words
+ * — «Список мог устареть: …» — and the three surfaces this closes print the
+ * same ones, so one product does not have two spellings of one situation.
+ *
+ * Neither tab is named here on purpose: `content-report-queue.test.mts` proves
+ * the complaints queue is mounted in exactly one place by scanning every file
+ * under `src/` for the component's name, and a note that mentioned it counted
+ * as a second mount. A test that cannot tell a note from a mount is coarse, but
+ * it is guarding a queue whose every row names somebody who asked not to be
+ * named, and a comment is the cheaper thing to change.
+ */
+export const LIST_MAY_BE_STALE = "Список мог устареть";
+
 /**
  * Every sentence this module shows, for the test that asserts none of them
  * explains the machine.
@@ -266,4 +310,8 @@ export const PLAIN_UNAVAILABLE_MESSAGES: readonly string[] = [
   TASK_RECURRENCE_UNAVAILABLE_DETAIL,
   TASK_ROUTING_UNAVAILABLE,
   TASK_ROUTING_UNAVAILABLE_DETAIL,
+  CHATS_UNAVAILABLE,
+  TASKS_UNAVAILABLE,
+  LIST_UNAVAILABLE,
+  LIST_MAY_BE_STALE,
 ];

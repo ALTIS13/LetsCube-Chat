@@ -4,6 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
+import { mapPgError } from "@/lib/errors";
+import {
+  heldListCleared,
+  heldListPending,
+  heldListRefused,
+  heldListSucceeded,
+  listReadView,
+  type HeldList,
+} from "@/lib/listReadState";
+import { plainFailure, TASKS_UNAVAILABLE } from "@/lib/plainMessages";
 import type {
   TaskAssignmentScope,
   Profile,
@@ -34,8 +44,8 @@ export interface TasksFilter {
 
 export function useTasks(filter: TasksFilter, options: { enabled?: boolean } = {}) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
-  const [tasks, setTasks] = useState<TaskWithPeople[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [read, setRead] = useState<HeldList<TaskWithPeople>>(() => heldListPending<TaskWithPeople>());
+  const tasks = read.rows;
   const supabase = useMemo(() => createClient(), []);
   const rt = useMemo(() => getRealtimeClient(), []);
   const enabled = options.enabled ?? true;
@@ -45,12 +55,25 @@ export function useTasks(filter: TasksFilter, options: { enabled?: boolean } = {
   const statusKey = (filter.statuses ?? []).slice().sort().join(",");
   const assignmentScopeKey = (filter.assignmentScopes ?? []).slice().sort().join(",");
   const visibilityKey = (filter.visibilities ?? []).slice().sort().join(",");
+  // The question these rows answer. A refused read keeps what is on screen and
+  // says it may be old — but only while it is still an answer to the same
+  // question; rows read for another account or another filter are nobody's old
+  // answer. `lib/listReadState.ts` holds that rule.
+  const subject = [
+    userId ?? "",
+    filter.mine,
+    statusKey,
+    assignmentScopeKey,
+    visibilityKey,
+    filter.assignee ?? "",
+  ].join("|");
 
   const fetchTasks = useCallback(async () => {
     if (!userId) return;
     if (!enabled) {
-      setTasks([]);
-      setLoading(false);
+      // This account is not shown the list at all. That is an answer, and an
+      // empty one is the right way to say it — unlike a read nobody could make.
+      setRead(heldListCleared<TaskWithPeople>());
       return;
     }
     bumpFetch("useTasks");
@@ -86,19 +109,32 @@ export function useTasks(filter: TasksFilter, options: { enabled?: boolean } = {
 
     const { data, error } = await q;
     if (error) {
+      // F-6. This said `setTasks([])`, and the page then drew «Нет доступных
+      // задач» with a «Создать задачу» beside it — a refusal told as "you are
+      // all caught up". The SELECT policy here calls a nine-argument plpgsql
+      // function, and the restrictive «block banned» policy on this table
+      // answers with emptiness rather than with an error, so both halves of the
+      // failure land on this line.
       if (import.meta.env.DEV) console.error("[useTasks] fetch failed", error);
-      setTasks([]);
-    } else {
-      setTasks(
+      setRead((previous) =>
+        heldListRefused(previous, {
+          subject,
+          message: plainFailure(mapPgError(error), TASKS_UNAVAILABLE),
+        }),
+      );
+      return;
+    }
+    setRead(
+      heldListSucceeded(
         (data ?? []).map((row) => ({
           ...(row as TaskWithPeople),
           assignee: (row as { assignee?: Profile | null }).assignee ?? null,
           creator:  (row as { creator?: Profile | null }).creator ?? null,
         })),
-      );
-    }
-    setLoading(false);
-  }, [userId, enabled, supabase, filter.mine, statusKey, assignmentScopeKey, visibilityKey, filter.assignee]); // eslint-disable-line react-hooks/exhaustive-deps
+        subject,
+      ),
+    );
+  }, [userId, enabled, supabase, subject, filter.mine, statusKey, assignmentScopeKey, visibilityKey, filter.assignee]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
 
@@ -125,5 +161,13 @@ export function useTasks(filter: TasksFilter, options: { enabled?: boolean } = {
     };
   }, [userId, enabled, rt, fetchTasks, filter.mine]);
 
-  return { tasks, loading, refetch: fetchTasks };
+  return {
+    tasks,
+    loading: read.loading,
+    /** The refused read's sentence, or null. Already in a person's words. */
+    error: read.error,
+    /** `loading | unavailable | stale | ready` — see `lib/listReadState.ts`. */
+    view: listReadView(read),
+    refetch: fetchTasks,
+  };
 }

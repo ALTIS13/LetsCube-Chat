@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import type { Folder, FolderScope, ChatWithLastMessage, Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
-import { useIsManagerOrAdmin } from "@/hooks/useRole";
+import { useMatchesIsManagerOrAdmin } from "@/hooks/useRole";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
 import { createClient } from "@/lib/supabase/client";
 import { KubButton, KubIcon, KubModal, type KubIconName } from "@/components/kub";
@@ -36,7 +36,13 @@ export function FolderEditModal({
   canManage,
 }: FolderEditModalProps) {
   const { chats, currentUser } = useAppStore();
-  const isStaff = useIsManagerOrAdmin();
+  // `folders insert scope-aware` asks `is_manager_or_admin`, so the selector
+  // that offers the «shared» scope asks exactly that and not the wide client
+  // `isStaff` — which a permission carried by a location role satisfies with no
+  // global role at all, and which would therefore offer a scope the insert then
+  // refuses (D-202). `useFolders` reads the same predicate, so the modal and
+  // the sidebar can no longer disagree about one person.
+  const { allowed: canUseSharedScope } = useMatchesIsManagerOrAdmin();
   const supabase = createClient();
 
   const [name, setName] = useState(folder?.name ?? "");
@@ -165,7 +171,7 @@ export function FolderEditModal({
     onClose();
   };
 
-  const showScopeSelector = isStaff && !folder;
+  const showScopeSelector = canUseSharedScope && !folder;
   const isCreator = folder ? (folder.created_by ?? folder.user_id) === currentUser?.id : true;
 
   const titleNode = (

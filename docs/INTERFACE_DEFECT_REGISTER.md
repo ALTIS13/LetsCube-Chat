@@ -11649,7 +11649,7 @@ rather than break a guard for an invisible difference.
 
 ---
 
-## D-202 `[ ]` Three meanings of «staff» meet on the folders screen
+## D-202 `[x]` Three meanings of «staff» meet on the folders screen
 
 **Severity:** low today and latent — all 8 folders on this deployment are
 `personal`, so nobody is currently losing a control. The disagreement is real
@@ -11733,3 +11733,117 @@ therefore every bot chat, a group's own creation, and a chat being deleted.
 **Left open by this:** a group's members still cannot read the *history* of who
 came and went before today — the service lines start now. The record in
 `audit_logs` remains unreadable to them, and deliberately so.
+
+---
+
+## D-202 — how it was closed, 2026-09-15
+
+Not with `useIsManagerOrAdmin()`, for the reason the entry gave. Two new pure
+modules instead:
+
+- `lib/serverRoleAccess.ts` — `matchesIsManagerOrAdmin` and `matchesIsAdmin`,
+  copies of the two database functions with both production bodies quoted in
+  the header. `lib/moderationAccess.ts` keeps its name and all three exports and
+  now delegates, so the queue's own meaning and its test are untouched.
+- `lib/folderAccess.ts` — a copy of the three `folders` policies.
+
+`useFolders` and `FolderEditModal` now ask the same predicate, so the sidebar
+and the modal can no longer tell one person two different things.
+
+**A fourth narrow spelling was found while fixing the third.** `canManageFolder`
+gated the `system` scope on `role === "admin"`, while the policy uses
+`is_admin` — a different function from `is_manager_or_admin` (it excludes
+`manager`). Mirrored too. Zero `system` folders exist.
+
+**Deliberately not copied:** the older permissive `Users can manage own folders`
+(`ALL USING auth.uid() = user_id`), which ORs with the scope-aware policies. It
+can only widen the answer where `created_by <> user_id`, a shape the insert
+policy cannot produce and production does not have.
+
+**F-8 closed with it.** `legacyRoleHasPermission` was untestable rather than
+untested — it sat inline in `useRole.ts`, which imports React, the store and
+supabase-js, so no `node --test` process could reach it. It is now
+`lib/legacyRolePermissions.ts`, and the missing `folders.manage_shared` is back:
+23 keys for legacy `admin`, matching the database exactly.
+
+**Anti-storm rule respected, and proved structurally rather than by scan:**
+`fetchFolders`'s dependency array is byte-identical (`[userId, supabase]`), and
+the new inputs are destructured booleans, which have no identity to rotate a
+`useCallback`. Verified independently.
+
+---
+
+## D-203 `[x]` Three list surfaces drew a refused read as «ничего нет»
+
+**Severity:** medium, and the defect class this project already named D-140,
+fixed twice per-surface and never generalised.
+
+**Surfaces:** `hooks/useTasks.ts`, `hooks/useChats.ts`, `hooks/useTopics.ts` —
+and `hooks/useMessages.ts` for pinned messages, closed alongside. `useChats` did
+not even destructure `error`; `useMessages` went further and *asserted* the
+empty answer was final.
+
+**Consequence:** «Чаты не найдены» is a claim about an account, made out of a
+question that never got an answer — while the memberships read immediately above
+it had just proved the person has chats. For a banned person every list is empty
+anyway, because the fifteen restrictive «block banned» policies filter rather
+than raise, so there is no error to catch and nothing on screen to explain it.
+
+**Fix:** `lib/listReadState.ts` — the module that already existed for this class
+— gained one fact a hook needs and an admin tab does not: **whose answer this
+is**. A refusal keeps the rows only when they answer the *same* question;
+rows read for another conversation are not a stale answer to this one, they are
+its absence. Without that, a forum with a refused read would draw the previous
+chat's channels.
+
+**Verified:** 19 unit tests for the transitions, 30 mutations across 9 files,
+**five of which were green at first and exposed real holes in the tests** — a
+short source pattern that matched a second occurrence lower in the file, a lazy
+`[\s\S]*?` that ran into the next block and found the same words there, and a
+notice left behind `{false && (` that still satisfied a `data-testid` check.
+Then `tests/e2e/chat-list-refusal.spec.ts`, because none of the new states had
+ever been drawn in a browser: it renders the refusal in both themes and, more
+importantly, **measures that the wrapper added around `ChatList`
+(`flex min-h-0 flex-1 flex-col`) did not break its scroller** — the one claim in
+the change that had been reasoned from class names. 4/4 at 1440 and at 390.
+
+**Not covered, and not faked:** the `stale` rendering. Reaching it needs a second
+read refused after a first succeeded, and nothing a test can trigger from the
+page does that. An `.or(...)` assertion covering both outcomes was drafted and
+thrown away — it would have passed whatever the product did.
+
+---
+
+## D-204 `[x]` The one refusal reactions can produce was unreachable, after the screen had already changed
+
+**Severity:** medium-low. An unusually clean specimen: the product built the
+sentence and then made it unreachable.
+
+**Surface:** `hooks/useMessages.ts` and `lib/messageReactions.ts`.
+`lib/errors.ts:78` has carried «На это сообщение больше реакций поставить
+нельзя.» all along; nothing could raise it. Both writes sent their errors to
+`console.error`, there was no rollback of the optimistic paint, and the client
+held the per-message limit as a **hardcoded constant** while the database holds
+it as a **per-user function** already parameterised for an entitlement.
+
+**Corrected from the audit, measured:** production *has* `set_message_reaction`,
+so the DELETE-then-INSERT race the audit called live is not live here — the RPC
+is tried first. What was live: on the RPC path the refusal reached only the
+console, and the guess stood until a fall-through refetch repaired it. The
+person saw their reaction change and silently revert, with no explanation.
+
+**Fix:** the refusal rolls back to exactly the reactions that were on screen and
+says why, in the composer's existing refusal line rather than a second channel.
+The limit is now asked of `public.reaction_limit_per_message()` once per
+account, defaulting to 1 and never blocking the paint.
+
+**One mutation stayed green and was worth more than the rest:** removing the
+rollback changed nothing observable, because the chat revalidates itself after
+2.5 seconds when Realtime never answers — a patient assertion passes over a
+missing rollback. The assertion is now bounded to 1200 ms from the banner, and
+goes red.
+
+**Renamed afterwards:** the state is `actionRefusal`, not `sendRefusal` — it now
+carries refusals that are not sends. `blockedSendRefusal` in
+`lib/personalModeration.ts` keeps its name, because that one really is about
+sending.

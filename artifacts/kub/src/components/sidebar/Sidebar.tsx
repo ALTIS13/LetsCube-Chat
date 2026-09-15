@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { KubGlassLayer, KubIcon } from "@/components/kub";
+import { KubButton, KubGlassLayer, KubIcon, KubNotice } from "@/components/kub";
 import { SidebarHeader } from "./SidebarHeader";
 import { FolderTabs } from "./FolderTabs";
 import { FolderRail } from "./FolderRail";
@@ -21,6 +21,7 @@ import { useAppStore } from "@/store/app.store";
 import { useChats } from "@/hooks/useChats";
 import { useFolders } from "@/hooks/useFolders";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
+import { LIST_MAY_BE_STALE } from "@/lib/plainMessages";
 import type { Folder } from "@/types/database";
 
 export function Sidebar() {
@@ -36,7 +37,7 @@ export function Sidebar() {
   const searchQuery = useAppStore((s) => s.searchQuery);
   const mobileSection = useAppStore((s) => s.mobileSection);
   const setMobileSection = useAppStore((s) => s.setMobileSection);
-  const { chats, loading, refetch } = useChats();
+  const { chats, loading, error: chatsError, view: chatsView, refetch } = useChats();
   const {
     folders,
     folderChats,
@@ -210,13 +211,42 @@ export function Sidebar() {
             <div className="flex-1 flex items-center justify-center">
               <KubIcon name="spinner" size={22} className="text-[color:var(--kub-cyan)]" />
             </div>
+          ) : chatsView === "unavailable" ? (
+            /* F-6. Nothing has ever come back and the read was refused, so
+               «Чаты не найдены» would be a statement about this account made
+               out of a question that never got an answer. */
+            <div className="flex-1 px-3 py-6" data-testid="chat-list-unavailable">
+              <KubNotice tone="danger" className="text-sm">
+                {chatsError}
+              </KubNotice>
+              <div className="mt-3 flex justify-center">
+                <KubButton size="sm" variant="secondary" onClick={() => void refetch()}>
+                  Повторить
+                </KubButton>
+              </div>
+            </div>
           ) : (
-            <ChatList
-              chats={filtered}
-              selectedChatId={selectedChatId}
-              onChatSelect={setSelectedChatId}
-              onScrollStateChange={setSearchTucked}
-            />
+            <div className="flex min-h-0 flex-1 flex-col">
+              {/* The chats on screen are still true and are no longer current.
+                  They stay, and the line above them says so — the same shape the
+                  sanctions tab and the channel rail already use. */}
+              {chatsView === "stale" && (
+                <div className="flex flex-wrap items-center gap-2 px-3 pb-2" data-testid="chat-list-stale">
+                  <KubNotice tone="danger" className="min-w-0 flex-1 text-xs">
+                    {LIST_MAY_BE_STALE}: {chatsError}
+                  </KubNotice>
+                  <KubButton size="sm" variant="secondary" onClick={() => void refetch()}>
+                    Повторить
+                  </KubButton>
+                </div>
+              )}
+              <ChatList
+                chats={filtered}
+                selectedChatId={selectedChatId}
+                onChatSelect={setSelectedChatId}
+                onScrollStateChange={setSearchTucked}
+              />
+            </div>
           )}
         </div>
       </div>

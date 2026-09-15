@@ -25,6 +25,17 @@ import {
   type MembershipRowLike,
   type MessageRowLike,
 } from "@/lib/chatListDelta";
+import { mapPgError } from "@/lib/errors";
+import {
+  LIST_READ_PENDING,
+  listReadCleared,
+  listReadEnded,
+  listReadRefused,
+  listReadSucceeded,
+  listReadView,
+  type ListReadProgress,
+} from "@/lib/listReadState";
+import { CHATS_UNAVAILABLE, plainFailure } from "@/lib/plainMessages";
 import { isIncomingMessage } from "@/lib/messageActor";
 import { MESSAGE_LAST_MESSAGE_SELECT } from "@/lib/messageProjection";
 import { subscribeByTable } from "@/lib/realtimeTableChannels";
@@ -92,7 +103,15 @@ function eventContext(userId: string): ChatListEventContext {
  * summary when the event cannot settle it (D-088).
  */
 export function useChats() {
-  const [loading, setLoading] = useState(true);
+  // F-6. Three facts and not one: whether a read is in flight, whether the last
+  // one failed, and whether anything has ever come back for this account. The
+  // hook used to hold only the first, so a refused read left «Чаты не
+  // найдены» on screen — a sentence about the person's account, made out of
+  // a request that never got an answer. The rows stay in the store, where a
+  // realtime event applies to one of them at a time; only the reading's own
+  // state is held here.
+  const [read, setRead] = useState<ListReadProgress>(LIST_READ_PENDING);
+  const loading = read.loading;
   const chats = useAppStore((s) => s.chats);
   const setChats = useAppStore((s) => s.setChats);
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
@@ -118,8 +137,10 @@ export function useChats() {
   const fetchChats = useCallback(async (options: FetchChatsOptions = {}) => {
     const preserveActiveChat = Boolean(options.preserveActiveChat);
     if (!userId) {
+      // Nobody is signed in. An empty list is the true answer here, and it is
+      // the answer — not the absence of one.
       setChats([]);
-      setLoading(false);
+      setRead(listReadCleared());
       return;
     }
 
@@ -144,7 +165,20 @@ export function useChats() {
       // memberships", it emptied the list and closed the open chat whenever a
       // revalidation ran before requests went through again — which a reconnect
       // makes likely, because the socket can rejoin a moment earlier.
-      if (membershipsError) return;
+      //
+      // Keeping the rows was half of it (F-6). The other half is saying so: the
+      // sidebar drew «Чаты не найдены» for a person whose reads are all being
+      // refused — which is what the restrictive «block banned» policy on `chats`
+      // does, silently and with no error at all.
+      if (membershipsError) {
+        setRead((previous) =>
+          listReadRefused(previous, {
+            subject: userId,
+            message: plainFailure(mapPgError(membershipsError), CHATS_UNAVAILABLE),
+          }),
+        );
+        return;
+      }
 
       if (!memberships?.length) {
         if (!preserveActiveChat) {
@@ -152,6 +186,8 @@ export function useChats() {
           const selectedChatId = useAppStore.getState().selectedChatId;
           if (selectedChatId) useAppStore.getState().setSelectedChatId(null);
         }
+        // This one really is an empty list: the read came back and said so.
+        setRead(listReadSucceeded(userId));
         return;
       }
 
@@ -159,13 +195,24 @@ export function useChats() {
       const membershipByChat = new Map(myMemberships.map((membership) => [membership.chat_id, membership]));
       const chatIds = myMemberships.map((m) => m.chat_id);
 
-      const { data: chatsData } = await supabase
+      const { data: chatsData, error: chatsError } = await supabase
         .from("chats")
         .select("*, members:chat_members(user_id, role, joined_at, last_read_at, last_delivered_at, profile:profiles(*))")
         .in("id", chatIds)
         .order("updated_at", { ascending: false });
 
-      if (!chatsData) return;
+      // `error` was not even destructured here, so this read's refusal left the
+      // list exactly as it was and told nobody — and the memberships above had
+      // just proved the person has chats.
+      if (chatsError || !chatsData) {
+        setRead((previous) =>
+          listReadRefused(previous, {
+            subject: userId,
+            message: plainFailure(chatsError ? mapPgError(chatsError) : null, CHATS_UNAVAILABLE),
+          }),
+        );
+        return;
+      }
 
       const batchedSummaries = await fetchBatchedChatSummaries(supabase, chatIds);
 
@@ -252,9 +299,10 @@ export function useChats() {
           ? sortChatsForSidebar(replayChatListEvents(sortedVisibleChats, arrived, eventContext(userId)), userId)
           : sortedVisibleChats,
       );
+      setRead(listReadSucceeded(userId));
     } finally {
       eventsDuringFetchRef.current = null;
-      setLoading(false);
+      setRead(listReadEnded);
       fetchInFlightRef.current = false;
       if (fetchQueuedRef.current) {
         fetchQueuedRef.current = false;
@@ -523,7 +571,15 @@ export function useChats() {
     };
   }, [fetchChats]);
 
-  return { chats, loading, refetch: fetchChats };
+  return {
+    chats,
+    loading,
+    /** The refused read's sentence, or null. Already in a person's words. */
+    error: read.error,
+    /** `loading | unavailable | stale | ready` — see `lib/listReadState.ts`. */
+    view: listReadView(read),
+    refetch: fetchChats,
+  };
 }
 
 function latestTimestamp(...values: Array<string | null | undefined>): string | null {

@@ -28,6 +28,7 @@ import {
   railIsOffered,
   topicIdForChannel,
 } from "@/lib/channelRail";
+import { listReadFailed } from "@/lib/listReadState";
 import type { ServerChannel } from "@/lib/serverChannels";
 import {
   joinVoiceChannel,
@@ -153,7 +154,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const clearChatPanelRequest = useAppStore((s) => s.clearChatPanelRequest);
   const savedChat = chat ? isSavedChat(chat, userId) : false;
   const isForum = !!chat?.is_forum;
-  const { topics, createTopic } = useTopics(chatId, isForum);
+  const { topics, createTopic, view: topicsView, refetch: refetchTopics } = useTopics(chatId, isForum);
   const generalTopicIds = useMemo(
     () => topics.filter((topic) => topic.is_general).map((topic) => topic.id),
     [topics],
@@ -163,7 +164,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const {
     messages, pinnedMessages, pinnedReady, loading, loadingOlder, hasMoreOlder, olderError, isTyping,
     sendMessage, sendMediaMessage, sendTyping, toggleReaction,
-    sendRefusal, clearSendRefusal,
+    actionRefusal, clearActionRefusal,
     retryMessageSend, discardLocalMessage,
     editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, deleteMessagesForEveryone, togglePin, forwardMessage, clearChatForMe,
     loadOlderMessages, ensureMessageLoaded,
@@ -369,8 +370,22 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   // all besides the one general channel. Read here rather than in the rail's
   // own section below, because the capsule under the header is drawn
   // differently once a list of rooms is on screen — see `capsuleChannel`.
+  // F-6. The rooms have said «this read failed» since 2026-09-14; the text
+  // channels are `useTopics`, which used to answer a refusal with `[]` — so a
+  // forum whose `topics` read was refused drew itself as an ordinary chat, with
+  // the rail gone and nothing anywhere saying a channel list existed. One
+  // failure, told once, by the surface that was already built for it.
+  const channelsUnreadable = serverChannels.failed || listReadFailed(topicsView);
+  // `serverChannels` itself is a fresh object every render, so the dependency
+  // is its `refresh` — which is a `useCallback` with no dependencies and really
+  // is stable, and makes this one stable too.
+  const refreshServerChannels = serverChannels.refresh;
+  const retryChannels = useCallback(() => {
+    refreshServerChannels();
+    void refetchTopics();
+  }, [refreshServerChannels, refetchTopics]);
   const railOffered =
-    voiceEnabled && railIsOffered(serverChannels.channels, serverChannels.categories, serverChannels.failed);
+    voiceEnabled && railIsOffered(serverChannels.channels, serverChannels.categories, channelsUnreadable);
   const voiceDirectory = useMemo(() => {
     const names = new Map<string, string>();
     const faces = new Map<string, string | null>();
@@ -528,8 +543,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     // A read that failed keeps the rail on screen and says so, instead of
     // taking the channels away with no sentence anywhere. See
     // `ServerChannelsView.failed`.
-    failed: serverChannels.failed,
-    onRetry: serverChannels.refresh,
+    failed: channelsUnreadable,
+    onRetry: retryChannels,
   };
 
   /**
@@ -1513,6 +1528,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
               topics={topics}
               canManage={canManageTopics}
               onCreate={createTopic}
+              unreadable={channelsUnreadable}
+              onRetry={retryChannels}
             />
           )}
 
@@ -1598,8 +1615,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onSendMedia={sendMediaFromSheet}
             incomingMedia={mediaSendRequest}
             onIncomingMediaTaken={closeMediaSendRequest}
-            refusal={sendRefusal}
-            onDismissRefusal={clearSendRefusal}
+            refusal={actionRefusal}
+            onDismissRefusal={clearActionRefusal}
             bot={
               botChat.botId
                 ? {

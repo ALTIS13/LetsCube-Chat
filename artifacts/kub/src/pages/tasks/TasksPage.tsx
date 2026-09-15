@@ -16,7 +16,7 @@ import {
 } from "@/hooks/useTaskAccess";
 import { useTasks, type TasksFilter } from "@/hooks/useTasks";
 import { useTaskSoftDelete } from "@/hooks/useTaskSoftDelete";
-import { KubButton, KubEmptyState, KubFilterButton, KubFilterSummary, KubHeader, KubIcon, KubInput, type ActiveFilter } from "@/components/kub";
+import { KubButton, KubEmptyState, KubFilterButton, KubFilterSummary, KubHeader, KubIcon, KubInput, KubNotice, type ActiveFilter } from "@/components/kub";
 import { BulkSelectControl } from "@/components/ui/BulkSelectControl";
 import { TaskCard } from "./TaskCard";
 import { TaskListRow } from "./TaskListRow";
@@ -32,6 +32,7 @@ import {
 } from "./taskMeta";
 import type { TaskWithPeople } from "@/types/database";
 import { cn } from "@/lib/utils";
+import { LIST_MAY_BE_STALE } from "@/lib/plainMessages";
 
 interface Tab {
   id: string;
@@ -126,7 +127,7 @@ export function TasksPage() {
   const activeTab = tabs.find((t) => t.id === tabId) ?? tabs[0];
 
   const baseFilter: TasksFilter = { mine: "all" };
-  const { tasks, loading, refetch } = useTasks(baseFilter, { enabled: canViewTasks && !taskChecking });
+  const { tasks, loading, error: tasksError, view: tasksView, refetch } = useTasks(baseFilter, { enabled: canViewTasks && !taskChecking });
 
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -683,9 +684,36 @@ export function TasksPage() {
 
       {/* List */}
       <div className="flex-1 overflow-y-auto px-3 sm:px-5 py-4 pb-[calc(1rem+var(--kub-safe-bottom))]">
+        {/* Tasks are on screen and the newest read failed: they are older than
+            the database and they are true, so they stay and the line above them
+            says what happened. The same shape the sanctions tab uses. */}
+        {tasksView === "stale" && (
+          <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="tasks-stale">
+            <KubNotice tone="danger" className="min-w-0 flex-1 text-xs">
+              {LIST_MAY_BE_STALE}: {tasksError}
+            </KubNotice>
+            <KubButton size="sm" variant="secondary" onClick={() => void refetch()}>
+              Повторить
+            </KubButton>
+          </div>
+        )}
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <KubIcon name="spinner" size={24} tone="accent" label="Загрузка" />
+          </div>
+        ) : tasksView === "unavailable" ? (
+          /* F-6. Nothing has ever loaded and the read was refused. Drawing
+             «Нет доступных задач» with a «Создать задачу» beside it told the
+             person they were caught up, which is the opposite of what is known. */
+          <div className="py-10" data-testid="tasks-unavailable">
+            <KubNotice tone="danger" className="text-sm">
+              {tasksError}
+            </KubNotice>
+            <div className="mt-3 flex justify-center">
+              <KubButton size="sm" variant="secondary" onClick={() => void refetch()}>
+                Повторить
+              </KubButton>
+            </div>
           </div>
         ) : visibleTasks.length === 0 ? (
           <KubEmptyState
@@ -851,7 +879,7 @@ function getEmptyDescription(tabId: string, canCreateTasks: boolean): string {
 }
 
 function applyClientFilters(
-  tasks: TaskWithPeople[],
+  tasks: readonly TaskWithPeople[],
   tabId: string,
   search: string,
   nowMs: number,

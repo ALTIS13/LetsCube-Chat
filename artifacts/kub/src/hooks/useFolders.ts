@@ -4,6 +4,11 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
+import {
+  canCreateFolderWithScope,
+  canManageFolder as folderPolicyAllows,
+} from "@/lib/folderAccess";
+import { useMatchesIsAdmin, useMatchesIsManagerOrAdmin } from "@/hooks/useRole";
 import type { Folder, FolderScope, AppRole } from "@/types/database";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -83,12 +88,23 @@ export function useFolders() {
   // (primitive-only dependencies).
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const role = useAppStore((s) => s.currentUser?.role ?? null) as AppRole | null;
+  // The same rule applied to the two role predicates below (D-202). They read
+  // the caller's *global* roles, which the legacy `role` column above does not
+  // know about, and the values enter this hook as booleans — destructured at
+  // the call, never held as the returned object. A boolean has no identity, so
+  // it cannot rotate a `useCallback`; and neither hook subscribes to anything
+  // but `currentUser?.id`, so neither adds a heartbeat wake-up.
+  //
+  // The load-bearing half of the rule is below, not here: `fetchFolders` must
+  // keep its `[userId, supabase]` dependencies. Who you are does not change
+  // which rows RLS returns to a `select *`, only which controls we draw on
+  // them, so nothing here belongs in the fetcher.
+  const { allowed: isManagerOrAdmin } = useMatchesIsManagerOrAdmin();
+  const { allowed: isServerAdmin } = useMatchesIsAdmin();
   const [folders, setFolders] = useState<Folder[]>([]);
   const [folderChats, setFolderChats] = useState<Record<string, Set<string>>>({});
   /** Last user-facing error from a mutation; cleared on the next successful op. */
   const [lastError, setLastError] = useState<string | null>(null);
-
-  const isStaff = role === "admin" || role === "manager";
 
   const fetchFolders = useCallback(async () => {
     if (!userId) {
@@ -168,18 +184,14 @@ export function useFolders() {
   // ── Permission helpers ──────────────────────────────────────────────────
   /**
    * True if the current user can rename / delete / change the chat list of
-   * the given folder.  Mirrors the RLS matrix in 20260504_folders_shared.sql
-   * so the UI can disable destructive actions before the server has to
-   * reject them.
+   * the given folder.  The rule itself is `lib/folderAccess.ts`, a copy of the
+   * `folders update/delete scope-aware` policies as they read on production,
+   * so the UI can disable destructive actions before the server has to reject
+   * them — and, since D-202, so it stops hiding actions the server allows.
    */
-  const canManageFolder = useCallback((folder: Folder): boolean => {
-    if (!userId) return false;
-    const creator = folder.created_by ?? folder.user_id;
-    if (folder.scope === "personal") return folder.user_id === userId;
-    if (folder.scope === "shared") return isStaff || creator === userId;
-    if (folder.scope === "system") return role === "admin";
-    return false;
-  }, [userId, isStaff, role]);
+  const canManageFolder = useCallback((folder: Folder): boolean => (
+    folderPolicyAllows({ folder, userId, isManagerOrAdmin, isAdmin: isServerAdmin })
+  ), [userId, isManagerOrAdmin, isServerAdmin]);
 
   // ── Mutations ────────────────────────────────────────────────────────────
   const createFolder = useCallback(async (
@@ -190,7 +202,7 @@ export function useFolders() {
     if (!userId) return null;
     const trimmed = name.trim();
     if (!trimmed) return null;
-    if (scope !== "personal" && !isStaff) {
+    if (!canCreateFolderWithScope(scope, isManagerOrAdmin)) {
       setLastError("Создавать общие папки могут только администраторы и менеджеры.");
       return null;
     }
@@ -225,7 +237,7 @@ export function useFolders() {
       setLastError(friendlyFolderError(err, "create"));
       return null;
     }
-  }, [userId, folders, isStaff, supabase]);
+  }, [userId, folders, isManagerOrAdmin, supabase]);
 
   const updateFolder = useCallback(async (
     id: string,
