@@ -609,6 +609,48 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-15 — `8d38b17fdba714a279c36f89ad908f8e2cd8d627`
+
+The support and administration forms stop offering what the server refuses
+(D-142, D-144, D-139), and the five red media specs are triaged (D-206).
+
+- `letscube-web` runs image
+  `l64kyyu1sysev2izzjjbizhe:8d38b17fdba714a279c36f89ad908f8e2cd8d627`, read off
+  the running container, healthy. Live entry moved from `index-jzr0-3b9.js` to
+  `index-KCUZDAFl.js`, 2,937,662 bytes.
+- Marker «Сообщений за 5 минут — от 1 до 200.», calibrated in four directions and
+  compared in node rather than in the shell because it is Cyrillic: present in
+  the built bundle, absent from the live one beforehand, control present in
+  both, a nonsense string in neither.
+- Gates: typecheck clean, unit **2714/2714** with 17 mutations red and every file
+  restored byte-for-byte, e2e 24/24 at 1440 and 24/24 at 390, `git diff --check`
+  clean.
+
+**A third register entry proposed a fix the database refuses.** D-142 said to
+gate the invite role picker on «tech admin»; `registration_invite_create` checks
+`has_permission(auth.uid(), 'system.manage')`, which also admits a global
+administrator granted that key and the legacy `profiles.role` column. After
+D-124 and D-202 this is now a pattern rather than an accident: **an entry's
+proposed fix is a hypothesis about the server, and has to be measured like one.**
+
+**The defect a person actually hits was not in the entry at all.** D-144's
+editor carried `maxLength={4_000}` on all five actions while three of the five
+RPCs refuse anything over 1000 — so a 1500-character reason typed to the end,
+submitted, and came back refused.
+
+**Twenty-eight frames were captured and looked at rather than filed**, and one
+fixed a grammatical fault the code review had passed over: two role names read
+as the subject of a singular verb.
+
+**Honesty notes kept rather than dropped:** one mutation stayed green because
+the state it restores is unreachable from the interface without an option that
+was removed, and it is recorded as such; D-143's five header bars on a phone are
+real and unfixed; D-139 has no pixels because no fixture exists for a location
+member without admin rights; and `pnpm run format:check` does **not** pass on
+HEAD, on roughly twenty untouched files — so biome is not currently a gate and
+no report should claim it as one.
+
+
 ### 2026-09-15 — `35a30bdc5023863a87ece5324a0004e6baa69cac`
 
 A received photograph's worker copy reaches the open chat (D-095), and the
