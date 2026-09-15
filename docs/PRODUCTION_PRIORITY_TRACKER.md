@@ -609,6 +609,52 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-15 — `35a30bdc5023863a87ece5324a0004e6baa69cac`
+
+A received photograph's worker copy reaches the open chat (D-095), and the
+attach sheet's magic number becomes the claim it stood in for (D-195).
+
+- `letscube-web` runs image
+  `l64kyyu1sysev2izzjjbizhe:35a30bdc5023863a87ece5324a0004e6baa69cac`, read off
+  the running container, healthy. Live entry moved from `index-Cn_2zF0d.js` to
+  `index-jzr0-3b9.js`, 2,932,262 bytes, control string present.
+
+**This deploy has no content marker, and that is stated rather than dressed
+up.** The change is logic, and every identifier it introduces —
+`onlyPicturesOutstanding`, `MESSAGE_VARIANT_IMAGE_POLL_INTERVAL_MS`,
+`hasVideoMessages` — is mangled by the minifier; checked in the built bundle
+before the push rather than assumed. So identity rests on the container's image
+tag and reach on the entry filename moving off the one recorded before the push.
+That is weaker than a calibrated marker and is the honest description of it.
+
+- Gates: typecheck clean, unit **2661/2661** after a rebuild, `git diff --check`
+  clean, `attach-sheet` 24/24 where it had been 22 passed / 2 failed, and the
+  new `photo-variant-arrival` 2/2 at both viewports — red when the gate is
+  restored, and red again when the pace returns to sixty seconds, the second
+  proving the twelve-second bound is real rather than a patient assertion.
+
+**Six media entries were verified rather than trusted, and half were already
+fixed.** The register's «fixed on the branch, not deployed» caveats were stale:
+the four commits they name are all ancestors of `origin/main`. D-113, D-114 and
+D-122 closed as bookkeeping — verified *wired*, not merely present. D-115
+(albums) is still real and deliberately not started: a feature, not a defect.
+D-116 is partly done and its remaining half, a backfill of forty previews, needs
+`letscube-worker` deployed with the D-116 rule — **whether that worker is
+deployed was not checked, and is the next thing to check.**
+
+**D-195's arithmetic, finally:** the panel grows +134 while the tab capsule
+leaves the flow (−78) for a send capsule that floats and reserves 76px inside
+the scroller. Net +57 against a threshold of 60. It went red in `e8af325`, which
+*correctly* replaced a fixed 96px reserve with a measured 76px one — those
+twenty points are the whole deficit. The product was right and the number was
+wrong, which is why the number is gone.
+
+**D-206 filed:** five media e2e specs were already red before any of this,
+proved by reverting and re-running to an identical 5 of 18. Three broke in the
+same 2026-09-13 wave that broke D-195 — one day's work moved four measured
+numbers and nobody re-read the tests calibrated against the old ones.
+
+
 ### 2026-09-15 — `d80c89cb8125c358508a38fe5ba84dad235c7e6e`
 
 The two things the owner reported blocked — creating a group at all, and
