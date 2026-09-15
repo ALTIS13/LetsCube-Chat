@@ -232,11 +232,24 @@ test.describe("the send path of photos and videos", () => {
     const stored = backend.stored.get(upload.path);
     expect(stored, "storage kept the upload").toBeTruthy();
     const picture = await sharp(stored?.bytes).metadata();
-    expect({ format: picture.format, width: picture.width, height: picture.height }).toEqual({ format: "jpeg", width: 1600, height: 1200 });
+    /*
+      1440x1080 out of a 1600x1200 pick, and the two shipped decisions that make
+      it so. D-174 moved the default photo send to SD on 2026-09-13, which is
+      `compact` — a 1280 px long side — and D-116's floor keeps at least 1080 px
+      of the short side where the source had it. For 4:3 the floor is the larger
+      of the two, so the scale is 1080/1200 rather than 1280/1600.
+
+      This read 1600x1200 until D-206: at the old `balanced` default the 1920 cap
+      never bound and the photo went up untouched. Nothing about the case changed
+      — it is here for the name, the type and the format of the fallback encode —
+      but the size is the one number in it that a quality decision can move, so
+      it is stated with its arithmetic rather than left to be recalibrated.
+    */
+    expect({ format: picture.format, width: picture.width, height: picture.height }).toEqual({ format: "jpeg", width: 1440, height: 1080 });
     expect(backend.inserts[0]).toMatchObject({
       type: "image",
       media_path: upload.path,
-      media_metadata: { mime_type: "image/jpeg", optimized: true, uncompressed: false, width: 1600, height: 1200, original_mime_type: "image/png" },
+      media_metadata: { mime_type: "image/jpeg", optimized: true, uncompressed: false, width: 1440, height: 1080, original_mime_type: "image/png" },
     });
   });
 

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { readBackendIdentity, whyQaSignInIsImpossible } from "./backend-identity.ts";
 
 export type QaCredentials = {
   email: string;
@@ -114,6 +115,30 @@ export async function gotoOrSkip(page: Page, pathName: string) {
     throw new Error(`KUB_BASE_URL=${process.env.KUB_BASE_URL} was given, but ${pathName} could not be loaded: ${reason}`);
   }
   test.skip(!response, `KUB_BASE_URL is not reachable: ${test.info().project.use.baseURL}`);
+}
+
+/**
+ * Skips when the server under test is wired to a backend the QA accounts
+ * cannot exist in, and only then.
+ *
+ * A signed-in spec run against the route-mock fixture server used to fail with
+ * «sign-in did not reach the authenticated shell», which names the symptom of
+ * a configuration mistake as though it were a product fault — D-206 carried two
+ * such specs as failures. The configuration is knowable before anything is
+ * typed into a form, so it is read instead of inferred; `readBackendIdentity`
+ * holds the decision and is unit-tested, including the case where the probe
+ * reads nothing, which means *run* rather than skip.
+ *
+ * Call it before signing in. It costs one request for a module the dev server
+ * is already serving.
+ */
+export async function skipUnlessBackendHoldsQaAccounts(page: Page): Promise<void> {
+  const source = await page.request
+    .get("/src/lib/supabase/client.ts")
+    .then((response) => (response.ok() ? response.text() : ""))
+    .catch(() => "");
+  const reason = whyQaSignInIsImpossible(readBackendIdentity(source));
+  test.skip(reason !== null, reason ?? "");
 }
 
 /**

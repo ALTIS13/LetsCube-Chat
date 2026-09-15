@@ -5,7 +5,15 @@ import {
   findFirstAvailableQaRole,
   gotoOrSkip,
   loginAsRoleOrSkip,
+  skipUnlessBackendHoldsQaAccounts,
 } from "./helpers/auth";
+
+/**
+ * The second case here signs a QA account in and opens a real chat's shared
+ * media, so it keeps no screenshot, trace or video of a failure — Playwright
+ * only accepts that per file, which is why it is set for the source scan too.
+ */
+test.use({ screenshot: "off", trace: "off", video: "off" });
 
 test("chat info media gallery uses generated variants instead of original image files", () => {
   const source = readFileSync(
@@ -25,6 +33,11 @@ test("chat info counted media rows open in real UI without horizontal overflow",
     { includeDefault: true },
   );
   test.skip(!role, "QA credentials or auth state are not configured");
+  // And the server has to be one those accounts exist in. Against the
+  // route-mock fixture this failed on «sign-in did not reach the authenticated
+  // shell», which reads as a broken login rather than a spec in the wrong place
+  // (D-206).
+  await skipUnlessBackendHoldsQaAccounts(page);
 
   await gotoOrSkip(page, "/");
   await loginAsRoleOrSkip(page, role);

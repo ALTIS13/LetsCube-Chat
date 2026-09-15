@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip } from "./helpers/auth";
+import {
+  findFirstAvailableQaRole,
+  gotoOrSkip,
+  loginAsRoleOrSkip,
+  skipUnlessBackendHoldsQaAccounts,
+} from "./helpers/auth";
 
 /**
  * Opening a chat a second time should cost nothing for pictures already seen.
@@ -18,12 +23,24 @@ import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip } from "./helpe
  * What this asserts is the outcome rather than the header: after a first load,
  * a second entry produces no network traffic for media and, in particular, no
  * revalidation. A 304 here would mean the browser still had to ask.
+ *
+ * It signs a QA account in, so it needs a server on the real backend and it
+ * looks at a real person's pictures on the way. Both follow from that: it skips
+ * rather than fails where no such backend is configured (D-206), and it keeps
+ * no screenshot, trace or video of a failure, which Playwright can only be told
+ * per file.
  */
+test.use({ screenshot: "off", trace: "off", video: "off" });
+
 const CHAT_WITH_MEDIA = "/?chat=02a3f32e-0973-4fb0-9001-5d270cb22cca";
 
 test("a second visit to a chat asks the network for nothing", async ({ page, context }) => {
   const role = findFirstAvailableQaRole(["client", "owner", "tech_admin"], { includeDefault: true });
   test.skip(!role, "QA credentials are not configured");
+  // Credentials on this machine say nothing about the server this run points
+  // at. Against the route-mock fixture there is no auth service to answer them,
+  // and this used to fail on the form rather than on the configuration.
+  await skipUnlessBackendHoldsQaAccounts(page);
 
   const media: Array<{ url: string; bytes: number; status: number }> = [];
   page.on("requestfinished", async (request) => {

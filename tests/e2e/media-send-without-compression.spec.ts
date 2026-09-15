@@ -248,12 +248,48 @@ function sentPhotoBubble(page: Page, caption?: string): Locator {
   return caption ? bubbles.filter({ hasText: caption }).first() : bubbles.last();
 }
 
+/**
+ * The viewer's badge, and the question D-206 left open.
+ *
+ * `getByText("Оригинал", { exact: true })` matched two nodes and died of strict
+ * mode. That reads like a duplicated label, and a duplicated label would be a
+ * product defect worse than a flaky test — so it was measured rather than
+ * argued. The header draws the word twice and lets CSS choose which one a width
+ * gets: `sm:hidden` below 640 and `hidden sm:inline` from 640 up
+ * (`MediaViewer.tsx`, the pair from `lib/mediaOriginality.ts`). Read off the
+ * page at 1440 and at 360, exactly one of the two has a box and the other is
+ * `display: none`. So it was a loose locator, and the fault was the test's.
+ *
+ * The replacement cannot make that mistake again, and — this is the point — it
+ * would catch the defect the old one was mistaken for: it reads every span's
+ * computed `display` and box out of the page and requires that exactly one word
+ * is drawn. `textContent` would hold both and be satisfied by a badge nobody can
+ * see, which is the trap `media-original-claim.spec.ts` names as well.
+ */
+async function expectOneOriginalityBadge(viewer: Locator, word: string) {
+  const badge = viewer.getByTestId("media-viewer-originality");
+  await expect(badge).toBeVisible();
+  await expect(badge).toHaveAttribute("data-originality", "original");
+  const spellings = await badge.evaluate((node) =>
+    Array.from(node.querySelectorAll("span")).map((span) => ({
+      text: span.textContent ?? "",
+      display: getComputedStyle(span).display,
+      width: Math.round(span.getBoundingClientRect().width),
+    })),
+  );
+  const drawn = spellings.filter((span) => span.display !== "none" && span.width > 0);
+  expect(
+    drawn.map((span) => span.text),
+    `the header must draw one spelling and exactly one; it drew ${JSON.stringify(spellings)}`,
+  ).toEqual([word]);
+}
+
 async function expectViewerServesOriginal(page: Page, bubble: Locator, originalPath: string, width: number) {
   const originalUrl = `${PUBLIC_MEDIA}${originalPath}`;
   await bubble.getByRole("button", { name: "Открыть фото" }).click();
   const viewer = page.locator('[role="dialog"][aria-modal="true"]').filter({ has: page.getByTestId("media-viewer-stage") });
   await expect(viewer).toBeVisible();
-  await expect(viewer.getByText("Оригинал", { exact: true })).toBeVisible();
+  await expectOneOriginalityBadge(viewer, "Оригинал");
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -263,16 +299,60 @@ async function expectViewerServesOriginal(page: Page, bubble: Locator, originalP
     )
     .toEqual({ src: originalUrl, width });
 
+  /*
+    And the file control, which is the half of «the viewer opens the original»
+    that a person actually presses.
+
+    This asked for a button named «Открыть оригинал» and required a new tab.
+    D-147 removed both on 2026-09-13 — `mediaFileAction` answers `save` in every
+    shell but Android, and `saveMediaAs` fetches the file and writes it through
+    an `<a download>` — and D-097 then made the name say what the file is. This
+    helper was never updated, so it has been asking for a control the product no
+    longer has ever since; the strict-mode violation two lines above ran first
+    and nobody saw the rest (D-206). Measured now rather than named: the press's
+    own fetch is what says which file it reached.
+  */
   await page.evaluate(() => {
     const opened: string[] = [];
-    (window as unknown as { __opened: string[] }).__opened = opened;
+    const saved: Array<{ name: string; scheme: string }> = [];
+    const fetched: string[] = [];
+    const page_ = window as unknown as Record<string, unknown>;
+    page_.__opened = opened;
+    page_.__saved = saved;
+    page_.__fetched = fetched;
+    const send = window.fetch.bind(window);
+    window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      fetched.push(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      return send(input as RequestInfo, init);
+    }) as typeof window.fetch;
     window.open = ((url?: string | URL) => {
       opened.push(String(url));
       return null;
     }) as typeof window.open;
+    // Not called through: a real click hands the file to the browser's own
+    // download, which is not this machine's business during a test.
+    HTMLAnchorElement.prototype.click = function patched(this: HTMLAnchorElement) {
+      if (this.download) saved.push({ name: this.download, scheme: this.href.split(":")[0] ?? "" });
+    };
   });
-  await viewer.getByRole("button", { name: "Открыть оригинал" }).click();
-  expect(await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened)).toEqual([originalUrl]);
+  const control = viewer.getByTestId("media-viewer-file-action");
+  await expect(control, "the control must name the file it hands over (D-097)").toHaveAccessibleName("Сохранить оригинал");
+  await control.click();
+  const pressed = () =>
+    page.evaluate(() => ({
+      opened: (window as unknown as { __opened: string[] }).__opened,
+      saved: (window as unknown as { __saved: Array<{ name: string; scheme: string }> }).__saved,
+      fetched: (window as unknown as { __fetched: string[] }).__fetched,
+    }));
+  await expect.poll(async () => (await pressed()).saved.length, { message: "nothing was saved" }).toBeGreaterThan(0);
+  const { opened, saved, fetched } = await pressed();
+  // A tab would mean `saveMediaAs` fell through to its own escape hatch, which
+  // is exactly the behaviour D-147 removed from the ordinary path.
+  expect(opened, "a tab was opened, which D-147 closed").toEqual([]);
+  expect(saved[0]?.scheme, "the file was not written from a blob").toBe("blob");
+  expect(fetched.filter((url) => url.startsWith(PUBLIC_MEDIA)), "the press reached for something other than the original").toEqual([
+    originalUrl,
+  ]);
 }
 
 // ── what reached storage ─────────────────────────────────────────────────────
