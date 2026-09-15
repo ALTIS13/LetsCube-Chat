@@ -609,6 +609,48 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-15 — `d80c89cb8125c358508a38fe5ba84dad235c7e6e`
+
+The two things the owner reported blocked — creating a group at all, and
+creating channels in an existing one — plus the task buttons matching their
+RPCs, the last two rows of D-133, and a modal stack so Escape closes one layer
+rather than two.
+
+- `letscube-web` runs image
+  `l64kyyu1sysev2izzjjbizhe:d80c89cb8125c358508a38fe5ba84dad235c7e6e`, read off
+  the running container, healthy, one replica. Live entry moved from
+  `index-Di3dP3Dm.js` to `index-Cn_2zF0d.js`, 2,932,270 bytes.
+- Marker «Пропустить и назвать группу», calibrated in four directions and
+  compared **in node rather than in the shell**, because it is Cyrillic and the
+  encoding of a shell match is one more thing that can be wrong — the lesson of
+  the `latin1` probe two deploys ago. Present in the committed source, absent
+  from the live bundle beforehand, control present in both, a nonsense string in
+  neither.
+- Gates: typecheck clean, unit **2661/2661**, `git diff --check` clean, e2e for
+  each new surface at 1440 and 390.
+
+**A database change went with it**, applied separately and first:
+`20260915160000_a_private_delete_is_not_a_staff_action.sql`, after a verified
+schema backup (1,338,630 bytes, sha256
+`23c08ecbb3946fcfdb834a3cd650188df8e4a255fc71901dea25e3fe35ebd288`) and its own
+rehearsal on production, rolled back. `audit_logs` held 392 rows before and
+after.
+
+**Both of the owner's reports turned out to be client-side, and the database was
+measured first in each case.** The group-creation probe is worth keeping: it
+reported the `chats` insert refused by RLS while every conjunct of that policy's
+own WITH CHECK, measured as the same person, was true. A contradiction means the
+probe is wrong, and it was — the same insert as a bare statement under
+`SET LOCAL ROLE authenticated` succeeds. Believing it would have sent me to
+rewrite a policy that was never at fault.
+
+**Still open and waiting on the owner:** the `media` bucket is public and holds
+all 771 objects. Flipping it breaks every image in the product the moment it
+happens — URLs are persisted in rows as well as built in seven call sites — so
+the sequence is client first, then the twenty legacy paths and the avatars, then
+the bucket. Recorded in `docs/audit/2026-09-15-storage-audit.md`.
+
+
 ### 2026-09-15 — `86acfb2440a2c39ce65a74db89bfbf2c09e61e1c`
 
 A refused read stops being drawn as an empty account (D-203), three meanings of
