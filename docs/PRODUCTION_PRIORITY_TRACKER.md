@@ -609,6 +609,54 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-15 — `86acfb2440a2c39ce65a74db89bfbf2c09e61e1c`
+
+A refused read stops being drawn as an empty account (D-203), three meanings of
+«staff» become one on the folders screen (D-202 / F-8), and the reaction refusal
+becomes reachable with a rollback behind it (D-204). Carries the service-message
+work deployed as database state earlier the same night (D-166).
+
+- `letscube-web` runs image
+  `l64kyyu1sysev2izzjjbizhe:86acfb2440a2c39ce65a74db89bfbf2c09e61e1c`, read off
+  the running container, healthy, one replica — the previous one is gone. Live
+  entry moved from `index-BOJop3WX.js` to `index-Di3dP3Dm.js`, 3,030,214 bytes.
+- Marker `chat-list-unavailable`, calibrated in **four** directions: control
+  `LETSCUBE` in both bundles, the marker in the shipping one only,
+  `zzz-never-shipped` in neither. Round eight read a 144-byte asset, the
+  documented mid-rollover state.
+- A Cyrillic needle was carried alongside it purely to confirm yesterday's
+  lesson — «Не удалось загрузить задачи», compared in `utf8` this time, matched
+  correctly where the `latin1` comparison of the previous deploy had answered
+  «absent» about a string that was present.
+- Gates: typecheck clean, unit **2631/2631**, server **98/98** against a fresh
+  `artifacts/api-server/dist`, production build proved by its own output (`sw.js`
+  build `4787c40a6c50bb61`), `git diff --check` clean. New e2e:
+  `group-service-messages` 6/6 and `chat-list-refusal` 4/4, each at both 1440
+  and 390.
+
+**The database half went first and separately**, under
+`20260915140000_a_group_says_who_came_and_went.sql`: one transaction, a verified
+schema backup beforehand (1,331,541 bytes, sha256
+`d23512daa48ac89249a8de87997b717759b680012050376a39d5e15c96d51320`), a rehearsal
+on production that measured all eight branches and rolled back, and a self-check
+that raises rather than committing a half-applied state.
+
+**Three tests were found agreeing with the defect they were written for**, in
+one session. The list work had five mutations come back green — a short source
+pattern matching a second occurrence lower in the file, a lazy `[\s\S]*?`
+running into the next block and finding the same words there, and a notice left
+behind `{false && (` that still satisfied a `data-testid` check. The reaction
+rollback mutation stayed green because the chat revalidates itself after 2.5 s
+when Realtime never answers, so a patient assertion passes over a missing
+rollback entirely. And a loose alternation over two possible sentences passed
+whichever the product drew.
+
+**What is deliberately not covered:** the `stale` rendering of a list. Reaching
+it needs a second read refused after a first succeeded, and nothing a test can
+trigger from the page does that; an `.or(...)` assertion covering both outcomes
+was drafted and thrown away rather than banked as evidence.
+
+
 ### 2026-09-15 — `8cb48f203fd6d4efb451da4807db801b8bd43f91`
 
 A member row says who somebody is and opens them (D-168), and two defects caught
