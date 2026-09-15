@@ -18,6 +18,38 @@
  * flip, a row already flipped is no longer `ready` so it is not selected twice,
  * and a row the worker has finished is at the new size so it no longer matches.
  *
+ * ## THE FLIP IS NO LONGER ENOUGH ON ITS OWN (measured 2026-09-15)
+ *
+ * The sentence above about the worker's «candidate set» was true when this was
+ * written and is not true now. `6a26bc8` — «the pipeline is told about work
+ * instead of hunting for it every minute» — made the worker consume
+ * `private.media_variant_jobs` and nothing else. It does not look for `stale`
+ * rows any more, so marking one and walking away leaves it stale for ever: the
+ * client skips anything that is not `ready`, and that picture silently falls
+ * back to its full-size original.
+ *
+ * Seen for real. One row was flipped, the queue was empty a minute later and
+ * the row was still `stale`; a job inserted by hand was consumed at once and
+ * the row came back `ready`.
+ *
+ * So after running this with `--apply`, enqueue the work as well. The queue is
+ * owned by `supabase_admin` and `postgres` is not a member of it, so it needs
+ * that role:
+ *
+ *     insert into private.media_variant_jobs (scope, target_id)
+ *     select 'message', v.message_id
+ *       from public.media_variants v
+ *       join public.messages m on m.id = v.message_id
+ *      where v.variant_kind = 'image_preview' and v.status = 'stale'
+ *        and m.deleted_at is null
+ *        and (m.media_path is not null or m.media_url is not null)
+ *     on conflict (scope, target_id) do nothing;
+ *
+ * — which is exactly what `private.enqueue_media_variant_job_for_message`
+ * writes, so the worker cannot tell the two apart. Recorded as D-207; the
+ * proper fix is for this script to enqueue rather than for the next person to
+ * remember a paragraph.
+ *
  * Dry run unless `--apply` is passed. Prints counts and byte totals only: no
  * ids, paths, chat or message identifiers.
  */

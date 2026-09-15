@@ -12127,7 +12127,7 @@ are all ancestors of `origin/main`, and the tester's report was against
 | D-113 a video does not send | **already fixed and deployed.** Verified *wired*, not merely present: the failure description and per-attachment isolation are reached from `ChatWindow`. Residual — an upload while the installed iPhone app is backgrounded — needs a device. |
 | D-114 a 300 KB photo is slow | **already fixed and deployed.** Three-way upload concurrency with strict pick-order insertion. Residual needs a device. |
 | D-122 the attach sheet | **already fixed.** All seven acceptance points shipped. Bookkeeping only. |
-| D-116 WebP and zoom | **partly.** Floor, cap, version token and zoom are deployed; the backfill of 40 existing previews needs `letscube-worker` deployed with the D-116 rule, and **whether that worker is deployed was not checked**. |
+| D-116 WebP and zoom | **complete, 2026-09-15.** The worker *is* deployed with the rule — `fkd10qwlo4qod9e6gtyzzuwk` runs `9049376`, which carries both the short-side floor and the backfill module. And the backfill was not forty previews but **one**: measured, not remembered. It is done, and `image_preview` rows went 172 ready to 173 with none stale. |
 | D-095 a photo's worker copy never arrives | **was still real. Fixed.** |
 | D-195 the attach sheet stopped growing | **was still real. Fixed, and finally diagnosed.** |
 | D-115 albums | **still real, not started.** |
@@ -12188,3 +12188,43 @@ reverting it and re-running: identical 5 failed / 13 passed.
 **Why it is one entry:** three of the five broke in the same 2026-09-13
 quality-ladder wave that broke D-195. A day's work moved four measured numbers
 and the tests calibrated against the old ones were never re-read.
+
+---
+
+## D-207 `[ ]` The preview backfill marks rows for a worker that stopped looking for them
+
+**Severity:** medium, and latent until somebody runs the script — which is
+exactly when it will not be noticed.
+
+**Surface:** `scripts/media-preview-backfill.mjs`, and
+`artifacts/api-server/src/workers/mediaVariantsWorker.ts`.
+
+**Defect:** the script's whole mechanism is to flip an `image_preview` row from
+`ready` to `stale`, on the stated grounds that this «puts a message back into
+the worker's candidate set». That was true when it was written. `6a26bc8` —
+«the pipeline is told about work instead of hunting for it every minute» — made
+the worker consume `private.media_variant_jobs` and nothing else. **It does not
+look for `stale` rows any more.** So the script marks rows and nothing ever
+regenerates them.
+
+**Consequence:** `useMediaVariants` skips any row that is not `ready`
+(`useMediaVariants.ts:285`), so each marked picture silently falls back to its
+full-size original — the very thing D-116 was about — and stays that way.
+Nothing reports it: the script prints `marked_stale N` and exits successfully.
+
+**Measured, 2026-09-15, not reasoned.** Running it with `--apply` on production
+flipped one row. A minute later `private.media_variant_jobs` held **0 rows** and
+the variant was still `stale`. A job inserted by hand was consumed at once and
+the row returned to `ready` — 172 ready before, 173 after, none stale.
+
+**Two things the fix has to deal with.** The queue is owned by `supabase_admin`
+and `postgres` is not a member, so a plain `psql -U postgres` insert is refused;
+and the script reaches the database through PostgREST with the service role,
+which cannot see the `private` schema at all. So the script cannot enqueue
+directly — it needs either an RPC of its own, or to touch `messages.media_path`
+so that `trg_enqueue_media_variant_job_on_update` fires, which is the product's
+own path and therefore the one that cannot drift.
+
+**Not fixed now**, deliberately: there is nothing left to back-fill, so any fix
+would ship untested end to end. A warning naming this entry is in the script's
+header instead, where the next person to run it will actually read it.
