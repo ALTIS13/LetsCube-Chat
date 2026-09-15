@@ -12,7 +12,6 @@ import {
   getMessageVariantRowsSignature,
   getMessageVariantSourceIds,
   hasNewMessageVariantWork,
-  hasVideoVariantSources,
   queueMessageVariantRefresh,
   selectMessageVariantCacheEvictions,
   type MessageVariantKind,
@@ -60,7 +59,6 @@ const MESSAGE_VARIANT_CACHE_LIMIT = 8;
 interface MessageVariantCacheEntry {
   chatId: string;
   refreshState: MessageVariantRefreshState;
-  hasVideoMessages: boolean;
   variants: Record<string, MessageMediaVariantUrls>;
   listeners: Set<(variants: Record<string, MessageMediaVariantUrls>) => void>;
   refreshLifecycle: MessageVariantRefreshLifecycle | null;
@@ -110,7 +108,6 @@ export function useMessageMediaVariantUrls(messages: MessageMediaVariantSource[]
   const messageIds = useMemo(() => getMessageVariantSourceIds(messages), [messages]);
   const messageIdKey = messageIds.join("|");
   const chatId = useMemo(() => getMessageVariantCacheKey(messages), [messages]);
-  const hasVideoMessages = useMemo(() => hasVideoVariantSources(messages), [messages]);
   const expectedKinds = useMemo(() => getExpectedMessageVariantKindsByMessage(messages), [messages]);
   const [variantsByMessageId, setVariantsByMessageId] = useState<Record<string, MessageMediaVariantUrls>>({});
 
@@ -127,12 +124,12 @@ export function useMessageMediaVariantUrls(messages: MessageMediaVariantSource[]
       entry.evictionTimer = null;
     }
     setVariantsByMessageId(entry.variants);
-    updateMessageVariantCacheEntry(entry, messageIds, hasVideoMessages, expectedKinds);
+    updateMessageVariantCacheEntry(entry, messageIds, expectedKinds);
     return () => {
       entry.listeners.delete(setVariantsByMessageId);
       scheduleMessageVariantEntryEviction(entry);
     };
-  }, [chatId, hasVideoMessages, messageIdKey]);
+  }, [chatId, messageIdKey]);
 
   return variantsByMessageId;
 }
@@ -143,7 +140,6 @@ function getMessageVariantCacheEntry(chatId: string): MessageVariantCacheEntry {
   const entry: MessageVariantCacheEntry = {
     chatId,
     refreshState: { messageIds: [], loading: false, reloadPending: false },
-    hasVideoMessages: false,
     variants: {},
     listeners: new Set(),
     refreshLifecycle: null,
@@ -165,7 +161,6 @@ function getMessageVariantCacheEntry(chatId: string): MessageVariantCacheEntry {
 function updateMessageVariantCacheEntry(
   entry: MessageVariantCacheEntry,
   messageIds: string[],
-  hasVideoMessages: boolean,
   expectedKinds: Map<string, readonly MessageVariantKind[]>,
 ): void {
   const transition = queueMessageVariantRefresh(entry.refreshState, messageIds);
@@ -175,7 +170,6 @@ function updateMessageVariantCacheEntry(
   // work counts; see `hasNewMessageVariantWork`.
   if (hasNewMessageVariantWork(entry.expectedKinds, expectedKinds)) entry.unchangedPolls = 0;
   entry.expectedKinds = expectedKinds;
-  entry.hasVideoMessages = hasVideoMessages;
   applyMessageVariantPolling(entry);
   if (messageIds.length === 0) {
     entry.variants = {};
@@ -193,12 +187,21 @@ function updateMessageVariantCacheEntry(
  * Called after anything that could change the answer: the messages on screen,
  * and every poll's own result. The lifecycle takes its interval once, when it
  * is built, so a changed pace means a new one — but it is only rebuilt when the
- * pace actually changed, or a poll that keeps its minute would reset its own
+ * pace actually changed, or a poll that keeps its interval would reset its own
  * timer and its tab-return listeners every time it ran.
  *
- * Only a chat holding a video polls at all, exactly as before this change: a
- * picture's variants land in one pass, and the sender's own preview is already
- * on screen while they do, so nothing there was ever waiting on a second look.
+ * `decideMessageVariantPoll` is the whole rule (D-176). This used to add a
+ * condition of its own on top — only a chat holding a video polled at all — on
+ * the grounds that «a picture's variants land in one pass, and the sender's own
+ * preview is already on screen while they do». Neither half held for a photo
+ * somebody else sent: the one pass runs before the worker has written anything,
+ * and the sender-side preview exists only for an «Оригинал» send
+ * (`readOriginalPreview` requires `uncompressed`). So an ordinary photo in a
+ * chat without a video was drawn from its full-size original for the rest of
+ * the session, and the info panel's grid showed a placeholder where its tile
+ * should be. That was D-095, and the gate was the pre-D-176 crude form of the
+ * same idea the rule now states properly — bounded, backed off, and stopping
+ * the moment everything has arrived.
  */
 function applyMessageVariantPolling(entry: MessageVariantCacheEntry): void {
   const decision = decideMessageVariantPoll({
@@ -206,7 +209,7 @@ function applyMessageVariantPolling(entry: MessageVariantCacheEntry): void {
     settled: entry.settledKinds,
     unchangedPolls: entry.unchangedPolls,
   });
-  if (entry.disposed || !entry.hasVideoMessages || !decision.poll) {
+  if (entry.disposed || !decision.poll) {
     stopMessageVariantPolling(entry);
     return;
   }

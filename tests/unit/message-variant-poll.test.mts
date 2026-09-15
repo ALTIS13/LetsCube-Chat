@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  MESSAGE_VARIANT_IMAGE_POLL_INTERVAL_MS,
   MESSAGE_VARIANT_POLL_INTERVAL_MS,
   MESSAGE_VARIANT_POLL_MAX_INTERVAL_MS,
   MESSAGE_VARIANT_POLL_UNCHANGED_LIMIT,
@@ -11,6 +12,7 @@ import {
   getMessageVariantRowsSignature,
   hasNewMessageVariantWork,
   hasOutstandingMessageVariants,
+  onlyPicturesOutstanding,
   type MessageVariantRow,
   type MessageVariantSource,
 } from "../../artifacts/kub/src/lib/messageVariantRefresh.ts";
@@ -189,4 +191,79 @@ test("an answer is told from the one before it by what the rows say, not by thei
   const arrived = [...first, row({ message_id: "m-2", variant_kind: "image_thumb" })];
   assert.notEqual(getMessageVariantRowsSignature(first), getMessageVariantRowsSignature(arrived));
   assert.equal(getMessageVariantRowsSignature([]), "");
+});
+
+// ── D-095: a photo is not asked for on a transcode's schedule ────────────────
+
+test("a chat of photographs polls, and on the picture pace", () => {
+  // The defect itself. A chat with no video in it did not poll at all, so the
+  // worker's copies of a photo somebody else sent never arrived while it was
+  // open. The rule answers "outstanding" here and always did — what stopped it
+  // was a second condition in the hook, now gone.
+  const expected = getExpectedMessageVariantKindsByMessage([imageMessage("m-1")]);
+  const settled = collectSettledMessageVariantKinds([]);
+
+  assert.equal(onlyPicturesOutstanding(expected, settled), true);
+  assert.deepEqual(decideMessageVariantPoll({ expected, settled, unchangedPolls: 0 }), {
+    poll: true,
+    intervalMs: MESSAGE_VARIANT_IMAGE_POLL_INTERVAL_MS,
+    reason: "outstanding",
+  });
+  // Five seconds, not sixty: the point of the pace is that a resize is not a
+  // transcode. A minute here would have been the defect's cost kept.
+  assert.equal(MESSAGE_VARIANT_IMAGE_POLL_INTERVAL_MS, 5_000);
+  assert.ok(MESSAGE_VARIANT_IMAGE_POLL_INTERVAL_MS < MESSAGE_VARIANT_POLL_INTERVAL_MS);
+});
+
+test("a video still outstanding keeps the video pace, photo or no photo", () => {
+  // The slower of the two is what the chat is waiting for. Asking twelve times
+  // as often would not make ffmpeg finish sooner, and D-176 is the reason that
+  // matters.
+  const expected = getExpectedMessageVariantKindsByMessage([videoMessage("m-1"), imageMessage("m-2")]);
+  const settled = collectSettledMessageVariantKinds([
+    row({ message_id: "m-2", variant_kind: "image_thumb" }),
+    row({ message_id: "m-2", variant_kind: "image_preview" }),
+  ]);
+
+  assert.equal(onlyPicturesOutstanding(expected, settled), false);
+  assert.equal(
+    decideMessageVariantPoll({ expected, settled, unchangedPolls: 0 }).intervalMs,
+    MESSAGE_VARIANT_POLL_INTERVAL_MS,
+  );
+});
+
+test("a photo's copies that never come are given up on, bounded like anything else", () => {
+  const expected = getExpectedMessageVariantKindsByMessage([imageMessage("m-1")]);
+  const settled = collectSettledMessageVariantKinds([row({ message_id: "m-1", variant_kind: "image_thumb" })]);
+  const paces: number[] = [];
+  for (let unchangedPolls = 0; unchangedPolls < MESSAGE_VARIANT_POLL_UNCHANGED_LIMIT; unchangedPolls += 1) {
+    const decision = decideMessageVariantPoll({ expected, settled, unchangedPolls });
+    assert.equal(decision.poll, true, "poll " + unchangedPolls + " must still run");
+    paces.push(decision.intervalMs);
+  }
+
+  // The same shape as the video curve, started from five seconds: about five
+  // and a half minutes of patience in the same eight queries. The ceiling is
+  // never reached from here, which is the point — a picture that has not been
+  // written in five minutes is not being written.
+  assert.deepEqual(paces, [5_000, 5_000, 5_000, 10_000, 20_000, 40_000, 80_000, 160_000]);
+  assert.ok(paces[paces.length - 1] < MESSAGE_VARIANT_POLL_MAX_INTERVAL_MS);
+  assert.deepEqual(
+    decideMessageVariantPoll({ expected, settled, unchangedPolls: MESSAGE_VARIANT_POLL_UNCHANGED_LIMIT }),
+    { poll: false, intervalMs: 0, reason: "unchanged" },
+  );
+});
+
+test("nothing outstanding is not pictures outstanding", () => {
+  // Or a settled chat would be read as a chat of photographs and keep its pace
+  // alive; the first rule of `decideMessageVariantPoll` stops it either way,
+  // but the two must not disagree about what is happening.
+  const expected = getExpectedMessageVariantKindsByMessage([imageMessage("m-1")]);
+  const settled = collectSettledMessageVariantKinds([
+    row({ message_id: "m-1", variant_kind: "image_thumb" }),
+    row({ message_id: "m-1", variant_kind: "image_preview" }),
+  ]);
+
+  assert.equal(onlyPicturesOutstanding(expected, settled), false);
+  assert.equal(decideMessageVariantPoll({ expected, settled, unchangedPolls: 0 }).reason, "settled");
 });

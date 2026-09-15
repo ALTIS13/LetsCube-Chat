@@ -440,7 +440,41 @@ test.describe("the attach sheet (D-122)", () => {
     ]);
     await expect(sheet.locator("[data-attach-pick]")).toHaveCount(3);
     const picked = await settlesToFit(sheet, "three picks");
-    expect(picked.height, "three picks did not grow the sheet").toBeGreaterThan(empty.height + 60);
+    expect(picked.height, "three picks did not grow the sheet").toBeGreaterThan(empty.height);
+    // How much it grows is deliberately not a number written here. Two entries
+    // and three picks in three columns is two rows, and the tab capsule leaves
+    // the flow for the send capsule at the same moment, so the net is a row of
+    // picks minus that capsule: measured 57px on the phone and 59px on the
+    // desktop. This line used to read `empty.height + 60`, a threshold
+    // calibrated against the fixed `pb-24` (96px) the gallery once kept for the
+    // floating capsule; when the video ladder replaced it with a reserve
+    // measured from the floating stack (76px with no ladder showing) the grid
+    // lost 20px, the growth fell under the threshold, and the test went red on
+    // 2026-09-13 over a sheet that was behaving correctly — taking the two
+    // closing gestures below down with it for a day (D-195).
+    const picks = await sheet.evaluate((node) => {
+      const scroller = node.querySelector<HTMLElement>("[data-attach-scroll]");
+      const send = node.querySelector<HTMLElement>("[data-attach-send-bar]");
+      if (!scroller) return [];
+      // What the picks must stay clear of: the capsule floating over the grid,
+      // or the foot of the scrolling part when nothing floats there.
+      const floor = send ? send.getBoundingClientRect().top : scroller.getBoundingClientRect().bottom;
+      return Array.from(node.querySelectorAll<HTMLElement>("[data-attach-pick]")).map((pick) => {
+        const box = pick.getBoundingClientRect();
+        return { top: Math.round(box.top), clearance: Math.round(floor - box.bottom) };
+      });
+    });
+
+    // The claim the threshold was standing in for, measured rather than guessed:
+    // the sheet took the room the picks need, and the capsule floating over the
+    // grid hides none of them. A reserve that is too small breaks this and
+    // nothing else — which is exactly what it is for.
+    expect(picks, "three picks are drawn in the grid").toHaveLength(3);
+    for (const pick of picks) {
+      expect(pick.clearance, "a pick is hidden under the send capsule or past the foot of the sheet").toBeGreaterThanOrEqual(0);
+    }
+    // And they wrapped, which is why the sheet had to grow in the first place.
+    expect(new Set(picks.map((pick) => pick.top)).size, "the picks did not wrap onto a second row").toBe(2);
 
     // With picks selected the dim asks first, and only then closes.
     await dim.click({ position: dimPoint });

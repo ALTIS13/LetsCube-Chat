@@ -79,15 +79,6 @@ export function getMessageVariantSourceIds(messages: readonly MessageVariantSour
   return Array.from(ids).sort();
 }
 
-export function hasVideoVariantSources(messages: readonly MessageVariantSource[]): boolean {
-  return messages.some((message) => (
-    message.type === "video" &&
-    message.media_url &&
-    !message.deleted_at &&
-    !message.id.startsWith("tmp:")
-  ));
-}
-
 const MESSAGE_IMAGE_VARIANT_KINDS: readonly MessageVariantKind[] = ["image_thumb", "image_preview"];
 const MESSAGE_VIDEO_VARIANT_KINDS: readonly MessageVariantKind[] = ["video_poster", "video_720p"];
 
@@ -110,6 +101,16 @@ const TERMINAL_MESSAGE_VARIANT_ERROR_CODES: ReadonlySet<string> = new Set([
 
 /** The pace the poll has always run at, and still runs at while answers keep changing. */
 export const MESSAGE_VARIANT_POLL_INTERVAL_MS = 60_000;
+/**
+ * The pace a picture's copies are asked for.
+ *
+ * A thumbnail and a preview are two resizes, and the worker writes them within
+ * seconds of the message; a 720p transcode is minutes of ffmpeg. Asking for a
+ * picture on the video pace means a reader waits a minute for a copy that spent
+ * fifty-five seconds of it already in storage — which is most of what D-095
+ * cost, once the chat was allowed to ask at all.
+ */
+export const MESSAGE_VARIANT_IMAGE_POLL_INTERVAL_MS = 5_000;
 /** However far the wait backs off, it stops here. */
 export const MESSAGE_VARIANT_POLL_MAX_INTERVAL_MS = 300_000;
 /** Answers that change nothing are tolerated at the full pace this many times before the wait grows. */
@@ -211,6 +212,30 @@ export function hasOutstandingMessageVariants(
 }
 
 /**
+ * Whether everything still outstanding is a picture's copy.
+ *
+ * Decides the pace and nothing else. A chat still waiting on a video keeps the
+ * video pace even when a photo in it is outstanding too: the slower of the two
+ * is what the chat is actually waiting for, and asking twelve times as often
+ * would not make ffmpeg finish sooner.
+ */
+export function onlyPicturesOutstanding(
+  expected: ReadonlyMap<string, readonly MessageVariantKind[]>,
+  settled: ReadonlyMap<string, ReadonlySet<string>>,
+): boolean {
+  let outstanding = false;
+  for (const [messageId, kinds] of expected) {
+    const settledKinds = settled.get(messageId);
+    for (const kind of kinds) {
+      if (settledKinds?.has(kind)) continue;
+      if (!MESSAGE_IMAGE_VARIANT_KINDS.includes(kind)) return false;
+      outstanding = true;
+    }
+  }
+  return outstanding;
+}
+
+/**
  * Whether the messages on screen have brought work the poll has not seen.
  *
  * A message that arrived after the polling converged is the one thing that must
@@ -256,7 +281,11 @@ export function decideMessageVariantPoll({
   if (unchangedPolls >= MESSAGE_VARIANT_POLL_UNCHANGED_LIMIT) {
     return { poll: false, intervalMs: 0, reason: "unchanged" };
   }
-  return { poll: true, intervalMs: pollIntervalMs(unchangedPolls), reason: "outstanding" };
+  // A picture and a transcode are not the same wait; see the two constants above.
+  const base = onlyPicturesOutstanding(expected, settled)
+    ? MESSAGE_VARIANT_IMAGE_POLL_INTERVAL_MS
+    : MESSAGE_VARIANT_POLL_INTERVAL_MS;
+  return { poll: true, intervalMs: pollIntervalMs(unchangedPolls, base), reason: "outstanding" };
 }
 
 export function queueMessageVariantRefresh(
@@ -396,7 +425,7 @@ function expectsMessageVariants(message: MessageVariantSource): boolean {
  * to cover ten minutes of ffmpeg would cost ten more pointless queries to get
  * there.
  */
-function pollIntervalMs(unchangedPolls: number): number {
+function pollIntervalMs(unchangedPolls: number, base: number): number {
   const doublings = Math.max(0, unchangedPolls - MESSAGE_VARIANT_POLL_STEADY_POLLS);
-  return Math.min(MESSAGE_VARIANT_POLL_INTERVAL_MS * 2 ** doublings, MESSAGE_VARIANT_POLL_MAX_INTERVAL_MS);
+  return Math.min(base * 2 ** doublings, MESSAGE_VARIANT_POLL_MAX_INTERVAL_MS);
 }

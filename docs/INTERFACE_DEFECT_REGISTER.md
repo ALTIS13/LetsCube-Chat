@@ -5887,7 +5887,7 @@ icon without a name.
 **Fixed** in `b3efbc8` with an `aria-label`. **Regression tests:** taking it out
 failed the D-092 spec in the agent's mutation run.
 
-## D-095 `[ ]` A new photo's worker copies do not reach an open chat without videos
+## D-095 `[x]` A new photo's worker copies do not reach an open chat without videos
 
 **Severity:** low. Read from the source, not reproduced.
 
@@ -6553,7 +6553,7 @@ this entry, and the mechanism it needs now exists. `tests/e2e/desktop-shell.spec
 asserts the messenger's corner as an empty set and «Задачи» as the named set
 `["Новая"]`, so it stays a ratchet in both directions.
 
-## D-113 `[ ]` A video does not send
+## D-113 `[x]` A video does not send
 
 **Severity:** high. Reported by a tester of the production build (`45971c6`) on
 2026-09-11 through the owner, recorded for later; not yet reproduced.
@@ -6599,7 +6599,7 @@ the tile. So the reason is still unknown. What will name it is the send path's n
 server's own status and the file's name, once a build with it reaches him — which is an argument for deploying
 this batch before hunting further.
 
-## D-114 `[ ]` A 300 KB photo takes a very long time to upload
+## D-114 `[x]` A 300 KB photo takes a very long time to upload
 
 **Severity:** medium. The same report; not yet reproduced.
 
@@ -6853,7 +6853,7 @@ where Telegram has compact grouped rows.
 
 **Decision:** rebuilt in Telegram's settings idiom inside the parity work of item 30.
 
-## D-122 `[ ]` The attach menu is a list of buttons that open other things, where Telegram's attach sheet does the thing in place
+## D-122 `[x]` The attach menu is a list of buttons that open other things, where Telegram's attach sheet does the thing in place
 
 **Severity:** high, for how the product reads. Named by the owner on 2026-09-11, after
 the D-119 renders, with two screenshots of Telegram's attach sheet on Android shown for
@@ -11478,7 +11478,7 @@ computed border width in both states, and removing the rule turns it red.
 
 ---
 
-## D-195 `[ ]` The attach sheet stopped growing with what is picked, and its test has been red since
+## D-195 `[x]` The attach sheet stopped growing with what is picked, and its test has been red since
 
 **Severity:** medium. Found on 2026-09-14 while checking that the D-194 fix broke
 nothing: two tests of `tests/e2e/attach-sheet.spec.ts` are red, at
@@ -12111,3 +12111,80 @@ holds `location_members.manage`. The two should be decided together.
 **Do not widen only the caller side.** D-197 is the precedent: the sanction
 matrix was widened on both the caller and the target because ranking one alone
 would have opened a worse hole than it closed.
+
+---
+
+## The media cluster, verified and closed on 2026-09-15
+
+A survey of the six media entries, measured against the shipped code rather than
+taken from the entries' own words. **The register's «fixed on the branch, not
+deployed» caveats were stale**: `584a38f`, `e6a36c4`, `faa32bc` and `c1a1d2d`
+are all ancestors of `origin/main`, and the tester's report was against
+`45971c6`.
+
+| Entry | Verdict |
+| --- | --- |
+| D-113 a video does not send | **already fixed and deployed.** Verified *wired*, not merely present: the failure description and per-attachment isolation are reached from `ChatWindow`. Residual — an upload while the installed iPhone app is backgrounded — needs a device. |
+| D-114 a 300 KB photo is slow | **already fixed and deployed.** Three-way upload concurrency with strict pick-order insertion. Residual needs a device. |
+| D-122 the attach sheet | **already fixed.** All seven acceptance points shipped. Bookkeeping only. |
+| D-116 WebP and zoom | **partly.** Floor, cap, version token and zoom are deployed; the backfill of 40 existing previews needs `letscube-worker` deployed with the D-116 rule, and **whether that worker is deployed was not checked**. |
+| D-095 a photo's worker copy never arrives | **was still real. Fixed.** |
+| D-195 the attach sheet stopped growing | **was still real. Fixed, and finally diagnosed.** |
+| D-115 albums | **still real, not started.** |
+
+### D-195, the arithmetic the entry said nobody understood
+
+Measured in a browser at both viewports. At 390: the empty sheet is 317 points,
+a sheet with picks is 374. The panel grows **+134**, while the tab capsule
+(60px plus padding, **−78**) leaves the flow for the send capsule, which floats
+and reserves 76px *inside* the scroller. Net **+57** against a threshold of 60;
+at 1440 it is +59.
+
+It went red on 2026-09-13 in `e8af325` — the video quality ladder — which
+**correctly** replaced the gallery's fixed 96px reserve with a measured 76px
+one. Those 20 points are the whole deficit: the threshold had been calibrated
+against an over-reserve. The product was right and the number was wrong. The
+magic number is replaced by the claim it stood in for — every pick drawn clear
+of the floating capsule, and the picks wrapping onto a second row — proved by a
+mutation that shrinks the reserve while still growing the sheet, which goes red
+at exactly −39px.
+
+A correction to the entry itself: the two closing gestures it worried about run
+*before* the failing line. What actually went unchecked for a day is the
+confirm-before-discard path after it.
+
+### D-095, and the comment that was wrong twice
+
+The gate was `!entry.hasVideoMessages`, standing in front of the D-176 rule, and
+its justifying comment was wrong twice for a *received* photograph: the single
+entry query runs before the worker has written anything, and the sender-side
+preview exists only for an «Оригинал» send. Removing the gate alone would have
+left a photograph waiting the full video minute, so pictures got their own pace
+— five seconds, chosen by what is outstanding, so a chat still waiting on a
+transcode keeps the minute untouched. D-176's bound and backoff are unchanged.
+
+---
+
+## D-206 `[ ]` Five media e2e specs were already red, three of them from one day's wave
+
+**Severity:** medium for the suite's honesty; no product defect is claimed for
+three of the five.
+
+**Found** while verifying the media cluster, and proved to predate that work by
+reverting it and re-running: identical 5 failed / 13 passed.
+
+- `media-cache-reuse`, `media-gallery-variants` — sign-in specs needing
+  production QA credentials rather than the fixture server. Not product defects;
+  they should say so rather than fail.
+- `media-send-path` «a photo goes as a JPEG» — expects 1600×1200 and gets
+  1440×1080, which is D-174's «a photograph goes at SD unless the sheet is told
+  otherwise» (`ab69dfe`, 2026-09-13). A stale test, not a defect.
+- `media-send-without-compression` ×2 — a strict-mode violation: «Оригинал»
+  resolves to two elements because `mediaOriginality.ts` defines both `badge`
+  and `compactBadge` with that word. **Almost certainly a loose locator rather
+  than a duplicated visible label — but that was not confirmed**, and until
+  somebody checks which of the two is visible it stays a suspicion.
+
+**Why it is one entry:** three of the five broke in the same 2026-09-13
+quality-ladder wave that broke D-195. A day's work moved four measured numbers
+and the tests calibrated against the old ones were never re-read.
