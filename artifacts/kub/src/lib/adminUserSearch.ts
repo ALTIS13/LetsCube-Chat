@@ -9,6 +9,25 @@
  *
  * It lives here rather than inside `UsersTab` for the usual reason: the rule is
  * worth a test and the component is not loadable by `node --test`.
+ *
+ * **Consumers, as of 2026-09-17:** `pages/admin/UsersTab.tsx` and
+ * `components/chat/GroupInviteModal.tsx`, which carried its own spelling of
+ * this rule and got it wrong in a way nothing here could catch (D-170): it also
+ * stripped «_», and 'ivan_petrov' ILIKE '%ivan petrov%' is false, so 4 of this
+ * deployment's 11 usernames could not be found by typing them out in full. The
+ * test below now pins the underscore, where before this file said nothing about
+ * it.
+ *
+ * **Still to come:** `components/sidebar/NewGroupModal.tsx` escapes nothing at
+ * all, so a «,» or a «(» in its field breaks the `or=(…)` filter outright. The
+ * same two lines fix it; that file was being edited by another agent on
+ * 2026-09-17 and was left alone deliberately. Five further spellings of these
+ * two `ilike` filters remain inline — `useGlobalSearch.ts`, `useCreateChat.ts`,
+ * `TaskFormModal.tsx`, `TaskAssignModal.tsx`, `AuditTab.tsx` — and are not this
+ * change's business.
+ *
+ * The name still says «admin» because `UsersTab` was the first caller; nothing
+ * in the rule is administrative, and renaming it is a separate change.
  */
 
 const UUID_PATTERN =

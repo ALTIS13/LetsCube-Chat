@@ -6,6 +6,7 @@
 // outside those two are indistinguishable — which is why the rule now lives in
 // a module a test can load.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -44,6 +45,25 @@ test("characters PostgREST would read rather than match are removed", () => {
   assert.equal(adminUserQuery("ol\\ga").term, "olga");
 });
 
+test("the underscore survives, because a никнейм is allowed to contain one", () => {
+  // Not in the list above, and the omission was load-bearing. `GroupInviteModal`
+  // carried its own copy of this rule that replaced «_» with a space, and
+  // Postgres answers false to 'anna_s' ILIKE '%anna s%' — so 4 of the 11
+  // usernames on this deployment could not be found by typing them out in full.
+  // Nothing here turned red when that copy was written, which is why it drifted.
+  //
+  // «_» is ILIKE's single-character wildcard, so leaving it in is *wider* than
+  // the character typed — 'annaXs' matches too. Wider finds the person; removing
+  // it finds nobody, and only one of those two mistakes is recoverable by the
+  // reader.
+  assert.equal(adminUserQuery("anna_s").term, "anna_s");
+  assert.equal(adminUserQuery("@anna_s").term, "anna_s");
+  assert.deepEqual(adminUserSearchFilters(adminUserQuery("anna_s")), [
+    "full_name.ilike.%anna_s%",
+    "username.ilike.%anna_s%",
+  ]);
+});
+
 test("nothing typed asks for no filter at all", () => {
   // An empty filter list means "apply none". A list that matched nothing would
   // show an empty table for an empty search box, which is a different claim.
@@ -74,6 +94,37 @@ test("a non-string is a query for nothing, not a crash", () => {
       adminUserQuery(value as unknown as string),
       { term: "", id: null },
       `${JSON.stringify(value)} was not read as empty`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Who asks, read as source.
+//
+// Every test above can pass while a screen builds the filter itself, and two
+// of them did: `GroupInviteModal` stripped «_» (D-170) and `NewGroupModal`
+// escaped nothing at all, so a «,» or a «(» in the field broke `or=(…)`
+// outright and the step showed an empty list without saying why.
+// ---------------------------------------------------------------------------
+
+const CONSUMERS = [
+  "artifacts/kub/src/pages/admin/UsersTab.tsx",
+  "artifacts/kub/src/components/chat/GroupInviteModal.tsx",
+  "artifacts/kub/src/components/sidebar/NewGroupModal.tsx",
+];
+
+test("every people-search screen builds its filter here", () => {
+  for (const file of CONSUMERS) {
+    const source = readFileSync(file, "utf8");
+    assert.ok(
+      source.includes("adminUserQuery(") && source.includes("adminUserSearchFilters("),
+      `${file}: builds its own people filter again instead of asking this module`,
+    );
+    // The inline spelling, in the shape all three had it. A screen that still
+    // writes this has a second rule whatever else it imports.
+    assert.ok(
+      !source.includes("full_name.ilike.%${"),
+      `${file}: the ilike filter is spelled inline again`,
     );
   }
 });

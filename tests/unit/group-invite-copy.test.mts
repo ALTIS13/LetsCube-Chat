@@ -11,6 +11,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  INVITE_KNOWN_HEADING,
+  INVITE_OTHERS_HEADING,
+  inviteCandidateButtonLabel,
+  inviteDenialText,
+  invitePolicyUnreadNote,
+  inviteSearchEmptyText,
   inviteState,
   invitesEmptyText,
   invitesWaitingLine,
@@ -128,4 +134,65 @@ test("the state a missing migration leaves behind tells the reader nothing about
   // данных» named a repair nobody reading it can make.
   assert.equal(GROUP_INVITES_MIGRATION_REQUIRED, "Приглашения сейчас недоступны. Попробуйте позже.");
   assert.doesNotMatch(GROUP_INVITES_MIGRATION_REQUIRED, /баз[аы] данных|миграц|таблиц|функци/i);
+});
+
+// D-165 and D-170. Two things the invite screen used to do without a word: it
+// removed an ordinary member's invite button when it could not read
+// `chats.invite_policy`, and it stamped «Недоступно» on every button when any
+// read failed. Both are sentences now, and each one names a branch of
+// `group_invite_create`'s refusal rather than the database.
+
+test("each refusal is named after the branch that would raise it", () => {
+  assert.equal(inviteDenialText("not_group_chat", "group"), "Приглашения есть только у групп и каналов.");
+  assert.equal(inviteDenialText("member_required", "group"), "Приглашать может только тот, кто сам в группе.");
+  assert.equal(inviteDenialText("admin_required", "group"), "В группе приглашают только владелец и администраторы.");
+});
+
+test("a channel's refusals speak of a channel", () => {
+  assert.equal(inviteDenialText("member_required", "channel"), "Приглашать может только тот, кто сам в канале.");
+  assert.equal(inviteDenialText("admin_required", "channel"), "В канале приглашают только владелец и администраторы.");
+});
+
+test("no refusal mentions the database, a policy name or a migration", () => {
+  for (const denial of ["not_group_chat", "member_required", "admin_required"] as const) {
+    assert.doesNotMatch(inviteDenialText(denial, "group"), /баз[аы] данных|миграц|invite_policy|owner_admin/i);
+  }
+});
+
+test("an unread policy says it was not read, and claims nothing about what it is", () => {
+  const note = invitePolicyUnreadNote("group");
+  assert.match(note, /Не удалось прочитать/);
+  assert.match(note, /ответит сервер/);
+  // The defect this replaces is the card asserting the default it never read.
+  assert.doesNotMatch(note, /только администраторы|только владелец/i);
+  assert.match(invitePolicyUnreadNote("channel"), /канал/);
+});
+
+test("the button beside a person says what pressing it would do", () => {
+  assert.equal(inviteCandidateButtonLabel("available"), "Пригласить");
+  assert.equal(inviteCandidateButtonLabel("self"), "Это вы");
+  assert.equal(inviteCandidateButtonLabel("member"), "Уже здесь");
+  assert.equal(inviteCandidateButtonLabel("pending"), "Ждёт ответа");
+  for (const state of ["former", "declined", "cancelled", "expired"] as const) {
+    assert.equal(inviteCandidateButtonLabel(state), "Пригласить снова", state);
+  }
+});
+
+test("«Ждёт ответа» is the same phrase the invitations block uses for that state", () => {
+  // Two surfaces, one state: the button in the invite screen and the chip in
+  // the invitations list. «Приглашение отправлено» on one and «Ждёт ответа» on
+  // the other read as two different things having happened.
+  assert.equal(inviteCandidateButtonLabel("pending"), inGroup("pending").label);
+});
+
+test("an empty result is told apart from a search that never ran", () => {
+  assert.equal(inviteSearchEmptyText("Смирнова"), "По запросу «Смирнова» никого не нашли.");
+  assert.equal(inviteSearchEmptyText("  Смирнова  "), "По запросу «Смирнова» никого не нашли.");
+  assert.equal(inviteSearchEmptyText(""), "Пока некого приглашать.");
+  assert.equal(inviteSearchEmptyText("   "), "Пока некого приглашать.");
+});
+
+test("the two headings explain the order rather than describing the code", () => {
+  assert.equal(INVITE_KNOWN_HEADING, "Вы уже общаетесь");
+  assert.equal(INVITE_OTHERS_HEADING, "Остальные");
 });

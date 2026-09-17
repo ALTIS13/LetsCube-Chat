@@ -2,12 +2,53 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useAppStore } from "@/store/app.store";
+import { usePermissionAccess } from "@/hooks/useRole";
 import { KubButton, KubIcon, KubModal } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { cn } from "@/lib/utils";
+import { adminUserQuery, adminUserSearchFilters } from "@/lib/adminUserSearch";
+import { chatInviteAdmission, readInvitePolicy, type ChatMemberRole } from "@/lib/chatInviteAccess";
+import {
+  INVITE_KNOWN_HEADING,
+  INVITE_OTHERS_HEADING,
+  inviteCandidateButtonLabel,
+  inviteDenialText,
+  invitePolicyUnreadNote,
+  inviteSearchEmptyText,
+} from "@/lib/groupInviteCopy";
+import {
+  canInviteCandidate,
+  inviteCandidateName,
+  inviteCandidateState,
+  matchesInviteSearch,
+  orderInviteCandidates,
+  peopleAlreadyInYourChats,
+} from "@/lib/inviteCandidates";
 import { createGroupInvite, formatGroupInviteError, GROUP_INVITES_MIGRATION_REQUIRED, isGroupInviteUnavailableError } from "@/lib/groupInvites";
 import type { GroupInviteStatus } from "@/lib/groupInvites";
 import type { GroupInvite, Profile } from "@/types/database";
+
+/**
+ * D-170: reaching somebody you cannot spell. D-165: not hiding the action in
+ * silence.
+ *
+ * This screen used to open as a blank box behind «Введите минимум 2 символа для
+ * поиска пользователя.» and a list of nothing. That is the dead end the owner
+ * reported on 2026-09-15 from the other surface — «я сейчас не могу создать
+ * группу как тех админ» — and `NewGroupModal` was fixed for it while this one,
+ * the screen you use once the group exists, was not. It opens with people now.
+ *
+ * The order is the mechanic, not the search box: people you already share a
+ * chat with come first, taken from the chat list the store already holds. The
+ * one route that would reach a stranger — `search_profiles_by_phone` — refuses
+ * every caller without `users.view`, so nothing here offers or implies it.
+ *
+ * Who may invite comes from `lib/chatInviteAccess.ts`, a measured copy of
+ * `group_invite_create`'s four-branch gate, so an administrator the server
+ * would admit is no longer refused by the interface, and a policy the client
+ * could not read no longer removes the action without a word.
+ */
 
 interface GroupInviteModalProps {
   chatId: string;
@@ -17,7 +58,17 @@ interface GroupInviteModalProps {
   onClose: () => void;
 }
 
-type CandidateStatus = "self" | "member" | "pending" | "sent" | "declined" | "cancelled" | "expired" | "former" | "available";
+const INVITE_PERMISSION_KEYS = ["chats.invite", "chats.invite_any", "system.manage"] as const;
+
+/** What the chat's own row says, once it has been read. */
+interface ChatFacts {
+  type: string | null;
+  /** `null` when the column could not be read, which is not the same as a value. */
+  invitePolicy: ReturnType<typeof readInvitePolicy>;
+  myRole: ChatMemberRole | null;
+  /** Whether the read itself failed, as opposed to answering nothing. */
+  failed: boolean;
+}
 
 export function GroupInviteModal({
   chatId,
@@ -27,16 +78,60 @@ export function GroupInviteModal({
   onClose,
 }: GroupInviteModalProps) {
   const supabase = useMemo(() => createClient(), []);
+  const chats = useAppStore((s) => s.chats);
   const memberIdSet = useMemo(() => new Set(memberIds), [memberIds]);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Profile[]>([]);
+  const [fetched, setFetched] = useState<Profile[]>([]);
   const [inviteStatuses, setInviteStatuses] = useState<Record<string, GroupInviteStatus>>({});
   const [sentInviteeIds, setSentInviteeIds] = useState<Set<string>>(new Set());
-  const [loadingResults, setLoadingResults] = useState(false);
+  const [loadingResults, setLoadingResults] = useState(true);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [migrationRequired, setMigrationRequired] = useState(false);
+  const [chatFacts, setChatFacts] = useState<ChatFacts | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const permissions = usePermissionAccess(INVITE_PERMISSION_KEYS);
+
+  /**
+   * The chat's type, its invite policy and my role in it, in one request.
+   *
+   * `select("*")` on the embedded chat rather than naming `invite_policy`: a
+   * client whose schema cache predates the column must get the row without it
+   * instead of a PGRST204 on the whole read, and `readInvitePolicy` then
+   * answers `null` — «not read» — which is exactly the state this screen now
+   * has words for.
+   */
+  useEffect(() => {
+    if (!currentUserId) return;
+    let cancelled = false;
+    supabase
+      .from("chat_members")
+      .select("role, chat:chats(*)")
+      .eq("chat_id", chatId)
+      .eq("user_id", currentUserId)
+      .maybeSingle()
+      .then(({ data, error: err }) => {
+        if (cancelled) return;
+        if (err) {
+          // A refused read is not an answer. Offering the action and letting
+          // `group_invite_create` judge it is honest; refusing on the strength
+          // of a read that never happened is the D-140 mistake again.
+          setChatFacts({ type: null, invitePolicy: null, myRole: null, failed: true });
+          return;
+        }
+        const row = data as { role?: string | null; chat?: Record<string, unknown> | null } | null;
+        setChatFacts({
+          type: typeof row?.chat?.type === "string" ? row.chat.type : null,
+          invitePolicy: readInvitePolicy(row?.chat?.invite_policy),
+          myRole: readChatRole(row?.role),
+          failed: false,
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chatId, currentUserId, supabase]);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,42 +162,99 @@ export function GroupInviteModal({
     };
   }, [chatId, supabase]);
 
+  /**
+   * A page of people, filtered by what was typed or unfiltered when nothing is.
+   *
+   * No minimum length. The two-character gate is what made this screen open
+   * empty, and `Profiles are viewable by everyone` is the live read policy, so
+   * there is nothing to protect by waiting. The filter itself comes from
+   * `lib/adminUserSearch.ts`: it strips a leading «@» — usernames are stored
+   * without one, so «@olga» matched nobody — and removes only the characters
+   * PostgREST would read as grammar. This screen used to strip «_» as well,
+   * and Postgres confirms what that costs: 'ivan_petrov' ILIKE '%ivan petrov%'
+   * is false, so 4 of the 11 usernames on this deployment could not be found
+   * by typing them out in full.
+   */
   useEffect(() => {
-    const trimmed = query.trim();
-    if (trimmed.length < 2) {
-      setResults([]);
-      setLoadingResults(false);
-      return;
-    }
-
     let cancelled = false;
+    const parsed = adminUserQuery(query);
+    const filters = adminUserSearchFilters(parsed);
+    setLoadingResults(true);
     const timer = window.setTimeout(async () => {
-      setLoadingResults(true);
-      const safeQuery = escapeSupabasePattern(trimmed);
-      const { data, error: searchError } = await supabase
-        .from("profiles")
-        .select("*")
-        .or(`full_name.ilike.%${safeQuery}%,username.ilike.%${safeQuery}%`)
-        .limit(20);
+      let request = supabase.from("profiles").select("*");
+      if (currentUserId) request = request.neq("id", currentUserId);
+      if (filters.length > 0) request = request.or(filters.join(","));
+      const { data, error: searchError } = await request.limit(20);
       if (cancelled) return;
       setLoadingResults(false);
       if (searchError) {
         setError("Не удалось найти пользователей.");
-        setResults([]);
+        setFetched([]);
         return;
       }
       setError(null);
-      setResults((data as Profile[] | null) ?? []);
-    }, 260);
+      setFetched((data as Profile[] | null) ?? []);
+    }, parsed.term || parsed.id ? 260 : 0);
 
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, supabase]);
+  }, [query, currentUserId, supabase]);
+
+  /** Everybody the chat list already knows about, with their profiles. */
+  const knownPeople = useMemo(() => {
+    const ids = peopleAlreadyInYourChats(chats, currentUserId);
+    const byId = new Map<string, Profile>();
+    for (const chat of chats) {
+      for (const member of chat.members ?? []) {
+        const profile = member.profile;
+        if (profile?.id && ids.has(profile.id)) byId.set(profile.id, profile);
+      }
+      const other = chat.other_user;
+      if (other?.id && ids.has(other.id)) byId.set(other.id, other);
+    }
+    return { ids, people: Array.from(byId.values()) };
+  }, [chats, currentUserId]);
+
+  const parsedQuery = useMemo(() => adminUserQuery(query), [query]);
+  const searching = Boolean(parsedQuery.term || parsedQuery.id);
+
+  const ordered = useMemo(() => {
+    const known = knownPeople.people.filter((person) => matchesInviteSearch(person, query));
+    return orderInviteCandidates({
+      people: [...known, ...fetched],
+      knownIds: knownPeople.ids,
+      memberIds: memberIdSet,
+      myId: currentUserId,
+      searching,
+    });
+  }, [knownPeople, fetched, memberIdSet, currentUserId, searching, query]);
+
+  const admission = useMemo(() => {
+    // Until the chat's row and the permission snapshot are in, nothing is
+    // claimed: the list stays usable and the server remains the judge.
+    if (!chatFacts || chatFacts.failed || permissions.checking) return null;
+    return chatInviteAdmission({
+      chatType: chatFacts.type,
+      chatRole: chatFacts.myRole,
+      invitePolicy: chatFacts.invitePolicy,
+      hasInvite: permissions.hasPermission("chats.invite"),
+      hasInviteAny: permissions.hasPermission("chats.invite_any"),
+      hasSystemManage: permissions.hasPermission("system.manage"),
+    });
+  }, [chatFacts, permissions]);
+
+  const denied = admission?.denial ?? null;
+  // Only when the unread policy is the thing that would have decided it. An
+  // owner may invite whatever the policy says, so telling them it could not be
+  // read is a sentence about our plumbing rather than about them.
+  const policyUnreadNote = admission?.canInvite && admission.grantedBy === null
+    ? invitePolicyUnreadNote(chatFacts?.type)
+    : null;
 
   const handleInvite = async (user: Profile) => {
-    if (migrationRequired || !currentUserId || sendingId) return;
+    if (migrationRequired || denied || !currentUserId || sendingId) return;
     setError(null);
     setMessage(null);
     setSendingId(user.id);
@@ -117,7 +269,61 @@ export function GroupInviteModal({
 
     setSentInviteeIds((current) => new Set(current).add(user.id));
     setInviteStatuses((current) => ({ ...current, [user.id]: "pending" }));
-    setMessage(`Приглашение отправлено: ${displayName(user)}.`);
+    setMessage(`Приглашение отправлено: ${inviteCandidateName(user)}.`);
+  };
+
+  const known = ordered.filter((person) => knownPeople.ids.has(person.id));
+  const others = ordered.filter((person) => !knownPeople.ids.has(person.id));
+  const grouped = !searching && known.length > 0 && others.length > 0;
+
+  const renderRow = (user: Profile) => {
+    const state = inviteCandidateState({
+      personId: user.id,
+      myId: currentUserId,
+      memberIds: memberIdSet,
+      inviteStatuses,
+      sentIds: sentInviteeIds,
+    });
+    const actionable = canInviteCandidate(state) && !migrationRequired && !denied;
+    return (
+      <div
+        key={user.id}
+        data-invite-candidate={user.id}
+        data-invite-state={state}
+        className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors kub-raise-hover"
+      >
+        <UserAvatar user={user} size="sm" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-[color:var(--kub-text)]">{inviteCandidateName(user)}</div>
+          <div className="truncate text-xs text-[color:var(--kub-muted)]">
+            {user.username ? `@${user.username}` : roleLabel(user.role)}
+          </div>
+        </div>
+        {/*
+          * No control at all when the whole screen is refused. A row of inert
+          * «Пригласить» buttons under a sentence saying you may not invite is
+          * the screen disagreeing with itself — and the people are still worth
+          * showing, which is the same rule the settings screen follows: a
+          * member reads every value, and only the pencil is withheld.
+          */}
+        {denied ? null : (
+          <button
+            type="button"
+            onClick={() => void handleInvite(user)}
+            disabled={!actionable || sendingId !== null}
+            className={cn(
+              "inline-flex h-8 shrink-0 items-center justify-center rounded-lg px-3 text-xs font-semibold transition-colors",
+              actionable
+                ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] hover:bg-[var(--kub-cyan-hover)]"
+                : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]",
+              "disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed",
+            )}
+          >
+            {sendingId === user.id ? "Отправка..." : inviteCandidateButtonLabel(state)}
+          </button>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -146,6 +352,26 @@ export function GroupInviteModal({
         />
       </div>
 
+      {denied && (
+        <div
+          data-testid="invite-denied"
+          className="flex items-start gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]"
+        >
+          <KubIcon name="lock" size={14} className="mt-0.5 shrink-0" />
+          <span>{inviteDenialText(denied, chatFacts?.type)}</span>
+        </div>
+      )}
+
+      {policyUnreadNote && (
+        <div
+          data-testid="invite-policy-unread"
+          className="flex items-start gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]"
+        >
+          <KubIcon name="info" size={14} className="mt-0.5 shrink-0" />
+          <span>{policyUnreadNote}</span>
+        </div>
+      )}
+
       {message && (
         <div className="flex items-start gap-2 rounded-xl border border-[color-mix(in_srgb,var(--kub-cyan)_35%,transparent)] bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-accent-text)]">
           <KubIcon name="info" size={14} className="mt-0.5 shrink-0" />
@@ -160,52 +386,37 @@ export function GroupInviteModal({
         </div>
       )}
 
-      <div className="max-h-[min(56vh,360px)] overflow-y-auto -mx-1 px-1">
-        {query.trim().length < 2 ? (
-          <EmptyInviteState text="Введите минимум 2 символа для поиска пользователя." />
-        ) : loadingResults ? (
-          <EmptyInviteState text="Ищем пользователей…" />
-        ) : results.length === 0 ? (
-          <EmptyInviteState text="Пользователи не найдены." />
-        ) : (
-          <div className="space-y-1">
-            {results.map((user) => {
-              const status = getCandidateStatus(user.id, currentUserId, memberIdSet, inviteStatuses, sentInviteeIds);
-              const canInvite = canInviteCandidate(status);
-              const disabled = migrationRequired || !canInvite || sendingId !== null;
-              return (
-                <div
-                  key={user.id}
-                  className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors kub-raise-hover"
-                >
-                  <UserAvatar user={user} size="sm" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-[color:var(--kub-text)]">{displayName(user)}</div>
-                    <div className="truncate text-xs text-[color:var(--kub-muted)]">
-                      {user.username ? `@${user.username}` : roleLabel(user.role)}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void handleInvite(user)}
-                    disabled={disabled}
-                    className={cn(
-                      "inline-flex h-8 shrink-0 items-center justify-center rounded-lg px-3 text-xs font-semibold transition-colors",
-                      canInvite && !migrationRequired
-                        ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] hover:bg-[var(--kub-cyan-hover)]"
-                        : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]",
-                      "disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed",
-                    )}
-                  >
-                    {sendingId === user.id ? "Отправка..." : statusLabel(status, migrationRequired)}
-                  </button>
-                </div>
-              );
-            })}
+      <div className="max-h-[min(56vh,360px)] overflow-y-auto -mx-1 px-1" data-testid="invite-candidates">
+        {ordered.length === 0 ? (
+          loadingResults ? (
+            <EmptyInviteState text="Ищем пользователей…" />
+          ) : (
+            <EmptyInviteState text={inviteSearchEmptyText(query)} />
+          )
+        ) : grouped ? (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <ListHeading text={INVITE_KNOWN_HEADING} />
+              {known.map(renderRow)}
+            </div>
+            <div className="space-y-1">
+              <ListHeading text={INVITE_OTHERS_HEADING} />
+              {others.map(renderRow)}
+            </div>
           </div>
+        ) : (
+          <div className="space-y-1">{ordered.map(renderRow)}</div>
         )}
       </div>
     </KubModal>
+  );
+}
+
+function ListHeading({ text }: { text: string }) {
+  return (
+    <div className="px-2 pt-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
+      {text}
+    </div>
   );
 }
 
@@ -217,45 +428,12 @@ function EmptyInviteState({ text }: { text: string }) {
   );
 }
 
-function getCandidateStatus(
-  userId: string,
-  currentUserId: string | null,
-  memberIdSet: Set<string>,
-  inviteStatuses: Record<string, GroupInviteStatus>,
-  sentInviteeIds: Set<string>,
-): CandidateStatus {
-  if (userId === currentUserId) return "self";
-  if (memberIdSet.has(userId)) return "member";
-  if (sentInviteeIds.has(userId)) return "sent";
-  const inviteStatus = inviteStatuses[userId];
-  if (inviteStatus === "accepted") return "former";
-  if (inviteStatus) return inviteStatus;
-  return "available";
-}
-
-function statusLabel(status: CandidateStatus, migrationRequired: boolean): string {
-  if (migrationRequired) return "Недоступно";
-  if (status === "self") return "Это вы";
-  if (status === "member") return "Уже в чате";
-  if (status === "pending" || status === "sent") return "Приглашение отправлено";
-  if (status === "former" || status === "declined" || status === "cancelled" || status === "expired") return "Пригласить снова";
-  return "Пригласить";
-}
-
-function canInviteCandidate(status: CandidateStatus): boolean {
-  return status === "available" || status === "former" || status === "declined" || status === "cancelled" || status === "expired";
-}
-
-function displayName(user: Profile): string {
-  return user.full_name ?? user.username ?? "Без имени";
+function readChatRole(value: unknown): ChatMemberRole | null {
+  return value === "owner" || value === "admin" || value === "member" ? value : null;
 }
 
 function roleLabel(role: Profile["role"]): string {
   if (role === "admin") return "Администратор";
   if (role === "manager") return "Менеджер";
   return "Пользователь";
-}
-
-function escapeSupabasePattern(value: string): string {
-  return value.replace(/[%_,]/g, " ").trim();
 }

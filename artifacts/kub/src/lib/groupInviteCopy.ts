@@ -22,8 +22,10 @@
  * Free of React and of every browser API, so `node --test` reads it directly.
  */
 
+import type { ChatInviteDenial } from "./chatInviteAccess.ts";
 import { chatVocabulary } from "./chatVocabulary.ts";
 import type { GroupInviteStatus } from "./groupInvites.ts";
+import type { InviteCandidateState } from "./inviteCandidates.ts";
 import { selectRussianPluralForm } from "./messageMediaSections.ts";
 
 /**
@@ -122,4 +124,70 @@ export function invitesEmptyText({ total, visible, failed, type }: InviteEmptyIn
   if (visible > 0) return "";
   if (total > 0) return `Все приглашённые уже в ${words.locative}.`;
   return `В ${words.object} ещё никого не приглашали.`;
+}
+
+/**
+ * Why the invite screen offers nothing (D-165).
+ *
+ * One sentence per branch of `group_invite_create`'s refusal, named after the
+ * error it would raise. The screen used to have no such sentence at all: an
+ * unrecognised `invite_policy` removed an ordinary member's invite button and
+ * said nothing, which is the half of D-165 the earlier pass left open. The
+ * other half of saying nothing was the blanket «Недоступно» stamped on every
+ * button when any read failed, which named neither the cause nor the remedy.
+ */
+export function inviteDenialText(denial: ChatInviteDenial, type: string | null | undefined): string {
+  const words = chatVocabulary(type);
+  if (denial === "not_group_chat") return "Приглашения есть только у групп и каналов.";
+  if (denial === "member_required") return `Приглашать может только тот, кто сам в ${words.locative}.`;
+  return `В ${words.locative} приглашают только владелец и администраторы.`;
+}
+
+/**
+ * The note for a policy the client could not read.
+ *
+ * It replaces a silent refusal, and it deliberately does not claim to know the
+ * answer: the column is read by the function itself, so the invitation is
+ * offered and the server judges it. Saying «только администраторы» here would
+ * be the card asserting a policy it never read, which is D-165's part 1 over
+ * again on a second surface.
+ */
+export function invitePolicyUnreadNote(type: string | null | undefined): string {
+  const words = chatVocabulary(type);
+  return `Не удалось прочитать, кому разрешено приглашать в ${words.object}. Приглашение можно отправить — ответит сервер.`;
+}
+
+/** What the button beside one person says. */
+export function inviteCandidateButtonLabel(state: InviteCandidateState): string {
+  if (state === "self") return "Это вы";
+  if (state === "member") return "Уже здесь";
+  if (state === "pending") return "Ждёт ответа";
+  if (state === "former" || state === "declined" || state === "cancelled" || state === "expired") {
+    return "Пригласить снова";
+  }
+  return "Пригласить";
+}
+
+/**
+ * The two headings over the unfiltered list.
+ *
+ * They exist to make the order legible: people you already share a chat with
+ * are first, and a list whose order nobody can explain reads as no order at
+ * all. While something is typed there are no headings, because a search result
+ * is one answer to one question.
+ */
+export const INVITE_KNOWN_HEADING = "Вы уже общаетесь";
+export const INVITE_OTHERS_HEADING = "Остальные";
+
+/**
+ * Nothing matched, with what was looked for quoted back.
+ *
+ * «Пользователи не найдены.» could not be told apart from a search that never
+ * ran, which is the state the old two-character gate left the screen in for
+ * every single-letter query.
+ */
+export function inviteSearchEmptyText(term: string): string {
+  const trimmed = term.trim();
+  if (!trimmed) return "Пока некого приглашать.";
+  return `По запросу «${trimmed}» никого не нашли.`;
 }

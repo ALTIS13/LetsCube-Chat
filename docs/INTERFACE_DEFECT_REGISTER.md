@@ -9892,7 +9892,7 @@ the arrow leaves it — which is what the register proposed and what the referen
 **What this did not do:** the reference's fifteen rows include several this product has no feature for, and one
 — «Тип группы» — that it has no column for. Nothing was invented to fill them.
 
-## D-165 `[~]` The invite card states a policy it never read, and silently takes the invite button away
+## D-165 `[x]` The invite card states a policy it never read, and silently takes the invite button away
 
 **Severity: medium.** It tells people something untrue about who may invite.
 
@@ -9937,6 +9937,60 @@ all 40 chats carry the first. Six specs seeded it. Every fixture-based render of
 therefore showing a state the product cannot be in. Corrected in five of the six; the sixth
 (`chat-list-event-cost.spec.ts`) was being edited by another agent at the time and is noted here so it is not
 forgotten.
+
+
+---
+
+**Part 2 closed 2026-09-18, and the measurement changed the answer.**
+
+The note above left it open as «a product decision, not a defect», on the
+reasoning that defaulting to «administrators only» when the policy could not be
+read is the *safe* direction. Reading the server settled it the other way, in
+two steps.
+
+First, an unread policy is not a policy the server is unsure about.
+`chats.invite_policy` is `not null` with a default of `owner_admin_only`, its
+CHECK admits only that and `members_can_invite`, and `group_invite_create` reads
+the column itself. So `null` on the client never means «the chat has no policy»
+— it means **this client could not read the column**, a stale schema cache,
+PGRST204. Refusing on that is not caution about the chat, it is our plumbing
+silently removing somebody's action. The honest answer is to offer it and let
+the function judge, which is what it is for.
+
+Second, and this is the part the entry never named: the card's two-branch rule
+was **wrong in the permissive direction too**, for a case that exists on this
+deployment. `group_invite_create` has four branches, not two — `system.manage`,
+which needs no membership at all, and `chats.invite_any`, which needs membership
+and then ignores the policy. Measured on 2026-09-17, four arms inside
+`begin; … rollback;`, each with a control that had to succeed first: a
+legacy-`admin` who is a plain member of a group whose policy is
+`owner_admin_only` **was admitted by the server**, while `ChatInfoPanel.tsx:388`
+computed false and took the row away with nothing said. That is this entry's own
+complaint — «silently takes the invite button away» — in the direction nobody
+had looked.
+
+**Fixed by having one rule instead of three.** `lib/chatInviteAccess.ts` mirrors
+the function body in the server's own order (type before permissions, so
+`system.manage` does not open invitations on a private chat; `invite_any` before
+the policy, so it ignores it). `GroupInviteModal` asks it, and now the card
+does too. While the permission snapshot is in flight the three answers are
+false, which reduces the mirror to exactly the old rule, so nobody who had the
+row watches it appear; it appears for the arm-D case once the check lands.
+
+**One guard was needed that the lib cannot carry.** «Избранное» is created by
+`newGroupRow`, so its row really is `type: 'group'` and you are its owner — the
+mirror admits it on type alone and would have offered to invite somebody into
+your own saved messages. `canSendInvites` is `!isSaved && …`, and the test reads
+`savedMessages.ts` for the `newGroupRow` call so the guard stops being
+load-bearing quietly if that ever changes.
+
+**Verified by mutation, which is the only way a source guard earns anything.**
+Four, each red: the card back on the two-branch rule, the card without the
+«Избранное» guard, a fourth permission key the server never reads, and the modal
+no longer asking the mirror. The keys are pinned to exactly the three
+`group_invite_create` consults — a fourth here would be a key somebody is about
+to gate on that the server does not look at, which is how three entries in one
+day proposed fixes the database refuses.
 
 ## D-166 `[x]` Every membership change is already recorded per chat, and no chat can show it
 
@@ -10224,6 +10278,31 @@ are for signing up to the product, not for joining a conversation — the link o
 
 **Also unsurfaced:** `group_invites.expires_at` is fetched (`ChatInfoPanel.tsx:414`) and never shown;
 only the status is (`:1719`).
+
+**The search half is done; the entry stays open for the link.** Closed
+2026-09-17/18: the screen opened as a blank box behind «Введите минимум 2
+символа», so the only people reachable were the ones you could already spell.
+It opens with people now — everybody you already share a chat with, from the
+chat list the store holds, ordered before strangers — and the filter is built
+by `lib/adminUserSearch.ts` instead of a third inline spelling of the same two
+`ilike` clauses.
+
+That third spelling was itself a defect: it replaced «_» with a space, and
+`'anna_s' ILIKE '%anna s%'` is false, so **4 of this deployment's 11 usernames
+could not be found by typing them out in full**. `NewGroupModal` had a fourth
+spelling that escaped nothing at all, where a «,» ends a filter inside `or=(…)`
+and «(» delimits one — a comma in a name turned one search into two and a
+bracket into a parse error, with an empty list and no explanation. Both ask the
+module now, pinned by a consumer guard whose mutation goes red; five further
+inline spellings remain (`useGlobalSearch.ts`, `useCreateChat.ts`,
+`TaskFormModal.tsx`, `TaskAssignModal.tsx`, `AuditTab.tsx`) and are listed in
+that module's own comment.
+
+**What keeps this entry open** is the sentence it opens with: there is still no
+shareable link or join code for a chat. Reaching somebody you cannot spell at
+all — a stranger with no shared chat — needs that, or a phone lookup, and
+`search_profiles_by_phone` refuses every caller without `users.view`. Nothing in
+this batch offers or implies either.
 
 ---
 

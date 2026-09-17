@@ -11,6 +11,7 @@ import { CHAT_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 import { GROUP_INVITES_MIGRATION_REQUIRED, createGroupInvite } from "@/lib/groupInvites";
 import { showAppAlert } from "@/lib/appDialogs";
 import { newGroupRow } from "@/lib/chatCreation";
+import { adminUserQuery, adminUserSearchFilters } from "@/lib/adminUserSearch";
 
 export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onRefetch?: () => void }) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
@@ -39,13 +40,23 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
    * Telegram's own «New Group» opens with.
    */
   useEffect(() => {
-    const term = query.trim();
+    // The filter is built by `lib/adminUserSearch.ts` rather than spelled here.
+    // This field escaped nothing at all, and inside `or=(…)` a «,» ends a
+    // filter while «(» and «)» delimit one — so a comma in a name turned one
+    // search into two and a bracket turned it into a parse error, with the
+    // step showing an empty list and saying nothing. «@olga» is now read as a
+    // username too, and a pasted uuid matches the person exactly.
+    //
+    // `GroupInviteModal` had its own third spelling of the same rule until
+    // D-170; the module's own comment lists the five that are left elsewhere.
+    const parsed = adminUserQuery(query);
+    const filters = adminUserSearchFilters(parsed);
     const t = setTimeout(async () => {
       let request = supabase.from("profiles").select("*").neq("id", userId ?? "");
-      if (term) request = request.or(`full_name.ilike.%${term}%,username.ilike.%${term}%`);
+      if (filters.length) request = request.or(filters.join(","));
       const { data } = await request.order("full_name", { ascending: true }).limit(20);
       setResults((data as Profile[]) ?? []);
-    }, term ? 300 : 0);
+    }, filters.length ? 300 : 0);
     return () => clearTimeout(t);
   }, [query, userId, supabase]);
 

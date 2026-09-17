@@ -10,6 +10,8 @@ import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { chatVocabulary, countedMemberLabel } from "@/lib/chatVocabulary";
+import { usePermissionAccess } from "@/hooks/useRole";
+import { chatInviteAdmission } from "@/lib/chatInviteAccess";
 import {
   inviteState,
   invitesEmptyText,
@@ -570,7 +572,36 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
   const isOwner = myRole === "owner";
   const isOwnerOrAdmin = !isSaved && (myRole === "owner" || myRole === "admin");
   const canEditChatProfile = isGroup && isOwnerOrAdmin;
-  const canSendInvites = isGroup && Boolean(myRole) && (isOwnerOrAdmin || (invitePolicySupported && invitePolicy === "members_can_invite"));
+  // Who may invite is `group_invite_create`'s own gate, mirrored in
+  // `lib/chatInviteAccess.ts` against the function body on production. This
+  // card used to decide it in two branches — chat administrator, or a policy
+  // of «members_can_invite» — and the server has four. The two it never had:
+  // `system.manage`, which needs no membership at all, and `chats.invite_any`,
+  // which needs membership and then ignores the policy.
+  //
+  // The second one is a measured divergence, not a tidy-up. Arm D of the
+  // 2026-09-17 run: a legacy-`admin` who is a plain member of a group whose
+  // policy is `owner_admin_only` was **admitted** by the server, while this
+  // line computed false and took the row away with nothing said — which is
+  // D-165's own complaint, in the direction the entry did not name.
+  //
+  // While the snapshot is still in flight the three answers are false, and the
+  // mirror then reduces to exactly the rule above, so nobody who had the row
+  // watches it appear. It appears for the arm-D case once the check lands.
+  const invitePermissions = usePermissionAccess(CHAT_INVITE_PERMISSION_KEYS);
+  const inviteAdmission = chatInviteAdmission({
+    chatType: chat.type,
+    chatRole: myRole,
+    // `invitePolicySupported` false means the column was not read, which is not
+    // the same as a value — the mirror is told «unread» rather than the default.
+    invitePolicy: invitePolicySupported ? invitePolicy : null,
+    hasInvite: !invitePermissions.checking && invitePermissions.hasPermission("chats.invite"),
+    hasInviteAny: !invitePermissions.checking && invitePermissions.hasPermission("chats.invite_any"),
+    hasSystemManage: !invitePermissions.checking && invitePermissions.hasPermission("system.manage"),
+  });
+  // «Избранное» is a chat of type `group` on this deployment, so the mirror
+  // would happily offer to invite somebody into your own saved messages.
+  const canSendInvites = !isSaved && inviteAdmission.canInvite;
 
   // Whether a voice row is offered at all: a group rather than a channel, a
   // member rather than an onlooker, and a channel that exists. All three are
@@ -3153,6 +3184,15 @@ function formatInviteTime(value: string): string {
   if (diffHours < 24) return `${diffHours} ч назад`;
   return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
 }
+
+/**
+ * The three keys `group_invite_create` consults, and no others.
+ *
+ * Read off production on 2026-09-17 and quoted in `lib/chatInviteAccess.ts`
+ * with the four arms that measured it. Asking for more keys than the server
+ * looks at would cost a round trip and invite somebody to gate on one of them.
+ */
+const CHAT_INVITE_PERMISSION_KEYS = ["chats.invite", "chats.invite_any", "system.manage"] as const;
 
 function readChatInvitePolicy(chat: ChatWithLastMessage): InvitePolicy | null {
   const value = (chat as ChatWithLastMessage & { invite_policy?: string | null }).invite_policy;
