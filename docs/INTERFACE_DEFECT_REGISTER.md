@@ -6834,7 +6834,7 @@ every changed module was checked against the disk before the run that counts.
 Before-and-after renders of the menu, a phone in both themes and a desktop, went to
 the owner.
 
-## D-120 `[ ]` A «Папки» tab duplicates the folder tabs above the chat list
+## D-120 `[x]` A «Папки» tab duplicates the folder tabs above the chat list
 
 **Severity:** low, for clutter. Named by the owner on 2026-09-11.
 
@@ -6844,7 +6844,47 @@ folders at the top only.
 
 **Decision:** remove the duplicate, inside the navigation work of item 30.
 
-## D-121 `[ ]` Sound settings are large stretched modules left from the old interface
+**Confirmed against the shipped code on 2026-09-17**, and it was worse than «a tab
+that does nothing those do not»: the tab set `mobileSection = "folders"`, `Sidebar`
+watched for it and opened `FolderListModal` — a **second, full-screen folder
+surface**, drawn in the old material with a perimeter around every row and the page
+ground inside its icon squares. Photographed at 390 in both themes before the fix:
+`output/folders/folders-before-390-{dark,light}-tab.png`.
+
+**Fixed on 2026-09-17.** The capsule is «Чаты», «Профиль» and «Задачи» where the
+right allows it; `FolderTabs` at the top of the list is the phone's folder surface,
+and it already chose, created with «+» and edited on a second press of the chosen
+tab. `FolderListModal.tsx` is deleted — nothing else reached it — and `mobileSection`
+no longer carries `'folders'`.
+
+The list of destinations moved to `artifacts/kub/src/lib/bottomNavDestinations.ts`,
+which imports nothing, so *which surfaces are destinations of their own* is now a
+decision `node --test` can reach instead of one only a screenshot could check. All
+three removals — «Поиск» and «Админка» on 2026-09-12, «Папки» here — are recorded in
+that module, because the cheapest way to reintroduce one is not to know it was ever
+taken out.
+
+**Tests:** `tests/unit/bottom-nav-destinations.test.mts` (7, two of them in-file
+mutations) and the phone half of the folder-surface pair in
+`tests/e2e/desktop-shell.spec.ts`, whose title has claimed «its only folder surface»
+since 2026-09-12 while checking nothing of the sort. Proved by restoring the
+destination in the module and the store: 4 unit tests red (3 in the new file, 1 in
+`narrow-phone-typography`), the e2e red on `toHaveCount` expected 0 received 1 for
+the «Папки» button; reverted to the same SHA-256 and 9/9 plus the e2e green again.
+
+**Renders:** `output/folders/folders-{after,tab-restored}-390-{dark,light}-list.png`,
+with the pair taken minutes apart on one tree so the concurrent work in this
+worktree could not leak into it. Pixel-differenced rather than eyeballed: the only
+region that changes at 390 is the capsule, `(189, 2058)-(823, 2184)`, and at 1440
+**no pixel changes at all** — the capsule is `md:hidden` and the folder rail is the
+computer's folder surface. `tab-restored` is byte-identical to the `before` frames.
+
+**Two things worth keeping:** on an account without the tasks right the capsule is
+now two entries, which is thin but symmetric and reads fine — say so if that is not
+wanted, it is one line in the module. And this closes the 2026-09-12 «four labels»
+number: the owner set four when «Папки» was still one of them.
+
+## D-121 `[x]` Sound settings are large stretched modules left from the old interface
 
 **Severity:** medium, for the look. Named by the owner on 2026-09-11.
 
@@ -6852,6 +6892,42 @@ folders at the top only.
 where Telegram has compact grouped rows.
 
 **Decision:** rebuilt in Telegram's settings idiom inside the parity work of item 30.
+
+**Already fixed when this entry was re-checked on 2026-09-17; the register was
+stale.** `e9c2790` (2026-09-14, «the sound settings stop being a different
+application») rebuilt the surface: three boxes filled from the page ground inside a
+panel became three captioned groups of hairline-divided rows drawn by `AudioGroup`,
+whose container is the same string `SettingsGroup` uses for the four groups outside
+the panel; two bare checkboxes became `KubSwitch`; three stacked full-width pills
+became the segmented track the theme picker and «Лимит кэша» already are; and the
+162x16 «Сбросить настройки звука» text link became a 44px row.
+
+There is one wrinkle in the entry's own words: the product has **no notification
+sound settings**. `SETTINGS_ROWS` carries a single «Звук» row, under «Приложение»,
+with the keywords микрофон/аудио/голос/громкость/усиление, and that panel is what
+was rebuilt. If a notification tone picker is wanted it is a new feature, not this
+defect.
+
+**Verified on rendered pixels, not on the commit message.** Before,
+`output/audio/audio-before-390-dark-0.png`: three outlined near-black panels, each
+holding another outlined box holding the control. Now,
+`output/audio/audio-current-390-{dark,light}-*.png` and the 1440 pair, taken
+2026-09-17 from the shipping component: muted uppercase caption, one veiled group
+per caption, rows parted by `--kub-rule`, switches on the right, one segmented
+track. That is the «compact grouped rows» this entry asked for.
+
+**One gap closed rather than a second surface built.** `audio-settings-capture.spec.ts`
+photographs and asserts nothing by design, and `audio-settings-vocabulary.spec.ts`
+pins the ground, the nesting, the switches, the picker, the single mode readout, the
+reset row and the clipping — but nothing tied the group's shape to the screen around
+it, so `SettingsScreen.tsx` could move to a different group and this panel would
+quietly become a dialect again, which *is* the defect. «a group here is the same
+object the settings screen draws» in `tests/unit/audio-settings-surface.test.mts`
+compares the two strings instead of describing either. Proved both ways in-file, and
+on disk: changing `rounded-xl` to `rounded-2xl` in the section turned 4 tests red
+(the new one, its own mutation check, and two older ones that read the same string);
+`git checkout` restored the file to SHA-256 `5015bb98…` and 20/20 went green.
+`SettingsScreen.tsx` was read and never written — it belongs to another track.
 
 ## D-122 `[x]` The attach menu is a list of buttons that open other things, where Telegram's attach sheet does the thing in place
 
@@ -12734,3 +12810,78 @@ outside the shared header.
 **Nothing needs reinstalling.** The Windows client is a shell around
 `https://app.letscube.ru/` (`windows-tauri/src-tauri/src/lib.rs:31`), so this
 reaches an installed client through the ordinary web deploy.
+
+---
+
+## D-211 `[x]` Nobody could create a group, because the insert asked for its own row back
+
+**Severity:** highest. A core function, broken for every account including the
+owner's, for at least three days.
+
+**Reported** by the owner twice — on 2026-09-15 («я сейчас не могу создать
+группу как тех админ, чего уж говорить об обычных пользователях») and again on
+2026-09-18 («даже админ типа Никиты не может создать группу, что-то явно
+сломалось»). **The first report was answered with a different fix and declared
+closed. It was not.**
+
+**Surface:** `components/sidebar/NewGroupModal.tsx` and `lib/savedMessages.ts` —
+both did `.insert({...}).select("id").single()` on `public.chats`.
+
+**The evidence that settled it**, from the gateway log rather than from
+reasoning:
+
+    5 × POST /rest/v1/chats?select=id HTTP/1.1" 403
+
+and, from the database, **zero chats created in three days** while the newest
+group dates from 2026-05-17. So the request reached the server and was refused;
+nothing was silently swallowed on the client.
+
+**Defect.** `.insert(row).select("id")` becomes `INSERT ... RETURNING` through
+PostgREST, and **PostgreSQL applies the SELECT policy to a returned row as
+well**. `chats` has exactly one SELECT policy — `Chat members can view chats`,
+`EXISTS(chat_members WHERE chat_id = chats.id AND user_id = auth.uid())` — and
+the creator's membership row is written by `trg_add_chat_creator_as_owner`, an
+**AFTER INSERT** trigger, whose effect does not exist when RETURNING is
+evaluated. The row goes in, is refused on the way out, and the statement rolls
+back with it.
+
+Measured on production, rolled back, the same account both ways:
+
+| statement | result |
+| --- | --- |
+| `insert into public.chats (...) values (...)` | **OK** |
+| `insert into public.chats (...) values (...) returning id` | **new row violates row-level security policy for "chats"** |
+
+**Fix:** the client chooses the id and does not read the row back
+(`lib/chatCreation.ts`). Proved on production, rolled back, for a plain user and
+for an admin alike: the new shape is accepted and the trigger makes the owner
+row. **Not fixed in the database on purpose** — a SELECT policy of
+`created_by = auth.uid()` would make RETURNING work for everybody and would also
+let somebody removed from a group they once created go on reading its row.
+
+**The rest of the class was measured, not assumed.** `topics`, `voice_channels`
+and `chat_channel_categories` all accept an insert WITH RETURNING for a real
+group owner, because their policies ask `is_chat_admin(chat_id)` — a row that
+already exists. So channel creation is not affected by this.
+
+### Why it took two reports, which is the part worth keeping
+
+On 2026-09-15 the same probe was run and **gave the right answer**: a `DO` block
+that did `insert ... returning id into v_chat` reported the insert refused. That
+was dismissed as a faulty harness, because the same insert written as a bare
+statement — **without RETURNING** — succeeded, and the difference was read as
+«`set_config('role')` inside plpgsql does not really change the role». It does.
+The difference was the RETURNING clause all along, and the refusal was the
+product telling the truth.
+
+Two rules come out of it. A probe that disagrees with another probe is a
+**finding**, not noise: the two differ in some way that matters, and the way
+they differ is the answer. And a probe has to be **the shape of the real
+request** — `.insert().select()` is not `insert`, and PostgREST's translation is
+part of the system under test.
+
+The guard in `tests/unit/chat-creation.test.mts` is a source read, and that is
+deliberate: this defect typechecks, passes every mocked test because a fixture
+answers the read-back happily, and is invisible until somebody meets a real
+policy. Four mutations turn it red — either call site reading its row back, and
+either spelling the row out inline.

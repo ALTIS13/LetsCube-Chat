@@ -5,6 +5,8 @@
  * same row: two copies of a chat-creation path that has already been narrowed
  * once by an RLS lockdown is exactly the kind of duplication that drifts.
  */
+import { newGroupRow } from "@/lib/chatCreation";
+
 export async function openSavedMessagesChat({
   userId,
   setSelectedChatId,
@@ -34,12 +36,12 @@ export async function openSavedMessagesChat({
     setSelectedChatId(existing.id);
     return;
   }
-  const { data: chat, error } = await supabase
-    .from("chats")
-    .insert({ type: "group", name: "Избранное", created_by: userId })
-    .select("id")
-    .single();
-  if (error || !chat) return;
+  // Same defect as the group modal, same fix: the id is chosen here and the
+  // row is not read back, because `INSERT ... RETURNING` is judged by the
+  // SELECT policy and the creator is not yet a member when it is evaluated.
+  const chat = newGroupRow({ name: "Избранное", createdBy: userId });
+  const { error } = await supabase.from("chats").insert(chat);
+  if (error) return;
   // The `add_chat_creator_as_owner` trigger inserts the owner row. Do not
   // repeat it from the client: RLS correctly blocks a direct membership upsert
   // in production and that shows up as noisy 403 logs.

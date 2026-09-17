@@ -10,6 +10,7 @@ import { prefixError } from "@/lib/errors";
 import { CHAT_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 import { GROUP_INVITES_MIGRATION_REQUIRED, createGroupInvite } from "@/lib/groupInvites";
 import { showAppAlert } from "@/lib/appDialogs";
+import { newGroupRow } from "@/lib/chatCreation";
 
 export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onRefetch?: () => void }) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
@@ -63,11 +64,16 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
     }
     setLoading(true);
     setError(null);
-    const { data: chat, error: chatErr } = await supabase.from("chats")
-      .insert({ type: "group", name: groupName.trim(), created_by: userId })
-      .select("id").single();
-    if (chatErr || !chat) {
-      setError(chatErr ? prefixError("Не удалось создать группу", chatErr) : "Не удалось создать группу");
+    // No `.select("id")` here, and the id comes from this side. PostgREST
+    // turns a read-back into `INSERT ... RETURNING`, and PostgreSQL then
+    // applies the SELECT policy to the returned row — which `chats` only
+    // grants to a member, a row `trg_add_chat_creator_as_owner` writes AFTER
+    // the insert. That is why every attempt answered 403 and nobody could make
+    // a group. See `lib/chatCreation.ts` for the measurement.
+    const chat = newGroupRow({ name: groupName, createdBy: userId });
+    const { error: chatErr } = await supabase.from("chats").insert(chat);
+    if (chatErr) {
+      setError(prefixError("Не удалось создать группу", chatErr));
       setLoading(false);
       return;
     }
