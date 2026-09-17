@@ -229,7 +229,24 @@ interface IconEntry {
  */
 export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   activity: { Icon: Pulse },
-  admin: { Icon: ShieldCheck },
+  // A gear, not `ShieldCheck`, and neither choice was taste. This is the glyph
+  // `roles.badge_icon` names for «Тех. администратор», and `admin` — a
+  // different role — names `shield`, which is `Shield`. A shield with a tick
+  // beside a plain shield is one object at the 11px a badge chip draws at, so
+  // two of the four standings were indistinguishable. Three medals borrow
+  // `shield` as well, which `MEDAL_ICON_OVERRIDES` already had to correct.
+  //
+  // `GearSix` rather than a person-with-something, which was the first attempt:
+  // `badge-vocabulary.test.mts` refused it because «Менеджер» wears
+  // `IdentificationBadge` and a person and a person-with-a-gear are one
+  // silhouette at that size. A gear is also not a new idea — `ProfileRoleSummary`
+  // has drawn `name="settings"` beside «Тех. администратор» in the
+  // administration panel since it was written, so this makes two surfaces agree
+  // instead of adding a third answer.
+  //
+  // Nothing renders `name="admin"` in JSX; the only reader is the badge
+  // catalogue, so this changes one badge and no other surface.
+  admin: { Icon: GearSix },
   airplane: { Icon: AirplaneTilt },
   alert: { Icon: WarningCircle },
   atSign: { Icon: At },

@@ -2512,11 +2512,12 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
                       showOnlineDot: false,
                     }
                   }
-                  // Scoped to this chat on purpose: the strip beside it may
-                  // carry a «Владелец» of its own, which is LETSCUBE's owner
-                  // rather than this group's (D-180).
+                  // This chat's standing, and now the only standing on the
+                  // row. A strip of LETSCUBE-wide badges used to sit beside
+                  // it, so «Владелец» stood here twice meaning two different
+                  // facts; D-213 moved the whole strip to the person's card,
+                  // where `PROFILE_CARD_BADGE_LIMITS` shows all of it.
                   roleLabel={chatRoleLabel(member.chat_role, words.possessive)}
-                  badges={memberBadgeStrips.get(member.id) ?? null}
                   onOpen={() => {
                     setMemberCardId(member.id);
                     setView("member");
@@ -3355,8 +3356,15 @@ function MemberCard({
       <div className="mt-1 text-xs text-[color:var(--kub-muted)]" data-testid="member-card-joined">
         {formatJoinedAt(member.joined_at)}
       </div>
+      {/* Everything this person wears on LETSCUBE, words included — the whole
+          strip, because `PROFILE_CARD_BADGE_LIMITS` is uncapped. This is the
+          surface D-213 moved it to: a card is about the person, so a word has
+          room to be read, where the member row is about this group. */}
       {badges && (
-        <div className="mt-4 flex max-w-full flex-wrap items-center justify-center gap-1.5">
+        <div
+          className="mt-4 flex max-w-full flex-wrap items-center justify-center gap-1.5"
+          data-testid="member-card-badges"
+        >
           {badges.shown.map((badge) => (
             <ProfileBadgeChip key={`${badge.kind}:${badge.key}`} badge={badge} />
           ))}
@@ -3417,7 +3425,6 @@ function GroupMemberRow({
   subject,
   facts,
   roleLabel,
-  badges,
   onOpen,
   onOpenMenu,
   onOpenSheet,
@@ -3428,8 +3435,6 @@ function GroupMemberRow({
   facts: ChatMemberRowFacts;
   /** «Владелец группы», «Администратор канала», or empty for an ordinary member. */
   roleLabel: string;
-  /** What this person wears, or null when they wear nothing at all. */
-  badges: BadgeStrip | null;
   onOpen: () => void;
   onOpenMenu: (position: { x: number; y: number }) => void;
   onOpenSheet: () => void;
@@ -3479,9 +3484,11 @@ function GroupMemberRow({
       <UserAvatar user={member} size="sm" showOnline={facts.showOnlineDot} />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium truncate flex items-center gap-1 text-[color:var(--kub-text)]">
-          {/* The accessible name is the scoped one, so a screen reader hears
-              «Владелец группы» here and «Владелец» from a standing chip — the
-              two things this glyph would otherwise be read as (D-180). */}
+          {/* The accessible name is the scoped one — «Владелец группы», not
+              «Владелец». It used to be scoped so a screen reader could tell it
+              apart from the standing chip beside it (D-180); the chip is gone
+              and the scoping is now the only thing that names the glyph at all,
+              which makes it more load-bearing rather than less. */}
           {isMemberOwner && <KubIcon name="crown" size={12} tone="pink" className="flex-shrink-0" label={roleLabel} />}
           {isMemberAdmin && <KubIcon name="shield" size={12} tone="accent" className="flex-shrink-0" label={roleLabel} />}
           <span className="truncate">{facts.name}</span>
@@ -3512,21 +3519,7 @@ function GroupMemberRow({
             >
               {facts.secondary}
             </span>
-            {badges && (
-              <span
-                className="flex min-w-0 flex-wrap items-center gap-1.5"
-                data-testid="chat-info-member-badges"
-              >
-                {badges.shown.map((badge) => (
-                  <ProfileBadgeChip key={`${badge.kind}:${badge.key}`} badge={badge} />
-                ))}
-                {badges.hidden > 0 && (
-                  <KubBadge tone="muted" pill>
-                    +{badges.hidden}
-                  </KubBadge>
-                )}
-              </span>
-            )}
+
           </div>
       </div>
       </button>

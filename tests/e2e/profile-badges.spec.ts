@@ -140,12 +140,26 @@ test("the standing comes before the medal, and the strip says how many it did no
   await expect(page.getByTestId("profile-badges")).toContainText("+1");
 });
 
-test("somebody who wears nothing keeps the card the product always had", async ({ page }) => {
-  // The strip is an addition, not a replacement: a person with no public role
-  // and no medal must not end up with a blanker card than before.
+test("somebody who wears nothing is not called «Пользователь»", async ({ page }) => {
+  // This test used to require the opposite, and it was pinning the defect.
+  //
+  // `profiles.role` is an enum of `admin | manager | user` and 16 of this
+  // deployment's 18 accounts carry `user`, so «Пользователь» was printed on
+  // almost every contact card in the product. It is the column's default, not a
+  // fact about a person — which is the sentence D-180 opened with («nobody could
+  // see who anybody was: a contact card said «Пользователь» to everyone») and
+  // the one D-146's fix left behind when it made the legacy label the fallback.
+  //
+  // «Администратор» and «Менеджер» from that same column ARE facts, because
+  // every authoritative predicate on the server still honours it — `is_admin`
+  // reads `profiles.role = 'admin'` **or** `has_global_role(...)`. So the label
+  // survives for those two and is gone for the default.
   await openCard(page, []);
   await expect(page.getByTestId("profile-badges")).toHaveCount(0);
-  await expect(page.getByTestId("chat-info-panel")).toContainText("Пользователь");
+  await expect(page.getByTestId("chat-info-panel")).not.toContainText("Пользователь");
+  // And the card is not blanker than before: the name, the username line and
+  // the presence sentence are what it was always carrying.
+  await expect(page.getByTestId("chat-info-panel")).toContainText(ANNA.full_name as string);
 });
 
 test("an answer that never came leaves the card as it was", async ({ page }) => {
@@ -170,7 +184,13 @@ test("an answer that never came leaves the card as it was", async ({ page }) => 
 
   await expect(page.getByTestId("chat-info-panel")).toBeVisible();
   await expect(page.getByTestId("profile-badges")).toHaveCount(0);
-  await expect(page.getByTestId("chat-info-panel")).toContainText("Пользователь");
+  // Not «Пользователь», for the reason above, and not a spinner either: a
+  // refused function is answered for, so the strip settles on nothing rather
+  // than waiting forever. `profile-badges-pending` is the state while the
+  // answer is genuinely in flight, and it must not be the resting state.
+  await expect(page.getByTestId("chat-info-panel")).not.toContainText("Пользователь");
+  await expect(page.getByTestId("profile-badges-pending")).toHaveCount(0);
+  await expect(page.getByTestId("chat-info-panel")).toContainText(ANNA.full_name as string);
 });
 
 test("the strip holds in the dark theme", async ({ page }, info) => {

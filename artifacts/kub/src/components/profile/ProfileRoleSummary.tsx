@@ -95,6 +95,22 @@ export function ProfileRoleSummary({ user, compact = false, routing: routingProp
   }, [locationById, profileById, roleById, routing.available, routing.members, user.id]);
 
   const fallbackRole = LEGACY_APP_ROLE_LABEL[user.role];
+  /**
+   * The legacy column as a *standing*, which it only sometimes is (D-213).
+   *
+   * `profiles.role` is an enum of `admin | manager | user`, and every
+   * authoritative predicate on the server still honours it — `is_admin` reads
+   * `profiles.role = 'admin'` **or** `has_global_role(...)`. So «Администратор»
+   * and «Менеджер» from this column are facts, and worth printing when nothing
+   * else is known.
+   *
+   * «Пользователь» is not a fact. It is the enum's default, carried by 16 of
+   * this deployment's 18 accounts, and printing it made a contact card say
+   * «Пользователь» to almost everybody — which is the sentence D-180 opened
+   * with and the one D-146's fix left behind. Nothing is the honest answer:
+   * the card already carries the name, the username and the presence line.
+   */
+  const legacyStanding = user.role === "admin" || user.role === "manager" ? fallbackRole : null;
   const hasDynamicContent = dynamicRoles.available && globalRoles.length > 0;
   const hasLocationContent = routing.available && memberships.length > 0;
   // While the routing data is in flight the component knew nothing about this
@@ -106,6 +122,19 @@ export function ProfileRoleSummary({ user, compact = false, routing: routingProp
 
   if (compact) {
     const primaryMembership = memberships[0] ?? null;
+    // Nothing is claimed while the answer is in flight. `badges.ready` was
+    // never read here, and an unanswered id is simply absent from `rows` — so
+    // `worn` was empty for «asked and got nothing» and «has not answered yet»
+    // alike, and every card opened by printing the legacy label and then
+    // replacing it. A person watching that saw themselves called «Пользователь»
+    // for as long as the round trip took.
+    // `settled`, not `ready`: `ready` means «we know what these people wear»,
+    // and a refused function never becomes ready, so waiting for it held this
+    // placeholder for ever against a database without `profile_badges` — which
+    // this spec's own «an answer that never came» test caught immediately.
+    if (!badges.settled) {
+      return <div className="flex min-w-0 items-center gap-1.5" data-testid="profile-badges-pending" />;
+    }
     // What is worn wins the strip: it is the same fact the administrator's view
     // shows, read through a door everybody has. Where somebody wears nothing the
     // card keeps exactly what it showed before rather than going blank, so no
@@ -141,9 +170,11 @@ export function ProfileRoleSummary({ user, compact = false, routing: routingProp
             </KubBadge>
           ))
         ) : (
-          <KubBadge tone={user.role === "admin" ? "pink" : user.role === "manager" ? "cyan" : "muted"} pill>
-            {fallbackRole}
-          </KubBadge>
+          legacyStanding && (
+            <KubBadge tone={user.role === "admin" ? "pink" : "cyan"} pill>
+              {legacyStanding}
+            </KubBadge>
+          )
         )}
         {globalRoles.length > 2 && <KubBadge tone="muted" pill>+{globalRoles.length - 2}</KubBadge>}
         {primaryMembership && (

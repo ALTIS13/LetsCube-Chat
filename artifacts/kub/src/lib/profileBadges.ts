@@ -152,35 +152,54 @@ export interface BadgeStrip {
 }
 
 /**
- * How many of each family a strip beside a name has room for (D-180).
+ * Where a badge belongs, and where it does not (D-213).
  *
- * Section 5.1 of the proposal: «then the standing chip, then at most two medals
- * and a «+N» for the rest». Counted per family rather than as one limit of
- * three, and the difference is section 4.5's «at most one chip» for the
- * standing: somebody holding two public roles would otherwise spend the row's
- * whole budget on two ranks and show nothing they earned. It is not about the
- * standing being pushed off — standings sort first, so a flat limit would never
- * drop one. That was the reason written here first, and the mutation that was
- * supposed to prove it stayed green, which is how it got corrected.
+ * This used to be a pair of counts — one standing and one medal beside a name
+ * in the member list — and the question it answered was «how many fit». The
+ * owner of this deployment answered a different question on 2026-09-18:
+ *
+ *   «оно до сих пор отображается как роли глобальные с надписями вместо
+ *    значков»
+ *
+ * These badges are global by construction, not by accident. `profile_badges`
+ * joins `user_global_roles ⋈ roles` filtered to `scope = 'global'`; it takes no
+ * `chat_id` and never reads `chat_members`, and the client type says so —
+ * `ProfileBadgeKind` is `"global_role" | "achievement"`. So a member row was
+ * putting LETSCUBE-wide standing into a list about one group, one line below
+ * that group's own standing, and the word «Владелец» stood on the row twice
+ * meaning two different facts.
+ *
+ * **Both references agree, and neither does this.** In a Discord server's
+ * member list a person carries their standing *in that server* — the name's
+ * colour, at most one role icon, a crown for the owner — and Discord's own
+ * account badges (Nitro, HypeSquad, staff) never appear there; they live on
+ * the profile popout. Telegram prints a short grey word for the group role,
+ * «админ» or a custom title the owner typed, and shows no site-wide rank at
+ * all. Premium and verification are profile properties in both.
+ *
+ * So the rule is about scope rather than about room:
+ *
+ *   - **a member row** carries this group's standing and nothing else. It is
+ *     already drawn the way the owner asked for — `crown` or `shield` at 12px
+ *     with the words only in the accessible name — and the second line names
+ *     the scope in Telegram's own manner («Владелец группы»).
+ *   - **a person's card** carries who they are on LETSCUBE: every badge, in
+ *     full, words included. The card is where a name is the subject rather
+ *     than one entry in a list, and where a word has room to be read.
+ *
+ * `PROFILE_CARD_BADGE_LIMITS` is therefore uncapped, and that is the whole
+ * reason the counts are gone rather than merely raised. The note that stood
+ * here reached the same conclusion — «the whole strip belongs where the whole
+ * strip has room, which is the person's own card» — and kept the row's chips
+ * only because the card did not exist yet. D-168 built it on 2026-09-15.
+ *
+ * The measurement that produced the old count is worth keeping: with two
+ * medals a member holding a standing and two medals wrapped to a second line
+ * of chips and the four-person list grew from 223 points to 331, so the panel
+ * read as a list of chip collections rather than a list of people. Removing
+ * them takes that back to 223 and further.
  */
-export const MEMBER_ROW_BADGE_LIMITS = { standings: 1, medals: 1 } as const;
-
-/**
- * One medal rather than the proposal's two, decided by looking at the rendered
- * list at 390 points.
- *
- * With two, a member holding a standing and two medals wrapped to a second line
- * of chips, and the four-person list grew from 223 to 331 points — the panel
- * stopped reading as a list of people and started reading as a list of chip
- * collections. Neither Telegram nor Discord stacks chips in a member list;
- * Discord puts one icon beside a name and keeps the rest for the profile.
- *
- * So the row shows the standing, the newest medal and «+N», and the whole strip
- * belongs where the whole strip has room — which is the person's own card,
- * opened from the row. That opening is D-168 and is not built yet, which is the
- * one cost of this decision and is written down rather than hidden.
- */
-
+export const PROFILE_CARD_BADGE_LIMITS = { standings: Infinity, medals: Infinity } as const;
 /**
  * The chips a strip shows, keeping the order `projectProfileBadges` put them in.
  *
@@ -190,7 +209,7 @@ export const MEMBER_ROW_BADGE_LIMITS = { standings: 1, medals: 1 } as const;
  */
 export function badgeStrip(
   worn: readonly ProfileBadge[],
-  limits: { standings: number; medals: number } = MEMBER_ROW_BADGE_LIMITS,
+  limits: { standings: number; medals: number } = PROFILE_CARD_BADGE_LIMITS,
 ): BadgeStrip {
   let standings = 0;
   let medals = 0;

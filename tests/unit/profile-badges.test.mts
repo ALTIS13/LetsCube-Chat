@@ -13,7 +13,7 @@ import {
   badgeUserIds,
   badgeWeight,
   hiddenBadgeCount,
-  MEMBER_ROW_BADGE_LIMITS,
+  PROFILE_CARD_BADGE_LIMITS,
   projectProfileBadges,
   type ProfileBadgeRow,
 } from "../../artifacts/kub/src/lib/profileBadges.ts";
@@ -134,7 +134,7 @@ test("a detail that is only whitespace is no detail", () => {
 // chat's own role, then one standing and at most two medals; anything past that
 // is counted rather than dropped silently.
 
-test("a member row wears one standing and one medal, whatever else is held", () => {
+test("a card wears everything held, and the row's old budget is kept as a record", () => {
   const worn = projectProfileBadges(
     [
       role({ key: "owner", title: "Владелец", rank: 100 }),
@@ -145,15 +145,29 @@ test("a member row wears one standing and one medal, whatever else is held", () 
     ],
     ME,
   );
-  const strip = badgeStrip(worn);
-  // One of each family, decided by looking at the rendered list rather than by
-  // the proposal's two medals: at 390 points a second medal wrapped the row to a
-  // second line of chips and the panel stopped reading as a list of people.
+  // The card shows the lot: five badges, five chips, nothing counted away.
+  // Every rank the person holds and every medal they earned, because on a card
+  // the person is the subject rather than one entry in a list of people.
+  const card = badgeStrip(worn);
   assert.deepEqual(
-    strip.shown.map((badge) => badge.title),
+    card.shown.map((badge) => badge.title),
+    ["Владелец", "Администратор", "Тестировщик", "Освоился", "Ветеран"],
+  );
+  assert.equal(card.hidden, 0, "the card counted a badge away instead of drawing it");
+
+  // What this used to assert, and why it is not asserted of any surface now:
+  // the member row took one of each family, measured at 390 points where a
+  // second medal wrapped the chips to a second line and the four-person list
+  // grew from 223 points to 331. D-213 took the row's chips away entirely —
+  // they were LETSCUBE-wide standing inside a list about one group — so the
+  // budget they were sized for no longer exists. The shape it produced is kept
+  // here as the record of that measurement.
+  const asTheRowWas = badgeStrip(worn, { standings: 1, medals: 1 });
+  assert.deepEqual(
+    asTheRowWas.shown.map((badge) => badge.title),
     ["Владелец", "Тестировщик"],
   );
-  assert.equal(strip.hidden, 3, "the rest are counted, not forgotten");
+  assert.equal(asTheRowWas.hidden, 3, "the rest are counted, not forgotten");
 });
 
 test("a second rank does not take the room the medals were given", () => {
@@ -171,7 +185,10 @@ test("a second rank does not take the room the medals were given", () => {
     ],
     ME,
   );
-  const strip = badgeStrip(worn);
+  // Asked for explicitly now that no surface defaults to it. The mechanism is
+  // what is being pinned, not a screen: a surface that acquires a budget later
+  // must not spend it all on ranks.
+  const strip = badgeStrip(worn, { standings: 1, medals: 1 });
   assert.deepEqual(
     strip.shown.map((badge) => badge.title),
     ["Владелец", "Тестировщик"],
@@ -192,16 +209,23 @@ test("a strip with room to spare hides nothing", () => {
   assert.equal(strip.hidden, 0);
 });
 
-test("a surface may ask for other room, and the limits are the member row's default", () => {
-  assert.deepEqual({ ...MEMBER_ROW_BADGE_LIMITS }, { standings: 1, medals: 1 });
+test("the card's room is uncapped, and a surface may still ask for less", () => {
+  // Uncapped rather than a large number, and the difference is the point: the
+  // counts existed to answer «how many fit beside a name», and after D-213 no
+  // badge is drawn beside a name at all. The one surface left is the person's
+  // card, where the whole set is the subject. A finite default here would be a
+  // cap nobody had measured.
+  assert.deepEqual({ ...PROFILE_CARD_BADGE_LIMITS }, { standings: Infinity, medals: Infinity });
   const worn = projectProfileBadges([role(), medal(), medal({ key: "settled_in", title: "Освоился" })], ME);
+  const everything = badgeStrip(worn);
+  assert.equal(everything.shown.length, 3, "the card dropped one of three badges");
+  assert.equal(everything.hidden, 0);
+
+  // The mechanism is still there for a surface that does have a budget, and the
+  // «+N» it produces is still counted, so reintroducing one needs no new code.
   const oneChip = badgeStrip(worn, { standings: 1, medals: 0 });
   assert.deepEqual(oneChip.shown.map((badge) => badge.title), ["Владелец"]);
   assert.equal(oneChip.hidden, 2);
-  // And a surface with room — a person's own card — may show the lot.
-  const roomy = badgeStrip(worn, { standings: 4, medals: 8 });
-  assert.equal(roomy.shown.length, 3);
-  assert.equal(roomy.hidden, 0);
 });
 
 // The icon resolution, proved where every surface meets it rather than only in

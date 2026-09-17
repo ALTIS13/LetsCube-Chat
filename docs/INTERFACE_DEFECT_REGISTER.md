@@ -13026,3 +13026,222 @@ tests now go through `openRailManage`, which asserts the capsule and the drawer
 by name so that if the phone ever stops offering them the failure says *that*
 rather than pointing at the manage button. 15/15 at 390, photographed:
 `output/empty-group-channel/voice-form-{dark,light}-chromium-mobile-390.png`.
+
+---
+
+## D-213 `[x]` A group's member list showed LETSCUBE-wide rank, in words, beside that group's own
+
+**Severity:** medium, and it is the one the owner reported rather than one found
+by looking.
+
+**Reported** by the owner on 2026-09-18: «проверку прав и корректировку вида
+лычек, потому-что сейчас оно до сих пор отображается как роли глобальные с
+надписями вместо значков».
+
+**Surfaces:** `ChatInfoPanel.tsx` — the member row and the member card;
+`lib/profileBadges.ts`; `components/kub/icons.ts`;
+`components/profile/ProfileRoleSummary.tsx`.
+
+**Defect.** Both halves of the sentence are true, and the second one hid the
+first. `profile_badges` joins `user_global_roles` to `roles` filtered to
+`scope = 'global'`; it takes no `chat_id`, never reads `chat_members`, and the
+client type says so outright — `ProfileBadgeKind` is
+`"global_role" | "achievement"`. So the chips beside a name in a group's member
+list were LETSCUBE-wide standing **by construction**, sitting one line below
+that group's own standing. On the owner's own row the word «Владелец» appeared
+twice, meaning two different facts.
+
+**This was seen five days earlier and lost.** It is written down in
+`docs/PRODUCTION_PRIORITY_TRACKER.md` as the third of three defects found while
+building the strip — the member row that read «Владелец [crown Владелец]», this
+chat's owner beside LETSCUBE's, one word meaning two things a line apart. The
+first two got numbers, D-181 and D-182. This one did not, so it was in no batch
+and nobody read it again. A defect with no number is a defect nobody owns.
+
+**What both references actually do.** In a Discord server's member list a
+person carries their standing *in that server* — the name's colour, at most one
+role icon, a crown for the owner — and Discord's own account badges (Nitro,
+HypeSquad, staff) never appear there; they are on the profile popout. Telegram
+prints a short grey word for the group role, «админ» or a custom title the owner
+typed, and shows no site-wide rank at all; Premium and verification are profile
+properties. Neither puts a site-wide rank in a list about one group. The product
+had the right shape for the right scope and the wrong shape for the wrong scope
+two centimetres apart: the per-chat marker was already a crown or a shield at
+12px with the words only in the accessible name.
+
+**Fixed as a rule about scope, not about room.** `MEMBER_ROW_BADGE_LIMITS` —
+one standing and one medal — answered "how many fit beside a name".
+`PROFILE_CARD_BADGE_LIMITS` answers a different question and is uncapped:
+
+- **a member row** carries this group's standing and nothing else: the glyph on
+  the name line, whose accessible name is the scoped sentence, and a second line
+  that names the scope in Telegram's manner («Владелец группы»);
+- **a person's card** carries who they are on LETSCUBE — every badge, words
+  included, nothing counted away, so there is no plus-N left to press.
+
+The note that used to stand where the limits were had already reached this
+conclusion — "the whole strip belongs where the whole strip has room, which is
+the person's own card" — and kept the row's chips only because the card did not
+exist. D-168 built it on 2026-09-15.
+
+**Two of the four standings were the same picture.** `roles.badge_icon` names
+`admin` for «Тех. администратор» and `shield` for «Администратор»; the build
+drew `ShieldCheck` and `Shield`, which at the 11px a chip uses is one object.
+Three medals borrow `shield` as well, which `MEDAL_ICON_OVERRIDES` already had
+to correct. «Тех. администратор» now draws a gear — not a new idea:
+`ProfileRoleSummary` has drawn the `settings` glyph beside that role in the
+administration panel since it was written, so two surfaces now agree instead of
+three answers existing.
+
+**The test for that was wrong before it was right, and the mutation said so.**
+The first version compared component names, found `ShieldCheck` different from
+`Shield`, and **stayed green** when the mutation put the two shields back side
+by side. It was not a weak check, it was measuring something other than the
+sentence above it. It now compares *silhouettes* from a written-down table of
+phosphor components that read as one object at badge size — and the first glyph
+chosen for «Тех. администратор», a person-with-a-gear, was refused by it,
+because «Менеджер» wears `IdentificationBadge` and a person and a
+person-with-something are one shape at that size. Four mutations red.
+
+**«Пользователь» on almost every contact card, which is D-180's own opening
+sentence.** `ProfileRoleSummary`'s compact form fell back to
+`LEGACY_APP_ROLE_LABEL[user.role]`, and `profiles.role` is an enum whose default
+`user` is carried by **16 of this deployment's 18 accounts**. «Администратор»
+and «Менеджер» from that same column *are* facts — every authoritative predicate
+still honours it, `is_admin` reads `profiles.role = 'admin'` **or**
+`has_global_role(...)` — so the label survives for those two and is gone for the
+default. Two e2e tests pinned «Пользователь» as expected and now require its
+absence.
+
+**And the fallback fired while the answer was still in flight.** `badges.ready`
+was read nowhere, and an unanswered id is simply absent from `rows`, so "asked
+and got nothing" and "has not answered yet" were the same state: every card
+opened by printing «Пользователь» and then replacing it. Waiting for `ready`
+turned out to be its own trap — a refused `profile_badges` never becomes ready,
+and the placeholder would have been permanent. The hook has a third state now:
+`settled` is "answered or failed", which is the one a surface should wait on,
+and `failed` says which. This was caught by the spec's own "an answer that never
+came" test within a minute of the first fix, not by reasoning.
+
+**Verified:** 14/14 across `member-badges.spec.ts` (rewritten — its job changed
+from "chips in the row" to the split) and `profile-badges.spec.ts`;
+`badge-vocabulary.test.mts` 13/13 with four mutations red;
+`profile-badges.test.mts` 17/17. Photographed at 1440 in both themes:
+`output/member-badges/{light,dark,card-light,card-dark}-*.png`.
+
+**What is deliberately left open:** per-group roles. Those are slices 5 to 7 of
+D-180 and they need a migration — see D-215. The role colour that never reaches
+a pixel is D-214.
+
+---
+
+## D-214 `[ ]` The colour an administrator picks for a role never reaches a pixel, and cannot
+
+**Severity:** low as a defect, medium as dead configuration: the administration
+panel offers a colour picker whose value changes nothing.
+
+**Surface:** `roles.colour` in the database, `lib/profileBadges.ts` (which
+carries it), `ProfileBadgeChip.tsx` (which never reads it),
+`lib/badgeVocabulary.ts` and its `badgeTone`.
+
+**Defect.** `profile_badges` returns `r.colour` and `projectProfileBadges`
+carries it into `ProfileBadge.colour`; `ProfileBadgeChip` reads `icon`, `kind`,
+`key`, `weight`, `title` and `detail`, and never `colour`. The tone comes from
+`badgeTone()`, which collapses everything into three values: `pink` for `owner`
+and `tech_admin`, `cyan` for the rest, `muted` for every medal. So the four
+colours configured in the catalogue — and colour is the whole mechanic Discord
+uses for this — are fetched over the wire and thrown away.
+
+**Why it was not simply wired up, measured rather than argued.** The obvious fix
+is to put `colour` on the chip's border and glyph, where the threshold for
+non-text interface is 3:1 rather than the 4.5:1 a word needs. Measured against
+the three surfaces a chip sits on, in both themes, with the same arithmetic
+`tests/unit/status-badge-contrast.test.mjs` uses — dark surface / surface-2 /
+surface-3, then light surface / surface-2 / surface-3:
+
+- **owner** `#F5B50A` — dark 9.94, 8.89, 7.87; light **1.83, 1.63, 1.50**
+- **tech_admin** `#4d8bd0` — dark 5.12, 4.58, 4.05; light 3.55, **3.16, 2.92**
+- **admin** `#f04a92` — dark 5.27, 4.72, 4.18; light 3.44, **3.07, 2.83**
+- **manager** `#4DCD5E` — dark 8.82, 7.90, 6.99; light **2.06, 1.83, 1.69**
+
+In the dark theme every one of them clears 3:1 comfortably. **In the light theme
+the gold and the green are invisible** — 1.50 to 2.06, which is not a marginal
+miss — and the blue and the pink fail on `--kub-surface-3`, which is the surface
+a chip on a card actually sits on. Wiring the colour through would have shipped
+a light theme where the owner's badge has no visible edge.
+
+The cause is visible in the numbers: the catalogue's colours were taken from the
+**dark** theme's palette. `#4d8bd0` and `#f04a92` are the `--kub-cyan` and
+`--kub-pink` dark values exactly — the same 4.05 and 4.18 the contrast test
+quotes for those tones. The existing tone tokens are theme-aware; the
+catalogue's hexes are not.
+
+**Also worth saying: the mapping disagrees with the catalogue.** `badgeTone`
+gives `owner` pink, while the catalogue asks for gold; and `admin`, whose
+catalogue colour *is* that pink, gets cyan. So even the three tones in use are
+assigned in a different pairing than the database describes.
+
+**Two honest ways forward, neither of them "read `colour` in the chip":**
+
+1. **Theme-aware role tokens.** Four pairs — `--kub-role-owner` and the rest —
+   defined in both theme blocks, derived from the catalogue colour but adjusted
+   until each clears 3:1 in the light theme too, and pinned by the contrast
+   test. The colour picker then becomes a choice from a palette rather than a
+   free hex, which is what the measurement above says it has to be.
+2. **Per-theme columns** on `roles`, so an administrator sets both. More honest
+   about what is really needed and more to maintain.
+
+**Not a decision to take without the owner**, because either way the free colour
+picker in the administration panel stops being free, and that is a product
+choice rather than a defect.
+
+---
+
+## D-215 `[ ]` Per-group roles: the badge system has no way to express standing inside a group
+
+**Severity:** medium. It is the other half of what the owner asked for on
+2026-09-18, and it needs a migration rather than a client change.
+
+**Measured on production, 2026-09-18, read-only.**
+
+- `chat_members.role` is an enum `chat_member_role = owner | admin | member`,
+  NOT NULL, default `member`. No CHECK constraint — the type is the constraint.
+  Distribution across 61 memberships: **owner 34, member 26, admin 1**. The
+  thirty-four owners are the artefact the 2026-09-11 private-chat repair
+  describes (whoever opened a private chat became its owner); the single `admin`
+  row is the whole of the per-chat administrator tier on this deployment.
+- The `roles` catalogue holds three **chat-scope** rows — `chat_owner`,
+  `chat_admin`, `chat_member` — and all three are `is_active = false`,
+  `badge_public = false`, with zero holders. They are dead by construction, and
+  `20260904060000_roles_retire_dead_tiers_and_club_naming.sql` says why: chat
+  scope roles are never evaluated anywhere, and chat access comes from
+  `chat_members.role` via `is_chat_admin` and `chat_role_of`.
+- So there is no table anywhere that assigns a named, coloured tag to a
+  (chat, person) pair. Group standing is exactly three values and nothing else.
+
+**Do not reach for the dead rows.** Recorded twice already — D-168 above and
+`docs/proposals/2026-09-13-roles-and-badges.md` — and it is worth a third time
+because it is the cheap-looking move: `roles.colour` is one colour shared by
+everyone holding that role, so it cannot express one person's tag in one group.
+Reviving those rows would be the relabelling of an existing function the owner
+has ruled out, not an implementation of this.
+
+**The design exists**, in that proposal: `public.chat_roles` with `chat_id`,
+`name`, `colour`, `icon` and `priority`, and `public.chat_member_roles` with a
+composite foreign key onto `chat_members (chat_id, user_id)`, so leaving a group
+drops the tags with the membership — no trigger and no sweeper. Screen copy is
+drafted there too.
+
+**Two things found today that this work has to settle.**
+
+- `admin` and `manager` are both `badge_public = true` with **zero holders**, so
+  two of the four intended standings cannot appear on anybody. Either the
+  catalogue was seeded for a future that has not arrived, or it is a
+  configuration mistake; the owner's call.
+- `profile_badges` joins `user_global_roles` directly and never calls
+  `has_global_role`, which is the only predicate that also honours the legacy
+  `profiles.role` column. An account made an administrator by that column alone
+  would therefore be an administrator everywhere **except** on its badge.
+  Measured: of the 2 accounts with a `profiles.role` other than `user`, neither
+  lacks a public global role, so nobody is in that state today — but the two
+  sources of truth are one `update` apart.

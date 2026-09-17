@@ -25,6 +25,19 @@ import type { ProfileBadgeRow } from "@/lib/profileBadges";
 const cache = new Map<string, ProfileBadgeRow[]>();
 /** In flight, so ten bubbles mounting at once make one request. */
 const pending = new Map<string, Promise<void>>();
+/**
+ * Ids whose last attempt failed.
+ *
+ * Deliberately not the cache: a refusal is not «wears nothing», and the next
+ * time a surface asks about this person it should ask the server again. But it
+ * is not «in flight» either, and until this set existed those two were the same
+ * state — an id that failed simply stayed missing, `ready` stayed false for
+ * ever, and a surface that waited for `ready` waited for ever. A contact card
+ * held its loading placeholder permanently against a database without the
+ * function, which is exactly the shape of the bug this hook was written to
+ * avoid on the other side.
+ */
+const failed = new Set<string>();
 /** Bumped whenever the cache gains anything, so mounted hooks re-read it. */
 let revision = 0;
 const listeners = new Set<() => void>();
@@ -44,7 +57,14 @@ async function loadBadges(ids: string[]): Promise<void> {
     // An answer that did not come is not an answer that nothing is worn. The
     // ids stay uncached so a later render asks again, and the surface renders
     // the person without a strip in the meantime.
-    for (const id of ids) pending.delete(id);
+    for (const id of ids) {
+      pending.delete(id);
+      failed.add(id);
+    }
+    // Announced, so a surface waiting for an answer stops waiting. The effect
+    // below depends on the id list rather than on `revision`, so telling
+    // everybody about a failure cannot turn into a request loop.
+    announce();
     return;
   }
   const rows = (data ?? []) as unknown as ProfileBadgeRow[];
@@ -53,6 +73,7 @@ async function loadBadges(ids: string[]): Promise<void> {
     // empty array records it, so nobody asks about them again for the session.
     cache.set(id, rows.filter((row) => row.user_id === id));
     pending.delete(id);
+    failed.delete(id);
   }
   announce();
 }
@@ -72,6 +93,16 @@ export interface ProfileBadgesState {
   rows: Map<string, ProfileBadgeRow[]>;
   /** Whether every id asked about has been answered for. */
   ready: boolean;
+  /**
+   * Whether every id has either been answered for **or** failed.
+   *
+   * This is the one a surface should wait on. `ready` is the stronger claim —
+   * «we know what these people wear» — and a surface that waits for it against
+   * a database without the function waits for ever.
+   */
+  settled: boolean;
+  /** Whether at least one id's last attempt failed. */
+  failed: boolean;
 }
 
 export function useProfileBadges(userIds: readonly string[]): ProfileBadgesState {
@@ -97,12 +128,19 @@ export function useProfileBadges(userIds: readonly string[]): ProfileBadgesState
     const ids = key ? key.split("|") : [];
     const rows = new Map<string, ProfileBadgeRow[]>();
     let ready = true;
+    let settled = true;
+    let anyFailed = false;
     for (const id of ids) {
       const answer = cache.get(id);
-      if (answer) rows.set(id, answer);
-      else ready = false;
+      if (answer) {
+        rows.set(id, answer);
+        continue;
+      }
+      ready = false;
+      if (failed.has(id)) anyFailed = true;
+      else settled = false;
     }
-    return { rows, ready };
+    return { rows, ready, settled, failed: anyFailed };
     // `revision` is the dependency that matters: the cache is module state, so
     // nothing else changes when an answer arrives.
   }, [key, revision]);
