@@ -13346,3 +13346,78 @@ rather than by test id, because at 390 the folder rail is not on screen and the
 header carries «Меню» instead. Reverting `KubTooltip` to the CSS bubble turns
 all five pointer tests red. Photographed:
 `output/icon-tooltip/bell-{dark,light}-chromium-desktop-1440.png`.
+
+---
+
+**D-215 — the server half applied 2026-09-18.**
+`20260918120000_chat_roles_and_member_tags.sql`, with its rollback and its
+rehearsal beside it. Verified schema backup taken first
+(`/srv/letscube/backups/schema/schema-20260917T232230Z.sql`, 1 032 945 bytes,
+135 `CREATE TABLE`, sha256 `6ebc13af…`). One transaction, `lock_timeout 5s`, a
+self-check that raises rather than committing a half-applied state.
+
+**What the rehearsal measured before it was applied**, seventeen cases as real
+`authenticated` sessions inside `begin; … rollback;`: four controls ALLOWED
+(group owner creates, a second group's owner creates, chat admin assigns, owner
+tags a member), and a read pair that had to *disagree* — a member sees 1 role,
+a non-member sees 0 — which is what proves the impersonation took at all rather
+than everything running as `postgres`. Then the refusals, each naming the thing
+that produced it: a plain member refused by the policy, a chat admin refused by
+the policy (the owner-only gate, see below), a tag borrowed from another group
+refused by `chat_member_roles_role_fkey`, a role in a private chat refused by
+`chat_role_private_chat`, a blank name by `chat_roles_name_length`, a free hex
+colour by `chat_roles_colour_palette_key`, the same name in another case by
+`chat_roles_chat_name_idx`, and twenty-six roles **in one statement** by
+`chat_roles_limit`. After the rollback: both tables gone, 61 memberships
+unchanged, no audit rows, the three dead chat-scope roles still dead.
+
+**Verified after applying:** both tables with RLS on; six policies each, two
+permissive and four restrictive, the same set `topics` and `voice_channels`
+carry; both composite foreign keys present as written —
+`(chat_id, user_id) → chat_members` and `(chat_id, role_id) → chat_roles` — so
+leaving a group drops the tags with the membership and a tag can never name
+another group's role; `anon` reaches neither table; `authenticated` holds none
+of TRUNCATE, TRIGGER or REFERENCES; the dead chat-scope rows untouched.
+
+**Three things the written design got wrong about this database**, found by
+measuring it rather than by reading the proposal:
+
+1. `chat_member_roles.role_id` as a plain reference lets an administrator of
+   chat A pin a role belonging to chat B on somebody, and chat A's list would
+   draw chat B's name and colour. Fixed with a `unique (chat_id, id)` on
+   `chat_roles` and a composite key — the same repair `voice_channels_category_fkey`
+   had four days earlier.
+2. «Inside a group» is not what the schema would have enforced: 24 of 27
+   private chats carry an `owner` row from the 2026-09-11 artefact, so one side
+   of most private conversations passes `is_chat_admin`. A trigger refuses a
+   role in a `private` chat outright.
+3. The bounds «25 per chat, 5 per member» were specified as BEFORE triggers,
+   which cannot see the rows their own command is inserting — so a single
+   26-row INSERT, which PostgREST will happily send, walks straight past them.
+   They are AFTER INSERT row triggers, and the rehearsal sends 26 rows in one
+   statement to prove it.
+
+**Two decisions for the owner, both reversible in one line.**
+
+- **`colour` holds a palette key, not a hex** (`^[a-z][a-z0-9_]{1,31}$`), on
+  D-214's evidence: a free hex column would reproduce per group the defect that
+  entry measured globally, with nobody to audit it. The interface owns the
+  palette and its two theme values.
+- **The write gate is split**: inventing or renaming a group's tags needs
+  `is_chat_owner`, handing an existing tag to somebody needs `is_chat_admin`.
+  Copied from `enforce_chat_member_update`, which already lets an administrator
+  promote a member and refuses them the owner. It costs one person one power
+  today — there is exactly one non-owner `admin` row across all 13 groups — and
+  widening it later is one policy while narrowing it after groups have built
+  vocabularies is not.
+
+**Still open on D-215:** the interface. The tables hold nothing yet, and nothing
+reads them. The screen that defines a group's tags, the assignment control on a
+member, and the row and author-line rendering are the next block.
+
+**Two unrelated findings this measurement turned up**, each worth its own entry
+when somebody gets to them: `chat_channel_categories` is subscribed to by
+`useServerChannels.ts` but is not in the `supabase_realtime` publication, so
+that binding has never fired; and `voice_channels` grants `authenticated` no
+UPDATE while its `FOR ALL` policy promises one — latent only because the client
+just reads it.
