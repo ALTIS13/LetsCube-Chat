@@ -11087,6 +11087,34 @@ author line (4), per-group roles (5–7, blocked on nothing now that D-164 has l
 premium medals (8), which stay undesigned on purpose — a medal with no data behind it is the one thing in that
 document that would be a relabelling.
 
+**Slice 3 re-scoped on 2026-09-18, and the accounting corrected.** The member
+list was shipped by `5960115` and `d424f96`, deployed as `e6006f5` on
+2026-09-13, while this list went on calling it open — and the register's own
+audit table credited `e6006f5` to D-182. Worth naming as an accounting fault
+rather than quietly fixing: a slice list that disagrees with the deployed
+product is how the owner ends up reporting a defect in something we believe is
+unbuilt.
+
+What shipped there was also the wrong thing, which the owner reported on
+2026-09-18 and which is now D-213: the strip in that list was LETSCUBE-wide
+standing beside the group's own. The badge in a member row is therefore **not**
+an open slice and never becomes one — a row carries this group's standing, and
+the whole strip lives on the person's card. Slice 3 is closed with that
+correction.
+
+**Slice 4 is affected the same way.** «The badge on a message's author line»
+cannot be the global strip either, for exactly D-213's reason: a message is read
+inside one conversation. Discord colours the author's name by their highest role
+*in that server* and Telegram prints the group title beside it; neither shows a
+site-wide rank there. So slice 4 waits on per-group roles rather than being
+buildable from what exists — it is part of D-215 now, not a separate small
+piece.
+
+**Slices 5 to 7 are D-215**, with the production measurements that bound them:
+`chat_members.role` is an enum of three values, the three chat-scope rows in
+`roles` are dead by construction, and nothing in the schema can name a tag for
+one person in one group.
+
 ---
 
 ## D-181 `[x]` A confirmation raised by a key press was answered by that same press
