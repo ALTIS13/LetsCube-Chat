@@ -10,7 +10,6 @@ import { ChatList } from "./ChatList";
 import { NewChatModal } from "./NewChatModal";
 import { NewGroupModal } from "./NewGroupModal";
 import { FolderEditModal } from "./FolderEditModal";
-import { FolderListModal } from "./FolderListModal";
 import { SettingsModal } from "./SettingsModal";
 import { SettingsPanel } from "@/components/settings/SettingsPanel";
 import { openSavedMessagesChat } from "@/lib/savedMessages";
@@ -50,7 +49,6 @@ export function Sidebar() {
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [showNewChat, setShowNewChat] = useState(false);
   const [editingFolder, setEditingFolder] = useState<Folder | "new" | null>(null);
-  const [showFolderList, setShowFolderList] = useState(false);
   // Phone only in effect: the header keeps the field in its control row from
   // `md`, so this flag changes nothing on a computer.
   const [searchTucked, setSearchTucked] = useState(false);
@@ -66,16 +64,13 @@ export function Sidebar() {
     if (target) setEditingFolder(target);
   };
 
-  // BottomNav (mobile) drives `mobileSection` in the store. We open the matching
-  // secondary surface here and close it when the user switches back to "chats".
-  useEffect(() => {
-    if (mobileSection === "folders") setShowFolderList(true);
-  }, [mobileSection]);
-
-  const closeFolderList = () => {
-    setShowFolderList(false);
-    if (mobileSection === "folders") setMobileSection("chats");
-  };
+  // BottomNav (mobile) drives `mobileSection` in the store. «Профиль» opens
+  // the settings sheet below, and «Задачи» is a route rather than a section.
+  //
+  // There used to be a third: «Папки» opened `FolderListModal`, a full-screen
+  // folder list, while the folder strip sat at the top of this very column —
+  // two folder surfaces on one screen (D-120). The tab and the screen are both
+  // gone; `FolderTabs` below chooses, creates and edits.
 
   const hasSearchQuery = searchQuery.trim().length > 0;
   // In-chat search, as a state of this column from `md`.
@@ -264,20 +259,6 @@ export function Sidebar() {
           deleteFolder={deleteFolder}
           setChatsForFolder={setChatsForFolder}
           canManage={editingFolder === "new" ? true : canManageFolder(editingFolder)}
-        />
-      )}
-      {showFolderList && (
-        <FolderListModal
-          onClose={closeFolderList}
-          folders={folders}
-          folderChats={folderChats}
-          activeFolder={activeFolder}
-          onSelect={setActiveFolder}
-          createFolder={createFolder}
-          updateFolder={updateFolder}
-          deleteFolder={deleteFolder}
-          setChatsForFolder={setChatsForFolder}
-          canManageFolder={canManageFolder}
         />
       )}
       {showNewGroup && (

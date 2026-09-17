@@ -84,8 +84,11 @@ interface AppState {
    * when this becomes 'search' and immediately resets the section back to
    * 'chats' so the tap acts like an action rather than a sticky tab.
    */
-  mobileSection: 'chats' | 'search' | 'folders' | 'profile'
-  setMobileSection: (section: 'chats' | 'search' | 'folders' | 'profile') => void
+  // 'folders' went with D-120: the tab that set it opened a second folder
+  // surface beside the strip at the top of the chat list. 'search' is a
+  // one-shot focus signal rather than a screen — see `SidebarHeader`.
+  mobileSection: 'chats' | 'search' | 'profile'
+  setMobileSection: (section: 'chats' | 'search' | 'profile') => void
 
   // Reply/forward/edit state — composer-level UI flags
   replyToMessage: MessageWithSender | null

@@ -368,6 +368,26 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     await expect(page.getByTestId("folder-rail")).toBeHidden();
     const strip = page.locator("[data-kub-list-chrome]").getByRole("button", { name: /Личные/ });
     await expect(strip).toBeVisible();
+
+    // «Its only» was a claim this test did not check until D-120, and it was
+    // false: the bottom capsule carried «Папки», which opened a full-screen
+    // folder list over the strip. Both halves of that are measured now.
+    const bar = page.getByRole("navigation", { name: "Навигация" });
+    await expect(bar).toBeVisible();
+    await expect(bar.getByRole("button", { name: "Папки" })).toHaveCount(0);
+
+    // The whole capsule, not the one word, so a folder door under another name
+    // is caught by the same assertion. `boot` signs in a manager, so «Задачи»
+    // is offered; `tests/unit/bottom-nav-destinations.test.mts` covers the
+    // account that is not.
+    const labels = await bar
+      .getByRole("button")
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute("aria-label") ?? ""));
+    expect(labels).toEqual(["Чаты", "Профиль", "Задачи"]);
+
+    // And the screen that tab opened is not reachable from anywhere else: its
+    // «Новая папка» footer is the one string only it ever drew.
+    await expect(page.getByRole("dialog").filter({ hasText: "Новая папка" })).toHaveCount(0);
   });
 
   test("the side-menu button is on the rail, and no longer above the chat list", async ({ page }) => {

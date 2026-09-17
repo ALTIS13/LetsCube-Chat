@@ -260,7 +260,10 @@ const veiled = [
   ["components/settings/SettingsScreen.tsx", 3],
   ["components/settings/SettingsPanel.tsx", 2],
   ["components/sidebar/FolderEditModal.tsx", 2],
-  ["components/sidebar/FolderListModal.tsx", 1],
+  // `components/sidebar/FolderListModal.tsx` was here at 1 until D-120. It was
+  // the phone's second folder surface, opened by a «Папки» tab beside the folder
+  // strip at the top of the chat list; the tab, the screen and the file are all
+  // gone. Nothing took its job — `FolderTabs.tsx` above already had it.
   ["components/sidebar/AudioSettingsSection.tsx", 1],
   ["components/sidebar/NewGroupModal.tsx", 1],
   ["components/sidebar/NewChatModal.tsx", 1],

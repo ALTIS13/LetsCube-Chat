@@ -2,17 +2,10 @@
 
 import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
-import { KubIcon, type KubIconName } from "@/components/kub";
+import { KubIcon } from "@/components/kub";
 import { useTaskAccessGate } from "@/hooks/useTaskAccess";
+import { bottomNavDestinations, type BottomNavDestination } from "@/lib/bottomNavDestinations";
 import { cn } from "@/lib/utils";
-
-type SectionId = "chats" | "folders" | "profile" | "tasks";
-
-interface Tab {
-  id: SectionId;
-  label: string;
-  icon: KubIconName;
-}
 
 export function BottomNav() {
   const [location, setLocation] = useLocation();
@@ -20,23 +13,21 @@ export function BottomNav() {
   const { mobileSection, setMobileSection } = useAppStore();
   const isOnTasksRoute = location.startsWith("/tasks");
 
-  // Four, on the owner's instruction of 2026-09-12. Search left because the
-  // list header already carries a real search field at every width, and
-  // administration because it has five other entries; neither was a second
-  // destination, both were a second door to the same one.
-  const tabs: Tab[] = [
-    { id: "chats",   label: "Чаты",    icon: "chatBubble" },
-    { id: "folders", label: "Папки",   icon: "folderAdd" },
-    { id: "profile", label: "Профиль", icon: "user" },
-    ...(canAccessTasks ? [{ id: "tasks" as const, label: "Задачи", icon: "tasks" as KubIconName }] : []),
-  ];
+  // Which entries exist, and the reason each one does, live in
+  // `lib/bottomNavDestinations.ts` — including the three that were taken out,
+  // «Поиск» and «Админка» on the owner's instruction of 2026-09-12 and «Папки»
+  // with D-120. A list written inline here could only be checked by a
+  // screenshot.
+  const tabs = bottomNavDestinations(canAccessTasks);
 
-  const handleTab = (id: SectionId) => {
-    if (id === "tasks") {
+  // The whole entry, not its parts: `route` is the discriminant, and narrowing
+  // it here is what proves `setMobileSection` is never handed «tasks».
+  const handleTab = (entry: BottomNavDestination) => {
+    if (entry.route) {
       setLocation("/tasks");
       return;
     }
-    setMobileSection(id);
+    setMobileSection(entry.id);
   };
 
   return (
@@ -67,14 +58,14 @@ export function BottomNav() {
       // the same height below themselves, and two copies of one number drift.
       style={{ height: "var(--kub-bottom-nav)" }}
     >
-      {tabs.map(({ id, label, icon }) => {
-        const isActive =
-          id === "tasks" ? isOnTasksRoute : mobileSection === id;
+      {tabs.map((entry) => {
+        const { id, label, icon } = entry;
+        const isActive = entry.route ? isOnTasksRoute : mobileSection === entry.id;
         return (
           <button
             key={id}
             type="button"
-            onClick={() => handleTab(id)}
+            onClick={() => handleTab(entry)}
             aria-label={label}
             aria-current={isActive ? "page" : undefined}
             className={cn(
@@ -86,12 +77,20 @@ export function BottomNav() {
               // spilled out of their own buttons and ended up 3.2px apart, in a
               // font whose space measures 3.3px. They read as one phrase.
               //
-              // Four labels since 2026-09-12, and the fit is no longer tight:
-              // measured in Inter at 600/11px uppercase, «Чаты» 32.03, «Папки»
-              // 40.50, «Профиль» 56.75 and «Задачи» 48.50 total 177.78px
-              // against 344px of row. The padding and the 11px size stay
-              // anyway: they are the floor under the gap, and a longer word or
-              // a fifth tab would walk back towards the same edge.
+              // Three labels since D-120, and the fit is no longer tight.
+              // Measured on the rendered capsule at 360 with Inter loaded — the
+              // capsule is 280px wide and 262 inside its own padding, not the
+              // 344 an older note here claimed, which was this bar before it
+              // became a floating capsule inset 40px from each side:
+              //
+              //   three: buttons 44 + 62.05 + 52.39 = 158.44, narrowest gap
+              //          between two labels 42.53px;
+              //   four:  «Папки» back at 46.75 makes 205.19, and the gap falls
+              //          to 22.20px.
+              //
+              // So the padding and the 11px size stay: they are the floor under
+              // the gap, and a fourth destination really does walk back towards
+              // the 3.2px edge D-061 measured.
               "relative flex flex-col items-center gap-0.5 min-w-[44px] min-h-[44px] px-1 py-1 rounded-full transition-colors",
               // Telegram marks the chosen tab with a filled rounded capsule
               // behind the icon and its label, not with a dot beneath them.

@@ -37,6 +37,10 @@ const SECTION = fileURLToPath(
   new URL("../../artifacts/kub/src/components/sidebar/AudioSettingsSection.tsx", import.meta.url),
 );
 const MODULE = fileURLToPath(new URL("../../artifacts/kub/src/lib/audioSettingsSurface.ts", import.meta.url));
+/** The screen this panel sits inside. Read only — it belongs to another track. */
+const SCREEN = fileURLToPath(
+  new URL("../../artifacts/kub/src/components/settings/SettingsScreen.tsx", import.meta.url),
+);
 
 const read = (file: string) => readFileSync(file, "utf8");
 
@@ -197,6 +201,58 @@ test("on and off are said with the product's switch", () => {
 
 test("no viewport breakpoint decides the layout of a fixed-width column", () => {
   assert.deepEqual(viewportBreakpoints(read(SECTION)), []);
+});
+
+/**
+ * D-121, stated as the thing it actually asks for: this section is drawn in
+ * **the screen's own idiom**, not in one of its own that happens to look
+ * similar today.
+ *
+ * Every assertion above pins a class string that appears in this file. None of
+ * them ties that string to `SettingsScreen.tsx`, where `SettingsGroup` draws
+ * the four groups outside this panel — so the settings screen could move to a
+ * different group shape and this section would silently become a dialect
+ * again, which is the whole of the defect the owner reported. The two are
+ * compared rather than described.
+ *
+ * `SettingsScreen.tsx` belongs to another track; it is read here and never
+ * written.
+ */
+test("a group here is the same object the settings screen draws", () => {
+  const group = (text: string) =>
+    strings(blankComments(text)).filter((value) => /^overflow-hidden rounded-xl divide-y/.test(value));
+  const mine = group(read(SECTION));
+  const theirs = group(read(SCREEN));
+  assert.equal(mine.length, 1, `the audio panel draws ${mine.length} group shapes: ${mine.join(" | ")}`);
+  assert.equal(theirs.length, 1, `the settings screen draws ${theirs.length} group shapes: ${theirs.join(" | ")}`);
+  assert.equal(
+    mine[0],
+    theirs[0],
+    "the sound settings and the screen around them no longer draw a group the same way (D-121)",
+  );
+});
+
+test("the idiom guarantee fails when either side drifts", () => {
+  const group = (text: string) =>
+    strings(blankComments(text)).filter((value) => /^overflow-hidden rounded-xl divide-y/.test(value));
+  // Broken on this side: a rule of the edge's weight instead of `--kub-rule`.
+  const mine = group(
+    mutate(
+      read(SECTION),
+      '"overflow-hidden rounded-xl divide-y divide-[color:var(--kub-rule)] kub-raise"',
+      '"overflow-hidden rounded-xl divide-y divide-[color:var(--kub-border-color)] kub-raise"',
+    ),
+  );
+  assert.notEqual(mine[0], group(read(SCREEN))[0]);
+  // And on the other: the screen moves and this section does not follow.
+  const theirs = group(
+    mutate(
+      read(SCREEN),
+      '"overflow-hidden rounded-xl divide-y divide-[color:var(--kub-rule)] kub-raise"',
+      '"overflow-hidden rounded-2xl divide-y divide-[color:var(--kub-rule)] kub-raise"',
+    ),
+  );
+  assert.notEqual(group(read(SECTION))[0], theirs[0]);
 });
 
 /**

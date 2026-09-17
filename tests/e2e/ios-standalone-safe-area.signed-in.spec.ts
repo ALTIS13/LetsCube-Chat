@@ -81,10 +81,13 @@ test.describe("portrait", () => {
     await expectClearOfHardware(page, insets, "signed-in portrait, chat list end", quietly);
   });
 
-  for (const [tab, what] of [
-    ["Профиль", "the profile and settings sheet"],
-    ["Папки", "the folders sheet"],
-  ] as const) {
+  // «the folders sheet» stood beside «the profile and settings sheet» until
+  // D-120, on 2026-09-17. It pressed a «Папки» tab that opened a full-screen
+  // folder list while the folder strip sat at the top of the chat list; the tab
+  // and the sheet are both gone, and the strip's geometry is inside «the chat
+  // list and the tab bar» above. Nothing replaces it: there is no second folder
+  // surface left to photograph.
+  for (const [tab, what] of [["Профиль", "the profile and settings sheet"]] as const) {
     test(what, async ({ page }) => {
       await signIn(page);
       await page.getByRole("button", { name: tab, exact: true }).click();

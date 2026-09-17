@@ -25,6 +25,14 @@ const nav = readFileSync(
   new URL("../../artifacts/kub/src/components/layout/BottomNav.tsx", import.meta.url),
   "utf8",
 );
+// The labels moved out of the component with D-120, into a module `node --test`
+// can import in full. This file still measures the *fit*, so it needs them:
+// read from where they are now, so the count below cannot go green by looking
+// at a list that no longer exists.
+const destinations = readFileSync(
+  new URL("../../artifacts/kub/src/lib/bottomNavDestinations.ts", import.meta.url),
+  "utf8",
+);
 
 /** Comments explain the defects; they must not be read as code that causes them. */
 function withoutComments(source) {
@@ -73,11 +81,21 @@ test("message text is never justified", () => {
  * 44.0 x 48.5px, still over the 44px floor.
  *
  * Four labels since 2026-09-12, when the owner took search and administration
- * out of the bar. Measured the same way, in Inter at 600/11px uppercase with
- * the font hosts reachable: «Чаты» 32.03, «Папки» 40.50, «Профиль» 56.75 and
- * «Задачи» 48.50 total 177.78px against the same 344px row. The size, the
- * padding and the tracking are still pinned below, because they are the floor
- * under the gap and the fit walks back towards the edge with every word added.
+ * out of the bar, and three since D-120 took «Папки» — a second door to the
+ * folder strip at the top of the chat list.
+ *
+ * Re-measured on 2026-09-17 on the rendered capsule at 360 with Inter loaded,
+ * and two numbers in the note this replaces were wrong. The row is **262px**
+ * inside the capsule's own padding, not 344: this bar became a capsule inset
+ * 40px from each side, so it is 280 wide at 360, and 344 was the full-width
+ * bar it used to be. And its four label widths came from a detached probe;
+ * in the button they are «Чаты» 29.52, «Профиль» 54.05 and «Задачи» 44.39,
+ * whose buttons total 158.44 of the 262 with a narrowest label gap of 42.53px.
+ * With «Папки» back that gap is 22.20px.
+ *
+ * The size, the padding and the tracking are still pinned below, because they
+ * are the floor under the gap and the fit walks back towards D-061's 3.2px edge
+ * with every word added.
  */
 test("the bottom tab labels are sized to fit the narrowest phone", () => {
   const source = withoutComments(nav);
@@ -104,14 +122,22 @@ test("the bottom tab labels are sized to fit the narrowest phone", () => {
     "the tab label widened its tracking again, which costs the row several pixels per label",
   );
 
-  // And the labels themselves, because a fifth tab or a longer word breaks the
-  // same fit from the other side. Four is the owner's number, and 28
-  // characters is the measured 22 with room for one longer synonym.
-  const labels = [...source.matchAll(/label:\s*"([^"]+)"/g)].map((match) => match[1]);
-  assert.equal(labels.length, 4, `the tab bar has ${labels.length} labels; the owner settled on four on 2026-09-12`);
+  // And the labels themselves, because a fourth tab or a longer word breaks the
+  // same fit from the other side. Three is what the owner's 2026-09-12
+  // instruction and D-120 leave, and 22 characters is the measured 17 with room
+  // for one longer synonym.
+  //
+  // `bottom-nav-destinations.test.mts` owns *which* destinations those are and
+  // why; this only owns how much room they take.
+  const labels = [...withoutComments(destinations).matchAll(/label:\s*"([^"]+)"/g)].map((match) => match[1]);
+  assert.equal(
+    labels.length,
+    3,
+    `the tab bar has ${labels.length} labels; three is what remains after 2026-09-12 and D-120`,
+  );
   const characters = labels.reduce((total, value) => total + value.length, 0);
   assert.ok(
-    characters <= 28,
-    `the tab labels total ${characters} characters; four labels measured 22 and 28 is the ceiling that keeps the padding intact`,
+    characters <= 22,
+    `the tab labels total ${characters} characters; three labels measured 17 and 22 is the ceiling that keeps the padding intact`,
   );
 });
