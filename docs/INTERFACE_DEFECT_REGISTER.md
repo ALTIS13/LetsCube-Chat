@@ -6496,7 +6496,7 @@ given back, the header on screen, the composer on the keys; and a browser that i
 not the installed app still lifting the composer. The source half is
 `tests/unit/installed-ios-viewport.test.mjs`.
 
-## D-112 `[ ]` In the Windows app the window's own buttons sit over the page's top-right controls, and take most of their clicks
+## D-112 `[x]` In the Windows app the window's own buttons sit over the page's top-right controls, and take most of their clicks
 
 **Severity:** high for the Windows app. Reported by the owner on 2026-09-11 with a
 screenshot, recorded for later; not yet investigated.
@@ -12690,3 +12690,47 @@ refuse loudly, naming the prerequisite. `tests/e2e/helpers/backend-identity.ts`
 now does that for the backend a spec is pointed at; the same is needed for a
 missing feature flag, and `public-home-routing.spec.ts` already contains a
 working example of failing loudly rather than skipping.
+
+---
+
+## D-112 — closed 2026-09-18, the half the messenger's shell did not own
+
+The 2026-09-12 assessment cleared the messenger and left «Задачи» at 64%
+deliberately: the reservation was applied by the messenger's *panes*, and the
+pages are not panes. It named the remedy exactly — «applying `pt-window-top` to
+the page shells is the navigation work's part of this entry, and the mechanism
+it needs now exists» — and that is what this is.
+
+The fix is one place rather than one per page. `KubHeader` is the header of the
+only two surfaces that are not the messenger, «Задачи» and «Мои боты», and it
+reserved the hardware inset only:
+
+    h-[calc(3.5rem+var(--kub-safe-top))] pt-safe
+    → h-[calc(3.5rem+var(--kub-safe-top)+var(--kub-window-caption))] pt-window-top
+
+`--kub-window-caption` is `0px` everywhere but `data-desktop-shell="windows"`,
+so nothing outside the Windows shell moves by a pixel. The material still runs
+under the strip — the header's box starts at the window's top edge and its
+*content* is padded below the caption, which is what `pt-window-top` does and
+what `ChatHeader`, `FolderRail` and `SidebarHeader` have always done.
+
+**«Мои боты» had it too**, and was not in the entry: it puts a «Документация»
+link in the same corner. Found by reading the other consumer of the shared
+header rather than by assuming the entry's list was complete.
+
+**The ratchet flipped rather than being deleted.** `desktop-shell.spec.ts`
+asserted the corner as the named set `["Новая"]`; it is now `[]` for both pages,
+plus a measurement that the header's row really starts at the window's top edge
+while the caption has height — the reservation rather than a coincidence of
+layout. 17 passed at 1440, and the mutation that restores `pt-safe` fails with
+`["Новая"]`.
+
+**One thing this cannot catch, recorded in the spec itself:** both pages take
+that corner from `KubHeader`, so a regression there fails the «Задачи» check
+first and the «Мои боты» one never runs — an early guard hiding the rest. What
+the second check does catch alone is that page growing a control of its own
+outside the shared header.
+
+**Nothing needs reinstalling.** The Windows client is a shell around
+`https://app.letscube.ru/` (`windows-tauri/src-tauri/src/lib.rs:31`), so this
+reaches an installed client through the ordinary web deploy.

@@ -671,20 +671,61 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     expect(reserved.railTop).toBe(0);
     await page.getByRole("button", { name: "Назад" }).first().click().catch(() => undefined);
 
-    // «Задачи» is D-112 as the 2026-09-12 assessment measured it, and it is
-    // **not fixed here**: this stage owns the messenger's shell, and the page's
-    // own «+ Новая» has sat under the buttons since before it. The options
-    // rendered for the owner solved it by making the buttons' strip the top
-    // inset, which this branch does not do — see the report.
+    // «Задачи» was the other half of D-112, and it is fixed now. The
+    // 2026-09-12 assessment measured 64% of «+ Новая» under the buttons and
+    // left it, because that stage owned the messenger's shell and the
+    // reservation was applied by the messenger's panes rather than by the
+    // pages. `KubHeader` — the header of the only two pages that are not the
+    // messenger, «Задачи» and «Мои боты» — now reserves
+    // `--kub-window-caption` the same way `ChatHeader` and `FolderRail` do.
     //
-    // Asserted as a named set rather than as an empty one, so it is a ratchet:
-    // the moment anything the shell adds reaches that corner, this fails.
+    // The set is empty rather than named, and it is still a ratchet: the
+    // moment anything reaches that corner again, this fails with the name of
+    // whatever it was.
     await page.goto("/tasks", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("button", { name: "Новая" })).toBeVisible();
     expect(
       await controlsInWindowButtons(page),
-      "D-112 on «Задачи» grew beyond the page's own «Новая»",
-    ).toEqual(["Новая"]);
+      "a control on «Задачи» is back under the window buttons (D-112)",
+    ).toEqual([]);
+
+    // And the page's own row really did move: its top is the caption's height,
+    // not zero — the reservation rather than a coincidence of layout.
+    const tasksHeader = await page.evaluate(() => {
+      const caption = document.querySelector('[data-testid="desktop-window-chrome"]');
+      const header = document.querySelector("header");
+      if (!caption || !header) return null;
+      const captionBox = caption.getBoundingClientRect();
+      const row = header.getBoundingClientRect();
+      return { captionBottom: Math.round(captionBox.bottom), headerTop: Math.round(row.top) };
+    });
+    expect(tasksHeader, "no window chrome or no page header to measure").not.toBeNull();
+    if (tasksHeader) {
+      // The row starts at the window's top edge; its *content* is padded below
+      // the caption, which is what `pt-window-top` does and what keeps the
+      // material running under the strip.
+      expect(tasksHeader.headerTop).toBe(0);
+      expect(tasksHeader.captionBottom).toBeGreaterThan(0);
+    }
+
+    // «Мои боты» is the other page that is not the messenger — the only other
+    // user of `KubHeader` — and it puts a «Документация» link in the same
+    // corner, so it had the same defect and is fixed by the same reservation.
+    // Checked here rather than assumed from the shared component: the entry's
+    // own words are «any other page with controls in that corner».
+    //
+    // Note what this assertion can and cannot catch. Both pages take their
+    // corner from `KubHeader`, so a regression there fails the «Задачи» check
+    // above and execution never reaches this one — an early guard hiding the
+    // rest, which this repository has been bitten by before. What it does catch
+    // on its own is this page growing a control of its own outside that header,
+    // which is the case the entry's wording is actually about.
+    await page.goto("/bots", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("link", { name: /Документация/ })).toBeVisible();
+    expect(
+      await controlsInWindowButtons(page),
+      "a control on «Мои боты» is under the window buttons (D-112)",
+    ).toEqual([]);
   });
 
   test("a folder on the rail chooses it, and the chosen one edits it", async ({ page }) => {
