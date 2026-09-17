@@ -188,7 +188,14 @@ const covers = [
   ["components/sidebar/SidebarHeader.tsx", "absolute left-0 top-12 w-64", "kub-glass-strong"],
   ["components/chat/ChatHeader.tsx", "max-h-[min(70vh,480px)]", "kub-glass-strong"],
   ["components/kub/KubModal.tsx", "kub-modal-panel", "kub-glass-strong"],
-  ["components/kub/KubTooltip.tsx", "text-[color:var(--kub-text)] border", "kub-glass-strong"],
+  // `components/kub/KubTooltip.tsx` carried its own glass until D-216. It drew
+  // a CSS-only bubble absolutely inside the trigger, which every ancestor
+  // with `overflow: hidden` clipped — and all three of its call sites sit
+  // inside two of them. It is a named shape of the Radix tooltip now, so the
+  // glass moved to the element that actually covers content: `TooltipContent`
+  // in `components/ui/tooltip.tsx`, listed on the next line. There is one
+  // tooltip surface in the product rather than two.
+  ["components/ui/tooltip.tsx", "z-50 overflow-hidden rounded-md border", "kub-glass-strong"],
   ["components/kub/KubFeedbackViewport.tsx", "py-2.5 pl-4 pr-3", "kub-glass-strong"],
   // The chat list's context menu, in both the shapes it takes.
   ["components/sidebar/ChatList.tsx", "w-[272px] max-w-[calc(100vw-24px)]", "kub-glass-strong"],

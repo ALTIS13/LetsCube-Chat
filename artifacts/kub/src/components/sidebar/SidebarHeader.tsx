@@ -411,6 +411,7 @@ export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSear
                 onClick={onNewChat}
                 className={cn(iconButtonClass, "text-[color:var(--kub-cyan)]")}
                 aria-label="Новый чат"
+                data-testid="sidebar-new-chat-button"
               >
                 <KubIcon name="edit" size={17} />
               </button>

@@ -13273,3 +13273,76 @@ drafted there too.
   Measured: of the 2 accounts with a `profiles.role` other than `user`, neither
   lacks a public global role, so nobody is in that state today — but the two
   sources of truth are one `update` apart.
+
+---
+
+## D-216 `[x]` The label on an icon button was clipped to a six-pixel sliver
+
+**Severity:** medium. Three controls in the chat column had a name nobody could
+read, and the sliver that did reach the screen looked like a rendering fault.
+
+**Reported** by the owner on 2026-09-18: «сообщения при наведении на иконки с
+функциями, сейчас их описания появляются под списком чатов».
+
+**Surface:** `components/kub/KubTooltip.tsx`, and its three call sites —
+`NotificationBell.tsx` («Уведомления»), `SidebarHeader.tsx` («Новый чат»),
+`FolderRail.tsx` («Меню»).
+
+**Defect.** `KubTooltip` drew its bubble as a `position: absolute` span inside
+the trigger's own wrapper, revealed by `.group:hover > .kub-tooltip`. Absolute
+positioning is clipped by any ancestor with `overflow: hidden`, and every one of
+those three call sites lives inside two of them — the chat list's header block
+and `.kub-chat-list-column`.
+
+**Measured at 1440 before the fix**, by reading the DOM rather than by looking:
+the bell occupies y 10–46, its `side="bottom"` bubble is laid out at y 52–80 and
+94px wide, correctly centred — and everything below the header's edge is cut
+away. What reached the screen was a six-pixel sliver of a border sitting on the
+first row of the chat list. That is the notch in the owner's screenshot, and it
+is why the report says the descriptions appear «под списком чатов»: the only
+part that survives the clip is the part that overlaps the list.
+
+**This exact defect had already been found and fixed once, in the other tooltip.**
+`components/ui/tooltip.tsx` carries the note: «Portalled, which this was not…
+It also inherited any ancestor's `overflow: hidden`, which clips a tooltip near
+the edge of a scrolling panel.» Two tooltip systems existed and only one had
+been repaired. So the fix is not a third: `KubTooltip` is now a named shape of
+the Radix one — the short label on an icon button, as opposed to the popover
+`InfoHint` builds — and there is one positioning implementation in the product.
+
+**What changed for a reader**, beyond not being clipped: the label appears on
+keyboard focus as well as hover, it flips side rather than running off the
+window, and it waits 250ms so crossing a row of icons does not flash three
+labels. The glass, the border, the 12px type and each call site's requested side
+are unchanged.
+
+**Observed and accepted, not a defect:** the bubble contains the word twice —
+once to look at and once in a visually hidden span that `aria-describedby`
+points at. Every one of these buttons also carries an `aria-label` with the same
+word, so a screen reader hears it as a name and then as a description. That is
+Radix's ordinary behaviour and the redundancy is harmless; it is written down
+here so it is not rediscovered as a bug.
+
+**The test asks the question a person asks.** A clipped tooltip is in the DOM,
+carries the right text and reports a sensible bounding box — every cheap
+assertion passes straight over the defect. So `icon-tooltip-reach.spec.ts` asks
+whether the middle of the label is what is actually on screen at that point,
+with `elementFromPoint`, which answers wrongly if the bubble is clipped, covered
+or off the window. It covers all three call sites rather than a sample: a spec
+that checked only the header would have left the rail's «Меню» clipped and
+looked complete.
+
+Two things the first run of that spec got wrong, both mine rather than the
+product's: it opened a conversation before looking, which on a phone pushes the
+header off screen, and it read the bubble with `textContent` and then
+`innerText`, both of which return the word twice because the hidden copy is
+hidden by clipping rather than by `display`. It reads the content element's own
+text nodes now.
+
+**Verified:** 9/9 at 1440 and 390, with three tests skipped at 390 for a stated
+reason — a hover bubble is a pointer's affordance, and on a phone the spec
+instead asserts the function is still named and reachable, by accessible name
+rather than by test id, because at 390 the folder rail is not on screen and the
+header carries «Меню» instead. Reverting `KubTooltip` to the CSS bubble turns
+all five pointer tests red. Photographed:
+`output/icon-tooltip/bell-{dark,light}-chromium-desktop-1440.png`.
