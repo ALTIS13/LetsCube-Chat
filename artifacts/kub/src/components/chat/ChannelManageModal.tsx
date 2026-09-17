@@ -363,6 +363,44 @@ export function ChannelManageModal({
   const nameIsUsable = normalizeChannelName(name) !== null;
   const drafting = draft.kind !== "none";
 
+  /**
+   * The create-channel form, rendered in one place and used in two.
+   *
+   * Two call sites because it belongs inside the heading it is adding to when
+   * there is one, and after the list when there is not — and «when there is
+   * not» is the ordinary case: a group with no channels has no sections at all.
+   */
+  const renderCreateChannelForm = (open: Extract<Draft, { kind: "create-channel" }>) => (
+    <div ref={revealDraft} className="kub-raise rounded-xl px-3 py-3" data-testid="channel-create-form">
+      <ChannelFields
+        idPrefix="channel-create"
+        kind={open.channelKind}
+        name={name}
+        remaining={remaining}
+        categories={admin.categories}
+        categoriesSupported={admin.categoriesSupported}
+        categoryId={categoryId}
+        seats={seats}
+        speakRole={speakRole}
+        busy={admin.busy}
+        onName={setName}
+        onKind={(next) => setDraft({ ...open, channelKind: next })}
+        onCategory={setCategoryId}
+        onSeats={setSeats}
+        onSpeakRole={setSpeakRole}
+      />
+      <FormButtons
+        submitLabel={CHANNEL_CREATE_SUBMIT}
+        submitTestId="channel-create-submit"
+        busy={admin.busy}
+        canSubmit={nameIsUsable}
+        onSubmit={() => void submitDraft()}
+        onCancel={closeDraft}
+      />
+      <div ref={draftFoot} aria-hidden="true" className="h-2" />
+    </div>
+  );
+
   return (
     <KubModal
       open
@@ -616,38 +654,21 @@ export function ChannelManageModal({
               </ul>
             )}
 
-            {draft.kind === "create-channel" && draft.categoryId === (group.category?.id ?? null) && (
-              <div ref={revealDraft} className="kub-raise rounded-xl px-3 py-3" data-testid="channel-create-form">
-                <ChannelFields
-                  idPrefix="channel-create"
-                  kind={draft.channelKind}
-                  name={name}
-                  remaining={remaining}
-                  categories={admin.categories}
-                  categoriesSupported={admin.categoriesSupported}
-                  categoryId={categoryId}
-                  seats={seats}
-                  speakRole={speakRole}
-                  busy={admin.busy}
-                  onName={setName}
-                  onKind={(next) => setDraft({ ...draft, channelKind: next })}
-                  onCategory={setCategoryId}
-                  onSeats={setSeats}
-                  onSpeakRole={setSpeakRole}
-                />
-                <FormButtons
-                  submitLabel={CHANNEL_CREATE_SUBMIT}
-                  submitTestId="channel-create-submit"
-                  busy={admin.busy}
-                  canSubmit={nameIsUsable}
-                  onSubmit={() => void submitDraft()}
-                  onCancel={closeDraft}
-                />
-                <div ref={draftFoot} aria-hidden="true" className="h-2" />
-              </div>
-            )}
+            {draft.kind === "create-channel" && draft.categoryId === (group.category?.id ?? null) &&
+              renderCreateChannelForm(draft)}
           </section>
         ))}
+
+        {/* The same form, when no section claimed it.
+            It used to be rendered ONLY inside the matching section, so in a
+            group with no channels yet — `tree.length === 0`, which is what
+            almost every group on this deployment actually is — the draft was
+            set and nothing appeared. Pressing «Добавить канал» did exactly
+            nothing, which is how the owner reported it. The category form below
+            never had the fault because it was always outside the map. */}
+        {draft.kind === "create-channel" &&
+          !tree.some((group) => (group.category?.id ?? null) === draft.categoryId) &&
+          renderCreateChannelForm(draft)}
 
         {draft.kind === "create-category" && (
           <NameForm

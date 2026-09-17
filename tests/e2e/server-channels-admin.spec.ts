@@ -644,3 +644,115 @@ test("the dialog is readable in the light theme too", async ({ page }, info) => 
   await page.getByTestId("channel-create-speak-admin").click();
   await shoot(page, shotPath(info, "light-create"));
 });
+
+/**
+ * A group with nothing in it, which is what production actually looks like.
+ *
+ * Measured on 2026-09-18: thirteen groups, **zero** channel categories, one
+ * voice room and eleven topics between them. So the shape every test above
+ * uses — a group already carrying a heading, rooms and topics — is the shape
+ * almost no real group has, and the owner reported «в группе не вижу создания
+ * голосового канала» and «нажимаю что хочу сделать канал и ничего не
+ * происходит» against the empty one.
+ *
+ * This is that group: no categories, no rooms, no topics. The path is the one a
+ * person actually takes — the rail's own control rather than the settings
+ * screen three taps away.
+ */
+function emptyStore(): ChannelStore {
+  return { created: 0, categories: [], topics: [], voice: [] };
+}
+
+/**
+ * Reach the rail's manage control at whatever width this project is.
+ *
+ * On a computer the rail is a column of the conversation and the control is
+ * simply there. On a phone the same list lives in a drawer behind the capsule
+ * where the topic strip used to be, so the control cannot be pressed until the
+ * capsule is — and a test that skipped that step failed at 390 while passing
+ * at 1440, which reads like a product defect and is not one.
+ *
+ * The capsule is asserted rather than probed for: if the phone ever stops
+ * offering it, this is the line that says so, instead of the failure landing
+ * on the manage control and pointing at the wrong thing.
+ */
+async function openRailManage(page: Page) {
+  const trigger = page.getByTestId("channel-rail-trigger");
+  if (await trigger.count()) {
+    await expect(trigger, "the phone offers no way into the channel list").toBeVisible();
+    await trigger.click();
+    await expect(page.getByTestId("channel-rail-sheet"), "the capsule opened no drawer").toBeVisible();
+  }
+  const manage = page.getByTestId("channel-rail-manage").first();
+  await expect(manage, "the rail offers no way to manage channels in an empty group").toBeVisible();
+  await manage.click();
+}
+
+test("a group with nothing in it can still be given its first channel, from the rail", async ({ page }) => {
+  const store = emptyStore();
+  const seed = rows("owner");
+  await openFixture(page, {
+    me: ME,
+    chats: seed.chats,
+    memberships: seed.memberships,
+    messages: seed.messages,
+    rest: restFor(store),
+    rpc: (name) => (name === "search_chat_messages" ? missingFunction(name) : undefined),
+  });
+  await openChat(page, "Команда проекта", LINES[0]);
+
+  // The rail is offered to somebody who can shape it even when there is
+  // nothing to shape yet — otherwise the «+» that makes the first channel
+  // lives only in the rail the first channel would have earned.
+  await openRailManage(page);
+
+  await expect(page.getByTestId("channel-manage-dialog")).toBeVisible();
+
+  // The button that opens the form is `disabled={admin.busy || drafting}`, so a
+  // read that never settles would leave it inert and pressing it would do
+  // exactly nothing — which is what «ничего не происходит» looks like.
+  const open = page.getByTestId("channel-create-open");
+  await expect(open, "the create control is missing in an empty group").toBeVisible();
+  await expect(open, "the create control is disabled, so pressing it does nothing").toBeEnabled();
+  await open.click();
+
+  const form = page.getByTestId("channel-create-form");
+  await expect(form, "pressing create opened no form").toBeVisible();
+
+  // And a voice room is reachable from it. The form opens on «text», so this is
+  // the control the owner could not find.
+  const voice = form.getByTestId("channel-create-kind-voice");
+  await expect(voice, "the form offers no voice room").toBeVisible();
+  await voice.click();
+  await expect(form.getByTestId("channel-create-seats"), "choosing voice showed no seat field").toBeVisible();
+});
+
+for (const theme of ["dark", "light"] as const) {
+  test(`the first channel of an empty group, photographed (${theme})`, async ({ page }, info) => {
+    const store = emptyStore();
+    const seed = rows("owner");
+    await openFixture(page, {
+      me: ME,
+      chats: seed.chats,
+      memberships: seed.memberships,
+      messages: seed.messages,
+      rest: restFor(store),
+      rpc: (name) => (name === "search_chat_messages" ? missingFunction(name) : undefined),
+    });
+    await openChat(page, "Команда проекта", LINES[0]);
+    await stampTheme(page, theme);
+    await openRailManage(page);
+    await expect(page.getByTestId("channel-manage-dialog")).toBeVisible();
+    await page.getByTestId("channel-create-open").click();
+    const form = page.getByTestId("channel-create-form");
+    await expect(form).toBeVisible();
+    await form.getByTestId("channel-create-kind-voice").click();
+    await expect(form.getByTestId("channel-create-seats")).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(350);
+    await page.screenshot({
+      path: `output/empty-group-channel/voice-form-${theme}-${info.project.name}.png`,
+      fullPage: false,
+    });
+  });
+}

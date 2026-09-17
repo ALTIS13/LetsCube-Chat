@@ -12885,3 +12885,65 @@ deliberate: this defect typechecks, passes every mocked test because a fixture
 answers the read-back happily, and is invisible until somebody meets a real
 policy. Four mutations turn it red — either call site reading its row back, and
 either spelling the row out inline.
+
+---
+
+## D-212 `[x]` «Добавить канал» did nothing in a group that had no channels yet
+
+**Severity:** high. The channel feature was unreachable in the ordinary case —
+which is nearly every group on this deployment.
+
+**Reported** by the owner on 2026-09-18: «в группе не вижу создания голосового
+конала и как-то странно работает создание канала (нажимаю что хочу сделать
+канал и ничего не происходит)».
+
+**Surface:** `components/chat/ChannelManageModal.tsx`.
+
+**Defect:** the create-channel form was rendered **inside** `tree.map(...)`,
+gated on `draft.categoryId === (group.category?.id ?? null)`. A group with no
+channels and no headings has `tree.length === 0`, so there is no section for the
+form to render in: pressing «Добавить канал» set the draft and **nothing
+appeared**. The create-*category* form never had the fault because it was always
+outside the map — which is why categories were makeable and channels were not.
+
+**Why nobody saw it.** Every test in `server-channels-admin.spec.ts` seeded a
+group that already had a heading, two rooms and topics. Measured on production
+on 2026-09-18: **thirteen groups, zero categories, one voice room, eleven
+topics between them** — so the seeded shape is the shape almost no real group
+has, and the empty one was never rendered.
+
+**Not the database.** Checked first, and it is worth recording that it was:
+`topics`, `voice_channels` and `chat_channel_categories` all accept an insert
+WITH RETURNING for a real group owner (`is_chat_admin` true), so nothing was
+being refused. The same day's group-creation defect (D-211) *was* a policy
+problem, and assuming this one was too would have wasted the search.
+
+**Fix:** the form is one renderer used in two places — inside the heading it is
+adding to when there is one, and after the list when there is not. Both
+conditions are mutually exclusive, so only one instance ever mounts and the
+`revealDraft` / `draftFoot` refs still belong to it.
+
+**Verified:** a new test walks the path a person actually takes — the rail's own
+control rather than the settings screen three taps away — on a group with
+nothing in it, and asserts the create control is present **and enabled** (it is
+`disabled={admin.busy || drafting}`, so a read that never settled would leave it
+inert and look identical), then that the form appears, then that a voice room is
+reachable from it. 13/13 at 1440, and removing the out-of-map render fails
+exactly that one test while the other twelve stay green.
+
+**«Не вижу создания голосового канала» has the same cause.** The form opens on
+«Текстовый» and the voice choice is a control inside it, so somebody who never
+got the form open never got to the choice. Photographed:
+`output/empty-group-channel/voice-form-{dark,light}-chromium-desktop-1440.png`.
+
+**One more thing the 390 run found, and it was my test rather than the
+product.** The first mobile run failed all three new tests on
+`channel-rail-manage` while the other twelve passed. On a phone the rail is not
+a column of the conversation: it is a drawer behind the capsule where the topic
+strip used to be (`ChannelRail.tsx:555` `channel-rail-trigger` →
+`channel-rail-sheet`, which renders the same `ChannelRailList`). So the control
+exists and works there, it simply cannot be pressed before the capsule is. The
+tests now go through `openRailManage`, which asserts the capsule and the drawer
+by name so that if the phone ever stops offering them the failure says *that*
+rather than pointing at the manage button. 15/15 at 390, photographed:
+`output/empty-group-channel/voice-form-{dark,light}-chromium-mobile-390.png`.
