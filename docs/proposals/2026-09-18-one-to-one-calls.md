@@ -126,7 +126,7 @@ And **cancellation is not possible at all today**: there is no
 ringing phone that cannot be stopped when the caller hangs up is worse than no
 ring.
 
-### Windows, closed — not possible
+### Windows, closed — correct as it is, and the answer is autostart
 
 **No client ever registers a WNS channel.** The server half is fully built
 (`send-push-notifications/wns.ts`, `index.ts:404-474`) and the schema accepts a
@@ -135,10 +135,25 @@ ring.
 the product already tells the user so, at `usePush.ts:130-133`: «Уведомления
 Windows работают, пока LETSCUBE запущен.»
 
-Worth noting for later: Windows is the **only** shell with a working retraction
-primitive — `remove_windows_notification` calls `RemoveGroupedTagWithId`
-(`windows-tauri/src-tauri/src/lib.rs:929-945`). A *running* Windows app can ring
-and stop ringing today.
+**The owner's decision, 2026-09-18: this is not a defect and is not to be
+closed.** A closed desktop client should not ring, and Telegram's does not
+either. Chasing WNS delivery for a call would be building the wrong thing.
+
+**The answer is to let the application be running.** Windows is the **only**
+shell in this product with a working retraction primitive —
+`remove_windows_notification` calls `RemoveGroupedTagWithId`
+(`windows-tauri/src-tauri/src/lib.rs:929-945`) — so a *running* Windows app can
+both ring and stop ringing, which nothing else here can do. What is missing is
+not delivery to a closed application but a way for it not to be closed:
+**start at sign-in, and start minimised to the tray**, as two separate choices.
+
+Measured on 2026-09-18: Tauri 2.11.5 with the `tray-icon` feature already on
+(`windows-tauri/src-tauri/Cargo.toml:25`), plugins `deep-link`, `opener`,
+`single-instance` and `updater` — **and no autostart plugin**. `src/startup.rs`
+is the application's own startup *stages* and has nothing to do with starting
+at login; the two must not be conflated.
+
+That work is slice D2 below and is in flight as of this writing.
 
 ### iOS installed app — not possible as a ring
 
@@ -236,6 +251,89 @@ a row A creates and A or B resolves — and not by a trigger on occupancy. The S
 can confirm «answered»; it cannot produce «missed», and it cannot produce
 «declined» at all.
 
+## 4a. Many devices, one person
+
+Asked for by the owner the same day: «звонка на разные устройства и возможности
+отключить принятие звонков на определённое авторизированное в аккаунт
+устройство». Telegram rings every device you are signed in on, stops the rest
+the moment one answers, and lets you turn a device off for calls.
+
+### Ringing every device is free, and stopping them is free too
+
+Each signed-in client holds **its own** Realtime subscription — the unfiltered
+`voice_channels` channel from §3 is opened per application instance, not per
+account — so a ring row reaches every device that is running, with no fan-out
+to build and no list of devices to keep. The same property cancels it: whichever
+device answers writes to the row, every other subscription sees that write, and
+they stop. **This is the one part of the feature that costs nothing**, and it is
+the reason the ring belongs on a row rather than on a message.
+
+Two traps that come with it, and both have to be handled in the rule rather than
+in the interface:
+
+- **The same person may answer twice.** Two of B's devices can press «ответить»
+  within the same second. The row has to record *which device* answered and
+  refuse the second, or both join and B hears themselves. The answer is a
+  conditional write — the first write wins, and a device whose write did not
+  land stops ringing and says the call was answered elsewhere, which is what
+  Telegram shows.
+- **A device that was asleep must not ring late.** A laptop woken ten minutes
+  after the call was missed will receive the row's history on resubscribe. The
+  ring's own expiry — the same timestamp slice C is about — is what keeps it
+  from ringing at a call that is long over, and it has to be evaluated on
+  arrival rather than trusted.
+
+### «Do not accept calls on this device» needs a device, and there are three
+
+Measured on production on 2026-09-18, and this is the part that does not fall
+out for free. The schema has **three different notions of a device**, and none of
+them is «this installation of the application»:
+
+| what | identity | live state |
+|---|---|---|
+| `public.user_push_devices` | the FCM token; `device_id` is nullable | **9 rows, 5 users, platform `android` only, and `device_id` is NULL in all 9** |
+| `public.push_subscriptions` | the Web Push `endpoint`, with a `user_agent` beside it | the browser/PWA half |
+| `public.push_foreground_sessions` | `client_id`, a uuid **per tab**, with a 20-second lease | not a device at all |
+
+`user_push_devices` already carries an **`enabled boolean not null`** — which is
+exactly the shape a per-device switch wants, for push rather than for calls. But
+`device_id` being null in every live row (matching `usePush.ts:628`, which
+passes `p_device_id: null`) means the interface has nothing stable to name a
+device by, and `platform` being `android` in all nine means the Windows and
+browser halves are not in that table at all.
+
+So there are two honest shapes, and they are not the same size:
+
+**A — a switch that lives on the device it governs.** Stored locally, per
+installation: «не принимать звонки на этом устройстве». It works immediately, it
+needs no schema, and it is truthful — the device that is told is the device that
+obeys. What it cannot do is be seen or changed from another device, and it is
+lost when somebody clears site data. Telegram's own per-device call setting is
+*not* this, so it would be the smaller thing wearing the larger thing's name
+unless the interface says where the setting lives.
+
+**B — a device registry, which is Telegram's «Активные сеансы».** A stable id per
+installation, stored server-side with a label the person recognises, listed
+anywhere and toggleable from anywhere. This is the real answer, and it is a stage
+of its own: it overlaps `user_push_devices` (which half-is it already, with
+`enabled`, `device_model`, `app_version` and `last_seen_at` all present and a
+`device_id` column sitting unused), and it would want to cover the browser and
+Windows halves that table does not.
+
+**Recommended:** A in the first version, with the interface saying plainly that
+the setting belongs to this device; B as its own stage, built on
+`user_push_devices` by finally giving `device_id` a value rather than by adding
+a fourth notion of a device. **The owner decides whether the first version ships
+with A or waits for B** — that is question 6 below.
+
+### What a per-device switch must not become
+
+A device that refuses calls must still be told that a call happened, or the
+person picks up their laptop and has no idea somebody rang. The refusal is about
+**ringing**, not about the record: the missed-call row in the conversation is the
+same for every device, because it is a fact about the call rather than about the
+phone.
+
 ## 5. The slices
 
 **Slice A — a call room a member can make, and the ring between two open
@@ -261,8 +359,25 @@ produces exactly one «missed» record.
 channel, `USE_FULL_SCREEN_INTENT`, and a cancel path — which needs Kotlin, a
 signed release and a device QA pass. **Not startable without a device.**
 
-**Slice E — what the product says on the shells that cannot ring.** Windows
-closed and the iOS installed app. A plain line, in place of pretending.
+**Slice D2 — Windows autostart, to the tray and normally.** Two separate
+choices, read from the real state rather than from what the application last
+wrote, and drawn only on the shell that can do it. It is what turns «a closed
+client cannot ring» from a limitation into a setting, and it needs no device:
+the registry key is the mechanism and can be read back, though whether the
+application truly starts at the next sign-in cannot be proved without signing
+out and in.
+
+**Slice E — what the product says on the iPhone.** One shell, not two: the
+installed iPhone app cannot ring in the background and no setting changes that,
+so the interface says so plainly, exactly as slice 6 of the voice proposal
+already commits to for background audio. Windows is no longer in this slice —
+see the decision above.
+
+**Slice F — «do not accept calls on this device».** Shape A, local to the
+installation, with the interface saying where the setting lives; or shape B,
+the device registry, if the owner wants Telegram's «Активные сеансы» first.
+Ringing every device and stopping the rest is **not** in this slice — it falls
+out of the ring itself and is built in slice A.
 
 ## 6. Open questions, which are the owner's
 
@@ -279,14 +394,26 @@ closed and the iOS installed app. A plain line, in place of pretending.
    and the existing block list is the obvious gate.
 4. **Video, or audio only, in the first version?** The token already permits
    video, and the answer changes the incoming-call surface.
-5. **Windows closed is a stage of its own.** Closing it means a migration, an
-   authenticated channel-registration path and Rust work — worth doing, but not
-   inside a call proposal.
+5. ~~**Windows closed is a stage of its own.**~~ **Answered by the owner on
+   2026-09-18:** a closed client should not ring, as Telegram's does not.
+   Autostart — to the tray and normally — is the requirement instead, and it is
+   slice D2. WNS delivery to a closed application stays unbuilt and unwanted.
+6. **Does the first version ship the per-device switch as A or wait for B?**
+   A is local to the installation and works at once; B is the device registry
+   and is a stage. §4a has the measurement behind both.
+7. **When a device refuses calls, does it still show the incoming call
+   silently, or nothing at all?** Telegram shows nothing on a device you have
+   turned off. Either is defensible; the record in the conversation is the same
+   for every device regardless.
 
 ## 7. What this proposal will not claim
 
-It will not claim a ring on a closed Windows application or on a backgrounded
-iPhone, because neither is possible here today and both were measured rather than
-assumed. It will not route a ring through push, because the measured floor is up
-to eighty seconds. And it will not reuse the group call's occupancy trigger for
+It will not claim a ring on a backgrounded iPhone, because that is not possible
+here and it was measured rather than assumed. It will not claim one on a closed
+Windows application either — but for a different reason, and the difference
+matters: that one is **correct behaviour** rather than a missing feature, and
+the setting that makes the application run is the answer to it.
+
+It will not route a ring through push, because the measured floor is up to
+eighty seconds. And it will not reuse the group call's occupancy trigger for
 «missed», because that mechanism announces calls that never happened.
