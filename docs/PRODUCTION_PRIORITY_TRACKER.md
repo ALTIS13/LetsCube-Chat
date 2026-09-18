@@ -610,7 +610,7 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
-### 2026-09-18 — `e094d4bd` (thirteen deploys, one day)
+### 2026-09-18 — `8d0898ca` (fourteen deploys, one day, and three production migrations)
 
 - **`0b5d62df`** — the voice gateway's moderation half: `/force-mute` and
   `/remove`, with the authorisation matrix, the rate limit and the client's
@@ -618,6 +618,26 @@ hash run by hand, and it is worth writing down as one.
   and checked by a calibrated route probe: `token`, `force-mute` and `remove`
   all answer 400 to an empty body while `NoSuchRouteZZZ` answers 404 — a route
   that exists rejects the body, one that does not rejects the path.
+- **`8d0898ca`** — the call bar (D-225) and the record of the database change
+  applied the same hour (D-226). Image tag read off the running container;
+  markers verified in the live bundle with a control present and a fabricated
+  one absent.
+
+  **One production database change, applied as `postgres`:**
+  `20260918180000_a_renamed_heading_reaches_the_other_rails.sql`. Backup
+  `/srv/letscube/backups/db-schema/pre-20260918180000-categories-realtime-20260918T052408Z.sql`,
+  1,352,382 bytes, sha256 `9ff7198a…36534a95`, 137 `CREATE TABLE`; the whole
+  file rehearsed on production inside a transaction that ended in ROLLBACK, and
+  production re-measured unchanged after it. Before → after: published
+  `false` → `true`, replica identity `d` → `f`, published tables in `public`
+  32 → 33, **filenode 144372 → 144372** (the migration asserts that itself),
+  RLS still on, six policies intact, `anon` still unable to read. No Realtime
+  restart and no slot work: `realtime.list_changes` rebuilds its `add-tables`
+  argument from `pg_publication_tables` on every poll.
+
+  Rollback is `20260918180000_…rollback.sql`, the same two locks and nothing
+  else; the only thing it brings back is the silence.
+
 - **`e094d4bd`** — the client half, which closes D-221, and two SDK defaults it
   uncovered (D-223, D-224). Image tag read off the running container; the
   previous replica retired. Verified in the live bundle in both directions: the
