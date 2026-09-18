@@ -343,6 +343,7 @@ test("a live call in the second room is not hung up by the rail's arrival", () =
       ready: true,
       supported: true,
       channel: named ? { id: named.id, name: named.name, participantCount: 0, maxParticipants: 10 } : null,
+      chatType: "group",
     }),
     false,
   );
@@ -362,6 +363,7 @@ test("a room deleted under a live call still hangs it up", () => {
       ready: true,
       supported: true,
       channel: named ? { id: named.id, name: named.name, participantCount: 0, maxParticipants: 10 } : null,
+      chatType: "group",
     }),
     true,
   );
@@ -479,4 +481,45 @@ test("somebody who can shape the channels is offered the rail to shape them in",
   // And the older answers are unchanged: a failed read still keeps the rail on
   // screen for everybody, and a heading on its own still counts.
   assert.equal(railIsOffered(onlyGeneral, [], true, false), true);
+});
+
+test("a private chat's call is not the rail's to end, however empty the rail is", () => {
+  // The defect this covers, found on production from the SFU's own log: the
+  // participant left with `reason: CLIENT_REQUEST_LEAVE` every few seconds
+  // while ICE was healthy and on UDP — the application hanging up on itself.
+  //
+  // A one-to-one call puts a `voice_channels` row in the private chat, and the
+  // rail does not list it: `voiceChannelRowOffer` answers `not_a_group`. So the
+  // view comes back `ready`, `supported` and with **no channel**, which is
+  // exactly the shape this rule was written to read as «an administrator ended
+  // it». Everything below is that shape, and the answer must be false.
+  const asPrivate = (over: Record<string, unknown> = {}) =>
+    voiceCallLostItsChannel({
+      callChannelId: "call-room",
+      callChatId: CHAT,
+      chatId: CHAT,
+      ready: true,
+      supported: true,
+      channel: null,
+      chatType: "private",
+      ...over,
+    } as Parameters<typeof voiceCallLostItsChannel>[0]);
+
+  assert.equal(asPrivate(), false, "a private call was hung up by the rail's view");
+  // And it stays false for the other things that would otherwise convict it —
+  // a channel belonging to some other room, for instance.
+  assert.equal(
+    asPrivate({ channel: { id: "someone-else", name: "Общий", participantCount: 0, maxParticipants: 10 } }),
+    false,
+  );
+
+  // The mutation this exists for: dropping the type check. With it gone the
+  // first case above answers true, which is the production defect exactly.
+  // And the group case must still convict, or the guard has swallowed the rule
+  // rather than narrowed it.
+  assert.equal(asPrivate({ chatType: "group" }), true, "a group's call lost its channel and was kept");
+
+  // An unknown type is the safe direction: a read that has not come back is not
+  // evidence that anybody ended anything.
+  assert.equal(asPrivate({ chatType: null }), false);
 });

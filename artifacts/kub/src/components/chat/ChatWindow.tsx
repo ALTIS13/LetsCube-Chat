@@ -632,12 +632,24 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         ready: voice.ready && !voice.failed,
         supported: voice.supported,
         channel: voice.channel,
+        // Only a group's call is the rail's to end. A private chat's call
+        // room is not listed there, so «no channel» is the ordinary state
+        // rather than evidence that anybody ended anything.
+        chatType: chat?.type ?? null,
       })
     ) {
       return;
     }
     void leaveVoiceCall();
-  }, [call.channelId, call.chatId, voice.chatId, voice.channel, voice.ready, voice.supported]);
+  }, [
+    call.channelId,
+    call.chatId,
+    chat?.type,
+    voice.chatId,
+    voice.channel,
+    voice.ready,
+    voice.supported,
+  ]);
 
   if (chat && initialUnreadRef.current?.chatId !== chatId) {
     const myMembership = chat.members?.find((member) => member.user_id === userId) ?? null;

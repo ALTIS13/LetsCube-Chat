@@ -747,7 +747,31 @@ export function voiceCallLostItsChannel(input: {
   supported: boolean;
   /** The channel this chat has now, or null. */
   channel: VoiceChannelSummary | null;
+  /**
+   * The type of the chat the call is in, or null while it is unknown.
+   *
+   * Added on 2026-09-18, and it is the whole of the defect below.
+   */
+  chatType: string | null;
 }): boolean {
+  // **Only a group's call is governed by the rail.**
+  //
+  // This rule was written when a `voice_channels` row could only belong to a
+  // group, so «this chat's view says there is no such channel» could only mean
+  // an administrator had ended it. One-to-one calls then put a row in every
+  // private chat anybody calls in — and the rail does not list those, because
+  // `voiceChannelRowOffer` answers `not_a_group`. So for a private chat the
+  // view is `ready`, `supported`, and reports **no channel**, which read as
+  // «an administrator ended it» and hung the call up seconds after it began.
+  //
+  // Measured on production from the SFU's own log: the participant left with
+  // `reason: CLIENT_REQUEST_LEAVE` while ICE was healthy and on UDP, over and
+  // over. Not a network failure — the application hanging up on itself.
+  //
+  // `null` is the safe answer while the type is unknown: hanging up a live
+  // call because a read has not come back yet is the failure this guard
+  // exists to prevent, one level up.
+  if (input.chatType !== "group") return false;
   if (!input.callChannelId || !input.callChatId) return false;
   if (!input.ready || !input.supported) return false;
   if (input.chatId === null || input.chatId !== input.callChatId) return false;

@@ -15995,3 +15995,76 @@ the next time this is asked.
 **Do not "fix" it by smoothing the count.** If the client really is dropping,
 hiding the flap would hide a connection problem in a call; the first job is to
 find out which of the three it is.
+
+## D-239 `[x]` A one-to-one call hung itself up seconds after it started
+
+**Severity:** high, and it made the feature unusable rather than untidy. The
+owner's words for the whole experience were «непонятно»; this is most of why.
+
+**Found by watching the owner's own call while it was happening**, after they
+asked for «проверку что функционал точно верно работает». The database sampled
+every ten seconds showed the participant count oscillating for minutes:
+
+```
+17:55:04  1     17:55:36  0     17:56:09  1     17:56:41  0
+17:55:15  0     17:55:47  1     17:56:19  1     17:56:51  1
+17:55:26  1     17:55:58  0     17:56:30  1     17:57:02  0
+```
+
+**The SFU's own log named the cause and ruled out the obvious one.** Every
+disconnect:
+
+```
+participant closing   reason: "CLIENT_REQUEST_LEAVE"   isExpectedToResume: false
+starting RTC session  Reconnect: false   ReconnectReason: RR_UNKNOWN
+```
+
+with `connectionType: "udp"` and ICE selecting a udp4 candidate each time. So
+the media path was healthy and the SDK was not reconnecting — **the application
+was hanging up on itself**, and each return was a fresh `connect()`.
+
+### The rule that did it
+
+`ChatWindow` carries «an administrator ended the voice chat, so this client's
+call ends too». It asks `voiceCallLostItsChannel`, which returns true when the
+open chat's channel view is `ready` and `supported` and does **not** list the
+channel the call is in.
+
+Written when a `voice_channels` row could only belong to a group, that was
+exactly right. Slice A then put a row in every private chat anybody calls in —
+and the rail does not list those, because `voiceChannelRowOffer` answers
+`not_a_group`. So for a private chat the view comes back ready, supported and
+**with no channel**, which read as «an administrator ended it».
+
+**This is the third instance of one pattern today**, and that is the finding
+worth more than the fix:
+
+| | old rule | new subject matter it was given |
+|---|---|---|
+| D-237 | the group-call trigger announces a room | a room in a private chat |
+| D-238 | the participant count is presence | a count driven by a hanging-up client |
+| D-239 | the rail's view decides a call is over | a call the rail never lists |
+
+Each was correct when written; each was handed a case its author could not have
+had in mind; and **every test of each one passed**, because the tests supply the
+subject matter the rule was written for. Both existing tests of
+`voiceCallLostItsChannel` pass a group, and both stayed green.
+
+### The fix
+
+The rule takes the chat's type and speaks only for a group. An unknown type
+answers false as well — hanging up a live call because a read has not come back
+is precisely the failure the guard above it exists to prevent.
+
+Two mutations, both red: removing the type check reproduces the production
+defect exactly, and inverting it breaks the group case too. The private case is
+now its own test, with the SFU's evidence in its comment.
+
+### What is still open
+
+**Why the client came back** after each hang-up is not proved. `useVoiceCall`
+has no automatic rejoin — `onClosed` publishes a failure — so the most likely
+answer is the owner pressing «позвонить» again on seeing the call drop, which
+fits `Reconnect: false` and the ~17-second spacing without needing a hidden
+timer. It is not, however, measured, and D-238 stays open until a call is
+watched after this fix: if the flap survives, something else is doing it.

@@ -554,6 +554,10 @@ const lost = (over: Partial<Parameters<typeof voiceCallLostItsChannel>[0]> = {})
     ready: true,
     supported: true,
     channel: CHANNEL,
+    // A group by default: this rule governs the rail's channels, and a private
+    // chat's call room is not one of them. See the private case in
+    // `server-channel-rail.test.mts`, and the production defect behind it.
+    chatType: "group",
     ...over,
   });
 
