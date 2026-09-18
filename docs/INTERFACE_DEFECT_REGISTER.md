@@ -14569,3 +14569,140 @@ Fourteen mutations, all red, including the three that break the render-cost rule
 specifically: a merge that always builds a new map, one that ignores a shrinking
 map (an ended call would stay on the list for ever), and one that replaces an
 unchanged entry anyway.
+
+---
+
+## D-229 `[x]` A call left no trace in the conversation it happened in
+
+**Severity:** medium. Slice 3's last named item after D-228, and the one that
+makes a call part of the group's record rather than a thing that was briefly
+true in a rail.
+
+A voice chat started, ran and ended, and the conversation said nothing. Somebody
+scrolling tomorrow could not tell it had happened; somebody in the chat now
+learned a call was running only by watching the rail.
+
+### «Once per call, not once per join» is the whole difficulty
+
+The proposal's own gate. Three measured facts stood in the way, and the answer
+dissolved all three rather than working around them:
+
+1. **Asking for a token creates the room**, so `room_started` fires for somebody
+   who pressed join and never connected. `docs/operations/voice.md` records
+   `active_since` being set for a minute after any press.
+2. **`room_finished` can be lost to a restart.** `20260918160000` cleaned up one
+   row whose `active_since` had been set with nobody in the room since
+   2026-09-13.
+3. **A webhook can be delivered twice.** `voice_webhook_event_seen`
+   de-duplicates a *delivery* — by `event.id`, or a SHA-256 of the body when
+   LiveKit sends none — but not the *fact*: a room recreated a minute later
+   sends a second `room_started` under a new id. (My brief said «nothing in the
+   current path is idempotent»; that was wrong, and the correction is the useful
+   part — the delivery is covered, the fact was not.)
+
+**So the fact is not a webhook at all: it is the transition of
+`voice_channels.participant_count` through zero.** A `BEFORE UPDATE OF
+participant_count` trigger, latched by one new nullable column
+`call_announced_at`, over a pure rule:
+
+    voice_call_transition(before, after, announced)
+      0 → >0, not announced  → 'start'
+      >0 → 0,  announced     → 'end'
+      anything else          → nothing
+
+Asked directly on production after applying: `start / nothing / end / nothing`
+for 0→1 unannounced, 1→2 announced, 2→0 announced, 0→1 already announced. The
+second, third and tenth joiner write nothing, which is the gate.
+
+Each fact falls out rather than being handled: a press that connects nobody
+never moves the count off zero, so (1) cannot produce a line. Every occupancy
+path funnels through `private.voice_channel_recount` — the join and leave
+webhooks, the reconciler's `voice_participants_replace`, the reaper's
+`voice_participants_reap` — so «ended» is driven by whichever layer notices
+first and needs no webhook at all, which answers (2). And a redelivered
+`participant_joined` is an upsert that moves no count, so it never reaches the
+trigger, which with the latch answers (3).
+
+### Two appended rows, not one edited
+
+A single row updated when the call ends has a different failure mode: a row
+claiming a call is **running** has to be corrected, and a correction that never
+lands leaves the scrollback asserting a call in progress for ever. Appended rows
+state a past event at the point it happened, so a lost end line leaves a start
+with no end — incomplete rather than false. «Is a call running now» is the
+rail's question and it answers it from `participant_count`.
+
+### The copy, and what it says about a room that no longer exists
+
+    Начался разговор в канале «Общая»
+    Разговор в канале «Общая» закончился
+
+«разговор» and «канал» are the product's own words — `VoiceCallBar` says «Выйти
+из разговора», `ChannelRail` says «Отключить от голосового канала?». «в канале
+«Имя»» rather than «в «Имя»» because a quoted proper name can only stay
+nominative when a generic noun carries the prepositional case; D-166 solved the
+same problem with a colon.
+
+The name is **snapshotted into the content**, with no foreign key to the
+channel. A rename after the call leaves both lines untouched; deleting the room
+leaves both standing; a rename *during* a call gives the start line the old name
+and the end line the new one, because each line records the moment it was
+written. All three are tests.
+
+### What was checked before it was applied
+
+Four facts read independently off production rather than taken on trust, because
+this INSERT runs **inside the transaction that joins or leaves a room** — a
+failed write here would break joining, which is far worse than a missing line:
+
+- `messages_sender_shape_check` requires a `type = 'system'` row to carry
+  `user_id IS NULL AND bot_id IS NULL`, which is exactly what the writer
+  inserts — and, with the INSERT policy wanting `auth.uid() = user_id`, is why
+  **no client can forge one**;
+- `messages` is owned by `postgres`, `voice_channels` by `supabase_admin` — so
+  the file runs as `supabase_admin` and re-owns its functions to whoever owns
+  `messages`, derived from `pg_class` rather than named;
+- `enqueue_message_notifications` returns early for a system row, so **nothing
+  is pushed**. A notification when a call starts is a separate product decision
+  and is deliberately not taken here;
+- `call_announced_at` did not already exist.
+
+The migration also **enforces its role rather than describing it**: its first
+statement asks `pg_has_role(current_user, <voice_channels' owner>, 'USAGE')` and
+raises naming the owner. The three migrations before it put the role in a
+comment and two of them failed on «must be owner of …».
+
+Applied 2026-09-18 as `supabase_admin` after a verified backup
+(`pre-20260918200000-call-service-message-20260918T064858Z.sql`, 1,353,004
+bytes, sha256 `ac9eeee7…`, 137 `CREATE TABLE`) and a rehearsal of the whole file
+on production that ended in ROLLBACK. The column was added without a rewrite,
+proved by comparing `pg_relation_filenode` across the statement, and the
+self-check drives a synthetic group and room through a whole call and then
+abandons it by raising a sentinel inside a subtransaction — so the end-to-end
+path is exercised at apply time and the migration refuses rather than committing
+half. **No client change and no deploy**: the line renders through the system
+message the product already has.
+
+### Three green mutations, each one a finding rather than a pass
+
+`security definer` dropped, the `WHEN` clause deleted alone, and `update of
+participant_count` widened to `update` all stayed green — and each is
+redundant-by-design rather than untested: every path today arrives inside one of
+the existing SECURITY DEFINER RPCs and `authenticated` holds no UPDATE on
+`participant_count`, so the two trigger clauses are pre-filters rather than
+gates. They stay, and the file now says why. The mutation the gate actually
+rests on — the rule firing per arrival with the `WHEN` clause deleted — turns
+**five** cases red, including «one start and one end, not one per join».
+
+Two weak guards were found and tightened on the way: the filenode guard passed
+for `if false then`, and a self-check mutation passed because the migration is
+idempotent and restored the function before the check ran.
+
+### The one residual, stated rather than buried
+
+If the participant mirror wrongly dips to zero — the reaper firing on a live
+participant after minutes of failed reconciliation — the conversation gets a
+spurious end/start pair. That is a mirror-accuracy defect which shows identically
+in the rail, is bounded by the reconciler's 30-second period, and cannot flap,
+because `voice_participants_replace` is atomic. A genuine last-person-leaves
+**is** an ended call, and rejoining **is** a new one.
