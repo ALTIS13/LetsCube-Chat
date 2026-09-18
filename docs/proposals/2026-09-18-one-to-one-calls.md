@@ -458,6 +458,106 @@ person picks up their laptop and has no idea somebody rang. The refusal is about
 same for every device, because it is a fact about the call rather than about the
 phone.
 
+## 4b. Moving a call between your own devices
+
+Asked for by the owner on 2026-09-18, after slice F's database half landed:
+«если он заходит с условного телефона то система видела что активна условная
+голосовая сессия в какой-то группе и предлагает по аналогии с discord
+присоединиться в этот голосовой чат с телефона заместо компьютера, но
+одновременно с двух устройств в один войс зайти должна быть нельзя, сами войсы
+не должны иметь грубой привязки и в случае если изначальный владелец голосового
+канала выйдет то подключение не должно обрываться».
+
+Three requirements. **Two of them are already true**, which is worth establishing
+before building anything.
+
+### «Сами войсы не должны иметь грубой привязки» — already so, measured
+
+Nothing binds a room to whoever made it.
+
+- `created_by` on `voice_channels` is **written and never read to decide
+  anything**: the only function whose body mentions it is `voice_private_room`,
+  which sets it on insert. Grepped across every function in `public` and
+  `private`.
+- Nothing ends a room because a **particular** person left. The two functions
+  that touch `active_since` are `voice_channel_recount` and
+  `voice_channel_set_active`, and both key on the **count**, never on identity.
+- LiveKit closes a room `empty_timeout: 60` seconds after it is empty — that is
+  emptiness, not ownership, and a room with anybody still in it stays.
+
+So a group voice channel already behaves as Discord's does: a place that exists,
+which people enter and leave, whose life is occupancy. The one call that *does*
+end when somebody leaves is the one-to-one call, which the owner confirmed
+separately on the same day and which is deliberate.
+
+### «Одновременно с двух устройств в один войс нельзя» — already so in the data
+
+`voice_participants`'s primary key is **`(channel_id, user_id)`**. One person
+cannot be represented twice in one room, whatever any client does.
+
+What that does *not* settle is the transport. LiveKit is documented to
+disconnect an existing participant when a second connection arrives with the
+same identity — and the identity this product mints is the user id, read off the
+SFU's own log: `participant: 1532baab-…`. **That behaviour is not verified
+here**, and the design below deliberately does not depend on it: the client
+refuses to join a room it already believes itself to be in elsewhere, and offers
+to *move* instead. If LiveKit's rule is what the documentation says, the move is
+belt and braces; if it is not, the interface is the thing that keeps the rule.
+
+### What is actually missing: the phone does not know
+
+Everything needed is already on the client, which is the pleasant part.
+
+`voice_participants` is `SELECT`-able by any member of the chat — “members read
+voice participants”, `is_chat_member(voice_channel_chat(channel_id))` — and it is
+in the `supabase_realtime` publication. So a phone that has just signed in can
+see that **its own user id** is a participant of room C, while its own call state
+says it is connected to nothing. Those two facts together are «вы в этом
+голосовом чате на другом устройстве», and neither needs a new table, a new
+device identity, or a round trip to ask.
+
+The rule is therefore pure and small, and belongs in `lib/` with the others:
+
+    inCallElsewhere(myUserId, participantRows, localCallChannelId)
+      → the channel I am in somewhere else, or null
+
+### What the surface says, and the one place it must not lie
+
+Discord simply moves you, and says so afterwards. This should **say it first**,
+because moving is not free: it disconnects the person's other device
+mid-sentence, and on a computer that device may be the one with the good
+microphone in front of the person they are talking to.
+
+So: «Вы в этом разговоре на другом устройстве» with «Перейти сюда», and the
+press does two things in one: join here, which ends the connection there. The
+sentence must not promise both devices can listen, because they cannot.
+
+### The device's name is slice F's, and this is why it was worth building
+
+The banner reads better as «на компьютере» than as «на другом устройстве», and
+slice F now has the registry that can say which: `session_devices_list` labels
+each authorisation from its `user_agent`. Wiring the label in needs one thing
+this schema does not have — **which session a participant row belongs to** — and
+that is the honest shape of «чёткое определение устройства пользователя»:
+
+    alter table public.voice_participants add column session_id uuid
+
+written by the gateway from the token's own `session_id` claim at join, read by
+nobody else. It is a small migration and it is **not** in the first version of
+this: the banner works without it, and the claim is still the one thing in slice
+F that is strongly evidenced rather than proved. Prove the claim, then name the
+device.
+
+### What this is not
+
+**Not a second mechanism for «who is in this room».** The participant rows and
+the presence reader already answer that, and a banner that asked the server its
+own question would be a second source of a fact that has one.
+
+**Not a way to be in two rooms at once.** Joining anywhere still leaves whatever
+you were in — `joinVoiceChannel` already leaves the room it finds this client in
+before joining the next. The move is that same rule seen from the other device.
+
 ## 5. The slices
 
 **Slice A — a call room a member can make, and the ring between two open
@@ -496,6 +596,13 @@ installed iPhone app cannot ring in the background and no setting changes that,
 so the interface says so plainly, exactly as slice 6 of the voice proposal
 already commits to for background audio. Windows is no longer in this slice —
 see the decision above.
+
+**Slice G — moving a call to the device in your hand.** The banner that says
+you are in this conversation on another device, and the press that brings it
+here. §4b measures what is already true — no ownership binding, and one person
+cannot be twice in a room — and what is missing, which is only that the phone
+does not know. Naming *which* device is slice F's registry plus a `session_id`
+on `voice_participants`, and is deliberately not in the first version.
 
 **Slice F — «do not accept calls on this device», as a device registry.**
 Decided on 2026-09-18. A row per authorised device, written at sign-in and
