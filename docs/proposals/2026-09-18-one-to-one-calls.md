@@ -356,6 +356,55 @@ the setting belongs to this device; B as its own stage, built on
 a fourth notion of a device. **The owner decides whether the first version ships
 with A or waits for B** — that is question 6 below.
 
+### A fourth notion of a device, measured on 2026-09-18 — and it may be the right one
+
+The recommendation above was to build B on `user_push_devices` «by finally
+giving `device_id` a value rather than by adding a fourth notion of a device».
+Two things measured while starting that work argue against it, and a third
+argues for something else entirely.
+
+**`user_push_devices` has no client grants at all.** `authenticated` and `anon`
+hold nothing on it — every write goes through an RPC — so a «list my devices»
+surface needs a read function written for it. That is a small cost and worth
+naming: the table holds `token` and `token_hash`, and a listing RPC must return
+neither.
+
+**The bigger objection: it is keyed on a push token.** No push, no row. A
+browser tab signed in without notification permission still rings while it is
+open, and its owner still needs to be able to silence it from their phone — and
+it would not be in the list at all. Nine rows, five users, `platform = android`
+in all nine: today that table is one shell's push registry, not an inventory of
+where somebody is signed in.
+
+**`auth.sessions` is the inventory, and it already exists.** GoTrue keeps a row
+per authorisation with `user_agent`, `ip`, `created_at`, `updated_at` and
+`refreshed_at` — which is what «Активные сеансы» *is*, in Telegram and here. It
+needs no registration code in any shell, it covers every platform equally, and
+«авторизированное в аккаунт устройство» is a description of a row in it.
+
+Two facts about it that a design has to answer, both measured:
+
+- **342 sessions across 15 users, and `not_after` is null on every one.** A raw
+  listing would show somebody twenty-odd entries, most of them long dead. So the
+  list needs a freshness rule — `refreshed_at` within some window — and that rule
+  is a product decision about what «active» means, not a detail.
+- **A session is not an installation.** Signing out and in again on the same
+  laptop makes a new row, so a per-session switch resets when somebody
+  re-authenticates. Telegram behaves the same way, which makes it defensible —
+  but it should be chosen rather than discovered.
+
+**The assumption this rests on, stated as one.** For a device to read *its own*
+row it must know which session it is, and the natural answer is the `session_id`
+claim in the access token (`auth.jwt() ->> 'session_id'`). GoTrue has emitted it
+for a long time and this deployment runs v2.189.0, so it is very probably there
+— **and it has not been verified here.** Nothing in this repository reads it
+today. Verify it against a real signed-in token before building on it; if it is
+absent, the whole shape changes and a client-generated installation id comes
+back into play.
+
+So slice F has a fork in it that §4a did not have, and the honest order is:
+verify the claim, decide what «active» means, then build. The switch itself is
+small either way — one boolean, read where the ring is decided.
 ### What a per-device switch must not become
 
 A device that refuses calls must still be told that a call happened, or the
