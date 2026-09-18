@@ -14,7 +14,8 @@ interface KubTooltipProps {
  *
  * **It used to be a CSS-only bubble and that made it useless where it was most
  * used.** The bubble was a `position: absolute` span inside a
- * `relative inline-flex group` wrapper, shown by `.group:hover > .kub-tooltip`.
+ * `relative inline-flex group` wrapper, revealed by a hover rule in the
+ * stylesheet whose declarations are gone with it.
  * Absolute positioning is clipped by any ancestor with `overflow: hidden`, and
  * the sidebar's header sits inside two of them — the header block and
  * `.kub-chat-list-column`. Measured at 1440 on 2026-09-18: the bell occupies
@@ -53,7 +54,11 @@ export function KubTooltip({ label, side = "top", children, className }: KubTool
         // `kub-glass-strong`, the border and the 12px type are what the CSS
         // bubble had; `TooltipContent` brings its own glass and text size, so
         // only the size is overridden here.
-        className="whitespace-nowrap px-2 py-1 text-[12px] font-medium"
+        // `kub-tooltip` carries one declaration pair: the animation duration
+        // and easing, from the motion tokens. Without it the bubble animates
+        // at the `animate-in` plugin's own 150ms, which is a literal outside
+        // this product's motion system — the drift `motion-contract` catches.
+        className="kub-tooltip whitespace-nowrap px-2 py-1 text-[12px] font-medium"
       >
         {label}
       </TooltipContent>

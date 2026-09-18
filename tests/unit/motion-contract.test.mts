@@ -163,26 +163,69 @@ test("the shared controls take their timing from the system, not from a literal"
 });
 
 /**
- * A tooltip bubble must leave the layout when it is not being shown. Kept in
- * the flow at zero opacity it still counted towards the page's scroll width:
- * measured, the invisible bubble on the sidebar's right-most button made the
- * messenger 393px wide inside a 390px viewport, which the audit reported as
- * clipped content.
+ * A tooltip must not sit in the column's layout while it is invisible.
  *
- * `display` is what has to change, so the fade needs `allow-discrete` and a
- * `@starting-style` to survive it. All three are asserted together, because
- * the first without the others is a tooltip that appears with no transition
- * at all.
+ * The measurement that produced this test is worth keeping even though what it
+ * measured is gone: the old CSS bubble was kept in the flow at zero opacity and
+ * still counted towards the page's scroll width, so the invisible one on the
+ * sidebar's right-most button made the messenger 393px wide inside a 390px
+ * viewport, which the audit reported as clipped content. The rules that fixed
+ * it — `display: none`, `allow-discrete` and a `@starting-style` to keep the
+ * fade `display` would otherwise cancel — went with the bubble in D-216.
+ *
+ * The contract they served did not go anywhere, and it is now met by a stronger
+ * mechanism rather than by a rule: `KubTooltip` renders through
+ * `components/ui/tooltip.tsx`, which portals into `body`. A portalled bubble is
+ * not in the column's flow at all, so it cannot contribute a pixel of scroll
+ * width whether it is shown or not — and it also cannot be clipped by the two
+ * `overflow: hidden` ancestors every call site sits inside, which is the defect
+ * D-216 was actually reported for.
+ *
+ * So this asserts the mechanism, in both halves. Reading the source rather than
+ * the stylesheet because the guarantee is now structural: a component that
+ * stopped portalling would pass every CSS assertion ever written here.
  */
-test("a tooltip is out of the layout until it is shown", () => {
-  const rest = ruleBody(css, ".kub-tooltip");
-  assert.match(rest, /display:\s*none/, "an invisible tooltip must not occupy the layout");
+test("a tooltip is portalled, so it is never in the column's layout", () => {
+  const tooltip = readFileSync(
+    new URL("../../artifacts/kub/src/components/ui/tooltip.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    tooltip,
+    /TooltipPrimitive\.Portal/,
+    "the tooltip is rendered in place again — it will be clipped by any ancestor that hides overflow",
+  );
 
-  const shown = ruleBody(css, ".group:hover > .kub-tooltip");
-  assert.match(shown, /display:\s*block/);
-  assert.match(shown, /opacity:\s*1/);
+  const kub = readFileSync(
+    new URL("../../artifacts/kub/src/components/kub/KubTooltip.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    kub,
+    /TooltipContent/,
+    "KubTooltip has its own bubble again rather than using the portalled one",
+  );
+  // The absolute bubble, in the shape it had. A second tooltip implementation
+  // is what D-216 removed, and the cheapest way to bring the defect back is to
+  // write one here rather than to break the one above.
+  const code = kub.replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.doesNotMatch(
+    code,
+    /position:\s*absolute|absolute/,
+    "KubTooltip positions its own bubble again, which is what every overflow:hidden ancestor clips",
+  );
+});
 
-  assert.match(rest, /allow-discrete/, "the fade is cancelled by display:none without this");
-  assert.match(css, /@starting-style\s*\{[\s\S]*?\.kub-tooltip/);
-  assert.match(css, /\.group:focus-within > \.kub-tooltip/, "the keyboard must reach it too");
+/** The fade the portalled bubble carries, so it does not appear instantly. */
+test("the tooltip still fades in and out", () => {
+  const tooltip = readFileSync(
+    new URL("../../artifacts/kub/src/components/ui/tooltip.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(tooltip, /animate-in/, "the tooltip arrives with no transition at all");
+  assert.match(
+    tooltip,
+    /data-\[state=closed\]:animate-out/,
+    "the tooltip vanishes rather than fading out",
+  );
 });

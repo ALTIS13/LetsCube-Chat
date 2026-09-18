@@ -1664,32 +1664,27 @@ textarea::placeholder, input::placeholder {
   }
 }
 
-/* A tooltip bubble is laid out only while it is being shown. Kept in the flow
-   at zero opacity it still counted towards the page's scroll width: measured,
-   the invisible bubble on the sidebar's right-most button made the messenger
-   393px wide inside a 390px viewport. `allow-discrete` and `@starting-style`
-   keep the fade that `display: none` would otherwise cancel, and `:focus-within`
-   means the keyboard reaches it too — hover alone never did. */
+/* `.kub-tooltip` used to hold a whole bubble here, and the measurement behind
+   it is worth keeping even though the bubble is gone: kept in the flow at zero
+   opacity it still counted towards the page's scroll width, so the invisible
+   one on the sidebar's right-most button made the messenger 393px wide inside a
+   390px viewport. That bubble was `position: absolute` inside its trigger's own
+   wrapper, which every ancestor with `overflow: hidden` clipped — D-216 — and
+   `KubTooltip` is a named shape of the portalled Radix tooltip now. A portalled
+   bubble is in no column's flow, so the layout half of that measurement can no
+   longer happen at all.
+
+   What is left is the timing, and it is a real job rather than a leftover. The
+   portalled content animates with Tailwind's `animate-in` utilities, whose
+   duration is the plugin's own 150ms — a literal outside this product's motion
+   tokens, which is exactly the drift `tests/unit/motion-contract.test.mts`
+   exists to catch. These two declarations put it back on
+   `--kub-motion-fast`, so reduced motion and every future retune reach the
+   tooltip with everything else. */
 @layer components {
   .kub-tooltip {
-    display: none;
-    opacity: 0;
-    transition:
-      opacity var(--kub-motion-fast) var(--kub-ease-standard),
-      display var(--kub-motion-fast) allow-discrete;
-  }
-
-  .group:hover > .kub-tooltip,
-  .group:focus-within > .kub-tooltip {
-    display: block;
-    opacity: 1;
-  }
-
-  @starting-style {
-    .group:hover > .kub-tooltip,
-    .group:focus-within > .kub-tooltip {
-      opacity: 0;
-    }
+    animation-duration: var(--kub-motion-fast);
+    animation-timing-function: var(--kub-ease-standard);
   }
 }
 
