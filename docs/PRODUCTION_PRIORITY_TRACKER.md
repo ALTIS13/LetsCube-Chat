@@ -611,6 +611,69 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-18 — two deployments failed on a transient GitHub outage, and three wrong hypotheses first
+
+**Not a code failure, and the diagnosis is the point.** Deployments 438 and 439
+(`fb433a5b` and `a9bac968`) both failed after ~2m 18s, six minutes apart, at the
+**clone**, before a single build step ran:
+
+```
+fatal: unable to access 'https://github.com/ALTIS13/LetsCube-Chat.git/':
+  Failed to connect to github.com port 443 after 134872 ms
+Deployment failed: … check_git_if_build_needed()
+```
+
+Afterwards, from the **same network with the same image**, the same operation
+took 0.35 s and returned the right commit:
+
+```
+docker run --rm --network coolify ghcr.io/coollabsio/coolify-helper:1.0.14 \
+  sh -c 'git ls-remote --heads https://github.com/ALTIS13/LetsCube-Chat.git main'
+→ a9bac9680f775a963fa86afcadda8f607ec13590  refs/heads/main
+```
+
+So: transient, recovered, and nothing to fix. Production kept serving
+`c7a63529`, and what did not reach it was a test file and documentation — the
+database changes those commits *describe* were already applied directly, so no
+user-facing behaviour was waiting on the deploy.
+
+#### Where the evidence lives, because it took too long to find
+
+Coolify keeps the whole build transcript in its own database, and no token is
+needed to read it:
+
+```
+docker exec coolify-db psql -U coolify -d coolify -At \
+  -c "select id, status, created_at from application_deployment_queues order by created_at desc limit 4;"
+docker exec coolify-db psql -U coolify -d coolify -At \
+  -c "select logs from application_deployment_queues where id = <id>;"
+```
+
+`logs` is a JSON array of `{output}` lines — the failing command included.
+
+#### The three hypotheses that were wrong, and the one reading error behind them
+
+**`docker logs coolify` stamps in UTC; the host's `date` is MSK.** Read as one
+clock, a perfectly live queue looked like one that had stopped three hours
+earlier — the last line said 15:12 while the host said 18:11. That single
+misreading produced all three detours:
+
+1. **«Horizon is stuck.»** Measured instead: the worker processes were 0:44,
+   1:43 and 2:41 old, so Horizon was cycling them normally. A stuck queue has
+   old workers, not fresh ones.
+2. **«The webhook is not arriving.»** Measured instead:
+   `gh api repos/ALTIS13/LetsCube-Chat/hooks/<id>/deliveries` shows all three
+   hooks delivering with **200**, the most recent one *while I was looking at
+   it* — which is what finally exposed the timezone error.
+3. **«Docker's address pools drifted»** — the failure mode this server has
+   actually had before (see CLAUDE.md §8). Measured instead: `daemon.json` still
+   carries `bip 192.168.240.1/24` and the `172.30.0.0/16` pool, and GitHub was
+   reachable from the host, from the default bridge and from the `coolify`
+   network alike.
+
+The rule this restates, which this file already holds in other words: **read
+the log the system wrote before reasoning about the system.** Each of the three
+checks above was sound work answering a question that was never the question.
 ### 2026-09-18 — `10a87f09` (a private chat rings, and three production migrations behind it)
 
 **Current baseline.** `letscube-web` runs image
