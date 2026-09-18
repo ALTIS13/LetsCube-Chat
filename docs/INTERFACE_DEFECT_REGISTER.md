@@ -15622,3 +15622,44 @@ rehearsed in a rolled-back transaction on production against synthetic rows with
 the registration triggers disabled inside it, and verified afterwards on values
 rather than on the fact that it ran. Gates at the commit: typecheck clean, unit
 3063/3063, `voice-call` and `voice-ring` 138 passed across both viewports.
+
+## D-234 `[ ]` The time slides left inside a bubble that carries a reply
+
+**Severity:** low as damage, medium as an eyesore — it is on every reply anybody
+sends, which is a large share of messages in a busy chat.
+
+**Reported by the owner on 2026-09-18**, with a screenshot, while the call work
+was in flight: «bubble сообщений (а именно время), смещается при ответе куда-то
+влево, у остальных сообщений вроде проблем замечено не было — но на всякий
+случай стоит проверить что подобных проблем точно нет». Recorded now and
+deliberately **not** fixed now, at their instruction.
+
+**What the screenshot shows.** An own (outgoing) bubble containing a quoted
+reply — «Никитос / и я не пойму как бот…» — then the body «Ща проверю», then
+«18:44 ✓». The quote block is what sets the bubble's width, and it is much wider
+than the body. The time does **not** sit at the bubble's bottom-right corner
+where it sits on every other message: it sits immediately after the body text,
+leaving a visible gap of bubble to its right.
+
+**Where it lives.** `artifacts/kub/src/components/chat/MessageBubble.tsx`, the
+reserved-spacer mechanism at roughly `:344-670`. That code already knows this is
+subtle — its own comments record a case where the bubble «was told it had 984px,
+chose inline, and the reserved spacer then wrapped», and another where «trusting
+that guess put the reserved spacer on a line of its own». There is an existing
+contract for it in `tests/e2e/message-meta-spacer-line.spec.ts`.
+
+**A hypothesis, marked as one.** The fit test asks whether the last line plus
+the spacer fits «the width the bubble can actually get». In a reply the bubble's
+width is decided by the **quote**, not by the body, so a short body leaves the
+row far narrower than the box — and a spacer sized for the row rather than for
+the box would leave the time where the text ends instead of at the edge. That is
+a reading of the comments, **not a measurement**, and this register has had three
+entries in one day whose proposed fix the system refused. Measure the two widths
+before changing anything.
+
+**What the sweep must also do, because the owner asked for it explicitly:** check
+that no other bubble shape has the same problem. The candidates share the
+property that something other than the body sets the width — a forwarded header,
+an attachment caption, a link preview, an edited mark, a bubble carrying a
+reaction row. Each needs a look, at both 390 and 1440, in both themes, and the
+existing spec is the place to pin whatever is found.
