@@ -106,6 +106,36 @@ Push also cannot cancel: the service worker's `push` handler always shows a
 notification (`sw.js:215-226` → `:228-245`) — there is no silent branch — so a
 «the caller hung up» push would draw a second card rather than close the first.
 
+
+### A hidden window has to stay awake, and nobody has checked that it does
+
+**This is the risk the whole «let it be running» answer rests on, and it is
+pre-existing rather than introduced by autostart** — close-to-tray already hides
+the window today.
+
+Chromium throttles timers in a hidden or occluded page, and this shell passes
+`additional_browser_args` carrying **only** `--disk-cache-size` — there is no
+`--disable-background-timer-throttling`, no `--disable-renderer-backgrounding`,
+no `--disable-backgrounding-occluded-windows` (`windows-tauri/src-tauri/src/lib.rs:1329-1351`).
+
+What that does and does not threaten is worth separating, because the two
+halves of a ring behave differently:
+
+- **the arrival** of a ring is a WebSocket message, and a socket delivers to a
+  hidden page. That half is probably fine;
+- **everything with a clock** is not. The ring's own expiry, the «missed» cut-off
+  of slice C, and any re-read on resubscribe all run on timers, and a throttled
+  timer turns «ringing for forty-five seconds» into something else.
+
+Adding those three flags would settle it, and they were **deliberately not
+added** with the autostart work: they affect every launch, they cost battery and
+CPU whenever the window is hidden, and that is a product decision rather than a
+side effect of a settings row. It is question 8.
+
+**And it must be measured rather than reasoned about.** The honest experiment is
+a hidden window with a timer and a socket, observed over several minutes — not a
+reading of Chromium's documented policy, which is a statement about a browser
+rather than about this shell at this version with these arguments.
 ### Android, closed
 
 Four named changes, each measured:
@@ -405,6 +435,12 @@ out of the ring itself and is built in slice A.
    silently, or nothing at all?** Telegram shows nothing on a device you have
    turned off. Either is defensible; the record in the conversation is the same
    for every device regardless.
+8. **Do the three Chromium flags go on?** `--disable-background-timer-throttling`,
+   `--disable-renderer-backgrounding` and `--disable-backgrounding-occluded-windows`
+   would keep a hidden window's clocks running, which the ring's expiry and the
+   missed-call cut-off both need. They apply to every launch and cost battery
+   whenever the window is hidden. Measure first — the section above says how —
+   then decide.
 
 ## 7. What this proposal will not claim
 
