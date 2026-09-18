@@ -415,6 +415,41 @@ into play.
 So slice F has a fork in it that §4a did not have, and the honest order is:
 verify the claim, decide what «active» means, then build. The switch itself is
 small either way — one boolean, read where the ring is decided.
+
+#### «Active» measured, and the answer is `refreshed_at`
+
+Taken on production on 2026-09-18, and the two candidate definitions are not
+close:
+
+| freshness taken as | sessions in 30 days | per person: fewest / average / most |
+|---|---|---|
+| `refreshed_at` | 24 | 1 / **2.0** / 7 |
+| `coalesce(refreshed_at, created_at)` | 298 | 1 / **19.9** / **127** |
+
+**318 of 342 sessions have never been refreshed.** A session that came back for a
+token is a living installation; one that never did is a sign-in that went
+nowhere. So «active» is `refreshed_at within 30 days`, which gives a person two
+entries on average and seven at worst — a list somebody can read. The other
+definition gives one person **127**, which is not a device list, it is a log.
+
+Every session inside that window has a `user_agent`, so a label is always
+available and none of them has to be called «unknown device».
+
+One wart, named rather than solved: a session that has just signed in and not yet
+refreshed is **not** in its own list until it does. Measured: no session created
+in the last day is unrefreshed, so the window is short in practice — but a device
+that cannot see itself for an hour is a confusing first impression, and
+`or created_at > now() - interval '1 hour'` is the cheap answer if it shows up.
+
+#### And the number nobody asked about is the interesting one
+
+**342 sessions for 15 people, 318 of them never refreshed.** That is roughly
+twenty-three dead sign-ins each, and nothing prunes them. It does not break the
+list — the freshness window hides them — but it is worth knowing before a screen
+called «Активные сеансы» exists, because the same rows are what a security
+screen would be counting, and because something is creating far more sessions
+than there are devices. Not diagnosed here; recorded so that the device work does
+not quietly inherit it.
 ### What a per-device switch must not become
 
 A device that refuses calls must still be told that a call happened, or the
