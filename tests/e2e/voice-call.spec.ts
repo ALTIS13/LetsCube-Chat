@@ -351,19 +351,29 @@ async function installVoiceSeam(
         speak: null,
       };
       window.__voiceProbe = held;
-      const roster = (muted: boolean) => [
-        { userId: me, name: "", muted },
-        { userId: anna, name: "Анна (из токена)", muted: false },
-        // A room with more people in it than the two this file has always had.
-        // Only the render-cost test asks for them: the number that matters
-        // there is «how many rows did one syllable rebuild», and two rows
-        // cannot tell a list apart from a row.
-        ...(others as string[]).map((userId, index) => ({
-          userId,
-          name: `Гость ${index + 1}`,
-          muted: false,
-        })),
-      ];
+      const roster = (muted: boolean) =>
+        [
+          { userId: me, name: "", muted },
+          { userId: anna, name: "Анна (из токена)", muted: false },
+          // A room with more people in it than the two this file has always had.
+          // Only the render-cost test asks for them: the number that matters
+          // there is «how many rows did one syllable rebuild», and two rows
+          // cannot tell a list apart from a row.
+          ...(others as string[]).map((userId, index) => ({
+            userId,
+            name: `Гость ${index + 1}`,
+            muted: false,
+          })),
+        ].map((entry) => ({
+          // The permission the SDK reports per participant, added with
+          // `canSpeak` on 2026-09-18. `true` rather than absent: a stand-in that
+          // left it `undefined` would be claiming «unknown» in a state where a
+          // real transport answers, and «unknown» is the shape the *table* gives
+          // outside a call. Nobody here is silenced; the spec that needs one is
+          // `server-channel-rail.spec.ts`, where the moderation menu lives.
+          ...entry,
+          canSpeak: true,
+        }));
       window.__letscubeVoiceRoom = (events) => {
         held.speak = (userIds: string[]) => events.onSpeakers(userIds);
         return {

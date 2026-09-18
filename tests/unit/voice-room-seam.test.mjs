@@ -19,13 +19,33 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const source = readFileSync("artifacts/kub/src/hooks/voiceRoom.ts", "utf8");
 /** Comments stripped. Three guards fired on prose rather than code today. */
-const code = source
-  .replace(/\/\*[\s\S]*?\*\//g, "")
-  .split("\n")
-  .map((line) => line.replace(/\/\/.*$/, ""))
-  .join("\n");
+const strip = (text) =>
+  text
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .map((line) => line.replace(/\/\/.*$/, ""))
+    .join("\n");
+
+const source = readFileSync("artifacts/kub/src/hooks/voiceRoom.ts", "utf8");
+const code = strip(source);
+
+/**
+ * Two files above the seam, read the same way and for a narrower reason.
+ *
+ * They are not invisible to `tests/e2e/voice-call.spec.ts` the way the room is
+ * — the stand-in replaces the transport, not the store or the capsule — but
+ * that spec's stand-in never calls `onSpeechAllowed`, so the rules that decide
+ * whether a revocation happened, and the sentence that tells the person, have
+ * no behavioural cover today. Source reading is the weaker instrument and this
+ * is where it earns its place: a behavioural test for these belongs in the
+ * spec, and until the stand-in grows the call these two guards are what stop
+ * the rules being simplified away.
+ */
+const callCode = strip(readFileSync("artifacts/kub/src/hooks/useVoiceCall.ts", "utf8"));
+const capsuleCode = strip(
+  readFileSync("artifacts/kub/src/components/chat/VoiceCallCapsule.tsx", "utf8"),
+);
 
 test("the seam is the only file that names LiveKit, and it loads it lazily", () => {
   // The control for everything below: if this file stopped being the seam,
@@ -109,5 +129,241 @@ test("a browser that refuses an output device is answered, not thrown at", () =>
     body,
     /return false;/,
     "a refused device switch no longer answers false, so a call could end over a headset choice",
+  );
+});
+
+/* ── A revoked publish permission (D-221) ─────────────────────────────────────
+ *
+ * The gateway silences somebody by calling the SFU's `UpdateParticipant` with
+ * `canPublish: false`. There is no database column for it — `voice_participants`
+ * has none — so the SFU is the only place the fact exists, and the seam is the
+ * only place in the client that can read it. Everything below is about that
+ * reading arriving at all: the bindings that raise it, the permission the
+ * answer comes from, and the press the interface must not pretend to honour.
+ */
+
+/** One `.on(RoomEvent.X, …)` line, or a failure naming the event that is gone. */
+function binding(event) {
+  const line = code.split("\n").find((entry) => entry.includes(`RoomEvent.${event}`));
+  assert.ok(line, `nothing handles RoomEvent.${event}`);
+  return line;
+}
+
+test("the events a revoked publish permission raises are all bound", () => {
+  // The defect this closes: none of these three was bound, so the SFU took a
+  // person's microphone away and the rail went on drawing them unmuted. The
+  // two unpublish events are **not** interchangeable — the SDK's own typing
+  // makes `trackUnpublished` a `RemoteParticipant` event and
+  // `localTrackUnpublished` a `LocalParticipant` one — so binding either alone
+  // leaves one side of the room blind.
+  assert.match(
+    binding("TrackUnpublished"),
+    /report/,
+    "a remote participant losing a track no longer refreshes the list",
+  );
+  assert.match(
+    binding("LocalTrackUnpublished"),
+    /reportAndAnnounce/,
+    "this client losing its own track no longer reaches the state above, so the " +
+      "person who was silenced is told nothing",
+  );
+  assert.match(
+    binding("ParticipantPermissionsChanged"),
+    /reportAndAnnounce/,
+    "the permission change itself is no longer handled — and it is the only one " +
+      "of the three that fires when there was no track to lose",
+  );
+  assert.ok(
+    code.indexOf("RoomEvent.TrackUnpublished") !== code.indexOf("RoomEvent.LocalTrackUnpublished"),
+    "the remote and the local unpublish have collapsed into one binding",
+  );
+});
+
+test("the permission is read from the room, never inferred from a track", () => {
+  // `!isMicrophoneEnabled` is true for a person who pressed their own button
+  // and for a person the SFU silenced. Telling those apart is the whole reason
+  // `canSpeak` exists beside `muted`, so the reader must not be built from the
+  // track state it is there to distinguish itself from.
+  const start = code.indexOf("const permissionToSpeak = (");
+  assert.ok(start > 0, "the permission reader is gone from the seam");
+  const end = code.indexOf("const report = () => {", start);
+  assert.ok(end > start, "report no longer follows the permission reader — check this slice");
+  const body = code.slice(start, end);
+  assert.ok(
+    body.includes("who.permissions ? who.permissions.canPublish : null"),
+    "the permission reader no longer answers from the participant's own permissions",
+  );
+  assert.ok(
+    !body.includes("isMicrophoneEnabled"),
+    "the permission is being inferred from the microphone state, which cannot " +
+      "tell a self-mute from a moderator's mute",
+  );
+});
+
+test("a participant the room has said nothing about is unknown, not silenced", () => {
+  // Absent is the state every participant is in for the first moments of a
+  // call, and for the whole call if the server sends no permission at all.
+  // Collapsing it into `false` would draw everybody as silenced and offer to
+  // un-silence people nobody had touched — the control-that-does-nothing this
+  // whole change exists to remove.
+  assert.ok(
+    code.includes("permissionToSpeak(local)") && code.includes("permissionToSpeak(remote)"),
+    "report no longer asks about both halves of the room, so one of them carries " +
+      "a made-up permission",
+  );
+  for (const invented of ["canSpeak: true", "canSpeak: false"]) {
+    assert.ok(
+      !code.includes(invented),
+      `report states «${invented}» outright, which is a claim rather than a reading`,
+    );
+  }
+});
+
+test("this client's own permission reaches the interface, and only when it changes", () => {
+  assert.ok(
+    code.includes("onSpeechAllowed(allowed: boolean | null): void;"),
+    "the seam's event interface no longer carries this client's own permission, " +
+      "so nothing above it can learn that a moderator silenced them",
+  );
+  assert.ok(
+    code.includes("events.onSpeechAllowed(allowed)"),
+    "the seam never announces the permission it reads",
+  );
+  // Every permission change in the room reaches the same handler, most of them
+  // about other people. Without the guard the call state is republished for
+  // each one, and `ChatWindow` re-renders its whole subtree for a fact about
+  // somebody else — the cost that moved `speakers` out of the state object.
+  assert.ok(
+    code.includes("if (allowed === announcedSpeech) return;"),
+    "the announcement is no longer guarded, so somebody else's permission change " +
+      "republishes this call's state",
+  );
+});
+
+test("a press the room would refuse is answered before the track is looked at", () => {
+  // `published` is this function's own `LocalAudioTrack` and the SDK never
+  // clears it: a server-side unpublish removes the *publication*. So
+  // `if (!published) return;` cannot stand in for the permission check, and a
+  // version that asks it first mutes a track nobody is carrying and reports a
+  // mute this person did not press.
+  const start = code.indexOf("async setMuted(");
+  assert.ok(start > 0, "setMuted is gone from the seam");
+  const end = code.indexOf("async sampleHealth()", start);
+  assert.ok(end > start, "sampleHealth no longer follows setMuted — check this slice");
+  const body = code.slice(start, end);
+  const permission = body.indexOf("speechAllowed() === false");
+  assert.ok(permission >= 0, "setMuted no longer asks whether the room would carry this at all");
+  const track = body.indexOf("if (!published) return;");
+  assert.ok(track >= 0, "setMuted no longer guards the absent track");
+  assert.ok(
+    permission < track,
+    "the track guard comes first, so a revoked permission falls through to muting " +
+      "a publication the SFU has already removed",
+  );
+  assert.ok(
+    !body.includes("throw"),
+    "setMuted throws at a press it cannot honour; a refusal is an answer, not an error",
+  );
+  // The other half: a permission that came back leaves the publication gone,
+  // so unmuting the track alone would be a pressed control carrying no audio.
+  assert.ok(
+    body.includes("getTrackPublication(Track.Source.Microphone)") &&
+      body.includes("publishTrack(published"),
+    "unmuting after a restored permission no longer puts the track back on the air",
+  );
+});
+
+test("the microphone is published as a microphone", () => {
+  // Not cosmetic and not the SDK's default. A hand-built `LocalAudioTrack`
+  // carries `Track.Source.Unknown`, and `publishTrack` overwrites that only
+  // from `opts.source`. `Participant.isMicrophoneEnabled` reads
+  // `getTrackPublication(Track.Source.Microphone)` and answers false for an
+  // Unknown publication — for the local participant and for every remote one —
+  // and `RemoteParticipant.setVolume` defaults to the same source and silently
+  // finds nothing. Without this line every person in the call reports as muted
+  // for its whole length and deafening does nothing at all.
+  const start = code.indexOf("async join(url, token, microphone)");
+  assert.ok(start > 0, "join is gone from the seam");
+  const end = code.indexOf("async setDeafened(", start);
+  assert.ok(end > start, "setDeafened no longer follows join — check this slice");
+  const body = code.slice(start, end);
+  assert.ok(
+    body.includes("publishTrack(published, { source: Track.Source.Microphone })"),
+    "the capture is published without naming its source, so `isMicrophoneEnabled` " +
+      "reads false for everybody and `setVolume` moves nothing",
+  );
+  assert.match(
+    code,
+    /const \{ LocalAudioTrack, Room, RoomEvent, Track \} = await import\("livekit-client"\)/,
+    "the source enum is no longer imported, so the publication cannot name itself",
+  );
+});
+
+test("a permission the room never granted is nobody's doing", () => {
+  // Two ways to turn this rule into an accusation. `null` means the SFU has not
+  // said, and reading it as a refusal would tell somebody a moderator silenced
+  // them at the start of every call. A token minted without publish rights is
+  // the listen-only grant the capsule already states as «Только слушаете», and
+  // reading *that* as a revocation would do the same to every listener.
+  const start = callCode.indexOf("onSpeechAllowed: (allowed) => {");
+  assert.ok(start > 0, "the call no longer listens for its own permission");
+  const end = callCode.indexOf("onReconnecting: () => {", start);
+  assert.ok(end > start, "onReconnecting no longer follows onSpeechAllowed — check this slice");
+  const body = callCode.slice(start, end);
+  assert.ok(
+    body.includes("if (allowed === null) return;"),
+    "an unstated permission is being read as a refusal, so a call with no answer " +
+      "from the SFU accuses a moderator",
+  );
+  assert.ok(
+    body.includes("const revoked = !allowed && outcome.grant.canPublish;"),
+    "a listen-only token is being read as a revocation, so somebody who was never " +
+      "granted the microphone is told a moderator took it",
+  );
+  assert.ok(
+    callCode.includes("speechRevoked: false,"),
+    "the revocation is no longer cleared with the call, so one call's force-mute " +
+      "appears in the next",
+  );
+});
+
+test("the person who was silenced is told, and the control is sunk rather than faded", () => {
+  assert.ok(
+    capsuleCode.includes("Модератор выключил ваш микрофон."),
+    "the capsule no longer says who silenced this person, so a taken microphone " +
+      "reads as a broken one",
+  );
+  assert.ok(
+    capsuleCode.includes("disabled={speechRevoked}"),
+    "the microphone control is still offered while the room refuses to carry it",
+  );
+  assert.ok(
+    capsuleCode.includes("CAPSULE_CONTROL_UNAVAILABLE_GLASS") &&
+      capsuleCode.includes("linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))"),
+    "the unavailable control no longer steps the material, so on a translucent " +
+      "capsule it is not visibly unavailable at all (rule 5)",
+  );
+  assert.ok(
+    !capsuleCode.includes("--kub-warn-text"),
+    "the capsule names a token this project does not define, so the sentence has no colour",
+  );
+  assert.ok(
+    !capsuleCode.includes("opacity"),
+    "the unavailable state is being drawn with opacity, which rule 5 measured at " +
+      "2.23:1 on a translucent surface against a floor of 4.5",
+  );
+});
+
+test("the SDK does not stop this client's capture when the room unpublishes it", () => {
+  // The room option, not `userProvidedTrack`. `LocalParticipant.unpublishTrack`
+  // reads `stopOnUnpublish ?? roomOptions.stopLocalTrackOnUnpublish ?? true`
+  // and then calls `track.stop()` with no regard for who provided the track —
+  // so on the one path nobody here asks for, a force-mute, the default ends the
+  // `MediaStreamTrack` the hook is holding. The microphone light goes out
+  // mid-call and there is nothing left to put back when the permission returns.
+  assert.ok(
+    code.includes("new Room({ stopLocalTrackOnUnpublish: false })"),
+    "the room takes the SDK's default again, so a force-mute stops the capture " +
+      "the hook owns and a restored permission has no track to republish",
   );
 });

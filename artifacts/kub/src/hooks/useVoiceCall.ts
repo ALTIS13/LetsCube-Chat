@@ -82,6 +82,31 @@ export interface VoiceCallState {
    * stops the interface lying on the day slice 5 starts refusing.
    */
   canPublish: boolean;
+  /**
+   * Whether somebody took this client's permission to speak away **during** the
+   * call.
+   *
+   * Distinct from `canPublish`, which is the grant the token was minted with
+   * and never changes for the length of a call. This one is the room's current
+   * answer, and the only thing in the product that changes it mid-call is a
+   * moderator pressing «Заглушить» — the gateway calls the SFU's
+   * `UpdateParticipant` with `canPublish: false` and writes no database column
+   * at all, so the SFU is the only place the fact exists.
+   *
+   * A token minted **without** publish rights does not set this. That is the
+   * listen-only grant, which the capsule already states as «Только слушаете»,
+   * and reading it as a revocation would tell somebody a moderator had silenced
+   * them when nobody had touched them.
+   *
+   * In `VoiceCallState` rather than beside it, which is the opposite of the
+   * choice `speakers` gets below, and the reason is the measurement that made
+   * `speakers` move out: it is replaced several times a second, so every reader
+   * of this object re-renders on every syllable. A revocation happens when a
+   * moderator presses a control — once in a call, or never — and it changes
+   * what the capsule *says*, so a reader re-rendering for it is the point of
+   * it. `deafened` is held here for the same reason and at the same rate.
+   */
+  speechRevoked: boolean;
   /** A Russian sentence when the last attempt was refused; null otherwise. */
   refusal: string | null;
 }
@@ -96,6 +121,11 @@ const IDLE: VoiceCallState = {
   micMuted: false,
   deafened: false,
   canPublish: true,
+  // False here is what clears a revocation at both ends of a call's life: every
+  // join publishes `{ ...IDLE, phase: "joining" }`, every leave publishes
+  // `IDLE`, and both failure paths spread it too. So one call's force-mute
+  // cannot survive into the next, and there is no separate reset to forget.
+  speechRevoked: false,
   refusal: null,
 };
 
@@ -252,6 +282,28 @@ export function useVoiceSpeaking(userId: string | null, channelId: string | null
 /** Read once, outside React. The whole set, as the SDK last sent it. */
 export function voiceSpeakersSnapshot(): readonly string[] {
   return speakers;
+}
+
+/**
+ * Whether a moderator has silenced this client in one particular room.
+ *
+ * A primitive, and scoped by `channelId`, for the same two reasons
+ * `useVoiceSpeaking` is: a component subscribed through here renders only when
+ * the answer for **its** room changes, and a capsule drawing some other chat's
+ * channel must not say that this person has been silenced in it.
+ *
+ * It reads the store directly rather than arriving as a prop because the
+ * capsule's `view` is built by `voiceCapsuleState`, whose whole job is to be a
+ * rule a `node --test` process can load — and this is not a rule, it is one
+ * live fact about one client. The precedent is `VoiceSpeakingAvatar`, a leaf
+ * inside the same capsule that subscribes to a boolean of its own.
+ */
+export function useVoiceSpeechRevoked(channelId: string | null): boolean {
+  const read = useCallback(
+    () => state.speechRevoked && state.channelId === channelId,
+    [channelId],
+  );
+  return useSyncExternalStore(subscribe, read, read);
 }
 
 function stopCapture() {
@@ -477,6 +529,25 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
       onSpeakers: (talking) => {
         if (mine !== generation) return;
         publishSpeakers(talking);
+      },
+      onSpeechAllowed: (allowed) => {
+        if (mine !== generation) return;
+        // Unknown is not a refusal. The SFU may simply not have said yet, and
+        // treating the gap as `false` would accuse a moderator of something at
+        // the start of every call.
+        if (allowed === null) return;
+        // Only a permission that the token was granted and the room now refuses
+        // is a revocation. Without the second half, the listen-only grant —
+        // which the capsule already states as «Только слушаете» — would be
+        // reported as a moderator's doing.
+        const revoked = !allowed && outcome.grant.canPublish;
+        if (state.speechRevoked === revoked) return;
+        // `micMuted` goes with it on the way in: the person is not being heard,
+        // so a microphone control reading «on» would be the lie. It is left
+        // alone on the way out, because a restored permission does not put the
+        // track back — pressing the control is what does that, and that press
+        // is the one thing that can also be `canPublish`-checked by the SFU.
+        patch({ speechRevoked: revoked, micMuted: revoked ? true : state.micMuted });
       },
       onReconnecting: () => {
         if (mine !== generation) return;

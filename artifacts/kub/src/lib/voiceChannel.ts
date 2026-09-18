@@ -48,6 +48,25 @@ export interface VoiceParticipant {
   name: string;
   /** Self-mute, as the SFU reports it. Not a database column — section 3.1. */
   muted: boolean;
+  /**
+   * Whether the SFU currently lets this person publish, or `null` when nobody
+   * here knows.
+   *
+   * Kept apart from `muted` because the two look identical and are not the same
+   * fact. `muted` is `!isMicrophoneEnabled`, which is true for somebody who
+   * pressed their own microphone button **and** for somebody a moderator
+   * silenced — and the moderation menu has to tell those apart, or it offers
+   * «Разрешить говорить» to a person who muted themselves and restores a
+   * permission they never lost. That control would do nothing, which is the
+   * defect D-221 exists to close rather than to add.
+   *
+   * `null` is «unknown» and must never be read as «silenced»: outside a call
+   * the table carries no permissions at all, and a participant whose token
+   * simply granted publish may carry no explicit value either. Same distinction
+   * `lossBetween` makes in `lib/voiceConnectionHealth.ts`, where a missing
+   * counter answers `null` rather than a confident zero.
+   */
+  canSpeak: boolean | null;
 }
 
 /** Why a microphone could not be captured. Mirrors `classifyMicError`'s codes. */
@@ -124,6 +143,11 @@ export function resolveVoiceParticipants(
     // Mute is the SFU's to report and is not in the table. Outside the call
     // nobody is drawn as muted, because nothing out here knows.
     muted: false,
+    // And `null` rather than `true` for the same reason, one step further: the
+    // table knows who is in the room and nothing else, so whether they may
+    // speak is unknown here. `true` would be a claim, and it is the claim that
+    // would put «Заглушить» on somebody already silenced.
+    canSpeak: null,
   }));
 }
 

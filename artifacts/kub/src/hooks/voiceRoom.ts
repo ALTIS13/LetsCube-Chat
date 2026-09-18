@@ -30,7 +30,15 @@ export interface VoiceRoom {
    * subscribes and hears, and holds no capture at all.
    */
   join(url: string, token: string, microphone: MediaStreamTrack | null): Promise<void>;
-  /** Self-mute, which the SFU propagates to everyone connected. */
+  /**
+   * Self-mute, which the SFU propagates to everyone connected.
+   *
+   * Does nothing to the track when the room has taken this client's publish
+   * permission away — there is nothing published to mute, and muting the
+   * capture on its own would tell nobody. It re-announces the permission
+   * instead, so the state above says who silenced whom rather than drawing a
+   * mute this person never pressed.
+   */
   setMuted(muted: boolean): Promise<void>;
   /**
    * Stop hearing everybody, locally.
@@ -107,6 +115,22 @@ export interface VoiceRoomEvents {
    * list. Computing it here from a local analyser would answer for one person.
    */
   onSpeakers(userIds: string[]): void;
+  /**
+   * Whether the room currently lets **this client** be heard, as the media
+   * server itself answers it. `null` means it has not said.
+   *
+   * Sent on every change and on the join, never on a timer. It exists because a
+   * permission can be taken away in the middle of a call by somebody else —
+   * a moderator silencing a person through the gateway — and the only place
+   * that fact arrives is the SFU. Nothing above this interface can compute it:
+   * the join-time grant says what the token asked for, not what the room
+   * allows now.
+   *
+   * `null` is unknown and must not be read as a refusal. The same rule
+   * `lossBetween` follows in `lib/voiceConnectionHealth.ts`, where a counter
+   * that is missing answers `null` rather than a confident zero.
+   */
+  onSpeechAllowed(allowed: boolean | null): void;
 }
 
 /**
@@ -146,9 +170,22 @@ export async function loadVoiceRoom(events: VoiceRoomEvents): Promise<VoiceRoom>
  * exists to prevent, in the small.
  */
 async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
-  const { LocalAudioTrack, Room, RoomEvent } = await import("livekit-client");
+  const { LocalAudioTrack, Room, RoomEvent, Track } = await import("livekit-client");
 
-  const room = new Room();
+  // `stopLocalTrackOnUnpublish: false` for exactly the reason
+  // `userProvidedTrack` is true below — the hook owns the capture's lifetime —
+  // except that the path this governs is not one we ask for. When the SFU takes
+  // this client's publish permission away it unpublishes the track on our
+  // behalf, and the SDK's own `unpublishTrack` then reads
+  // `stopOnUnpublish ?? roomOptions.stopLocalTrackOnUnpublish ?? true` and
+  // calls `track.stop()`, with no regard for `isUserProvided` (measured in
+  // livekit-client 2.22.3). That ends the `MediaStreamTrack` the hook is
+  // holding: the browser's microphone light goes out in the middle of a call
+  // the person is still in, and there is nothing left to publish when a
+  // moderator gives the permission back — only a second `getUserMedia`, prompt
+  // and all. `false` makes it `stopMonitor()` instead, and `leave()` stays the
+  // one thing that ends the capture.
+  const room = new Room({ stopLocalTrackOnUnpublish: false });
   let published: InstanceType<typeof LocalAudioTrack> | null = null;
   let left = false;
   // Kept rather than applied once: somebody who joins while this is on has to
@@ -161,21 +198,88 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
     }
   };
 
+  /**
+   * Whether the room lets one participant publish, or `null` when it has not
+   * said.
+   *
+   * Read from the permissions the server hands out, never inferred from whether
+   * a track is on the air: `!isMicrophoneEnabled` is true for somebody who
+   * pressed their own microphone button **and** for somebody the SFU silenced,
+   * and those are the two facts the moderation menu has to tell apart.
+   *
+   * Absent is unknown. A participant carries no `permissions` until a
+   * `ParticipantInfo` with a `permission` arrives for them, and reading that
+   * gap as `false` would draw everybody as silenced for the first moments of
+   * every call — and offer to un-silence people nobody had touched.
+   *
+   * Structurally typed rather than taking the SDK's `Participant`, so the
+   * narrowness of what this reads is visible at the signature.
+   */
+  const permissionToSpeak = (who: { permissions?: { canPublish: boolean } }): boolean | null =>
+    who.permissions ? who.permissions.canPublish : null;
+
+  /**
+   * The same question about this client. `null` while the room has not said.
+   *
+   * Guarded on the participant existing for the same reason `report` writes
+   * `local?.identity`: the type says it is always there, and the code here has
+   * to run before a connection and after a failed one.
+   */
+  const speechAllowed = (): boolean | null => {
+    const local = room.localParticipant;
+    return local ? permissionToSpeak(local) : null;
+  };
+
   const report = () => {
     const list: VoiceParticipant[] = [];
     const local = room.localParticipant;
     if (local?.identity) {
-      list.push({ userId: local.identity, name: local.name || "", muted: !local.isMicrophoneEnabled });
+      list.push({
+        userId: local.identity,
+        name: local.name || "",
+        muted: !local.isMicrophoneEnabled,
+        canSpeak: permissionToSpeak(local),
+      });
     }
     for (const remote of room.remoteParticipants.values()) {
-      list.push({ userId: remote.identity, name: remote.name || "", muted: !remote.isMicrophoneEnabled });
+      list.push({
+        userId: remote.identity,
+        name: remote.name || "",
+        muted: !remote.isMicrophoneEnabled,
+        canSpeak: permissionToSpeak(remote),
+      });
     }
     events.onParticipants(list);
+  };
+
+  /**
+   * What was last said upwards about this client's own permission.
+   *
+   * `undefined` is «nothing said yet», which is a third state beside the
+   * `boolean | null` the interface carries: it is what makes the first
+   * announcement of a call happen even when the answer is the ordinary one.
+   * Held so that a permission change belonging to somebody else — every
+   * `ParticipantPermissionsChanged` in the room reaches the same handler —
+   * costs the state above nothing.
+   */
+  let announcedSpeech: boolean | null | undefined;
+
+  const announceSpeech = () => {
+    const allowed = speechAllowed();
+    if (allowed === announcedSpeech) return;
+    announcedSpeech = allowed;
+    events.onSpeechAllowed(allowed);
   };
 
   const reportAndApply = () => {
     applyDeafened();
     report();
+  };
+
+  /** Both halves of the same event: who is in the room, and what it allows us. */
+  const reportAndAnnounce = () => {
+    report();
+    announceSpeech();
   };
 
   room
@@ -185,6 +289,26 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
     .on(RoomEvent.TrackMuted, report)
     .on(RoomEvent.TrackUnmuted, report)
     .on(RoomEvent.LocalTrackPublished, report)
+    // The three events a revoked publish permission actually raises, and the
+    // reason the rail used to show an unmuted microphone for somebody who
+    // could no longer speak: none of them was bound.
+    //
+    // `TrackUnpublished` is a **remote** participant's track going away —
+    // the SDK's own typing is `(publication: RemoteTrackPublication,
+    // participant: RemoteParticipant)`, and it never fires for us.
+    // `LocalTrackUnpublished` is the same event for this client, and it is the
+    // one that arrives when the SFU drops our microphone: the server sends a
+    // `trackUnpublished` signal, `LocalParticipant.handleLocalTrackUnpublished`
+    // unpublishes, and `isMicrophoneEnabled` goes false with nobody told.
+    // `ParticipantPermissionsChanged` is the fact underneath both, and the Room
+    // re-emits it for remote participants as well as for the local one
+    // (`setupParticipant` in livekit-client 2.22.3 forwards the participant
+    // event through `emitWhenConnected`), which is why it is the source of
+    // truth rather than the unpublish: a permission can be taken away without
+    // any track having been published to lose.
+    .on(RoomEvent.TrackUnpublished, report)
+    .on(RoomEvent.LocalTrackUnpublished, reportAndAnnounce)
+    .on(RoomEvent.ParticipantPermissionsChanged, reportAndAnnounce)
     .on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
       // Identities, not participant objects: everything above this seam knows
       // people by the id `chat_members` uses, and the SDK's participant is a
@@ -194,7 +318,10 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
     .on(RoomEvent.Reconnecting, () => events.onReconnecting())
     .on(RoomEvent.Reconnected, () => {
       events.onReconnected();
-      report();
+      // Announced as well as reported: a permission can be taken away while the
+      // transport is down, and the change event for it was raised at a moment
+      // this client had nowhere to receive it.
+      reportAndAnnounce();
     })
     .on(RoomEvent.Disconnected, (reason) => {
       // A disconnect this client asked for is not news; one it did not is.
@@ -206,26 +333,69 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
     async join(url, token, microphone) {
       await room.connect(url, token);
       if (!microphone) {
-        report();
+        reportAndAnnounce();
         return;
       }
       // `userProvidedTrack` is true: this track came from our own capture, and
       // the SDK must not stop it behind our back — the hook owns its lifetime
       // and ends it on leave, which is what turns the microphone light off.
       published = new LocalAudioTrack(microphone, undefined, true);
-      await room.localParticipant.publishTrack(published);
-      report();
+      // `source` named explicitly, and it is not cosmetic. A `LocalAudioTrack`
+      // built by hand carries `Track.Source.Unknown`; `publishTrack` overwrites
+      // that only from `opts.source`, and the value is then what both the SDK
+      // and the SFU key on. `isMicrophoneEnabled` reads
+      // `getTrackPublication(Track.Source.Microphone)` and answers **false**
+      // for an Unknown publication, for the local participant and for every
+      // remote one, so without this line every person in the call reports as
+      // muted for its whole length. `RemoteParticipant.setVolume` defaults to
+      // the same source, finds no publication and returns having done nothing,
+      // so without this line deafening is a no-op as well. All three measured
+      // in livekit-client 2.22.3: `publishOrRepublishTrack`
+      // (`if (opts.source) track.source = opts.source`),
+      // `Participant.getTrackPublication`, `RemoteParticipant.setVolume`.
+      await room.localParticipant.publishTrack(published, { source: Track.Source.Microphone });
+      reportAndAnnounce();
     },
     async setDeafened(next) {
       deafened = next;
       applyDeafened();
     },
     async setMuted(muted) {
+      // The room's answer comes first, and `!published` cannot stand in for it.
+      // When the SFU revokes this client's publish permission it removes the
+      // **publication**; `published` is still the `LocalAudioTrack` this
+      // function made, still non-null and still perfectly willing to be muted.
+      // So the early return below never fires on that path, `published.mute()`
+      // succeeds, the SDK has already detached its own mute listener in
+      // `unpublishTrack`, nothing reaches the SFU, and the button reports a
+      // mute this person did not press over audio nobody was carrying anyway.
+      //
+      // It does not throw, either: a press has to be answered, and the answer
+      // here is the permission itself — the state above turns that into a
+      // sentence naming who silenced them.
+      if (speechAllowed() === false) {
+        reportAndAnnounce();
+        return;
+      }
       if (!published) return;
-      // The SDK's own mute is what the other participants learn about. It also
-      // sets `enabled = false` on the underlying track, so there is one
-      // mechanism rather than ours beside its.
-      await (muted ? published.mute() : published.unmute());
+      if (muted) {
+        // The SDK's own mute is what the other participants learn about. It
+        // also sets `enabled = false` on the underlying track, so there is one
+        // mechanism rather than ours beside its.
+        await published.mute();
+        report();
+        return;
+      }
+      // Unmuting when the publication is gone: the SFU removed it while the
+      // permission was revoked, and the permission has since come back. Only
+      // unmuting the track would leave a control that reads as pressed and
+      // carries no audio — the same defect one step further along. The capture
+      // is still live because `stopLocalTrackOnUnpublish` is off above, so the
+      // same track goes back on the air rather than a new microphone prompt.
+      if (!room.localParticipant.getTrackPublication(Track.Source.Microphone)) {
+        await room.localParticipant.publishTrack(published, { source: Track.Source.Microphone });
+      }
+      await published.unmute();
       report();
     },
     async sampleHealth() {

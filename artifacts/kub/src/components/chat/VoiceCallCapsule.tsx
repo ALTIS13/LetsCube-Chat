@@ -5,6 +5,7 @@ import { TinyUserAvatar } from "./MessageReactions";
 import { VoiceSpeakingAvatar } from "./VoiceSpeakingAvatar";
 import { VoiceConnectionPanel } from "./VoiceConnectionPanel";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
+import { useVoiceSpeechRevoked } from "@/hooks/useVoiceCall";
 import { CAPSULE_GLASS, CAPSULE_CONTROL_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING } from "@/lib/controlSurface";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,13 @@ import { orderVoiceParticipants, type VoiceCapsuleView, type VoiceChannelSummary
  * wrapped in `VoiceSpeakingAvatar`, which subscribes to a boolean of its own so
  * that a syllable renders one face rather than the capsule. Until then this
  * note said the capsule deliberately did not, and named it slice 4.
+ *
+ * And it tells the person a moderator has silenced them (D-221). That fact
+ * exists only in the SFU — the gateway revokes `canPublish` and writes no
+ * column — so it does not arrive with `view`, which is built by a pure function
+ * from things a `node --test` process can hold; it is read from the call store
+ * by `useVoiceSpeechRevoked`, scoped to this channel, the way
+ * `VoiceSpeakingAvatar` reads its own boolean.
  */
 
 export interface VoiceCallCapsuleProps {
@@ -52,6 +60,27 @@ export interface VoiceCallCapsuleProps {
 
 /** How many faces fit beside two names at 360 CSS pixels, measured by counting. */
 const FACES = 3;
+
+/**
+ * The capsule's control when it is present but not offered.
+ *
+ * `DISABLED_SINK` cannot be used here for the same reason `CAPSULE_CONTROL_GLASS`
+ * exists at all: these controls carry their material on a glass layer that is
+ * their first child, and a veil laid on the button's own background sits
+ * underneath it, where the light theme's .80 fill hides it. So the step goes on
+ * the glass, as `CAPSULE_CONTROL_GLASS` does for hover and press — one
+ * `--kub-sink-veil` as a background **image**, which composites over the fill
+ * already there and therefore cannot go flush with its own ground (rule 5 of
+ * docs/operations/interface-material.md). Not `opacity`: that rule measured a
+ * faded control on a translucent panel at 2.23:1 against a threshold of 4.5,
+ * because the wallpaper shows straight through it.
+ *
+ * Here rather than beside its sibling in `lib/chatChrome.ts` only because that
+ * file belongs to another change in flight; it is the same shape and belongs
+ * next to it.
+ */
+const CAPSULE_CONTROL_UNAVAILABLE_GLASS =
+  "rounded-full border border-[color:var(--glass-line)] bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]";
 
 export function VoiceCallCapsule({
   channel,
@@ -73,6 +102,9 @@ export function VoiceCallCapsule({
   // whose channel list arrives after mount goes hidden to visible in place,
   // which is the ordinary case rather than an edge one.
   const [healthOpen, setHealthOpen] = useState(false);
+  // Above the early return with it, and scoped to this chat's channel so a
+  // capsule drawing some other room cannot say this person was silenced in it.
+  const speechRevoked = useVoiceSpeechRevoked(channel?.id ?? null);
 
   if (!view.visible || !channel) return null;
 
@@ -147,6 +179,27 @@ export function VoiceCallCapsule({
           >
             {view.detail}
           </div>
+          {/* The person who was silenced, told. Without this line their track
+              is simply gone: the microphone button stops doing anything and
+              nothing anywhere says why, which reads as a broken microphone or a
+              broken application rather than as somebody's decision. So the
+              sentence names the moderator — that is the whole content of it.
+
+              Not `truncate`, unlike the two lines above: those are a name and a
+              list, where an ellipsis loses nothing that matters, and this is the
+              one thing in the capsule that has to be read to the end. It wraps
+              instead, and the chrome stack is measured with a border-box
+              `ResizeObserver`, so the conversation's top inset follows on its
+              own. `--kub-danger-text`, the token tuned for words rather than for
+              marks; there is no `--kub-warn-text` in this product. */}
+          {speechRevoked && (
+            <div
+              className="text-[11px] leading-snug text-[color:var(--kub-danger-text)]"
+              data-testid="voice-capsule-forced-mute"
+            >
+              Модератор выключил ваш микрофон.
+            </div>
+          )}
         </div>
 
         {shown.length > 0 && (
@@ -210,17 +263,43 @@ export function VoiceCallCapsule({
         )}
 
         {view.mute && (
+          /* Still drawn while somebody is silenced, and inert rather than
+             absent: a control that disappears is read as a feature that went
+             away, where a control that is visibly not offered is read as a
+             state — and the sentence beside it says whose state. `disabled`
+             rather than `aria-disabled`, because there is nothing useful a press
+             could do and the browser refusing it is better than a handler that
+             silently declines. */
           <button
             type="button"
             onClick={onToggleMute}
-            className="group/capsule relative h-8 w-8 shrink-0 rounded-full"
+            disabled={speechRevoked}
+            className={cn(
+              "group/capsule relative h-8 w-8 shrink-0 rounded-full",
+              speechRevoked && "cursor-not-allowed",
+            )}
             aria-pressed={view.muted}
-            aria-label={view.muted ? "Включить микрофон" : "Выключить микрофон"}
-            title={view.muted ? "Включить микрофон" : "Выключить микрофон"}
+            aria-label={
+              speechRevoked
+                ? "Модератор выключил ваш микрофон"
+                : view.muted
+                  ? "Включить микрофон"
+                  : "Выключить микрофон"
+            }
+            title={
+              speechRevoked
+                ? "Модератор выключил ваш микрофон"
+                : view.muted
+                  ? "Включить микрофон"
+                  : "Выключить микрофон"
+            }
             data-testid="voice-capsule-mute"
             data-muted={view.muted ? "true" : "false"}
+            data-unavailable={speechRevoked ? "true" : "false"}
           >
-            <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />
+            <KubGlassLayer
+              className={speechRevoked ? CAPSULE_CONTROL_UNAVAILABLE_GLASS : CAPSULE_CONTROL_GLASS}
+            />
             <span className="relative flex h-full w-full items-center justify-center">
               <KubIcon
                 name={view.muted ? "microphoneSlash" : "microphone"}

@@ -47,7 +47,12 @@ const CHANNEL: VoiceChannelSummary = {
   maxParticipants: 10,
 };
 
-const person = (userId: string, name: string, muted = false): VoiceParticipant => ({ userId, name, muted });
+const person = (
+  userId: string,
+  name: string,
+  muted = false,
+  canSpeak: boolean | null = null,
+): VoiceParticipant => ({ userId, name, muted, canSpeak });
 
 function capsule(over: Partial<Parameters<typeof voiceCapsuleState>[0]> = {}) {
   return voiceCapsuleState({
@@ -171,9 +176,9 @@ test("names come from the chat's member list, with «Участник» as the f
   const directory = new Map([[ANNA, "Анна Смирнова"], [PETR, "  "]]);
 
   assert.deepEqual(resolveVoiceParticipants([ANNA, PETR, "unknown"], directory), [
-    { userId: ANNA, name: "Анна Смирнова", muted: false },
-    { userId: PETR, name: "Участник", muted: false },
-    { userId: "unknown", name: "Участник", muted: false },
+    { userId: ANNA, name: "Анна Смирнова", muted: false, canSpeak: null },
+    { userId: PETR, name: "Участник", muted: false, canSpeak: null },
+    { userId: "unknown", name: "Участник", muted: false, canSpeak: null },
   ]);
 
   // The token's name is a snapshot taken at mint time, so the current member
@@ -184,10 +189,38 @@ test("names come from the chat's member list, with «Участник» as the f
       directory,
     ),
     [
-      { userId: ANNA, name: "Анна Смирнова", muted: true },
-      { userId: "unknown", name: "Гость", muted: false },
-      { userId: "blank", name: "Участник", muted: false },
+      { userId: ANNA, name: "Анна Смирнова", muted: true, canSpeak: null },
+      { userId: "unknown", name: "Гость", muted: false, canSpeak: null },
+      { userId: "blank", name: "Участник", muted: false, canSpeak: null },
     ],
+  );
+});
+
+test("outside the call nobody is claimed to be able to speak, which is not the same as silenced", () => {
+  // `canSpeak` is what the moderation menu reads to tell «this person muted
+  // themselves» from «a moderator silenced this person», and the table knows
+  // neither. `null` is the only honest answer out here.
+  //
+  // The mutation this exists for is `canSpeak: true`, which reads as a claim
+  // and would put «Заглушить» on somebody already silenced in every room the
+  // reader is not connected to — every room but one. `false` is worse still: it
+  // would draw the whole group as silenced.
+  for (const entry of resolveVoiceParticipants([ANNA, PETR], new Map())) {
+    assert.equal(
+      entry.canSpeak,
+      null,
+      "the table answered whether somebody may speak, and it cannot know that",
+    );
+  }
+
+  // And the rename path must not invent one either: it carries the SDK's answer
+  // through untouched, including an explicit `false`.
+  assert.deepEqual(
+    renameVoiceParticipants([person(ANNA, "Анна", true, false)], new Map()).map(
+      (entry) => entry.canSpeak,
+    ),
+    [false],
+    "renaming somebody changed whether they may speak",
   );
 });
 
