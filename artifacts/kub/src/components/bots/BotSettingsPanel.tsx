@@ -240,14 +240,39 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
           <Section title="Команды" error={errors.commands} description="До 100 команд, доступных пользователям бота.">
             <div className="space-y-2">
               {commands.map((command, index) => (
-                <div key={`${command.command}-${index}`} className="grid gap-2 border-b border-[color:var(--kub-rule)] pb-3 sm:grid-cols-[10rem_1fr_2.75rem]">
+                /* D-222 tier 2. This was `sm:`, and inside a pane the window
+                   does not set it was not cramped — it was **off screen**. The
+                   detail pane is the viewport minus the 22rem list, so at a 768
+                   window it is 416px and the section's content is 334px, while
+                   the three tracks resolve to 160 + 217 + 44 with two 8px gaps
+                   = 437: the description field refuses to shrink past 217, so
+                   the grid overflowed the pane by 103px and «удалить команду»
+                   was drawn past its right edge, unreachable. Measured 2026-09-18
+                   at 768, 1024 and 700, both themes.
+
+                   The threshold is that 437 read back as a container width:
+                   content is `section - 34`, so the row form is honest from a
+                   471px section, rounded up to 30rem. A viewport number cannot
+                   do this — at a 700px window the same section is 652px and the
+                   three columns are right, at 768 it is 368px and they are not,
+                   and `sm:` answers the same thing at both. */
+                <div key={`${command.command}-${index}`} className="grid gap-2 border-b border-[color:var(--kub-rule)] pb-3 @min-[30rem]:grid-cols-[10rem_1fr_2.75rem]">
                   <KubInput aria-label={`Команда ${index + 1}`} value={command.command} disabled={!editable} onChange={(event) => setCommands(commands.map((item, itemIndex) => itemIndex === index ? { ...item, command: event.target.value.toLowerCase() } : item))} />
                   <KubInput aria-label={`Описание команды ${index + 1}`} value={command.description} disabled={!editable} onChange={(event) => setCommands(commands.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} />
                   <button type="button" aria-label={`Удалить команду ${index + 1}`} disabled={!editable} className="h-11 w-11 rounded-md text-[color:var(--kub-danger)] kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed" onClick={() => setCommands(commands.filter((_, itemIndex) => itemIndex !== index))}><KubIcon name="delete" size={18} className="mx-auto" /></button>
                 </div>
               ))}
               {commands.length === 0 && <KubEmptyState title="Команд пока нет" description="Добавьте первую команду для Bot API." className="py-5" />}
-              <div className="flex flex-col gap-2 sm:flex-row">
+              {/* D-222 tier 2, and the same threshold on the webhook pair below.
+                  Under Inter the two labels here are 161.45 + 175.19 and the
+                  webhook pair is 173.41 + 156.23; with the 8px gap the wider of
+                  the two needs 344.64px, so the row form is honest from a
+                  378.64px section — 24rem. Under `sm:` it took the row at a 334px
+                  content box instead, shrank both buttons and broke each label
+                  over two lines. Narrow window, measured rather than guessed:
+                  a 768–778pt viewport here and 768–771 for the webhook pair,
+                  which is why this is tier 2 and not tier 1. */}
+              <div className="flex flex-col gap-2 @min-[24rem]:flex-row">
                 <KubButton variant="secondary" className="min-h-11" disabled={!editable || commands.length >= 100} onClick={() => setCommands([...commands, { command: "", description: "" }])}>Добавить команду</KubButton>
                 <KubButton className="min-h-11" disabled={!editable || mutations.commands.isPending} onClick={() => void run("commands", () => mutations.commands.mutateAsync(commands))}>Сохранить команды</KubButton>
               </div>
@@ -263,7 +288,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
                   for why the secret genuinely cannot be kept. */}
               <KubInput label="Секрет подписи" type="password" value={webhook.secret} disabled={!editable} onChange={(event) => setWebhook({ ...webhook, secret: event.target.value })} autoComplete="new-password" hint={BOT_WEBHOOK_SECRET_HINT} />
               <label className="flex min-h-11 items-center gap-3 text-sm text-[color:var(--kub-text)]"><input type="checkbox" checked={webhook.drop} disabled={!editable} onChange={(event) => setWebhook({ ...webhook, drop: event.target.checked })} />Удалить ожидающие обновления</label>
-              <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="flex flex-col gap-2 @min-[24rem]:flex-row">
                 <KubButton className="min-h-11" disabled={!editable || !webhook.url || !webhook.secret} onClick={saveWebhook}>Сохранить webhook</KubButton>
                 {detail.webhook.configured && <KubButton variant="danger" className="min-h-11" disabled={!editable} onClick={() => void deleteWebhook()}>Удалить webhook</KubButton>}
               </div>
@@ -342,9 +367,17 @@ function Notice({ children }: { children: string }) {
  * buttons that produce it are at the foot of every one of these boxes, and a
  * message a person has to scroll back up to read is the defect this replaced,
  * only shorter.
+ *
+ * It is also **the box D-222's tier-2 thresholds are measured against**, which
+ * is what `@container` is doing on it. Its children get `section - 34` (its own
+ * `p-4` and two borders), and the section itself is the detail pane less the
+ * tab content's padding — a width no viewport predicts, because the pane is the
+ * whole window below `md` and the window minus a 22rem list above it. Nothing
+ * else changes: `kub-glass` already sets `isolation` and a backdrop filter, so
+ * this element was a stacking context and a containing block before.
  */
 function Section({ title, description, error, children }: { title: string; description?: string; error?: string | null; children: React.ReactNode }) {
-  return <section aria-labelledby={`bot-section-${title}`} className="kub-glass rounded-md border border-[color:var(--kub-border-color)] p-4"><h3 id={`bot-section-${title}`} className="text-sm font-semibold text-[color:var(--kub-text)]">{title}</h3>{description && <p className="mt-1 text-xs leading-5 text-[color:var(--kub-muted)]">{description}</p>}<div className="mt-4">{children}</div>{error && <p role="alert" data-bot-section-error={title} className="mt-3 rounded-md border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-sm leading-5 text-[color:var(--kub-danger-text)]">{error}</p>}</section>;
+  return <section aria-labelledby={`bot-section-${title}`} className="@container kub-glass rounded-md border border-[color:var(--kub-border-color)] p-4"><h3 id={`bot-section-${title}`} className="text-sm font-semibold text-[color:var(--kub-text)]">{title}</h3>{description && <p className="mt-1 text-xs leading-5 text-[color:var(--kub-muted)]">{description}</p>}<div className="mt-4">{children}</div>{error && <p role="alert" data-bot-section-error={title} className="mt-3 rounded-md border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-sm leading-5 text-[color:var(--kub-danger-text)]">{error}</p>}</section>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

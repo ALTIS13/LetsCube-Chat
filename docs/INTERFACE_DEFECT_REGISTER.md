@@ -13960,6 +13960,13 @@ Tier 2 — bites in a particular viewport window rather than at the default:
 column into 352+320 at a 1024px viewport. **Worth one screenshot each at 768 and
 1024 before anybody edits them** — tier 2 is arithmetic, not observed pixels.
 
+**Photographed on 2026-09-18, and three of the numbers above are wrong.** Three
+of these eight lines bite and five do not; the support pane is 622px and splits
+302+320, not 672 and 352+320; and the tabs are 97px wide against a widest label
+of 83.95px, which is why they read cleanly. The measurements, the verdict on
+each line and the fix are in «Tier 2 on 2026-09-18» below. **This paragraph is
+kept as written because the instruction in it was right and paid for itself.**
+
 Tier 3 — cramped but not broken, so candidates and not defects:
 `sidebar/SidebarHeader.tsx:190, :319, :321` (11 occurrences) force one row from
 `md:` inside a 260–540px column, but `min-w-0`/`flex-1` let the field shrink.
@@ -14091,10 +14098,13 @@ count stands, and the fix vocabulary stands.
 ### Fixed on 2026-09-18: tier 1 and half B, with five corrections to this entry
 
 **What is done:** every tier-1 line, both pill primitives, and every half-B site
-except the two the tier-1 work owned. **What is not:** tier 2 (which the entry
-says needs a screenshot each at 768 and 1024 before anybody edits it — still
-true, still unscreenshotted), tier 3, and `SidebarHeader`. The status is `[~]`
-rather than `[x]` for that reason.
+except the two the tier-1 work owned. **What is not:** tier 2, tier 3 and
+`SidebarHeader`. The status is `[~]` rather than `[x]` for that reason.
+
+**Tier 2 closed on 2026-09-18**, screenshots first as this entry demanded: three
+of its eight lines bite and are fixed, five are acquitted, and three of the
+numbers it stated were wrong. See «Tier 2 on 2026-09-18» below. Tier 3 and
+`SidebarHeader` are still open, which is why the status has not moved.
 
 #### The vocabulary, established once
 
@@ -14238,7 +14248,9 @@ claim is only dangerous while it is silent.
 #### Still open, and one new candidate
 
 Tier 2 and tier 3 stand exactly as written above, screenshots at 768 and 1024
-still owed before anybody edits them. One thing found while measuring and left
+still owed before anybody edits them — **tier 2's were taken on 2026-09-18 and
+are recorded at the end of this entry; tier 3's are still owed.** One thing
+found while measuring and left
 alone: **`StorageSection`'s heading drops its ⓘ to a line of its own at the 260
 column** (`flex flex-wrap`, 205px wanted against 136px). Pre-existing in the
 stacked form, the same class as the defect `WindowsStartupSection`'s own comment
@@ -14265,6 +14277,163 @@ text — was added rather than the guard deleted; `shrink-0` on
 minimum) and was removed; and removing it from `NewGroupModal`'s «×» on the same
 reasoning went **red at 8px instead of 10** — a bare `<svg>` carries no
 intrinsic width the flex algorithm respects. It is back, with the number.
+
+### Tier 2 on 2026-09-18, photographed first: three lines of eight bite, and three of this entry's numbers were wrong
+
+The entry asked for **one screenshot each at 768 and 1024 before anybody edits
+them**, on the grounds that tier 2 was arithmetic and not observed pixels. That
+was the right instruction and it paid: of the eight lines it names, **three
+bite, five do not**, and the numbers behind two of the five were the reason they
+looked worse than they are.
+
+A third viewport was added to the pair the entry asked for: **700**, which is
+the width that makes the mechanism visible. Both surfaces put a fixed 22rem list
+beside the pane from `md` upward, so the pane is the whole window at 700 and the
+window minus 352 at 768 — one `sm:` state, two containers, two required answers.
+Neither container is dragged, so tier 1's instrument («a pair of widths at one
+viewport») is not available here and the pair is built the other way round; see
+Coverage below.
+
+Measured with Inter on the page — the capture spec lets the font host through,
+for the reason correction 1 of the tier-1 pass records — at 700, 768 and 1024,
+in both themes. Section = pane − 48, content = section − 34, at every width.
+
+**Read the «window where it bites» column as arithmetic, because it is.** Only
+its left edge, 768, was photographed; the right edge is that photograph's
+numbers — a natural width against the content box — carried along a
+pane-to-window relation that held exactly at all three widths. It is stated
+because the width of the window matters to how much this is worth, and it is
+labelled because the whole reason this pass exists is that the last set of
+numbers here was not.
+
+**Convicted.**
+
+| Line | What the pixels show | Window where it bites |
+|---|---|---|
+| `bots/BotSettingsPanel.tsx:243` | Not cramped — **off screen**. The three tracks resolve to 160 + 217 + 44 with two 8px gaps whatever the box is, because the description field will not shrink past 217, so in a 334px content box the grid ran **103px past the pane** and «удалить команду» was drawn past the right edge of the window with nothing to scroll it into view. | 768–871 |
+| `:250` | «Добавить команду» and «Сохранить команды» shrink to 156.41 + 169.59 against natural 161.45 + 175.19, and **each label breaks over two lines** inside a button that stays 44px tall. | 768–778 |
+| `:266` | The same, on «Сохранить webhook» + «Удалить webhook» — natural 173.41 + 156.23 + an 8px gap is 337.64 against a 334px content box. | 768–771 |
+
+**Acquitted, with the measurement that acquits them.**
+
+- **`:169`, the four Russian tabs.** «~100px each» is right — 97px at 768 — and
+  the implication is wrong. The widest label, «Диагностика», is **83.95px**, so
+  it sits inside its own 97px cell with 6.5px to spare on each side, and the
+  nearest label, «Команда» at 57.2px in a cell of the same 97px, ends 30.4px
+  before it — 6.5 plus the 4px gap plus its own 19.9. Nothing clips, nothing
+  wraps (`TabsTrigger` carries `whitespace-nowrap`), and a 3× crop of the strip
+  is legible. **Note the instrument, because it nearly got this wrong the other
+  way:** a centred `nowrap` label wider than its content box spills into its own
+  padding without ever raising `scrollWidth`, so an overflow probe answers
+  «fits» for a label that does not. The number that settles it is the text's own
+  width, which is why the probe records it.
+- **`:223` and `:287`.** Both already carry `flex-wrap`, so at 768 they wrap to
+  two rows at natural width instead of squeezing — `:287` is 96px tall there and
+  each button is one line. That is the graceful form, not the defect.
+- **`:278`, the privacy row.** Identical in shape at 700, 768 and 1024: the name
+  block is `min-w-0 flex-1` and absorbs the whole difference (419 → 135 → 391px)
+  while «Запросить полный доступ» keeps its 190.72px. Nothing wrapped at any
+  width.
+- **`pages/admin/support/SupportTicketDetails.tsx:150`.** Cramped, not broken —
+  a tier-3 candidate at most. **And both of this entry's numbers for it are
+  wrong: the pane is 622px, not 672, and the split is 302 + 320, not 352 + 320.**
+  The admin shell costs a further 50px that the arithmetic did not know about,
+  so the conversation column's floor is 302px, reached at exactly 1024 and
+  widening by one pixel per pixel above it. In that column nothing clips,
+  nothing overflows, every action in the 320px sidebar is one line, and the
+  widest run of text is 200.63px. Left alone, and the register corrected rather
+  than the code.
+
+#### The fix, and the numbers behind the two thresholds
+
+Same vocabulary as tier 1: `@container` on the measured box, `@min-[Nrem]:` on
+the utilities, no `@sm:`/`@md:` anywhere.
+
+The measured box is **`Section`**, the one box every tab of this panel is built
+from. It already carried `kub-glass`, which sets `isolation` and a backdrop
+filter, so it was a stacking context and a containing block before this — adding
+`container-type: inline-size` takes nothing new. Its children get `section − 34`.
+
+| Line | Threshold | The measurement behind it |
+|---|---|---|
+| `:243` command grid | **30rem / 480px** | the description field's own floor is 217px, so the three tracks plus two gaps need 437px of content, which is a 471px section; 30rem is the next whole rem |
+| `:250` and `:266` | **24rem / 384px** | the wider of the two pairs is 161.45 + 175.19 + an 8px gap = 344.64px, which is a 378.64px section; 24rem is the next whole rem. One number covers both because the wider requirement wins |
+
+A viewport number cannot do either: at 700 the same section is 652px and both
+forms are right, at 768 it is 368px and neither is, and `sm:` answers the same
+thing at both.
+
+**What the fix deliberately did not do.** `:250` and `:266` could have been
+given `sm:flex-wrap` instead — the spelling `:223` and `:287` already use, no
+threshold at all, graceful for any label length. It was rejected because it
+leaves the viewport breakpoint in place and because the assertion it permits is
+weaker: «the labels stay on one line» is font-dependent, and the fixture has no
+Inter, so it would pass under Segoe UI on a build that ships broken. A
+direction, like a track count, does not move with the font.
+
+**What the fix changes below `md`, stated rather than discovered later.** The
+thresholds are container widths, so they also decide the phone form. At a 412pt
+window — the widest project in the narrow half of the matrix — the section is
+380px, under both thresholds, and every control stays stacked exactly as it was.
+The command row gains its three-column form between 520 and 639 points, where
+`sm:` used to stack it although it fitted; the button rows gain their row form
+from 432. Both are widths where the measurement says there is room.
+
+#### Coverage
+
+`tests/e2e/bot-settings-container-queries.spec.ts` (6 contracts) and
+`tests/e2e/d222-tier2-capture.spec.ts` (the pixels, 34 frames each side).
+
+**The instrument is a pair of viewports, not a pair of widths**, and that is the
+one place tier 2 could not copy tier 1. Nothing here is dragged by hand, so two
+container widths at one window do not exist; the pair is inverted instead:
+
+- **one media state, two containers** — 700 and 768 both answer `sm:` true, and
+  the section behind them is 652px and 368px. They must lay out *differently*.
+  Putting `sm:` back turns the 768 half red while the 700 half keeps passing for
+  the wrong reason;
+- **one container, two media states** — 700 and 1052 give the *same* 652px
+  section (1052 − 352 = 700) while `md:` is false at one and true at the other.
+  They must lay out *identically*, which is what forbids swapping `sm:` for a
+  different viewport number instead of fixing the mechanism.
+
+A third contract states the defect in its own terms rather than as a form: no
+delete button is ever drawn past the right edge of the pane. A fourth runs only
+on the narrow projects and says the phone did not move.
+
+Pixels in `output/d222-tier2/{before,after}/png` — 34 files each, same names,
+700/768/1024 × dark/light, the tab strip cropped on its own, and the «Команда»
+and «Диагностика» tabs at 768 because the shared `Section` reaches them too.
+**Four of the 34 differ and the other 30 are byte-identical**: the API tab at
+768 in both themes, which is precisely the pair of widths convicted above.
+
+**Eight mutations, eight red.** No green to explain. `sm:` and `md:` back on
+each of the two lines (four), the section stripped of its container (one), and
+each threshold moved to a wrong number (two more, both of which also turn the
+*phone* contract red, which is the guard working). The eighth, deleting the row
+form outright, goes red because the probe can no longer find the rows at all —
+a premise failing loudly rather than a layout assertion, and worth recording as
+that rather than as a fourth kind of proof.
+
+**Two instrument notes, both of which produced a false green first.** Playwright
+is not the only thing that has to see an edit: Tailwind generates the stylesheet
+from the source it scans, and a scripted write the watcher misses leaves the
+module correct and the rule missing. Five mutations came back green that way
+before the runner was made to wait for proof. And the proof itself has to be
+asked properly — a plain `/src/index.css?direct` keeps serving a **merged**
+answer that still carries the rule the edit deleted, so «the old rule is gone»
+never becomes true; a nonce on the query returns a freshly generated, purged
+stylesheet. The runner is kept at `output/d222-tier2/mutations.mjs` with both
+lessons written into it.
+
+#### Still open
+
+Tier 3 stands exactly as written above, and `SidebarHeader` with it.
+`SupportTicketDetails:150` moves from tier 2 to the tier-3 list on the
+measurement above. One thing seen while measuring and left alone: in the
+stacked command row the 44px delete button sits alone on its own line, which is
+the form `sm:` already produced below 640 and not something this fix
+introduced — a tier-3 candidate, not part of this change.
 
 
 ---
