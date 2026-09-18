@@ -2,10 +2,24 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
+import {
+  RowActionHeader,
+  RowActionMenu,
+  RowActionSheet,
+  rowMenuPlacement,
+  type RowAction,
+  type RowMenuPlacement,
+} from "@/components/kub/RowActions";
 import { TinyUserAvatar } from "./MessageReactions";
 import { VoiceSpeakingAvatar } from "./VoiceSpeakingAvatar";
+import { useVoiceModeration } from "@/hooks/useVoiceModeration";
+import { requestAppConfirm } from "@/lib/appDialogs";
 import { CAPSULE_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING, FOCUS_RING_INSET, PRESS_SINK } from "@/lib/controlSurface";
+import {
+  voiceModerationActions,
+  type VoiceModerationAction,
+} from "@/lib/voiceModeration";
 import {
   CHANNEL_RAIL_RETRY,
   CHANNEL_RAIL_UNREADABLE,
@@ -75,6 +89,16 @@ export interface ChannelRailProps {
   selfId: string | null;
   /** This reader's role in the group: `owner`, `admin`, `member`, or null. */
   role: string | null;
+  /**
+   * Any member's role in this group, from the chat's own member list.
+   *
+   * Needed by the moderation menu and by nothing else. Without it the rail
+   * would have to offer «Заглушить» on the owner and let the gateway refuse —
+   * telling the reader a rule it already knew, which is the defect D-165
+   * records. `null` for somebody with no membership row, which is a real state
+   * and exactly when disconnecting them is the point.
+   */
+  roleOf?: (userId: string) => string | null;
   /** The room this client's call is in, which need not be one of these. */
   callChannelId: string | null;
   /** True while a join is in flight, so a second press cannot start a second one. */
@@ -103,6 +127,7 @@ function ChannelRailList({
   faces,
   selfId,
   role,
+  roleOf,
   callChannelId,
   joining,
   onSelectText,
@@ -113,6 +138,131 @@ function ChannelRailList({
 }: ChannelRailProps) {
   const [collapsed, setCollapsed] = useState<readonly string[]>([]);
   const canManage = canManageChannels(role);
+  const moderation = useVoiceModeration();
+  const [occupantMenu, setOccupantMenu] = useState<OccupantMenu | null>(null);
+
+  /**
+   * Opens the menu on one occupant, or does nothing when there is nothing to
+   * offer.
+   *
+   * The pointer decides the shape, not the viewport: a coarse pointer gets the
+   * sheet from the foot of the screen, everything else gets a menu where the
+   * pointer is. That is the same reading `ChatInfoPanel` makes for the same
+   * pair of components, and it is a reading about the input device rather than
+   * about the window's width — a tablet held sideways is wide and still a
+   * finger.
+   */
+  const openOccupantMenu = useCallback(
+    (
+      channelId: string,
+      person: { userId: string; name: string; canSpeak: boolean | null; face: string | null },
+      position: { x: number; y: number },
+    ) => {
+      const targetRole = roleOf?.(person.userId) ?? null;
+      const offered = voiceModerationActions(
+        { selfId, role },
+        { userId: person.userId, role: targetRole, canSpeak: person.canSpeak },
+      );
+      // A row that opens an empty menu is the same defect as a control that
+      // does nothing, so the row is not pressable at all in that case — this is
+      // the second gate rather than the only one.
+      if (offered.length === 0) return;
+      const coarse = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
+      setOccupantMenu({
+        channelId,
+        userId: person.userId,
+        name: person.name,
+        role: targetRole,
+        canSpeak: person.canSpeak,
+        face: person.face,
+        mode: coarse ? "sheet" : "menu",
+        placement: rowMenuPlacement(position),
+      });
+    },
+    [role, roleOf, selfId],
+  );
+
+  /**
+   * The actions for whoever the menu is open on, built from the same rules the
+   * row used to decide it was pressable — so the row and the menu cannot
+   * disagree about who may do what.
+   */
+  const menuActions: RowAction[] = occupantMenu
+    ? voiceModerationActions(
+        { selfId, role },
+        { userId: occupantMenu.userId, role: occupantMenu.role, canSpeak: occupantMenu.canSpeak },
+      ).map((action) => ({
+        id: action,
+        ...MODERATION_WORDS[action],
+        // Only the disconnect asks. A silence is undone by the item above it
+        // and costs nothing to try; putting somebody out of a room interrupts
+        // them mid-sentence and cannot be undone from here — they have to come
+        // back themselves.
+        confirm:
+          action === "disconnect"
+            ? () =>
+                requestAppConfirm({
+                  title: "Отключить от голосового канала?",
+                  description: `${occupantMenu.name} выйдет из разговора. Вернуться в канал это не запрещает.`,
+                  confirmLabel: "Отключить",
+                  tone: "danger",
+                  icon: "userRemove",
+                })
+            : undefined,
+        // The controller's answer is deliberately dropped here: it already said
+        // what happened, in a line of its own, and there is nothing this menu
+        // does differently on a refusal — it closes either way.
+        run: async () => {
+          await moderation.moderate({
+            channelId: occupantMenu.channelId,
+            target: { userId: occupantMenu.userId, name: occupantMenu.name },
+            action,
+          });
+        },
+      }))
+    : [];
+
+  const menuHeader = occupantMenu ? (
+    <RowActionHeader
+      // The person, not the room. The first capture put the channel speaker
+      // glyph here while the rail row directly above it showed that person as
+      // an avatar — one human being with two marks, one of them belonging to
+      // something else entirely.
+      avatar={
+        <TinyUserAvatar
+          user={{
+            id: occupantMenu.userId,
+            full_name: occupantMenu.name,
+            username: null,
+            avatar_url: occupantMenu.face,
+          }}
+        />
+      }
+      title={occupantMenu.name}
+      subtitle={occupantMenu.canSpeak === false ? "Заглушён модератором" : undefined}
+    />
+  ) : null;
+
+  const busyActionId =
+    moderation.busy && occupantMenu && moderation.busy.userId === occupantMenu.userId
+      ? moderation.busy.action
+      : null;
+
+  /** Ask, then mark busy, then run. The other order puts «Выполняем…» under an unanswered question. */
+  const runOccupantAction = useCallback(
+    async (action: RowAction) => {
+      if (action.confirm && !(await action.confirm())) {
+        setOccupantMenu(null);
+        return;
+      }
+      try {
+        await action.run();
+      } finally {
+        setOccupantMenu(null);
+      }
+    },
+    [],
+  );
 
   const toggle = useCallback((categoryId: string) => {
     setCollapsed((current) =>
@@ -228,6 +378,9 @@ function ChannelRailList({
                   inCall={callChannelId === channel.id}
                   joining={joining}
                   onJoin={onJoinVoice}
+                  moderatableBy={{ selfId, role }}
+                  roleOf={roleOf}
+                  onOccupantMenu={openOccupantMenu}
                 />
               ),
             )}
@@ -254,9 +407,65 @@ function ChannelRailList({
           <span className="min-w-0 flex-1 truncate text-left">Управление каналами</span>
         </button>
       )}
+
+      {occupantMenu && occupantMenu.mode === "menu" && (
+        <RowActionMenu
+          header={menuHeader}
+          actions={menuActions}
+          placement={occupantMenu.placement}
+          busyActionId={busyActionId}
+          layer={MODERATION_MENU_LAYER}
+          onClose={() => setOccupantMenu(null)}
+          onRun={runOccupantAction}
+        />
+      )}
+      {occupantMenu && occupantMenu.mode === "sheet" && (
+        <RowActionSheet
+          header={menuHeader}
+          actions={menuActions}
+          busyActionId={busyActionId}
+          layer={MODERATION_MENU_LAYER}
+          onClose={() => setOccupantMenu(null)}
+          onRun={runOccupantAction}
+        />
+      )}
     </div>
   );
 }
+
+/**
+ * Above the drawer form of this rail, which stands at `z-[60]`.
+ *
+ * 80 rather than a fresh number: `ChatInfoPanel` already passes 80 to these
+ * same components for exactly this reason, and that was a measurement — the
+ * default 50 renders underneath a surface at 60, so a menu opened from the
+ * drawer would be painted behind the list it was opened from. One number for
+ * one problem.
+ */
+const MODERATION_MENU_LAYER = 80;
+
+/** Which occupant a menu is open on, and how it was opened. */
+interface OccupantMenu {
+  readonly channelId: string;
+  readonly userId: string;
+  readonly name: string;
+  readonly role: string | null;
+  readonly canSpeak: boolean | null;
+  /** Their avatar, so the menu names the person the row named. */
+  readonly face: string | null;
+  readonly mode: "menu" | "sheet";
+  readonly placement: RowMenuPlacement;
+}
+
+/** The words for each action, and which of them asks first. */
+const MODERATION_WORDS: Record<
+  VoiceModerationAction,
+  { label: string; icon: "microphoneSlash" | "microphone" | "userRemove"; danger?: boolean }
+> = {
+  silence: { label: "Заглушить в канале", icon: "microphoneSlash" },
+  unsilence: { label: "Разрешить говорить", icon: "microphone" },
+  disconnect: { label: "Отключить от канала", icon: "userRemove", danger: true },
+};
 
 /**
  * The chosen row's language, which is the chat list's: a cyan wash that steps
@@ -316,6 +525,9 @@ function VoiceChannelRailRow({
   inCall,
   joining,
   onJoin,
+  moderatableBy,
+  roleOf,
+  onOccupantMenu,
 }: {
   channel: ServerChannel;
   occupants: readonly VoiceParticipant[];
@@ -325,6 +537,14 @@ function VoiceChannelRailRow({
   inCall: boolean;
   joining: boolean;
   onJoin: (channel: ServerChannel) => void;
+  /** The reader, for the moderation rules. Same pair the list holds. */
+  moderatableBy: { selfId: string | null; role: string | null };
+  roleOf?: (userId: string) => string | null;
+  onOccupantMenu: (
+    channelId: string,
+    person: { userId: string; name: string; canSpeak: boolean | null; face: string | null },
+    position: { x: number; y: number },
+  ) => void;
 }) {
   // `full` and `listen-only` are different answers and must not be one: the
   // first says come back later, the second says you are welcome now but will
@@ -388,31 +608,21 @@ function VoiceChannelRailRow({
       {occupants.length > 0 && (
         <div className="mt-0.5 space-y-0.5 pl-4" data-testid="channel-rail-occupants">
           {occupants.map((person) => (
-            <div
+            <OccupantRow
               key={person.userId}
-              className="flex items-center gap-2 rounded-md px-2 py-[3px]"
-              data-testid="channel-rail-occupant"
-            >
-              <VoiceSpeakingAvatar userId={person.userId} channelId={channel.id}>
-                <TinyUserAvatar
-                  user={{
-                    id: person.userId,
-                    full_name: person.name,
-                    username: null,
-                    avatar_url: faces?.get(person.userId) ?? null,
-                  }}
-                />
-              </VoiceSpeakingAvatar>
-              <span
-                className="min-w-0 flex-1 truncate text-xs text-[color:var(--kub-text)]"
-                data-testid="channel-rail-occupant-name"
-              >
-                {person.userId === selfId ? `${person.name} (вы)` : person.name}
-              </span>
-              {person.muted && (
-                <KubIcon name="microphoneSlash" size={12} tone="muted" label="Микрофон выключен" />
-              )}
-            </div>
+              channelId={channel.id}
+              person={person}
+              face={faces?.get(person.userId) ?? null}
+              isSelf={person.userId === selfId}
+              moderatable={
+                voiceModerationActions(moderatableBy, {
+                  userId: person.userId,
+                  role: roleOf?.(person.userId) ?? null,
+                  canSpeak: person.canSpeak,
+                }).length > 0
+              }
+              onOpenMenu={onOccupantMenu}
+            />
           ))}
         </div>
       )}
@@ -437,6 +647,127 @@ function VoiceChannelRailRow({
  * the breakpoint hides it — and the caller, believing the column is drawn,
  * offers no trigger either. One rule, measured.
  */
+/**
+ * One person in a room, and the moderator's way in (D-221).
+ *
+ * ## Two gestures, because there is no one gesture
+ *
+ * Right-click is what somebody who has used Discord will try, and it is the
+ * gesture that does not compete with anything. But a phone has no right-click
+ * and this rail is a drawer there, so a plain press opens the menu too. That is
+ * safe here and would not be on most rows: an occupant row has no other action
+ * — it is a name, not a destination — so a press cannot mean two things.
+ *
+ * Long-press was considered and rejected. `ChatListItem` has one, and it costs a
+ * timer, a movement threshold and a cancel on scroll; it earns that in a list
+ * whose rows are the primary navigation. Here the press is free.
+ *
+ * ## The row is only pressable when there is something to press it for
+ *
+ * `moderatable` is `voiceModerationActions(...).length > 0`, computed by the
+ * caller from the same rules the menu builds from. A row that opens an empty
+ * menu is the same defect as a control that does nothing, and a plain member
+ * must not see an affordance at all — so for them this is the `div` it has
+ * always been, with no hover, no cursor and no focus stop.
+ *
+ * ## Self-mute and a silence are different marks
+ *
+ * `microphoneSlash` for somebody who turned their own microphone off; `ban` for
+ * somebody a moderator silenced. Two silhouettes — a microphone with a slash
+ * against a circle with a slash — rather than one glyph in two colours, because
+ * a rail row is 12 pixels of text and colour is never the only signal. The
+ * tone is `--kub-danger`, the mark tone, not `--kub-danger-text`.
+ */
+function OccupantRow({
+  channelId,
+  person,
+  face,
+  isSelf,
+  moderatable,
+  onOpenMenu,
+}: {
+  channelId: string;
+  person: VoiceParticipant;
+  face: string | null;
+  isSelf: boolean;
+  moderatable: boolean;
+  onOpenMenu: (
+    channelId: string,
+    person: { userId: string; name: string; canSpeak: boolean | null; face: string | null },
+    position: { x: number; y: number },
+  ) => void;
+}) {
+  const silenced = person.canSpeak === false;
+  const open = (event: { clientX: number; clientY: number; preventDefault: () => void }) => {
+    event.preventDefault();
+    onOpenMenu(
+      channelId,
+      { userId: person.userId, name: person.name, canSpeak: person.canSpeak, face },
+      { x: event.clientX, y: event.clientY },
+    );
+  };
+
+  const body = (
+    <>
+      <VoiceSpeakingAvatar userId={person.userId} channelId={channelId}>
+        <TinyUserAvatar
+          user={{
+            id: person.userId,
+            full_name: person.name,
+            username: null,
+            avatar_url: face,
+          }}
+        />
+      </VoiceSpeakingAvatar>
+      <span
+        className="min-w-0 flex-1 truncate text-left text-xs text-[color:var(--kub-text)]"
+        data-testid="channel-rail-occupant-name"
+      >
+        {isSelf ? `${person.name} (вы)` : person.name}
+      </span>
+      {silenced ? (
+        <KubIcon name="ban" size={12} tone="danger" label="Заглушён модератором" />
+      ) : (
+        person.muted && (
+          <KubIcon name="microphoneSlash" size={12} tone="muted" label="Микрофон выключен" />
+        )
+      )}
+    </>
+  );
+
+  const shared = {
+    "data-testid": "channel-rail-occupant",
+    "data-user-id": person.userId,
+    "data-silenced": silenced ? "true" : "false",
+    "data-moderatable": moderatable ? "true" : "false",
+  } as const;
+
+  if (!moderatable) {
+    return (
+      <div className="flex items-center gap-2 rounded-md px-2 py-[3px]" {...shared}>
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={open}
+      onContextMenu={open}
+      title="Управление участником"
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-2 py-[3px] transition-colors kub-raise-hover",
+        FOCUS_RING_INSET,
+        PRESS_SINK,
+      )}
+      {...shared}
+    >
+      {body}
+    </button>
+  );
+}
+
 export function ChannelRail(props: ChannelRailProps) {
   return (
     <nav

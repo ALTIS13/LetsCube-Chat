@@ -419,12 +419,26 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const voiceDirectory = useMemo(() => {
     const names = new Map<string, string>();
     const faces = new Map<string, string | null>();
+    // Roles too, from the same pass, for the moderation menu on an occupant
+    // row (D-221). Without them the rail would have to offer «Заглушить» on
+    // the owner of the group and let the gateway refuse — telling the reader a
+    // rule the interface already knew.
+    const roles = new Map<string, string | null>();
     for (const member of chat?.members ?? []) {
       names.set(member.user_id, member.profile?.full_name ?? "");
       faces.set(member.user_id, member.profile?.avatar_url ?? null);
+      roles.set(member.user_id, (member.role as string | null) ?? null);
     }
-    return { names, faces };
+    return { names, faces, roles };
   }, [chat?.members]);
+  // A function rather than the map, because `null` and «absent» mean the same
+  // thing to the rules and the caller should not have to know which it got:
+  // somebody in the room with no membership row is a real state, and the one
+  // where disconnecting them is the point.
+  const voiceRoleOf = useCallback(
+    (userId: string) => voiceDirectory.roles.get(userId) ?? null,
+    [voiceDirectory.roles],
+  );
   const inThisChannel = voice.channel !== null && call.channelId === voice.channel.id;
   // While connected the SDK is the truth (section 3.1): it holds a live
   // connection to every participant, where the table is a mirror that can be up
@@ -575,6 +589,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     currentTextChannelId: railTextChannelId,
     occupantsOf,
     faces: voiceDirectory.faces,
+    roleOf: voiceRoleOf,
     selfId: userId,
     role: myRole,
     callChannelId: call.channelId,

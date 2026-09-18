@@ -13735,7 +13735,7 @@ starts from a fact rather than from a search.
 
 ---
 
-## D-221 `[~]` Nobody could be silenced or removed from a voice room they were already in
+## D-221 `[x]` Nobody could be silenced or removed from a voice room they were already in
 
 **Severity:** high for a product with voice channels. Somebody being
 disruptive right now could not be stopped until they reconnected, which they
@@ -13746,8 +13746,10 @@ when `is_muted(user, chat)` — **only at token mint**. Zero `UpdateParticipant`
 `RemoveParticipant` or `MutePublishedTrack` calls existed anywhere in the
 product.
 
-**The gateway half is built and deployed. The client controls are not**, which
-is why this entry is `[~]`.
+**Closed 2026-09-18.** The gateway half shipped in `0b5d62df`; the client half
+is the moderation menu on a voice occupant, and it is what closes this. The
+entry stood at `[~]` until then, because a deployed route nothing calls is not a
+feature.
 
 **`MuteRoomTrack` does not exist, and finding that out mattered.** It is the
 name of the *request message* for `MutePublishedTrack`, not a method. Probed
@@ -13836,3 +13838,297 @@ that does not rejects the path.
 refuses a new publication. If it is the latter, the follow-on is
 `MutePublishedTrack(muted: true)` per audio track — which this build can do in
 the muting direction and, as above, not in the other.
+
+---
+
+## D-222 `[ ]` A viewport breakpoint deciding a layout that lives in a column the owner drags
+
+**Severity:** medium, and cosmetic in the sense that nothing breaks — but it is
+the first thing the owner saw when they opened «Обновления», and what they saw
+was text wrapped four lines deep inside a `rounded-full` pill, which renders as
+an ellipse with the words crammed into it. Recorded at the owner's request on
+2026-09-18 as a class rather than as one card: «добавь на потом исправление
+подобных "особенностей" интерфейса».
+
+**Reproduction:** settings → «Обновления», with the chat-list column at its
+default width, on a desktop window. The card's title breaks after one word, its
+description becomes a ribbon two or three words wide, and both info chips
+(«Версия установки: …», «Режим: …») wrap to three or four lines inside a pill
+whose radius is half its height.
+
+### The mechanism, corrected once before it was written down
+
+My first reading blamed `SideMenuLayer`'s 304px drawer. **That was wrong and the
+correction is the useful part.** `ReleaseDistributionSection` has exactly one
+mount — `components/settings/SettingsScreen.tsx:777` — and `SideMenuLayer`'s
+whole render tree carries **zero** viewport breakpoints. The 304px drawer is
+clean.
+
+The container is the **resizable chat-list column**, and it is resized by hand:
+
+- `artifacts/kub/src/index.css:234` — `--kub-chat-list-width: 360px`
+- `artifacts/kub/src/lib/desktopChatList.ts:57,60,67` — min **260**, max **540**
+- `components/sidebar/Sidebar.tsx:202` renders `<SettingsPanel />` as that
+  column's body, which is where D-160 moved the settings screen when it came out
+  of an 896px dialog
+- `components/sidebar/ChatListResizer.tsx:41-50` persists the dragged width to
+  `localStorage` and writes it onto `document.documentElement`
+
+So **no viewport width predicts this container's width.** At a 1440px window the
+card is 328px wide, or 228px, or 508px, depending on where the owner last left
+the handle. Tailwind's `sm:` is a `@media` query on the viewport, so inside that
+column every `sm:` reads «wide»: the header grid takes its three-column form
+(`ReleaseDistributionSection.tsx:93`), the download button moves into the third
+column at its intrinsic ~95px (`:261`, `:274`, `:286`), and the content column
+collapses to roughly **161px at the default and 61px at the 260px minimum** —
+absent entirely at the maximum, which is why this is easy to miss.
+
+**The codebase had already written this lesson down**, at
+`artifacts/kub/src/lib/channelRail.ts:385-390`: measure against the pane, «never
+the viewport … the chat list is dragged by hand, so at one window width the pane
+has many». The rail obeys it. The settings screen predates it.
+
+### Why a threshold tweak cannot fix it
+
+All three tier-1 components render in **both** containers through one
+`SettingsScreen`: `SettingsPanel` (the narrow column, from `md` upward) and
+`SettingsModal` (a viewport sheet, below `md`).
+
+- At a 700px viewport the card is ~640px wide, `sm:` is true, and the
+  three-column form is **correct**.
+- At a 1440px viewport the card is ~328px wide, `sm:` is equally true, and the
+  three-column form is **wrong**.
+
+One component, one breakpoint, the same breakpoint state, two required answers.
+That is the proof this needs a container query rather than a different number.
+
+### The bounded scope, measured rather than grepped
+
+Two independent halves. Counts are after classifying every match by hand — a
+raw grep over-states this by more than an order of magnitude, and an over-stated
+defect class is worse than none.
+
+**Half A — a viewport breakpoint inside a narrow container.**
+
+| | count |
+|---|---|
+| Raw occurrences of `sm:`/`md:`/`lg:`/`xl:`/`2xl:` | **521** in 86 files |
+| Dead shadcn leftovers (zero importers) | −30 |
+| Live | **491** |
+| Inside a narrow-container render set | ~90 |
+| **Actually bites** | **19 occurrences · 11 lines · 5 components** |
+
+**19 of 491 is 3.9%.** This is not a codebase-wide sweep; it is essentially one
+screen. Most of the rest is the shell's legitimate question «is this the phone's
+single pane», where below `md` the container *is* the viewport.
+
+Tier 1 — wrong at the default column width, today. All reached through
+`SettingsScreen`, all authored for the retired 896px dialog:
+
+1. `settings/ReleaseDistributionSection.tsx:93` — `sm:grid-cols-[auto_minmax(0,1fr)_auto]`, the owner's screenshot
+2. `settings/ReleaseDistributionSection.tsx:261, :274, :286` — `sm:col-span-1 sm:w-auto` on three buttons
+3. `settings/StorageSection.tsx:152` — `sm:col-start-3 sm:justify-end`; and `:113` is a three-column grid with **no `sm:` gate at all**, so its third column always exists. Windows-only, and its labels («Вернуть по умолчанию») are longer than the release card's, so the squeeze is worse
+4. `settings/ProfileDecorationSection.tsx:108` — `sm:grid-cols-2` → ~142px cells
+
+Tier 2 — bites in a particular viewport window rather than at the default:
+`bots/BotSettingsPanel.tsx:169` (four Russian tabs at ~100px each), `:243`
+(a ~148px description field), `:223`, `:250`, `:266`, `:278`, `:287`; and
+`pages/admin/support/SupportTicketDetails.tsx:150`, where `lg:` splits a 672px
+column into 352+320 at a 1024px viewport. **Worth one screenshot each at 768 and
+1024 before anybody edits them** — tier 2 is arithmetic, not observed pixels.
+
+Tier 3 — cramped but not broken, so candidates and not defects:
+`sidebar/SidebarHeader.tsx:190, :319, :321` (11 occurrences) force one row from
+`md:` inside a 260–540px column, but `min-w-0`/`flex-1` let the field shrink.
+Same component at 288px in `pages/public/PublicPreviewCapturePage.tsx:252`,
+which is what product imagery is captured from.
+
+**Half B — `rounded-full` on a box whose text can wrap.** A pill is only a pill
+while it is one line high; above that the radius clamps to half the height and
+eats the corners. 266 `rounded-full` in total, 236 of them correctly round
+(avatars, icon-only buttons, dots, numeric badges, progress tracks, slider
+thumbs, pills already carrying `whitespace-nowrap` or `truncate`). **~15 real
+sites plus 2 primitives**, and unlike half A this one does **not** need a narrow
+container — several of these wrap by construction at any width.
+
+Already broken on screen: `ReleaseDistributionSection.tsx:108` and `:118` (both
+widened further by an `InfoHint` child); `StorageSection.tsx:133`, `:139`;
+`sidebar/NotificationBell.tsx:547`, `:566`, `:695` (the last two a duplicated
+block) in a panel whose floor is 280px; `chat/ChatInfoPanel.tsx:3004`, an
+absolutely positioned month marker with neither `max-width` nor `nowrap`.
+
+The two that multiply, because one line serves many call sites:
+
+- `components/kub/KubBadge.tsx:65` — `pill ? "rounded-full" : "rounded-md"` over
+  a base of `inline-flex items-center gap-1.5 border px-2 py-0.5`: no height, no
+  `nowrap`, no `max-width`, ~50 call sites. Mostly latent, but
+  `ProfileRoleSummary` and `LocationsTab` feed it an administrator-typed
+  `role.name`, which is unbounded.
+- `components/kub/KubFilterChip.tsx:32` — the same absence, fed template strings
+  that include free text (`Поиск: ${search.trim()}` at
+  `pages/tasks/TasksPage.tsx:280`) into a `flex flex-wrap` row.
+
+Wrapping by construction, wide container: `chat/MessageList.tsx:186` is
+`max-w-[min(82vw,32rem)] rounded-full … text-center leading-snug` around
+arbitrary server text — a pill explicitly built to be multi-line. Also
+`auth/RegisterForm.tsx:358` («Регистрация только по приглашению», 33 characters,
+the longest fixed label on a pill in the product), `MessageList.tsx:1223`,
+`:1813`, and `sidebar/NewGroupModal.tsx:178`, which puts an un-truncated user
+name on a pill while its own sibling `ChatRoleChip.tsx:43` truncates — that
+sibling is the cheap fix pattern.
+
+`components/ui/badge.tsx:12` is the same unsafe pill with zero call sites: not a
+live defect, and it should be deleted rather than fixed.
+
+### The vocabulary a fix would use, so the sweep does not invent a second system
+
+**Container queries are native here and were verified by compiling them, not by
+reading the version number.** Tailwind **4.2.1**, CSS-first
+(`artifacts/kub/src/index.css:1` is `@import "tailwindcss"`, there is no
+`tailwind.config.*`). The installed compiler emits:
+
+```
+.@container               { container-type: inline-size }
+.@sm\:w-auto              { @container (width >= 24rem) { width: auto } }
+.@min-\[20rem\]\:flex-row { @container (width >= 20rem) { … } }
+.@max-\[24rem\]\:flex-col { @container (width < 24rem)  { … } }
+.sm\:w-auto               { @media (width >= 40rem) { width: auto } }   ← control
+```
+
+**One trap, and it would be silent: the two scales are different.** `sm:` reads
+`--breakpoint-sm: 40rem` = 640px; `@sm:` reads `--container-sm: 24rem` = **384px**.
+A blind `sm:` → `@sm:` rewrite changes the threshold. For the release card it
+happens to land well — 328px is false and stacks, 476px at the maximum column is
+true and takes three columns — but that is luck, not equivalence. `@min-[…]` with
+a measured number is the honest spelling.
+
+**Where the decision has consequences in JavaScript, the project already has a
+pattern, used twice, with tests and a written rationale** — follow it rather than
+reaching for CSS:
+
+- `lib/profileWindow.ts:157` `paneFitsProfileColumn(paneWidth)` →
+  `chat/ChatInfoPanel.tsx:384-399`
+- `lib/channelRail.ts:391` `paneFitsChannelRail(paneWidth)` →
+  `chat/ChatWindow.tsx:508-524`
+
+Both are a pure predicate in `lib/`, a `useLayoutEffect` with a `ResizeObserver`
+on `[data-kub-conversation-pane]`, **only the answer in state** (the render-cost
+contract in `tests/e2e/chat-list-event-cost.spec.ts`), and a unit test at the
+boundary — `tests/unit/profile-window.test.mts:133-139`,
+`tests/unit/server-channel-rail.test.mts:291-304`. Worth noting as evidence the
+pattern works: `ChatInfoPanel` is over 2,000 lines at 320–380px wide and carries
+**zero** breakpoints.
+
+Today the only `@container` in the product is `components/ui/field.tsx:49`, a
+shadcn leftover with no `@sm:` consumer, so container variants are effectively
+new here — which is the reason this entry names the exact spellings.
+
+### Scope note
+
+Recorded open on purpose. The owner asked for it «на потом», the counts above
+bound it, and the ordering is tier 1 → the two primitives in half B → tier 2.
+A fix is not a polish pass: every tier-1 line needs pixels at both column
+extremes (260px and 540px) **and** in the `SettingsModal` form below `md`, because
+that dual case is the whole reason a threshold change is not the answer.
+
+---
+
+## D-223 `[x]` Every person in a call was drawn with their microphone off, and deafening did nothing at all
+
+**Severity:** high, and it had been live since the call shipped. Two features
+that were tested, reviewed and deployed did not work in a browser at all.
+
+Found on 2026-09-18 by an agent reading `livekit-client` 2.22.3's own bundle
+while binding the events D-221's client half needed — not by a test, and no test
+in this repository could have found it: `tests/e2e/voice-call.spec.ts` replaces
+the whole transport with a stand-in, which is the only reason the call can be
+tested without an SFU and also the reason everything inside `createLiveKitRoom`
+is invisible to it.
+
+**One cause, two symptoms.** `hooks/voiceRoom.ts` published the captured
+microphone as
+
+    published = new LocalAudioTrack(microphone, undefined, true);
+    await room.localParticipant.publishTrack(published);
+
+A `LocalAudioTrack` built by hand carries `source = Track.Source.Unknown`, and
+`publishOrRepublishTrack` overwrites it **only** from `opts.source` — which was
+not passed. So every LETSCUBE client published its microphone to the SFU as
+`UNKNOWN`, and both of the SDK's microphone lookups key on
+`Track.Source.Microphone`. Read out of the installed bundle rather than from the
+documentation:
+
+- `get isMicrophoneEnabled()` is
+  `!(this.getTrackPublication(Track.Source.Microphone)?.isMuted ?? true)`. No
+  such publication exists, so the `?? true` branch runs and it answers
+  **`false`** — for the local participant and for every remote one, for the
+  whole call. `report()` builds `muted: !isMicrophoneEnabled`, so **everybody
+  was reported as muted, always**: the microphone-off glyph beside every name in
+  the rail and in the capsule, whatever anybody did.
+- `RemoteParticipant.setVolume(volume, source = Track.Source.Microphone)` does
+  `this.volumeMap.set(source, volume)` and then
+  `getTrackPublication(source)` — finds nothing, and returns having changed no
+  volume. **Deafening was a complete no-op**, and the re-application on
+  `TrackSubscribed` — added the same day after a mutation proved it was
+  needed — could never match either, because it reads
+  `volumeMap.get(publication.source)` and the publication's source is `UNKNOWN`.
+
+So D-219's «stop hearing the room», shipped in `3bb80399` hours earlier, did
+nothing; and the mute glyph told everybody the opposite of the truth.
+
+**The fix is one option object:**
+`publishTrack(published, { source: Track.Source.Microphone })`. `stopOnMute` is
+false and `isUserProvided` is true, so naming the source changes nothing about
+the capture's lifetime — it only tells the SFU and the SDK which of the
+participant's tracks this is.
+
+**Why the tests stayed green, stated rather than excused.** The stand-in's
+`setMuted` sets `mediaStreamTrack.enabled = false` on the real captured track
+and then publishes its own roster, so every mute assertion read a real track and
+a fixture's own list. Both halves were right. Neither touched
+`isMicrophoneEnabled`, which is the one thing the product reads.
+`tests/unit/voice-room-seam.test.mjs` now asserts the source is named, and a
+mutation removing it turns it red — a source read, with the weakness that
+implies, and the only instrument that reaches inside that function.
+
+---
+
+## D-224 `[x]` A force-mute would have ended the microphone capture, and the light would have gone out
+
+**Severity:** high, and it was latent rather than live — the route that triggers
+it shipped on 2026-09-18 and nothing called it until the same day's client half.
+Recorded because it was found by reading the SDK rather than by watching it
+happen, and because the file's own comment already claimed the opposite.
+
+**What the SDK does.** `LocalParticipant.unpublishTrack(track, stopOnUnpublish)`
+resolves
+`stopOnUnpublish ?? roomOptions.stopLocalTrackOnUnpublish ?? true` and, when
+that is true, calls `track.stop()` — through `LocalTrack.stop` to
+`Track.stop` to `_mediaStreamTrack.stop()` — with **no `isUserProvided`
+guard**. A server-side unpublish, which is exactly what revoking `canPublish`
+produces, therefore ends the `MediaStreamTrack` the hook captured and owns.
+
+**What that would have looked like.** A moderator silences somebody. That
+person's browser microphone indicator goes out mid-call. Lifting the silence
+gives them permission to publish a track that no longer exists, so speaking
+again would need a second `getUserMedia` and a second permission prompt — and on
+a phone, possibly a refusal.
+
+**The comment in the file said this could not happen.** `voiceRoom.ts` carried,
+and still carries, «`userProvidedTrack` is true: this track came from our own
+capture, and the SDK must not stop it behind our back — the hook owns its
+lifetime and ends it on leave, which is what turns the microphone light off.»
+The flag does what it says on the `mute()` path; `unpublishTrack` does not
+consult it. A true sentence about one path, believed about all of them.
+
+Fixed with `new Room({ stopLocalTrackOnUnpublish: false })`, which makes the
+same code path call `stopMonitor()` instead. `leave()` stays the one thing that
+ends the capture, and `room.disconnect(false)` was already explicit, so nothing
+else about the lifetime moves.
+
+**The general lesson, which is the reason this is written down.** Both this and
+D-223 are defaults in a dependency contradicting a comment in our own source,
+and neither was reachable by any test in this repository. The instrument that
+found them was reading the installed bundle — not the typings, which state the
+shape and not the behaviour, and not the documentation. When a claim about an
+SDK matters, read the code that ships.

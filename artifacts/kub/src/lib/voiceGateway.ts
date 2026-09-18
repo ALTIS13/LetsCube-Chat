@@ -233,3 +233,98 @@ export function voiceGatewayRefusalText(code: VoiceGatewayRefusalCode): string {
       return "Сервер ответил неожиданно, попробуйте ещё раз.";
   }
 }
+
+/**
+ * The two moderation routes, as a contract rather than as a call — the same
+ * shape the token route above follows, and for the same reason.
+ *
+ * Read off `supabase/functions/voice-gateway/index.ts` and
+ * `moderation.mjs` as they stood deployed on 2026-09-18, not from the
+ * proposal. Three things in here are measured rather than chosen, and each one
+ * cost a round trip to find out:
+ *
+ * **The gateway silently discards a request field it does not know.** A
+ * misspelled name is a 200 that changes nothing, which is indistinguishable
+ * from success. So every field below has exactly one spelling in this client,
+ * built by a function, never assembled at a call site.
+ *
+ * **`muted` must be a real boolean.** The gateway refuses `"false"`, `0` and
+ * `null` with `invalid_request` rather than coercing them, because a moderation
+ * action decided by a truthiness accident is the wrong kind of accident. The
+ * signature here is `boolean`, so nothing else can reach it.
+ *
+ * **Lifting a silence is not an unconditional yes.** `muted: false` makes the
+ * gateway recompute what a fresh token would grant that person — their role
+ * against the channel's `speak_role`, and any staff mute from `public.mutes` —
+ * so somebody below the channel's speaking role stays unable to publish, and
+ * the answer says so in `canPublish`. This client reads that field and never
+ * assumes the lift worked.
+ */
+export const VOICE_GATEWAY_FORCE_MUTE_PATH = "/functions/v1/voice-gateway/force-mute";
+export const VOICE_GATEWAY_REMOVE_PATH = "/functions/v1/voice-gateway/remove";
+
+/** Which of the two, as the gateway's own path segment names them. */
+export type VoiceModerationRoute = "force-mute" | "remove";
+
+export function voiceModerationEndpoint(supabaseUrl: string, route: VoiceModerationRoute): string {
+  const base = supabaseUrl.replace(/\/+$/, "");
+  return `${base}${route === "remove" ? VOICE_GATEWAY_REMOVE_PATH : VOICE_GATEWAY_FORCE_MUTE_PATH}`;
+}
+
+/** Silence somebody already in the room, or lift it. `muted` is a boolean, not a value. */
+export function voiceForceMuteRequestBody(
+  channelId: string,
+  userId: string,
+  muted: boolean,
+): { channelId: string; userId: string; muted: boolean } {
+  return { channelId, userId, muted };
+}
+
+/** Put somebody out of the room. They may come back; this is not a ban. */
+export function voiceRemoveRequestBody(
+  channelId: string,
+  userId: string,
+): { channelId: string; userId: string } {
+  return { channelId, userId };
+}
+
+/**
+ * What a moderation call did, or why it did not.
+ *
+ * `muted` and `canSpeak` are `null` for `remove`, which reports neither — and
+ * `null` here carries the same meaning it carries on `VoiceParticipant`:
+ * nobody knows, as distinct from «no».
+ */
+export type VoiceModerationOutcome =
+  | { ok: true; muted: boolean | null; canSpeak: boolean | null }
+  | { ok: false; code: VoiceGatewayRefusalCode };
+
+/**
+ * One answer from a moderation route, read.
+ *
+ * A 200 whose body does not actually say `ok: true` is a refusal, not a
+ * success. That branch is the one worth having: the gateway does not send such
+ * a thing today, and a client that assumed the status was enough would report
+ * «Заглушён» over a body that said otherwise the first time it did — which is
+ * the same false success `readVoiceTokenResponse` refuses to give for an empty
+ * token. `status: 0` is this codebase's convention for «fetch threw».
+ *
+ * The gateway's field is `canPublish`; the interface's word is `canSpeak`. The
+ * rename happens here, at the seam, so the wire's vocabulary stops at this
+ * module — the same rule that keeps every LiveKit name inside `voiceRoom.ts`.
+ */
+export function readVoiceModerationResponse(
+  status: number,
+  payload: unknown,
+): VoiceModerationOutcome {
+  if (status === 200 || status === 201) {
+    const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+    if (record?.ok !== true) return { ok: false, code: readCode(payload) ?? "malformed" };
+    return {
+      ok: true,
+      muted: typeof record.muted === "boolean" ? record.muted : null,
+      canSpeak: typeof record.canPublish === "boolean" ? record.canPublish : null,
+    };
+  }
+  return { ok: false, code: readCode(payload) ?? statusRefusal(status) };
+}

@@ -107,6 +107,20 @@ interface Shape {
    * room, which is enough to earn a rail on its own.
    */
   bare?: boolean;
+  /**
+   * Whether this client is connected to «Общая», and who the SFU says may speak.
+   *
+   * The rail lists a room two ways and only one of them knows about a
+   * permission: outside the call the table answers, and it carries presence and
+   * nothing else, so `canSpeak` is `null` — unknown. Inside the call the SDK
+   * answers and `canSpeak` is a real boolean. The moderation menu reads exactly
+   * that difference, so a test of the silenced mark has to be in the second
+   * state, which is what this seed buys: a granting gateway and a stand-in
+   * transport whose roster this file controls.
+   */
+  inLobby?: { silenced?: string[] };
+  /** What the two moderation routes answer. A grant by default. */
+  moderation?: { status: number; body: unknown };
 }
 
 /**
@@ -157,12 +171,84 @@ function seed(shape: Shape): { chats: Row[]; memberships: Row[]; messages: Row[]
 
 interface Opened {
   tokenRequests: string[];
+  /** Every moderation call, in order: which route, and the body it carried. */
+  moderationCalls: { route: string; body: Record<string, unknown> | null }[];
   fixture: Fixture;
+}
+
+/**
+ * The SFU seam, for the one state the table cannot produce.
+ *
+ * A narrow copy of `voice-call.spec.ts`'s stand-in: only the methods a joined
+ * call touches, and a roster this file controls so `canSpeak` can be a real
+ * boolean. `voice-call.spec.ts` keeps the full one because it tests the call;
+ * what this file tests is the rail's rows, and importing that stand-in would
+ * couple two specs through a third file for four methods.
+ */
+async function installLobbyTransport(page: Page, silenced: string[]) {
+  // A real audio track, because a joined call is the point here.
+  //
+  // `openGroup`'s own microphone mock answers with an empty track list: it was
+  // written so a click could be seen reaching the gateway, and the gateway
+  // refuses there, so the capture never had to be usable. A join that gets a
+  // token needs `getTracks()[0]` to be a real `MediaStreamTrack`, and an
+  // `AudioContext` destination is one — synthesized by the browser, no device
+  // and no permission prompt. Registered after that mock so this one wins.
+  await page.addInitScript(() => {
+    const devices = navigator.mediaDevices ?? ({} as MediaDevices);
+    Object.defineProperty(devices, "getUserMedia", {
+      value: async () => {
+        const context = new AudioContext();
+        return context.createMediaStreamDestination().stream;
+      },
+      configurable: true,
+    });
+    if (!navigator.mediaDevices) {
+      Object.defineProperty(navigator, "mediaDevices", { value: devices, configurable: true });
+    }
+  });
+  await page.addInitScript(
+    ({ me, anna, petr, hushed }) => {
+      const roster = () =>
+        [
+          { userId: me, name: "", muted: false },
+          { userId: anna, name: "Анна (из токена)", muted: false },
+          { userId: petr, name: "Пётр (из токена)", muted: false },
+        ].map((entry) => ({
+          ...entry,
+          // The SDK reports a permission per participant; `false` is somebody a
+          // moderator stopped from publishing. Never `undefined` here — that is
+          // the shape the table gives and it means «unknown».
+          canSpeak: !(hushed as string[]).includes(entry.userId),
+        }));
+      window.__letscubeVoiceRoom = (events) => ({
+        async join() {
+          // Nothing to connect to. What a joined call gives the rail is the
+          // roster, and that is the whole point of this stand-in.
+          events.onParticipants(roster());
+        },
+        async setMuted() {},
+        async leave() {},
+        async sampleHealth() {
+          return { at: Date.now(), rttMs: null, jitterMs: null, packetsSent: null, packetsLost: null };
+        },
+        async setDeafened() {},
+        async setOutputDevice() {
+          return true;
+        },
+        serverName() {
+          return null;
+        },
+      });
+    },
+    { me: ME.id, anna: ANNA.id, petr: PETR.id, hushed: silenced },
+  );
 }
 
 async function openGroup(page: Page, shape: Shape = {}): Promise<Opened> {
   const rows = seed(shape);
   const tokenRequests: string[] = [];
+  const moderationCalls: { route: string; body: Record<string, unknown> | null }[] = [];
 
   // The microphone, answered before anything asks the person for it. Joining a
   // room asks for it first (a person who declines costs the gateway nothing),
@@ -176,6 +262,12 @@ async function openGroup(page: Page, shape: Shape = {}): Promise<Opened> {
       Object.defineProperty(navigator, "mediaDevices", { value: devices, configurable: true });
     }
   });
+
+  // After the microphone mock above, never before: init scripts run in the
+  // order they were registered, and that one answers with an empty track list.
+  // Registered first, this one was simply overwritten and the join stopped at
+  // «Подключаемся…» with `stream.getAudioTracks is not a function`.
+  if (shape.inLobby) await installLobbyTransport(page, shape.inLobby.silenced ?? []);
 
   const fixture = await openFixture(page, {
     me: ME,
@@ -196,9 +288,26 @@ async function openGroup(page: Page, shape: Shape = {}): Promise<Opened> {
   // The gateway, refusing cleanly. What matters is the channel id the client
   // asked for; a clean refusal then puts the call back into a state where the
   // next room can be clicked, which is how «switching is one click» is shown.
+  //
+  // `inLobby` is the exception and it grants, because the one thing a refusal
+  // cannot produce is a joined call — and a joined call is the only state where
+  // the rail knows whether somebody may speak.
   await page.route("**/functions/v1/voice-gateway/token", async (route) => {
     const body = route.request().postDataJSON() as { channelId?: string } | null;
     tokenRequests.push(body?.channelId ?? "");
+    if (shape.inLobby && body?.channelId === ROOM_LOBBY) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          url: "wss://sfu.invalid/rtc",
+          token: "fixture-token",
+          canPublish: true,
+        }),
+      });
+      return;
+    }
     await route.fulfill({
       status: 403,
       contentType: "application/json",
@@ -206,8 +315,42 @@ async function openGroup(page: Page, shape: Shape = {}): Promise<Opened> {
     });
   });
 
+  // The two moderation routes, recorded rather than answered blindly: what this
+  // spec has to see is the **body** — a field name the gateway does not know is
+  // silently discarded there, so a typo would be a 200 that changed nothing.
+  for (const route of ["force-mute", "remove"] as const) {
+    await page.route(`**/functions/v1/voice-gateway/${route}`, async (handler) => {
+      let body: Record<string, unknown> | null = null;
+      try {
+        body = handler.request().postDataJSON() as Record<string, unknown> | null;
+      } catch {
+        body = null;
+      }
+      moderationCalls.push({ route, body });
+      const answer =
+        shape.moderation ??
+        (route === "remove"
+          ? { status: 200, body: { ok: true, channelId: body?.channelId, userId: body?.userId } }
+          : {
+              status: 200,
+              body: {
+                ok: true,
+                channelId: body?.channelId,
+                userId: body?.userId,
+                muted: body?.muted === true,
+                canPublish: body?.muted !== true,
+              },
+            });
+      await handler.fulfill({
+        status: answer.status,
+        contentType: "application/json",
+        body: JSON.stringify(answer.body),
+      });
+    });
+  }
+
   await openChat(page, "Команда проекта", LINES[0]);
-  return { tokenRequests, fixture };
+  return { tokenRequests, moderationCalls, fixture };
 }
 
 /**
@@ -551,4 +694,241 @@ test("a bare group's rail, photographed for the report that asked for it", async
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(300);
   await page.screenshot({ path: `output/bare-group-rail/rail-${testInfo.project.name}.png`, fullPage: false });
+});
+
+/**
+ * Silencing and disconnecting somebody from the rail (D-221).
+ *
+ * The rules are `tests/unit/voice-moderation.test.mts`, which holds the client's
+ * matrix against the **deployed gateway's own module** on every combination.
+ * What is measured here is what that cannot reach: whether the row is pressable
+ * at all, which items are drawn, and — the assertion that matters most — the
+ * exact body each item sends. The gateway discards a request field it does not
+ * recognise, so a misspelled name would be a 200 that changed nothing, and no
+ * assertion about the interface would notice.
+ */
+test.describe("moderating somebody in a voice room", () => {
+  test.beforeEach(async ({ request }) => {
+    await requireFixtureServer(request);
+  });
+
+  /** The row for one person inside «Общая». */
+  const occupant = (page: Page, userId: string) =>
+    page.locator(
+      `[data-testid="channel-rail-voice-group"][data-channel-id="${ROOM_LOBBY}"] ` +
+        `[data-testid="channel-rail-occupant"][data-user-id="${userId}"]`,
+    );
+
+  const menuItem = (page: Page, label: string) =>
+    page.getByRole("menuitem").filter({ hasText: label });
+
+  /** Opens the rail where it is a sheet, so the phone half runs these too. */
+  async function showRail(page: Page, wide: boolean) {
+    if (!wide) await page.getByTestId("channel-rail-trigger").click();
+    await expect(page.getByTestId("channel-rail-list")).toBeVisible();
+  }
+
+  /**
+   * Join «Общая», and get the rail back.
+   *
+   * Joining closes the sheet — `onJoinVoice` calls `setRailOpen(false)`, which
+   * is right: on a phone the drawer covers the conversation it just put you
+   * into. So on the phone half the rail has to be opened again, and the first
+   * version of these three tests failed on exactly that: nine green on the
+   * desktop, three red at 390, all of them looking for a row inside a drawer
+   * that had closed itself.
+   */
+  async function joinLobby(page: Page, wide: boolean) {
+    await page
+      .locator(`[data-testid="channel-rail-voice"][data-channel-id="${ROOM_LOBBY}"]`)
+      .click();
+    if (!wide) {
+      await expect(page.getByTestId("channel-rail-list")).toHaveCount(0);
+      await page.getByTestId("channel-rail-trigger").click();
+    }
+    await expect(page.getByTestId("channel-rail-list")).toBeVisible();
+  }
+
+  test("the owner may act on a member, and a plain member may act on nobody", async ({
+    page,
+  }, testInfo) => {
+    const wide = paneIsWide(testInfo);
+    await openGroup(page, { role: "owner" });
+    await showRail(page, wide);
+
+    // Petr is a member and Anna an administrator: an owner may silence both.
+    await expect(occupant(page, PETR.id)).toHaveAttribute("data-moderatable", "true");
+    await expect(occupant(page, ANNA.id)).toHaveAttribute("data-moderatable", "true");
+
+    // And a row that offers nothing is not a button at all — no hover, no
+    // cursor, no focus stop. Asserted on the tag rather than on the attribute,
+    // because the attribute is what the component claims and the tag is what
+    // the browser gives a person.
+    await openGroup(page, { role: "member" });
+    await showRail(page, wide);
+    await expect(occupant(page, ANNA.id)).toHaveAttribute("data-moderatable", "false");
+    expect(
+      await occupant(page, ANNA.id).evaluate((node) => node.tagName.toLowerCase()),
+    ).toBe("div");
+  });
+
+  test("a silence names the channel, the person and the direction, in the gateway's own field names", async ({
+    page,
+  }, testInfo) => {
+    const wide = paneIsWide(testInfo);
+    const opened = await openGroup(page, { role: "admin" });
+    await showRail(page, wide);
+
+    await occupant(page, PETR.id).click();
+    await menuItem(page, "Заглушить в канале").click();
+
+    await expect
+      .poll(() => opened.moderationCalls.length, { message: "the menu sent nothing at all" })
+      .toBe(1);
+    expect(opened.moderationCalls[0]).toEqual({
+      route: "force-mute",
+      // Exactly these three keys and no others. `muted` is a real boolean: the
+      // gateway refuses `"true"` and `1` rather than coercing them, because a
+      // moderation action decided by a truthiness accident is the wrong kind of
+      // accident.
+      body: { channelId: ROOM_LOBBY, userId: PETR.id, muted: true },
+    });
+
+    // And the result is said out loud, because outside a joined call nothing on
+    // screen can change: the table carries presence and no permission.
+    await expect(page.getByTestId("kub-feedback-viewport")).toContainText(
+      "больше не может говорить",
+    );
+  });
+
+  test("outside the room both directions are offered, because nothing out there knows", async ({
+    page,
+  }, testInfo) => {
+    const wide = paneIsWide(testInfo);
+    await openGroup(page, { role: "owner" });
+    await showRail(page, wide);
+    await occupant(page, PETR.id).click();
+
+    // `canSpeak` is null here — the rail is reading the table. Hiding the lift
+    // would leave a moderator who silences somebody and then leaves the room
+    // unable to undo it, which is worse than an item that turns out to be a
+    // no-op; both directions are idempotent on the server.
+    await expect(menuItem(page, "Заглушить в канале")).toBeVisible();
+    await expect(menuItem(page, "Разрешить говорить")).toBeVisible();
+    await expect(menuItem(page, "Отключить от канала")).toBeVisible();
+  });
+
+  test("inside the room the silenced person is marked, and only the lift is offered", async ({
+    page,
+  }, testInfo) => {
+    const wide = paneIsWide(testInfo);
+    await openGroup(page, { role: "owner", inLobby: { silenced: [PETR.id] } });
+    await showRail(page, wide);
+
+    // Join, so the roster comes from the transport rather than from the table —
+    // the only state in which a permission is known at all.
+    await joinLobby(page, wide);
+    await expect(occupant(page, PETR.id)).toHaveAttribute("data-silenced", "true");
+    await expect(occupant(page, ANNA.id)).toHaveAttribute("data-silenced", "false");
+
+    // Two silhouettes rather than one glyph in two colours: a rail row is 12
+    // pixels of text and colour is never the only signal.
+    await expect(occupant(page, PETR.id).getByLabel("Заглушён модератором")).toBeVisible();
+
+    await occupant(page, PETR.id).click();
+    await expect(menuItem(page, "Разрешить говорить")).toBeVisible();
+    // The one this test exists for. Offering «Заглушить» to somebody already
+    // silenced is a control that does nothing, which is the defect being closed
+    // rather than one to add.
+    await expect(menuItem(page, "Заглушить в канале")).toHaveCount(0);
+  });
+
+  test("a lift the gateway did not grant is not reported as speech", async ({ page }, testInfo) => {
+    const wide = paneIsWide(testInfo);
+    await openGroup(page, {
+      role: "owner",
+      // The gateway lifted the silence and recomputed the permission from the
+      // person's role against the channel's `speak_role`; the answer was still
+      // no. Both halves have to reach the reader.
+      moderation: { status: 200, body: { ok: true, muted: false, canPublish: false } },
+    });
+    await showRail(page, wide);
+    await occupant(page, PETR.id).click();
+    await menuItem(page, "Разрешить говорить").click();
+
+    const feedback = page.getByTestId("kub-feedback-viewport");
+    await expect(feedback).toContainText("Заглушение снято");
+    await expect(feedback).toContainText("не хватает прав");
+    await expect(feedback).not.toContainText("снова может говорить");
+  });
+
+  test("a refusal is a sentence, and nothing is claimed to have happened", async ({
+    page,
+  }, testInfo) => {
+    const wide = paneIsWide(testInfo);
+    await openGroup(page, {
+      role: "owner",
+      // A code the interface cannot pre-empt: the person left the room between
+      // the rail's last read and the press. The ones the interface *can*
+      // pre-empt are not offered at all, which is the point of the matrix.
+      moderation: { status: 403, body: { ok: false, error: "participant_not_in_room" } },
+    });
+    await showRail(page, wide);
+    await occupant(page, PETR.id).click();
+    await menuItem(page, "Заглушить в канале").click();
+
+    await expect(page.getByTestId("kub-feedback-viewport")).toContainText(
+      "уже не в голосовом канале",
+    );
+  });
+
+  test("disconnecting asks first, and answering no sends nothing", async ({ page }, testInfo) => {
+    const wide = paneIsWide(testInfo);
+    const opened = await openGroup(page, { role: "owner" });
+    await showRail(page, wide);
+    await occupant(page, PETR.id).click();
+    await menuItem(page, "Отключить от канала").click();
+
+    // The question, and the fact that it says the disconnect is not a ban —
+    // a moderator who reads it as one will be surprised a second later.
+    const question = page.getByText("Отключить от голосового канала?");
+    await expect(question).toBeVisible();
+    await expect(page.getByText("Вернуться в канал это не запрещает.")).toBeVisible();
+
+    await page.getByRole("button", { name: "Отмена", exact: true }).click();
+    await expect(question).toHaveCount(0);
+    expect(opened.moderationCalls).toEqual([]);
+
+    // And answering yes does send it, to the other route.
+    await occupant(page, PETR.id).click();
+    await menuItem(page, "Отключить от канала").click();
+    await page.getByRole("button", { name: "Отключить", exact: true }).click();
+    await expect.poll(() => opened.moderationCalls.length).toBe(1);
+    expect(opened.moderationCalls[0]).toEqual({
+      route: "remove",
+      // No `muted` on this route. A field the gateway does not know is
+      // discarded in silence, so sending one would be a 200 nobody could tell
+      // from a success.
+      body: { channelId: ROOM_LOBBY, userId: PETR.id },
+    });
+  });
+
+  for (const theme of ["dark", "light"] as const) {
+    test("the menu on an occupant, photographed in the " + theme + " theme", async ({
+      page,
+    }, testInfo) => {
+      const wide = paneIsWide(testInfo);
+      await openGroup(page, { role: "owner", theme, inLobby: { silenced: [PETR.id] } });
+      await showRail(page, wide);
+      await joinLobby(page, wide);
+      await expect(occupant(page, PETR.id)).toHaveAttribute("data-silenced", "true");
+      await occupant(page, PETR.id).click();
+      await expect(menuItem(page, "Разрешить говорить")).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(400);
+      await page.screenshot({
+        path: `output/voice-moderation/menu-${testInfo.project.name}-${theme}.png`,
+      });
+    });
+  }
 });
