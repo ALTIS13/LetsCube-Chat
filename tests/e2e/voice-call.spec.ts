@@ -223,6 +223,18 @@ interface Seed {
   theme?: "light" | "dark";
   /** Install the React commit counter before the application boots. */
   countRenders?: boolean;
+  /**
+   * Whether «Смета и склад» has a voice channel of its own.
+   *
+   * `false` is the state the call bar exists for and the one no test could
+   * reach before: a conversation with no voice channel at all — a private
+   * chat, or any group made before channels existed. `voiceCapsuleState`
+   * returns `HIDDEN` first for those, so a running call used to be
+   * completely invisible there. `channel: null` is not the same seed: it
+   * takes the channel away from **both** chats and leaves no way to start a
+   * call in the first place.
+   */
+  otherChannel?: boolean;
 }
 
 function rows(seed: Seed): { chats: Row[]; memberships: Row[]; messages: Row[] } {
@@ -280,6 +292,16 @@ declare global {
        * that is what the interface promises and what the SDK actually sends.
        */
       speak: ((userIds: string[]) => void) | null;
+      /**
+       * Take this client's publish permission away, or give it back.
+       *
+       * What a force-mute looks like from inside the transport. There is no
+       * column to seed and no route to mock — the gateway revokes `canPublish`
+       * on the SFU and writes nothing — so this is the only way a test can
+       * reach the state. `null` is «the permission is unknown», which must not
+       * be read as a refusal.
+       */
+      revokeSpeech: ((allowed: boolean | null) => void) | null;
     };
   }
 }
@@ -349,6 +371,7 @@ async function installVoiceSeam(
         deafened: [],
         refuseOutput: Boolean(refuseOutput),
         speak: null,
+        revokeSpeech: null,
       };
       window.__voiceProbe = held;
       const roster = (muted: boolean) =>
@@ -376,6 +399,11 @@ async function installVoiceSeam(
         }));
       window.__letscubeVoiceRoom = (events) => {
         held.speak = (userIds: string[]) => events.onSpeakers(userIds);
+        // What a force-mute looks like from inside the transport: the SFU
+        // revokes `canPublish` and the seam announces the permission. There is
+        // no database column to seed and no route to mock — the fact exists
+        // only in the SDK — so the stand-in has to be able to raise it.
+        held.revokeSpeech = (allowed: boolean | null) => events.onSpeechAllowed(allowed);
         return {
         async join(url: string, token: string, microphone: MediaStreamTrack | null) {
           held.joins.push({ url, token, hasTrack: Boolean(microphone) });
@@ -572,7 +600,7 @@ async function open(page: Page, seed: Seed = {}) {
     const filter = url.searchParams.get("chat_id") ?? "";
     if (filter.endsWith(CHAT_TEAM)) return answer(team ? [asRow(team)] : []);
     return answer(
-      channel
+      channel && seed.otherChannel !== false
         ? [{
             id: OTHER_CHANNEL_ID,
             name: "Склад",
@@ -1733,5 +1761,200 @@ for (const theme of ["dark", "light"] as const) {
     await row.scrollIntoViewIfNeeded();
     await page.waitForTimeout(250);
     await row.screenshot({ path: shot("panel-speaking") });
+  });
+}
+
+/**
+ * The call, seen and touched from outside the conversation it is in (D-225).
+ *
+ * `tests/unit/voice-call-bar.test.mts` holds the rule about when the bar is
+ * drawn and what it says. What is measured here is everything that cannot be:
+ * that it actually appears in a conversation with **no voice channel at all** —
+ * where `voiceCapsuleState` returns `HIDDEN` before it says anything, and a
+ * running microphone therefore had nothing on screen about it — that its
+ * controls reach the same transport the capsule's do, and that exactly one bar
+ * is ever visible, the two placements being the column's foot on a computer and
+ * a band across the top on a phone.
+ */
+
+/** The bar the person can actually see. Two are mounted; one at most is shown. */
+const bar = (page: Page) => page.locator('[data-testid="voice-call-bar"]:visible');
+
+/** Take this client's publish permission away from inside the transport. */
+async function revokeSpeech(page: Page, allowed: boolean | null): Promise<void> {
+  await page.evaluate(async (value) => {
+    const held = window.__voiceProbe;
+    if (!held?.revokeSpeech) throw new Error("the transport was never asked for");
+    held.revokeSpeech(value as boolean | null);
+    const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await frame();
+    await frame();
+  }, allowed);
+}
+
+test("a call in a conversation with no voice channel is visible and can be left", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  // The worst case, and the reason this exists: «Смета и склад» has no channel,
+  // so the capsule is not merely quiet there — it is not rendered at all.
+  await open(page, {
+    channel: { participantCount: 1 },
+    present: [ANNA.id],
+    otherChannel: false,
+  });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+
+  await switchChat(page, "Смета и склад", OTHER_LINE);
+  // The capsule really is absent — this is the premise, and asserting it stops
+  // this whole test from passing against a capsule that quietly came back.
+  await expect(capsule(page)).toHaveCount(0);
+
+  await expect(bar(page)).toBeVisible();
+  await expect(bar(page).getByTestId("voice-call-bar-room")).toHaveText("Общий голос");
+  // The group, so somebody knows which conversation they are talking in, and
+  // the state, so they know the call is still up.
+  // Two boxes rather than one string: the group truncates where the column
+  // is narrow and the state never does, because the state is what somebody
+  // reads to know the call is up. The first capture cut it — «Команда
+  // проекта · Вы в разг…» — at the column default of 360 points.
+  await expect(bar(page).getByTestId("voice-call-bar-where")).toHaveText("Команда проекта");
+  await expect(bar(page).getByTestId("voice-call-bar-state")).toHaveText("Вы в разговоре");
+
+  // Not clipped, measured rather than looked at. `toHaveText` reads
+  // `textContent`, which is the same string whether or not the box it sits in
+  // can show it — so the assertion above passed while the pixels read «Вы в
+  // разг…». This is the check that would have caught it: the state must fit
+  // its own box, and the group's name is the one allowed not to.
+  const clipped = await bar(page).evaluate((node) => {
+    const read = (testId: string) => {
+      const found = node.querySelector(`[data-testid="${testId}"]`);
+      if (!found) return null;
+      return { scroll: found.scrollWidth, client: found.clientWidth };
+    };
+    return { state: read("voice-call-bar-state"), where: read("voice-call-bar-where") };
+  });
+  expect(clipped.state, "the state has no box of its own").not.toBeNull();
+  expect(clipped.state.scroll).toBeLessThanOrEqual(clipped.state.client + 1);
+
+  // The controls reach the same transport the capsule's do.
+  await bar(page).getByTestId("voice-call-bar-mute").click();
+  await expect.poll(async () => (await probe(page)).muted).toEqual([true]);
+  await expect(bar(page).getByTestId("voice-call-bar-state")).toHaveText("Микрофон выключен");
+
+  await bar(page).getByTestId("voice-call-bar-leave").click();
+  await expect.poll(async () => (await probe(page)).left).toBe(1);
+  // And the bar goes with the call rather than lingering over nothing.
+  await expect(bar(page)).toHaveCount(0);
+});
+
+test("voice-call-bar-one-visible: the bar stands down where the capsule stands", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+
+  // In the call's own conversation the capsule has these same three controls
+  // over this same state. Two identical control sets on one screen is the
+  // duplicate this product refuses.
+  await expect(bar(page)).toHaveCount(0);
+
+  await switchChat(page, "Смета и склад", OTHER_LINE);
+  // That chat has a channel of its own, so the capsule is there and says where
+  // the call is — but it still offers nothing, which is what the bar is for.
+  await expect(detail(page)).toHaveText("Вы в другом голосовом чате");
+  await expect(action(page)).toHaveCount(0);
+  // Exactly one, never two: both placements are mounted and CSS decides which
+  // shell shows which, so a mistake there is two bars rather than none.
+  await expect(bar(page)).toHaveCount(1);
+
+  await switchChat(page, "Команда проекта", LINE);
+  await expect(bar(page)).toHaveCount(0);
+});
+
+test("the bar's body goes back to the conversation the call is in", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id], otherChannel: false });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+  await switchChat(page, "Смета и склад", OTHER_LINE);
+
+  await bar(page).getByTestId("voice-call-bar-open").click();
+  // Back in the call's own conversation: its capsule offers «Выйти» again, and
+  // the bar has stood down because the capsule now stands there.
+  await expect(action(page)).toHaveText("Выйти");
+  await expect(bar(page)).toHaveCount(0);
+  // The same call throughout — not a rejoin.
+  expect(await probe(page)).toMatchObject({ left: 0 });
+});
+
+test("a moderator's silence reaches the bar, and the microphone stops being pressable", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id], otherChannel: false });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+  await switchChat(page, "Смета и склад", OTHER_LINE);
+  await expect(bar(page)).toBeVisible();
+
+  await revokeSpeech(page, false);
+  await expect(bar(page)).toHaveAttribute("data-voice-tone", "danger");
+  await expect(bar(page).getByTestId("voice-call-bar-state")).toHaveText(
+    "Модератор выключил ваш микрофон",
+  );
+  const mute = bar(page).getByTestId("voice-call-bar-mute");
+  // Drawn and inert, not absent: a control that disappears reads as a feature
+  // that went away.
+  await expect(mute).toBeVisible();
+  await expect(mute).toBeDisabled();
+  await expect(mute).toHaveAttribute("data-unavailable", "true");
+  // Leaving is not the moderator's to take away.
+  await expect(bar(page).getByTestId("voice-call-bar-leave")).toBeEnabled();
+
+  // And «unknown» is not a refusal: a permission nobody reported must not be
+  // read as a silence somebody imposed.
+  await revokeSpeech(page, null);
+  await expect(bar(page)).toHaveAttribute("data-voice-tone", "danger");
+  await revokeSpeech(page, true);
+  await expect(bar(page)).toHaveAttribute("data-voice-tone", "live");
+  await expect(bar(page).getByTestId("voice-call-bar-mute")).toBeEnabled();
+});
+
+for (const theme of ["dark", "light"] as const) {
+  test("the call bar, photographed in the " + theme + " theme", async ({
+    page,
+    browserName,
+  }, info: TestInfo) => {
+    needsWebRtc(browserName);
+    await open(page, {
+      channel: { participantCount: 1 },
+      present: [ANNA.id],
+      otherChannel: false,
+      theme,
+    });
+    await action(page).click();
+    await expect(action(page)).toHaveText("Выйти");
+    await switchChat(page, "Смета и склад", OTHER_LINE);
+    // The premise, asserted before the thing being photographed, so a failure
+    // names its own cause. This capture went red once out of three cold runs
+    // with «element(s) not found», which is indistinguishable between «the bar
+    // is not drawn» and «the call is no longer running».
+    expect(await probe(page)).toMatchObject({ left: 0 });
+    await expect(bar(page)).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(400);
+    await page.screenshot({
+      path: `output/voice-call-bar/bar-${info.project.name}-${theme}.png`,
+    });
   });
 }

@@ -2441,5 +2441,40 @@ textarea::placeholder, input::placeholder {
     .kub-chat-list-column [data-chat-row-body] {
       opacity: calc(1 - var(--kub-chat-list-narrow) * 1.6);
     }
+
+    /* The call bar, docked at the column's foot, narrowing by the same ratio
+       as everything above it rather than switching mode at a threshold.
+
+       Three elements, two of which give way: the names close exactly as the
+       list chrome does, and the deafen and mute buttons close after them. What
+       stays at ratio 1 is «Выйти» and the headset, because a 66px strip has
+       room for one control and leaving a call is the one that must not require
+       widening a column first — the other two are two clicks away through the
+       headset, which opens the conversation the call is in.
+
+       `* 2.2` on the buttons rather than `* 1.6`: they are the last thing to
+       go, so they fade over the top half of the drag and are gone by the time
+       the padding starts giving way. Measured against the 260..540 range the
+       resizer allows rather than chosen. */
+    .kub-chat-list-column .kub-voice-call-bar__names {
+      overflow: hidden;
+      opacity: calc(1 - var(--kub-chat-list-narrow, 0) * 1.6);
+      max-width: calc(24rem * (1 - var(--kub-chat-list-narrow, 0)));
+    }
+
+    .kub-chat-list-column .kub-voice-call-bar__extra {
+      overflow: hidden;
+      opacity: calc(1 - var(--kub-chat-list-narrow, 0) * 2.2);
+      max-width: calc(2rem * (1 - var(--kub-chat-list-narrow, 0) * 1.1));
+    }
+
+    /* No `pointer-events` rule, and that is deliberate rather than missing. A
+       button whose `max-width` has reached 0 with `overflow: hidden` has no
+       hit area at all, so it stops taking presses on its own — and the first
+       version of this block guarded it with
+       `:has([data-kub-list-narrow="1"])`, an attribute that exists nowhere in
+       this codebase. The narrow ratio is a custom property on the document,
+       never an attribute, so that selector matched nothing and the rule was
+       dead the moment it was written. */
   }
 }

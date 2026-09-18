@@ -5,6 +5,7 @@ import { useAppStore } from "@/store/app.store";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { ChatListResizer } from "@/components/sidebar/ChatListResizer";
 import { ChatWindow } from "@/components/chat/ChatWindow";
+import { VoiceCallBar } from "@/components/chat/VoiceCallBar";
 import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { BottomNav } from "./BottomNav";
 import { DesktopUpdatePill } from "@/components/desktop/DesktopUpdatePill";
@@ -114,6 +115,28 @@ export function MainLayout() {
             the 44px it held the panes clear of those buttons by is now
             `--kub-window-caption`, padded out of each pane's own top through
             `pt-window-top`. See `DesktopWindowChrome`. */}
+        {/* The running call, on a phone, where the chat list column it is
+            docked to is not on screen.
+
+            `md:hidden` and not a JavaScript width check: `useIsMobile()` reads
+            `< 768` and agrees with `md:` at every width, but it starts
+            `undefined` and resolves in an effect, so a bar gated on it would
+            appear a frame late on every phone. The store flag below is not a
+            width at all — it is whether a conversation is open — so the two
+            gates answer different questions and cannot disagree about one.
+
+            Above the panes rather than over them: this is Telegram's position
+            on a phone, it pushes the conversation down rather than covering its
+            header, and it needs no room reserved anywhere. On a computer the
+            same component is docked at the foot of the chat list column
+            instead — see `Sidebar`. Exactly one of the two is ever visible, and
+            `voice-call-bar-one-visible` in the e2e pins that. */}
+        {isMobileChatOpen && (
+          <div className="md:hidden">
+            <VoiceCallBar placement="top" />
+          </div>
+        )}
+
         <div
           // No reservation here, deliberately. Padding on this box shrinks the
           // panes and leaves a band of the application's own ground under the

@@ -13415,12 +13415,35 @@ measuring it rather than by reading the proposal:
 reads them. The screen that defines a group's tags, the assignment control on a
 member, and the row and author-line rendering are the next block.
 
-**Two unrelated findings this measurement turned up**, each worth its own entry
-when somebody gets to them: `chat_channel_categories` is subscribed to by
-`useServerChannels.ts` but is not in the `supabase_realtime` publication, so
-that binding has never fired; and `voice_channels` grants `authenticated` no
-UPDATE while its `FOR ALL` policy promises one — latent only because the client
-just reads it.
+**Two unrelated findings this measurement turned up.** The first was real and is
+D-226; the second was wrong, and the correction is worth more than the claim
+was.
+
+`chat_channel_categories` is subscribed to by `useServerChannels.ts` and was not
+in the `supabase_realtime` publication, so that binding had never fired — closed
+on 2026-09-18 as **D-226**.
+
+`voice_channels` granting `authenticated` no UPDATE was **not a defect**, and
+the sentence that stood here was wrong in the confident direction. The
+measurement was right: `relacl` reads `authenticated=ard`, no `w`, and
+`has_table_privilege('authenticated', …, 'UPDATE')` really is false. The
+inference was wrong, because UPDATE on this table is granted **per column**, on
+exactly the seven `useChannelAdmin` writes — `name`, `position`,
+`max_participants`, `speak_role`, `archived`, `updated_at`, `category_id` —
+while `participant_count` and `active_since` are withheld because the SFU owns
+them. Seven needed, seven granted. Nothing was broken and there was nothing to
+harden: `anon` holds no column on the table at all, and the server paths run as
+`service_role`, which does hold table-level UPDATE.
+
+**This is the fourth time this project has drawn that conclusion from that
+measurement.** D-191 read it off the policy alone; the self-check in
+`20260918120000_chat_roles_and_member_tags.sql:125` asked
+`has_table_privilege(…, 'UPDATE')` and concluded renames were refused;
+`20260918160000` corrected that and found the one gap that was real
+(`category_id`); and this note made it again. The rule, stated so the fifth time
+does not happen: **on a table with column-level grants, `has_table_privilege`
+answers false by design, and only `has_column_privilege`, asked one column at a
+time, answers the question.**
 
 ---
 
@@ -14132,3 +14155,212 @@ and neither was reachable by any test in this repository. The instrument that
 found them was reading the installed bundle — not the typings, which state the
 shape and not the behaviour, and not the documentation. When a claim about an
 SDK matters, read the code that ships.
+
+---
+
+## D-225 `[x]` A call kept running with nothing on screen about it, and no way to touch it
+
+**Severity:** high. The microphone stayed open, and in the common case there was
+no control anywhere to close it.
+
+**Measured 2026-09-18** by reading `voiceCapsuleState` rather than by guessing.
+A call survives leaving the conversation it started in — `useVoiceCall` holds it
+as module state precisely so it does, and that is right. What did not exist was
+any way to see it or act on it from anywhere else:
+
+- in a chat that **owns** a voice channel, the capsule said «Вы в другом
+  голосовом чате» and offered **nothing at all** — no mute, no deafen, no
+  leave, no way back;
+- in a chat that owns **none** — a private conversation, or any group made
+  before channels existed — `if (!channel) return HIDDEN` fires first, so the
+  running call was **completely invisible**.
+
+The only way back to it was to remember which conversation it was in. This is
+the state Discord's voice panel and Telegram's call bar both exist to prevent.
+
+### What was built
+
+`components/chat/VoiceCallBar.tsx` over a pure rule in `lib/voiceCallBar.ts`.
+Four decisions, each with a reason that is not taste:
+
+**Two placements, because the two shells have different shapes.** On a computer
+both panes are on screen, so the bar docks at the foot of the chat list column —
+Discord's position, and it costs the conversation nothing. On a phone there is
+one pane and that column is not on screen while a chat is open, so it is a band
+across the top — Telegram's position. One component; only the edge it carries
+and how it narrows differ. Exactly one of the two is ever visible, and the e2e
+pins that with a count rather than a visibility check, because a mistake in the
+gating produces **two** bars rather than none.
+
+**In the flow, never over it.** A bar floating above the list would cover the
+last rows, and reserving room by padding the pane leaves a band of the
+application's own ground in the bar's shape once the call ends — the failure the
+owner saw on 2026-09-12, which `MainLayout` already carries a comment about. A
+docked bar shortens the list instead.
+
+**It stands down in the conversation that owns the call.** The capsule is
+already there with the same three controls over the same module state; two
+identical control sets on one screen is the relabelled duplicate this project
+refuses, and on a phone they would be one band under another. On a computer the
+handover is visible rather than a loss — both panes are on screen, so the
+controls move from the column to the capsule in plain sight.
+
+**No faces.** The capsule draws a stack and this deliberately does not: the
+names the SDK carries are baked into each token at mint time, and outside the
+conversation that owns the call there is no member list to correct them against.
+A row of half-stale names is worse than none.
+
+### The defect the pixels found, in this very component
+
+The first capture read «Общий голос» over «Команда проекта · Вы в разг…». The
+two facts were one string, and at the chat list column's default 360 points the
+line ran out **inside the state** — the one thing somebody reads to know the
+call is still up.
+
+Fixed by making them two boxes rather than one string: the group's name
+truncates and the state never does. The fact that survives being cut short is
+the one that gets cut.
+
+**And it is now a test rather than a screenshot.** `toHaveText` reads
+`textContent`, which is the same string whether or not its box can show it —
+which is exactly why the assertion passed while the pixels were wrong. The e2e
+now measures `scrollWidth` against `clientWidth` on the state's own span, and a
+mutation giving it `truncate` turns that red.
+
+Ten mutations against the rule and six against the browser, all red. Pixels in
+both themes, both placements, 1440 and 390.
+
+**One flake, stated rather than buried:** the dark capture went red once on the
+first cold run of these new modules with «element(s) not found», and has passed
+twenty times since. It now asserts the call is still running *before* it looks
+for the bar, so any recurrence says which half failed instead of leaving the two
+indistinguishable.
+
+---
+
+## D-226 `[x]` A renamed channel heading reached nobody else, and nothing said so
+
+**Severity:** medium, and it had been live since the headings shipped on
+2026-09-14. Not an outage — a feature that silently did not work.
+
+**Measured 2026-09-18 on production, read-only, and confirmed from both sides.**
+
+The database side:
+
+    tablename               | in supabase_realtime | replica identity
+    chat_channel_categories | f                    | d
+    voice_channels          | t                    | d
+    voice_participants      | t                    | f
+    topics                  | t                    | d
+
+`20260914140000_channel_categories.sql` created the table, granted it, gave it
+six policies and two foreign keys, and never added it to the publication — while
+`20260913150000_voice_channels.sql`, written the day before, had a `do $publish$`
+block for exactly this and a self-check counting the membership.
+
+The client side, read out of the bundle live at `app.letscube.ru` rather than
+out of the source, because what matters is what is deployed:
+
+    yf(r.realtime, `server-channels:${e}`, [
+      {event:"*", schema:"public", table:"voice_channels",          filter:`chat_id=eq.${e}`, …},
+      {event:"*", schema:"public", table:"chat_channel_categories", filter:`chat_id=eq.${e}`, …},
+      …
+    ])
+
+So the deployed client subscribes and the database has nothing to send. **This
+was production behaviour today, not a gap waiting on a deploy.**
+
+**What a person experienced.** An administrator renames a heading in «Каналы».
+Their own screen changes, because `useChannelAdmin` updates its own held list.
+On every other member's screen the old heading stays until they reload or reopen
+the group. Same for a heading added, deleted, or dragged into a new order.
+
+**Why it was easy to miss:** moving a *room* between headings already worked,
+because that write lands on `voice_channels.category_id` and that table is
+published. A tester dragging a room sees the other device update and concludes
+the rail is live. It is the headings themselves that were not.
+
+**Why it was contained, and why that is not luck.** On 2026-09-05 one
+unpublished table killed every other binding on its channel while still
+reporting SUBSCRIBED. `lib/realtimeTableChannels.ts` answered that with one
+channel per table, and `useServerChannels` uses it — so this binding sat alone
+on `server-channels:<chatId>:chat_channel_categories` and took nothing down with
+it. That rule is the only reason this was a missing feature rather than a second
+outage.
+
+**Nothing warned anybody.** `realtime.subscription_check_filters` validates that
+the filter's column exists and is SELECTable by the claims role; it never looks
+at the publication. The subscribe succeeds, the channel reports SUBSCRIBED, and
+the silence is indistinguishable from a group nobody has touched.
+
+### Publishing the table was only half of it
+
+The binding filters `chat_id=eq.<chatId>`, and `removeCategory` issues a real
+DELETE — the only one of `useChannelAdmin`'s ten mutators that is not an INSERT
+or an UPDATE. Under REPLICA IDENTITY DEFAULT the old tuple carries only the
+primary key, so a DELETE reaches the filter with no `chat_id` in it.
+
+That was not taken from documentation. `realtime.is_visible_through_filters`
+lives in this database, is IMMUTABLE and pure, so it was asked directly:
+
+    old tuple [chat_id, id] vs filter chat_id=eq.<that chat>   -> t
+    old tuple [id]          vs filter chat_id=eq.<that chat>   -> NULL
+    old tuple [chat_id, id] vs filter chat_id=eq.<other chat>  -> f
+
+The middle row was the state before this migration: the function inner-joins
+filters against the columns it is handed, a filter naming an absent column
+aggregates over no rows, `bool_and` returns NULL, and `apply_rls` uses the
+result in a `where`, where NULL is not visible. The third row is the control —
+with the whole old tuple present the filter still refuses another group's
+heading, so FULL widened the payload without widening the audience. All three
+are assertions in the migration's own self-check, so it cannot stay green on a
+Realtime that changes how it filters; a `relreplident` source scan could.
+
+`replica identity using index` on the existing `(chat_id, id)` unique key was
+considered and rejected: PostgreSQL treats a dropped replica-identity index as
+REPLICA IDENTITY NOTHING **silently**, which is a rule living where nobody would
+look for it, and all seven tables in this deployment with a non-default identity
+use plain FULL.
+
+### Applied
+
+`.migration-backup/supabase/migrations/20260918180000_a_renamed_heading_reaches_the_other_rails.sql`,
+as **`postgres`** — verified rather than assumed, because the two migrations
+immediately before it had to run as `supabase_admin` and the schema is no guide:
+`postgres` owns the publication and this table, `supabase_admin` owns
+`voice_channels` and `voice_participants`.
+
+Backup first: `/srv/letscube/backups/db-schema/pre-20260918180000-categories-realtime-20260918T052408Z.sql`,
+1,352,382 bytes, sha256 `9ff7198a…36534a95`, 137 `CREATE TABLE` statements.
+Then the whole file rehearsed on production inside a transaction that ended in
+ROLLBACK — every notice fired, no exception — and production re-measured
+unchanged after it.
+
+Before → after: published `false` → `true`, replica identity `d` → `f`,
+published tables in `public` 32 → 33, and **filenode 144372 → 144372**, which
+the migration asserts itself rather than claiming: it reads
+`pg_relation_filenode` either side of the DDL and raises if it moved. RLS still
+on, six policies intact, `anon` still unable to read, the FULL-identity count in
+`public` 7 → 8.
+
+**No Realtime restart and no slot work**, and that is measured too:
+`realtime.list_changes` rebuilds its `add-tables` argument from
+`pg_publication_tables` on every poll, so the publication is a parameter of the
+read rather than state baked into the `wal2json` slot. Both statements are also
+guarded on the state they establish, so a second application does no DDL and
+takes no lock.
+
+**The client needed no change and no deploy.** The binding was already in the
+bundle that was live.
+
+### Found on the way, deliberately not folded in
+
+`chat_members` measures the same way — published with replica identity `d`,
+while `docs/SUPABASE_CURRENT_STATE.md:117` and `docs/SUPABASE_SCHEMA_MAP.md:314`
+both claim FULL and `docs/proposals/2026-09-13-voice-channels.md:802` reasoned
+from that stale line. `useChats.ts` binds its DELETE with
+`filter: user_id=eq.<userId>`, so by the mechanism above that DELETE cannot
+match either. **Not verified as user-visible** — `scheduleRefetch` may already
+be reached another way — so it gets its own measurement and its own file rather
+than a line in this one. Also recorded: the comment at `useChats.ts:451` says
+`public.chats` is not published, and it is.

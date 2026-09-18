@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { KubButton, KubGlassLayer, KubIcon, KubNotice } from "@/components/kub";
 import { SidebarHeader } from "./SidebarHeader";
+import { VoiceCallBar } from "@/components/chat/VoiceCallBar";
 import { FolderTabs } from "./FolderTabs";
 import { FolderRail } from "./FolderRail";
 import { SideMenuLayer } from "./SideMenuLayer";
@@ -243,6 +244,21 @@ export function Sidebar() {
               />
             </div>
           )}
+
+          {/* The running call, at the foot of the column — Discord's position,
+              and in the flow rather than over the list. A bar floating above it
+              would cover the last rows, and holding room for it by padding the
+              column leaves a band of the application's own ground in the bar's
+              shape once the call ends; `MainLayout` carries the comment about
+              the day that shipped. Docked, the list is simply shorter.
+
+              Outside the conditional above on purpose: it is drawn while the
+              search results, the settings column or the chat-search panel stand
+              in the list's place, because a call does not stop being in
+              progress because somebody opened settings. It draws nothing at all
+              when there is no call, and nothing when the conversation that owns
+              the call is the one on screen — the capsule is already there. */}
+          <VoiceCallBar placement="column" />
         </div>
       </div>
 

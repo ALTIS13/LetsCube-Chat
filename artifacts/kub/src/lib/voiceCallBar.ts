@@ -1,0 +1,182 @@
+/**
+ * The call, from anywhere in the application.
+ *
+ * ## The defect this exists for
+ *
+ * A call survives leaving the conversation it was started in — `useVoiceCall`
+ * holds it as module state precisely so it does, and that was the right
+ * decision. What did not exist was any way to see it or touch it from
+ * elsewhere. Measured on 2026-09-18 by reading `voiceCapsuleState`:
+ *
+ *  - in a chat that owns a voice channel, the capsule says «Вы в другом
+ *    голосовом чате» and **offers nothing at all** — no mute, no deafen, no
+ *    leave, no way back;
+ *  - in a chat that owns none — a private conversation, or any group made
+ *    before channels existed — `if (!channel) return HIDDEN` fires first and
+ *    the running call is **completely invisible**.
+ *
+ * So the microphone stayed open with nothing on screen saying so, and the only
+ * way to reach it was to remember which conversation it was in and navigate
+ * back. That is the state Discord's voice panel and Telegram's call bar both
+ * exist to prevent.
+ *
+ * ## One rule, and why it is not «always show»
+ *
+ * The bar is drawn when a call is running **and the conversation that owns it
+ * is not the one on screen**. Not because chrome is precious, but because the
+ * capsule already stands in that conversation with the same three controls over
+ * the same module state: two identical control sets on one screen is the
+ * relabelled duplicate this project refuses, and on a phone the bar and the
+ * capsule would occupy the same band one under the other.
+ *
+ * The handover is visible rather than a loss: on a computer both panes are on
+ * screen, so opening the call's own chat moves the controls from the column to
+ * the capsule in plain sight.
+ *
+ * ## What it is not
+ *
+ * It is not a second call state. Everything here is derived from the one
+ * `VoiceCallState` the hook publishes, so the bar and the capsule cannot
+ * disagree about whether the microphone is muted — they are two windows onto
+ * one fact. And it holds no controls the capsule does not have: the same mute,
+ * the same deafen, the same leave.
+ *
+ * This module imports nothing, so `node --test` can load it. A rule inside a
+ * `"use client"` module is a rule with no test; `voiceChannel.ts` records why
+ * at its own head.
+ */
+
+/** The phases this module knows, spelled as `VoiceCallState.phase` spells them. */
+export type VoiceCallBarPhase = "idle" | "joining" | "connected" | "reconnecting" | "failed";
+
+export interface VoiceCallBarInput {
+  readonly phase: VoiceCallBarPhase;
+  /** The room the call is in. `null` means there is no call to speak of. */
+  readonly channelId: string | null;
+  /** The chat that room belongs to — where pressing the bar goes. */
+  readonly chatId: string | null;
+  readonly channelName: string | null;
+  /** That chat's own name, from the list the reader already has. */
+  readonly chatName: string | null;
+  /** The conversation on screen, so the bar can stand down where the capsule stands. */
+  readonly selectedChatId: string | null;
+  readonly micMuted: boolean;
+  readonly deafened: boolean;
+  /** A moderator took the microphone away (D-221). */
+  readonly speechRevoked: boolean;
+}
+
+export interface VoiceCallBarView {
+  readonly visible: boolean;
+  /** The room's name, which is the thing a person is looking for. */
+  readonly room: string;
+  /** The group it is in, or null when the reader has no name for it. */
+  readonly where: string | null;
+  /** One short line under the names. Never a number, never a status code. */
+  readonly detail: string;
+  readonly tone: "live" | "neutral" | "danger";
+  /** Whether the three controls are drawn at all. A join in flight offers none. */
+  readonly controls: boolean;
+  readonly muted: boolean;
+  readonly deafened: boolean;
+  /**
+   * The microphone is not this person's to press. The control stays drawn and
+   * reads as unavailable, because removing it would leave the reader looking
+   * for a control that used to be there.
+   */
+  readonly speechRevoked: boolean;
+  /** Which chat the bar's body opens. Null means the bar's body does nothing. */
+  readonly openChatId: string | null;
+}
+
+const HIDDEN: VoiceCallBarView = {
+  visible: false,
+  room: "",
+  where: null,
+  detail: "",
+  tone: "neutral",
+  controls: false,
+  muted: false,
+  deafened: false,
+  speechRevoked: false,
+  openChatId: null,
+};
+
+/**
+ * What the bar says, or that there is nothing to say.
+ *
+ * `failed` is deliberately not a bar. A call that failed is not running, the
+ * retry belongs where the person tried — the capsule, which offers «Повторить»
+ * against the channel it knows — and a bar following somebody around the
+ * application to report a failure they already saw is noise.
+ */
+export function voiceCallBarState(input: VoiceCallBarInput): VoiceCallBarView {
+  const { phase, channelId, chatId } = input;
+  if (channelId === null) return HIDDEN;
+  if (phase !== "joining" && phase !== "connected" && phase !== "reconnecting") return HIDDEN;
+  // The capsule is already in that conversation, with these same controls over
+  // this same state.
+  if (chatId !== null && chatId === input.selectedChatId) return HIDDEN;
+
+  const room = (input.channelName ?? "").trim() || "Голосовой канал";
+  const where = (input.chatName ?? "").trim() || null;
+
+  if (phase === "joining") {
+    return {
+      ...HIDDEN,
+      visible: true,
+      room,
+      where,
+      detail: "Подключаемся…",
+      tone: "neutral",
+      // Nothing to mute yet, and nothing to leave: the join has its own cancel
+      // in the capsule, and offering a second one here would race it.
+      controls: false,
+      openChatId: chatId,
+    };
+  }
+
+  if (phase === "reconnecting") {
+    return {
+      visible: true,
+      room,
+      where,
+      // «Соединение восстанавливается», not «Нет связи»: the SDK is trying, the
+      // call has not ended, and telling somebody their call is gone while it is
+      // coming back is the kind of sentence that makes them press leave.
+      detail: "Соединение восстанавливается…",
+      tone: "danger",
+      // Kept: muting and leaving must work while the transport is down. Leaving
+      // in particular — somebody who wants out of a call that is stuttering
+      // must not have to wait for it to come back first.
+      controls: true,
+      muted: input.micMuted,
+      deafened: input.deafened,
+      speechRevoked: input.speechRevoked,
+      openChatId: chatId,
+    };
+  }
+
+  return {
+    visible: true,
+    room,
+    where,
+    detail: input.speechRevoked
+      ? "Модератор выключил ваш микрофон"
+      : input.deafened
+        ? "Вы не слышите разговор"
+        : input.micMuted
+          ? "Микрофон выключен"
+          : "Вы в разговоре",
+    // `danger` only for the one state somebody else caused. Muting and
+    // deafening are this person's own choices and the controls already show
+    // them; painting a chosen state as a problem would be the interface
+    // disagreeing with the reader.
+    tone: input.speechRevoked ? "danger" : "live",
+    controls: true,
+    muted: input.micMuted,
+    deafened: input.deafened,
+    speechRevoked: input.speechRevoked,
+    openChatId: chatId,
+  };
+}
