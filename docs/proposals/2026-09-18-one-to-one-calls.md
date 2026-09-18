@@ -403,11 +403,19 @@ so the interface says so plainly, exactly as slice 6 of the voice proposal
 already commits to for background audio. Windows is no longer in this slice —
 see the decision above.
 
-**Slice F — «do not accept calls on this device».** Shape A, local to the
-installation, with the interface saying where the setting lives; or shape B,
-the device registry, if the owner wants Telegram's «Активные сеансы» first.
+**Slice F — «do not accept calls on this device», as a device registry.**
+Decided on 2026-09-18. A row per authorised device, written at sign-in and
+refreshed while the session lives; a list that names each one the way Telegram's
+«Активные сеансы» does — what it is, where it last was, when — and a switch on
+each that any of them can flip. The switch is read where the ring is decided,
+so a device that refuses calls is simply not among those rung.
+
 Ringing every device and stopping the rest is **not** in this slice — it falls
-out of the ring itself and is built in slice A.
+out of the ring itself and is built in slice A. What this slice adds is the
+*choice*, and the reason it is a stage rather than a setting is the registry:
+nothing in this product currently knows what a device is (§4a measures exactly
+what does and does not exist), so the row, its identity across a token refresh,
+and its retirement all have to be designed before a switch means anything.
 
 ## 6. Open questions, which are the owner's
 
@@ -417,20 +425,35 @@ out of the ring itself and is built in slice A.
    explicit `push_enabled` row and honours per-chat mutes — so a person who muted
    a chat would not learn they were called. Correct for messages; a decision for
    calls.
-2. **How long does it ring before it is missed?** Telegram rings about 45
-   seconds; Discord until cancelled.
-3. **Is a call offered in every private chat, or only between people who are
-   already in contact?** Anything that can ring a stranger is an abuse surface,
-   and the existing block list is the obvious gate.
-4. **Video, or audio only, in the first version?** The token already permits
-   video, and the answer changes the incoming-call surface.
+2. ~~**How long does it ring before it is missed?**~~ **Answered on
+   2026-09-18: 45 seconds**, Telegram's number. It is a ceiling as well as a
+   duration — a ring that ends by itself is what makes «пропущенный» a fact
+   somebody can write down — and it makes slice C mandatory rather than
+   optional, because something has to decide the 45 seconds are up.
+3. ~~**Is a call offered in every private chat, or only between people who are
+   already in contact?**~~ **Answered on 2026-09-18: every private chat, minus
+   the block list.** The gate is the one that already exists; no notion of «a
+   contact» is invented for this. A private chat only exists because somebody
+   already opened it, which is the product's own definition of being in touch.
+4. ~~**Video, or audio only, in the first version?**~~ **Answered on
+   2026-09-18: audio only.** The incoming-call surface stays a name, a
+   photograph and two buttons, and video keeps its own slice — it is a
+   different bandwidth question, a different permission prompt and a different
+   thing to do on a weak connection. Nothing in the schema forecloses it: the
+   token already permits video, so adding it later needs no migration.
 5. ~~**Windows closed is a stage of its own.**~~ **Answered by the owner on
    2026-09-18:** a closed client should not ring, as Telegram's does not.
    Autostart — to the tray and normally — is the requirement instead, and it is
    slice D2. WNS delivery to a closed application stays unbuilt and unwanted.
-6. **Does the first version ship the per-device switch as A or wait for B?**
-   A is local to the installation and works at once; B is the device registry
-   and is a stage. §4a has the measurement behind both.
+6. ~~**Does the first version ship the per-device switch as A or wait for B?**~~
+   **Answered on 2026-09-18: B, the device registry.** Shape A is local to the
+   installation, and «turn off calls on the laptop» that can only be done *from
+   the laptop* is not what was asked for — it is the lesser function wearing
+   the name of the one asked for, which this project refuses on principle.
+   Slice F is therefore the registry: a row per authorised device, registered
+   at sign-in, listed with «Активные сеансы» beside it, each with its own
+   switch, visible and changeable from any of them. It is a stage of its own
+   and it does not block slices A–C.
 7. **When a device refuses calls, does it still show the incoming call
    silently, or nothing at all?** Telegram shows nothing on a device you have
    turned off. Either is defensible; the record in the conversation is the same
