@@ -611,6 +611,95 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-18 — `10a87f09` (a private chat rings, and three production migrations behind it)
+
+**Current baseline.** `letscube-web` runs image
+`l64kyyu1sysev2izzjjbizhe:10a87f094dfca77bfa57cdabd704daac224399db`, read off the
+running container; the previous replica (`f795e76e…`) was observed alive beside
+it and then gone.
+
+**Proved in the served bundle, both ways.** `/assets/index-dt238rK2.js`
+(3,126,459 bytes, path taken from the page on the same request) carries
+«Входящий звонок» twice and `voice_call_ring` once, with «Вы в разговоре» as the
+control that this is the real bundle. At `HEAD~1` the first two appear nowhere in
+`artifacts/kub/src` and the control does — which is the half that makes their
+presence mean anything.
+
+Three commits:
+
+- **`f795e76e`** — D-222 tier 1 and half B: the settings screen asks the box it
+  is drawn in rather than the window. Recorded in its own right below.
+- **`6cf783df`** — the first two call migrations, applied and verified before the
+  client half existed.
+- **`10a87f09`** — the client half, the third migration, and D-233.
+
+#### Three production migrations, each backed up, rehearsed and verified
+
+All three applied as `supabase_admin`, which owns `voice_channels` — ownership
+here does not follow the schema and was read off `pg_tables.tableowner`, not off
+a migration's description of itself. There is no other database with this schema,
+so every rehearsal ran **on production inside a transaction ending in ROLLBACK**,
+on synthetic rows, with `auth.users`'s and `profiles`'s registration triggers
+disabled inside that transaction so that no real account was read or written.
+
+- `20260918220000_a_private_chat_can_ring.sql` — backup
+  `pre-20260918220000-private-chat-ring-20260918T105612Z.sql` (1,367,301 bytes,
+  sha256 `db1d1b31…`, 138 `CREATE TABLE`). Thirteen probes, each answering a
+  value: the non-owner makes the room through the RPC where their own insert is
+  refused by RLS, a group is refused, a block is refused, a second ring is
+  refused, the caller cannot answer themselves, stopping twice is not an error, a
+  nonsense reason is, a drifted room is normalised, an incoherent ring violates
+  its constraint, and nothing outside the rehearsal moved.
+- `20260918230000_a_ring_cannot_be_forged.sql` — backup
+  `pre-20260918230000-ring-forgery-20260918T110141Z.sql` (1,379,468 bytes, sha256
+  `93abf8d3…`, 138). Written because verifying the first one on the applied
+  database printed `INSERT,SELECT` where its own header said «SELECT and nothing
+  else».
+- `20260918240000_a_call_that_died_does_not_lock_the_pair_out.sql` — backup
+  `pre-20260918240000-ring-lockout-20260918T121104Z.sql` (1,380,828 bytes, sha256
+  `a147d02a…`, 138). Written because a call whose clients all died left the pair
+  unable to call each other **for ever**.
+
+#### The two findings worth more than the migrations
+
+**INSERT and UPDATE on one table were granted at different levels, and a new
+column inherits accordingly.** UPDATE on `voice_channels` is held column by
+column — seven of them — so the three ring columns got nothing. INSERT is held at
+the **table** level, and a table grant covers every column the table will ever
+have, so they arrived writable-on-insert. Since a private chat's owner may insert
+a room there, a blocked caller could have inserted one **already ringing** and
+stepped around the single gate the owner's «every private chat, minus the block
+list» rests on.
+
+**And the obvious fix is a silent no-op.** `revoke insert (col) … from
+authenticated` against a table-level grant is accepted without complaint and
+changes nothing — a column-level revoke cannot cut a table-level privilege. It
+was caught only because the self-check compared `column_privileges` with what it
+wanted instead of assuming the statement had worked. The grant had to be
+*replaced*: revoked whole, re-granted as the explicit fourteen columns, asserted
+in both directions, and a group voice channel proved to still insert afterwards.
+
+#### What the ring rests on, verified at the right level
+
+The whole design is «the subscription that already exists carries it», so three
+things were checked rather than assumed: `has_column_privilege('authenticated',
+…, 'SELECT')` answers true for each ring column — the predicate Realtime actually
+uses, and the one `has_table_privilege` famously lies about here; the table is
+published for insert, update and delete; and the publication carries **no column
+list** (`pg_publication_rel.prattrs is null`), which is what makes a column added
+today reach the wire at all.
+
+**Not yet observed:** a ring travelling over a live WebSocket to a second signed-in
+device. The three conditions above are what that requires and each is verified;
+the wire itself has not been watched, and this line says so rather than claiming
+it has.
+
+**Gates at `10a87f09`:** typecheck clean across four packages, unit **3063/3063**,
+`voice-call.spec.ts` and `voice-ring.spec.ts` **138 passed** across 1440 and 390.
+Pixels in both directions, both themes, both widths — and they earned their keep:
+the desktop ring card was photographed sitting across the conversation's date
+separator and its «НОВЫЕ СООБЩЕНИЯ» mark, which is what turned it into a band in
+the flow at every width (D-233).
 ### 2026-09-18 — `313c5b83` (six more deploys the same day; the microphone stops being open all the time)
 
 **Current baseline.** `letscube-web` runs image
