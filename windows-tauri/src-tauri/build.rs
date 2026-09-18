@@ -19,6 +19,8 @@ const COMMANDS: &[&str] = &[
     "desktop_toggle_maximize",
     "desktop_is_maximized",
     "desktop_close_to_tray",
+    "desktop_get_autostart",
+    "desktop_set_autostart",
     "desktop_get_storage_state",
     "desktop_set_storage_location",
     "desktop_set_cache_limit",

@@ -1,3 +1,4 @@
+pub mod autostart;
 pub mod startup;
 pub mod storage;
 pub mod updater;
@@ -48,6 +49,12 @@ const WINDOWS_APP_ID: &str = "ru.letscube.messenger";
 const DESKTOP_BUILD: &str = env!("LETSCUBE_DESKTOP_BUILD");
 static MAIN_READY: AtomicBool = AtomicBool::new(false);
 static PREFLIGHT_RUNNING: AtomicBool = AtomicBool::new(false);
+/// Whether *this* launch was asked to wait in the tray.
+///
+/// Read once from the command line at the top of `run()` rather than at each
+/// use, so the window builder and the setup hook cannot reach two different
+/// answers, and so the decision is made before any window exists.
+static LAUNCH_STARTS_HIDDEN: AtomicBool = AtomicBool::new(false);
 #[cfg(debug_assertions)]
 static QA_OFFLINE_FAILURE_EMITTED: AtomicBool = AtomicBool::new(false);
 
@@ -513,6 +520,11 @@ fn desktop_bridge_script() -> String {
     toggleMaximize: async () => call("desktop_toggle_maximize"),
     isMaximized: async () => call("desktop_is_maximized"),
     closeToTray: async () => call("desktop_close_to_tray"),
+    getAutostart: async () => call("desktop_get_autostart"),
+    setAutostart: async (options) => call("desktop_set_autostart", {{
+      enabled: options.enabled === true,
+      startMinimized: options.startMinimized === true
+    }}),
     getStorageState: async () => call("desktop_get_storage_state"),
     setStorageLocation: async (location) => call("desktop_set_storage_location", {{ location }}),
     setCacheLimit: async (bytes) => call("desktop_set_cache_limit", {{ bytes }}),
@@ -1324,7 +1336,16 @@ fn build_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         browser_args.push_str(&args);
     }
 
+    // The hidden start is a property of the window from the moment it exists,
+    // never a `hide()` afterwards. `tauri.conf.json` says `visible: true`, and
+    // building from that config and hiding the window later would put a real
+    // frame of a real window on screen — the one thing worse than a window that
+    // does not appear is one that appears and vanishes. There is no flash here
+    // because there is nothing to flash: the window is created invisible and
+    // `setup` does not call `show_main` for this launch.
+    let starts_hidden = LAUNCH_STARTS_HIDDEN.load(Ordering::Acquire);
     let builder = WebviewWindowBuilder::from_config(app, &config)?
+        .visible(!starts_hidden)
         .data_directory(profile_dir)
         .initialization_script(initialization_script())
         .additional_browser_args(&browser_args);
@@ -1560,6 +1581,42 @@ fn desktop_clear_cache(
     storage_state_for(&app)
 }
 
+/// The executable Windows would have to run at sign-in.
+///
+/// `current_exe` rather than anything remembered: an update replaces the binary
+/// in place and a reinstall can move it, so the only path worth registering is
+/// the one this process is running from right now.
+fn current_executable_path() -> Result<String, &'static str> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|path| path.to_str().map(str::to_owned))
+        .ok_or("autostart_unavailable")
+}
+
+#[tauri::command]
+fn desktop_get_autostart(window: WebviewWindow) -> Result<autostart::AutostartState, &'static str> {
+    require_production_main(&window)?;
+    autostart::read_state(&current_executable_path()?)
+}
+
+/// Writes the two choices and answers with what the registry says afterwards.
+///
+/// Never with what was asked for. A person can remove the value with any of a
+/// dozen Windows tools and Task Manager can veto it, so an answer assembled
+/// from the request would be a setting that reports its own intentions back to
+/// itself. The read is the whole point of the round trip.
+#[tauri::command]
+fn desktop_set_autostart(
+    window: WebviewWindow,
+    enabled: bool,
+    start_minimized: bool,
+) -> Result<autostart::AutostartState, &'static str> {
+    require_production_main(&window)?;
+    let executable = current_executable_path()?;
+    autostart::write_state(&executable, enabled, start_minimized)?;
+    autostart::read_state(&executable)
+}
+
 #[tauri::command]
 fn desktop_set_update_channel(
     window: WebviewWindow,
@@ -1780,6 +1837,13 @@ fn begin_startup_qa(window: WebviewWindow, app: AppHandle) {
 }
 
 pub fn run() {
+    // Before anything can build a window and before the single-instance plugin
+    // takes its mutex, so every later reader gets the same answer.
+    LAUNCH_STARTS_HIDDEN.store(
+        autostart::launch_starts_hidden(&std::env::args().collect::<Vec<_>>()),
+        Ordering::Release,
+    );
+
     #[allow(unused_mut)]
     let mut context = tauri::generate_context!();
     // Done here rather than inside `setup`, because the single-instance plugin
@@ -1800,6 +1864,21 @@ pub fn run() {
                     activate_notification_route(&main, route);
                     return;
                 }
+            }
+            // This is the only thing that rescues a launch that went straight
+            // to the tray: autostart, a deep link and a person double-clicking
+            // the icon are exactly the three cases this plugin exists for, and
+            // the third one has to *show* the hidden instance rather than leave
+            // it hidden. `restore_startup_surface` already did; what is new is
+            // that it now matters, because before this change no launch was
+            // ever hidden and the call was a no-op on a visible window.
+            //
+            // The exception is a second launch that asked for the tray itself.
+            // Windows runs the sign-in entry once, so this is not the login
+            // case; it is somebody running that same command line again, and
+            // answering it with a window would contradict the words in it.
+            if autostart::launch_starts_hidden(&args) {
+                return;
             }
             restore_startup_surface(app);
         }))
@@ -1825,6 +1904,8 @@ pub fn run() {
             desktop_toggle_maximize,
             desktop_is_maximized,
             desktop_close_to_tray,
+            desktop_get_autostart,
+            desktop_set_autostart,
             desktop_get_storage_state,
             desktop_set_storage_location,
             desktop_set_cache_limit,
@@ -1852,7 +1933,13 @@ pub fn run() {
                     }
                 }
             });
-            show_main(app.handle());
+            // A launch that asked for the tray is never shown here. The
+            // notification route below still shows it, deliberately: a person
+            // who clicked a toast asked for the window, whatever the sign-in
+            // entry said.
+            if !LAUNCH_STARTS_HIDDEN.load(Ordering::Acquire) {
+                show_main(app.handle());
+            }
             let startup_args = std::env::args().collect::<Vec<_>>();
             if let Some(route) = notification_route_from_args(&startup_args) {
                 if let Some(main) = app.get_webview_window("main") {

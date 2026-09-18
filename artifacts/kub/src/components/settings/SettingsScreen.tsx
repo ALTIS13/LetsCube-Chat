@@ -20,6 +20,7 @@ import { isNativeAndroid } from "@/lib/platform/capabilities";
 import { isDesktopApp } from "@/lib/platform/desktop";
 import { ReleaseDistributionSection } from "@/components/settings/ReleaseDistributionSection";
 import { StorageSection } from "@/components/settings/StorageSection";
+import { WindowsStartupSection } from "@/components/settings/WindowsStartupSection";
 import { ProfileDecorationSection } from "@/components/settings/ProfileDecorationSection";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
@@ -775,8 +776,12 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
             >
               <div className="space-y-3">
                 <ReleaseDistributionSection />
-                {/* The section guards itself too; this keeps the spacer from being the
-                    one thing the browser build still renders here. */}
+                {/* The sections guard themselves too; this keeps the spacer from being
+                    the one thing the browser build still renders here. Autostart joins
+                    `StorageSection` behind the same gate rather than claiming a row of
+                    its own: both are things only the Windows shell can do, and a row id
+                    would have to be searchable on every platform that cannot draw it. */}
+                {desktopWindows && <WindowsStartupSection />}
                 {desktopWindows && <StorageSection />}
               </div>
             </DisclosureRow>

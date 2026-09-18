@@ -31,6 +31,11 @@ url = "2.5.8"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = ["Data_Xml_Dom", "Foundation", "UI_Notifications"] }
+# Already in the lock file transitively — reqwest's `system-proxy` feature pulls
+# it on Windows — so naming it directly adds no new code to the build, exactly
+# as with `sha2` above. It gives autostart its one registry value instead of a
+# plugin that cannot change its launch arguments while the application runs.
+winreg = "=0.55.0"
 
 [profile.release]
 codegen-units = 1

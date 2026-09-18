@@ -24,6 +24,8 @@
     "allow-desktop-toggle-maximize",
     "allow-desktop-is-maximized",
     "allow-desktop-close-to-tray",
+    "allow-desktop-get-autostart",
+    "allow-desktop-set-autostart",
     "allow-desktop-get-storage-state",
     "allow-desktop-set-storage-location",
     "allow-desktop-set-cache-limit",

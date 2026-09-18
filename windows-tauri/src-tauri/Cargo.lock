@@ -2064,6 +2064,7 @@ dependencies = [
  "tauri-plugin-updater",
  "url",
  "windows",
+ "winreg",
 ]
 
 [[package]]

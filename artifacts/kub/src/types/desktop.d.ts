@@ -6,6 +6,12 @@ type LetscubeDesktopRuntimeInfo = {
 
 type LetscubeDesktopUpdateChannel = "stable" | "test";
 
+type LetscubeDesktopAutostartRequest = {
+  enabled: boolean;
+  /** Only meaningful while `enabled`; the shell writes it as a launch flag. */
+  startMinimized: boolean;
+};
+
 type LetscubeDesktopNotification = {
   id: number;
   title: string;
@@ -37,6 +43,16 @@ interface Window {
     setUpdateChannel(channel: LetscubeDesktopUpdateChannel): Promise<unknown>;
     checkUpdate(): Promise<unknown>;
     installUpdate(): Promise<unknown>;
+    /**
+     * What `HKCU\...\Run` says right now, never what the application last
+     * wrote. Rejects with one of the codes in `DESKTOP_AUTOSTART_ERROR_CODES`.
+     */
+    getAutostart(): Promise<unknown>;
+    /**
+     * Writes both choices as one registry value and resolves with the state
+     * read back off the registry afterwards.
+     */
+    setAutostart(request: LetscubeDesktopAutostartRequest): Promise<unknown>;
     getStorageState(): Promise<unknown>;
     /**
      * `null` restores the default location. The argument is the *parent*

@@ -210,6 +210,8 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
     "desktop_toggle_maximize",
     "desktop_is_maximized",
     "desktop_close_to_tray",
+    "desktop_get_autostart",
+    "desktop_set_autostart",
     "desktop_get_storage_state",
     "desktop_set_storage_location",
     "desktop_set_cache_limit",
@@ -250,6 +252,11 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(libRs, /toggleMaximize: async \(\) => call\("desktop_toggle_maximize"\)/);
   assert.match(libRs, /isMaximized: async \(\) => call\("desktop_is_maximized"\)/);
   assert.match(libRs, /closeToTray: async \(\) => call\("desktop_close_to_tray"\)/);
+  assert.match(libRs, /getAutostart: async \(\) => call\("desktop_get_autostart"\)/);
+  assert.match(
+    libRs,
+    /setAutostart: async \(options\) => call\("desktop_set_autostart"/,
+  );
   assert.match(libRs, /getStorageState: async \(\) => call\("desktop_get_storage_state"\)/);
   assert.match(libRs, /setStorageLocation: async \(location\) => call\("desktop_set_storage_location"/);
   assert.match(libRs, /setCacheLimit: async \(bytes\) => call\("desktop_set_cache_limit"/);
@@ -330,6 +337,8 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
     assert.match(commandBody, /require_production_main\(&window\)/, `${command} must use the production/main guard`);
   }
   for (const command of [
+    "desktop_get_autostart",
+    "desktop_set_autostart",
     "desktop_start_dragging",
     "desktop_minimize",
     "desktop_toggle_maximize",
@@ -412,6 +421,7 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
       "allow-desktop-check-update",
       "allow-desktop-clear-cache",
       "allow-desktop-close-to-tray",
+      "allow-desktop-get-autostart",
       "allow-desktop-get-storage-state",
       "allow-desktop-get-update-channel",
       "allow-desktop-get-update-state",
@@ -421,6 +431,7 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
       "allow-desktop-minimize",
       "allow-desktop-notify",
       "allow-desktop-remove-notification",
+      "allow-desktop-set-autostart",
       "allow-desktop-set-cache-limit",
       "allow-desktop-set-storage-location",
       "allow-desktop-set-update-channel",
@@ -1703,5 +1714,115 @@ test("Windows update UI contract confirms Test to Stable reversal", () => {
   assert.match(
     spec,
     /toMatchObject\(\{\s*channel: "stable",\s*phase: "current",\s*mandatory: false,?\s*\}\)/,
+  );
+});
+
+/* The autostart wiring that `cargo test` cannot reach.
+ *
+ * Everything decidable — the command line written into the registry, how it is
+ * read back, what Task Manager's veto means, whether a launch starts hidden —
+ * is a pure function in `src/autostart.rs` with its own Rust tests, and those
+ * are the tests that matter. What is left is the wiring: which builder call
+ * receives the answer, and which lines are guarded by it. A builder chain has
+ * no seam a unit test can hold, so this is a scan, and it is written to fail
+ * on the one substitution that would reintroduce the defect it guards — a
+ * window created visible and hidden afterwards. */
+test("the Windows shell starts in the tray by creating the window hidden, never by hiding it", () => {
+  const libRs = readText("windows-tauri/src-tauri/src/lib.rs");
+  const autostartRs = readText("windows-tauri/src-tauri/src/autostart.rs");
+
+  // `startup.rs` is the application's own startup *stages*. Conflating the two
+  // would be a confusing mess, so the launch-at-sign-in code is its own module.
+  assert.match(libRs, /pub mod autostart;/);
+  assert.doesNotMatch(
+    readText("windows-tauri/src-tauri/src/startup.rs"),
+    /CurrentVersion\\Run|--start-minimized/,
+    "starting at sign-in must not be folded into the startup-stage module",
+  );
+
+  // Decided once, from the command line, before anything can build a window.
+  const run = libRs.match(/pub fn run\(\)[\s\S]*?tauri::Builder::default\(\)/)?.[0] ?? "";
+  assert.match(
+    run,
+    /LAUNCH_STARTS_HIDDEN\s*\.store\(\s*autostart::launch_starts_hidden/,
+    "the hidden-launch decision must be taken from argv before the builder runs",
+  );
+
+  // The window is created invisible. This is the assertion that would go red if
+  // anybody replaced the branch with a `hide()` after the fact.
+  const build = libRs.match(/fn build_main_window[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(build, /LAUNCH_STARTS_HIDDEN\.load/);
+  assert.match(
+    build,
+    /WebviewWindowBuilder::from_config\(app, &config\)\?\s*\n\s*\.visible\(!starts_hidden\)/,
+    "the main window must be built with visibility already decided",
+  );
+  assert.doesNotMatch(
+    build,
+    /\.hide\(\)/,
+    "a window that appears and vanishes is worse than one that never appears",
+  );
+
+  // And `setup` does not show it for that launch, while a notification route
+  // still does.
+  const setup = libRs.match(/\.setup\(\|app\|[\s\S]*?\n\s{8}\}\)/)?.[0] ?? "";
+  assert.match(
+    setup,
+    /if !LAUNCH_STARTS_HIDDEN\.load\(Ordering::Acquire\) \{\s*\n\s*show_main\(app\.handle\(\)\);/,
+    "setup must not show a window the launch asked to keep in the tray",
+  );
+  assert.match(
+    setup,
+    /notification_route_from_args\(&startup_args\)/,
+    "a toast click must still reach the window, whatever the sign-in entry said",
+  );
+
+  // A second launch is the only thing that rescues a hidden instance.
+  const singleInstance =
+    libRs.match(/tauri_plugin_single_instance::init\(\|app, args, _cwd\|[\s\S]*?\n\s{8}\}\)\)/)?.[0] ?? "";
+  assert.match(
+    singleInstance,
+    /restore_startup_surface\(app\);/,
+    "a second launch must show the hidden first instance",
+  );
+  assert.match(
+    singleInstance,
+    /if autostart::launch_starts_hidden\(&args\) \{\s*\n\s*return;/,
+    "a second launch that asked for the tray must not be answered with a window",
+  );
+  assert.match(
+    libRs.match(/fn restore_startup_surface[\s\S]*?\n\}/)?.[0] ?? "",
+    /show_main\(app\)/,
+  );
+
+  // The two flags are constants shared between the writer and the reader, so a
+  // rename cannot leave the registry writing one word and argv reading another.
+  assert.match(autostartRs, /pub const AUTOSTART_FLAG: &str = "--autostart";/);
+  assert.match(autostartRs, /pub const START_MINIMIZED_FLAG: &str = "--start-minimized";/);
+  // `.` stands in for the separator so the needle carries no escape of its own.
+  assert.match(
+    autostartRs,
+    /pub const RUN_KEY: &str = r"Software.Microsoft.Windows.CurrentVersion.Run";/,
+  );
+
+  // The quoting that `auto-launch` omits, and the refusal that replaces it.
+  assert.match(autostartRs, /format!\("\\"\{path\}\\" \{AUTOSTART_FLAG\}"\)/);
+  assert.match(autostartRs, /autostart_path_unsupported/);
+
+  // A debug build must never own the installed client's sign-in entry.
+  assert.match(autostartRs, /const DEV_RUN_VALUE_NAME: &str = "LETSCUBE \(dev\)";/);
+  assert.doesNotMatch(
+    autostartRs.match(/pub fn run_value_name[\s\S]*?\n\}/)?.[0] ?? "",
+    /qa_wants_isolated_identity/,
+    "the debug value name must not depend on a flag a run can forget to set",
+  );
+
+  // The setting reads the registry; it never reports its own intentions back.
+  const setCommand = libRs.match(/fn desktop_set_autostart[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(setCommand, /autostart::write_state\(&executable, enabled, start_minimized\)\?;/);
+  assert.match(
+    setCommand,
+    /autostart::read_state\(&executable\)\s*\n\}/,
+    "the write command must answer with the state it read back, not with the request",
   );
 });
