@@ -609,6 +609,57 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-18 — `a4592b94` (eight deploys, one day)
+
+The owner reported four things on 2026-09-18 and all four are on production.
+Read off the running container each time rather than trusted from the webhook.
+
+- **`749a13e5`** — channels («Добавить канал» did nothing in a group with no
+  channels, D-212), the phone's duplicate «Папки» tab (D-120), and the invite
+  rule that disagreed with the server in both directions (D-165, D-170).
+- **`facd7c6e`** — badges: a member row carried LETSCUBE-wide standing in words
+  beside the group's own (D-213), «Пользователь» on almost every contact card,
+  and two of four standings drawing the same picture at 11px.
+- **`0919380c`** — the label on an icon button was clipped to a six-pixel
+  sliver (D-216).
+- **`1674ddb7`** — the per-group roles migration, applied after a verified
+  schema backup and a seventeen-case rehearsal (D-215, server half).
+- **`f05cb617`** — per-group roles, the interface: the group's word in the row,
+  both sets stacked on the card, the management screen, and an eight-colour
+  palette measured at 4.5:1 as text in both themes.
+- **`a4592b94`** — the dead CSS bubble removed, and the tooltip's timing put
+  back on the motion tokens, which taking it out uncovered.
+
+`letscube-web` runs `l64kyyu1sysev2izzjjbizhe:a4592b94…`, one replica, healthy,
+the previous one retired during the rollover (watched: two replicas, then one).
+
+**Verified on the served files, not on the build.** 16 `--kub-role-` tokens in
+the served stylesheet; «Роли группы», «Роли группы настраивает владелец» and
+«Выдать роль» all present in the served entry chunk, read as utf8 because latin1
+hides Cyrillic. One probe came back negative and it was the probe, not the
+deploy: `.kub-tooltip` was still in the stylesheet because I had never removed
+it — the class had survived its component, which is how somebody later
+"fixes" a tooltip by reaching for a class nothing uses. Removed in `a4592b94`.
+
+**Gates at that commit:** typecheck clean, unit **2810/2810**, build proved by
+its own `sw.js build` and «built in» lines, e2e **49/49** at 1440 and 390 across
+chat-roles, member-badges and icon-tooltip with three stated skips.
+
+**Android 0.1.7 build 8** published the same day, verified four ways: the signer
+certificate byte-for-byte the one 0.1.5 and 0.1.6 carry, the Firebase config by
+hash, a calibrated probe of the bundled web copy in both directions across all
+four chunks, and the published file downloaded and compared byte for byte
+(`94f5b999…`, 7 226 429 bytes). Windows needed no release: the Tauri shell
+navigates to `https://app.letscube.ru/`, so it took every one of these with no
+reinstall.
+
+**The publish nearly went unnoticed as a no-op.** `publish-native-release.sh`
+defaults `RELEASE_ROOT` to `/srv/letscube/releases/public`, and from Windows Git
+Bash MSYS rewrites that into the Git installation directory: it built the whole
+tree locally and printed «Published android stable 0.1.7 build 8» with the
+correct size and hash while the live manifest answered 0.1.6 on three fetches.
+It has to run on the release host.
+
 ### 2026-09-15 — `8d38b17fdba714a279c36f89ad908f8e2cd8d627`
 
 The support and administration forms stop offering what the server refuses
