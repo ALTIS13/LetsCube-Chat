@@ -73,7 +73,20 @@ export type VoiceGatewayRefusalCode =
   | "rate_limited"
   | "unavailable"
   | "malformed"
-  | "network";
+  | "network"
+  /**
+   * The moderation routes' own refusals (2026-09-18), kept apart from
+   * `forbidden` because each names a rule the reader can act on rather than a
+   * door that is shut.
+   *
+   * «Вы не модератор этой группы» and «Владельца нельзя заглушить» are
+   * different sentences, and collapsing them into one would be the mistake
+   * D-165 records: a card that says «недоступно» about a rule it knows.
+   */
+  | "not_a_moderator"
+  | "self_not_allowed"
+  | "target_is_owner"
+  | "target_not_in_room";
 
 export type VoiceTokenOutcome =
   | { ok: true; grant: VoiceTokenGrant }
@@ -119,6 +132,20 @@ const WIRE_CODES: Record<string, VoiceGatewayRefusalCode> = {
   // redeployed to read them would delay both.
   voice_disabled: "disabled",
   rate_limited: "rate_limited",
+  // The moderation routes, added with them on 2026-09-18. Mapped rather than
+  // left to the status on purpose: 403 covers «you may not» and «that person
+  // may not be touched», and those are not the same thing to read.
+  not_a_moderator: "not_a_moderator",
+  self_not_allowed: "self_not_allowed",
+  target_is_owner: "target_is_owner",
+  // Two shapes of «there is nobody there to act on», one from the matrix and
+  // one from the SFU answering `not_found`. One sentence for both, because the
+  // difference is ours and not the reader's.
+  target_not_a_member: "target_not_in_room",
+  participant_not_in_room: "target_not_in_room",
+  // The gateway refuses a role its own code does not know rather than guessing.
+  // Nothing the reader can do about it, so it reads as «недоступно».
+  target_protected: "forbidden",
 };
 
 function statusRefusal(status: number): VoiceGatewayRefusalCode {
@@ -187,6 +214,17 @@ export function voiceGatewayRefusalText(code: VoiceGatewayRefusalCode): string {
       return "Голосовые чаты сейчас отключены.";
     case "rate_limited":
       return "Слишком много попыток, подождите немного.";
+    case "not_a_moderator":
+      return "Заглушать и отключать участников могут владелец и администраторы.";
+    case "self_not_allowed":
+      // Not «нет доступа»: the person may leave whenever they like, and the
+      // control that does it is two buttons away. Saying they are forbidden
+      // would be false about the thing they were trying to do.
+      return "Себя заглушить нельзя — выйдите из канала, если нужно.";
+    case "target_is_owner":
+      return "Владельца группы нельзя заглушить или отключить.";
+    case "target_not_in_room":
+      return "Этот участник уже не в голосовом канале.";
     case "network":
       return "Нет связи с сервером, проверьте подключение.";
     case "unavailable":

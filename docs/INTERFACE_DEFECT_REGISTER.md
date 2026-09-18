@@ -13732,3 +13732,107 @@ after the call ends, which is worse than the defect.
 
 Recorded with the measurement so the next person with a phone in their hand
 starts from a fact rather than from a search.
+
+---
+
+## D-221 `[~]` Nobody could be silenced or removed from a voice room they were already in
+
+**Severity:** high for a product with voice channels. Somebody being
+disruptive right now could not be stopped until they reconnected, which they
+had no reason to do.
+
+**Measured 2026-09-18:** `voice-gateway/index.ts` forces `canPublish: false`
+when `is_muted(user, chat)` — **only at token mint**. Zero `UpdateParticipant`,
+`RemoveParticipant` or `MutePublishedTrack` calls existed anywhere in the
+product.
+
+**The gateway half is built and deployed. The client controls are not**, which
+is why this entry is `[~]`.
+
+**`MuteRoomTrack` does not exist, and finding that out mattered.** It is the
+name of the *request message* for `MutePublishedTrack`, not a method. Probed
+against the deployed v1.8.4 over SSH, each probe with a negative control
+(`NoSuchMethodZZZ`): `MuteRoomTrack` answers **404 `bad_route`**, byte for byte
+like the fake, while `UpdateParticipant`, `RemoveParticipant`,
+`MutePublishedTrack` and eight others answer **401 `unauthenticated`** — the
+route exists and authorisation refused.
+
+**`UpdateParticipant` was chosen over `MutePublishedTrack` for a reason in the
+configuration, not a preference.** `room.enable_remote_unmute` is absent from
+`/srv/letscube/voice/livekit.yaml` and therefore `false`, and the binary carries
+the string «cannot unmute track, remote unmute is disabled» — so a force-mute
+through `MutePublishedTrack` could mute and **never unmute**. It also needs a
+track SID, which somebody with their microphone off does not have.
+
+**The server silently drops unknown fields**, which would have made a typo a
+200 that changed nothing: `permissionZZZ` and `permission` answered identically.
+So every field name was proved *positively* — send a string where a bool is
+expected and a known field answers 400 `malformed` while an unknown one is
+dropped and the request proceeds. All seven permission fields answered 400;
+three invented controls answered 503.
+
+**`is_chat_admin(chat_id)` cannot be used here, and the reason is worth
+recording.** It takes no user — it reads `auth.uid()` internally — and on a
+service-role connection `auth.uid()` is null, so the predicate reduces to
+`user_id = null` and refuses **everybody**. Safe, and useless. The caller is
+established the way the `token` route does it (verify the JWT, then read that
+`sub`'s row as service-role) and the same `role in ('owner','admin')` comparison
+is applied to that row.
+
+**Nothing writes to `public.mutes`, and three separate reasons each suffice.**
+That table is staff sanctions, not chat moderation. Writing a voice mute there
+would (1) **also gag the person in text**, because `messages` carries a
+RESTRICTIVE `not is_muted(auth.uid(), chat_id)`; (2) **bypass the sanction
+matrix**, because `enforce_sanction_matrix()` early-returns when `auth.uid()` is
+null, which is exactly the service-role case, so a chat administrator who is not
+staff would issue an unranked penalty; and (3) **put a row in the staff panel**
+beside real bans with a non-staff `issued_by`. So the action is deliberately
+live-only, and the cost is stated: a rejoin rebuilds the token from role,
+`speak_role` and `is_muted`, so a force-mute is undone by leaving and
+re-entering. Discord's «disconnect» behaves the same way; a persistent server
+mute would need its own table and is a product decision with a client half.
+
+**The matrix's order is part of the contract.** The caller's standing is decided
+before anything is said about the target, so the route cannot be used to find
+out who owns a chat. Nobody may mute or remove the owner — not an
+administrator, not another owner, not themselves — which is one step stricter
+than `enforce_chat_member_update`, where an owner may change a co-owner's role.
+Unmuting restores **the policy's answer** rather than an unconditional yes, by
+asking `is_muted` and then `canPublishInVoiceChannel`, so an administrator below
+a channel's `speak_role` cannot grant themselves publication in a listen-only
+room.
+
+**Two mutations came back green and both were findings.** Adding `owner` to the
+moderatable set was *redundant* — the matrix refuses the owner by name earlier,
+so the answer carries its own code; removing that earlier line reddens two
+tests, and the code now says which line is load-bearing. And the rate limiter
+recording **its own refusals** was a real gap: `retryAfterSeconds` reads the
+oldest entry, so a limiter that counted refusals reported the same number while
+silently holding somebody past the window. Only a timeline where a refusal lands
+inside the window and the question is asked after the original entry has aged
+can tell the difference; that test exists now and the mutation is red.
+
+**The code-coverage guard was blind to all six new refusals, and it is the guard
+written to catch exactly that.** `voice-gateway-client.test.mts` asserts «every
+refusal the function can send is known to this client» by scanning both files —
+but its wire scan only matched `jsonResponse(request, { ok: false, error: … })`,
+while the matrix returns `{ error, status }` from `moderation.mjs`; and its
+client scan required the mapped category to be one of the nine that existed when
+it was written, so a code mapped onto a *new* category counted as unmapped too.
+The two halves cancelled and the test passed over six new codes. Both halves are
+widened, with a control that fails if the moderation file stops being read, and
+four mutations red.
+
+**Deployed and verified by a calibrated probe.** The function's files were
+backed up first (`/srv/letscube/backups/functions/voice-gateway-…tgz`), and four
+of the seven were confirmed byte-identical to what was already running before
+anything was copied. After the restart: `token`, `force-mute` and `remove` all
+answer **400** to an empty body — the route exists and rejects the request —
+while `NoSuchRouteZZZ` answers **404**. A route that exists rejects the body; one
+that does not rejects the path.
+
+**Not verified, and it needs a live SFU:** whether `UpdateParticipant` with
+`canPublish: false` stops a microphone that is *already publishing* or only
+refuses a new publication. If it is the latter, the follow-on is
+`MutePublishedTrack(muted: true)` per audio track — which this build can do in
+the muting direction and, as above, not in the other.

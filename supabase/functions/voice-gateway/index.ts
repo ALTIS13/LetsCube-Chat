@@ -47,6 +47,14 @@ import {
   mintVoiceAccessToken,
   mintVoiceAdminToken,
 } from "./livekitToken.mjs";
+import {
+  buildRemoveParticipantPayload,
+  buildUpdateParticipantPayload,
+  moderationRefusal,
+  readModerationRequest,
+  readTwirpCode,
+} from "./moderation.mjs";
+import { createVoiceModerationRateLimiter } from "./moderationRateLimit.mjs";
 import { readUuid, voiceRoomName } from "./roomName.mjs";
 import {
   readBearerToken,
@@ -57,12 +65,21 @@ import {
 import { routeVoiceWebhookEvent } from "./webhookEvents.mjs";
 
 const MAX_TOKEN_REQUEST_BYTES = 4_000;
+const MAX_MODERATION_REQUEST_BYTES = 4_000;
 const MAX_WEBHOOK_REQUEST_BYTES = 64 * 1_024;
+// Eight seconds, which the moderation routes measured a reason for: an
+// `UpdateParticipant` aimed at a room the SFU is not hosting answers 503 after
+// its own internal RPC timeout, measured at 3.06s on 2026-09-18, so a shorter
+// value here would turn that refusal into an abort and report the wrong thing.
 const LIVEKIT_REQUEST_TIMEOUT_MS = 8_000;
 // How long LiveKit keeps a room alive with nobody in it, matching the slice 1
 // probe configuration. A shorter value makes a momentary reconnect look like
 // the end of the call.
 const ROOM_EMPTY_TIMEOUT_SECONDS = 60;
+
+// Per isolate, on support-gateway's pattern. See moderationRateLimit.mjs for
+// what that does and does not bound.
+const moderationLimiter = createVoiceModerationRateLimiter();
 
 type Environment = {
   supabaseUrl: string;
@@ -96,6 +113,9 @@ async function handleRequest(request: Request): Promise<Response> {
   }
 
   if (route === "webhook") return receiveWebhook(request);
+  if (route === "force-mute" || route === "remove") {
+    return moderateParticipant(request, route);
+  }
   return mintToken(request);
 }
 
@@ -306,6 +326,276 @@ async function createLiveKitRoom(
   return { ok: response.ok };
 }
 
+// ── POST /voice-gateway/force-mute, POST /voice-gateway/remove ───────────────
+
+/**
+ * Silencing or removing somebody who is connected right now.
+ *
+ * Slice 5's two moderation actions. Until these existed the only lever was
+ * `canPublish` at mint, which is evaluated once and never again: a person being
+ * disruptive could not be stopped until they chose to reconnect, which is the
+ * one thing they had no reason to do.
+ *
+ * The order below is the authorisation, and every step reads the database
+ * rather than the request:
+ *
+ *   1. the body — two uuids and, for a mute, a real boolean;
+ *   2. the caller's Supabase JWT, verified as the token route verifies it;
+ *   3. the rate limit, keyed on the caller, before any database work;
+ *   4. `is_banned` on the caller;
+ *   5. the channel row, which is where `chat_id` comes from — never the client;
+ *   6. the caller's `chat_members` row for that chat, and the target's;
+ *   7. `moderationRefusal`, which holds the whole matrix as a pure function.
+ *
+ * Nothing about the target is decided before the caller's own standing is, so
+ * this route cannot be used to discover who owns a chat.
+ */
+async function moderateParticipant(
+  request: Request,
+  action: "force-mute" | "remove",
+): Promise<Response> {
+  const raw = await request.text();
+  if (
+    !raw ||
+    new TextEncoder().encode(raw).byteLength > MAX_MODERATION_REQUEST_BYTES
+  ) {
+    return jsonResponse(request, { ok: false, error: "invalid_request" }, 400);
+  }
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return jsonResponse(request, { ok: false, error: "invalid_request" }, 400);
+  }
+  const parsed = readModerationRequest(action, body);
+  if (!parsed.ok) {
+    // `not_found` is the module refusing an action it does not have, which
+    // `parseRoute` makes unreachable from here; it keeps its own status rather
+    // than being flattened into 400, so the two never have to agree by luck.
+    const status = parsed.error === "not_found" ? 404 : 400;
+    return jsonResponse(request, { ok: false, error: parsed.error }, status);
+  }
+  const { channelId, userId, muted } = parsed.value as {
+    channelId: string;
+    userId: string;
+    muted: boolean | null;
+  };
+
+  const accessToken = readBearerToken(request.headers.get("authorization"));
+  if (!accessToken) {
+    return jsonResponse(request, { ok: false, error: "unauthorized" }, 401);
+  }
+  const environment = readEnvironment();
+  if (!environment) {
+    return jsonResponse(request, { ok: false, error: "not_configured" }, 503);
+  }
+
+  const authClient = createClient(environment.supabaseUrl, environment.publicKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: authData, error: authError } = await authClient.auth.getUser(
+    accessToken,
+  );
+  const callerId = authError ? null : readUuid(authData?.user?.id);
+  if (!callerId) {
+    return jsonResponse(request, { ok: false, error: "unauthorized" }, 401);
+  }
+
+  // Keyed on the verified caller, so nobody can spend somebody else's
+  // allowance, and placed before the database so a loop costs one map lookup.
+  const limit = moderationLimiter.check(callerId);
+  if (!limit.ok) {
+    return jsonResponse(request, { ok: false, error: "rate_limited" }, 429, {
+      "retry-after": String(limit.retryAfterSeconds),
+    });
+  }
+
+  const admin = createClient(environment.supabaseUrl, environment.serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const banned = await admin.rpc("is_banned", { uid: callerId });
+  if (banned.error) {
+    return jsonResponse(request, { ok: false, error: "unavailable" }, 503);
+  }
+  if (banned.data === true) {
+    return jsonResponse(request, { ok: false, error: "banned" }, 403);
+  }
+
+  const channel = await admin
+    .from("voice_channels")
+    .select("id, chat_id, speak_role, archived")
+    .eq("id", channelId)
+    .maybeSingle();
+  if (channel.error) {
+    return jsonResponse(request, { ok: false, error: "unavailable" }, 503);
+  }
+  const channelRow = channel.data as
+    | { chat_id: string; speak_role: string; archived: boolean }
+    | null;
+  if (!channelRow || channelRow.archived === true) {
+    return jsonResponse(request, { ok: false, error: "channel_not_found" }, 404);
+  }
+
+  const callerRole = await readChatRole(admin, channelRow.chat_id, callerId);
+  if (!callerRole.ok) {
+    return jsonResponse(request, { ok: false, error: "unavailable" }, 503);
+  }
+  const targetRole = await readChatRole(admin, channelRow.chat_id, userId);
+  if (!targetRole.ok) {
+    return jsonResponse(request, { ok: false, error: "unavailable" }, 503);
+  }
+
+  const refusal = moderationRefusal({
+    action,
+    callerId,
+    callerRole: callerRole.role,
+    targetId: userId,
+    targetRole: targetRole.role,
+  });
+  if (refusal) {
+    return jsonResponse(request, { ok: false, error: refusal.error }, refusal.status);
+  }
+
+  const room = voiceRoomName(channelId);
+  if (room === null) {
+    return jsonResponse(request, { ok: false, error: "invalid_request" }, 400);
+  }
+
+  if (action === "remove") {
+    const removed = await callLiveKitRoomService(
+      environment,
+      channelId,
+      "RemoveParticipant",
+      buildRemoveParticipantPayload({ room, identity: userId }),
+    );
+    if (!removed.ok) {
+      return jsonResponse(request, { ok: false, error: removed.error }, removed.status);
+    }
+    return jsonResponse(request, { ok: true, channelId, userId }, 200);
+  }
+
+  // Lifting a force-mute restores **the policy answer**, never an
+  // unconditional yes. Without that, an administrator below a channel's
+  // `speak_role`, or one carrying a staff mute from `public.mutes`, could
+  // unmute themselves past both — which is why this asks the same function the
+  // token route asks and why acting on yourself is refused as well.
+  let canPublish = false;
+  if (muted === false) {
+    const staffMuted = await admin.rpc("is_muted", {
+      uid: userId,
+      cid: channelRow.chat_id,
+    });
+    if (staffMuted.error) {
+      return jsonResponse(request, { ok: false, error: "unavailable" }, 503);
+    }
+    canPublish = canPublishInVoiceChannel({
+      memberRole: targetRole.role,
+      speakRole: channelRow.speak_role,
+      muted: staffMuted.data === true,
+    });
+  }
+
+  const updated = await callLiveKitRoomService(
+    environment,
+    channelId,
+    "UpdateParticipant",
+    buildUpdateParticipantPayload({ room, identity: userId, canPublish }),
+  );
+  if (!updated.ok) {
+    return jsonResponse(request, { ok: false, error: updated.error }, updated.status);
+  }
+  return jsonResponse(
+    request,
+    { ok: true, channelId, userId, muted: muted === true, canPublish },
+    200,
+  );
+}
+
+/**
+ * One membership row, read with the service role for a named user.
+ *
+ * `is_chat_admin(cid)` is the predicate every voice policy uses and it is
+ * deliberately not called here: it takes no user and reads `auth.uid()`, which
+ * is null on a service-role connection, so from this gateway it would refuse
+ * everybody. The token route already establishes the caller this way — verify
+ * the JWT, then read the row for that `sub` — and `moderationRefusal` applies
+ * the comparison `is_chat_admin` makes to the row this returns.
+ *
+ * A missing row is `{ ok: true, role: null }`, which is a fact. Only a failed
+ * read is `{ ok: false }`, because «I could not ask» must never be read as
+ * «they are not a member».
+ */
+async function readChatRole(
+  admin: ReturnType<typeof createClient>,
+  chatId: string,
+  userId: string,
+): Promise<{ ok: true; role: string | null } | { ok: false }> {
+  const membership = await admin
+    .from("chat_members")
+    .select("role")
+    .eq("chat_id", chatId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (membership.error) return { ok: false };
+  const role = (membership.data as { role?: string } | null)?.role ?? null;
+  return { ok: true, role };
+}
+
+/**
+ * One administrative twirp call against the SFU.
+ *
+ * The token is minted per call and scoped to this room, which is not a
+ * formality: measured on 2026-09-18, an admin token naming no room is refused
+ * `UpdateParticipant` with 401, because LiveKit compares the token's own `room`
+ * claim against the room being administered. A single unscoped admin token
+ * administers nothing.
+ *
+ * Failure is reported, never swallowed. The two 404s this server produces mean
+ * opposite things and are told apart by the body's twirp code: `not_found` is
+ * «that person is not in the room», while `bad_route` is «this method does not
+ * exist on this build» and is an outage, not an empty room.
+ */
+async function callLiveKitRoomService(
+  environment: Environment,
+  channelId: string,
+  method: "UpdateParticipant" | "RemoveParticipant",
+  payload: Record<string, unknown>,
+): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
+  const adminToken = await mintVoiceAdminToken({
+    apiKey: environment.livekitApiKey,
+    apiSecret: environment.livekitApiSecret,
+    channelId,
+    nowSeconds: Date.now() / 1_000,
+  });
+  if (!adminToken.ok) return { ok: false, error: "unavailable", status: 503 };
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${environment.livekitOrigin}/twirp/livekit.RoomService/${method}`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${adminToken.token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(LIVEKIT_REQUEST_TIMEOUT_MS),
+      },
+    );
+  } catch {
+    return { ok: false, error: "voice_unavailable", status: 503 };
+  }
+
+  const text = await response.text().catch(() => "");
+  if (response.ok) return { ok: true };
+  if (response.status === 404 && readTwirpCode(text) === "not_found") {
+    return { ok: false, error: "participant_not_in_room", status: 404 };
+  }
+  return { ok: false, error: "voice_unavailable", status: 503 };
+}
+
 // ── POST /voice-gateway/webhook ──────────────────────────────────────────────
 
 async function receiveWebhook(request: Request): Promise<Response> {
@@ -382,13 +672,17 @@ async function receiveWebhook(request: Request): Promise<Response> {
 
 // ── transport ────────────────────────────────────────────────────────────────
 
-function parseRoute(request: Request): "token" | "webhook" | null {
+type Route = "token" | "webhook" | "force-mute" | "remove";
+
+function parseRoute(request: Request): Route | null {
   const segments = new URL(request.url).pathname.split("/").filter(Boolean);
   const gatewayIndex = segments.lastIndexOf("voice-gateway");
   const path = gatewayIndex >= 0 ? segments.slice(gatewayIndex + 1) : segments;
   if (path.length !== 1) return null;
   if (path[0] === "token") return "token";
   if (path[0] === "webhook") return "webhook";
+  if (path[0] === "force-mute") return "force-mute";
+  if (path[0] === "remove") return "remove";
   return null;
 }
 
@@ -460,9 +754,16 @@ function corsHeaders(request: Request): Headers {
   return headers;
 }
 
-function jsonResponse(request: Request, body: unknown, status: number): Response {
+function jsonResponse(
+  request: Request,
+  body: unknown,
+  status: number,
+  // Only the moderation routes use this, and only for `retry-after` on a 429.
+  extra?: Record<string, string>,
+): Response {
   const headers = corsHeaders(request);
   headers.set("content-type", "application/json; charset=utf-8");
+  for (const [name, value] of Object.entries(extra ?? {})) headers.set(name, value);
   return new Response(JSON.stringify(body), { status, headers });
 }
 

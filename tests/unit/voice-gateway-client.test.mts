@@ -152,15 +152,43 @@ test("the function's own refusals are all known to this client", () => {
   // inside the webhook's verification result that is turned into `unauthorized`
   // before it is sent, and a scan that counted it would be asking this client
   // to recognise a string no response ever carries.
+  // Widened on 2026-09-18, and the widening is itself a finding. The
+  // moderation routes put their refusals in `moderation.mjs` as
+  // `{ error: "...", status: 403 }` rather than through `jsonResponse`, so the
+  // original scan read none of them: six new wire codes went straight past a
+  // guard written to catch exactly that, and it stayed green. Both files now,
+  // and both shapes.
+  const moderation = readFileSync("supabase/functions/voice-gateway/moderation.mjs", "utf8");
+  const statusShape = /error:\s*"([a-z_]+)",\s*status:\s*\d{3}/g;
   const wire = new Set(
-    [...source.matchAll(/(?:jsonResponse\(request,|plainJson\()\s*\{\s*ok:\s*false,\s*error:\s*"([a-z_]+)"/g)]
-      .map((match) => match[1]),
+    [
+      ...source.matchAll(/(?:jsonResponse\(request,|plainJson\()\s*\{\s*ok:\s*false,\s*error:\s*"([a-z_]+)"/g),
+      ...source.matchAll(statusShape),
+      ...moderation.matchAll(new RegExp(statusShape.source, "g")),
+    ].map((match) => match[1]),
   );
   assert.ok(wire.size >= 8, `expected the function to name several refusals, found ${wire.size}`);
+  // The control for the widening: if the scan stops reading the moderation
+  // file, these six vanish from the set and the assertion below passes over
+  // them in silence — which is what it did before.
+  for (const added of [
+    "not_a_moderator",
+    "self_not_allowed",
+    "target_is_owner",
+    "target_protected",
+    "target_not_a_member",
+    "participant_not_in_room",
+  ]) {
+    assert.ok(wire.has(added), `the scan does not see «${added}», so it reads only part of the function`);
+  }
 
   const client = readFileSync("artifacts/kub/src/lib/voiceGateway.ts", "utf8");
   const mapped = new Set(
-    [...client.matchAll(/^\s{2}([a-z_]+):\s*"(?:unauthenticated|forbidden|not_found|channel_full|disabled|rate_limited|unavailable|malformed|network)",$/gm)]
+      // Any category, not the nine that existed when this was written. That
+      // alternation was the other half of the blindness: a code mapped onto a
+      // NEW category counted as unmapped too, so the two halves cancelled and
+      // the test passed over both.
+    [...client.matchAll(/^\s{2}([a-z_]+):\s*"([a-z_]+)",$/gm)]
       .map((match) => match[1]),
   );
   const unmapped = [...wire].filter((code) => !mapped.has(code));

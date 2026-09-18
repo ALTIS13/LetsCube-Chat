@@ -679,3 +679,505 @@ test("an idempotency call that answers neither true nor false is not assumed", a
     ["voice_webhook_event_seen"],
   );
 });
+
+// ── POST /voice-gateway/force-mute, POST /voice-gateway/remove ───────────────
+//
+// Slice 5's two moderation actions, driven through the same handler as the
+// routes above. What is asserted here is the *ordering and the absences*: that
+// a plain member never reaches the SFU, that the owner is refused whoever asks,
+// that lifting a mute cannot grant more than the token would, and that a twirp
+// refusal comes back as a refusal instead of a cheerful 200. A source scan can
+// see none of those.
+//
+// Each test uses a caller of its own, because the gateway's rate limiter is one
+// object for the life of the isolate and a fixture that shared a caller across
+// twenty tests would start answering 429 halfway down this file. The one test
+// that wants a 429 asks for it on purpose.
+
+let callerSeed = 0;
+function nextCallerId() {
+  callerSeed += 1;
+  return `aaaaaaaa-0000-4000-8000-${String(callerSeed).padStart(12, "0")}`;
+}
+const TARGET_ID = "bbbbbbbb-1111-4111-8111-111111111111";
+const OWNER_ID = "cccccccc-2222-4222-8222-222222222222";
+
+function moderationPlan(options = {}) {
+  const {
+    callerId,
+    callerRole = "admin",
+    targetRole = "member",
+    speakRole = "member",
+    archived = false,
+    channelRow,
+    staffMuted = false,
+    rpcError = null,
+  } = options;
+  return {
+    getUser: () => ({ data: { user: { id: callerId } }, error: null }),
+    rpc: (name) => {
+      if (name === rpcError) return { data: null, error: { message: "permission denied" } };
+      if (name === "is_banned") return { data: options.banned === true, error: null };
+      if (name === "is_muted") return { data: staffMuted, error: null };
+      return { data: null, error: null };
+    },
+    table: (state) => {
+      if (state.table === "voice_channels") {
+        if (channelRow === null) return { data: null, error: null };
+        return {
+          data: channelRow ?? {
+            id: CHANNEL_ID,
+            chat_id: CHAT_ID,
+            speak_role: speakRole,
+            archived,
+          },
+          error: null,
+        };
+      }
+      if (state.table === "chat_members") {
+        const role = state.filters.user_id === callerId ? callerRole : targetRole;
+        return { data: role === null ? null : { role }, error: null };
+      }
+      return { data: null, error: null };
+    },
+  };
+}
+
+function resetModeration(options = {}) {
+  const callerId = options.callerId ?? nextCallerId();
+  reset(moderationPlan({ ...options, callerId }));
+  return callerId;
+}
+
+function moderationRequest(action, body, init = {}) {
+  return new Request(`${FUNCTION_ORIGIN}/functions/v1/voice-gateway/${action}`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer caller-supabase-jwt",
+      "content-type": "application/json",
+      ...(init.headers ?? {}),
+    },
+    body: typeof body === "string" ? body : JSON.stringify(body),
+  });
+}
+
+function twirpCall(method) {
+  return fetchCalls.find(([url]) => String(url).endsWith(`/${method}`)) ?? null;
+}
+
+function twirpCalls() {
+  return fetchCalls.map(([url]) => String(url).split("/").pop());
+}
+
+test("an administrator mutes a member, and the SFU is told exactly what changes", async () => {
+  resetModeration();
+  const response = await handler(
+    moderationRequest("force-mute", { channelId: CHANNEL_ID, userId: TARGET_ID, muted: true }),
+  );
+  const raw = await response.text();
+  const body = JSON.parse(raw);
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(body.muted, true);
+  assert.equal(body.canPublish, false);
+
+  const call = twirpCall("UpdateParticipant");
+  assert.ok(call, `no UpdateParticipant; calls were ${twirpCalls().join(", ")}`);
+  assert.equal(
+    String(call[0]),
+    "https://voice.letscube.test/twirp/livekit.RoomService/UpdateParticipant",
+  );
+  assert.deepEqual(JSON.parse(call[1].body), {
+    room: `vc_${CHANNEL_ID}`,
+    identity: TARGET_ID,
+    permission: {
+      canSubscribe: true,
+      canPublish: false,
+      canPublishData: false,
+      canUpdateMetadata: false,
+      hidden: false,
+      recorder: false,
+      agent: false,
+    },
+  });
+
+  // The admin token is room-scoped -- an unscoped one is refused by this SFU,
+  // measured on 2026-09-18 -- and it never appears in the answer.
+  const adminToken = String(call[1].headers.authorization).slice("Bearer ".length);
+  const claims = decodePayload(adminToken);
+  assert.equal(claims.video.room, `vc_${CHANNEL_ID}`);
+  assert.equal(claims.video.roomAdmin, true);
+  assert.equal(claims.video.roomJoin, false);
+  assert.equal(raw.includes(adminToken), false, "the admin token is in the response");
+  assert.equal(raw.includes(API_SECRET), false);
+  assert.equal(raw.includes(SERVICE_ROLE_KEY), false);
+});
+
+test("an administrator removes a member", async () => {
+  resetModeration();
+  const response = await handler(
+    moderationRequest("remove", { channelId: CHANNEL_ID, userId: TARGET_ID }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), {
+    ok: true,
+    channelId: CHANNEL_ID,
+    userId: TARGET_ID,
+  });
+  const call = twirpCall("RemoveParticipant");
+  assert.ok(call, `no RemoveParticipant; calls were ${twirpCalls().join(", ")}`);
+  assert.deepEqual(JSON.parse(call[1].body), {
+    room: `vc_${CHANNEL_ID}`,
+    identity: TARGET_ID,
+  });
+});
+
+test("an owner may moderate too", async () => {
+  resetModeration({ callerRole: "owner" });
+  const response = await handler(
+    moderationRequest("force-mute", { channelId: CHANNEL_ID, userId: TARGET_ID, muted: true }),
+  );
+  assert.equal(response.status, 200);
+  assert.ok(twirpCall("UpdateParticipant"));
+});
+
+test("a plain member is refused, and never reaches the SFU", async () => {
+  for (const action of ["force-mute", "remove"]) {
+    resetModeration({ callerRole: "member" });
+    const response = await handler(
+      moderationRequest(action, { channelId: CHANNEL_ID, userId: TARGET_ID, muted: true }),
+    );
+    assert.equal(response.status, 403, `${action} allowed a plain member`);
+    assert.deepEqual(await readJson(response), { ok: false, error: "not_a_moderator" });
+    assert.deepEqual(fetchCalls, [], `${action} called the SFU for a plain member`);
+  }
+});
+
+test("somebody who is not in the chat at all is refused before the target is read", async () => {
+  resetModeration({ callerRole: null, targetRole: null });
+  const response = await handler(
+    moderationRequest("remove", { channelId: CHANNEL_ID, userId: TARGET_ID }),
+  );
+  assert.equal(response.status, 403);
+  assert.deepEqual(await readJson(response), { ok: false, error: "not_a_member" });
+  assert.deepEqual(fetchCalls, []);
+});
+
+test("the chat's owner cannot be muted or removed, by anyone", async () => {
+  for (const action of ["force-mute", "remove"]) {
+    for (const callerRole of ["admin", "owner"]) {
+      resetModeration({ callerRole, targetRole: "owner" });
+      const response = await handler(
+        moderationRequest(action, { channelId: CHANNEL_ID, userId: OWNER_ID, muted: true }),
+      );
+      assert.equal(
+        response.status,
+        403,
+        `a ${callerRole} was allowed to ${action} the owner`,
+      );
+      assert.deepEqual(await readJson(response), { ok: false, error: "target_is_owner" });
+      assert.deepEqual(fetchCalls, [], `${action} by a ${callerRole} reached the SFU`);
+    }
+  }
+});
+
+test("removing or muting yourself is refused rather than made a second door", async () => {
+  for (const action of ["force-mute", "remove"]) {
+    const callerId = nextCallerId();
+    resetModeration({ callerId, callerRole: "owner", targetRole: "owner" });
+    const response = await handler(
+      moderationRequest(action, { channelId: CHANNEL_ID, userId: callerId, muted: false }),
+    );
+    assert.equal(response.status, 403, `${action} on self was allowed`);
+    assert.deepEqual(await readJson(response), { ok: false, error: "self_not_allowed" });
+    assert.deepEqual(fetchCalls, [], `${action} on self reached the SFU`);
+  }
+});
+
+test("lifting a mute restores the policy answer, never an unconditional yes", async () => {
+  // A listen-only channel: `speak_role` is admin and the target is a member, so
+  // an unmute must leave them unable to publish. Without this the route would
+  // be a way around `speak_role` for anybody an administrator chose.
+  resetModeration({ speakRole: "admin", targetRole: "member" });
+  const quiet = await handler(
+    moderationRequest("force-mute", { channelId: CHANNEL_ID, userId: TARGET_ID, muted: false }),
+  );
+  assert.equal(quiet.status, 200);
+  assert.equal((await readJson(quiet)).canPublish, false);
+  assert.equal(
+    JSON.parse(twirpCall("UpdateParticipant")[1].body).permission.canPublish,
+    false,
+  );
+
+  // And a staff mute from `public.mutes` wins over a chat administrator's
+  // unmute, which is the same precedence the token route applies at mint.
+  resetModeration({ staffMuted: true });
+  const staffMuted = await handler(
+    moderationRequest("force-mute", { channelId: CHANNEL_ID, userId: TARGET_ID, muted: false }),
+  );
+  assert.equal((await readJson(staffMuted)).canPublish, false);
+  assert.equal(
+    JSON.parse(twirpCall("UpdateParticipant")[1].body).permission.canPublish,
+    false,
+  );
+
+  // With nothing in the way, it really does come back.
+  resetModeration();
+  const restored = await handler(
+    moderationRequest("force-mute", { channelId: CHANNEL_ID, userId: TARGET_ID, muted: false }),
+  );
+  assert.equal((await readJson(restored)).canPublish, true);
+  assert.equal(
+    JSON.parse(twirpCall("UpdateParticipant")[1].body).permission.canPublish,
+    true,
+  );
+});
+
+test("the chat is read off the channel row, and both membership reads use it", async () => {
+  const callerId = resetModeration();
+  await handler(
+    moderationRequest("force-mute", {
+      channelId: CHANNEL_ID,
+      userId: TARGET_ID,
+      muted: true,
+    }),
+  );
+  const memberships = supabaseCalls().filter((call) => call.name === "chat_members");
+  assert.equal(memberships.length, 2);
+  assert.deepEqual(memberships[0].filters, { chat_id: CHAT_ID, user_id: callerId });
+  assert.deepEqual(memberships[1].filters, { chat_id: CHAT_ID, user_id: TARGET_ID });
+  const channel = supabaseCalls().find((call) => call.name === "voice_channels");
+  assert.deepEqual(channel.filters, { id: CHANNEL_ID });
+  assert.equal(channel.columns.includes("*"), false);
+});
+
+test("a muted target is not asked about again; an unmuted one is", async () => {
+  resetModeration();
+  await handler(
+    moderationRequest("force-mute", { channelId: CHANNEL_ID, userId: TARGET_ID, muted: true }),
+  );
+  assert.deepEqual(
+    supabaseCalls().filter((call) => call.kind === "rpc").map((call) => call.name),
+    ["is_banned"],
+  );
+
+  resetModeration();
+  await handler(
+    moderationRequest("force-mute", { channelId: CHANNEL_ID, userId: TARGET_ID, muted: false }),
+  );
+  const rpcs = supabaseCalls().filter((call) => call.kind === "rpc");
+  assert.deepEqual(rpcs.map((call) => call.name), ["is_banned", "is_muted"]);
+  // The person being unmuted, not the moderator doing it.
+  assert.deepEqual(rpcs[1].args, { uid: TARGET_ID, cid: CHAT_ID });
+});
+
+test("somebody no longer in the chat can be removed from the room but not muted", async () => {
+  resetModeration({ targetRole: null });
+  const removed = await handler(
+    moderationRequest("remove", { channelId: CHANNEL_ID, userId: TARGET_ID }),
+  );
+  assert.equal(removed.status, 200);
+  assert.ok(twirpCall("RemoveParticipant"));
+
+  resetModeration({ targetRole: null });
+  const muted = await handler(
+    moderationRequest("force-mute", { channelId: CHANNEL_ID, userId: TARGET_ID, muted: true }),
+  );
+  assert.equal(muted.status, 403);
+  assert.deepEqual(await readJson(muted), { ok: false, error: "target_not_a_member" });
+  assert.deepEqual(fetchCalls, []);
+});
+
+test("a twirp failure is reported as a failure and not swallowed", async () => {
+  // A refusal from the SFU.
+  resetModeration();
+  fetchReply = async () => new Response('{"code":"internal","msg":"boom"}', { status: 500 });
+  const refused = await handler(
+    moderationRequest("force-mute", { channelId: CHANNEL_ID, userId: TARGET_ID, muted: true }),
+  );
+  const refusedRaw = await refused.text();
+  assert.equal(refused.status, 503);
+  assert.deepEqual(JSON.parse(refusedRaw), { ok: false, error: "voice_unavailable" });
+  assert.equal(refusedRaw.includes("boom"), false, "LiveKit's message was echoed");
+
+  // Nothing answered at all.
+  resetModeration();
+  fetchReply = async () => {
+    throw new TypeError("connection refused");
+  };
+  const silent = await handler(
+    moderationRequest("remove", { channelId: CHANNEL_ID, userId: TARGET_ID }),
+  );
+  assert.equal(silent.status, 503);
+  assert.deepEqual(await readJson(silent), { ok: false, error: "voice_unavailable" });
+
+  // «That person is not in the room» -- a real answer, and its own status.
+  resetModeration();
+  fetchReply = async () =>
+    new Response('{"code":"not_found","msg":"participant not found"}', { status: 404 });
+  const gone = await handler(
+    moderationRequest("remove", { channelId: CHANNEL_ID, userId: TARGET_ID }),
+  );
+  assert.equal(gone.status, 404);
+  assert.deepEqual(await readJson(gone), { ok: false, error: "participant_not_in_room" });
+
+  // A 404 that is a missing *method* is an outage, not an empty room. This is
+  // the shape `MuteRoomTrack` answers on this build, and reading it as «they
+  // already left» would hide a LiveKit upgrade that renamed a method.
+  resetModeration();
+  fetchReply = async () => new Response('{"code":"bad_route","msg":"no handler"}', { status: 404 });
+  const missing = await handler(
+    moderationRequest("force-mute", { channelId: CHANNEL_ID, userId: TARGET_ID, muted: true }),
+  );
+  assert.equal(missing.status, 503);
+  assert.deepEqual(await readJson(missing), { ok: false, error: "voice_unavailable" });
+});
+
+test("a banned moderator is refused before the channel is read", async () => {
+  resetModeration({ banned: true });
+  const response = await handler(
+    moderationRequest("remove", { channelId: CHANNEL_ID, userId: TARGET_ID }),
+  );
+  assert.equal(response.status, 403);
+  assert.deepEqual(await readJson(response), { ok: false, error: "banned" });
+  assert.equal(
+    supabaseCallNames().some((name) => name.startsWith("table:")),
+    false,
+  );
+  assert.deepEqual(fetchCalls, []);
+});
+
+test("a missing or archived channel is 404 and touches no membership", async () => {
+  resetModeration({ channelRow: null });
+  const missing = await handler(
+    moderationRequest("remove", { channelId: CHANNEL_ID, userId: TARGET_ID }),
+  );
+  assert.equal(missing.status, 404);
+  assert.deepEqual(await readJson(missing), { ok: false, error: "channel_not_found" });
+
+  resetModeration({ archived: true });
+  const archived = await handler(
+    moderationRequest("force-mute", { channelId: CHANNEL_ID, userId: TARGET_ID, muted: true }),
+  );
+  assert.equal(archived.status, 404);
+  assert.equal(
+    supabaseCalls().some((call) => call.name === "chat_members"),
+    false,
+  );
+  assert.deepEqual(fetchCalls, []);
+});
+
+test("a database error on a moderation call is 503 and never leaks its message", async () => {
+  resetModeration({ rpcError: "is_banned" });
+  const response = await handler(
+    moderationRequest("remove", { channelId: CHANNEL_ID, userId: TARGET_ID }),
+  );
+  const raw = await response.text();
+  assert.equal(response.status, 503);
+  assert.deepEqual(JSON.parse(raw), { ok: false, error: "unavailable" });
+  assert.equal(raw.includes("permission denied"), false);
+});
+
+test("a body that is not two uuids and a boolean is refused before anything is read", async () => {
+  for (
+    const body of [
+      { channelId: CHANNEL_ID, userId: TARGET_ID },
+      { channelId: CHANNEL_ID, userId: TARGET_ID, muted: "true" },
+      { channelId: CHANNEL_ID, muted: true },
+      { userId: TARGET_ID, muted: true },
+      { channelId: "scratch", userId: TARGET_ID, muted: true },
+      { channelId: CHANNEL_ID, userId: `${TARGET_ID} or 1=1`, muted: true },
+      "{not json",
+    ]
+  ) {
+    resetModeration();
+    const response = await handler(moderationRequest("force-mute", body));
+    assert.equal(response.status, 400, `accepted ${JSON.stringify(body)}`);
+    assert.deepEqual(await readJson(response), { ok: false, error: "invalid_request" });
+    assert.deepEqual(supabaseCalls(), [], `${JSON.stringify(body)} reached the database`);
+  }
+});
+
+test("an unauthenticated or unconfigured moderation call mints nothing", async () => {
+  resetModeration();
+  const anonymous = await handler(
+    moderationRequest(
+      "remove",
+      { channelId: CHANNEL_ID, userId: TARGET_ID },
+      { headers: { authorization: "" } },
+    ),
+  );
+  assert.equal(anonymous.status, 401);
+  assert.deepEqual(await readJson(anonymous), { ok: false, error: "unauthorized" });
+  assert.deepEqual(fetchCalls, []);
+
+  reset(moderationPlan({ callerId: nextCallerId() }), { LIVEKIT_API_SECRET: undefined });
+  const unconfigured = await handler(
+    moderationRequest("remove", { channelId: CHANNEL_ID, userId: TARGET_ID }),
+  );
+  assert.equal(unconfigured.status, 503);
+  assert.deepEqual(await readJson(unconfigured), { ok: false, error: "not_configured" });
+
+  reset({
+    ...moderationPlan({ callerId: nextCallerId() }),
+    getUser: () => ({ data: { user: null }, error: new Error("bad jwt") }),
+  });
+  const rejected = await handler(
+    moderationRequest("remove", { channelId: CHANNEL_ID, userId: TARGET_ID }),
+  );
+  assert.equal(rejected.status, 401);
+  assert.deepEqual(fetchCalls, []);
+});
+
+test("both routes refuse anything but POST, and the near misses are 404", async () => {
+  for (const action of ["force-mute", "remove"]) {
+    resetModeration();
+    const wrongMethod = await handler(
+      new Request(`${FUNCTION_ORIGIN}/functions/v1/voice-gateway/${action}`, { method: "GET" }),
+    );
+    assert.equal(wrongMethod.status, 405, `${action} served a GET`);
+  }
+  for (
+    const path of ["/force-mutes", "/mute", "/removes", "/force-mute/extra", "/kick"]
+  ) {
+    resetModeration();
+    const response = await handler(
+      new Request(`${FUNCTION_ORIGIN}/functions/v1/voice-gateway${path}`, {
+        method: "POST",
+        headers: { authorization: "Bearer caller-supabase-jwt" },
+        body: JSON.stringify({ channelId: CHANNEL_ID, userId: TARGET_ID, muted: true }),
+      }),
+    );
+    assert.equal(response.status, 404, `route ${path} was served`);
+  }
+});
+
+test("one caller cannot hold the button down: the limit answers 429", async () => {
+  // The limiter is per isolate and keyed on the verified caller, so this test
+  // needs a caller of its own and twenty-one attempts.
+  const callerId = "dddddddd-3333-4333-8333-333333333333";
+  let refused = null;
+  for (let attempt = 0; attempt < 21; attempt += 1) {
+    resetModeration({ callerId });
+    const response = await handler(
+      moderationRequest("remove", { channelId: CHANNEL_ID, userId: TARGET_ID }),
+    );
+    if (response.status === 429) {
+      refused = response;
+      break;
+    }
+    assert.equal(response.status, 200, `attempt ${attempt} was ${response.status}`);
+  }
+  assert.ok(refused, "twenty-one actions in one minute were all allowed");
+  assert.deepEqual(await readJson(refused), { ok: false, error: "rate_limited" });
+  assert.match(String(refused.headers.get("retry-after")), /^[0-9]+$/);
+  // A refusal costs the SFU nothing and the database nothing past the identity.
+  assert.deepEqual(fetchCalls, []);
+  assert.equal(
+    supabaseCallNames().some((name) => name.startsWith("rpc:")),
+    false,
+    "a rate-limited call still asked the database",
+  );
+});
