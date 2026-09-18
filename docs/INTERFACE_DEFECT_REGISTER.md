@@ -14931,3 +14931,130 @@ operate. `voice-gateway-token.test.mjs` bans **any** `console.*` in this gateway
 logging was removed rather than the guard narrowed, and the two queries that
 answer the same question are documented instead. Changing that guard is a
 deliberate decision, not a side effect.
+
+---
+
+## D-231 `[!]` A pre-call connection test cannot honestly be built here, and the measurement says why
+
+**Severity:** none as a defect. This entry exists so that nobody builds the
+dialogue later, because the version of it that is easy to build **lies to every
+user, every time**, and the lie looks like reassurance.
+
+The voice audit listed «a connection test — the ten-second pre-call check,
+distinct from the live monitor» as absent. It was measured on 2026-09-18 before
+anything was built, and the honest answer is «almost nothing». Nothing was
+built.
+
+### The decisive finding, with a positive control
+
+The one fact worth knowing before a call is **whether this browser can reach
+`7882/udp`**, because that is the difference between a good call and a call
+dragged over TCP.
+
+`157.22.206.43:7882/udp` is **silent to an unauthenticated STUN binding
+request**, and the control in the same run proves the instrument and the
+machine's outbound UDP were both fine:
+
+| target | answer |
+|---|---|
+| `stun.l.google.com:19302` (control) | **reply**, 32 bytes, STUN type `0x0101`, transaction id matches |
+| `157.22.206.43:7882` — the ICE mux | **silence** |
+| `157.22.206.43:3478` — slice 1's TURN port | **silence**; TURN is gone, matching `turn.enabled: false` |
+| `157.22.206.43:7881/tcp` | connected, 19 ms |
+| `157.22.206.43:7880/tcp` — twirp | timeout, confirming it is unpublished |
+
+The reason is structural rather than configurational: the UDP mux demultiplexes
+by the ICE ufrag in the STUN `USERNAME` attribute, and a packet carrying an
+unknown ufrag is dropped rather than answered. No token, no ufrag, no answer.
+
+**So the obvious probe inverts.** Run in a real Chromium, twice, three arms:
+
+| arm | ordinary browser | with non-proxied UDP disabled |
+|---|---|---|
+| no `iceServers` | 1 × `host/udp`, complete | 0 candidates |
+| `stun:157.22.206.43:7882` | 1 × `host/udp`, **no srflx, gathering never completes** | 0 candidates |
+| `stun:stun.l.google.com:19302` (control) | `host/udp` + **`srflx/udp`** | 0 candidates |
+
+Read the first column. **A probe that uses the mux as its STUN server reports
+«no UDP» on a network where the control proves UDP works perfectly.** That is a
+false negative for everybody — the «plausible number measuring nothing» in its
+purest form, and it would tell every user their network cannot carry a good
+call.
+
+### Three more reasons, each measured
+
+**The client does not know the signalling URL at all.** `LIVEKIT`, `livekitUrl`
+and `VITE_VOICE` return **zero** matches across `artifacts/kub/src`. The URL
+arrives only inside the token response, and `lib/voiceGateway.ts` states the
+invariant on purpose: «Chosen by the gateway, never by the client.» A token-free
+probe therefore has nothing to aim at unless it hardcodes a path the gateway
+owns — which is the exact class of mistake `docs/operations/voice.md`'s «Two
+URLs, which are not the same URL» section records as the first draft's bug.
+
+**Signalling measures the path the app is already using.** Media is not proxied:
+`rtc.tcp_port: 7881`, `udp_port: 7882`, `node_ip: 157.22.206.43`. Signalling is
+TCP/443 through Traefik; media is UDP/7882 or TCP/7881 straight to the box.
+`api`, `app` and `core` all resolve to that one address, and the person pressing
+the button is already talking to it over HTTPS and a Realtime WebSocket. A good
+number is compatible with a terrible call; a bad one means the application is
+down.
+
+There is one real measurement available — `GET /voice/rtc/validate` answers
+**401** with CORS, so a browser can read the status, measured at
+`[17, 63, 16, 17, 15]` ms — and it **is not free**: every such request writes a
+`WARN … "status": 401 … "error": "no permissions to access the room"` into the
+SFU log, which `docs/operations/voice.md` calls «the best account of what
+happened in a call». Five samples per press is five lines of 401 noise per user
+per press.
+
+**And the browser cannot reach the media ports any other way.** From
+`https://app.letscube.ru`: `fetch("http://157.22.206.43:7881")` is refused in
+**1 ms** as mixed content and never leaves the browser;
+`new WebSocket("wss://157.22.206.43:7881")` fails in 83 ms and **JavaScript sees
+no status at all** — only the timing differs from a filtered port, and timing is
+not an instrument.
+
+**This deployment offers a client neither STUN nor TURN.** `turn.enabled: false`,
+no `stun_servers` key, one voice container. So candidate gathering can only use
+a third party such as Google's — which measures UDP to Google rather than UDP to
+this host, adds an external dependency to every user's pre-call flow in a
+deployment whose audience partly arrives through a tunnel, and puts a
+third-party network call somewhere the privacy policy would then have to
+describe. A different measurement wearing the right label.
+
+One aside worth keeping: `navigator.connection` on the live page reported
+`effectiveType: "4g"`, `downlink: 9.2` and **`rtt: 0`** on a working wired
+connection. That is D-217's own defect handed over by the platform — a confident
+zero where the truth is unknown.
+
+### What to do instead, and it is better than the test would have been
+
+**Report the transport the live call actually chose.** `sampleHealth()` in
+`hooks/voiceRoom.ts` already walks `candidate-pair` entries and reads
+`currentRoundTripTime`; it discards `localCandidateId`, so `protocol` — `udp`
+against `tcp` — is one lookup away in the same `RTCStatsReport`. That is the
+good-call-versus-TCP-call fact **measured rather than predicted**, at no extra
+cost, needing one nullable field on `VoiceHealthSample` and one line of
+vocabulary in the connection panel.
+
+It also closes a real gap: **it is nowhere recorded which transport a production
+call takes.** Since `turn.enabled: false`, no production client is handed a STUN
+server at all — slice 1's srflx measurements were taken on a probe that *had*
+TURN on 3478 — so production clients rely on peer-reflexive candidates from the
+SFU's own connectivity checks, and nothing has ever confirmed which path they
+end up on.
+
+A genuine pre-call test is possible but needs a server change: a gateway route
+minting a short-lived token for one dedicated probe room, the client connecting
+with `autoSubscribe: false` and publishing nothing, reading the selected
+candidate pair's protocol and round trip, then disconnecting. It costs one
+rate-limit allowance under its own action, one probe room, and one notional seat
+for thirty seconds — and it needs a probe channel **no chat's rail reads**, or
+the phantom-participant problem arrives with it.
+
+### One probe recorded as inconclusive rather than as a verdict
+
+Both `7882/udp` and a definitely-unbound `7883/udp` stay silent on a connected
+socket, so the host drops ICMP unreachable and silence alone cannot tell «bound
+but deliberately quiet» from «closed». The mux conclusion above rests on the ICE
+arms and the Google control, not on that probe.
