@@ -21,6 +21,7 @@ import { isDesktopApp } from "@/lib/platform/desktop";
 import { ReleaseDistributionSection } from "@/components/settings/ReleaseDistributionSection";
 import { StorageSection } from "@/components/settings/StorageSection";
 import { WindowsStartupSection } from "@/components/settings/WindowsStartupSection";
+import { IosCallsSection } from "@/components/settings/IosCallsSection";
 import { ProfileDecorationSection } from "@/components/settings/ProfileDecorationSection";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
@@ -783,6 +784,13 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
                     would have to be searchable on every platform that cannot draw it. */}
                 {desktopWindows && <WindowsStartupSection />}
                 {desktopWindows && <StorageSection />}
+                {/* Guards itself by shell, like the two above, and for the same
+                    reason: a row id that only one platform can draw would have
+                    to be searchable on the ones that cannot. It sits last
+                    because it is the only block here with nothing to press —
+                    slice E of the call proposal, where the honest answer is a
+                    sentence rather than a setting. */}
+                <IosCallsSection />
               </div>
             </DisclosureRow>
           )}
