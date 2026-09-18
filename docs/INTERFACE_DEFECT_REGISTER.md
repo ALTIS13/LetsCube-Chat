@@ -15737,3 +15737,92 @@ badge beside the name (Telegram's), a line under it, or part of the avatar. The
 product already has `KubBadge` with a `pill` variant, and D-222 has just given it
 a one-line contract — so the vocabulary exists. What is missing is a decision
 about which of the surfaces above carry it.
+
+## D-237 `[x]` A private chat was told about a «channel» that does not exist
+
+**Severity:** high, and it was the first thing the owner saw when they made a
+real call. Recorded, fixed and applied the same hour.
+
+**Reported by the owner on 2026-09-18**, with a screenshot: «выполнил ОДИН
+тестовый звонок, но почему-то наплодилось вот такое количество сообщений с
+непонятным описанием "Разговор в канале «Звонок» закончился" что за канал звонок
+в личных сообщениях между людьми для меня не ясно». Quite right — there is no
+channel. «Звонок» is the name `voice_private_room` gives the row it creates, and
+it was never meant to be read by anybody.
+
+**What one call produced**, read off production:
+
+```
+17:05:24  Начался разговор в канале «Звонок»
+17:05:54  Разговор в канале «Звонок» закончился
+17:05:55  Начался разговор в канале «Звонок»
+17:06:06  Разговор в канале «Звонок» закончился
+17:06:06  Отменённый звонок          ← the only one that should exist
+```
+
+**Mine, and the ordinary shape of one.** `write_voice_call_service_message`
+fires on `voice_channels.participant_count` crossing zero, for **any** row in
+that table. When it was written (`20260918200000`) that was exactly right,
+because only a group could have such a row. Slice A then put a row in every
+private chat anybody calls in, and the trigger went on doing precisely what it
+had always done.
+
+**Nothing was going to catch it.** The group-call tests seed a group; the call
+tests stub the transport and never move `participant_count` through a real
+webhook; the two mechanisms live in files written days apart. A feature that
+changes what an old trigger's rows *mean* is not a change the old trigger's
+tests can see — which is the general lesson, and it is worth more than the fix.
+
+**Fixed** in `20260918280000_a_private_chat_has_no_channel_to_announce.sql`: the
+trigger returns early for a private chat, because that case already has a
+better sentence — slice B's record, with the outcome, the direction and the
+length. Two mechanisms describing one call is how the owner came to read five
+lines about a call they cancelled. Rehearsed both ways: a private room going
+0→1→0 now writes **nothing**, and a group room going 0→1→2→0 still writes
+exactly **two** lines. The four rows already written were deleted under a
+predicate narrow enough to reach only them, with the count asserted before and
+after.
+
+---
+
+## D-238 `[ ]` The participant count flapped 1 → 0 → 1 during a live call
+
+**Severity:** medium, and currently invisible — which is why it is recorded
+rather than left to be rediscovered. D-237's fix means a private chat says
+nothing about occupancy at all, so this produces no noise there any more. **In a
+group it still would:** a spurious «Разговор закончился» followed by «Начался
+разговор», mid-call, for a call nobody left.
+
+**The evidence, from the same test call.** The count went to 0 at 17:05:54 and
+back to 1 at 17:05:55.6 — 0.8 seconds later — during a ring nobody had answered
+or cancelled. The worker's log puts a reconciler pass at **exactly** each of the
+three moments the count moved:
+
+```
+17:05:24  voiceReconciler pass  reconciled:1 unknown:0 reaped:0   → count 0→1
+17:05:54  voiceReconciler pass  reconciled:1 unknown:0 reaped:0   → count 1→0
+17:06:25  voiceReconciler pass  reconciled:1 unknown:0 reaped:0
+```
+
+So the pass at :54 replaced the participant list with an empty one, and
+something put it back 0.8 s later.
+
+**Not diagnosed, and the candidates are not equivalent:**
+
+- **the client dropped and rejoined** — LiveKit's SDK reconnects on a transport
+  hiccup, which would emit `participant_left` then `participant_joined` and make
+  this a true report of a real flap, not a bug;
+- **the reconciler read an empty room that was not empty** — a race between the
+  token mint and LiveKit's view of the room, which would make it a bug in
+  `voice_participants_replace`;
+- **a webhook arrived out of order** behind the reconciler's write.
+
+`private.voice_webhook_events` stores event **ids** for de-duplication and not
+event types, so the log cannot tell these apart after the fact. What would
+settle it: a call made with the worker's log at debug, or recording the event
+type alongside the id — the second is a small migration and would pay for itself
+the next time this is asked.
+
+**Do not "fix" it by smoothing the count.** If the client really is dropping,
+hiding the flap would hide a connection problem in a call; the first job is to
+find out which of the three it is.
