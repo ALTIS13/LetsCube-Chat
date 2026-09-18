@@ -14,7 +14,13 @@ test.describe("public privacy and support surfaces", () => {
     await expect(page.getByTestId("privacy-print")).toBeVisible();
     await expect(page.getByText("ООО «КУБ»").first()).toBeVisible();
     await expect(page.getByText("privacy@app.letscube.ru").first()).toBeVisible();
-    await expect(page.getByText("15. Контакты")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "7. Голосовые звонки" })).toBeVisible();
+    // The sentence the whole section exists for, pinned as text rather than by
+    // section number: renumbering is cheap and this claim is not. A policy that
+    // describes calls and stops saying the audio is not recorded would be a
+    // worse document than one that never mentioned them.
+    await expect(page.getByText("Оператор не ведёт запись разговоров")).toBeVisible();
+    await expect(page.getByText("16. Контакты")).toBeVisible();
     await expect(page.locator('input[type="password"]')).toHaveCount(0);
 
     const scrollRoot = page.getByTestId("public-scroll-root");
@@ -27,8 +33,8 @@ test.describe("public privacy and support surfaces", () => {
     expect(viewportSafety.scrollHeight).toBeGreaterThan(viewportSafety.clientHeight);
     expect(viewportSafety.scrollWidth).toBeLessThanOrEqual(viewportSafety.clientWidth + 1);
 
-    await page.getByRole("heading", { name: "15. Контакты" }).scrollIntoViewIfNeeded();
-    await expect(page.getByRole("heading", { name: "15. Контакты" })).toBeInViewport();
+    await page.getByRole("heading", { name: "16. Контакты" }).scrollIntoViewIfNeeded();
+    await expect(page.getByRole("heading", { name: "16. Контакты" })).toBeInViewport();
 
     const documentSafety = await page.evaluate(() => ({
       bodyWidth: document.body.scrollWidth,

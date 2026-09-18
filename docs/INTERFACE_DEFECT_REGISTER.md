@@ -14054,6 +14054,40 @@ A fix is not a polish pass: every tier-1 line needs pixels at both column
 extremes (260px and 540px) **and** in the `SettingsModal` form below `md`, because
 that dual case is the whole reason a threshold change is not the answer.
 
+### Seen again on 2026-09-18, with evidence that sharpens the order
+
+The owner sent two screenshots of the settings column and said the interface
+work was not successful. Both are this entry, and both are still live — the fix
+is recorded for later at the owner's own instruction and stays there, but the
+new evidence changes which line the sweep should start on.
+
+**The release card, unchanged.** «Версия установки: Windows EXE» and «Режим:
+Браузер» are still ellipses with their text crammed inside. Second sighting,
+same two lines (`ReleaseDistributionSection.tsx:108`, `:118`).
+
+**The achievements grid, which is worse than this entry's tier 1 had it.**
+`settings/ProfileDecorationSection.tsx:108` is `grid gap-1.5 sm:grid-cols-2`.
+At a 1440 viewport `sm:` is true, so a ~330px column becomes two ~160px cards,
+and after the 18px icon and the gaps each card has roughly 120px for its text.
+
+The measurement that matters is **which way the two halves of the card fail**,
+because they fail differently and only one of them is recoverable by the reader:
+
+- the title carries `truncate`, so it does not wrap — it **clips**. Five of the
+  seven achievements on screen were unreadable: «Тестиро…», «Альфа-т…»,
+  «Бета-тес…», «Собесед…», «Рассказ…». A clipped title is not a cramped title;
+  the word is simply gone;
+- the description below it wraps instead, eight lines deep — «Был с LETSCUBE
+  ещё до первых приложений для Android и Windows» down a 120px ribbon.
+
+So the same container produces a clip and a ribbon in one card, which is why
+this line should be **first** in the sweep rather than fourth: the release
+card's pills are ugly and readable, and these titles are not readable at all.
+
+Nothing else about this entry changes. The mechanism is the one measured above —
+a viewport breakpoint deciding a layout inside a column the owner drags — the
+count stands, and the fix vocabulary stands.
+
 ---
 
 ## D-223 `[x]` Every person in a call was drawn with their microphone off, and deafening did nothing at all
