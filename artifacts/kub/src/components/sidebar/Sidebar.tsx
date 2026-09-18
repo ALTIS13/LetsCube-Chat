@@ -66,7 +66,10 @@ export function Sidebar() {
   // chat list is on screen; it renders nothing, and every row takes its own
   // answer through `useChatVoicePresence`. Gated on there being a session at
   // all, so a signed-out shell opens no channel.
-  useVoicePresenceReader(userId !== null);
+  // The id rather than a flag since 2026-09-18: the same read now carries the
+  // ring, and the store behind it has to know who is reading before it may
+  // decide that a ring which ran out was this person's to write off.
+  useVoicePresenceReader(userId);
 
   const editFolder = (id: string) => {
     const target = folders.find((f) => f.id === id);

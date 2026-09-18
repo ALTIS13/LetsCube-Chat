@@ -15440,3 +15440,162 @@ hear; a gate on voice **messages**, which are recorded by holding a button and
 are not in a call at all — said in the settings screen rather than left to be
 wondered about (`MIC_ACTIVATION_SCOPE_NOTE`); and any of it on the SFU, which
 sees a participant publishing silence and nothing new.
+
+## D-233 `[x]` A private chat could not ring, and three things found while making it able to
+
+**Severity:** the feature's absence is the owner's request, not a defect. What
+this entry is for is the three defects found on the way, each of which would have
+shipped: a database state that locks two people out of calling each other **for
+ever**, a card that covers the conversation it arrives over, and a read that
+would have been right only by a round trip's luck.
+
+Slice A of `docs/proposals/2026-09-18-one-to-one-calls.md`, built after the owner
+answered its four blocking questions on 2026-09-18: **45 seconds**, **every
+private chat minus the block list**, **audio only**, and the per-device switch as
+**a device registry** rather than a setting local to one installation.
+
+### What the slice is, in one paragraph
+
+Three columns on `voice_channels` — `ring_started_at`, `ring_caller`,
+`ring_answered_at` — and four `SECURITY DEFINER` functions that are the only way
+to move them. The ring lives on that table and not in one of its own because
+**every signed-in client already holds an unfiltered subscription to it**, so a
+ring reaches every device the person is running with no fan-out to build, and the
+row changing again stops the rest. That is the whole of «ring every device, stop
+the others» (§4a), and on this table it costs nothing.
+
+The thing the proposal named and nobody had: **in a private chat one participant
+can create a call room and the other cannot** — INSERT is `is_chat_admin`, and
+whoever opened the chat holds `owner` while the other holds `member`. Measured
+rather than inferred: the non-owner's direct insert is refused by RLS, and
+through `voice_private_room` it succeeds.
+
+### Defect 1 — a dead call locked the pair out for ever
+
+`voice_call_ring` refuses a room whose ring is `ringing` **or** `answered`, and
+the migration that wrote that rule said nothing about who clears an `answered`
+one. **Nothing did.** So a call whose clients all died — a crash, a killed
+process, a closed lid — left `ring_answered_at` set, and from then on every call
+between those two people was refused `already_ringing`, permanently, with nothing
+in any interface able to clear it.
+
+Found by reading the client half, not by running it, which is the only reason it
+was fixed the same hour rather than reported months later as «I cannot call this
+person and I do not know why».
+
+Two repairs, two clocks, and they are not one:
+
+- **`private.voice_channel_recount` clears the residue** after the same
+  **two-minute** grace it already uses for a stale `active_since`. That function
+  is the one funnel every occupancy path goes through — the webhook's join and
+  leave, the reconciler's replace, the residue sweep's reap — so the repair needs
+  no new process. The grace is not caution: `room_started` fires before the first
+  participant row exists, so clearing on emptiness alone would race every join.
+- **`voice_call_ring` treats an empty answered room as over after thirty
+  seconds**, because two minutes of «you cannot call this person» is a shorter
+  defect rather than none. Thirty is far beyond a join round trip and far under
+  the recount's grace, so the two never disagree about one row.
+
+**An expired `ringing` ring is deliberately not cleared.** It is the only
+evidence that a call was made and nobody answered, and slice C exists to turn it
+into a «missed» line in the conversation; clearing it as residue would destroy
+the evidence before the thing that reads it is built. It locks nothing —
+`voice_call_ring` accepts `expired`, verified on production.
+
+### Defect 2 — the ring covered the conversation it arrived over
+
+Two captures, one at each width, each killing a different version.
+
+At 390 a card fixed to the top of the window **landed squarely over the chat
+header**, which on a phone carries the only way back to the chat list (D-047): a
+call that hides the back button for forty-five seconds traps somebody in a
+conversation. So the phone's became a band in the flow and the computer's stayed
+a fixed card, with `DesktopUpdatePill`'s arithmetic.
+
+Photographed at 1440, **that card sat across the conversation's date separator
+and its «НОВЫЕ СООБЩЕНИЯ» mark**, both clipped behind it. Which is the same
+defect one element down, and the general form is worth more than either: **a
+fixed thing over a scroller covers whatever is under it, and no arithmetic makes
+that false.** This project had already written that down as «reserve room inside
+the scroller, not by shrinking the container».
+
+A reservation was the other answer and the more expensive one — a token, a
+scroller that reads it, and a second thing to keep in step with the call bar's.
+In the flow there is nothing to keep in step: one shape at every width, the shell
+moves down by the band's height, nothing anywhere is covered. The one property
+the fixed card had is kept — `z-[96]` on a positioned element beats `KubModal`'s
+95 and the media viewer's 90 whether it is in the flow or out of it, so a call
+that arrives while somebody is looking at a photograph is still answerable.
+
+It also dissolved a trade rather than settling it: the fixed card's offset
+assumed a header of `--kub-control-row-height`, which the welcome screen does not
+have. A band has no offset to assume.
+
+### Defect 3 — a read that would have been right by a round trip's luck
+
+`useVoicePresence` re-read with `.gt("participant_count", 0)`, and the proposal
+says a ringing room has nobody in it, so the ring would be invisible. **Both are
+half true, and the half that is false is the interesting one.** The caller joins
+on the press, so the SFU's webhook bumps the count to 1 a round trip later — the
+old query would then have seen the row, one webhook late, and been unable to tell
+it from «somebody is talking in this chat».
+
+So the defect was a **race and a mislabel**, not permanent blindness. It surfaced
+because a fixture seeded `participant_count: 1` and the mutation that should have
+gone red came back green. The predicate is now
+`.or("participant_count.gt.0,ring_started_at.not.is.null")`, and the presence
+marks stay right because a row whose ring state is `ringing` is dropped from the
+*talking* set — evaluated against the clock, not against «has a ring column».
+
+### The boundary, agreed in two languages
+
+`voice_ring_state` is pure, `immutable`, and takes `now` explicitly, so the same
+four cases are assertable in SQL, in a rehearsal and in `lib/voiceRing.ts`
+without a call, an SFU or a clock anybody controls. The boundary is **`>=`**:
+verified on production, 44 seconds is still `ringing` and 45 exactly is
+`expired`, and the TypeScript mirror asserts the same. `answered` wins over
+`expired`, so a call taken at the 44th second is still a call an hour later.
+
+### One protocol decision the owner may want to revisit
+
+Three row states carry everything: `ringing`, `answered`, and **gone**. An answer
+sets a second timestamp; everything else clears the row. That is what keeps «they
+answered» apart from «they declined» for the caller, and it makes a hang-up
+propagate for free — but it also means **leaving ends the call for both sides**,
+so there is no rejoining; you call again. Telegram behaves the same way. It is a
+decision rather than a derivation, and it is written here so that changing it
+later is a change to a decision rather than a discovery.
+
+### What is not built
+
+The **record in the conversation** — outcome, duration, direction — is slice B
+and needs a payload column `messages` does not have; `voice_call_stop` takes the
+reason today and discards it, so that slice B is a change to one function body
+rather than to every call site in three shells. The **45-second cut-off as an
+authority** is slice C: today the client that is present enforces it, and a
+caller who closes their laptop mid-ring leaves a row that expires by arithmetic
+and blocks nothing. **Video** is a later slice; the token already permits it, so
+it needs no migration. The **device registry** is slice F.
+
+### Coverage
+
+`tests/unit/voice-ring.test.mts` for the rules and `tests/e2e/voice-ring.spec.ts`
+for the surfaces, on the fixture — real components, real hook, the gateway and
+the room stubbed exactly as `voice-call.spec.ts` stubs them. **Twenty-three
+mutations, twenty-one red**, including reverting the presence predicate, sending
+a decline as a cancel, ringing without joining, cancelling without leaving, and
+never setting the expiry timer.
+
+The two green ones are reported rather than papered over, and both are
+redundancy: forcing a private chat type in the header does not offer a call in a
+group, because a group has no other participant and that branch refuses first;
+and keeping expired rings in the store shows no stale card, because the picker
+filters by state anyway.
+
+Three production migrations — `20260918220000_a_private_chat_can_ring`,
+`20260918230000_a_ring_cannot_be_forged`, and
+`20260918240000_a_call_that_died_does_not_lock_the_pair_out` — each backed up,
+rehearsed in a rolled-back transaction on production against synthetic rows with
+the registration triggers disabled inside it, and verified afterwards on values
+rather than on the fact that it ran. Gates at the commit: typecheck clean, unit
+3063/3063, `voice-call` and `voice-ring` 138 passed across both viewports.

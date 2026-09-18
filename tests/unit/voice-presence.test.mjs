@@ -23,6 +23,18 @@ import {
 const TEAM = "22222222-2222-4222-8222-000000000001";
 const OTHER = "22222222-2222-4222-8222-000000000002";
 
+/**
+ * The moment the list is read at.
+ *
+ * `readVoicePresenceRows` takes one since 2026-09-18, because a room whose
+ * ring is still ringing is not a room with somebody talking in it, and
+ * whether a ring is still ringing is a question about the clock. Fixed here
+ * rather than `Date.now()` so the two sides of the 45-second boundary are
+ * something a test can stand on.
+ */
+const NOW = Date.parse("2026-09-18T12:00:00.000Z");
+const read = (rows, now = NOW) => readVoicePresenceRows(rows, now);
+
 const row = (over = {}) => ({
   id: "33333333-3333-4333-8333-000000000001",
   chat_id: TEAM,
@@ -36,13 +48,13 @@ test("a room with nobody in it is not presence, and neither is a broken counter"
   // Zero is the absence of presence rather than a presence of nought, so the
   // row is dropped rather than kept with a count of 0 — a kept zero would put a
   // mark saying «0» on the list.
-  assert.deepEqual(readVoicePresenceRows([row({ participant_count: 0 })]), []);
+  assert.deepEqual(read([row({ participant_count: 0 })]), []);
   // Negative is producible for a moment when a webhook and a reconciliation
   // disagree; `voiceOccupancyLabel` clamps it for the same reason.
-  assert.deepEqual(readVoicePresenceRows([row({ participant_count: -3 })]), []);
+  assert.deepEqual(read([row({ participant_count: -3 })]), []);
   for (const bad of [null, undefined, "2", Number.NaN, Number.POSITIVE_INFINITY]) {
     assert.deepEqual(
-      readVoicePresenceRows([row({ participant_count: bad })]),
+      read([row({ participant_count: bad })]),
       [],
       `a count of ${String(bad)} was read as presence`,
     );
@@ -50,27 +62,27 @@ test("a room with nobody in it is not presence, and neither is a broken counter"
   // And an archived room, which is what «removed» means here: the row survives
   // an archive, so a stale read would otherwise announce a call in a room
   // nobody can join.
-  assert.deepEqual(readVoicePresenceRows([row({ archived: true })]), []);
+  assert.deepEqual(read([row({ archived: true })]), []);
 });
 
 test("a row with no ids is not a room, whatever else it carries", () => {
-  assert.deepEqual(readVoicePresenceRows([row({ id: null })]), []);
-  assert.deepEqual(readVoicePresenceRows([row({ chat_id: null })]), []);
-  assert.deepEqual(readVoicePresenceRows([null, undefined, 7, "x", []]), []);
-  assert.deepEqual(readVoicePresenceRows(null), []);
-  assert.deepEqual(readVoicePresenceRows({}), []);
+  assert.deepEqual(read([row({ id: null })]), []);
+  assert.deepEqual(read([row({ chat_id: null })]), []);
+  assert.deepEqual(read([null, undefined, 7, "x", []]), []);
+  assert.deepEqual(read(null), []);
+  assert.deepEqual(read({}), []);
 });
 
 test("a nameless room gets a floor rather than an empty pair of quotes", () => {
   for (const name of [null, "", "   ", 7]) {
     assert.equal(
-      readVoicePresenceRows([row({ name })])[0].name,
+      read([row({ name })])[0].name,
       "Голосовой канал",
       `a room named ${JSON.stringify(name)} left the sentence with empty quotes`,
     );
   }
   // A fractional counter is floored rather than shown as «2.5 человека».
-  assert.equal(readVoicePresenceRows([row({ participant_count: 2.7 })])[0].count, 2);
+  assert.equal(read([row({ participant_count: 2.7 })])[0].count, 2);
 });
 
 test("the count is everybody in the conversation, not the busiest room alone", () => {
@@ -229,4 +241,69 @@ test("a first read reaches the list, and an empty one after it does too", () => 
   assert.notEqual(mergeVoicePresence(first, empty), first);
   // And nothing to nothing is still nothing, without a notification.
   assert.equal(mergeVoicePresence(empty, new Map()), empty);
+});
+
+/**
+ * A ringing room, which the list's read now returns and must not draw as a call
+ * in progress.
+ *
+ * Until 2026-09-18 the read was `.gt("participant_count", 0)` alone, and a
+ * ringing room has nobody in it — so the ring was invisible to the very
+ * subscription the one-to-one call design rests on. The read is now «somebody
+ * in it **or** a live ring», and these are the two shapes that widening drags
+ * past this function.
+ */
+const RINGING = "2026-09-18T11:59:57.000Z";
+const CALLER = "11111111-1111-4111-8111-000000000002";
+
+test("a ringing room reaches the read and is not somebody talking", () => {
+  // The ring as the callee's list sees it before anybody joins: nobody in it.
+  // The count already drops this one, and that is the assertion — the widened
+  // query brings it here, and the rule keeps it out of the mark.
+  assert.deepEqual(
+    read([row({ participant_count: 0, ring_started_at: RINGING, ring_caller: CALLER })]),
+    [],
+  );
+
+  // And the shape that the count does **not** drop, which is the whole reason
+  // this rule exists: the caller joins the room the moment they press, so an
+  // outgoing call is a room with exactly one person in it and a live ring. Left
+  // to the counter alone the chat list would print «1 человек в «Звонок»» on a
+  // private conversation where nobody is talking and somebody is waiting to be
+  // answered.
+  assert.deepEqual(
+    read([row({ name: "Звонок", participant_count: 1, ring_started_at: RINGING, ring_caller: CALLER })]),
+    [],
+    "a room whose ring is still ringing was counted as somebody talking",
+  );
+});
+
+test("an answered ring is a call in progress and keeps its mark", () => {
+  // The other half of the predicate. A private conversation with a call running
+  // in it should carry the same mark a group does, so `answered` is left alone
+  // — and a rule that dropped every row with a ring column set would take this
+  // one with it.
+  const rows = read([
+    row({
+      name: "Звонок",
+      participant_count: 2,
+      ring_started_at: RINGING,
+      ring_caller: CALLER,
+      ring_answered_at: "2026-09-18T11:59:58.000Z",
+    }),
+  ]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].count, 2);
+  assert.equal(rows[0].name, "Звонок");
+});
+
+test("the ring the list drops runs out on the database's own boundary", () => {
+  // 45 seconds after it started the ring is over, and a room somebody is still
+  // sitting in is a room with somebody in it again. The edge is `>=`, which is
+  // what `voice_ring_state` compares with; `>` here would keep the mark off the
+  // list for one second longer than the database keeps the ring alive.
+  const ringing = { name: "Звонок", participant_count: 1, ring_started_at: RINGING, ring_caller: CALLER };
+  const startedAt = Date.parse(RINGING);
+  assert.deepEqual(read([row(ringing)], startedAt + 44_000), []);
+  assert.equal(read([row(ringing)], startedAt + 45_000).length, 1);
 });

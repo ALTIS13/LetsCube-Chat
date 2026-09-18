@@ -33,6 +33,11 @@ function input(over: Partial<VoiceCallBarInput> = {}): VoiceCallBarInput {
     channelName: "Общий голос",
     chatName: "Команда проекта",
     selectedChatId: OTHER_CHAT,
+    // A group's room, which is the only kind the capsule knows how to be. The
+    // one-to-one call's private conversation has none, and the cases for that
+    // are at the foot of this file.
+    capsuleHere: true,
+    ringing: false,
     micMuted: false,
     deafened: false,
     speechRevoked: false,
@@ -181,4 +186,65 @@ test("a bar carrying a hold-to-talk control stops printing the group", () => {
   assert.equal(talking.detail, plain.detail);
   assert.equal(talking.controls, plain.controls);
   assert.equal(talking.openChatId, plain.openChatId);
+});
+
+test("a one-to-one call keeps its bar in its own conversation, because nothing else is there", () => {
+  // The rule the bar has always had is «stand down where the capsule stands».
+  // A private chat has no capsule: `ChatWindow` reads a chat's voice channels
+  // when its type is `group` and for nothing else, so the room a one-to-one
+  // call lives in is never drawn under a private conversation's header. With
+  // the old rule the call would be invisible in the one conversation it is in
+  // — the microphone open and nothing on screen saying so, which is the exact
+  // defect this bar was built for.
+  const group = voiceCallBarState(input({ selectedChatId: CALL_CHAT, capsuleHere: true }));
+  assert.equal(group.visible, false);
+
+  const oneToOne = voiceCallBarState(input({ selectedChatId: CALL_CHAT, capsuleHere: false }));
+  assert.equal(oneToOne.visible, true);
+  assert.equal(oneToOne.controls, true);
+
+  // And `capsuleHere` changes nothing anywhere else: it is a statement about
+  // one conversation, not a second switch for the whole bar.
+  assert.equal(voiceCallBarState(input({ selectedChatId: OTHER_CHAT, capsuleHere: false })).visible, true);
+  assert.equal(voiceCallBarState(input({ selectedChatId: OTHER_CHAT, capsuleHere: true })).visible, true);
+});
+
+test("a call still ringing at the other end gets no bar anywhere", () => {
+  // The caller joins the room the moment they press, so that an answer lands on
+  // a connection that is already up. That makes `phase` `joining` and then
+  // `connected` while the other person's telephone is still ringing, and left
+  // to itself the bar would say «Вы в разговоре» about a call nobody has taken.
+  // `VoiceCallRing` is the window onto that state; this is the other one
+  // standing down.
+  assert.equal(voiceCallBarState(input({ ringing: true, phase: "connected" })).visible, false);
+  assert.equal(voiceCallBarState(input({ ringing: true, phase: "joining" })).visible, false);
+  // Everywhere, not only in the call's own chat: the ring card is fixed to the
+  // window and is on screen whichever conversation is open.
+  assert.equal(voiceCallBarState(input({ ringing: true, selectedChatId: null })).visible, false);
+  assert.equal(
+    voiceCallBarState(input({ ringing: true, selectedChatId: OTHER_CHAT, capsuleHere: false })).visible,
+    false,
+  );
+  // And the moment it is answered the bar takes over, with everything on it.
+  const answered = voiceCallBarState(input({ ringing: false }));
+  assert.equal(answered.visible, true);
+  assert.equal(answered.controls, true);
+});
+
+test("the bar never prints the same fact twice", () => {
+  // A one-to-one call's room is the person: `startVoiceRing` passes their name
+  // as the room's, because «Звонок · Вы в разговоре» names nobody. And
+  // `useChats` sets a private chat's own `name` to that same person. Without
+  // the rule the bar would print «Анна Смирнова» over «Анна Смирнова · Вы в
+  // разговоре».
+  const view = voiceCallBarState(input({ channelName: "Анна Смирнова", chatName: "Анна Смирнова" }));
+  assert.equal(view.room, "Анна Смирнова");
+  assert.equal(view.where, null);
+  assert.equal(view.detail, "Вы в разговоре");
+  // A group whose name merely resembles the room's keeps both, because they
+  // are two different facts. The comparison is equality, not similarity.
+  assert.equal(
+    voiceCallBarState(input({ channelName: "Общий голос", chatName: "Общий голос 2" })).where,
+    "Общий голос 2",
+  );
 });

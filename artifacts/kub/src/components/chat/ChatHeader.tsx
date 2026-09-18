@@ -31,6 +31,9 @@ import {
 } from "@/lib/chatMute";
 import { requestContentReport } from "./ReportDialog";
 import { usePresenceNow } from "@/hooks/usePresenceNow";
+import { useVoiceCall } from "@/hooks/useVoiceCall";
+import { startVoiceRing, useVoiceRings } from "@/hooks/useVoiceRing";
+import { voiceCallOffer } from "@/lib/voiceRing";
 import { useAvatarVariantUrls } from "@/hooks/useMediaVariants";
 import type { ChatWithLastMessage } from "@/types/database";
 
@@ -89,6 +92,48 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
     currentUserId: currentUser?.id,
   });
   const isBlocked = Boolean(otherUser?.id && blocks.ids.has(otherUser.id));
+
+  /**
+   * «Позвонить», offered to **both** participants of a private chat.
+   *
+   * The asymmetry this closes is the thing nobody had named: `voice_channels`
+   * INSERT is `is_chat_admin(chat_id)`, and in a private conversation whoever
+   * opened it holds `owner` while the other side holds `member` — so exactly
+   * one of the two people could ever have created the room a call needs.
+   * `voice_private_room` is the definer function that closes it, and nothing
+   * here asks about a role, deliberately: a role test in the interface would
+   * put the asymmetry straight back after the database had just removed it.
+   *
+   * Every refusal it can answer is `voiceCallOffer`'s, where a test can reach
+   * them. The only one this component contributes is the fact that a bot chat
+   * has no `other_user` at all, which arrives as `no_person`.
+   */
+  const call = useVoiceCall();
+  const rings = useVoiceRings();
+  const callOffer = voiceCallOffer({
+    chatType: chat?.type,
+    isSaved: display.isSaved,
+    otherUserId: otherUser?.id,
+    selfId: currentUser?.id,
+    iBlockedThem: isBlocked,
+    callChannelId: call.channelId,
+    ringingHere: rings.some((ring) => ring.chatId === chatId),
+  });
+  const [callStarting, setCallStarting] = useState(false);
+
+  const handleCall = async () => {
+    if (!callOffer.offered || callStarting) return;
+    setCallStarting(true);
+    // The name goes with the press. A private chat's room is «Звонок» in the
+    // database, and the bar that carries the call afterwards prints the room's
+    // name as the thing somebody is looking for — so the person is the name,
+    // and this is the only surface that has it.
+    const outcome = await startVoiceRing({ chatId, who: name });
+    setCallStarting(false);
+    if (!outcome.ok) {
+      showActionFeedback({ kind: "error", title: outcome.refusal, key: "voice-ring" });
+    }
+  };
 
   useEffect(() => {
     if (!showMenu) return;
@@ -439,7 +484,31 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
             </span>
           </button>
 
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-1">
+            {/* Beside «Ещё» rather than inside it. A call is a thing somebody
+                reaches for, not a thing they go looking for in a list, and
+                every messenger with calls puts the telephone on the header
+                itself. It is drawn only where it can be pressed — a private
+                chat with a person who is not blocked — which is
+                `voiceCallOffer`'s decision and not this file's. */}
+            {callOffer.offered && (
+              <button
+                type="button"
+                onClick={() => void handleCall()}
+                disabled={callStarting}
+                className={cn(
+                  "kub-icon-action kub-interactive group/capsule relative h-11 w-11 rounded-full text-[color:var(--kub-text)]",
+                  callStarting && "cursor-not-allowed",
+                  FOCUS_RING,
+                )}
+                aria-label={callOffer.label}
+                title={callOffer.title}
+                data-testid="chat-header-call"
+              >
+                <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />
+                <KubIcon name="phone" size={20} className="relative" tone="accent" />
+              </button>
+            )}
             <div className="relative">
               <button
                 type="button"

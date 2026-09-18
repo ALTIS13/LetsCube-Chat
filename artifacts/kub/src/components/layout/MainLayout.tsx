@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/sidebar/Sidebar";
 import { ChatListResizer } from "@/components/sidebar/ChatListResizer";
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { VoiceCallBar } from "@/components/chat/VoiceCallBar";
+import { VoiceCallRing } from "@/components/chat/VoiceCallRing";
 import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { BottomNav } from "./BottomNav";
 import { DesktopUpdatePill } from "@/components/desktop/DesktopUpdatePill";
@@ -97,6 +98,18 @@ export function MainLayout() {
     // app, where iOS hands 100dvh over short from the first frame (D-111).
     <div className="flex flex-col h-app w-screen overflow-hidden px-safe">
       <DesktopUpdatePill />
+      {/* Somebody calling, or being called. Outside the shell below rather than
+          inside a pane, because it belongs to no conversation: a ring reaches
+          every device the person is signed in on and has to be answerable from
+          the chat list, from another chat, and from a full-screen photograph.
+
+          Here rather than inside the panes because on a phone it is a band in
+          the flow: the whole shell moves down by its height and nothing is
+          covered — measured, after a fixed card at 390 sat over the chat
+          header's back button, which on a phone is the only way out of a
+          conversation (D-047). From `md` the same element is `fixed` and takes
+          no room at all. It draws nothing when nothing is ringing. */}
+      <VoiceCallRing />
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden"
         data-testid="desktop-app-shell"

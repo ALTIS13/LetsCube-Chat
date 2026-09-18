@@ -60,6 +60,32 @@ export interface VoiceCallBarInput {
   readonly chatName: string | null;
   /** The conversation on screen, so the bar can stand down where the capsule stands. */
   readonly selectedChatId: string | null;
+  /**
+   * Whether the conversation that owns this call draws a capsule for it.
+   *
+   * True for a group's voice room, which is the only thing the capsule knows
+   * how to be. **False for a one-to-one call**, whose room belongs to a private
+   * chat — `ChatWindow` reads a chat's channels only when its type is `group`,
+   * so a private conversation has no capsule at all and never will.
+   *
+   * Without this the bar would keep the old rule and vanish in the one
+   * conversation a private call is in, which is exactly the defect it was built
+   * for: the microphone open and nothing on screen saying so. Required rather
+   * than optional, for the reason `deafened` is — a caller that stops passing it
+   * has silently gone back to that, and it has to be a type error.
+   */
+  readonly capsuleHere: boolean;
+  /**
+   * Whether this call is an outgoing ring nobody has answered yet.
+   *
+   * The caller joins the room the moment they press, so that an answer lands on
+   * a connection that is already up — which means `phase` is `joining` and then
+   * `connected` while the other person's telephone is still ringing. Left to
+   * itself the bar would say «Вы в разговоре» about a call nobody has taken.
+   * `VoiceCallRing` is the window onto that state and this is the other one
+   * standing down, which is the same rule as the capsule's, one state earlier.
+   */
+  readonly ringing: boolean;
   readonly micMuted: boolean;
   readonly deafened: boolean;
   /** A moderator took the microphone away (D-221). */
@@ -124,9 +150,12 @@ export function voiceCallBarState(input: VoiceCallBarInput): VoiceCallBarView {
   const { phase, channelId, chatId } = input;
   if (channelId === null) return HIDDEN;
   if (phase !== "joining" && phase !== "connected" && phase !== "reconnecting") return HIDDEN;
+  // A call that is still ringing is `VoiceCallRing`'s to speak for, everywhere.
+  if (input.ringing) return HIDDEN;
   // The capsule is already in that conversation, with these same controls over
-  // this same state.
-  if (chatId !== null && chatId === input.selectedChatId) return HIDDEN;
+  // this same state — where there is one. A private chat has none, so a
+  // one-to-one call keeps its bar in its own conversation as well.
+  if (chatId !== null && chatId === input.selectedChatId && input.capsuleHere) return HIDDEN;
 
   const room = (input.channelName ?? "").trim() || "Голосовой канал";
   /**
@@ -143,7 +172,18 @@ export function voiceCallBarState(input: VoiceCallBarInput): VoiceCallBarView {
    * — and a fact cut to one letter is not a shorter fact, it is noise. Pressing
    * the bar still goes there.
    */
-  const where = input.talkControl ? null : (input.chatName ?? "").trim() || null;
+  const named = input.talkControl ? null : (input.chatName ?? "").trim() || null;
+  /**
+   * And never the same fact twice.
+   *
+   * A one-to-one call's room **is** the person — `startVoiceRing` passes their
+   * name as the room's, because «Звонок · Вы в разговоре» names nobody — and
+   * `useChats` sets a private chat's own `name` to that same person. So without
+   * this line the bar would print «Анна Смирнова» over «Анна Смирнова · Вы в
+   * разговоре». Two lines saying one thing is the same waste the paragraph
+   * above refuses, arrived at from the other direction.
+   */
+  const where = named === room ? null : named;
 
   if (phase === "joining") {
     return {

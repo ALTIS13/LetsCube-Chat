@@ -4,13 +4,14 @@ import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { useAppStore } from "@/store/app.store";
 import {
   holdVoiceTalk,
-  leaveVoiceCall,
   setVoiceDeafened,
   setVoiceMuted,
   useVoiceCall,
   useVoiceSpeechRevoked,
   useVoiceTalkHeld,
 } from "@/hooks/useVoiceCall";
+import { endVoiceCall, useVoiceRings } from "@/hooks/useVoiceRing";
+import { voiceRingIsWaiting } from "@/lib/voiceRing";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { CAPSULE_CONTROL_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING_INSET } from "@/lib/controlSurface";
@@ -72,6 +73,18 @@ export function VoiceCallBar({ placement }: { placement: "column" | "top" }) {
   const chatName = useAppStore(
     (state) => state.chats.find((chat) => chat.id === call.chatId)?.name ?? null,
   );
+  // Whether the conversation that owns this call draws its own capsule for it.
+  // Only a group does: `ChatWindow` reads a chat's channels for `type ===
+  // "group"` and for nothing else, so a one-to-one call's private conversation
+  // has no capsule to hand over to. A scalar selector, like the name above.
+  const capsuleHere = useAppStore(
+    (state) => state.chats.find((chat) => chat.id === call.chatId)?.type === "group",
+  );
+  // A call whose other end is still ringing belongs to `VoiceCallRing`. The
+  // caller is connected — they joined the moment they pressed — so without this
+  // the bar would announce a conversation nobody has joined yet.
+  const rings = useVoiceRings();
+  const ringing = voiceRingIsWaiting({ rings, channelId: call.channelId, now: Date.now() });
   const speechRevoked = useVoiceSpeechRevoked(call.channelId);
   // The same two live facts the capsule reads directly, for the same reason and
   // through the same rule: the bar and the capsule are two windows onto one
@@ -97,6 +110,8 @@ export function VoiceCallBar({ placement }: { placement: "column" | "top" }) {
     channelName: call.channelName,
     chatName,
     selectedChatId,
+    capsuleHere,
+    ringing,
     micMuted: call.micMuted,
     deafened: call.deafened,
     speechRevoked,
@@ -364,7 +379,12 @@ export function VoiceCallBar({ placement }: { placement: "column" | "top" }) {
 
             <button
               type="button"
-              onClick={() => void leaveVoiceCall()}
+              // `endVoiceCall`, not `leaveVoiceCall`: for a group room the two
+              // are the same, and for a one-to-one call this also clears the
+              // ring — which is what ends the call for the other side and what
+              // stops the next «Позвонить» between those two people coming back
+              // `already_ringing`.
+              onClick={() => void endVoiceCall()}
               className="group/capsule relative h-8 shrink-0 rounded-full px-3"
               title="Выйти из разговора"
               data-testid="voice-call-bar-leave"

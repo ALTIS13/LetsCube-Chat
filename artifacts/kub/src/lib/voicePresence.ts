@@ -8,9 +8,30 @@
  * voice channel that nobody happens to be watching is a voice channel nobody
  * joins.
  *
- * This module imports nothing, so `node --test` can load it. A rule inside a
- * `"use client"` module is a rule with no test; `voiceChannel.ts` records why at
- * its own head.
+ * This module imports one sibling that imports nothing, so `node --test` can
+ * still load it. A rule inside a `"use client"` module is a rule with no test;
+ * `voiceChannel.ts` records why at its own head.
+ *
+ * ## A room that is ringing is not a room with somebody talking in it
+ *
+ * Added with one-to-one calls on 2026-09-18, and it is the half of that change
+ * that could have gone wrong quietly. The chat list's read used to be
+ * `.gt("participant_count", 0)`, which is why a ring was invisible to the very
+ * subscription it was designed to reach: a ringing room has nobody in it. The
+ * read is now «somebody in it **or** a live ring», and that widening drags two
+ * new shapes past this function:
+ *
+ *  - a room with a live ring and nobody in it — dropped by the count, as before;
+ *  - a room with a live ring and the **caller** already waiting in it, which is
+ *    the ordinary state of every outgoing call, because the caller joins the
+ *    moment they press. Its count is 1 and it would otherwise put «1 человек в
+ *    «Звонок»» on a private conversation where nobody is talking and somebody
+ *    is waiting to be answered. That is the mark saying the wrong thing, and it
+ *    is what `voiceRingState` is consulted for below.
+ *
+ * An **answered** ring is left alone on purpose: that is a call in progress, and
+ * a private conversation with a call running in it should carry the same mark a
+ * group does.
  *
  * ## The counter is all there is, and that is worth stating
  *
@@ -28,6 +49,8 @@
  * the list does not mention — is the one this exists to fix, and it is the worse
  * of the two.
  */
+
+import { voiceRingState } from "./voiceRing.ts";
 
 /** One room with somebody in it, as the list's own read returns it. */
 export interface VoiceRoomPresence {
@@ -56,7 +79,7 @@ export interface ChatVoicePresence {
  * reconciliation disagree. `voiceOccupancyLabel` clamps negatives for the same
  * reason and this follows it.
  */
-export function readVoicePresenceRows(rows: unknown): VoiceRoomPresence[] {
+export function readVoicePresenceRows(rows: unknown, now: number): VoiceRoomPresence[] {
   if (!Array.isArray(rows)) return [];
   const out: VoiceRoomPresence[] = [];
   for (const row of rows) {
@@ -67,6 +90,23 @@ export function readVoicePresenceRows(rows: unknown): VoiceRoomPresence[] {
     const count = typeof record.participant_count === "number" ? record.participant_count : 0;
     if (channelId === null || chatId === null) continue;
     if (!Number.isFinite(count) || count <= 0) continue;
+    // A ring the other side has not answered yet. The caller is in the room, so
+    // the count says «1» and means «waiting», which is not what this mark says.
+    // `now` is passed in rather than read for the reason the whole ring rule is
+    // pure: the boundary between «ringing» and «expired» is something a test has
+    // to be able to stand on both sides of.
+    const startedAt = typeof record.ring_started_at === "string" ? Date.parse(record.ring_started_at) : NaN;
+    const answeredAt = typeof record.ring_answered_at === "string" ? Date.parse(record.ring_answered_at) : NaN;
+    if (
+      Number.isFinite(startedAt) &&
+      voiceRingState({
+        startedAt,
+        answeredAt: Number.isFinite(answeredAt) ? answeredAt : null,
+        now,
+      }) === "ringing"
+    ) {
+      continue;
+    }
     // Archived rooms are excluded by the query, and again here: removing a room
     // sets `archived = true` rather than deleting it, so a stale read of an
     // archived room would otherwise announce a call in a room nobody can join.

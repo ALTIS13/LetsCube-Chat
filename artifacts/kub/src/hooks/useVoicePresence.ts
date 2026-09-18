@@ -10,6 +10,8 @@ import {
   readVoicePresenceRows,
   type ChatVoicePresence,
 } from "@/lib/voicePresence";
+import { readVoiceRingRows } from "@/lib/voiceRing";
+import { publishVoiceRings, setVoiceRingViewer } from "@/hooks/useVoiceRing";
 
 /**
  * Which of the reader's conversations have somebody talking in them (slice 3).
@@ -96,8 +98,9 @@ export function voicePresenceSnapshot(): ReadonlyMap<string, ChatVoicePresence> 
  * takes its answer through `useChatVoicePresence`, so this hook's own render is
  * the only one a call anywhere costs the list.
  */
-export function useVoicePresenceReader(enabled: boolean): void {
+export function useVoicePresenceReader(userId: string | null): void {
   const supabase = createClient();
+  const enabled = userId !== null;
   // One in-flight read at a time. A burst of events — somebody joining a room
   // with four people in it produces four — would otherwise start four reads
   // whose answers can arrive out of order, and the last to land wins rather
@@ -114,21 +117,56 @@ export function useVoicePresenceReader(enabled: boolean): void {
     try {
       for (;;) {
         again.current = false;
+        /**
+         * Somebody in the room, **or** a ring on it — and the second half is
+         * the single most important line in slice A of the one-to-one calls.
+         *
+         * Until 2026-09-18 this read was `.gt("participant_count", 0)` alone,
+         * and a ringing room has nobody in it. So the ring was invisible to the
+         * very subscription the whole design rests on: the row changed, the
+         * handler fired, the re-read asked for occupied rooms and the ring was
+         * not one. Nothing on any screen could have said somebody was calling.
+         *
+         * The three ring columns are selected explicitly. They carry a
+         * column-level `GRANT SELECT` and nothing else — a ring is set only
+         * through the four functions — and Realtime sends only what the
+         * subscribing role may read, which is what that grant is for.
+         *
+         * `readStartedAt` is taken **before** the query goes out, because the
+         * ring store uses it to decide whether an answer that lacks the
+         * caller's own ring is evidence that the ring is gone or merely a read
+         * that predates it.
+         */
+        const readStartedAt = Date.now();
         const { data, error } = await supabase
           .from("voice_channels" as never)
-          .select("id,chat_id,name,participant_count,archived")
-          .gt("participant_count", 0)
+          .select(
+            "id,chat_id,name,participant_count,archived,ring_started_at,ring_caller,ring_answered_at",
+          )
+          .or("participant_count.gt.0,ring_started_at.not.is.null")
           .eq("archived", false);
         // A refused read is not «nobody is talking». The held answer stays, and
         // the mark stays with it, because a list that quietly stops mentioning
         // calls is the defect this exists to fix rather than a safe default.
-        if (!error) publish(chatVoicePresence(readVoicePresenceRows(data)));
+        // The ring follows the same rule, and more sharply: publishing an empty
+        // set from a failed read would tell every device that every call had
+        // just ended.
+        if (!error) {
+          publish(chatVoicePresence(readVoicePresenceRows(data, Date.now())));
+          publishVoiceRings(readVoiceRingRows(data), readStartedAt);
+        }
         if (!again.current) break;
       }
     } finally {
       running.current = false;
     }
   }, [supabase]);
+
+  // Who is reading, handed to the ring store: it has to know whose ring ran out
+  // before it may write `missed`, and only the caller's own device does that.
+  useEffect(() => {
+    setVoiceRingViewer(userId);
+  }, [userId]);
 
   useEffect(() => {
     if (!enabled) return;
