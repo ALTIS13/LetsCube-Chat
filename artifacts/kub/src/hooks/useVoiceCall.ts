@@ -51,6 +51,16 @@ export interface VoiceCallState {
   channelName: string | null;
   /** The SDK's own view, replaced whole on every event. Never patched. */
   participants: VoiceParticipant[];
+  /**
+   * Who is speaking right now, by user id — the SDK's own answer, replaced
+   * whole like the list above.
+   *
+   * Separate from `participants` rather than a flag on each, because the two
+   * change at completely different rates: the membership moves when somebody
+   * joins, the speakers move several times a second. Merging them would rebuild
+   * every row of the rail on every syllable.
+   */
+  speakers: string[];
   micMuted: boolean;
   /**
    * Whether the token this call was joined with may publish. Always true in
@@ -69,6 +79,7 @@ const IDLE: VoiceCallState = {
   chatId: null,
   channelName: null,
   participants: [],
+  speakers: [],
   micMuted: false,
   canPublish: true,
   refusal: null,
@@ -89,6 +100,23 @@ const listeners = new Set<() => void>();
  */
 let generation = 0;
 let room: VoiceRoom | null = null;
+
+/**
+ * The transport of the call that is running, or null.
+ *
+ * Exported for the connection panel and for nothing else. It is deliberately a
+ * function rather than the binding: a module that imported `room` would capture
+ * whatever it was at import time, which is `null` for the whole lifetime of the
+ * application, and would appear to work because a panel that samples nothing
+ * simply draws an empty graph.
+ *
+ * It does not widen what a caller may do — `VoiceRoom` is the same three-method
+ * seam plus the readings — and it is not a way around `useVoiceCall`. Joining
+ * and leaving stay here, where the generation counter is.
+ */
+export function currentVoiceRoom(): VoiceRoom | null {
+  return room;
+}
 let capture: MediaStream | null = null;
 
 function publish(next: VoiceCallState) {
@@ -262,6 +290,10 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
         // repopulate a capsule that is gone.
         if (mine !== generation) return;
         patch({ participants });
+      },
+      onSpeakers: (speakers) => {
+        if (mine !== generation) return;
+        patch({ speakers });
       },
       onReconnecting: () => {
         if (mine !== generation) return;

@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { TinyUserAvatar } from "./MessageReactions";
+import { VoiceConnectionPanel } from "./VoiceConnectionPanel";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { CAPSULE_GLASS, CAPSULE_CONTROL_GLASS } from "@/lib/chatChrome";
+import { FOCUS_RING } from "@/lib/controlSurface";
 import { cn } from "@/lib/utils";
 import { orderVoiceParticipants, type VoiceCapsuleView, type VoiceChannelSummary, type VoiceParticipant } from "@/lib/voiceChannel";
 
@@ -58,6 +61,7 @@ export function VoiceCallCapsule({
 }: VoiceCallCapsuleProps) {
   if (!view.visible || !channel) return null;
 
+  const [healthOpen, setHealthOpen] = useState(false);
   const ordered = orderVoiceParticipants(participants, selfId);
   const shown = ordered.slice(0, FACES);
   const rest = ordered.length - shown.length;
@@ -70,12 +74,28 @@ export function VoiceCallCapsule({
     >
       <KubGlassLayer className={CAPSULE_GLASS} />
       <div className="relative flex items-center gap-2 rounded-full py-1.5 pl-3 pr-1.5">
-        <KubIcon
-          name="headset"
-          size={16}
-          tone={view.tone === "danger" ? "danger" : view.tone === "live" ? "accent" : "muted"}
-          className="shrink-0"
-        />
+        {/* The headset opens the connection panel (D-217). It is a control
+            rather than decoration because it is the one place a person looks
+            when a call sounds wrong, which is exactly where Discord puts the
+            same numbers. Sampling runs only while the panel is open — see
+            `useVoiceHealth` — so a closed capsule costs nothing. */}
+        <button
+          type="button"
+          onClick={() => setHealthOpen((open) => !open)}
+          aria-label={healthOpen ? "Скрыть состояние связи" : "Состояние связи"}
+          aria-expanded={healthOpen}
+          data-testid="voice-capsule-health"
+          className={cn(
+            "flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors kub-raise-hover",
+            FOCUS_RING,
+          )}
+        >
+          <KubIcon
+            name="headset"
+            size={16}
+            tone={view.tone === "danger" ? "danger" : view.tone === "live" ? "accent" : "muted"}
+          />
+        </button>
         <div className="min-w-0 flex-1">
           <div className="truncate text-xs font-semibold text-[color:var(--kub-text)]" data-testid="voice-capsule-title">
             {view.title}
@@ -164,6 +184,20 @@ export function VoiceCallCapsule({
           </button>
         )}
       </div>
+
+      {/* Below the capsule rather than in a portal: it is part of the same
+          chrome stack, it is never near a window edge, and a popover would need
+          its own dismissal while this closes with the same button that opened
+          it. `z-30` puts it over the conversation and under the composer's
+          hints at 50, which is the layer `ChannelRailSheet` had to measure. */}
+      {healthOpen && (
+        <div className="absolute inset-x-0 top-full z-30 mt-1 rounded-xl p-3" data-testid="voice-capsule-health-panel">
+          <KubGlassLayer className={CAPSULE_GLASS} />
+          <div className="relative">
+            <VoiceConnectionPanel open />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

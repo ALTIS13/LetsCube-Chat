@@ -1,9 +1,10 @@
 "use client";
 
 import type { VoiceParticipant } from "@/lib/voiceChannel";
+import type { VoiceHealthSample } from "@/lib/voiceConnectionHealth";
 
 /**
- * The SFU, reduced to the five things a call actually asks of it.
+ * The SFU, reduced to what a call actually asks of it.
  *
  * Two reasons this interface exists rather than `Room` being used directly.
  *
@@ -33,6 +34,42 @@ export interface VoiceRoom {
   setMuted(muted: boolean): Promise<void>;
   /** Leave. Must be safe to call twice and after a failed join. */
   leave(): Promise<void>;
+  /**
+   * One reading of the connection, for the panel the owner asked for on
+   * 2026-09-18.
+   *
+   * Returns the shape `lib/voiceConnectionHealth.ts` consumes, with `null` for
+   * anything this reading could not measure — never a zero. A zero round trip
+   * draws a line on the graph's floor, which reads as a perfect connection at
+   * exactly the moment there is none.
+   *
+   * Pulled rather than pushed. The SDK has a `ConnectionQualityChanged` event,
+   * but it carries a three-value verdict rather than milliseconds, and the
+   * panel shows numbers. Sampling on a timer is also what lets the graph have
+   * an even time axis, which an event stream does not.
+   */
+  sampleHealth(): Promise<VoiceHealthSample>;
+  /**
+   * Send the call's audio to a particular output device.
+   *
+   * This existed nowhere for calls until 2026-09-18: `applyAudioOutputDevice`
+   * moved voice *messages*, media playback and the composer's preview, and a
+   * call ignored the choice entirely. Picking a headset moved everything except
+   * the thing people pick a headset for.
+   *
+   * `false` means the browser refused — Firefox has no `setSinkId`, and Safari
+   * only gained it recently — and the caller must not report success.
+   */
+  setOutputDevice(deviceId: string): Promise<boolean>;
+  /**
+   * Which media server this call landed on, as «region-node», or null.
+   *
+   * Discord shows it («finland14135» in the owner's screenshot) and it is the
+   * one fact that makes a support conversation about a bad call tractable: two
+   * people on the same node with the same problem is a different report from
+   * two people on different continents.
+   */
+  serverName(): string | null;
 }
 
 /** What the room tells the interface. Everything else the SDK emits is slice 3 or 4. */
@@ -44,6 +81,15 @@ export interface VoiceRoomEvents {
   onReconnected(): void;
   /** The call ended for a reason other than this client asking it to. */
   onClosed(reason: string | null): void;
+  /**
+   * Who is speaking right now, by user id. The whole set, never a diff.
+   *
+   * The SDK decides this from its own audio levels, which is the only place it
+   * can be decided correctly: a client cannot hear a remote track's level
+   * without the SFU forwarding it, and the SFU is what publishes the speaker
+   * list. Computing it here from a local analyser would answer for one person.
+   */
+  onSpeakers(userIds: string[]): void;
 }
 
 /**
@@ -107,6 +153,12 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
     .on(RoomEvent.TrackMuted, report)
     .on(RoomEvent.TrackUnmuted, report)
     .on(RoomEvent.LocalTrackPublished, report)
+    .on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      // Identities, not participant objects: everything above this seam knows
+      // people by the id `chat_members` uses, and the SDK's participant is a
+      // LiveKit value that must not escape this function.
+      events.onSpeakers(speakers.map((who) => who.identity).filter(Boolean));
+    })
     .on(RoomEvent.Reconnecting, () => events.onReconnecting())
     .on(RoomEvent.Reconnected, () => {
       events.onReconnected();
@@ -139,6 +191,99 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
       // mechanism rather than ours beside its.
       await (muted ? published.mute() : published.unmute());
       report();
+    },
+    async sampleHealth() {
+      const at = Date.now();
+      const blank: VoiceHealthSample = {
+        at,
+        rttMs: null,
+        jitterMs: null,
+        packetsSent: null,
+        packetsLost: null,
+      };
+      // The published track when there is one; otherwise any subscribed track,
+      // because somebody the gateway refused publication to still has a
+      // connection worth measuring and would otherwise see an empty panel.
+      const source =
+        published ??
+        [...room.remoteParticipants.values()]
+          .flatMap((who) => [...who.audioTrackPublications.values()])
+          .map((publication) => publication.track)
+          .find((track) => Boolean(track)) ??
+        null;
+      if (!source) return blank;
+
+      let report: RTCStatsReport | undefined;
+      try {
+        report = await source.getRTCStatsReport();
+      } catch {
+        // A reading that failed is «unknown», which is what `blank` says. It is
+        // not a zero and it is not an error the call should notice.
+        return blank;
+      }
+      if (!report) return blank;
+
+      let rttMs: number | null = null;
+      let jitterMs: number | null = null;
+      let packetsSent: number | null = null;
+      let packetsLost: number | null = null;
+
+      report.forEach((entry: Record<string, unknown>) => {
+        const kind = entry.type;
+        if (kind === "outbound-rtp" && typeof entry.packetsSent === "number") {
+          packetsSent = entry.packetsSent;
+        } else if (kind === "inbound-rtp" && packetsSent === null && typeof entry.packetsReceived === "number") {
+          // A listener has no outbound counter. What it can report is what it
+          // received and what went missing on the way, which is the same
+          // question asked from the other end.
+          packetsSent = entry.packetsReceived + (typeof entry.packetsLost === "number" ? entry.packetsLost : 0);
+          if (typeof entry.packetsLost === "number") packetsLost = entry.packetsLost;
+          if (typeof entry.jitter === "number") jitterMs = entry.jitter * 1000;
+        }
+        if (kind === "remote-inbound-rtp") {
+          if (typeof entry.roundTripTime === "number") rttMs = entry.roundTripTime * 1000;
+          if (typeof entry.jitter === "number") jitterMs = entry.jitter * 1000;
+          if (typeof entry.packetsLost === "number") packetsLost = entry.packetsLost;
+        }
+        // The transport's own round trip, used when the media report carries
+        // none — which is every reading before the first RTCP arrives, roughly
+        // the first second of every call.
+        if (
+          kind === "candidate-pair" &&
+          rttMs === null &&
+          entry.state === "succeeded" &&
+          typeof entry.currentRoundTripTime === "number"
+        ) {
+          rttMs = entry.currentRoundTripTime * 1000;
+        }
+      });
+
+      return {
+        at,
+        rttMs: rttMs === null ? null : Math.round(rttMs),
+        jitterMs: jitterMs === null ? null : Math.round(jitterMs * 10) / 10,
+        packetsSent,
+        packetsLost,
+      };
+    },
+    async setOutputDevice(deviceId) {
+      try {
+        return await room.switchActiveDevice("audiooutput", deviceId);
+      } catch {
+        // `setSinkId` is missing in Firefox and throws on a device the browser
+        // will not hand over. Refused is an answer; a thrown error here would
+        // end a call over a headset choice.
+        return false;
+      }
+    },
+    serverName() {
+      const info = room.serverInfo;
+      if (!info) return null;
+      const region = typeof info.region === "string" ? info.region.trim() : "";
+      const node = typeof info.nodeId === "string" ? info.nodeId.trim() : "";
+      if (!region && !node) return null;
+      // Discord's own shape: the region and the node run together, «finland14135».
+      return region && node ? `${region}${node}` : region || node;
     },
     async leave() {
       left = true;

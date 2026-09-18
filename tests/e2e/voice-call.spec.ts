@@ -94,6 +94,10 @@ declare global {
       muted: boolean[];
       left: number;
       track: MediaStreamTrack | null;
+      /** How many times the call asked the transport how it is doing. */
+      healthSamples: number;
+      /** Every output device the call asked the transport to switch to. */
+      outputDevices: string[];
     };
   }
 }
@@ -123,7 +127,7 @@ async function probe(page: Page): Promise<VoiceProbe> {
 async function installVoiceSeam(page: Page) {
   await page.addInitScript(
     ({ me, anna }) => {
-      const held: NonNullable<Window["__voiceProbe"]> = { joins: [], muted: [], left: 0, track: null };
+      const held: NonNullable<Window["__voiceProbe"]> = { joins: [], muted: [], left: 0, track: null, healthSamples: 0, outputDevices: [] };
       window.__voiceProbe = held;
       const roster = (muted: boolean) => [
         { userId: me, name: "", muted },
@@ -142,6 +146,24 @@ async function installVoiceSeam(page: Page) {
         },
         async leave() {
           held.left += 1;
+        },
+        // Widened on 2026-09-18 with the seam itself. The stand-in answers the
+        // shape rather than plausible numbers: a spec that invented a round
+        // trip would be measuring its own fixture, and the arithmetic that
+        // turns readings into a panel is pinned by
+        // `tests/unit/voice-connection-health.test.mts` against readings it
+        // controls. What this proves is that the call asks and does not fall
+        // over — `null` is the honest answer from a transport that is not one.
+        async sampleHealth() {
+          held.healthSamples += 1;
+          return { at: Date.now(), rttMs: null, jitterMs: null, packetsSent: null, packetsLost: null };
+        },
+        async setOutputDevice(deviceId: string) {
+          held.outputDevices.push(deviceId);
+          return true;
+        },
+        serverName() {
+          return null;
         },
       });
     },
