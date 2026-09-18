@@ -15556,15 +15556,38 @@ verified on production, 44 seconds is still `ringing` and 45 exactly is
 `expired`, and the TypeScript mirror asserts the same. `answered` wins over
 `expired`, so a call taken at the 44th second is still a call an hour later.
 
-### One protocol decision the owner may want to revisit
+### The protocol decision, and the owner's ruling on it
 
 Three row states carry everything: `ringing`, `answered`, and **gone**. An answer
 sets a second timestamp; everything else clears the row. That is what keeps «they
 answered» apart from «they declined» for the caller, and it makes a hang-up
 propagate for free — but it also means **leaving ends the call for both sides**,
-so there is no rejoining; you call again. Telegram behaves the same way. It is a
-decision rather than a derivation, and it is written here so that changing it
-later is a change to a decision rather than a discovery.
+so there is no rejoining; you call again.
+
+**Confirmed by the owner on 2026-09-18, with the boundary stated:** that is right
+for a one-to-one call, and **explicitly wrong for a group voice channel**, which
+works as Discord's does — joining opens a room, and the room stands as long as
+one person is in it.
+
+Both already held, for two different reasons: the room's life is the server's
+(`participant_count` and the reconciler decide it, and nothing a leaving client
+sends could collapse a room somebody is still in), and the client must not even
+ask — `endVoiceCall` sends `voice_call_stop` only for the room it rang or
+answered.
+
+It held **by construction**, which is not the same as being pinned, so it is
+pinned now: `voice-call.spec.ts` asserts that a group leave asks the backend for
+none of the call functions — on what was *sent*, deliberately, because a test
+that checked the room was still there would pass equally well with the request
+going out and being ignored.
+
+**And the first version of that test was the exact mistake this register keeps
+writing down.** It left through the capsule, the mutation that removes the guard
+came back **green**, and the reason was that the capsule and the bar have
+different leaves: the capsule calls `leaveVoiceCall` and only the bar calls
+`endVoiceCall`. The assertion was true, cheap and about the wrong half. A green
+mutation is reach or redundancy, never «fine» — here it was reach, and the test
+now leaves through the bar and goes red.
 
 ### What is not built
 

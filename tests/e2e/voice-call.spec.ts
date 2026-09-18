@@ -1,4 +1,4 @@
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { expect, type Page, type TestInfo, test } from "@playwright/test";
 import {
   chat,
   membership,
@@ -50,7 +50,14 @@ const CHANNEL_ID = "33333333-3333-4333-8333-000000000001";
 const OTHER_CHANNEL_ID = "33333333-3333-4333-8333-000000000002";
 const LINE = "Макет главной готов, посмотрите";
 const OTHER_LINE = "Смета на витрину готова, посмотри";
-const GRANT = { ok: true, url: "wss://voice.letscube.ru", room: `vc_${CHANNEL_ID}`, identity: ME.id, token: "livekit.join.token", canPublish: true };
+const GRANT = {
+  ok: true,
+  url: "wss://voice.letscube.ru",
+  room: `vc_${CHANNEL_ID}`,
+  identity: ME.id,
+  token: "livekit.join.token",
+  canPublish: true,
+};
 
 /** The key `useAudioSettings` stores the audio settings under. */
 const AUDIO_SETTINGS_KEY = "kub:audio-settings:v1";
@@ -98,7 +105,8 @@ function installRenderCounter(countsKey: string) {
 
   const nameOf = (fiber: FiberLike): string | null => {
     if (fiber.tag !== 0 && fiber.tag !== 11 && fiber.tag !== 15) return null;
-    const type = fiber.tag === 11 ? (fiber.type as { render?: unknown } | null)?.render : fiber.type;
+    const type =
+      fiber.tag === 11 ? (fiber.type as { render?: unknown } | null)?.render : fiber.type;
     if (typeof type !== "function") return null;
     const named = type as { displayName?: string; name?: string };
     return named.displayName || named.name || null;
@@ -113,8 +121,12 @@ function installRenderCounter(countsKey: string) {
       if (name && name in counts) {
         const own = seen.get(fiber);
         const other = fiber.alternate ? seen.get(fiber.alternate) : undefined;
-        const previous = own && other ? (own.commit > other.commit ? own : other) : own ?? other;
-        if (!previous || previous.props !== fiber.memoizedProps || previous.state !== fiber.memoizedState) {
+        const previous = own && other ? (own.commit > other.commit ? own : other) : (own ?? other);
+        if (
+          !previous ||
+          previous.props !== fiber.memoizedProps ||
+          previous.state !== fiber.memoizedState
+        ) {
           counts[name] += 1;
         }
         seen.set(fiber, { props: fiber.memoizedProps, state: fiber.memoizedState, commit });
@@ -156,7 +168,8 @@ async function resetCounts(page: Page) {
 
 async function readCounts(page: Page): Promise<Record<string, number>> {
   return await page.evaluate(
-    (key) => (globalThis as unknown as Record<string, { read: () => Record<string, number> }>)[key].read(),
+    (key) =>
+      (globalThis as unknown as Record<string, { read: () => Record<string, number> }>)[key].read(),
     RENDERS_KEY,
   );
 }
@@ -248,14 +261,36 @@ interface Seed {
 }
 
 function rows(seed: Seed): { chats: Row[]; memberships: Row[]; messages: Row[] } {
-  const team = [membership(CHAT_TEAM, ANNA, "owner", AT), membership(CHAT_TEAM, PETR, "member", AT)];
+  const team = [
+    membership(CHAT_TEAM, ANNA, "owner", AT),
+    membership(CHAT_TEAM, PETR, "member", AT),
+  ];
   if (seed.member !== false) team.unshift(membership(CHAT_TEAM, ME, seed.role ?? "member", AT));
   return {
-    chats: [chat(CHAT_TEAM, "group", "Команда проекта", AT), chat(CHAT_OTHER, "group", "Смета и склад", AT)],
-    memberships: [...team, membership(CHAT_OTHER, ME, "owner", AT), membership(CHAT_OTHER, ANNA, "member", AT)],
+    chats: [
+      chat(CHAT_TEAM, "group", "Команда проекта", AT),
+      chat(CHAT_OTHER, "group", "Смета и склад", AT),
+    ],
+    memberships: [
+      ...team,
+      membership(CHAT_OTHER, ME, "owner", AT),
+      membership(CHAT_OTHER, ANNA, "member", AT),
+    ],
     messages: [
-      message("55555555-5555-4555-8555-000000000001", CHAT_TEAM, ME, LINE, "2026-09-13T10:00:00.000Z"),
-      message("55555555-5555-4555-8555-000000000002", CHAT_OTHER, ANNA, OTHER_LINE, "2026-09-13T10:05:00.000Z"),
+      message(
+        "55555555-5555-4555-8555-000000000001",
+        CHAT_TEAM,
+        ME,
+        LINE,
+        "2026-09-13T10:00:00.000Z",
+      ),
+      message(
+        "55555555-5555-4555-8555-000000000002",
+        CHAT_OTHER,
+        ANNA,
+        OTHER_LINE,
+        "2026-09-13T10:05:00.000Z",
+      ),
     ],
   };
 }
@@ -344,7 +379,8 @@ declare global {
 async function speak(page: Page, userIds: string[]): Promise<void> {
   await page.evaluate(async (ids) => {
     const held = window.__voiceProbe;
-    if (!held?.speak) throw new Error("the transport was never asked for, so no speaker event can be sent");
+    if (!held?.speak)
+      throw new Error("the transport was never asked for, so no speaker event can be sent");
     held.speak(ids);
     const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     await frame();
@@ -360,7 +396,9 @@ async function probe(page: Page): Promise<VoiceProbe> {
       joins: held?.joins ?? [],
       muted: held?.muted ?? [],
       left: held?.left ?? 0,
-      track: track ? { enabled: track.enabled, readyState: track.readyState, kind: track.kind } : null,
+      track: track
+        ? { enabled: track.enabled, readyState: track.readyState, kind: track.kind }
+        : null,
       // Widened with the seam. Both default to a value rather than to
       // `undefined`: a reader that answers undefined makes «the closed panel
       // sampled nothing» and «this reader does not know» the same result, and
@@ -483,106 +521,106 @@ async function installVoiceSeam(
         // only in the SDK — so the stand-in has to be able to raise it.
         held.revokeSpeech = (allowed: boolean | null) => events.onSpeechAllowed(allowed);
         return {
-        async join(url: string, token: string, microphone: MediaStreamTrack | null) {
-          held.joins.push({ url, token, hasTrack: Boolean(microphone) });
-          held.track = microphone;
-          // The gate reaches the track when the track arrives, which is what
-          // the real seam does at the end of its own `join`: the call sets the
-          // opening state **before** joining, so a «Рация» call is never
-          // audible for the moment between publishing and the first press.
-          if (microphone && held.micOpen.length > 0) {
-            microphone.enabled = held.micOpen[held.micOpen.length - 1];
-          }
-          events.onParticipants(roster(false));
-        },
-        async setMuted(muted: boolean) {
-          held.muted.push(muted);
-          // Both halves of what the real `setMuted` does, because this stands
-          // in for the **seam** rather than for the SDK. The SDK's own mute
-          // writes `enabled = !muted` with no regard for the gate (measured in
-          // livekit-client 2.22.3) and `createLiveKitRoom` re-applies the gate
-          // immediately afterwards — without that second line here, unmuting in
-          // «Рация» would leave this fixture's track live and a spec would be
-          // reporting a defect the product does not have.
-          const open = held.micOpen.length === 0 || held.micOpen[held.micOpen.length - 1];
-          if (held.track) held.track.enabled = !muted && open;
-          events.onParticipants(roster(muted));
-        },
-        async setMicrophoneOpen(open: boolean) {
-          held.micOpen.push(open);
-          // What `applyMicrophoneOpen` does in the real seam, including the
-          // half that matters: a gate never opens a track the room believes is
-          // muted. `held.muted` is this stand-in's record of that.
-          const muted = held.muted.length > 0 && held.muted[held.muted.length - 1];
-          if (held.track) held.track.enabled = open && !muted;
-        },
-        async leave() {
-          held.left += 1;
-        },
-        // Widened on 2026-09-18 with the seam itself. The stand-in answers the
-        // shape rather than plausible numbers: a spec that invented a round
-        // trip would be measuring its own fixture, and the arithmetic that
-        // turns readings into a panel is pinned by
-        // `tests/unit/voice-connection-health.test.mts` against readings it
-        // controls. What this proves is that the call asks and does not fall
-        // over — `null` is the honest answer from a transport that is not one.
-        async sampleHealth() {
-          held.healthSamples += 1;
-          const at = Date.now();
-          // `null` is the default and it is the honest answer from a transport
-          // that is not one. A `health` seed asks for a deterministic series
-          // instead, and it exists for one purpose: the panel's DRAWING cannot
-          // be photographed against an empty graph. The series is the test's
-          // own, exactly as `voice-connection-health.test.mts` controls its
-          // readings — the fixture never invents a plausible-looking number for
-          // a behavioural assertion to read back.
-          if (health === "none") {
-            return { at, rttMs: null, jitterMs: null, packetsSent: null, packetsLost: null };
-          }
-          const step = held.healthSamples;
-          if (health === "bad") {
+          async join(url: string, token: string, microphone: MediaStreamTrack | null) {
+            held.joins.push({ url, token, hasTrack: Boolean(microphone) });
+            held.track = microphone;
+            // The gate reaches the track when the track arrives, which is what
+            // the real seam does at the end of its own `join`: the call sets the
+            // opening state **before** joining, so a «Рация» call is never
+            // audible for the moment between publishing and the first press.
+            if (microphone && held.micOpen.length > 0) {
+              microphone.enabled = held.micOpen[held.micOpen.length - 1];
+            }
+            events.onParticipants(roster(false));
+          },
+          async setMuted(muted: boolean) {
+            held.muted.push(muted);
+            // Both halves of what the real `setMuted` does, because this stands
+            // in for the **seam** rather than for the SDK. The SDK's own mute
+            // writes `enabled = !muted` with no regard for the gate (measured in
+            // livekit-client 2.22.3) and `createLiveKitRoom` re-applies the gate
+            // immediately afterwards — without that second line here, unmuting in
+            // «Рация» would leave this fixture's track live and a spec would be
+            // reporting a defect the product does not have.
+            const open = held.micOpen.length === 0 || held.micOpen[held.micOpen.length - 1];
+            if (held.track) held.track.enabled = !muted && open;
+            events.onParticipants(roster(muted));
+          },
+          async setMicrophoneOpen(open: boolean) {
+            held.micOpen.push(open);
+            // What `applyMicrophoneOpen` does in the real seam, including the
+            // half that matters: a gate never opens a track the room believes is
+            // muted. `held.muted` is this stand-in's record of that.
+            const muted = held.muted.length > 0 && held.muted[held.muted.length - 1];
+            if (held.track) held.track.enabled = open && !muted;
+          },
+          async leave() {
+            held.left += 1;
+          },
+          // Widened on 2026-09-18 with the seam itself. The stand-in answers the
+          // shape rather than plausible numbers: a spec that invented a round
+          // trip would be measuring its own fixture, and the arithmetic that
+          // turns readings into a panel is pinned by
+          // `tests/unit/voice-connection-health.test.mts` against readings it
+          // controls. What this proves is that the call asks and does not fall
+          // over — `null` is the honest answer from a transport that is not one.
+          async sampleHealth() {
+            held.healthSamples += 1;
+            const at = Date.now();
+            // `null` is the default and it is the honest answer from a transport
+            // that is not one. A `health` seed asks for a deterministic series
+            // instead, and it exists for one purpose: the panel's DRAWING cannot
+            // be photographed against an empty graph. The series is the test's
+            // own, exactly as `voice-connection-health.test.mts` controls its
+            // readings — the fixture never invents a plausible-looking number for
+            // a behavioural assertion to read back.
+            if (health === "none") {
+              return { at, rttMs: null, jitterMs: null, packetsSent: null, packetsLost: null };
+            }
+            const step = held.healthSamples;
+            if (health === "bad") {
+              return {
+                at,
+                // Past 250ms, and climbing, so the verdict is «lagging» and the
+                // graph's ceiling has to rise above its own peak.
+                rttMs: 240 + step * 12,
+                jitterMs: 18,
+                packetsSent: 1000 + step * 100,
+                // Twenty per cent of everything sent since the last reading.
+                packetsLost: step * 20,
+              };
+            }
             return {
               at,
-              // Past 250ms, and climbing, so the verdict is «lagging» and the
-              // graph's ceiling has to rise above its own peak.
-              rttMs: 240 + step * 12,
-              jitterMs: 18,
+              // Between 40 and 49, which is the band the owner's screenshot
+              // shows and the case the graph's 50ms floor exists for.
+              rttMs: 40 + (step % 10),
+              jitterMs: 3,
               packetsSent: 1000 + step * 100,
-              // Twenty per cent of everything sent since the last reading.
-              packetsLost: step * 20,
+              packetsLost: 0,
             };
-          }
-          return {
-            at,
-            // Between 40 and 49, which is the band the owner's screenshot
-            // shows and the case the graph's 50ms floor exists for.
-            rttMs: 40 + (step % 10),
-            jitterMs: 3,
-            packetsSent: 1000 + step * 100,
-            packetsLost: 0,
-          };
-        },
-        async setDeafened(next: boolean) {
-          held.deafened.push(next);
-        },
-        // Recorded rather than left out. Nothing in this file can reach
-        // it — the per-person control is on the rail's occupant rows and
-        // this spec renders no rail — but a stand-in that omits a seam
-        // method is a stand-in that throws the day something does.
-        async setParticipantVolume(userId: string, volume: number) {
-          held.volumes.push({ userId, volume });
-        },
-        async setOutputDevice(deviceId: string) {
-          held.outputDevices.push(deviceId);
-          // A browser that will not do it answers `false`; it does not throw.
-          // `Room.switchActiveDevice` returns exactly this boolean.
-          return !held.refuseOutput;
-        },
-        serverName() {
-          // Discord's own shape, «region» then «node», which is what
-          // `createLiveKitRoom` composes from `room.serverInfo`.
-          return serverName;
-        },
+          },
+          async setDeafened(next: boolean) {
+            held.deafened.push(next);
+          },
+          // Recorded rather than left out. Nothing in this file can reach
+          // it — the per-person control is on the rail's occupant rows and
+          // this spec renders no rail — but a stand-in that omits a seam
+          // method is a stand-in that throws the day something does.
+          async setParticipantVolume(userId: string, volume: number) {
+            held.volumes.push({ userId, volume });
+          },
+          async setOutputDevice(deviceId: string) {
+            held.outputDevices.push(deviceId);
+            // A browser that will not do it answers `false`; it does not throw.
+            // `Room.switchActiveDevice` returns exactly this boolean.
+            return !held.refuseOutput;
+          },
+          serverName() {
+            // Discord's own shape, «region» then «node», which is what
+            // `createLiveKitRoom` composes from `room.serverInfo`.
+            return serverName;
+          },
         };
       };
     },
@@ -608,7 +646,23 @@ async function stampTheme(page: Page, theme: "light" | "dark") {
   }, theme);
 }
 
+/**
+ * Every RPC the page asked the backend for, in order, for the run in flight.
+ *
+ * `openFixture`'s `rpc` hook is consulted for each one by name, so recording
+ * there is a complete list rather than a sample. It exists for exactly one
+ * contract — that leaving a **group** voice channel sends none of the
+ * one-to-one call's functions — and a test that asserted «the room is still
+ * there» could not tell that apart from «the request was sent and ignored».
+ */
+let rpcNames: string[] = [];
+
+/** The one-to-one call's functions, out of everything the page asked for. */
+const callFunctionsAsked = () =>
+  rpcNames.filter((name) => name.startsWith("voice_call_") || name === "voice_private_room");
+
 async function open(page: Page, seed: Seed = {}) {
+  rpcNames = [];
   await installVoiceSeam(page, {
     refuseOutput: seed.refuseOutput,
     others: seed.others,
@@ -621,11 +675,17 @@ async function open(page: Page, seed: Seed = {}) {
     chats: data.chats,
     memberships: data.memberships,
     messages: data.messages,
-    rpc: (name) => (name === "search_chat_messages" ? missingFunction(name) : undefined),
+    rpc: (name) => {
+      rpcNames.push(name);
+      return name === "search_chat_messages" ? missingFunction(name) : undefined;
+    },
   });
 
   if (seed.theme) {
-    await page.addInitScript((value) => localStorage.setItem("kub-theme", value as string), seed.theme);
+    await page.addInitScript(
+      (value) => localStorage.setItem("kub-theme", value as string),
+      seed.theme,
+    );
   }
   if (seed.outputDevice || seed.audio) {
     // The shape `normalizeAudioSettings` parses. Only the fields a test asked
@@ -658,7 +718,12 @@ async function open(page: Page, seed: Seed = {}) {
    * thing these tests are here to catch.
    */
   let team: { id: string; name: string; count: number; max: number } | null = channel
-    ? { id: CHANNEL_ID, name: "Общий голос", count: channel.participantCount, max: channel.maxParticipants ?? 10 }
+    ? {
+        id: CHANNEL_ID,
+        name: "Общий голос",
+        count: channel.participantCount,
+        max: channel.maxParticipants ?? 10,
+      }
     : null;
   const writes: { method: string; body: Record<string, unknown> | null; search: string }[] = [];
   const asRow = (entry: NonNullable<typeof team>) => ({
@@ -688,7 +753,7 @@ async function open(page: Page, seed: Seed = {}) {
       route.fulfill({
         status,
         contentType: "application/json",
-        body: JSON.stringify(single ? found[0] ?? null : found),
+        body: JSON.stringify(single ? (found[0] ?? null) : found),
       });
 
     if (method === "POST") {
@@ -741,12 +806,14 @@ async function open(page: Page, seed: Seed = {}) {
     if (filter.endsWith(CHAT_TEAM)) return answer(team ? [asRow(team)] : []);
     return answer(
       channel && seed.otherChannel !== false
-        ? [{
-            id: OTHER_CHANNEL_ID,
-            name: "Склад",
-            participant_count: 0,
-            max_participants: channel.maxParticipants ?? 10,
-          }]
+        ? [
+            {
+              id: OTHER_CHANNEL_ID,
+              name: "Склад",
+              participant_count: 0,
+              max_participants: channel.maxParticipants ?? 10,
+            },
+          ]
         : [],
     );
   });
@@ -763,7 +830,10 @@ async function open(page: Page, seed: Seed = {}) {
       // answers has to be the row shape the query selects.
       body: JSON.stringify([
         ...(seed.present ?? []).map((user_id) => ({ channel_id: CHANNEL_ID, user_id })),
-        ...(seed.presentElsewhere ?? []).map((user_id) => ({ channel_id: OTHER_CHANNEL_ID, user_id })),
+        ...(seed.presentElsewhere ?? []).map((user_id) => ({
+          channel_id: OTHER_CHANNEL_ID,
+          user_id,
+        })),
       ]),
     }),
   );
@@ -815,7 +885,9 @@ async function switchChat(page: Page, chatName: string, text: string) {
     await expect(row).toBeVisible();
   }
   await row.click();
-  await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: text })).toBeVisible();
+  await expect(
+    page.locator('[data-message-bubble="true"]').filter({ hasText: text }),
+  ).toBeVisible();
 }
 
 const capsule = (page: Page) => page.getByTestId("voice-capsule");
@@ -827,7 +899,9 @@ async function openInfo(page: Page) {
   await expect(page.getByTestId("chat-info-panel")).toBeVisible();
 }
 
-test("a member of the group is offered the channel, its people and the way in", async ({ page }) => {
+test("a member of the group is offered the channel, its people and the way in", async ({
+  page,
+}) => {
   await open(page, { channel: { participantCount: 2 }, present: [ANNA.id, PETR.id] });
   await openInfo(page);
 
@@ -900,8 +974,14 @@ test("a plain member of that same group is offered nothing either", async ({ pag
   await expect(page.getByTestId("chat-info-voice-start")).toHaveCount(0);
 });
 
-test("an administrator with a room is offered the way in and nothing that writes", async ({ page }) => {
-  const { writes } = await open(page, { role: "owner", channel: { participantCount: 2 }, present: [ANNA.id, PETR.id] });
+test("an administrator with a room is offered the way in and nothing that writes", async ({
+  page,
+}) => {
+  const { writes } = await open(page, {
+    role: "owner",
+    channel: { participantCount: 2 },
+    present: [ANNA.id, PETR.id],
+  });
   await openInfo(page);
 
   // The room, its people and the way in are still the card's job.
@@ -978,7 +1058,10 @@ function needsWebRtc(browserName: string): void {
   );
 }
 
-test("joining asks the gateway for exactly this channel, and the capsule follows", async ({ page, browserName }) => {
+test("joining asks the gateway for exactly this channel, and the capsule follows", async ({
+  page,
+  browserName,
+}) => {
   needsWebRtc(browserName);
   const { tokenCalls } = await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
 
@@ -1040,7 +1123,71 @@ test("mute stops what is published, and unmute puts it back", async ({ page, bro
  * and a spec that waited for it would be timing a fixture rather than a gate.
  */
 
-test("«Рация»: a call joins closed, and «выключен» is not how it says so", async ({ page, browserName }) => {
+/**
+ * A group voice channel is a Discord room, not a telephone call, and leaving
+ * one must not end it.
+ *
+ * Stated by the owner on 2026-09-18 alongside the opposite rule for a private
+ * chat: there, hanging up ends the call for both sides and there is no
+ * rejoining. Here the room stands as long as anybody is in it, and somebody
+ * leaving is somebody leaving.
+ *
+ * Both halves of that already hold, and for different reasons, which is why
+ * this is pinned rather than left to hold by construction:
+ *
+ * - **the room's life is the server's.** `participant_count` and the
+ *   reconciler decide it, and nothing a leaving client sends could collapse a
+ *   room with somebody still in it;
+ * - **the client must not even ask.** `endVoiceCall` sends
+ *   `voice_call_stop` only for the room it rang or answered — the
+ *   `oneToOneChannelId` guard — and a group room is never that. Drop the
+ *   guard and every group leave posts a call function against a room that has
+ *   no ring. Today the database would answer `'idle'` and no harm would
+ *   follow, which is precisely why nothing else would catch it.
+ *
+ * So the assertion is on what was **sent**, not on what survived. A test that
+ * checked the room was still there would pass equally well with the request
+ * going out and being ignored, and would go on passing until the day the
+ * function's behaviour changed.
+ */
+test("leaving a group voice channel is leaving, and asks nothing of the call functions", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  // Two people in the room, so that leaving is plainly «I am going» rather
+  // than «the last one out».
+  await open(page, { channel: { participantCount: 2 }, present: [ANNA.id, PETR.id] });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+
+  // The capsule's leave first, which is the path in the call's own chat.
+  await action(page).click();
+  await expect(action(page)).toHaveText("Присоединиться");
+  expect(callFunctionsAsked(), "the capsule's leave asked for a call function").toEqual([]);
+
+  // And then the bar's, which is a **different** leave: the capsule calls
+  // `leaveVoiceCall` and the bar calls `endVoiceCall`, the one that carries the
+  // one-to-one hang-up. Dropping the guard inside it is green against the
+  // capsule and red only here — measured, after a first version of this test
+  // asserted the wrong half and survived the mutation it was written for.
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+  await switchChat(page, "Смета и склад", OTHER_LINE);
+  await expect(bar(page)).toBeVisible();
+  await bar(page).getByTestId("voice-call-bar-leave").click();
+  await expect(bar(page)).toHaveCount(0);
+
+  expect(
+    callFunctionsAsked(),
+    "leaving a group room from the bar asked the backend for a one-to-one call function",
+  ).toEqual([]);
+});
+
+test("«Рация»: a call joins closed, and «выключен» is not how it says so", async ({
+  page,
+  browserName,
+}) => {
   needsWebRtc(browserName);
   await open(page, {
     channel: { participantCount: 1 },
@@ -1070,7 +1217,10 @@ test("«Рация»: a call joins closed, and «выключен» is not how i
   await expect(mute).toHaveAttribute("title", "Выключить микрофон · режим рации");
 });
 
-test("«Рация»: the button is held, on every shell, and released everywhere", async ({ page, browserName }) => {
+test("«Рация»: the button is held, on every shell, and released everywhere", async ({
+  page,
+  browserName,
+}) => {
   needsWebRtc(browserName);
   await open(page, {
     channel: { participantCount: 1 },
@@ -1105,7 +1255,10 @@ test("«Рация»: the button is held, on every shell, and released everywher
   expect(await micLive(page)).toBe(false);
 });
 
-test("«Рация»: the key talks, the composer types, and a lost window lets go", async ({ page, browserName }) => {
+test("«Рация»: the key talks, the composer types, and a lost window lets go", async ({
+  page,
+  browserName,
+}) => {
   needsWebRtc(browserName);
   await open(page, {
     channel: { participantCount: 1 },
@@ -1153,7 +1306,10 @@ test("«Рация»: the key talks, the composer types, and a lost window lets 
   await page.keyboard.up("Backquote");
 });
 
-test("«Рация»: a mute wins over a held key, and unmuting does not leave it open", async ({ page, browserName }) => {
+test("«Рация»: a mute wins over a held key, and unmuting does not leave it open", async ({
+  page,
+  browserName,
+}) => {
   needsWebRtc(browserName);
   await open(page, {
     channel: { participantCount: 1 },
@@ -1194,10 +1350,13 @@ test("«Рация»: a mute wins over a held key, and unmuting does not leave i
   // ordinary control at rest, which is the distinction this whole mode turns
   // on.
   const refused = await paint();
-  expect(refused.word, "the word reads the same whether the microphone is off or merely idle").not.toBe(
-    offered.word,
+  expect(
+    refused.word,
+    "the word reads the same whether the microphone is off or merely idle",
+  ).not.toBe(offered.word);
+  expect(refused.opacity, "the unavailable state is drawn with opacity (rule 5)").toBe(
+    offered.opacity,
   );
-  expect(refused.opacity, "the unavailable state is drawn with opacity (rule 5)").toBe(offered.opacity);
 
   await page.keyboard.down("Backquote");
   expect(await micLive(page)).toBe(false);
@@ -1277,7 +1436,10 @@ test("«Всегда» is the behaviour this product already had, and costs noth
   expect(after.levelRunning).toBe(false);
   expect(after.micOpen).toEqual([true]);
   await expect(page.getByTestId("voice-capsule-talk")).toHaveCount(0);
-  await expect(page.getByTestId("voice-capsule-mute")).toHaveAttribute("title", "Выключить микрофон");
+  await expect(page.getByTestId("voice-capsule-mute")).toHaveAttribute(
+    "title",
+    "Выключить микрофон",
+  );
 });
 
 test("«Выйти» ends the call and closes the microphone", async ({ page, browserName }) => {
@@ -1319,10 +1481,16 @@ test("the call survives a change of conversation", async ({ page, browserName })
   await switchChat(page, "Команда проекта", LINE);
   await expect(action(page)).toHaveText("Выйти");
   await expect(detail(page)).toHaveText("Вы, Анна Смирнова");
-  expect(await probe(page)).toMatchObject({ left: 0, joins: [{ url: GRANT.url, token: GRANT.token, hasTrack: true }] });
+  expect(await probe(page)).toMatchObject({
+    left: 0,
+    joins: [{ url: GRANT.url, token: GRANT.token, hasTrack: true }],
+  });
 });
 
-test("a refused microphone is a state with words, and the way in comes back", async ({ page, browserName }) => {
+test("a refused microphone is a state with words, and the way in comes back", async ({
+  page,
+  browserName,
+}) => {
   needsWebRtc(browserName);
   await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
   // The browser's own refusal, as a person who presses «Не разрешать» produces
@@ -1344,7 +1512,10 @@ test("a refused microphone is a state with words, and the way in comes back", as
   expect(await probe(page)).toMatchObject({ joins: [] });
 });
 
-test("a gateway refusal is shown as a sentence, in the panel and in the capsule", async ({ page, browserName }) => {
+test("a gateway refusal is shown as a sentence, in the panel and in the capsule", async ({
+  page,
+  browserName,
+}) => {
   needsWebRtc(browserName);
   await open(page, {
     channel: { participantCount: 1 },
@@ -1358,7 +1529,9 @@ test("a gateway refusal is shown as a sentence, in the panel and in the capsule"
 
   // The same sentence in the information panel, where the row's own control is.
   await openInfo(page);
-  await expect(page.getByTestId("chat-info-voice-refusal")).toHaveText("Нет доступа к этому голосовому чату.");
+  await expect(page.getByTestId("chat-info-voice-refusal")).toHaveText(
+    "Нет доступа к этому голосовому чату.",
+  );
 
   // The microphone was opened and then released: a failed join must not leave
   // the capture running.
@@ -1383,8 +1556,9 @@ test("the SDK's own mute is what the seam stands in for", async ({ page, browser
   // mute test above rests on a measurement rather than on an assumption.
   await open(page, { channel: null });
   const result = await page.evaluate(async () => {
-    const { LocalAudioTrack } = await import("/node_modules/.vite/deps/livekit-client.js?import" as string)
-      .catch(() => import("livekit-client" as string));
+    const { LocalAudioTrack } = await import(
+      "/node_modules/.vite/deps/livekit-client.js?import" as string
+    ).catch(() => import("livekit-client" as string));
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const [raw] = stream.getAudioTracks();
     const local = new LocalAudioTrack(raw, undefined, true);
@@ -1482,7 +1656,10 @@ test("the held control takes a press above its paint, and is still painted at 32
   expect(beside).not.toBe("voice-capsule-talk");
 });
 
-test("the hold-to-talk control, photographed in both themes", async ({ page, browserName }, info: TestInfo) => {
+test("the hold-to-talk control, photographed in both themes", async ({
+  page,
+  browserName,
+}, info: TestInfo) => {
   needsWebRtc(browserName);
   // Three states in one frame each, because the whole argument about this
   // control is that they must not look alike: waiting, held, and a microphone
@@ -1542,7 +1719,10 @@ test("the hold-to-talk control, photographed in both themes", async ({ page, bro
   });
 });
 
-test("the capsule and the row, photographed in both themes", async ({ page, browserName }, info: TestInfo) => {
+test("the capsule and the row, photographed in both themes", async ({
+  page,
+  browserName,
+}, info: TestInfo) => {
   needsWebRtc(browserName);
   await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
   const shot = (name: string) => `output/voice-call/${name}-${info.project.name}.png`;
@@ -1609,7 +1789,10 @@ test("the capsule and the row, photographed in both themes", async ({ page, brow
  * audible while the capsule, and with it the only «Выйти» in slice 2,
  * disappeared from under them.
  */
-test("a room that disappears disconnects the person who is in it", async ({ page, browserName }) => {
+test("a room that disappears disconnects the person who is in it", async ({
+  page,
+  browserName,
+}) => {
   needsWebRtc(browserName);
   const { removeTeamChannel } = await open(page, {
     role: "owner",
@@ -1738,7 +1921,9 @@ test("the ring follows the SDK's speaker list, and nobody else", async ({ page, 
     expect(paint.style).toBe("solid");
   }
   for (const paint of await ringPaint(page, ME.id)) {
-    expect(paint.color, "a silent person is ringed too, so the ring says nothing").toBe(TRANSPARENT);
+    expect(paint.color, "a silent person is ringed too, so the ring says nothing").toBe(
+      TRANSPARENT,
+    );
   }
 
   // Both at once, which is the whole set arriving rather than a diff applied.
@@ -1768,37 +1953,48 @@ test("the ring follows the SDK's speaker list, and nobody else", async ({ page, 
  * would be removing information, which the preference is explicitly not for.
  */
 for (const reduced of [false, true] as const) {
-  test("the ring " + (reduced ? "snaps" : "fades") + " and stays visible with reduced motion " +
-    (reduced ? "on" : "off"), async ({ page, browserName }) => {
-    needsWebRtc(browserName);
-    await page.emulateMedia({ reducedMotion: reduced ? "reduce" : "no-preference" });
-    await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
-    await action(page).click();
-    await expect(action(page)).toHaveText("Выйти");
-    await speak(page, [ANNA.id]);
-    await expect(rings(page, ANNA.id).first()).toHaveAttribute("data-speaking", "true");
-    await page.waitForTimeout(250);
+  test(
+    "the ring " +
+      (reduced ? "snaps" : "fades") +
+      " and stays visible with reduced motion " +
+      (reduced ? "on" : "off"),
+    async ({ page, browserName }) => {
+      needsWebRtc(browserName);
+      await page.emulateMedia({ reducedMotion: reduced ? "reduce" : "no-preference" });
+      await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
+      await action(page).click();
+      await expect(action(page)).toHaveText("Выйти");
+      await speak(page, [ANNA.id]);
+      await expect(rings(page, ANNA.id).first()).toHaveAttribute("data-speaking", "true");
+      await page.waitForTimeout(250);
 
-    const measured = await page.evaluate((id) => {
-      const node = document.querySelector('[data-testid="voice-speaking"][data-user-id="' + id + '"]');
-      const style = getComputedStyle(node as HTMLElement);
-      return {
-        duration: style.transitionDuration,
-        property: style.transitionProperty,
-        animation: style.animationName,
-        color: style.outlineColor,
-      };
-    }, ANNA.id);
+      const measured = await page.evaluate((id) => {
+        const node = document.querySelector(
+          '[data-testid="voice-speaking"][data-user-id="' + id + '"]',
+        );
+        const style = getComputedStyle(node as HTMLElement);
+        return {
+          duration: style.transitionDuration,
+          property: style.transitionProperty,
+          animation: style.animationName,
+          color: style.outlineColor,
+        };
+      }, ANNA.id);
 
-    // Whatever the preference, the ring is painted: the information survives.
-    expect(measured.color, "the ring is gone, so the preference removed information").not.toBe(TRANSPARENT);
-    // And nothing pulses in either mode — a keyframe animation here would be
-    // movement driven by the SFU's opinion of who is talking, several times a
-    // second, which is not motion anybody asked for.
-    expect(measured.animation, "the ring animates; it was meant to be static").toBe("none");
-    expect(measured.property).toContain("outline-color");
-    expect(measured.duration, "the fade is not taking the motion token").toBe(reduced ? "0.001s" : "0.14s");
-  });
+      // Whatever the preference, the ring is painted: the information survives.
+      expect(measured.color, "the ring is gone, so the preference removed information").not.toBe(
+        TRANSPARENT,
+      );
+      // And nothing pulses in either mode — a keyframe animation here would be
+      // movement driven by the SFU's opinion of who is talking, several times a
+      // second, which is not motion anybody asked for.
+      expect(measured.animation, "the ring animates; it was meant to be static").toBe("none");
+      expect(measured.property).toContain("outline-color");
+      expect(measured.duration, "the fade is not taking the motion token").toBe(
+        reduced ? "0.001s" : "0.14s",
+      );
+    },
+  );
 }
 
 test("the ring belongs to the room the call is in, not to a stale row elsewhere", async ({
@@ -1859,9 +2055,15 @@ test("the ring belongs to the room the call is in, not to a stale row elsewhere"
  * to catch the cost arriving from above instead: a conversation that re-renders
  * its bubbles because somebody said «да» is the failure this is looking for.
  */
-test("a speaker change renders the faces that changed and nothing else", async ({ page, browserName }) => {
+test("a speaker change renders the faces that changed and nothing else", async ({
+  page,
+  browserName,
+}) => {
   needsWebRtc(browserName);
-  const others = Array.from({ length: 6 }, (_, index) => "11111111-1111-4111-8111-00000000001" + index);
+  const others = Array.from(
+    { length: 6 },
+    (_, index) => "11111111-1111-4111-8111-00000000001" + index,
+  );
   await open(page, {
     channel: { participantCount: 1 },
     present: [ANNA.id],
@@ -1875,7 +2077,10 @@ test("a speaker change renders the faces that changed and nothing else", async (
   // three of them and a «+5».
   await expect(page.getByTestId("chat-info-voice-participant")).toHaveCount(8);
   const drawn = await page.locator('[data-testid="voice-speaking"]').count();
-  expect(drawn, "not enough faces on screen for this measurement to mean anything").toBeGreaterThanOrEqual(8);
+  expect(
+    drawn,
+    "not enough faces on screen for this measurement to mean anything",
+  ).toBeGreaterThanOrEqual(8);
   // How many faces one person has on screen at once. Measured rather than
   // assumed: at 1440 the information panel is in the tree twice beside the
   // capsule's stack, so a person can be drawn three times, and a bound written
@@ -1884,9 +2089,10 @@ test("a speaker change renders the faces that changed and nothing else", async (
   // and rebuilding the list would be `drawn` per change instead.
   const copies = await rings(page, ANNA.id).count();
   expect(copies, "the person this test makes talk is not drawn anywhere").toBeGreaterThan(0);
-  expect(copies, "one person is drawn as often as the whole room, so the bound below proves nothing").toBeLessThan(
-    drawn,
-  );
+  expect(
+    copies,
+    "one person is drawn as often as the whole room, so the bound below proves nothing",
+  ).toBeLessThan(drawn);
 
   await page.waitForTimeout(500);
   await resetCounts(page);
@@ -1900,9 +2106,19 @@ test("a speaker change renders the faces that changed and nothing else", async (
   const counts = await readCounts(page);
   const perChange = counts.VoiceSpeakingAvatar / CHANGES;
   console.log(
-    "[voice-speaking] " + test.info().project.name + " " + drawn + " faces on screen (" +
-      copies + " of them one person's), " + CHANGES + " speaker changes: " + JSON.stringify(counts) +
-      " — " + perChange.toFixed(2) + " face renders per change",
+    "[voice-speaking] " +
+      test.info().project.name +
+      " " +
+      drawn +
+      " faces on screen (" +
+      copies +
+      " of them one person's), " +
+      CHANGES +
+      " speaker changes: " +
+      JSON.stringify(counts) +
+      " — " +
+      perChange.toFixed(2) +
+      " face renders per change",
   );
 
   // The premise: the rings really did change, so a counter reading zero is a
@@ -1917,16 +2133,34 @@ test("a speaker change renders the faces that changed and nothing else", async (
   // measured before `speakers` was moved out of `VoiceCallState`: 19 of 19.
   expect(
     perChange,
-    "one speaker change rebuilt " + perChange.toFixed(1) + " faces of the " + drawn + " on screen, " +
-      "where only " + copies + " belong to the person who changed",
+    "one speaker change rebuilt " +
+      perChange.toFixed(1) +
+      " faces of the " +
+      drawn +
+      " on screen, " +
+      "where only " +
+      copies +
+      " belong to the person who changed",
   ).toBeLessThanOrEqual(copies);
   // And it must not arrive from above. A conversation whose bubbles re-render
   // because somebody spoke is the same defect `message-render-stability.spec.ts`
   // measures from the composer.
-  expect(counts.MessageBubble, "speaking re-rendered message bubbles: " + JSON.stringify(counts)).toBe(0);
-  expect(counts.MessageList, "speaking re-rendered the message list: " + JSON.stringify(counts)).toBe(0);
-  expect(counts.ChatWindow, "speaking re-rendered the whole conversation: " + JSON.stringify(counts)).toBe(0);
-  expect(counts.VoiceChannelRow, "speaking rebuilt the participant list: " + JSON.stringify(counts)).toBe(0);
+  expect(
+    counts.MessageBubble,
+    "speaking re-rendered message bubbles: " + JSON.stringify(counts),
+  ).toBe(0);
+  expect(
+    counts.MessageList,
+    "speaking re-rendered the message list: " + JSON.stringify(counts),
+  ).toBe(0);
+  expect(
+    counts.ChatWindow,
+    "speaking re-rendered the whole conversation: " + JSON.stringify(counts),
+  ).toBe(0);
+  expect(
+    counts.VoiceChannelRow,
+    "speaking rebuilt the participant list: " + JSON.stringify(counts),
+  ).toBe(0);
 });
 
 /* ── The output device, reaching a call at last ───────────────────────────── */
@@ -1951,7 +2185,10 @@ test("the chosen output device reaches the transport when the call is joined", a
   await expect(page.getByTestId("voice-capsule-output-refused")).toHaveCount(0);
 });
 
-test("changing the device while the call runs reaches the transport again", async ({ page, browserName }) => {
+test("changing the device while the call runs reaches the transport again", async ({
+  page,
+  browserName,
+}) => {
   needsWebRtc(browserName);
   await open(page, { channel: { participantCount: 1 }, present: [ANNA.id], outputDevice: HEADSET });
   await action(page).click();
@@ -1964,7 +2201,10 @@ test("changing the device while the call runs reaches the transport again", asyn
   const choose = async (deviceId: string) => {
     await page.evaluate(
       ({ key, event, id }) => {
-        const held = JSON.parse(localStorage.getItem(key as string) ?? "{}") as Record<string, unknown>;
+        const held = JSON.parse(localStorage.getItem(key as string) ?? "{}") as Record<
+          string,
+          unknown
+        >;
         const next = { ...held, selectedOutputDeviceId: id };
         localStorage.setItem(key as string, JSON.stringify(next));
         window.dispatchEvent(new CustomEvent(event as string, { detail: next }));
@@ -1989,7 +2229,10 @@ test("changing the device while the call runs reaches the transport again", asyn
   expect(await outputDevices(page)).toEqual([HEADSET, SPEAKERS, HEADSET]);
 });
 
-test("a browser that refuses the device is not reported as having taken it", async ({ page, browserName }) => {
+test("a browser that refuses the device is not reported as having taken it", async ({
+  page,
+  browserName,
+}) => {
   needsWebRtc(browserName);
   await open(page, {
     channel: { participantCount: 1 },
@@ -2051,7 +2294,9 @@ test("the panel asks the transport and draws what it is told", async ({ page, br
   const panel = page.getByTestId("voice-connection-panel");
   await expect(panel).toBeVisible();
 
-  await expect.poll(async () => (await probe(page)).healthSamples, { timeout: 8_000 }).toBeGreaterThan(1);
+  await expect
+    .poll(async () => (await probe(page)).healthSamples, { timeout: 8_000 })
+    .toBeGreaterThan(1);
 
   // «45 мс» shaped, not «—»: the numbers reached the panel.
   await expect(page.getByTestId("voice-connection-average")).toHaveText(/^4[0-9] мс$/);
@@ -2073,10 +2318,7 @@ test("the panel asks the transport and draws what it is told", async ({ page, br
   await page.getByTestId("voice-capsule-health").click();
   await expect(panel).toHaveCount(0);
   await page.waitForTimeout(1500);
-  expect(
-    (await probe(page)).healthSamples,
-    "the panel is closed and still sampling",
-  ).toBe(before);
+  expect((await probe(page)).healthSamples, "the panel is closed and still sampling").toBe(before);
 });
 
 test("a bad connection says which threshold it crossed, and raises the ceiling", async ({
@@ -2101,7 +2343,9 @@ test("a bad connection says which threshold it crossed, and raises the ceiling",
   // The peak is inside the frame rather than on its edge.
   const ceiling = await page.getByTestId("voice-connection-ceiling").innerText();
   const max = Number(ceiling.replace(/[^0-9]/g, ""));
-  const last = Number((await page.getByTestId("voice-connection-last").innerText()).replace(/[^0-9]/g, ""));
+  const last = Number(
+    (await page.getByTestId("voice-connection-last").innerText()).replace(/[^0-9]/g, ""),
+  );
   expect(max, `the ceiling ${max} does not clear the peak ${last}`).toBeGreaterThan(last);
 });
 
@@ -2118,7 +2362,9 @@ test("a transport that measures nothing says so, rather than drawing a flat line
   await page.getByTestId("voice-capsule-health").click();
   const panel = page.getByTestId("voice-connection-panel");
   await expect(panel).toBeVisible();
-  await expect.poll(async () => (await probe(page)).healthSamples, { timeout: 8_000 }).toBeGreaterThan(1);
+  await expect
+    .poll(async () => (await probe(page)).healthSamples, { timeout: 8_000 })
+    .toBeGreaterThan(1);
 
   await expect(panel).toHaveAttribute("data-voice-verdict", "unknown");
   await expect(page.getByTestId("voice-connection-average")).toHaveText("—");
@@ -2181,10 +2427,10 @@ test("somebody already muted stays muted after undeafening", async ({ page, brow
   await expect(mute).toHaveAttribute("data-muted", "true");
   await deafen.click();
   await expect(deafen).toHaveAttribute("data-deafened", "false");
-  await expect(
-    mute,
-    "undeafening unmuted somebody who had muted themselves first",
-  ).toHaveAttribute("data-muted", "true");
+  await expect(mute, "undeafening unmuted somebody who had muted themselves first").toHaveAttribute(
+    "data-muted",
+    "true",
+  );
 });
 
 test("a listener who may not publish can still stop hearing the room", async ({
@@ -2215,90 +2461,97 @@ test("a listener who may not publish can still stop hearing the room", async ({
 /* ── The pixels ───────────────────────────────────────────────────────────── */
 
 for (const theme of ["dark", "light"] as const) {
-  test("the connection panel is photographed in the " + theme + " theme", async ({ page, browserName }, info: TestInfo) => {
-    needsWebRtc(browserName);
-    await open(page, {
-      channel: { participantCount: 1 },
-      present: [ANNA.id],
-      health: "good",
-      serverName: "finland14135",
-      theme,
-    });
-    expect(
-      await page.evaluate(() => document.documentElement.classList.contains("dark")),
-      "the application booted in the other theme",
-    ).toBe(theme === "dark");
+  test(
+    "the connection panel is photographed in the " + theme + " theme",
+    async ({ page, browserName }, info: TestInfo) => {
+      needsWebRtc(browserName);
+      await open(page, {
+        channel: { participantCount: 1 },
+        present: [ANNA.id],
+        health: "good",
+        serverName: "finland14135",
+        theme,
+      });
+      expect(
+        await page.evaluate(() => document.documentElement.classList.contains("dark")),
+        "the application booted in the other theme",
+      ).toBe(theme === "dark");
 
-    await action(page).click();
-    await expect(action(page)).toHaveText("Выйти");
-    await page.getByTestId("voice-capsule-health").click();
-    await expect(page.getByTestId("voice-connection-panel")).toBeVisible();
-    // Long enough for the graph to have a line rather than two points.
-    await expect
-      .poll(async () => (await probe(page)).healthSamples, { timeout: 12_000 })
-      .toBeGreaterThan(6);
-    await page.evaluate(() => document.fonts.ready);
-    await page.waitForTimeout(250);
-    await page.screenshot({
-      path: "output/voice/connection-" + theme + "-" + info.project.name + ".png",
-    });
-  });
-
-  test("the speaking ring is photographed in the " + theme + " theme", async ({ page, browserName }, info: TestInfo) => {
-    needsWebRtc(browserName);
-    await open(page, {
-      channel: { participantCount: 1 },
-      present: [ANNA.id],
-      others: ["11111111-1111-4111-8111-000000000010"],
-      outputDevice: HEADSET,
-      theme,
-    });
-    // The theme the application resolved, not one a later stamp painted over
-    // it. A hybrid — tokens moved while React still holds the old theme — is
-    // the trap `chat-roles-reach.spec.ts` records, and it photographs as a
-    // light screen labelled dark.
-    expect(
-      await page.evaluate(() => document.documentElement.classList.contains("dark")),
-      "the application booted in the other theme",
-    ).toBe(theme === "dark");
-
-    await action(page).click();
-    await expect(action(page)).toHaveText("Выйти");
-    await speak(page, [ANNA.id]);
-    await expect(rings(page, ANNA.id).first()).toHaveAttribute("data-speaking", "true");
-    await page.evaluate(() => document.fonts.ready);
-    await page.waitForTimeout(250);
-
-    const shot = (name: string) => "output/voice/" + name + "-" + theme + "-" + info.project.name + ".png";
-    await page.screenshot({ path: shot("screen-speaking") });
-
-    // The rail, which is where the ring lives on a phone: the capsule's stack of
-    // faces is `hidden sm:flex`, so below 640 it is in the tree and not on
-    // screen. As a column when the pane fits one, and as the sheet behind
-    // «Каналы» when it does not — one of the two is always there.
-    const column = page.getByTestId("channel-rail");
-    const trigger = page.getByTestId("channel-rail-trigger");
-    if (await column.isVisible().catch(() => false)) {
-      await column.screenshot({ path: shot("rail-speaking") });
-    } else {
-      await trigger.click();
-      const sheet = page.getByTestId("channel-rail-sheet");
-      await expect(sheet).toBeVisible();
+      await action(page).click();
+      await expect(action(page)).toHaveText("Выйти");
+      await page.getByTestId("voice-capsule-health").click();
+      await expect(page.getByTestId("voice-connection-panel")).toBeVisible();
+      // Long enough for the graph to have a line rather than two points.
+      await expect
+        .poll(async () => (await probe(page)).healthSamples, { timeout: 12_000 })
+        .toBeGreaterThan(6);
+      await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(250);
-      await sheet.screenshot({ path: shot("rail-speaking") });
-      await page.getByTestId("channel-rail-close").click();
-      await expect(sheet).toHaveCount(0);
-    }
+      await page.screenshot({
+        path: "output/voice/connection-" + theme + "-" + info.project.name + ".png",
+      });
+    },
+  );
 
-    await openInfo(page);
-    const row = page.getByTestId("chat-info-voice");
-    await expect(row).toBeVisible();
-    // The element rather than the page: at 390 this band is below the fold, and
-    // a photograph of the fold is not a photograph of the ring.
-    await row.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(250);
-    await row.screenshot({ path: shot("panel-speaking") });
-  });
+  test(
+    "the speaking ring is photographed in the " + theme + " theme",
+    async ({ page, browserName }, info: TestInfo) => {
+      needsWebRtc(browserName);
+      await open(page, {
+        channel: { participantCount: 1 },
+        present: [ANNA.id],
+        others: ["11111111-1111-4111-8111-000000000010"],
+        outputDevice: HEADSET,
+        theme,
+      });
+      // The theme the application resolved, not one a later stamp painted over
+      // it. A hybrid — tokens moved while React still holds the old theme — is
+      // the trap `chat-roles-reach.spec.ts` records, and it photographs as a
+      // light screen labelled dark.
+      expect(
+        await page.evaluate(() => document.documentElement.classList.contains("dark")),
+        "the application booted in the other theme",
+      ).toBe(theme === "dark");
+
+      await action(page).click();
+      await expect(action(page)).toHaveText("Выйти");
+      await speak(page, [ANNA.id]);
+      await expect(rings(page, ANNA.id).first()).toHaveAttribute("data-speaking", "true");
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(250);
+
+      const shot = (name: string) =>
+        "output/voice/" + name + "-" + theme + "-" + info.project.name + ".png";
+      await page.screenshot({ path: shot("screen-speaking") });
+
+      // The rail, which is where the ring lives on a phone: the capsule's stack of
+      // faces is `hidden sm:flex`, so below 640 it is in the tree and not on
+      // screen. As a column when the pane fits one, and as the sheet behind
+      // «Каналы» when it does not — one of the two is always there.
+      const column = page.getByTestId("channel-rail");
+      const trigger = page.getByTestId("channel-rail-trigger");
+      if (await column.isVisible().catch(() => false)) {
+        await column.screenshot({ path: shot("rail-speaking") });
+      } else {
+        await trigger.click();
+        const sheet = page.getByTestId("channel-rail-sheet");
+        await expect(sheet).toBeVisible();
+        await page.waitForTimeout(250);
+        await sheet.screenshot({ path: shot("rail-speaking") });
+        await page.getByTestId("channel-rail-close").click();
+        await expect(sheet).toHaveCount(0);
+      }
+
+      await openInfo(page);
+      const row = page.getByTestId("chat-info-voice");
+      await expect(row).toBeVisible();
+      // The element rather than the page: at 390 this band is below the fold, and
+      // a photograph of the fold is not a photograph of the ring.
+      await row.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(250);
+      await row.screenshot({ path: shot("panel-speaking") });
+    },
+  );
 }
 
 /**
@@ -2512,32 +2765,32 @@ test("a moderator's silence reaches the bar, and the microphone stops being pres
 });
 
 for (const theme of ["dark", "light"] as const) {
-  test("the call bar, photographed in the " + theme + " theme", async ({
-    page,
-    browserName,
-  }, info: TestInfo) => {
-    needsWebRtc(browserName);
-    await open(page, {
-      channel: { participantCount: 1 },
-      present: [ANNA.id],
-      otherChannel: false,
-      theme,
-    });
-    await action(page).click();
-    await expect(action(page)).toHaveText("Выйти");
-    await switchChat(page, "Смета и склад", OTHER_LINE);
-    // The premise, asserted before the thing being photographed, so a failure
-    // names its own cause. This capture went red once out of three cold runs
-    // with «element(s) not found», which is indistinguishable between «the bar
-    // is not drawn» and «the call is no longer running».
-    expect(await probe(page)).toMatchObject({ left: 0 });
-    await expect(bar(page)).toBeVisible();
-    await page.evaluate(() => document.fonts.ready);
-    await page.waitForTimeout(400);
-    await page.screenshot({
-      path: `output/voice-call-bar/bar-${info.project.name}-${theme}.png`,
-    });
-  });
+  test(
+    "the call bar, photographed in the " + theme + " theme",
+    async ({ page, browserName }, info: TestInfo) => {
+      needsWebRtc(browserName);
+      await open(page, {
+        channel: { participantCount: 1 },
+        present: [ANNA.id],
+        otherChannel: false,
+        theme,
+      });
+      await action(page).click();
+      await expect(action(page)).toHaveText("Выйти");
+      await switchChat(page, "Смета и склад", OTHER_LINE);
+      // The premise, asserted before the thing being photographed, so a failure
+      // names its own cause. This capture went red once out of three cold runs
+      // with «element(s) not found», which is indistinguishable between «the bar
+      // is not drawn» and «the call is no longer running».
+      expect(await probe(page)).toMatchObject({ left: 0 });
+      await expect(bar(page)).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(400);
+      await page.screenshot({
+        path: `output/voice-call-bar/bar-${info.project.name}-${theme}.png`,
+      });
+    },
+  );
 }
 
 /**
@@ -2567,10 +2820,7 @@ async function showChatList(page: Page) {
 }
 
 const voiceMark = (page: Page, chatName: string) =>
-  page
-    .getByTestId("chat-list-item")
-    .filter({ hasText: chatName })
-    .getByTestId("chat-list-voice");
+  page.getByTestId("chat-list-item").filter({ hasText: chatName }).getByTestId("chat-list-voice");
 
 test("the chat list marks a conversation with a call in it, and only that one", async ({
   page,
@@ -2610,20 +2860,21 @@ test("a conversation whose room empties loses its mark", async ({ page, browserN
 });
 
 for (const theme of ["dark", "light"] as const) {
-  test("the chat list's voice mark, photographed in the " + theme + " theme", async ({
-    page,
-  }, info: TestInfo) => {
-    await open(page, {
-      channel: { participantCount: 2 },
-      present: [ANNA.id, PETR.id],
-      theme,
-    });
-    await showChatList(page);
-    await expect(voiceMark(page, "Команда проекта")).toBeVisible();
-    await page.evaluate(() => document.fonts.ready);
-    await page.waitForTimeout(400);
-    await page.screenshot({
-      path: `output/voice-presence/list-${info.project.name}-${theme}.png`,
-    });
-  });
+  test(
+    "the chat list's voice mark, photographed in the " + theme + " theme",
+    async ({ page }, info: TestInfo) => {
+      await open(page, {
+        channel: { participantCount: 2 },
+        present: [ANNA.id, PETR.id],
+        theme,
+      });
+      await showChatList(page);
+      await expect(voiceMark(page, "Команда проекта")).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(400);
+      await page.screenshot({
+        path: `output/voice-presence/list-${info.project.name}-${theme}.png`,
+      });
+    },
+  );
 }
