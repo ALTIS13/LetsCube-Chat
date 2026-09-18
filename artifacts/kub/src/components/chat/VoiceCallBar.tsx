@@ -46,6 +46,16 @@ import { cn } from "@/lib/utils";
  * outside the conversation that owns the call there is no member list to
  * correct them against. A row of half-stale names is worse than none, and the
  * two facts worth having — which room, in which group — are here in full.
+ *
+ * **And therefore no roster here, and no per-person volume on it.** That
+ * question came up the same day the per-person control shipped (D-227): the
+ * rail's occupant rows carry a volume band, and this bar is the other place a
+ * call is reachable from. The answer is the paragraph above. A volume band
+ * needs to name whose voice it is turning down, and out here the only name
+ * available is the token's snapshot — so the control would be correct and the
+ * label beside it could be somebody's old name. The rail lists occupants
+ * against a live member list, which is why it is the one place that offers it,
+ * and pressing this bar is one gesture away from there.
  */
 export function VoiceCallBar({ placement }: { placement: "column" | "top" }) {
   const call = useVoiceCall();

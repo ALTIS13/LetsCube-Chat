@@ -12,7 +12,14 @@
  * Slice 2 of docs/proposals/2026-09-13-voice-channels.md. Who is speaking is
  * deliberately absent: that is slice 4, and section 3.1 explains why it is not
  * a column and not a rule here either.
+ *
+ * The one import below is a **type** and erases at build, so this module still
+ * pulls nothing into a `node --test` process and nothing into a bundle. The
+ * union it names belongs beside the decisions that read it, in
+ * `lib/voiceVolume.ts`, rather than being written out twice.
  */
+
+import type { VoiceAudioSource } from "./voiceVolume";
 
 /** Where the call is, from the interface's point of view. */
 export type VoiceCallPhase =
@@ -67,6 +74,22 @@ export interface VoiceParticipant {
    * counter answers `null` rather than a confident zero.
    */
   canSpeak: boolean | null;
+  /**
+   * How the room carries this person's voice, or `null` when nobody here knows.
+   *
+   * Read by the per-person volume control and by nothing else, and it exists
+   * because the honest answer to «can I turn this person down» is not always
+   * yes: `RemoteParticipant.setVolume` finds its publication by source, and a
+   * participant running a build from before 2026-09-18 publishes their
+   * microphone as `Unknown`. For them the call changes nothing and reports no
+   * error — so the fact has to arrive here, where a surface can say it, rather
+   * than be discovered by a listener dragging a slider that does nothing.
+   *
+   * `null` is «unknown» on the same terms as `canSpeak`: outside a call the
+   * table carries presence and no publications at all. Never read as «cannot».
+   * `lib/voiceVolume.ts` turns this reading into what the interface draws.
+   */
+  audioSource: VoiceAudioSource | null;
 }
 
 /** Why a microphone could not be captured. Mirrors `classifyMicError`'s codes. */
@@ -148,6 +171,11 @@ export function resolveVoiceParticipants(
     // speak is unknown here. `true` would be a claim, and it is the claim that
     // would put «Заглушить» on somebody already silenced.
     canSpeak: null,
+    // `null` for the third time, and this one is load-bearing in a different
+    // way: a volume control offered from out here would store a number and
+    // move no audio, because nothing is subscribed to a room this client is
+    // not in. The rule that refuses it reads exactly this.
+    audioSource: null,
   }));
 }
 

@@ -302,6 +302,8 @@ declare global {
        * be read as a refusal.
        */
       revokeSpeech: ((allowed: boolean | null) => void) | null;
+      /** Every per-person volume the call pushed at the transport, in order. */
+      volumes: { userId: string; volume: number }[];
     };
   }
 }
@@ -372,6 +374,7 @@ async function installVoiceSeam(
         refuseOutput: Boolean(refuseOutput),
         speak: null,
         revokeSpeech: null,
+        volumes: [],
       };
       window.__voiceProbe = held;
       const roster = (muted: boolean) =>
@@ -396,6 +399,13 @@ async function installVoiceSeam(
           // `server-channel-rail.spec.ts`, where the moderation menu lives.
           ...entry,
           canSpeak: true,
+          // And the audio reading, for the same reason: this stand-in is
+          // standing in for a transport that would answer. `microphone`
+          // is what a build since 2026-09-18 publishes — the source the
+          // SDK needs before a chosen loudness can reach anybody. The
+          // spec that exercises the reading is
+          // `server-channel-rail.spec.ts`, where the volume control lives.
+          audioSource: "microphone" as const,
         }));
       window.__letscubeVoiceRoom = (events) => {
         held.speak = (userIds: string[]) => events.onSpeakers(userIds);
@@ -463,6 +473,13 @@ async function installVoiceSeam(
         },
         async setDeafened(next: boolean) {
           held.deafened.push(next);
+        },
+        // Recorded rather than left out. Nothing in this file can reach
+        // it — the per-person control is on the rail's occupant rows and
+        // this spec renders no rail — but a stand-in that omits a seam
+        // method is a stand-in that throws the day something does.
+        async setParticipantVolume(userId: string, volume: number) {
+          held.volumes.push({ userId, volume });
         },
         async setOutputDevice(deviceId: string) {
           held.outputDevices.push(deviceId);

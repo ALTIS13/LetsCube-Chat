@@ -14364,3 +14364,107 @@ match either. **Not verified as user-visible** — `scheduleRefetch` may already
 be reached another way — so it gets its own measurement and its own file rather
 than a line in this one. Also recorded: the comment at `useChats.ts:451` says
 `public.chats` is not published, and it is.
+
+---
+
+## D-227 `[x]` A listener could not turn one person down, and the control that would do it had been silently inert
+
+**Severity:** medium as a missing feature, and worth an entry mostly for what
+building it uncovered.
+
+Discord's per-participant volume: a listener turns one other person down, for
+themselves only, and nobody else learns about it. It is not moderation, so it is
+offered to **everybody** — a different gate from «Заглушить в канале», which is
+owner and administrator only, and deliberately not folded into those rules.
+
+**It could not have worked before the same day's D-223.** `RemoteParticipant.setVolume(volume, source = Track.Source.Microphone)`
+does `volumeMap.set(source, volume)` and then `getTrackPublication(source)`,
+and every build before `91718323` published its capture as
+`Track.Source.Unknown`, so the lookup never matched. Read out of the installed
+`livekit-client` 2.22.3 rather than the documentation.
+
+### Three things measured rather than chosen
+
+**You cannot turn anybody up.** `createLiveKitRoom` builds its `Room` without
+`webAudioMix`, whose default is `false`, so there is no `AudioContext` and
+`RemoteAudioTrack.setVolume` falls through to `el.volume = volume` — which
+throws `IndexSizeError` outside 0..1, a fact `lib/playbackVolume.ts:50` already
+records in this codebase. Discord's 200% would need `webAudioMix: true`, which
+routes the whole call through an `AudioContext` (a suspended context with no
+gesture is a call with no sound) and changes the `switchActiveDevice("audiooutput")`
+branch the output-device control depends on. That is a change to how calls are
+heard, not a slider's maximum, so the range is 0..100%.
+
+**The old build problem, and what the interface does about it.** The `source`
+fix covers what *this* client publishes; a remote's publication source is
+whatever *their* build declared. Anyone on the previous web build or the Android
+0.1.7 APK publishes `UNKNOWN`, and `setVolume` finds no publication for them and
+changes nothing at all. So the seam reports a reading per participant —
+`audioSource`, `"microphone" | "unnamed" | "none" | null` — computed by **the
+same lookup `setVolume` makes**, so it answers exactly «will a chosen loudness
+land». For `"unnamed"` no slider is drawn at all, and a sentence takes its
+place: «Изменить нельзя: участник подключился из старой версии приложения.» A
+sunk slider is still a slider and a reader would still drag it.
+
+**Deafen and per-person volume are one knob, so they meet in one function.**
+`volumeFor(userId)` inside the seam returns `deafened ? 0 : chosen ?? default`,
+and the applier runs on `ParticipantConnected` and `TrackSubscribed` as before —
+so somebody joining while you are deafened still arrives silent, and undeafening
+restores each person's *chosen* value rather than 1. Choosing a volume while
+deafened holds it and pushes `volumeFor`, never the new value, so it cannot make
+one person audible; and because dragging a slider then would otherwise look like
+a control doing nothing, the band says «Вы не слушаете канал — громкость
+применится, когда включите звук.»
+
+Stored per person, not per person per room (`kub:voice-volume:v1`): the reason
+you turn somebody down is their microphone, their room or their headset, and
+those follow them between channels. A value back at the default **removes** its
+entry, so the record is only the people actually turned down. Seeded inside
+`createLiveKitRoom` rather than pushed in by a screen, because no component is
+guaranteed mounted while a call runs.
+
+### A green mutation that changed the design
+
+`voiceVolumeOffer` originally took `inThisRoom`, and forcing it `true` left the
+e2e green. It was redundant **and** the weaker question: `ChatWindow.occupantsOf`
+hands the rail SDK rows only for `call.channelId` while the phase is connected or
+reconnecting, so `audioSource !== null` already means «audio I am actually
+receiving», where a channel-id comparison also says yes during a join that has
+not connected. The parameter is gone and the mutation is recorded in the code.
+
+### The pixels found a defect, then found the fix's own defect
+
+The slider was `accent-[var(--kub-cyan)]` alone, matching the sound settings'
+slider. `accent-color` paints the filled half and the thumb and leaves the rest
+of the track to the browser: measured in the dark theme, the empty track came
+back **`rgb(59, 59, 59)`** — a pure neutral grey, no hue — on a panel ground of
+`rgb(17, 42, 71)`. On this navy it reads as a foreign part.
+
+The first fix reached for `--kub-surface-3`, the token `AudioMessage` uses. The
+pixels refused that too: on dark it is `#112B47`, which is this glass panel to
+within a rounding error, measured at **1.01:1** — the empty half did not fade
+into the panel, it vanished, leaving a cyan bar that stops with no groove saying
+how much range is left. Worse than the grey, which was at least visible.
+
+So `--kub-range-track`, declared per theme beside `--kub-rule` and for the same
+reason — a tone whose value is a measurement: `#081629` on dark (**1.25:1**
+against the rendered panel, and the inset well's own value, which is what a
+recessed groove should be) and `#DCEBF7` on light (**1.20:1**, where
+`--kub-surface-3` was already right). Fill against empty stands at **5.12:1**
+dark and **4.34:1** light, so the boundary between them is the clearest thing in
+the control — which is the one thing it has to say.
+
+**A bounded finding to go with it.** Three sliders in the product leave their
+empty track to the browser: `chat/ChatMediaPlayback.tsx` (two) and
+`settings/AudioSettingsSection.tsx` (one). `chat/AudioMessage.tsx` and
+`chat/attach/AttachVideoQuality.tsx` paint both halves at their call sites. The
+new `.kub-range` class is that, in tokens, once — so the sweep is one class per
+slider rather than a paragraph of per-engine rules each. Recorded under D-222's
+tier ordering rather than opened as a separate entry: same shape, same screen
+family, and the measurement above is the evidence.
+
+Twenty-eight mutations, all red — nineteen against the rules, nine against the
+browser, each of the latter verified as **served by Vite** before the run,
+because a scripted write landing between watcher events gives a green run that
+proves nothing. One mutation was refused by its own harness for a non-unique
+anchor and re-run with a unique needle.

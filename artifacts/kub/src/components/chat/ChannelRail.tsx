@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
 import {
   RowActionHeader,
@@ -12,7 +12,12 @@ import {
 } from "@/components/kub/RowActions";
 import { TinyUserAvatar } from "./MessageReactions";
 import { VoiceSpeakingAvatar } from "./VoiceSpeakingAvatar";
+import { useVoiceCall } from "@/hooks/useVoiceCall";
 import { useVoiceModeration } from "@/hooks/useVoiceModeration";
+import {
+  useSetVoiceParticipantVolume,
+  useVoiceParticipantVolume,
+} from "@/hooks/useVoiceVolume";
 import { requestAppConfirm } from "@/lib/appDialogs";
 import { CAPSULE_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING, FOCUS_RING_INSET, PRESS_SINK } from "@/lib/controlSurface";
@@ -20,6 +25,15 @@ import {
   voiceModerationActions,
   type VoiceModerationAction,
 } from "@/lib/voiceModeration";
+import {
+  occupantMenuOffersSomething,
+  voiceVolumeLabel,
+  voiceVolumeNotice,
+  voiceVolumeOffer,
+  VOICE_VOLUME_STEP,
+  type VoiceAudioSource,
+  type VoiceVolumeOffer,
+} from "@/lib/voiceVolume";
 import {
   CHANNEL_RAIL_RETRY,
   CHANNEL_RAIL_UNREADABLE,
@@ -155,7 +169,13 @@ function ChannelRailList({
   const openOccupantMenu = useCallback(
     (
       channelId: string,
-      person: { userId: string; name: string; canSpeak: boolean | null; face: string | null },
+      person: {
+        userId: string;
+        name: string;
+        canSpeak: boolean | null;
+        audioSource: VoiceAudioSource | null;
+        face: string | null;
+      },
       position: { x: number; y: number },
     ) => {
       const targetRole = roleOf?.(person.userId) ?? null;
@@ -163,10 +183,15 @@ function ChannelRailList({
         { selfId, role },
         { userId: person.userId, role: targetRole, canSpeak: person.canSpeak },
       );
+      // Volume is for everybody and moderation is for two roles, so the menu
+      // has two gates rather than one widened gate. Folding them together is
+      // how a plain member would end up being offered «Заглушить», or a
+      // moderator's own row would start offering a volume for their own voice.
+      const volume = voiceVolumeOffer({ selfId, target: person });
       // A row that opens an empty menu is the same defect as a control that
       // does nothing, so the row is not pressable at all in that case — this is
       // the second gate rather than the only one.
-      if (offered.length === 0) return;
+      if (!occupantMenuOffersSomething(volume, offered.length)) return;
       const coarse = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
       setOccupantMenu({
         channelId,
@@ -174,6 +199,7 @@ function ChannelRailList({
         name: person.name,
         role: targetRole,
         canSpeak: person.canSpeak,
+        volume,
         face: person.face,
         mode: coarse ? "sheet" : "menu",
         placement: rowMenuPlacement(position),
@@ -242,6 +268,26 @@ function ChannelRailList({
       subtitle={occupantMenu.canSpeak === false ? "Заглушён модератором" : undefined}
     />
   ) : null;
+
+  /**
+   * The volume band, above the actions and separated from them.
+   *
+   * It is deliberately not one of `menuActions`: those are a label and a `run`,
+   * and this has a value that is dragged. `RowActions` takes it as its own slot
+   * — see the note on `controls` there — so the two kinds of thing in this menu
+   * stay visibly two kinds of thing. Which matters here beyond tidiness: the
+   * band is about this listener's own ears and the items under it are about the
+   * room, and a reader must not take one for the other.
+   */
+  const menuControls =
+    occupantMenu && occupantMenu.volume !== "not_offered" ? (
+      <OccupantVolume
+        key={occupantMenu.userId}
+        userId={occupantMenu.userId}
+        name={occupantMenu.name}
+        offer={occupantMenu.volume}
+      />
+    ) : null;
 
   const busyActionId =
     moderation.busy && occupantMenu && moderation.busy.userId === occupantMenu.userId
@@ -412,6 +458,7 @@ function ChannelRailList({
         <RowActionMenu
           header={menuHeader}
           actions={menuActions}
+          controls={menuControls}
           placement={occupantMenu.placement}
           busyActionId={busyActionId}
           layer={MODERATION_MENU_LAYER}
@@ -423,6 +470,7 @@ function ChannelRailList({
         <RowActionSheet
           header={menuHeader}
           actions={menuActions}
+          controls={menuControls}
           busyActionId={busyActionId}
           layer={MODERATION_MENU_LAYER}
           onClose={() => setOccupantMenu(null)}
@@ -451,10 +499,131 @@ interface OccupantMenu {
   readonly name: string;
   readonly role: string | null;
   readonly canSpeak: boolean | null;
+  /**
+   * Whether this listener may set how loud this person is, decided when the
+   * menu opened.
+   *
+   * Read once rather than per render, like `placement` beside it: it is settled
+   * by how the room carries that person's voice at the moment of the press, and
+   * a menu whose contents changed under the pointer because a track event
+   * arrived is worse than one that is a moment stale.
+   */
+  readonly volume: VoiceVolumeOffer;
   /** Their avatar, so the menu names the person the row named. */
   readonly face: string | null;
   readonly mode: "menu" | "sheet";
   readonly placement: RowMenuPlacement;
+}
+
+/**
+ * How loud one other person is, for this listener alone.
+ *
+ * Discord's per-user volume. Three things about it are decisions rather than
+ * drawing, and all three are in `lib/voiceVolume.ts` where a test reads them:
+ * the 0..1 range (above 1 the element's own volume setter throws, because the
+ * room carries no `AudioContext`), the sentence under the control, and whether
+ * the control is offered at all.
+ *
+ * **A slider that cannot work is not drawn.** For somebody whose voice the room
+ * carries under no microphone source — every build before 2026-09-18, the
+ * Android 0.1.7 APK included — `setVolume` finds no publication and changes
+ * nothing, silently. A sunk slider would still be a slider, and a reader would
+ * still drag it; so the sentence takes its place, which is the one thing that
+ * teaches them something true. Rule 5 is why it is not the slider at 40%
+ * opacity, and rule 5 is also why nothing here fades.
+ *
+ * `useVoiceCall` for one field, `deafened`, and it is read here rather than
+ * passed down because this component exists only while a menu is open — so the
+ * subscription costs the rail nothing while it is merely being looked at.
+ */
+function OccupantVolume({
+  userId,
+  name,
+  offer,
+}: {
+  userId: string;
+  name: string;
+  offer: VoiceVolumeOffer;
+}) {
+  const { deafened } = useVoiceCall();
+  const volume = useVoiceParticipantVolume(userId);
+  const setVolume = useSetVoiceParticipantVolume(userId);
+  const notice = voiceVolumeNotice(offer, deafened);
+  const adjustable = offer === "adjustable";
+
+  return (
+    // `role="group"` rather than nothing, and it is not decoration: the
+    // desktop surface is a `role="menu"`, whose permitted children are
+    // menuitems, separators and groups — a bare slider inside one is invalid
+    // ARIA and a screen reader may skip it. A group is a legal container and
+    // reads its contents.
+    <div
+      role="group"
+      aria-label="Громкость участника"
+      className="px-2 py-1.5"
+      data-testid="occupant-volume"
+      data-offer={offer}
+    >
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-2 text-sm text-[color:var(--kub-text)]">
+          <KubIcon
+            name={adjustable && volume === 0 ? "muted" : "volume"}
+            size={16}
+            tone="muted"
+            className="shrink-0"
+          />
+          <span className="min-w-0 truncate">Громкость</span>
+        </span>
+        {adjustable && (
+          <span
+            className="shrink-0 tabular-nums text-xs text-[color:var(--kub-muted)]"
+            data-testid="occupant-volume-value"
+          >
+            {voiceVolumeLabel(volume)}
+          </span>
+        )}
+      </div>
+      {adjustable && (
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={VOICE_VOLUME_STEP}
+          value={volume}
+          // The person, not «участник»: this menu is opened from a row that
+          // says a name, and a screen reader that reads the control alone has
+          // to carry the same fact the eye gets from the header above it.
+          aria-label={`Громкость: ${name}`}
+          // Announced as «40%» or «Выключен» rather than as «0.4», which is
+          // what a range's own value reads as and means nothing out loud.
+          aria-valuetext={voiceVolumeLabel(volume)}
+          onChange={(event) => setVolume(Number(event.target.value))}
+          data-testid="occupant-volume-slider"
+          // `kub-field` for the touch floor (D-047 measured a 314x16 slider),
+          // and `kub-range` for the track.
+          //
+          // It was `accent-[var(--kub-cyan)]` alone, matching the sound
+          // settings' slider — and the pixels refused it. `accent-color`
+          // paints the filled half and the thumb and leaves the rest to the
+          // browser: measured in the dark theme, the empty track came back
+          // `rgb(59, 59, 59)`, a pure neutral grey with no hue, on a panel
+          // ground of `rgb(17, 42, 71)`. `AudioMessage` and
+          // `AttachVideoQuality` already paint both halves; `kub-range` is
+          // that, in tokens, once.
+          className="kub-field kub-range mt-1 w-full"
+          style={{ "--kub-range-filled": `${Math.round(volume * 100)}%` } as CSSProperties}
+        />
+      )}
+      {notice && (
+        <p
+          className="mt-1 text-[11px] leading-snug text-[color:var(--kub-muted)]"
+          data-testid="occupant-volume-notice"
+        >
+          {notice}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** The words for each action, and which of them asks first. */
@@ -542,7 +711,13 @@ function VoiceChannelRailRow({
   roleOf?: (userId: string) => string | null;
   onOccupantMenu: (
     channelId: string,
-    person: { userId: string; name: string; canSpeak: boolean | null; face: string | null },
+    person: {
+      userId: string;
+      name: string;
+      canSpeak: boolean | null;
+      audioSource: VoiceAudioSource | null;
+      face: string | null;
+    },
     position: { x: number; y: number },
   ) => void;
 }) {
@@ -607,23 +782,33 @@ function VoiceChannelRailRow({
           design: this is what the rail is for. */}
       {occupants.length > 0 && (
         <div className="mt-0.5 space-y-0.5 pl-4" data-testid="channel-rail-occupants">
-          {occupants.map((person) => (
-            <OccupantRow
-              key={person.userId}
-              channelId={channel.id}
-              person={person}
-              face={faces?.get(person.userId) ?? null}
-              isSelf={person.userId === selfId}
-              moderatable={
-                voiceModerationActions(moderatableBy, {
-                  userId: person.userId,
-                  role: roleOf?.(person.userId) ?? null,
-                  canSpeak: person.canSpeak,
-                }).length > 0
-              }
-              onOpenMenu={onOccupantMenu}
-            />
-          ))}
+          {occupants.map((person) => {
+            const moderationActions = voiceModerationActions(moderatableBy, {
+              userId: person.userId,
+              role: roleOf?.(person.userId) ?? null,
+              canSpeak: person.canSpeak,
+            }).length;
+            // No «is this my room» argument, and the note on `voiceVolumeOffer`
+            // says why: `occupantsOf` only gives this row an `audioSource` for
+            // the room whose audio is actually arriving, so the reading is the
+            // more accurate form of the same question.
+            const volume = voiceVolumeOffer({ selfId, target: person });
+            return (
+              <OccupantRow
+                key={person.userId}
+                channelId={channel.id}
+                person={person}
+                face={faces?.get(person.userId) ?? null}
+                isSelf={person.userId === selfId}
+                moderatable={moderationActions > 0}
+                volume={volume}
+                // One decision, made once, so the row and the menu cannot
+                // disagree about whether pressing it does anything.
+                offers={occupantMenuOffersSomething(volume, moderationActions)}
+                onOpenMenu={onOccupantMenu}
+              />
+            );
+          })}
         </div>
       )}
     </div>
@@ -664,11 +849,17 @@ function VoiceChannelRailRow({
  *
  * ## The row is only pressable when there is something to press it for
  *
- * `moderatable` is `voiceModerationActions(...).length > 0`, computed by the
- * caller from the same rules the menu builds from. A row that opens an empty
- * menu is the same defect as a control that does nothing, and a plain member
- * must not see an affordance at all — so for them this is the `div` it has
- * always been, with no hover, no cursor and no focus stop.
+ * `offers` is `occupantMenuOffersSomething(...)`, computed by the caller from
+ * the same two rules the menu builds from. A row that opens an empty menu is
+ * the same defect as a control that does nothing, so a row with nothing behind
+ * it is the `div` it has always been — no hover, no cursor, no focus stop.
+ *
+ * There are **two** reasons a press is worth making, and they are not one gate.
+ * Moderation is for an owner or an administrator; the volume is for everybody,
+ * about their own ears, and only for the room this client is actually connected
+ * to. So a plain member's row is inert in every room but the one they are
+ * sitting in, and pressable in that one — which is also why the existing test
+ * that finds a `div` for a plain member still finds one: it never joins.
  *
  * ## Self-mute and a silence are different marks
  *
@@ -684,6 +875,8 @@ function OccupantRow({
   face,
   isSelf,
   moderatable,
+  volume,
+  offers,
   onOpenMenu,
 }: {
   channelId: string;
@@ -691,9 +884,18 @@ function OccupantRow({
   face: string | null;
   isSelf: boolean;
   moderatable: boolean;
+  volume: VoiceVolumeOffer;
+  /** Whether pressing this row opens anything at all. */
+  offers: boolean;
   onOpenMenu: (
     channelId: string,
-    person: { userId: string; name: string; canSpeak: boolean | null; face: string | null },
+    person: {
+      userId: string;
+      name: string;
+      canSpeak: boolean | null;
+      audioSource: VoiceAudioSource | null;
+      face: string | null;
+    },
     position: { x: number; y: number },
   ) => void;
 }) {
@@ -702,7 +904,13 @@ function OccupantRow({
     event.preventDefault();
     onOpenMenu(
       channelId,
-      { userId: person.userId, name: person.name, canSpeak: person.canSpeak, face },
+      {
+        userId: person.userId,
+        name: person.name,
+        canSpeak: person.canSpeak,
+        audioSource: person.audioSource,
+        face,
+      },
       { x: event.clientX, y: event.clientY },
     );
   };
@@ -739,10 +947,14 @@ function OccupantRow({
     "data-testid": "channel-rail-occupant",
     "data-user-id": person.userId,
     "data-silenced": silenced ? "true" : "false",
+    // Still «may this row's person be moderated», unchanged: the row became
+    // pressable for a second reason and this attribute did not widen with it,
+    // because a test that reads it is asking about moderation.
     "data-moderatable": moderatable ? "true" : "false",
+    "data-volume": volume,
   } as const;
 
-  if (!moderatable) {
+  if (!offers) {
     return (
       <div className="flex items-center gap-2 rounded-md px-2 py-[3px]" {...shared}>
         {body}
@@ -755,7 +967,10 @@ function OccupantRow({
       type="button"
       onClick={open}
       onContextMenu={open}
-      title="Управление участником"
+      // Two words for two reasons a press is worth making, and the one that is
+      // true for every reader comes first: a moderator sees the same row plus
+      // three more items in it.
+      title={moderatable ? "Громкость и управление участником" : "Громкость участника"}
       className={cn(
         "flex w-full items-center gap-2 rounded-md px-2 py-[3px] transition-colors kub-raise-hover",
         FOCUS_RING_INSET,

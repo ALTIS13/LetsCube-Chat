@@ -2,6 +2,13 @@
 
 import type { VoiceParticipant } from "@/lib/voiceChannel";
 import type { VoiceHealthSample } from "@/lib/voiceConnectionHealth";
+import {
+  DEFAULT_VOICE_VOLUME,
+  normalizeVoiceVolume,
+  readStoredVoiceVolumes,
+  VOICE_VOLUME_STORAGE_KEY,
+  type VoiceAudioSource,
+} from "@/lib/voiceVolume";
 
 /**
  * The SFU, reduced to what a call actually asks of it.
@@ -57,6 +64,31 @@ export interface VoiceRoom {
    * rather than set once.
    */
   setDeafened(deafened: boolean): Promise<void>;
+  /**
+   * How loud one other person is, for this listener alone.
+   *
+   * Discord's per-user volume, and the local half again: nobody else is told,
+   * because it is a decision about this person's ears rather than about the
+   * room. Unlike `setDeafened` it is **not** for moderators — every participant
+   * may do it to every other participant, so the rule that gates it is in
+   * `lib/voiceVolume.ts` and has nothing to do with `lib/voiceModeration.ts`.
+   *
+   * `volume` is 0..1. Above 1 is not «louder» here but an `IndexSizeError`
+   * thrown by `HTMLMediaElement.volume`, because the room carries no
+   * `AudioContext` — the header of `lib/voiceVolume.ts` measures this and
+   * `normalizeVoiceVolume` is what callers pass through.
+   *
+   * Accepts somebody who is **not in the room yet** and remembers it, for the
+   * same reason `setDeafened` is kept rather than applied once: the value has
+   * to hold for a person who arrives later, and the SDK has no «this is how
+   * loud that person should be whenever they turn up».
+   *
+   * Answers nothing, deliberately. Whether a chosen loudness can reach a
+   * participant at all is `VoiceParticipant.audioSource`, reported with the
+   * rest of the room and re-reported whenever a publication changes — so the
+   * interface knows before it draws the slider rather than after a press.
+   */
+  setParticipantVolume(userId: string, volume: number): Promise<void>;
   /** Leave. Must be safe to call twice and after a failed join. */
   leave(): Promise<void>;
   /**
@@ -153,6 +185,23 @@ declare global {
   }
 }
 
+/**
+ * The stored per-person volumes, as one string, or null.
+ *
+ * Guarded because `localStorage` is not merely absent in some places — it
+ * **throws** on access in a private window with site data blocked, which
+ * `getAudioSettings` learned first. A listener whose choices cannot be read
+ * hears everybody at the default, which is the right failure.
+ */
+function readStoredVolumeRecord(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(VOICE_VOLUME_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 /** The runtime, fetched once per join. The browser caches the chunk after the first. */
 export async function loadVoiceRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
   if (import.meta.env.DEV && typeof window !== "undefined" && window.__letscubeVoiceRoom) {
@@ -192,10 +241,61 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
   // arrive silent, and the SDK has no «default volume for this room».
   let deafened = false;
 
-  const applyDeafened = () => {
+  /**
+   * How loud each person has been set to, by user id. Absent is the default.
+   *
+   * Seeded from storage here rather than pushed in after the join, and the
+   * reason is that there is no component guaranteed to be mounted while a call
+   * runs — the capsule lives in one conversation and the call outlives it. A
+   * replay driven from a screen would restore a listener's choices only once
+   * something happened to draw that screen, so somebody they had turned down
+   * would be loud again for as long as they were looking elsewhere.
+   *
+   * The parsing is not done here. `readStoredVoiceVolumes` takes the raw string
+   * and owns every decision about it, so the rule is testable and this file
+   * makes one guarded browser call.
+   */
+  const chosen = readStoredVoiceVolumes(readStoredVolumeRecord());
+
+  /**
+   * What one participant's volume should be right now.
+   *
+   * The two controls meet here and nowhere else, which is the whole point of
+   * one function: deafening wins while it is on, and lifting it restores each
+   * person's **chosen** loudness rather than 1 — the version that restored 1
+   * would quietly undo every per-person choice in the room on the second press
+   * of a control that is supposed to be about this listener's own ears.
+   */
+  const volumeFor = (userId: string): number =>
+    deafened ? 0 : chosen.get(userId) ?? DEFAULT_VOICE_VOLUME;
+
+  const applyVolumes = () => {
     for (const remote of room.remoteParticipants.values()) {
-      remote.setVolume(deafened ? 0 : 1);
+      remote.setVolume(volumeFor(remote.identity));
     }
+  };
+
+  /**
+   * How the room carries one participant's voice.
+   *
+   * The same lookup `RemoteParticipant.setVolume` makes — by source, not by
+   * kind — so this answers the question a listener actually has: will a chosen
+   * loudness reach them. A publication under any other source means it never
+   * will, however many times the call is made, which is the state every build
+   * before 2026-09-18 publishes in.
+   *
+   * Structurally typed rather than taking the SDK's `Participant`, like
+   * `permissionToSpeak` above, so what it reads is visible at the signature.
+   * Subscription is deliberately not part of it: the SDK keeps its own
+   * `volumeMap` and applies the value when the track arrives, so a publication
+   * that exists is enough for a choice to land.
+   */
+  const audioSourceOf = (who: {
+    getTrackPublication(source: typeof Track.Source.Microphone): unknown;
+    audioTrackPublications: { size: number };
+  }): VoiceAudioSource => {
+    if (who.getTrackPublication(Track.Source.Microphone)) return "microphone";
+    return who.audioTrackPublications.size > 0 ? "unnamed" : "none";
   };
 
   /**
@@ -239,6 +339,12 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
         name: local.name || "",
         muted: !local.isMicrophoneEnabled,
         canSpeak: permissionToSpeak(local),
+        // Read for this client too, though nobody may set their own volume.
+        // The reading is about how the room carries a voice, which is a
+        // question with an answer for every participant; who may act on it is
+        // `voiceVolumeOffer`'s decision, and keeping the two apart is what
+        // stops this field needing a fourth value meaning «not applicable».
+        audioSource: audioSourceOf(local),
       });
     }
     for (const remote of room.remoteParticipants.values()) {
@@ -247,6 +353,7 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
         name: remote.name || "",
         muted: !remote.isMicrophoneEnabled,
         canSpeak: permissionToSpeak(remote),
+        audioSource: audioSourceOf(remote),
       });
     }
     events.onParticipants(list);
@@ -272,7 +379,7 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
   };
 
   const reportAndApply = () => {
-    applyDeafened();
+    applyVolumes();
     report();
   };
 
@@ -358,7 +465,21 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
     },
     async setDeafened(next) {
       deafened = next;
-      applyDeafened();
+      applyVolumes();
+    },
+    async setParticipantVolume(userId, volume) {
+      // Held first and applied second, in that order and unconditionally: the
+      // person may not be in the room yet, and a version that only walked the
+      // current participants would be correct exactly once — the mistake
+      // `deafened` above is kept in a closure to avoid.
+      const next = normalizeVoiceVolume(volume);
+      if (next === DEFAULT_VOICE_VOLUME) chosen.delete(userId);
+      else chosen.set(userId, next);
+      const remote = room.remoteParticipants.get(userId);
+      // `volumeFor` rather than `next`, so choosing a loudness while deafened
+      // does not make one person audible: what was chosen is remembered and
+      // takes effect when the room is being listened to again.
+      if (remote) remote.setVolume(volumeFor(userId));
     },
     async setMuted(muted) {
       // The room's answer comes first, and `!published` cannot stand in for it.

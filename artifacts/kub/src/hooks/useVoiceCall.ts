@@ -188,7 +188,9 @@ let mutedBeforeDeafened = false;
 /**
  * The transport of the call that is running, or null.
  *
- * Exported for the connection panel and for nothing else. It is deliberately a
+ * Exported for the hooks that have to reach the transport directly rather than
+ * through the call's state: `useVoiceHealth` samples it on a timer, and
+ * `useVoiceVolume` pushes a chosen loudness into it. It is deliberately a
  * function rather than the binding: a module that imported `room` would capture
  * whatever it was at import time, which is `null` for the whole lifetime of the
  * application, and would appear to work because a panel that samples nothing

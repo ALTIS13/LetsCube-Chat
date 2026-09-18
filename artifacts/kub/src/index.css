@@ -356,6 +356,7 @@ html[data-ios-standalone] {
      and still a visible hairline, which is what a rule is for. Denser was
      tried: .14 comes back to 55 and is the defect again. */
   --kub-rule: rgba(255, 255, 255, 0.075);
+  --kub-range-track: #081629; /* 1.25:1 against this theme’s glass panel, measured */
 
   /* ── Colours that carry text ──────────────────────────────────────────────
    * A colour that is legible as a 3px border or a filled button is not
@@ -775,6 +776,7 @@ html[data-ios-standalone] {
      HEAVIER than the panel's own edge. This gives 36 — under the edge, where a
      rule belongs, and still a visible hairline at 1.21:1. */
   --kub-rule: rgba(23, 51, 82, 0.10);
+  --kub-range-track: #DCEBF7; /* 1.20:1 against this theme’s glass panel, measured */
   /* See the note in .dark. Measured against a solid black field, which is what
      a panel in this theme composites towards at worst. #DC2626 as a word is
      4.05:1 there; #C81E1E is 4.81:1, and 5.74:1 on white. */
@@ -2456,6 +2458,78 @@ textarea::placeholder, input::placeholder {
        go, so they fade over the top half of the drag and are gone by the time
        the padding starts giving way. Measured against the 260..540 range the
        resizer allows rather than chosen. */
+
+    /* A slider whose EMPTY half is ours too.
+     *
+     * `accent-color` paints the filled part and the thumb and leaves the rest
+     * of the track to the user agent. Measured on 2026-09-18 in the dark theme:
+     * the empty track came back `rgb(59, 59, 59)` — a pure neutral grey, no
+     * hue at all — on a panel ground of `rgb(17, 42, 71)`. On this navy it
+     * reads as a foreign part rather than as an unfilled track.
+     *
+     * `AudioMessage` and `AttachVideoQuality` already do it properly, with a
+     * `linear-gradient` and per-engine track rules written out at the call
+     * site. This is that, once, in tokens, so a slider needs one class rather
+     * than a paragraph of them. The fill ratio comes in as
+     * `--kub-range-filled`, because a gradient stop cannot be a Tailwind class.
+     *
+     * `--kub-range-track` for the empty half, declared per theme beside
+     * `--kub-rule` and for the same reason: a tone whose value is a
+     * measurement rather than a pick. `--kub-surface-3` was tried first —
+     * the token `AudioMessage` reaches for — and the pixels refused it: on
+     * the dark theme it is `#112B47`, which is the glass panel this control
+     * sits on to within a rounding error. Measured against the rendered
+     * panel: 1.01:1, so the empty half of the track did not vanish into the
+     * panel figuratively, it vanished. It reads as a cyan bar that stops,
+     * with no groove saying how much range is left — worse than the neutral
+     * grey it replaced, which was at least visible.
+     *
+     * So: `#081629` on dark (1.25:1, the inset well’s own value, and a
+     * recessed groove is exactly what this is) and `#DCEBF7` on light
+     * (1.20:1, where `--kub-surface-3` was already right). The fill stands
+     * 5.1:1 from the empty half on dark and 4.3:1 on light, so the boundary
+     * between them is the clearest thing in the control, which is the one
+     * thing it has to say.
+     */
+    .kub-range {
+      appearance: none;
+      background: linear-gradient(
+        to right,
+        var(--kub-cyan) var(--kub-range-filled, 0%),
+        var(--kub-range-track) var(--kub-range-filled, 0%)
+      );
+      border-radius: 9999px;
+      height: 0.375rem;
+    }
+
+    .kub-range::-webkit-slider-runnable-track {
+      height: 0.375rem;
+      border-radius: 9999px;
+    }
+
+    .kub-range::-webkit-slider-thumb {
+      appearance: none;
+      height: 0.75rem;
+      width: 0.75rem;
+      margin-top: -0.1875rem;
+      border-radius: 9999px;
+      background: var(--kub-cyan);
+    }
+
+    .kub-range::-moz-range-track {
+      height: 0.375rem;
+      border-radius: 9999px;
+      background: transparent;
+    }
+
+    .kub-range::-moz-range-thumb {
+      height: 0.75rem;
+      width: 0.75rem;
+      border: 0;
+      border-radius: 9999px;
+      background: var(--kub-cyan);
+    }
+
     .kub-chat-list-column .kub-voice-call-bar__names {
       overflow: hidden;
       opacity: calc(1 - var(--kub-chat-list-narrow, 0) * 1.6);

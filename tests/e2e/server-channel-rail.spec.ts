@@ -117,10 +117,35 @@ interface Shape {
    * that difference, so a test of the silenced mark has to be in the second
    * state, which is what this seed buys: a granting gateway and a stand-in
    * transport whose roster this file controls.
+   *
+   * `oldBuild` is the other state only a transport can produce, and the one the
+   * per-person volume has to be honest about: a participant whose audio the
+   * room carries under no microphone source. Every build before 2026-09-18
+   * published its capture that way — the Android 0.1.7 APK included — and
+   * `RemoteParticipant.setVolume` finds no publication for them, so a slider
+   * under their name would move and change nothing at all.
    */
-  inLobby?: { silenced?: string[] };
+  inLobby?: { silenced?: string[]; oldBuild?: string[] };
   /** What the two moderation routes answer. A grant by default. */
   moderation?: { status: number; body: unknown };
+  /**
+   * Per-person volumes already in storage when the page loads.
+   *
+   * A listener's choices are meant to outlive the room being rejoined, and the
+   * seam reads them at construction. Seeding the key is how a spec proves the
+   * reading rather than the writing.
+   */
+  volumes?: Record<string, number>;
+}
+
+/** The key `lib/voiceVolume.ts` stores the per-person volumes under. */
+const VOICE_VOLUME_KEY = "kub:voice-volume:v1";
+
+declare global {
+  interface Window {
+    /** Every per-person volume the rail asked the transport for, in order. */
+    __railVolumeProbe?: { userId: string; volume: number }[];
+  }
 }
 
 /**
@@ -185,7 +210,7 @@ interface Opened {
  * what this file tests is the rail's rows, and importing that stand-in would
  * couple two specs through a third file for four methods.
  */
-async function installLobbyTransport(page: Page, silenced: string[]) {
+async function installLobbyTransport(page: Page, silenced: string[], oldBuild: string[] = []) {
   // A real audio track, because a joined call is the point here.
   //
   // `openGroup`'s own microphone mock answers with an empty track list: it was
@@ -208,7 +233,9 @@ async function installLobbyTransport(page: Page, silenced: string[]) {
     }
   });
   await page.addInitScript(
-    ({ me, anna, petr, hushed }) => {
+    ({ me, anna, petr, hushed, old }) => {
+      const volumes: { userId: string; volume: number }[] = [];
+      window.__railVolumeProbe = volumes;
       const roster = () =>
         [
           { userId: me, name: "", muted: false },
@@ -220,6 +247,11 @@ async function installLobbyTransport(page: Page, silenced: string[]) {
           // moderator stopped from publishing. Never `undefined` here — that is
           // the shape the table gives and it means «unknown».
           canSpeak: !(hushed as string[]).includes(entry.userId),
+          // And how the room carries their voice, which is a second reading
+          // with the same rule: a real value, because a real transport answers
+          // here. `unnamed` is the older build, whose publication `setVolume`
+          // cannot find; `microphone` is this one.
+          audioSource: (old as string[]).includes(entry.userId) ? "unnamed" : "microphone",
         }));
       window.__letscubeVoiceRoom = (events) => ({
         async join() {
@@ -233,6 +265,14 @@ async function installLobbyTransport(page: Page, silenced: string[]) {
           return { at: Date.now(), rttMs: null, jitterMs: null, packetsSent: null, packetsLost: null };
         },
         async setDeafened() {},
+        async setParticipantVolume(userId: string, volume: number) {
+          // Recorded rather than acted on: there is no audio here to be loud.
+          // What this proves is that the interface asked, and asked for the
+          // value the slider showed — what the room then does with it is inside
+          // `createLiveKitRoom`, where `tests/unit/voice-room-seam.test.mjs`
+          // reads it.
+          volumes.push({ userId, volume });
+        },
         async setOutputDevice() {
           return true;
         },
@@ -241,7 +281,7 @@ async function installLobbyTransport(page: Page, silenced: string[]) {
         },
       });
     },
-    { me: ME.id, anna: ANNA.id, petr: PETR.id, hushed: silenced },
+    { me: ME.id, anna: ANNA.id, petr: PETR.id, hushed: silenced, old: oldBuild },
   );
 }
 
@@ -267,7 +307,18 @@ async function openGroup(page: Page, shape: Shape = {}): Promise<Opened> {
   // order they were registered, and that one answers with an empty track list.
   // Registered first, this one was simply overwritten and the join stopped at
   // «Подключаемся…» with `stream.getAudioTracks is not a function`.
-  if (shape.inLobby) await installLobbyTransport(page, shape.inLobby.silenced ?? []);
+  if (shape.inLobby) {
+    await installLobbyTransport(page, shape.inLobby.silenced ?? [], shape.inLobby.oldBuild ?? []);
+  }
+
+  // Before the fixture's own scripts, which is fine: this writes a key nothing
+  // else touches, and it has to be there before the application reads it.
+  if (shape.volumes) {
+    await page.addInitScript(
+      ({ key, record }) => localStorage.setItem(key, JSON.stringify(record)),
+      { key: VOICE_VOLUME_KEY, record: shape.volumes },
+    );
+  }
 
   const fixture = await openFixture(page, {
     me: ME,
@@ -912,6 +963,197 @@ test.describe("moderating somebody in a voice room", () => {
       body: { channelId: ROOM_LOBBY, userId: PETR.id },
     });
   });
+
+  /* ── How loud one other person is (per-person volume) ──────────────────────
+   *
+   * Discord's per-user volume, and a different gate from everything above it:
+   * any participant may turn any other participant down, nobody is told, and
+   * the rules are in `lib/voiceVolume.ts` where `tests/unit/voice-volume.test.mjs`
+   * holds them. What is measured here is what those cannot reach — that the
+   * control is drawn for a plain member at all, that it asks the transport for
+   * the value it is showing, that it is kept, and that a participant it cannot
+   * work for is told rather than handed a slider.
+   */
+
+  const slider = (page: Page) => page.getByTestId("occupant-volume-slider");
+
+  /**
+   * Close whatever this row opened, the way a person does: a click outside it.
+   *
+   * The top right corner, and not the next row one wants to press. Both shapes
+   * lay a `fixed inset-0` layer under themselves and close on a click to it —
+   * but the desktop menu is 272px wide and opens **at the pointer**, so it
+   * covers the rows below the one it came from. Clicking the next occupant to
+   * dismiss the first menu therefore lands on the menu itself, which swallows
+   * it, and the following click is then intercepted for the full timeout. That
+   * is how the first version of the capture below failed at 1440 and passed at
+   * 390, where the sheet is at the foot of the screen instead.
+   */
+  async function closeRowMenu(page: Page) {
+    const viewport = page.viewportSize();
+    expect(viewport, "no viewport to aim at").not.toBeNull();
+    await page.mouse.click(viewport!.width - 20, 20);
+    await expect(page.getByTestId("occupant-volume")).toHaveCount(0);
+  }
+
+  test("any participant may turn another down, it is remembered, and nobody is told", async ({
+    page,
+  }, testInfo) => {
+    const wide = paneIsWide(testInfo);
+    const opened = await openGroup(page, {
+      // A plain member: this is the case that separates the volume from
+      // moderation. Outside the room their rows are inert, and the test above
+      // proves that by finding a `div`.
+      role: "member",
+      inLobby: {},
+      // Pyotr was turned down in some earlier call. A listener's choice is
+      // meant to outlive the room, and this is the reading half of that.
+      volumes: { [PETR.id]: 0.25 },
+    });
+    await showRail(page, wide);
+    await joinLobby(page, wide);
+
+    await expect(occupant(page, ANNA.id)).toHaveAttribute("data-moderatable", "false");
+    await expect(occupant(page, ANNA.id)).toHaveAttribute("data-volume", "adjustable");
+    // And not for themselves: your own voice is not carried back to you.
+    await expect(occupant(page, ME.id)).toHaveAttribute("data-volume", "not_offered");
+
+    // What was stored comes back, on the person rather than on the room.
+    await occupant(page, PETR.id).click();
+    await expect(page.getByTestId("occupant-volume-value")).toHaveText("25%");
+    await expect(slider(page)).toHaveValue("0.25");
+
+    await closeRowMenu(page);
+    await occupant(page, ANNA.id).click();
+    // A member's menu has the band and no items at all — the three moderation
+    // ones are not offered to them, and the band is not one of them.
+    await expect(page.getByRole("menuitem")).toHaveCount(0);
+    await expect(slider(page)).toHaveValue("1");
+    await slider(page).fill("0.4");
+    await expect(page.getByTestId("occupant-volume-value")).toHaveText("40%");
+
+    // It reached the transport, with the value the slider was showing.
+    await expect
+      .poll(() => page.evaluate(() => window.__railVolumeProbe?.at(-1)))
+      .toEqual({ userId: ANNA.id, volume: 0.4 });
+
+    // And it was kept, by person. Pyotr's earlier 25% is still in the record,
+    // which is the whole of «per person, not per room»: one entry per person
+    // and no channel id anywhere in it.
+    expect(
+      await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null"), VOICE_VOLUME_KEY),
+    ).toEqual({ [PETR.id]: 0.25, [ANNA.id]: 0.4 });
+
+    // Nobody was told. This is the line that separates it from moderation: no
+    // gateway call, no request of any kind, so the person turned down cannot
+    // find out.
+    expect(opened.moderationCalls).toEqual([]);
+
+    // All the way down is a word rather than «0%»: a per-person silence is what
+    // a listener reaches for the slider to do.
+    await slider(page).fill("0");
+    await expect(page.getByTestId("occupant-volume-value")).toHaveText("Выключен");
+  });
+
+  test("a participant this cannot work for is told, not handed a slider that moves nothing", async ({
+    page,
+  }, testInfo) => {
+    const wide = paneIsWide(testInfo);
+    await openGroup(page, { role: "member", inLobby: { oldBuild: [PETR.id] } });
+    await showRail(page, wide);
+    await joinLobby(page, wide);
+
+    await expect(occupant(page, PETR.id)).toHaveAttribute("data-volume", "unreachable");
+    await occupant(page, PETR.id).click();
+    // The sentence takes the slider's place rather than standing under a sunk
+    // one: a disabled slider is still a slider, and a reader would still drag
+    // it. Rule 5 is the other half — unavailability is never opacity here.
+    await expect(page.getByTestId("occupant-volume-notice")).toContainText(
+      "старой версии приложения",
+    );
+    await expect(slider(page)).toHaveCount(0);
+    await expect(page.getByTestId("occupant-volume-value")).toHaveCount(0);
+
+    // Nothing was asked of the transport, because there was nothing to ask.
+    expect(await page.evaluate(() => window.__railVolumeProbe ?? [])).toEqual([]);
+
+    // And the participant on this build, in the same room, still gets one.
+    await closeRowMenu(page);
+    await occupant(page, ANNA.id).click();
+    await expect(slider(page)).toBeVisible();
+    await expect(page.getByTestId("occupant-volume-notice")).toHaveCount(0);
+  });
+
+  test("a volume chosen while the room is not being listened to says so, and is still kept", async ({
+    page,
+  }, testInfo) => {
+    const wide = paneIsWide(testInfo);
+    await openGroup(page, { role: "member", inLobby: {} });
+    await showRail(page, wide);
+    await joinLobby(page, wide);
+
+    // Deafen, which owns the same knob: `setDeafened` walks every participant
+    // and calls the very method the slider does. On a phone the drawer covers
+    // the capsule, so it is closed first and opened again after.
+    if (!wide) await page.keyboard.press("Escape");
+    const deafen = page.getByTestId("voice-capsule-deafen");
+    await deafen.click();
+    await expect(deafen).toHaveAttribute("data-deafened", "true");
+    if (!wide) await page.getByTestId("channel-rail-trigger").click();
+
+    await occupant(page, ANNA.id).click();
+    // Said out loud, because otherwise this is a slider being dragged with
+    // nothing happening — the same defect as one that cannot work at all.
+    await expect(page.getByTestId("occupant-volume-notice")).toContainText(
+      "Вы не слушаете канал",
+    );
+
+    // And still operable: the choice is kept and takes effect when the room is
+    // being listened to again. That «kept» is `volumeFor` inside the seam,
+    // where `tests/unit/voice-room-seam.test.mjs` proves that a volume chosen
+    // now does not make one person audible in a deafened room.
+    await slider(page).fill("0.5");
+    await expect
+      .poll(() => page.evaluate(() => window.__railVolumeProbe?.at(-1)))
+      .toEqual({ userId: ANNA.id, volume: 0.5 });
+  });
+
+  for (const theme of ["dark", "light"] as const) {
+    test("the volume on an occupant, photographed in the " + theme + " theme", async ({
+      page,
+    }, testInfo) => {
+      test.skip(process.env.KUB_CAPTURE_RAIL !== "1", "captures are opt-in");
+      const wide = paneIsWide(testInfo);
+      await openGroup(page, {
+        // An owner, so the band stands above the three items it must not be
+        // mistaken for: the two kinds of thing in this menu are what the
+        // capture is for.
+        role: "owner",
+        theme,
+        inLobby: { oldBuild: [PETR.id] },
+        volumes: { [ANNA.id]: 0.4 },
+      });
+      await showRail(page, wide);
+      await joinLobby(page, wide);
+
+      await occupant(page, ANNA.id).click();
+      await expect(slider(page)).toHaveValue("0.4");
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(400);
+      await page.screenshot({
+        path: `output/voice-volume/volume-${testInfo.project.name}-${theme}.png`,
+      });
+
+      // And the other state, which is the one a slider must not be drawn in.
+      await closeRowMenu(page);
+      await occupant(page, PETR.id).click();
+      await expect(page.getByTestId("occupant-volume-notice")).toBeVisible();
+      await page.waitForTimeout(200);
+      await page.screenshot({
+        path: `output/voice-volume/unreachable-${testInfo.project.name}-${theme}.png`,
+      });
+    });
+  }
 
   for (const theme of ["dark", "light"] as const) {
     test("the menu on an occupant, photographed in the " + theme + " theme", async ({

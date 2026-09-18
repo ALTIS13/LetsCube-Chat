@@ -65,8 +65,8 @@ test("somebody who joins while you are deafened arrives silent", () => {
   // the case a person notices and no test could see.
   assert.match(
     code,
-    /const applyDeafened = \(\) => \{/,
-    "the deafen state is no longer re-applied, so it is set once and forgotten",
+    /const applyVolumes = \(\) => \{/,
+    "the volume state is no longer re-applied, so it is set once and forgotten",
   );
 
   for (const event of ["ParticipantConnected", "TrackSubscribed"]) {
@@ -90,9 +90,147 @@ test("the deafen value is kept, because the SDK has no default volume for a room
   assert.match(code, /let deafened = false;/, "the deafen state is no longer held");
   assert.match(
     code,
-    /remote\.setVolume\(deafened \? 0 : 1\)/,
-    "the applier no longer reads the held value",
+    /remote\.setVolume\(volumeFor\(remote\.identity\)\)/,
+    "the applier no longer asks for one participant's own volume",
   );
+});
+
+/* ── Per-person volume, and the knob deafen already owns ──────────────────────
+ *
+ * Discord's per-user volume is `RemoteParticipant.setVolume`, which is the
+ * exact call `setDeafened` makes on everybody. So the two are one knob with two
+ * owners, and the guards below are about them not fighting over it. None of
+ * this is visible to `tests/e2e/server-channel-rail.spec.ts`: that spec
+ * replaces the transport, so what it proves is that the interface asks — what
+ * the room then applies is here, read as source.
+ */
+
+test("the two controls meet in one function, so undeafening restores what was chosen", () => {
+  // The mutation this exists for is the one a simplification reaches for first:
+  // `deafened ? 0 : 1`, which is what this file said until the per-person
+  // volume existed. It looks harmless and it silently undoes every per-person
+  // choice in the room on the second press of a control that is supposed to be
+  // about nothing but this listener's own ears.
+  assert.match(
+    code,
+    /deafened \? 0 : chosen\.get\(userId\) \?\? DEFAULT_VOICE_VOLUME;/,
+    "the deafen state and the chosen volume are no longer decided together, so one " +
+      "of them is overwriting the other",
+  );
+  assert.ok(
+    !code.includes("setVolume(deafened ? 0 : 1)"),
+    "deafening sets everybody back to 1 on the way out, which throws away every " +
+      "per-person volume in the room",
+  );
+});
+
+test("a volume chosen for somebody who is not here yet is kept", () => {
+  // The same rule `deafened` is held in the closure for: the SDK has no
+  // «whenever that person turns up, this is how loud they should be». A version
+  // that only pushed to a participant who is present would be correct exactly
+  // once, and would lose a choice made a second before somebody reconnected.
+  const start = code.indexOf("async setParticipantVolume(");
+  assert.ok(start > 0, "the seam no longer carries the per-person volume");
+  const end = code.indexOf("async sampleHealth()", start);
+  assert.ok(end > start, "sampleHealth no longer follows setParticipantVolume — check this slice");
+  const body = code.slice(start, end);
+  const held = body.indexOf("chosen.set(userId, next)");
+  const pushed = body.indexOf("remote.setVolume(");
+  assert.ok(held >= 0, "the chosen volume is no longer held, so it is lost on the next event");
+  assert.ok(pushed > held, "the volume is pushed before it is held, or not pushed at all");
+  assert.ok(
+    body.includes("room.remoteParticipants.get(userId)"),
+    "the participant is no longer found by identity, which is what that map is keyed by",
+  );
+  assert.ok(
+    body.includes("remote.setVolume(volumeFor(userId))"),
+    "a volume chosen while deafened is applied straight away, which makes one " +
+      "person audible in a room this listener has stopped hearing",
+  );
+  assert.ok(
+    body.includes("normalizeVoiceVolume(volume)"),
+    "the value reaches the element unclamped, and above 1 `HTMLMediaElement.volume` " +
+      "throws rather than getting louder",
+  );
+});
+
+test("the chosen volumes are seeded where the room is built, not pushed in by a screen", () => {
+  // There is no component guaranteed to be mounted while a call runs — the
+  // capsule lives in one conversation and the call outlives it. A replay driven
+  // from a screen would restore a listener's choices only once something
+  // happened to draw that screen, so somebody they had turned down would be
+  // loud again for as long as they were looking elsewhere.
+  assert.match(
+    code,
+    /const chosen = readStoredVoiceVolumes\(readStoredVolumeRecord\(\)\);/,
+    "a new room no longer starts from the stored volumes, so every choice is " +
+      "forgotten when the room is rejoined",
+  );
+  // And the read is guarded, because access itself throws in a private window
+  // with site data blocked — the failure `getAudioSettings` met first.
+  const start = code.indexOf("function readStoredVolumeRecord()");
+  assert.ok(start > 0, "the guarded storage read is gone");
+  const body = code.slice(start, code.indexOf("export async function loadVoiceRoom", start));
+  assert.match(body, /catch \{/, "an unreadable storage now takes the call down with it");
+});
+
+test("whether a volume can reach a participant is read from the room, never claimed", () => {
+  // The trap this whole feature sits on. `setVolume` finds its publication by
+  // source, and every build before 2026-09-18 published its capture as
+  // `Unknown` — so for those participants the call changes nothing and reports
+  // no error. The reading has to be the same lookup, or the interface is
+  // guessing on the reader's behalf.
+  const start = code.indexOf("const audioSourceOf = (");
+  assert.ok(start > 0, "the seam no longer reads how a voice is carried");
+  const body = code.slice(start, code.indexOf("const report = () => {", start));
+  assert.ok(
+    body.includes("getTrackPublication(Track.Source.Microphone)"),
+    "the reading is no longer the lookup `setVolume` itself makes, so it can answer " +
+      "yes for a participant whose volume cannot be moved",
+  );
+  assert.ok(
+    body.includes('audioTrackPublications.size > 0 ? "unnamed" : "none"'),
+    "publishing nothing and publishing under another name have collapsed into one " +
+      "answer — and only one of the two is an older build",
+  );
+  assert.ok(
+    code.includes("audioSource: audioSourceOf(local)") &&
+      code.includes("audioSource: audioSourceOf(remote)"),
+    "report no longer reads this fact for both halves of the room",
+  );
+  // No invented value, the same rule `canSpeak` follows one field above it.
+  for (const invented of [
+    'audioSource: "microphone"',
+    'audioSource: "unnamed"',
+    'audioSource: "none"',
+    "audioSource: null",
+  ]) {
+    assert.ok(
+      !code.includes(invented),
+      `report states «${invented}» outright, which is a claim rather than a reading`,
+    );
+  }
+});
+
+test("the seam's own interface carries the volume, named for the meaning", () => {
+  assert.ok(
+    code.includes("setParticipantVolume(userId: string, volume: number): Promise<void>;"),
+    "the transport seam no longer offers a per-person volume, so nothing above it " +
+      "can ask for one without naming LiveKit itself",
+  );
+  assert.ok(
+    code.includes("type VoiceAudioSource,") && code.includes("): VoiceAudioSource => {"),
+    "the seam no longer names the union it reports, so the reading has no type",
+  );
+  // And the decisions about it stay out of here. The seam reads the room and
+  // reports; what the interface may draw from that reading is
+  // `lib/voiceVolume.ts`, where `node --test` reaches it.
+  for (const decision of ["voiceVolumeOffer", "voiceVolumeNotice", "not_offered"]) {
+    assert.ok(
+      !code.includes(decision),
+      `the seam decides «${decision}», which is a rule in a module no test can load`,
+    );
+  }
 });
 
 test("a reading that failed is a reading, not a thrown call", () => {

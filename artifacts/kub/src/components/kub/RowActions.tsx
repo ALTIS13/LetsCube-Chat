@@ -131,6 +131,20 @@ function RowActionButton({
 interface RowActionsShared {
   header: ReactNode;
   actions: RowAction[];
+  /**
+   * A band between the header and the actions, for a control that is not one.
+   *
+   * `RowAction` is a label and a `run`, rendered as a `<button
+   * role="menuitem">`. A slider is neither: it has a value, it is dragged, and
+   * it reports no «Выполняем…». Widening the action union to carry it would
+   * put a second kind into every consumer of this pair — the chat list
+   * included, which has no use for it — and a range input crammed into a
+   * column of menu items reads as a mistake. So it comes in as its own slot,
+   * with its own separator, and the action shape is untouched.
+   *
+   * Absent everywhere except the voice occupant menu today.
+   */
+  controls?: ReactNode;
   busyActionId: string | null;
   /** Above whatever this opens over. The chat list keeps its own; a panel needs more. */
   layer?: number;
@@ -142,6 +156,7 @@ interface RowActionsShared {
 export function RowActionMenu({
   header,
   actions,
+  controls,
   placement,
   busyActionId,
   layer = ROW_ACTIONS_DEFAULT_LAYER,
@@ -165,6 +180,9 @@ export function RowActionMenu({
         style={style}
       >
         {header}
+        {controls && (
+          <div className="border-b border-[color:var(--kub-rule)] px-1 py-1">{controls}</div>
+        )}
         <div className="max-h-[min(70vh,420px)] overflow-y-auto py-1">
           {actions.map((action) => (
             <RowActionButton
@@ -185,6 +203,7 @@ export function RowActionMenu({
 export function RowActionSheet({
   header,
   actions,
+  controls,
   busyActionId,
   layer = ROW_ACTIONS_DEFAULT_LAYER,
   onClose,
@@ -208,6 +227,9 @@ export function RowActionSheet({
       >
         <div className="mx-auto mt-2 h-1.5 w-11 rounded-full bg-[var(--kub-surface-3)]" />
         {header}
+        {controls && (
+          <div className="border-b border-[color:var(--kub-rule)] px-2 py-2">{controls}</div>
+        )}
         <div className="max-h-[calc(82vh-82px)] overflow-y-auto px-2 pb-3">
           {actions.map((action) => (
             <RowActionButton

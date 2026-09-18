@@ -52,7 +52,12 @@ const person = (
   name: string,
   muted = false,
   canSpeak: boolean | null = null,
-): VoiceParticipant => ({ userId, name, muted, canSpeak });
+  // The reading the per-person volume control makes: how the room carries this
+  // voice, `null` outside a call. Defaulted here because every test in this
+  // file is about something else; `tests/unit/voice-volume.test.mjs` is where
+  // the values matter.
+  audioSource: VoiceParticipant["audioSource"] = null,
+): VoiceParticipant => ({ userId, name, muted, canSpeak, audioSource });
 
 function capsule(over: Partial<Parameters<typeof voiceCapsuleState>[0]> = {}) {
   return voiceCapsuleState({
@@ -176,9 +181,9 @@ test("names come from the chat's member list, with «Участник» as the f
   const directory = new Map([[ANNA, "Анна Смирнова"], [PETR, "  "]]);
 
   assert.deepEqual(resolveVoiceParticipants([ANNA, PETR, "unknown"], directory), [
-    { userId: ANNA, name: "Анна Смирнова", muted: false, canSpeak: null },
-    { userId: PETR, name: "Участник", muted: false, canSpeak: null },
-    { userId: "unknown", name: "Участник", muted: false, canSpeak: null },
+    { userId: ANNA, name: "Анна Смирнова", muted: false, canSpeak: null, audioSource: null },
+    { userId: PETR, name: "Участник", muted: false, canSpeak: null, audioSource: null },
+    { userId: "unknown", name: "Участник", muted: false, canSpeak: null, audioSource: null },
   ]);
 
   // The token's name is a snapshot taken at mint time, so the current member
@@ -189,9 +194,9 @@ test("names come from the chat's member list, with «Участник» as the f
       directory,
     ),
     [
-      { userId: ANNA, name: "Анна Смирнова", muted: true, canSpeak: null },
-      { userId: "unknown", name: "Гость", muted: false, canSpeak: null },
-      { userId: "blank", name: "Участник", muted: false, canSpeak: null },
+      { userId: ANNA, name: "Анна Смирнова", muted: true, canSpeak: null, audioSource: null },
+      { userId: "unknown", name: "Гость", muted: false, canSpeak: null, audioSource: null },
+      { userId: "blank", name: "Участник", muted: false, canSpeak: null, audioSource: null },
     ],
   );
 });
