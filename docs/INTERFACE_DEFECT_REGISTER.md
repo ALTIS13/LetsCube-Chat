@@ -14706,3 +14706,194 @@ spurious end/start pair. That is a mirror-accuracy defect which shows identicall
 in the rail, is bounded by the reconciler's 30-second period, and cannot flap,
 because `voice_participants_replace` is atomic. A genuine last-person-leaves
 **is** an ended call, and rejoining **is** a new one.
+
+---
+
+## D-230 `[x]` Voice had no off switch, no real rate limit and no ceiling
+
+**Severity:** medium as a live risk, high as an operational one. The feature
+could not be turned off without a code change, the rate limit bounded one
+isolate rather than the deployment, and nothing capped how many people the SFU
+could be asked to carry.
+
+Slice 5's remaining half (`docs/proposals/2026-09-13-voice-channels.md:1162`).
+Moderation shipped earlier the same day; these three are what was left.
+
+### The kill switch, and the two qualifications the proposal's gate needs
+
+`VOICE_ENABLED`, on the `BOT_CREATION_ENABLED` pattern verbatim in shape
+(`artifacts/api-server/src/bot/managementRoutes.ts:74-83`): one pure function,
+the environment passed in as an object, `"false"` closes it, absent or `""` or
+`"true"` leave it open, and **anything else is a configuration error rather than
+an implicit «on»**. Read per request, never captured in a constant.
+
+The proposal says «the kill switch turns the feature off for everyone without a
+deploy». Two qualifications, both measured rather than assumed:
+
+1. **It needs no function deploy, but it does need a container restart.**
+   `Deno.env.get` reads the container's process environment, which Docker fixes
+   at container start. `BOT_CREATION_ENABLED` has the identical requirement.
+2. **It does not hang up calls already in progress.** LiveKit keeps a room alive
+   while anybody is in it and a minted token is good for ten minutes, so `false`
+   means «no new or re-joined calls»; a live twenty-person call drains as people
+   leave. Closing that needs `DeleteRoom` from the reconciler — a worker change
+   and a second deployable — and is **deliberately not built**.
+
+**What the switch reaches is as important as that it exists.** `/token` only. It
+does **not** gate `/webhook`: refusing those would strand `participant_left` and
+`room_finished` and leave every chat list showing calls that had ended — the
+interface lying rather than saying it is off. Nor `/force-mute` and `/remove`, so
+a moderator keeps their levers while a call drains. Both are asserted.
+
+One venue difference from the bot gateway, of mechanism rather than policy: a
+long-lived Node process can refuse to boot on an unrecognised value, and an
+Edge Function has no boot to fail — so an unrecognised value refuses the request
+with `not_configured`, which this gateway already sends for an unusable
+environment and which the client already reads as «Голосовые чаты сейчас
+отключены.»
+
+### The rate limit that binds the deployment
+
+`moderationRateLimit.mjs` was honest in its own header about being per-isolate
+and about what the real thing needs: «a table and an RPC, which is the
+`support_rate_limit_signals` pattern and a migration». That is now built:
+`private.voice_rate_limit_signals`, `public.voice_rate_limit_consume(...)` which
+counts the window and records the attempt in one transaction under a
+per-(action, caller) advisory `xact` lock, and
+`public.voice_rate_limit_prune(...)` shaped like `voice_webhook_events_purge`.
+
+**And the old claim was worse than «per isolate» suggested**, which is now
+explicit in the source: the deployment limit was (isolates times 20) with no
+bound on the first factor, and the limiter *forgets* a caller when its isolate
+is recycled.
+
+**The refusal writes nothing, and that is the design.** Per caller per window
+the row cost is the *limit* — twenty rows — independent of how hard anyone
+hammers. Recording refusals would push the window forward on every rejected
+attempt and make the cost proportional to the attack rate. Proved on production
+inside a rolled-back transaction: the 21st attempt is refused with
+`retry_after_seconds: 60`, and three refusals later the table still holds
+exactly **20** rows.
+
+The token route and the moderation routes keep **separate** allowances, also
+proved: a moderator clearing a raid must not spend the allowance they need to
+rejoin. The per-isolate map stays in front of both, so a held-down button still
+costs no round trip.
+
+**Fail-open, deliberately.** An error, a missing function or an unrecognised
+answer allows the call. Every check that decides whether somebody may be in a
+call at all — `is_banned`, the membership row, the per-channel cap — already
+fails closed in the same function, so a broken limiter cannot let an
+unauthorised person in; it can only let an authorised member mint faster than
+intended, and the per-isolate layer still bounds that. Failing closed would turn
+a slow table or an unapplied migration into a total voice outage. The
+degradation is therefore not «no limit» but «the limit this gateway had
+yesterday» — which is also why the function and the migration can ship or roll
+back in either order.
+
+Pruned by the voice reconciler in the same tick as `purgeWebhookEvents`,
+retention ten minutes.
+
+### The concurrency cap, and why it can only be advisory here
+
+`VOICE_MAX_TOTAL_PARTICIPANTS`, read per request. Absent or empty is no cap —
+today's behaviour; a plain positive integer up to 10 000 is the cap; and `0`,
+`-1`, a leading space, `1e3` and `forty` all refuse with `not_configured` rather
+than being read as unlimited.
+
+`public.voice_active_participants(p_in_flight_seconds)` counts
+`voice_participants` **plus** the mints of the last thirty seconds with no
+participant row yet, and that second half is not optional: the mirror lags a
+join by a webhook round trip, so counting it alone would let a rush of
+simultaneous joins all read the same pre-rush number and all pass.
+`count(distinct user_id)`, so one flaky client retrying cannot eat the cap. Both
+halves proved on production: with two in-flight mints and no connected rows,
+`voice_active_participants(30)` answers **2** and `voice_active_participants(0)`
+answers **0** — the isolation the agent added after finding its own self-check
+could not tell the two terms apart.
+
+Checked **before** the allowance is spent, so a full deployment writes nothing
+and keeps answering the truthful reason however often it is asked. New wire code
+`voice_at_capacity` (503) becomes the category `at_capacity` and the sentence
+«Сейчас слишком много активных звонков, попробуйте позже.» Not `channel_full`,
+which would be false about a half-empty room and would send somebody looking for
+a person to remove. An older client falls back on the 503 to `disabled`, so the
+gateway may ship ahead of the app.
+
+**Two things this layer cannot do, stated rather than implied.** LiveKit
+enforces `max_participants` per room and has no server-wide equivalent, so the
+gateway can refuse to mint but cannot evict, and a token minted a moment before
+the cap was reached still joins. And **the number cannot be derived from this
+repository**: section 1.6 records no `nproc`, no `free -h` and no traffic
+allowance for this host, so the mechanism enforces whatever the deployment sets
+and defaults to unset. The only measured input is the egress table of section
+2.3 — 18.2 Mbps worst case for one room of twenty, 117.6 for one of fifty,
+per-room and quadratic. **Left empty pending the owner's number.**
+
+### Four green mutations, each one a finding
+
+Two in the gateway: a `typeof data === "boolean"` guard that was **redundant**
+because the conversion already excluded booleans — it claimed to prevent a
+hazard it could not reach, and was removed with the reasoning moved onto the
+conversion; and a **genuine coverage gap**, a `deploymentLimit` fixture option
+added for the moderation route and never asserted against, closed with «a
+moderation action the deployment refuses is a 429, not a silent success».
+
+Two more in the migration's own self-check, and they are the instructive ones:
+`v_active >= 1` over a **sum of two terms** is satisfied by either term, so
+deleting the in-flight subquery, zeroing the connected count and counting the
+wrong action all passed. Isolated by the window — `voice_active_participants(0)`
+can see no in-flight signal at all — and by moving the measurement ahead of the
+row it was meant to count.
+
+The advisory lock, which no single-session check can see, is proved
+deterministically with two `psql` sessions rather than by racing: A holds its
+transaction open after one consume, B with a two-second `lock_timeout` is
+cancelled naming the `perform` line, C — a different caller — returns
+immediately, and with the lock removed B returns immediately too. That last is
+the control.
+
+Twenty-nine gateway and client mutations plus eleven on the migration, all red
+after the four findings above were fixed.
+
+### Applied
+
+`20260918190000_voice_limits_bind_the_deployment.sql` as `supabase_admin`, after
+a verified backup (`pre-20260918190000-voice-limits-20260918T070048Z.sql`,
+1,359,780 bytes, sha256 `f5413a57…`, 137 `CREATE TABLE`).
+
+**Rehearsed twice, and the second time was not optional.** The agent rehearsed
+on a throwaway PostgreSQL **18.4** cluster because Docker's daemon was down on
+its machine; production is **17.6**, read off `version()`. So the whole file was
+rehearsed again on production inside a transaction that ended in ROLLBACK before
+it was applied.
+
+The role was verified rather than taken from the file:
+`private.voice_webhook_events` is owned by `supabase_admin`, `postgres` is
+**not** superuser on this deployment, and `20260913150000`'s own header says
+«apply as postgres» while the objects it produced belong to `supabase_admin` —
+**a migration's own sentence about its role is not evidence.** The file carries a
+precondition that refuses if `current_user` cannot create in `private`, and a
+check that refuses to commit if the new table's owner differs from its sibling's.
+
+Verified after: the table is owned by `supabase_admin`, lives in `private` where
+PostgREST cannot reach it, and `service_role` alone may execute the three
+functions — `authenticated` and `anon` may not. **No `alter table` on an
+existing relation anywhere in the file**, so nothing existing was locked and
+nothing was rewritten.
+
+One probe of mine was refused by the table's own CHECK constraint because I
+spent an action named `probe`, which is not one of the two the constraint
+allows. That is the constraint doing its job, and it is the same rule a mutation
+covers — worth recording as the cheapest possible confirmation that the action
+vocabulary is closed.
+
+### One thing deliberately not done
+
+The first draft warned once per isolate when the limiter could not be reached,
+because failing open silently is the version of that decision nobody can
+operate. `voice-gateway-token.test.mjs` bans **any** `console.*` in this gateway
+— a blanket rule rather than a judgement about which strings are safe — so the
+logging was removed rather than the guard narrowed, and the two queries that
+answer the same question are documented instead. Changing that guard is a
+deliberate decision, not a side effect.

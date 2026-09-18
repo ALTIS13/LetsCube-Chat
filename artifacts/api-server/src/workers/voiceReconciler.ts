@@ -41,6 +41,17 @@ const DEFAULT_STALE_MS = 5 * 60_000;
 /** Webhook idempotency keys are worthless once no webhook can still be retried. */
 const DEFAULT_WEBHOOK_RETENTION_MS = 24 * 60 * 60_000;
 /**
+ * Rate-limit signals are worthless once they have aged out of the gateway's
+ * window, which is sixty seconds today. Ten minutes rather than ninety seconds
+ * on purpose: that constant lives in a different deployable
+ * (`supabase/functions/voice-gateway/admission.mjs`) and can be widened without
+ * this worker changing, and a table whose size is already bounded by the limit
+ * gains nothing from a tight sweep. Deleting a signal the gateway still wanted
+ * would silently widen somebody's allowance, which is the one error worth
+ * spending disk to avoid.
+ */
+const RATE_LIMIT_RETENTION_MS = 10 * 60_000;
+/**
  * A hung SFU must not hold a tick open. Failing fast is not a loss: a channel
  * skipped this tick is asked again in thirty seconds, and layer 4 covers a
  * channel skipped for long enough to matter.
@@ -199,8 +210,9 @@ async function tick(
     );
   }
 
-  // Unrelated to the SFU, so it runs whatever LiveKit said.
+  // Unrelated to the SFU, so they run whatever LiveKit said.
   await purgeWebhookEvents(supabase, now());
+  await pruneRateLimitSignals(supabase, now());
 
   if (reconciled > 0 || unknown > 0 || (reaped ?? 0) > 0) {
     logger.info({ reconciled, unknown, reaped }, "voiceReconciler pass");
@@ -462,6 +474,30 @@ async function purgeWebhookEvents(supabase: SupabaseClient, now: Date): Promise<
   });
   if (error) {
     warnOnce("voice-webhook-purge", "voiceReconciler cannot purge webhook events", error);
+  }
+}
+
+/**
+ * `private.voice_rate_limit_signals` holds one row per voice action the gateway
+ * allowed, so its rate limit binds the deployment instead of one Edge Function
+ * isolate. A signal is worthless once it has aged out of the gateway's window,
+ * and this is the retention sweep the migration's own comment names -- the
+ * `support_email_retention_cleanup` arrangement, and the same shape as the
+ * purge above, in the same place for the same reason: it is unrelated to the
+ * SFU, so it runs whatever LiveKit said this tick.
+ *
+ * The table cannot grow large even if this never ran: the gateway records
+ * nothing for a refusal, so the bound is (limit x callers) per window rather
+ * than anything proportional to an attack rate. So a failure here is a warning
+ * and not an escalation, exactly like the purge.
+ */
+async function pruneRateLimitSignals(supabase: SupabaseClient, now: Date): Promise<void> {
+  const olderThan = new Date(now.getTime() - RATE_LIMIT_RETENTION_MS).toISOString();
+  const { error } = await supabase.rpc("voice_rate_limit_prune", {
+    p_older_than: olderThan,
+  });
+  if (error) {
+    warnOnce("voice-rate-limit-prune", "voiceReconciler cannot prune voice rate limit signals", error);
   }
 }
 

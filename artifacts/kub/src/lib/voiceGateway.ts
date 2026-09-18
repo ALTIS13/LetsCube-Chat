@@ -69,6 +69,14 @@ export type VoiceGatewayRefusalCode =
   | "forbidden"
   | "not_found"
   | "channel_full"
+  /**
+   * The *deployment* is carrying as many people as it is configured to carry,
+   * which is a different sentence from `channel_full` and must not borrow it:
+   * «в голосовом чате уже максимум участников» would be plainly false about a
+   * half-empty room on a busy server, and a person who read it would go looking
+   * for somebody to remove.
+   */
+  | "at_capacity"
   | "disabled"
   | "rate_limited"
   | "unavailable"
@@ -132,6 +140,11 @@ const WIRE_CODES: Record<string, VoiceGatewayRefusalCode> = {
   // redeployed to read them would delay both.
   voice_disabled: "disabled",
   rate_limited: "rate_limited",
+  // Slice 5's server-wide concurrency cap (2026-09-18). Sent with 503, so a
+  // client older than this mapping falls back to `disabled` and says the
+  // feature is off — wrong in detail but not absurd, and the fallback is why
+  // the gateway may be deployed ahead of the application.
+  voice_at_capacity: "at_capacity",
   // The moderation routes, added with them on 2026-09-18. Mapped rather than
   // left to the status on purpose: 403 covers «you may not» and «that person
   // may not be touched», and those are not the same thing to read.
@@ -210,6 +223,11 @@ export function voiceGatewayRefusalText(code: VoiceGatewayRefusalCode): string {
       return "Голосовой чат уже завершён.";
     case "channel_full":
       return "В голосовом чате уже максимум участников.";
+    case "at_capacity":
+      // Not «отключены» and not «максимум участников»: the feature works, this
+      // room may well be empty, and the only true thing to say is that the
+      // server is carrying as many calls as it will carry right now.
+      return "Сейчас слишком много активных звонков, попробуйте позже.";
     case "disabled":
       return "Голосовые чаты сейчас отключены.";
     case "rate_limited":

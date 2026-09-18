@@ -41,6 +41,7 @@ const USER_3 = "33333333-3333-4333-8333-333333333333";
 const NOW = new Date("2026-09-13T12:00:00.000Z");
 const FIVE_MINUTES_AGO = "2026-09-13T11:55:00.000Z";
 const ONE_DAY_AGO = "2026-09-12T12:00:00.000Z";
+const TEN_MINUTES_AGO = "2026-09-13T11:50:00.000Z";
 
 const room = (channelId) => `vc_${channelId}`;
 const participant = (identity, state = "ACTIVE") => ({ sid: `PA_${identity}`, identity, state });
@@ -70,6 +71,7 @@ function createBackend({ channels = [CHANNEL_A], livekit = {}, rooms = [], missi
   const replaced = [];
   const reaped = [];
   const purged = [];
+  const pruned = [];
 
   const json = (body, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -153,6 +155,11 @@ function createBackend({ channels = [CHANNEL_A], livekit = {}, rooms = [], missi
       purged.push(body().p_older_than);
       return json(0);
     }
+    if (url.pathname === "/rest/v1/rpc/voice_rate_limit_prune") {
+      if (missing.includes("voice_rate_limit_prune")) return absent("voice_rate_limit_prune");
+      pruned.push(body().p_older_than);
+      return json(0);
+    }
 
     throw new Error(`unstubbed ${method} ${url.pathname}`);
   };
@@ -169,6 +176,7 @@ function createBackend({ channels = [CHANNEL_A], livekit = {}, rooms = [], missi
     replaced,
     reaped,
     purged,
+    pruned,
     channelRead: () => requests.find((r) => r.path === "/rest/v1/voice_channels"),
     participantCalls: () => livekitCalls.filter((c) => c.rpc === "ListParticipants"),
     roomListCalls: () => livekitCalls.filter((c) => c.rpc === "ListRooms"),
@@ -282,6 +290,53 @@ test("webhook idempotency keys older than a day are purged", async () => {
   await tick(backend);
 
   assert.deepEqual(backend.purged, [ONE_DAY_AGO]);
+});
+
+test("rate limit signals older than ten minutes are pruned in the same tick", async () => {
+  // The sweep the migration's own comment names. It is in the tick beside the
+  // webhook purge rather than on a timer of its own, because both are
+  // retention on a private table and neither depends on the SFU.
+  const backend = createBackend({
+    livekit: { [room(CHANNEL_A)]: { participants: [participant(USER_1)] } },
+  });
+
+  await tick(backend);
+
+  assert.deepEqual(backend.pruned, [TEN_MINUTES_AGO]);
+});
+
+test("the prune runs when the SFU cannot be reached at all", async () => {
+  // The blindness rule bounds *writes derived from LiveKit*. A rate limit
+  // signal is derived from nothing LiveKit knows, so a tick that learned
+  // nothing about any room must still trim it -- otherwise an SFU outage would
+  // quietly stop the only thing that bounds that table.
+  const backend = createBackend({ livekit: { [room(CHANNEL_A)]: { status: 503 } } });
+
+  await tick(backend);
+
+  assert.deepEqual(backend.replaced, []);
+  assert.deepEqual(backend.reaped, []);
+  assert.deepEqual(backend.pruned, [TEN_MINUTES_AGO]);
+});
+
+test("a database without the prune function is a warning, not a failed tick", async () => {
+  // The migration and the worker deploy separately, in either order. A worker
+  // that threw here would stop reconciling participants -- a real defect --
+  // over a retention sweep on a table that cannot grow large anyway.
+  const backend = createBackend({
+    livekit: { [room(CHANNEL_A)]: { participants: [participant(USER_1)] } },
+    missing: ["voice_rate_limit_prune"],
+  });
+
+  await tick(backend);
+
+  assert.deepEqual(backend.pruned, [], "the stub answered 404, so nothing was recorded");
+  assert.deepEqual(
+    backend.replaced,
+    [{ channelId: CHANNEL_A, userIds: [USER_1], observedAt: NOW.toISOString() }],
+    "the participant set was still written",
+  );
+  assert.deepEqual(backend.purged, [ONE_DAY_AGO], "and the webhook log was still trimmed");
 });
 
 test("an identity that is not a user id never reaches a uuid[] parameter", async () => {

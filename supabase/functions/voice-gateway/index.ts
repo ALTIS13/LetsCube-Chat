@@ -16,6 +16,12 @@
 // On the SFU, `webhook.api_key` must name the same key and `webhook.urls` must
 // point at `<functions host>/voice-gateway/webhook`.
 //
+// Two optional names added with slice 5's limits, both read per request rather
+// than captured once, so changing either needs no function deploy —
+// `VOICE_ENABLED=false` is the kill switch and `VOICE_MAX_TOTAL_PARTICIPANTS`
+// is this deployment's concurrency cap. `admission.mjs` holds what each value
+// means and what the switch does and does not reach.
+//
 // One thing to check at deploy rather than assume: LiveKit sends no `apikey`
 // header, so the webhook URL has to reach this function without one. If the
 // Kong route in front of the functions runtime demands it, put it in the URL's
@@ -41,6 +47,14 @@
 // database or from LiveKit is ever put in a response.
 import { createClient } from "npm:@supabase/supabase-js@2.105.1";
 
+import {
+  readVoiceActiveParticipants,
+  readVoiceAdmission,
+  readVoiceConcurrencyCap,
+  readVoiceRateLimitAnswer,
+  VOICE_IN_FLIGHT_SECONDS,
+  VOICE_RATE_LIMITS,
+} from "./admission.mjs";
 import {
   canPublishInVoiceChannel,
   livekitHttpOrigin,
@@ -79,7 +93,36 @@ const ROOM_EMPTY_TIMEOUT_SECONDS = 60;
 
 // Per isolate, on support-gateway's pattern. See moderationRateLimit.mjs for
 // what that does and does not bound.
+//
+// Two instances rather than one map with namespaced keys, so the two routes
+// keep separate allowances: a moderator clearing a raid must not spend the
+// allowance they need to rejoin the call themselves.
+//
+// Both are now the *first* of two layers. The second — `voice_rate_limit_consume`
+// below — binds the whole deployment rather than one isolate, which is what
+// moderationRateLimit.mjs's own header said the real thing needed. This layer
+// stays in front of it because it costs a map lookup and no round trip, so a
+// loop inside one isolate is refused without touching the database at all.
 const moderationLimiter = createVoiceModerationRateLimiter();
+const tokenLimiter = createVoiceModerationRateLimiter();
+
+// **The degraded state is deliberately not logged**, and that cost an argument
+// worth recording. Both limits fail open, and failing open silently is the
+// version of that decision nobody can operate — so the first draft of this
+// file warned once per isolate when the RPC could not be reached.
+// `voice-gateway-token.test.mjs` refuses any `console.*` in this gateway at
+// all, a blanket rule rather than a judgement about which strings are safe,
+// and narrowing a security guard to fit a convenience is the wrong way round.
+//
+// So it is observable by asking instead, which is where an operator already is
+// when they apply the migration:
+//
+//   * `select count(*) from private.voice_rate_limit_signals where action =
+//     'token_mint'` is non-zero after a join if the limiter is live — and it is
+//     also the only way to tell a 429 from this layer apart from a 429 from the
+//     per-isolate one, since both answer `rate_limited`;
+//   * `select public.voice_active_participants(30)` answering a number proves
+//     the cap has something to compare against.
 
 type Environment = {
   supabaseUrl: string;
@@ -122,6 +165,15 @@ async function handleRequest(request: Request): Promise<Response> {
 // ── POST /voice-gateway/token ────────────────────────────────────────────────
 
 async function mintToken(request: Request): Promise<Response> {
+  // Before the body, before the JWT, before anything: a deployment that has
+  // switched voice off answers the same way whatever was asked of it, and a
+  // deployment whose switch or cap is misspelled refuses rather than guessing.
+  // Neither answer needs an identity, and neither is a secret.
+  const gate = voiceEnvironmentGate();
+  if (!gate.ok) {
+    return jsonResponse(request, { ok: false, error: gate.error }, gate.status);
+  }
+
   const raw = await request.text();
   if (!raw || new TextEncoder().encode(raw).byteLength > MAX_TOKEN_REQUEST_BYTES) {
     return jsonResponse(request, { ok: false, error: "invalid_request" }, 400);
@@ -159,9 +211,46 @@ async function mintToken(request: Request): Promise<Response> {
     return jsonResponse(request, { ok: false, error: "unauthorized" }, 401);
   }
 
+  // 1a. The per-isolate limiter, keyed on the verified caller, before any
+  //     database work at all: a loop inside one isolate costs one map lookup.
+  const isolateLimit = tokenLimiter.check(userId);
+  if (!isolateLimit.ok) {
+    return jsonResponse(request, { ok: false, error: "rate_limited" }, 429, {
+      "retry-after": String(isolateLimit.retryAfterSeconds),
+    });
+  }
+
   const admin = createClient(environment.supabaseUrl, environment.serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+
+  // 1b. This deployment's concurrency cap, asked *before* the allowance is
+  //     spent. A deployment at capacity therefore writes nothing and keeps
+  //     answering the truthful reason however often it is asked, while the
+  //     per-isolate limiter above bounds the asking. Spending the allowance
+  //     first would turn the twenty-first retry into «слишком много попыток»,
+  //     which is a false statement about a server that is simply full.
+  if (gate.cap !== null) {
+    // `null` is «I could not count», and a deployment that cannot count its
+    // participants must not stop taking calls — the same fail-open choice as
+    // the limiter below, for the same reason.
+    const active = readVoiceActiveParticipants(
+      await countActiveVoiceParticipants(admin),
+    );
+    if (active !== null && active >= gate.cap) {
+      return jsonResponse(request, { ok: false, error: "voice_at_capacity" }, 503);
+    }
+  }
+
+  // 1c. The deployment-wide limiter. One row per allowed mint and nothing at
+  //     all for a refusal, so the row cost per caller per window is the limit
+  //     itself however hard the caller hammers.
+  const deploymentLimit = await consumeVoiceRateLimit(admin, userId, "token_mint");
+  if (!deploymentLimit.allowed) {
+    return jsonResponse(request, { ok: false, error: "rate_limited" }, 429, {
+      "retry-after": String(deploymentLimit.retryAfterSeconds),
+    });
+  }
 
   // 2. A banned caller gets no token at all (section 3.7).
   const banned = await admin.rpc("is_banned", { uid: userId });
@@ -326,6 +415,71 @@ async function createLiveKitRoom(
   return { ok: response.ok };
 }
 
+// ── the two limits, and the switch ──────────────────────────────────────────
+
+/**
+ * The switch and the cap, read from the environment on this request.
+ *
+ * Both names are read here and nowhere else, and neither is captured in a
+ * module-level constant — which is the whole point of a kill switch. An Edge
+ * Function's `Deno.env.get` answers from the container's process environment,
+ * so a new value needs that container restarted; what it does **not** need is
+ * this function rebuilt or redeployed. `BOT_CREATION_ENABLED` has exactly the
+ * same requirement on the bot gateway, which resolves admission once at
+ * construction (`botGatewayIndex.ts:90`).
+ */
+function voiceEnvironmentGate():
+  | { ok: true; cap: number | null }
+  | { ok: false; error: string; status: number } {
+  const admission = readVoiceAdmission({ VOICE_ENABLED: Deno.env.get("VOICE_ENABLED") });
+  if (!admission.ok) return admission;
+  return readVoiceConcurrencyCap({
+    VOICE_MAX_TOTAL_PARTICIPANTS: Deno.env.get("VOICE_MAX_TOTAL_PARTICIPANTS"),
+  });
+}
+
+/**
+ * One caller's allowance, spent against the whole deployment rather than one
+ * isolate.
+ *
+ * `support_rate_limit_signals` is the pattern this follows, named by
+ * `moderationRateLimit.mjs`'s own header as what the real thing would need: a
+ * table nobody outside the database can see, and one SECURITY DEFINER function
+ * that both counts the window and records the attempt in one transaction, so
+ * two isolates asking at the same instant cannot both be told yes.
+ *
+ * An error, or an answer this code does not recognise, allows — see
+ * `readVoiceRateLimitAnswer` for why, and note that «the migration has not been
+ * applied here yet» is the same case.
+ */
+async function consumeVoiceRateLimit(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  action: "token_mint" | "moderate",
+): Promise<{ allowed: boolean; retryAfterSeconds?: number }> {
+  const plan = VOICE_RATE_LIMITS[action];
+  const answer = await admin.rpc("voice_rate_limit_consume", {
+    p_user_id: userId,
+    p_action: action,
+    p_limit: plan.limit,
+    p_window_seconds: plan.windowSeconds,
+  });
+  // `read.degraded` says «this answer was unusable, so the caller was allowed
+  // without being counted». It is not logged here; see the note beside the two
+  // limiter instances above for why, and for how to observe it instead.
+  return readVoiceRateLimitAnswer(answer.error ? null : answer.data);
+}
+
+/** How many people this deployment is carrying, connected plus in flight. */
+async function countActiveVoiceParticipants(
+  admin: ReturnType<typeof createClient>,
+): Promise<unknown> {
+  const answer = await admin.rpc("voice_active_participants", {
+    p_in_flight_seconds: VOICE_IN_FLIGHT_SECONDS,
+  });
+  return answer.error ? null : answer.data;
+}
+
 // ── POST /voice-gateway/force-mute, POST /voice-gateway/remove ───────────────
 
 /**
@@ -341,7 +495,10 @@ async function createLiveKitRoom(
  *
  *   1. the body — two uuids and, for a mute, a real boolean;
  *   2. the caller's Supabase JWT, verified as the token route verifies it;
- *   3. the rate limit, keyed on the caller, before any database work;
+ *   3. the rate limit, keyed on the caller, before any database work — then
+ *      again against the whole deployment, which costs one round trip and one
+ *      row per action and is why the caveat in `moderationRateLimit.mjs`'s
+ *      header no longer applies to these two routes;
  *   4. `is_banned` on the caller;
  *   5. the channel row, which is where `chat_id` comes from — never the client;
  *   6. the caller's `chat_members` row for that chat, and the target's;
@@ -413,6 +570,17 @@ async function moderateParticipant(
   const admin = createClient(environment.supabaseUrl, environment.serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+
+  // The same allowance, spent against the deployment rather than this isolate.
+  // It sits behind the map lookup above, so a held-down button still costs no
+  // round trip, and in front of every read below, so a loop cannot walk the
+  // authorisation path at all.
+  const deploymentLimit = await consumeVoiceRateLimit(admin, callerId, "moderate");
+  if (!deploymentLimit.allowed) {
+    return jsonResponse(request, { ok: false, error: "rate_limited" }, 429, {
+      "retry-after": String(deploymentLimit.retryAfterSeconds),
+    });
+  }
 
   const banned = await admin.rpc("is_banned", { uid: callerId });
   if (banned.error) {

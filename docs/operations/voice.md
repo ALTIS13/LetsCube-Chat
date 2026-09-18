@@ -241,6 +241,75 @@ forbids publishing afresh. If it is the second, the continuation is
 `MutePublishedTrack(muted: true)` per track — which this build can do in the
 silencing direction and, per the configuration above, cannot undo.
 
+## The kill switch, the limit and the cap
+
+Added 2026-09-18, slice 5. **Two new names in the functions runtime's `.env`,
+both optional, both read on every request** — so changing either needs the
+functions container restarted and does *not* need the function redeployed:
+
+    VOICE_ENABLED=true                 # `false` is the kill switch
+    VOICE_MAX_TOTAL_PARTICIPANTS=      # empty is no cap; a positive integer is one
+
+`VOICE_ENABLED` follows `BOT_CREATION_ENABLED` exactly
+(`docs/operations/bot-gateway.md:84-88`): absent, empty and `true` all leave
+voice open, `false` closes it, and **anything else refuses the route with
+`not_configured` rather than being read as «on»** — so `FALSE`, `0` and a
+trailing space are all configuration errors, not switches.
+
+**What `false` reaches, and what it does not.** It stops `/token`, so nobody can
+start or re-join a call. It deliberately does not gate `/webhook` — refusing
+those would strand `participant_left` and `room_finished` and leave every chat
+list showing calls that had ended — and it does not gate `/force-mute` or
+`/remove`, so a moderator keeps their levers while a call drains.
+
+**It does not hang up a call already in progress.** LiveKit keeps a room alive
+while anybody is in it, and a token already minted is good for ten minutes, so a
+live call ends when its participants leave. If «off» ever has to mean «and end
+what is running», that is `DeleteRoom` from the reconciler and a worker change,
+not a wider switch.
+
+`VOICE_MAX_TOTAL_PARTICIPANTS` is deliberately unset by default: **the number
+cannot be derived from anything in this repository.** Section 1.6 of the
+proposal says there is no `nproc`, no `free -h` and no traffic allowance
+recorded for this host; the measured arithmetic is the egress table in section
+2.3 — worst case 18.2 Mbps for one room of twenty, 117.6 Mbps for one of fifty
+— and it is per-room and quadratic, so no participant total bounds it exactly.
+Pick a number, set it, and watch the SFU. `0` is refused: turning voice off is
+the switch's job.
+
+The cap is **advisory at the gateway**. It refuses to mint past the number; it
+cannot evict anybody already connected, and LiveKit has no server-wide
+equivalent to the per-room `max_participants` that does the hard enforcing. It
+counts `public.voice_participants` plus the mints of the last thirty seconds
+that have not yet become a row in it, because the mirror lags a join by a
+webhook round trip and counting it alone would let a rush all pass.
+
+**The rate limit is now a table**, `private.voice_rate_limit_signals`, and one
+RPC that counts the window and records the attempt in one transaction — twenty
+actions per sixty seconds per caller per action, the token route and the two
+moderation routes keeping separate allowances. The per-isolate `Map` stays in
+front of it as a free pre-filter.
+
+Both limits **fail open**: a missing function, an error or an unrecognised
+answer allows the call and the deployment degrades to per-isolate limiting. They
+are abuse controls, and `is_banned`, the membership row and the per-channel cap
+all still fail closed, so a limiter failure cannot let an unauthorised person
+in. That is also why the migration and the function can be deployed or rolled
+back in either order.
+
+**How to tell whether the deployment-wide limit is actually live**, since both
+layers answer `rate_limited`: after a join,
+`select count(*) from private.voice_rate_limit_signals where action = 'token_mint'`
+is non-zero. And `select public.voice_active_participants(30)` answering a
+number proves the cap has something to compare against. The gateway logs
+nothing — that is a contract a unit test enforces — so asking is the only way.
+
+Migration: `.migration-backup/supabase/migrations/20260918190000_voice_limits_bind_the_deployment.sql`,
+applied as `supabase_admin`, with a rollback and a rehearsal beside it. The
+sweep that trims the table is in the reconciler beside the webhook purge, so
+`letscube-worker` carries it; if that is not deployed, rows accumulate at
+twenty per caller per minute and nothing else breaks.
+
 ## Proved in production, 2026-09-14
 
 Each of these was run against the real thing rather than a stub:

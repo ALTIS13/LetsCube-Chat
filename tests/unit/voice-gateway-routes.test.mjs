@@ -80,6 +80,13 @@ function defaultPlan() {
       if (name === "is_banned") return { data: false, error: null };
       if (name === "is_muted") return { data: false, error: null };
       if (name === "voice_webhook_event_seen") return { data: true, error: null };
+      // Slice 5's two limits. Answered here rather than left to the
+      // `{ data: null }` fallthrough on purpose: the gateway reads an
+      // unrecognised answer as «I could not ask» and allows, so a fixture that
+      // did not answer would put every test in this file on the degraded path
+      // and none of them on the one production takes.
+      if (name === "voice_rate_limit_consume") return { data: { ok: true }, error: null };
+      if (name === "voice_active_participants") return { data: 0, error: null };
       return { data: null, error: null };
     },
     table: ({ table }) => {
@@ -719,6 +726,9 @@ function moderationPlan(options = {}) {
       if (name === rpcError) return { data: null, error: { message: "permission denied" } };
       if (name === "is_banned") return { data: options.banned === true, error: null };
       if (name === "is_muted") return { data: staffMuted, error: null };
+      if (name === "voice_rate_limit_consume") {
+        return { data: options.deploymentLimit ?? { ok: true }, error: null };
+      }
       return { data: null, error: null };
     },
     table: (state) => {
@@ -958,16 +968,20 @@ test("a muted target is not asked about again; an unmuted one is", async () => {
   await handler(
     moderationRequest("force-mute", { channelId: CHANNEL_ID, userId: TARGET_ID, muted: true }),
   );
+  // The whole sequence, in order, which also pins where slice 5's
+  // deployment-wide limiter sits: ahead of `is_banned`, so a loop cannot walk
+  // the authorisation path at all.
   assert.deepEqual(
     supabaseCalls().filter((call) => call.kind === "rpc").map((call) => call.name),
-    ["is_banned"],
+    ["voice_rate_limit_consume", "is_banned"],
   );
 
   resetModeration();
   await handler(
     moderationRequest("force-mute", { channelId: CHANNEL_ID, userId: TARGET_ID, muted: false }),
   );
-  const rpcs = supabaseCalls().filter((call) => call.kind === "rpc");
+  const rpcs = supabaseCalls()
+    .filter((call) => call.kind === "rpc" && call.name !== "voice_rate_limit_consume");
   assert.deepEqual(rpcs.map((call) => call.name), ["is_banned", "is_muted"]);
   // The person being unmuted, not the moderator doing it.
   assert.deepEqual(rpcs[1].args, { uid: TARGET_ID, cid: CHAT_ID });
@@ -1180,4 +1194,290 @@ test("one caller cannot hold the button down: the limit answers 429", async () =
     false,
     "a rate-limited call still asked the database",
   );
+});
+
+// ── slice 5's kill switch, concurrency cap and deployment-wide limit ─────────
+//
+// Driven through the same handler as everything above, with the environment set
+// both ways, because the thing being asserted is that the *route's answer
+// changes*. A test that read `VOICE_ENABLED` out of the source, or called
+// `readVoiceAdmission` and stopped there, would pass over a switch that was
+// never wired into a route — which is the only way this could actually be
+// broken.
+//
+// **Every test below uses a caller of its own**, the way the moderation block
+// does and for the same reason: the token route now has a per-isolate limiter
+// keyed on the verified caller, that limiter is one object for the life of this
+// process, and a block of twenty-odd mints sharing `USER_ID` with the tests
+// above would start answering 429 partway down. Anything added here should take
+// a caller from `nextTokenCallerId` too.
+
+let tokenCallerSeed = 0;
+function nextTokenCallerId() {
+  tokenCallerSeed += 1;
+  return `eeeeeeee-0000-4000-8000-${String(tokenCallerSeed).padStart(12, "0")}`;
+}
+
+/**
+ * `reset`, with a fresh caller and an `rpc` override that *composes* with the
+ * default plan rather than replacing it. Replacing it is what the plain form
+ * does, and a test that overrode one RPC would silently unplan `is_banned`.
+ */
+function resetToken(plan = {}, overrides = {}) {
+  const callerId = plan.callerId ?? nextTokenCallerId();
+  const base = defaultPlan();
+  const override = plan.rpc;
+  reset(
+    {
+      ...plan,
+      getUser: () => ({ data: { user: { id: callerId } }, error: null }),
+      rpc: override
+        ? (name, args) => override(name, args) ?? base.rpc(name, args)
+        : base.rpc,
+    },
+    overrides,
+  );
+  return callerId;
+}
+
+const rateLimitCalls = () =>
+  supabaseCalls().filter((call) => call.kind === "rpc" && call.name === "voice_rate_limit_consume");
+const capacityCalls = () =>
+  supabaseCalls().filter((call) => call.kind === "rpc" && call.name === "voice_active_participants");
+
+test("VOICE_ENABLED=false turns minting off for everyone, and says so", async () => {
+  resetToken({}, { VOICE_ENABLED: "false" });
+  const off = await handler(tokenRequest());
+
+  assert.equal(off.status, 503);
+  assert.deepEqual(await readJson(off), { ok: false, error: "voice_disabled" });
+  // Nothing at all happened behind it: no SFU call, no database call, not even
+  // the caller's identity. A switch that still verified a JWT and created a
+  // room would not be a kill switch.
+  assert.deepEqual(fetchCalls, []);
+  assert.deepEqual(supabaseCalls(), []);
+
+  // The same request against the same fixture, the only difference being the
+  // value of the variable.
+  resetToken({}, { VOICE_ENABLED: "true" });
+  const on = await handler(tokenRequest());
+  assert.equal(on.status, 200);
+  assert.ok((await readJson(on)).token, "the switch stayed off when it was set to true");
+});
+
+test("absent and empty leave voice on, and an unrecognised value is never «on»", async () => {
+  for (const value of [undefined, ""]) {
+    resetToken({}, { VOICE_ENABLED: value });
+    assert.equal(
+      (await handler(tokenRequest())).status,
+      200,
+      `VOICE_ENABLED=${JSON.stringify(value)}`,
+    );
+  }
+  // `BOT_CREATION_ENABLED`'s rule: a typo must not quietly open or close the
+  // feature. The bot gateway can refuse to boot; an Edge Function reading its
+  // environment per request cannot, so it refuses the request with the code it
+  // already uses for an unusable environment.
+  for (const value of ["FALSE", "False", "0", "no", " false", "true ", "1"]) {
+    resetToken({}, { VOICE_ENABLED: value });
+    const response = await handler(tokenRequest());
+    assert.equal(response.status, 503, `VOICE_ENABLED=${JSON.stringify(value)} was tolerated`);
+    assert.deepEqual(await readJson(response), { ok: false, error: "not_configured" });
+    assert.deepEqual(fetchCalls, [], `VOICE_ENABLED=${JSON.stringify(value)} still reached the SFU`);
+  }
+});
+
+test("the switch does not strand the webhook, which would make the mirror lie", async () => {
+  // Refusing webhooks while voice is off would drop `participant_left` and
+  // `room_finished`, and every chat list in the product would keep showing a
+  // call that had ended. Off must mean «no new calls», not «stop listening».
+  reset({}, { VOICE_ENABLED: "false" });
+  const response = await handler(webhookRequest(participantEvent()));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), { ok: true, status: "applied" });
+});
+
+test("the switch does not take a moderator's levers away mid-drain", async () => {
+  // A call already in progress is not ended by the switch — see the note in
+  // `admission.mjs` — so somebody being disruptive in one can still be
+  // silenced while it drains.
+  reset(moderationPlan({ callerId: nextCallerId() }), { VOICE_ENABLED: "false" });
+  const response = await handler(
+    moderationRequest("force-mute", { channelId: CHANNEL_ID, userId: TARGET_ID, muted: true }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.ok(twirpCall("UpdateParticipant"), "the SFU was never told");
+});
+
+test("the concurrency cap refuses a mint and names a reason that is true", async () => {
+  resetToken(
+    { rpc: (name) => (name === "voice_active_participants" ? { data: 40, error: null } : undefined) },
+    { VOICE_MAX_TOTAL_PARTICIPANTS: "40" },
+  );
+  const full = await handler(tokenRequest());
+
+  assert.equal(full.status, 503);
+  // Not `channel_full`: the fixture channel has two people in it and room for
+  // ten. The client maps this onto its own sentence for exactly that reason.
+  assert.deepEqual(await readJson(full), { ok: false, error: "voice_at_capacity" });
+  assert.equal(createRoomCall(), null, "a room was created for a mint that was refused");
+  // And the caller's allowance was not spent, so the truthful answer survives
+  // being asked again rather than turning into «слишком много попыток».
+  assert.deepEqual(rateLimitCalls(), []);
+
+  // One below the cap is a join. Same fixture, one number different.
+  resetToken(
+    { rpc: (name) => (name === "voice_active_participants" ? { data: 39, error: null } : undefined) },
+    { VOICE_MAX_TOTAL_PARTICIPANTS: "40" },
+  );
+  assert.equal((await handler(tokenRequest())).status, 200);
+});
+
+test("no cap configured asks nothing, and a misconfigured cap refuses", async () => {
+  resetToken();
+  assert.equal((await handler(tokenRequest())).status, 200);
+  assert.deepEqual(capacityCalls(), [], "capacity was asked about with no cap set");
+
+  for (const value of ["0", "-1", "forty", "1.5", " 20", "20 ", "1e3", "0x10", "+5"]) {
+    resetToken({}, { VOICE_MAX_TOTAL_PARTICIPANTS: value });
+    const response = await handler(tokenRequest());
+    assert.equal(response.status, 503, `VOICE_MAX_TOTAL_PARTICIPANTS=${value} was tolerated`);
+    assert.deepEqual(await readJson(response), { ok: false, error: "not_configured" });
+  }
+});
+
+test("the cap is asked with the in-flight window, and not knowing does not stop calls", async () => {
+  resetToken({}, { VOICE_MAX_TOTAL_PARTICIPANTS: "40" });
+  await handler(tokenRequest());
+  assert.deepEqual(capacityCalls().map((call) => call.args), [{ p_in_flight_seconds: 30 }]);
+
+  // Fail open, deliberately: the cap is a capacity control, and every check
+  // that decides whether somebody may be in a call at all still fails closed
+  // a few lines further down the same function.
+  for (
+    const answer of [
+      { data: null, error: { message: "function does not exist" } },
+      { data: null, error: null },
+      { data: "many", error: null },
+      { data: true, error: null },
+      { data: -1, error: null },
+    ]
+  ) {
+    resetToken(
+      { rpc: (name) => (name === "voice_active_participants" ? answer : undefined) },
+      { VOICE_MAX_TOTAL_PARTICIPANTS: "1" },
+    );
+    const response = await handler(tokenRequest());
+    assert.equal(
+      response.status,
+      200,
+      `an unusable capacity answer (${JSON.stringify(answer)}) refused a join`,
+    );
+  }
+});
+
+test("the deployment-wide limit refuses with the retry-after the database chose", async () => {
+  resetToken({
+    rpc: (name) =>
+      name === "voice_rate_limit_consume"
+        ? { data: { ok: false, retry_after_seconds: 37 }, error: null }
+        : undefined,
+  });
+  const response = await handler(tokenRequest());
+
+  assert.equal(response.status, 429);
+  assert.deepEqual(await readJson(response), { ok: false, error: "rate_limited" });
+  assert.equal(response.headers.get("retry-after"), "37");
+  // Refused before anything is authorised and before the SFU is touched.
+  assert.equal(createRoomCall(), null);
+  assert.deepEqual(
+    supabaseCalls().filter((call) => call.kind === "rpc").map((call) => call.name),
+    ["voice_rate_limit_consume"],
+  );
+});
+
+test("the two routes spend separate allowances, with the limits the gateway holds", async () => {
+  const minter = resetToken();
+  await handler(tokenRequest());
+  assert.deepEqual(rateLimitCalls().map((call) => call.args), [
+    { p_user_id: minter, p_action: "token_mint", p_limit: 20, p_window_seconds: 60 },
+  ]);
+
+  const moderator = nextCallerId();
+  reset(moderationPlan({ callerId: moderator }));
+  await handler(moderationRequest("remove", { channelId: CHANNEL_ID, userId: TARGET_ID }));
+  assert.deepEqual(rateLimitCalls().map((call) => call.args), [
+    { p_user_id: moderator, p_action: "moderate", p_limit: 20, p_window_seconds: 60 },
+  ]);
+});
+
+test("a moderation action the deployment refuses is a 429, not a silent success", async () => {
+  // Written because a mutation stayed green: making `moderateParticipant`
+  // ignore the limiter's refusal broke nothing, so the two routes were not
+  // equally covered. Everything below the limit must be untouched — the
+  // channel, the memberships and the SFU.
+  reset(
+    moderationPlan({
+      callerId: nextCallerId(),
+      deploymentLimit: { ok: false, retry_after_seconds: 11 },
+    }),
+  );
+  const response = await handler(
+    moderationRequest("force-mute", { channelId: CHANNEL_ID, userId: TARGET_ID, muted: true }),
+  );
+
+  assert.equal(response.status, 429);
+  assert.deepEqual(await readJson(response), { ok: false, error: "rate_limited" });
+  assert.equal(response.headers.get("retry-after"), "11");
+  assert.deepEqual(fetchCalls, [], "the SFU was asked to mute somebody anyway");
+  assert.deepEqual(
+    supabaseCallNames().filter((name) => name.startsWith("table:")),
+    [],
+    "a refused action still read the channel or a membership",
+  );
+  assert.deepEqual(
+    supabaseCalls().filter((call) => call.kind === "rpc").map((call) => call.name),
+    ["voice_rate_limit_consume"],
+  );
+});
+
+test("a limiter that cannot be asked allows, and the isolate layer is still in front", async () => {
+  for (
+    const answer of [
+      { data: null, error: { message: "function public.voice_rate_limit_consume does not exist" } },
+      { data: null, error: null },
+      { data: { ok: "false" }, error: null },
+      { data: "no", error: null },
+    ]
+  ) {
+    resetToken({ rpc: (name) => (name === "voice_rate_limit_consume" ? answer : undefined) });
+    assert.equal(
+      (await handler(tokenRequest())).status,
+      200,
+      `an unusable limiter answer (${JSON.stringify(answer)}) refused a join`,
+    );
+  }
+
+  // The floor under that. With the database saying nothing useful, the
+  // per-isolate limiter still stops a loop — which is what makes failing open
+  // a degradation rather than an absence.
+  const callerId = nextTokenCallerId();
+  let refused = null;
+  for (let attempt = 0; attempt < 30 && refused === null; attempt += 1) {
+    resetToken({
+      callerId,
+      rpc: (name) => (name === "voice_rate_limit_consume" ? { data: null, error: null } : undefined),
+    });
+    const response = await handler(tokenRequest());
+    if (response.status === 429) refused = response;
+    else assert.equal(response.status, 200, `attempt ${attempt} was ${response.status}`);
+  }
+  assert.ok(refused, "thirty mints with a dead limiter were all allowed");
+  assert.deepEqual(await readJson(refused), { ok: false, error: "rate_limited" });
+  assert.match(String(refused.headers.get("retry-after")), /^[0-9]+$/);
+  // The database was never asked on the refused attempt: the map lookup is in
+  // front of the round trip, so a held-down button costs nothing.
+  assert.deepEqual(rateLimitCalls(), []);
 });

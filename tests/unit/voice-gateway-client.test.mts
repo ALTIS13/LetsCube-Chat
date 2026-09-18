@@ -89,6 +89,12 @@ test("every refusal the function can send has a category", () => {
     [503, "not_configured", "disabled"],
     [503, "unavailable", "unavailable"],
     [503, "voice_unavailable", "unavailable"],
+    // Slice 5. `voice_disabled` is the kill switch; `voice_at_capacity` is the
+    // server-wide cap, and it is deliberately not `channel_full` -- the room
+    // may be empty and the reader must not go looking for somebody to remove.
+    [503, "voice_disabled", "disabled"],
+    [503, "voice_at_capacity", "at_capacity"],
+    [429, "rate_limited", "rate_limited"],
   ];
   for (const [status, wire, expected] of cases) {
     assert.deepEqual(
@@ -123,6 +129,7 @@ test("each category is a distinct Russian sentence, and none names a status code
     "forbidden",
     "not_found",
     "channel_full",
+    "at_capacity",
     "disabled",
     "rate_limited",
     "unavailable",
@@ -159,12 +166,19 @@ test("the function's own refusals are all known to this client", () => {
   // guard written to catch exactly that, and it stayed green. Both files now,
   // and both shapes.
   const moderation = readFileSync("supabase/functions/voice-gateway/moderation.mjs", "utf8");
+  // Widened again on 2026-09-18, for the same reason and with the same lesson.
+  // Slice 5's kill switch answers from `admission.mjs`, in `moderationRefusal`'s
+  // `{ error, status }` shape, and `index.ts` returns that object rather than a
+  // literal -- so `voice_disabled` appears in neither file this scan already
+  // read. Three sources now.
+  const admission = readFileSync("supabase/functions/voice-gateway/admission.mjs", "utf8");
   const statusShape = /error:\s*"([a-z_]+)",\s*status:\s*\d{3}/g;
   const wire = new Set(
     [
       ...source.matchAll(/(?:jsonResponse\(request,|plainJson\()\s*\{\s*ok:\s*false,\s*error:\s*"([a-z_]+)"/g),
       ...source.matchAll(statusShape),
       ...moderation.matchAll(new RegExp(statusShape.source, "g")),
+      ...admission.matchAll(new RegExp(statusShape.source, "g")),
     ].map((match) => match[1]),
   );
   assert.ok(wire.size >= 8, `expected the function to name several refusals, found ${wire.size}`);
@@ -178,6 +192,13 @@ test("the function's own refusals are all known to this client", () => {
     "target_protected",
     "target_not_a_member",
     "participant_not_in_room",
+    // The control for the third source. Drop `admission.mjs` from the list
+    // above and this one vanishes from the set, which is what the two previous
+    // widenings both discovered the hard way.
+    "voice_disabled",
+    // And this one is the control for `index.ts` itself: it is the only wire
+    // code the concurrency cap can send.
+    "voice_at_capacity",
   ]) {
     assert.ok(wire.has(added), `the scan does not see «${added}», so it reads only part of the function`);
   }
