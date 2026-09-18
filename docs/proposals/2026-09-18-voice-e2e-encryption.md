@@ -119,15 +119,36 @@ because an enum default was rendered as a fact (D-213), and the invite card
 printed a policy it had never read (D-165). The same rule applies here and
 more sharply.
 
-So: **no padlock until the room is actually encrypted and every participant is
-verified**, and three distinct states rather than two —
+**Decided by the owner on 2026-09-18**, answering the question at the end of
+this document: no padlock in an unverified room. Either nothing, or a padlock
+that is **red, with a lightning bolt or broken**, and a hover that says the call
+is not protected.
 
-1. **encrypted and verified** — the padlock, and the wording the owner showed;
-2. **encrypted, not verified** — said differently, with the verification screen
-   one tap away, because the user has protection against the media path and not
-   against us;
-3. **not encrypted** — said plainly, with the reason, because a room that
-   quietly fell back is worse than one that never claimed anything.
+Taking the second, because nothing is worse than something wrong: an absent
+indicator reads as «this screen has no opinion», and a person cannot tell it
+apart from a screen that has not loaded. A broken padlock is an opinion.
+
+So three marks, one per state, and the **wording** carries the distinction the
+icon cannot:
+
+1. **Encrypted and verified** — a closed padlock, and the sentence the owner's
+   screenshot shows.
+2. **Encrypted, not verified** — the broken padlock, per the decision above.
+   Its hover says what is actually true: the media is encrypted and the person
+   on the other end has not been verified, with the verification a tap away.
+   **Not «звонок не защищён»**, and this is worth one sentence of argument: an
+   unverified encrypted call *is* protected against the media path and against
+   a passive operator. Telling somebody their call is unprotected when it is
+   partly protected is a false alarm, and an indicator that cries wolf is an
+   indicator people learn to ignore — which costs exactly the case in state 3.
+   The icon is the owner's; the sentence has to be the true one.
+3. **Not encrypted** — the same broken padlock and the blunt sentence:
+   «Звонок не защищён». With the reason, because a room that quietly fell back
+   is worse than one that never claimed anything.
+
+The two red states share an icon and differ in words. If that turns out to read
+as one state rather than two, the fix is a second icon rather than a softer
+sentence.
 
 ## 5. Sequencing
 
@@ -150,10 +171,11 @@ never true.
 
 ## 6. Open questions for the owner
 
-- **Should an unverified room show a padlock?** Discord's does. The
-  recommendation above is that ours should not, and should say something
-  accurate instead. This is the one decision that changes the shape of the
-  whole thing.
+- ~~**Should an unverified room show a padlock?**~~ **Answered 2026-09-18:**
+  not a green one. A red padlock, with a lightning bolt or broken, and an
+  explanation on hover. Written into section 4 above, with the one refinement
+  that the *wording* for «encrypted but unverified» must not claim the call is
+  unprotected, because it is not — only unverified.
 - **What happens to a participant whose device cannot encrypt** — refused, or
   the room stays plaintext and says so? The recommendation is refused, with a
   sentence naming the browser.
