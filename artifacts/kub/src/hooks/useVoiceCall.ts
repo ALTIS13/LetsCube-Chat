@@ -10,6 +10,16 @@ import {
 } from "@/hooks/useAudioSettings";
 import { microphonePermissionHelp } from "@/lib/platform/capabilities";
 import {
+  MIC_GATE_CLOSED,
+  micGateNeedsLevel,
+  micTalkKeyFires,
+  micTalkKeyReleases,
+  nextMicGate,
+  type MicActivation,
+  type MicGateState,
+} from "@/lib/micGate";
+import { openMicLevelSource, type MicLevelSource } from "@/lib/micLevel";
+import {
   classifyMicrophoneError,
   microphoneRefusalText,
   type VoiceCallPhase,
@@ -287,6 +297,31 @@ export function voiceSpeakersSnapshot(): readonly string[] {
 }
 
 /**
+ * Whether the talk control — the key or the button — is being held right now.
+ *
+ * Beside `VoiceCallState` rather than inside it, for the reason `speakers` is:
+ * it changes once per sentence in a push-to-talk conversation, and a field of
+ * the state object rebuilds `ChatWindow`'s whole subtree every time it moves.
+ * A primitive read through `useSyncExternalStore` renders the two controls that
+ * draw it and nothing else.
+ *
+ * Not scoped by channel, unlike `useVoiceSpeaking`: there is one call and one
+ * key, and the two surfaces that draw the control already only draw it for the
+ * call that is running.
+ */
+let talkHeld = false;
+
+export function useVoiceTalkHeld(): boolean {
+  const read = useCallback(() => talkHeld, []);
+  return useSyncExternalStore(subscribe, read, read);
+}
+
+/** Read once, outside React. */
+export function voiceTalkHeldSnapshot(): boolean {
+  return talkHeld;
+}
+
+/**
  * Whether a moderator has silenced this client in one particular room.
  *
  * A primitive, and scoped by `channelId`, for the same two reasons
@@ -392,6 +427,261 @@ function forgetOutputDevice(): void {
   appliedOutputDevice = null;
 }
 
+/* ── How the microphone decides to be open ─────────────────────────────────
+ *
+ * Three modes, and a call has to hold whatever the second and third need: a
+ * level to compare against a threshold, a key that may be held anywhere in the
+ * application, and the releases that are not keyups. All of it belongs to the
+ * module rather than to a component for the reason at the top of this file — a
+ * call outlives every screen that can draw it, and a person who alt-tabs out of
+ * a conversation is exactly the case a held key has to survive.
+ *
+ * Every decision below is `lib/micGate.ts`'s. What is here is the wiring: when
+ * the level source exists, what the settings cache is refreshed by, which
+ * events release a hold, and the one place the answer is pushed at the
+ * transport.
+ */
+
+/**
+ * The mode, the threshold and the key, cached.
+ *
+ * Read from storage on the join and refreshed by the same two events
+ * `watchOutputDevice` listens to. It is a cache rather than a call to
+ * `getAudioSettings()` at the point of use because the point of use is a
+ * `keydown` handler on `window`: that function reads `localStorage` and parses
+ * JSON, and doing it for every key somebody types in the composer is a cost
+ * nobody asked for.
+ */
+let gateSettings: { activation: MicActivation; threshold: number; talkKey: string } | null = null;
+let gate: MicGateState = MIC_GATE_CLOSED;
+/** The last reading, or 0 when nothing is measuring. Never stale on purpose. */
+let micLevel = 0;
+let levelSource: MicLevelSource | null = null;
+let stopWatchingGate: (() => void) | null = null;
+
+function publishTalkHeld(next: boolean): void {
+  if (talkHeld === next) return;
+  talkHeld = next;
+  for (const listener of listeners) listener();
+}
+
+/** What the gate should be, from the stored mode and the live facts. */
+function evaluateGate(): void {
+  const settings = gateSettings;
+  const target = room;
+  if (!settings || !target) return;
+  const next = nextMicGate(gate, {
+    activation: settings.activation,
+    // The store's own value, which is what the interface is drawing. A mute
+    // wins over every mode; `nextMicGate` is where that is decided.
+    muted: state.micMuted,
+    held: talkHeld,
+    level: micLevel,
+    threshold: settings.threshold,
+    now: Date.now(),
+  });
+  const moved = next.open !== gate.open;
+  // Assigned even when the answer did not move, because the tail's deadline
+  // does: a version that only stored a change would restart the 400ms from the
+  // last *transition* and cut a person off inside a sentence.
+  gate = next;
+  if (moved) void target.setMicrophoneOpen(next.open).catch(() => undefined);
+}
+
+/**
+ * Start or stop the level source to match the mode.
+ *
+ * Only «По голосу» needs one, which is `micGateNeedsLevel`'s whole job: an
+ * `AudioContext` and a 50ms timer running for a call in «Всегда» or «Рация»
+ * would be a battery cost with nothing reading it.
+ *
+ * A browser that cannot measure — no `AudioContext`, or a graph that threw —
+ * leaves the microphone **open**. For a call that is the safer failure: not
+ * being heard at all reads as a broken microphone and is the thing a person
+ * cannot diagnose, while a gate that did not engage is merely the behaviour
+ * they had yesterday.
+ */
+function syncLevelSource(): void {
+  const settings = gateSettings;
+  const needed = Boolean(settings && micGateNeedsLevel(settings.activation));
+  if (!needed) {
+    levelSource?.close();
+    levelSource = null;
+    // Reset rather than kept: a loud reading from a minute ago must not open
+    // the gate for the first 50ms of the next time this mode is chosen.
+    micLevel = 0;
+    return;
+  }
+  if (levelSource) return;
+  const track = capture?.getAudioTracks()[0] ?? null;
+  if (!track) return;
+  levelSource = openMicLevelSource(track, (level) => {
+    micLevel = level;
+    evaluateGate();
+  });
+  if (!levelSource) {
+    micLevel = 1;
+    evaluateGate();
+  }
+}
+
+/**
+ * The talk key, and the releases that are not a keyup.
+ *
+ * **Capture phase**, like `MainLayout`'s own `keydown` listener and for the
+ * same reason (D-194): Radix's `DismissableLayer` listens on `document` in the
+ * capture phase and calls `preventDefault()` for any layer it has mounted, so a
+ * bubble-phase listener here would find the press already spent whenever a
+ * menu, a hint or a popover happened to be up. Nothing is prevented from here —
+ * the key is left to do whatever it would have done, which for a key that
+ * prints is to print.
+ *
+ * **The keyup is not guarded the way the keydown is.** A release always
+ * releases: the modifier test and the text-field test both exist to stop a
+ * press from talking, and applying either of them to a release is how a
+ * microphone is left open. `micTalkKeyReleases` therefore asks only for the
+ * code, and the four events below cover the releases that never arrive as a
+ * keyup at all — a window losing focus to `Alt+Tab`, a pointer released
+ * outside the button that was pressed, a tab going to the background.
+ */
+function watchTalkKey(): () => void {
+  if (typeof window === "undefined") return () => undefined;
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    const settings = gateSettings;
+    // The mode test is a **cost** guard rather than a rule, and it is worth
+    // saying so: `nextMicGate` ignores `held` in every mode but «Рация», so
+    // removing this line changes no audio — it was mutated out on 2026-09-18
+    // and every test stayed green. What it saves is a store notification, and
+    // with it a render of the capsule and the call bar, on each press of that
+    // key in a call that has no use for it.
+    if (!settings || settings.activation !== "ptt") return;
+    const target = event.target as HTMLElement | null;
+    const tagName = target?.tagName;
+    const editable = tagName === "INPUT" || tagName === "TEXTAREA" || Boolean(target?.isContentEditable);
+    if (
+      !micTalkKeyFires(
+        {
+          code: event.code,
+          ctrlKey: event.ctrlKey,
+          altKey: event.altKey,
+          metaKey: event.metaKey,
+          editable,
+          repeat: event.repeat,
+        },
+        settings.talkKey,
+      )
+    ) {
+      return;
+    }
+    holdVoiceTalk(true);
+  };
+
+  const onKeyUp = (event: KeyboardEvent) => {
+    const settings = gateSettings;
+    if (!settings) return;
+    if (!micTalkKeyReleases(event.code, settings.talkKey)) return;
+    holdVoiceTalk(false);
+  };
+
+  const release = () => {
+    if (!talkHeld) return;
+    holdVoiceTalk(false);
+  };
+  const onVisibility = () => {
+    if (document.visibilityState === "hidden") release();
+  };
+
+  window.addEventListener("keydown", onKeyDown, true);
+  window.addEventListener("keyup", onKeyUp, true);
+  window.addEventListener("blur", release);
+  window.addEventListener("pointerup", release);
+  window.addEventListener("pointercancel", release);
+  document.addEventListener("visibilitychange", onVisibility);
+  return () => {
+    window.removeEventListener("keydown", onKeyDown, true);
+    window.removeEventListener("keyup", onKeyUp, true);
+    window.removeEventListener("blur", release);
+    window.removeEventListener("pointerup", release);
+    window.removeEventListener("pointercancel", release);
+    document.removeEventListener("visibilitychange", onVisibility);
+  };
+}
+
+/** The mode as it is right now, for a gate that is about to be applied. */
+function readGateSettings(): { activation: MicActivation; threshold: number; talkKey: string } {
+  const settings = getAudioSettings();
+  return {
+    activation: settings.micActivation,
+    threshold: settings.micGateThreshold,
+    talkKey: settings.micTalkKey,
+  };
+}
+
+/**
+ * Watch the mode for the length of one call.
+ *
+ * The mode can be changed **during** a call — the settings screen is the call's
+ * settings screen, which is what `docs/proposals/2026-09-13-voice-channels.md`
+ * says in as many words — so this listens to the same two events
+ * `watchOutputDevice` does: the in-page custom event, and `storage` for a
+ * change made in another tab.
+ */
+function watchMicrophoneGate(mine: number): void {
+  // Only the listeners, never `forgetMicrophoneGate()`. The join has already
+  // decided the opening state and pushed it at the transport; a full reset here
+  // would put `gate` back to closed and the first evaluation would then push
+  // the same answer a second time — measured on 2026-09-18 as `micOpen:
+  // [true, true]` for a call in «Всегда», which is one redundant round trip per
+  // call and a state the store and the seam briefly disagree about.
+  stopWatchingGate?.();
+  stopWatchingGate = null;
+  if (typeof window === "undefined") return;
+  const apply = () => {
+    if (mine !== generation) return;
+    gateSettings = readGateSettings();
+    syncLevelSource();
+    evaluateGate();
+  };
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === AUDIO_SETTINGS_STORAGE_KEY) apply();
+  };
+  window.addEventListener(AUDIO_SETTINGS_EVENT, apply);
+  window.addEventListener("storage", onStorage);
+  const stopKeys = watchTalkKey();
+  stopWatchingGate = () => {
+    window.removeEventListener(AUDIO_SETTINGS_EVENT, apply);
+    window.removeEventListener("storage", onStorage);
+    stopKeys();
+  };
+  apply();
+}
+
+/** Safe to call twice, during a join, and when there was never a call. */
+function forgetMicrophoneGate(): void {
+  stopWatchingGate?.();
+  stopWatchingGate = null;
+  levelSource?.close();
+  levelSource = null;
+  micLevel = 0;
+  gate = MIC_GATE_CLOSED;
+  gateSettings = null;
+  publishTalkHeld(false);
+}
+
+/**
+ * Hold the microphone open, or let it go.
+ *
+ * One function for the key and for the button, which is what makes the phone
+ * and the computer the same feature rather than two: `VoiceCallCapsule` and
+ * `VoiceCallBar` call it from a pointer, `watchTalkKey` calls it from a key,
+ * and both release through the same path.
+ */
+export function holdVoiceTalk(down: boolean): void {
+  publishTalkHeld(down);
+  evaluateGate();
+}
+
 /**
  * The microphone, asked for at the moment somebody joins.
  *
@@ -449,6 +739,7 @@ async function requestVoiceToken(channelId: string): Promise<VoiceTokenOutcome> 
 function fail(refusal: string) {
   stopCapture();
   forgetOutputDevice();
+  forgetMicrophoneGate();
   forgetSpeakers();
   room = null;
   mutedBeforeDeafened = false;
@@ -563,6 +854,7 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
         if (mine !== generation) return;
         stopCapture();
         forgetOutputDevice();
+        forgetMicrophoneGate();
         forgetSpeakers();
         room = null;
         publish({ ...IDLE, phase: "failed", refusal: "Звонок прерван." });
@@ -596,6 +888,20 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
       stopCapture();
       await opened.join(outcome.grant.url, outcome.grant.token, null);
     } else {
+      // The gate's opening state, set **before** the join rather than after
+      // it. A call in «Рация» that published first and closed second would be
+      // audible for the length of one event loop, which is the one moment
+      // nobody is watching for.
+      gateSettings = readGateSettings();
+      gate = nextMicGate(MIC_GATE_CLOSED, {
+        activation: gateSettings.activation,
+        muted: false,
+        held: false,
+        level: 0,
+        threshold: gateSettings.threshold,
+        now: Date.now(),
+      });
+      await opened.setMicrophoneOpen(gate.open);
       await opened.join(outcome.grant.url, outcome.grant.token, microphone);
     }
   } catch {
@@ -618,6 +924,11 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
   // call has nowhere to appear while the capsule still says «Подключаемся…».
   watchOutputDevice(opened, mine);
   void applyOutputDevice(opened, getAudioSettings().selectedOutputDeviceId, mine);
+  // The gate, for the length of the call: the level source if the mode needs
+  // one, the talk key, and the watcher that follows a mode changed mid-call.
+  // Only for a token that may publish — there is nothing to gate otherwise, and
+  // the capture has already been released above.
+  if (outcome.grant.canPublish) watchMicrophoneGate(mine);
 }
 
 /** Leave. Safe during a join, after a failure, and when there is no call at all. */
@@ -627,6 +938,7 @@ export async function leaveVoiceCall(): Promise<void> {
   room = null;
   stopCapture();
   forgetOutputDevice();
+  forgetMicrophoneGate();
   forgetSpeakers();
   publish(IDLE);
   if (open) await open.leave().catch(() => undefined);
@@ -658,6 +970,10 @@ export async function setVoiceDeafened(deafened: boolean): Promise<void> {
   try {
     await room.setDeafened(deafened);
     if (mutedNext !== beforeMuted) await room.setMuted(mutedNext);
+    // The mute that deafening implies reaches the gate as well: an unmute on
+    // the way back out must not leave a «Рация» call transmitting with nothing
+    // held, and the seam's own re-application only knows the value this pushes.
+    evaluateGate();
   } catch {
     patch({ deafened: beforeDeafened, micMuted: beforeMuted });
   }
@@ -679,7 +995,14 @@ export async function setVoiceMuted(muted: boolean): Promise<void> {
   patch({ micMuted: muted });
   try {
     await room.setMuted(muted);
+    // And the gate is re-evaluated against the new mute. On the way in it is
+    // belt and braces — the SDK's own mute disables the track — and on the way
+    // out it is the whole of the correctness: `setTrackMuted(false)` re-enables
+    // the track, so a «Рация» call whose microphone was just turned back on has
+    // to be closed again with nothing held.
+    evaluateGate();
   } catch {
     patch({ micMuted: before });
+    evaluateGate();
   }
 }

@@ -15058,3 +15058,206 @@ Both `7882/udp` and a definitely-unbound `7883/udp` stay silent on a connected
 socket, so the host drops ICMP unreachable and silence alone cannot tell «bound
 but deliberately quiet» from «closed». The mux conclusion above rests on the ICE
 arms and the Google control, not on that probe.
+
+## D-232 `[x]` A call's microphone had two states, and a shared room heard everything between them
+
+**Severity:** high. Not a control that looked wrong — a control that was
+missing, in the one feature where its absence is heard by other people. A
+person in a voice channel published continuously from the moment they joined:
+their keyboard, their room-mate, the television in the next room, everything
+said to somebody who walked in. The only remedy the product offered was mute,
+and a mute has to be remembered twice — pressed before the noise and released
+before the next sentence, which is the failure everybody who has used a
+conference call knows.
+
+**Scope note, stated first because it matters more than the fix.** This is
+**not** in `docs/proposals/2026-09-13-voice-channels.md`. That document names
+push-to-talk and the noise gate twice as explicitly out of scope — in slice 2's
+exclusion list and again in section 7 — and both lines are now struck through
+with an addendum pointing here. It was built during continuous work under the
+owner's standing instruction, and it is scope beyond an approved design rather
+than a slice that was quietly skipped. What it does not touch: the LiveKit
+contract of section 3, the migration, the Edge Function, the caps, the
+moderation model.
+
+### What was there, measured rather than recalled
+
+`hooks/voiceRoom.ts` published one microphone track and offered `setMuted`.
+`buildAudioTrackConstraints` asks the browser for `echoCancellation`,
+`noiseSuppression` and `autoGainControl` (`hooks/useAudioSettings.ts:172-186`),
+which is genuine processing and is not a gate: it cleans the signal it is given
+and publishes all of it. Discord and Telegram both answer this with a gate and
+a hold key. This product answered it with nothing, and «mute when you are not
+speaking» is not an answer — it is the work the gate exists to do, handed to
+the person, in the middle of a conversation.
+
+### Three modes, and why the third is not a relabel of the first two
+
+`lib/micGate.ts`. `MicActivation` is `"open" | "voice" | "ptt"`, drawn as
+«Всегда» / «По голосу» / «Рация» — Discord's own two words in the vocabulary a
+Russian Discord user already has, plus the state this product has always been
+in.
+
+`open` is the **default**, and that is the load-bearing decision of this entry.
+A stored `kub:audio-settings:v1` written before today has to go on meaning what
+it meant, and somebody who never opens this section must not find a noise gate
+in front of their voice tomorrow. Calling `open` «voice activity with the
+threshold at zero» was the other option — it is what Discord's own slider does
+at its bottom end — and it is refused because the interface would then name a
+gate that never closes, which is a label disagreeing with its mechanism. The
+owner's rule against relabelled functions applies to a mode as much as to a
+screen.
+
+### The arithmetic, and the two things a bare threshold gets wrong
+
+The control is a **position** from 0 to 1, not a number of decibels, because
+the live level is drawn on the same axis directly beneath it: a person setting
+a threshold is comparing two quantities, and two axes for one comparison is how
+a threshold control becomes guesswork. `MIC_GATE_FLOOR_DB = -70` is what
+position 0.01 means; position 0 means «never closes». −70 rather than −100
+because below about −70 sit the quantisation noise of a 16-bit capture and the
+browser's own suppression, so the bottom third of the slider would be a region
+where nothing ever happens.
+
+`MIC_GATE_THRESHOLD_DEFAULT = 0.35` is −45.5 dBFS, and it is stated in the
+source as a **starting point rather than a measurement of anybody's room**:
+conversational speech peaks near −25 dBFS into a laptop capture and a quiet room
+under «Чистый голос» sits below −60, so −45 has about 15 dB of margin either
+way. A rough default is defensible here only because the surface draws the live
+level against it — the control exists to be calibrated by the person, in the one
+place their own microphone and their own room are available.
+
+Two mechanisms, not one, because a bare threshold fails in two different ways:
+
+1. **`micGateCloseAt` is half `micGateOpenAt`** — 6 dB of hysteresis. A voice
+   crossing a single threshold chatters on the consonants.
+2. **`MIC_GATE_HOLD_MS = 400`** — the gate stays open for 400 ms after the level
+   drops. Speech has gaps at that scale; without the hold the gate closes inside
+   a sentence and clips the word after the pause.
+
+And the hold is **`voice` only**. In «Рация» letting go stops it, immediately —
+a hold-open of even 200 ms turns «open only while I hold it» into a promise the
+mechanism does not keep, which is the whole point of the mode.
+
+### The mechanism under it, and the obvious implementation that is wrong
+
+The gate drives `MediaStreamTrack.enabled` on the published track
+(`voiceRoom.ts`, behind `setMicrophoneOpen`). It does **not** call `setMuted`,
+and that is a measurement rather than a preference: a mute draws a crossed
+microphone beside everybody's name, so a gate built on it would blink that glyph
+on and off through every sentence, for every other person in the room. Measured
+against a loopback `RTCPeerConnection` on 2026-09-18: **4902 bytes in two
+seconds with the track enabled, 482 with it disabled**, `media-source.audioLevel`
+at 0 — so disabling sends silence while the publication, the permission and the
+participant list are all untouched. Nobody is told, because «not talking at this
+instant» is not a fact about the conversation. A self-mute is, and it still
+propagates.
+
+Three seams that were found by reading the SDK rather than by guessing:
+
+- **`LocalTrack.setTrackMuted` writes `enabled = !muted` unconditionally**
+  (livekit-client 2.22.3: `unmute()` → `setTrackMuted(false)` →
+  `this._mediaStreamTrack.enabled = !muted`). So every unmute puts the track
+  back on the air whatever the gate had decided. The gate's value is held in the
+  room object and re-applied, or somebody in «Рация» who muted and unmuted would
+  be transmitting with nothing held.
+- **`setMicrophoneOpen` is accepted before the join and remembered.** A call
+  joined in «Рация» must not be audible for the length of one event loop between
+  publishing and the first press, and the only way to guarantee that is for the
+  state to exist before there is a track to apply it to. `setDeafened` and
+  `setParticipantVolume` already work this way.
+- **A mute wins.** `enabled = open && !published.isMuted`. Without the second
+  half a syllable arriving while somebody is muted re-enables a track the SDK
+  still believes is muted — audible to the room, with this client's interface,
+  the participant list and the SFU all saying «выключен».
+
+### Measuring the level, and the trap in it
+
+`lib/micLevel.ts` opens one `AudioContext` per call and reads the level off a
+**clone** of the local track. Not the track itself: a disabled track's analyser
+reads 0, so a gate measuring the track it controls can open once and never
+again — it would jam shut the first time it closed. The clone shares the
+hardware source and its own `enabled` is never touched. A browser that cannot
+measure — no `AudioContext`, or a graph that threw — returns `null`, and the
+mode degrades to the on-screen control rather than to a microphone that never
+opens.
+
+### The key, and the one honest sentence about it
+
+`MIC_TALK_KEY_DEFAULT` is `Backquote`. Eight codes are refused with a reason
+each: `Escape` belongs to whatever a person opened (D-194 is in this register
+about exactly that), `Tab` and both `Enter`s move focus and send, `Space`
+scrolls and types, `F5`/`F11`/`F12` never reach the page usably. A bare modifier
+is refused too. A refusal is a **sentence**, not a silent no-op: a control that
+swallows a press and changes nothing reads as broken.
+
+The default prints a character, and the settings row says so rather than leaving
+somebody to discover it mid-sentence: «пока курсор в поле ввода, она не включит
+микрофон — держите кнопку «Говорить»». In a messenger the cursor is in the
+composer most of the time, so this is not a corner case. It is a sentence rather
+than a refusal because the key works everywhere except in a field, and the
+on-screen control covers the field.
+
+Release is by window-level listeners on `blur`, `pointerup`, `pointercancel` and
+`visibilitychange` — the same shape the composer's recorder uses, and for the
+same reason: a button re-parented mid-gesture loses pointer capture, after which
+the release is delivered somewhere else and the gesture never ends. One listener
+on the window cannot be re-parented.
+
+### The control on the phone, and the two trades it forced
+
+A phone has no key, and the owner refuses a function that exists on one shell
+and silently not on another — so «Говорить» is a control in the capsule and in
+the call bar, and the key and the button are one mechanism: both call
+`holdVoiceTalk`, both are released by the same window listeners. Two trades came
+out of it at 390, and they were ruled differently:
+
+- **The room's name truncates** («Общий го…») because of the fourth control.
+  **Accepted.** The label on the control you must hold beats the name of the room
+  you are already in, and the call bar drops the group name in this mode for the
+  same pressure (`voiceCallBarState`, `talkControl: true`).
+- **The control was a 32px hold target.** **Fixed.** 32 is the capsule's own
+  deliberate size for a strip of chrome where a tap has the whole pill to land
+  on; a press held through a sentence is the one interaction there that the
+  product's 44px floor was written for, and sliding off it does not misfire — it
+  stops publishing, silently, while the person is still speaking. Raising the
+  control would push the row and cost the room's name what is left of it, so
+  `.kub-hold-target::after` grows the hit area and not the paint:
+  `inset-block: -6px` over 32px is 44 exactly, and 6px is ground both surfaces
+  already hold in their own padding (`py-1.5` on the capsule's row, `py-2` on
+  the bar's). Coarse pointers only. Four mutations turn
+  `tests/unit/touch-target-system.test.mjs` red, including the one that paints.
+
+### One defect of my own, found during the work
+
+`.kub-range` — the per-theme slider track added for the threshold control, after
+`--kub-surface-3` measured **1.01:1** against the panel and the empty half of the
+track simply vanished — was written **inside `@media (min-width: 48rem)`**. It
+therefore did nothing below 768px, which is every phone, which is the viewport
+the control most needed it in. Found by reading the sheet at 390 rather than by
+a test. The general shape is worth more than the fix: a rule placed in a file
+that is mostly media queries inherits the nearest one silently, and nothing about
+the declaration looks wrong.
+
+### Coverage
+
+`tests/unit/mic-gate.test.mts` (477 lines) holds the rules — modes, clamping,
+the open/close pair, the hold, the key refusals, the vocabulary — none of which
+needs a browser, because the decisions were deliberately put where
+`node --test` can reach them. `tests/unit/voice-room-seam.test.mjs` gained 156
+lines for the transport seam. Eight new tests in `tests/e2e/voice-call.spec.ts`,
+including the ones that would catch the seams above: a call joining closed in
+«Рация» without saying «выключен», a mute winning over a held key and unmuting
+not leaving it open, a lost window letting go, the composer typing rather than
+talking, the gate holding across a gap in «По голосу», «Всегда» costing nothing
+new, and the bar's control on a phone — the only surface there. Photographed in
+both themes.
+
+### Deliberately not built
+
+Noise **suppression** beyond the browser's (an RNNoise-class model is a
+different proposal with its own weight budget); a per-person gate for what you
+hear; a gate on voice **messages**, which are recorded by holding a button and
+are not in a call at all — said in the settings screen rather than left to be
+wondered about (`MIC_ACTIVATION_SCOPE_NOTE`); and any of it on the SFU, which
+sees a participant publishing silence and nothing new.

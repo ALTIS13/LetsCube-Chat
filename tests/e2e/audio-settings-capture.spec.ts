@@ -148,4 +148,55 @@ test.describe("under a running microphone", () => {
       info.annotations.push({ type: "capture", description: `output/audio/audio-${tag}-{manual,testing}.png` });
     });
   }
+
+  /**
+   * «Микрофон в звонке», in the two modes that bring a control with them.
+   *
+   * The threshold is photographed **with the microphone test running**, because
+   * that is the state it exists to be read in: the bar under the slider is the
+   * live level on the threshold's own axis, and a still of it at rest says
+   * nothing about whether the two line up. Chromium's fake device is a pulse,
+   * so the bar in these frames is whatever that pulse was doing at the shutter
+   * — what the picture is for is the layout, the tone of a bar that is open
+   * against one that is not, and whether anything is clipped at 390.
+   */
+  for (const theme of ["dark", "light"] as const) {
+    test(`the microphone mode, photographed (${theme})`, async ({ page, request }, info) => {
+      await requireFixtureServer(request);
+      await openSound(page, theme);
+      const width = page.viewportSize()?.width ?? 0;
+      const tag = `${process.env.KUB_CAPTURE_TAG || "after"}-${width}-${theme}`;
+      const picker = page.getByTestId("mic-activation-picker");
+      // The group itself rather than the whole window: it is the last one on
+      // the screen, so a window shot cuts it at the scrollport's edge and the
+      // threshold — the row the mode exists for — falls off the bottom.
+      const group = page.locator('[data-audio-group="Микрофон в звонке"]');
+
+      await page.getByTestId("audio-mic-test").click();
+      await expect(page.getByTestId("audio-self-monitor")).toBeEnabled();
+
+      await picker.locator('[data-mic-activation="voice"]').click();
+      await expect(page.getByTestId("mic-gate-level")).toBeVisible();
+      await group.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(400);
+      await group.screenshot({ path: `output/audio/audio-${tag}-gate-voice.png` });
+
+      await picker.locator('[data-mic-activation="ptt"]').click();
+      await expect(page.getByTestId("mic-talk-key")).toBeVisible();
+      await group.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(250);
+      await group.screenshot({ path: `output/audio/audio-${tag}-gate-ptt.png` });
+
+      // And the recorder waiting for a key, which is the one state with no
+      // resting appearance of its own.
+      await page.getByTestId("mic-talk-key").click();
+      await expect(page.getByTestId("mic-talk-key")).toHaveAttribute("data-listening", "true");
+      await page.waitForTimeout(250);
+      await group.screenshot({ path: `output/audio/audio-${tag}-gate-key.png` });
+      info.annotations.push({
+        type: "capture",
+        description: `output/audio/audio-${tag}-gate-{voice,ptt,key}.png`,
+      });
+    });
+  }
 });

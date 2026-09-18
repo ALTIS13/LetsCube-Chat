@@ -1,6 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+// Relative and with the extension, not `@/lib/micGate`, and neither half is a
+// slip. This module is imported by `tests/unit/mic-gate.test.mts` and
+// `audio-live-settings.test.mts` in a bare `node --test` process, which
+// resolves no bundler alias and no extensionless specifier: `@/lib/micGate`
+// fails at load with `Cannot find package '@/lib'` and `../lib/micGate` with
+// `Cannot find module`. Both were measured rather than guessed. `./motion.ts`
+// is imported this way by half of `lib/` and `allowImportingTsExtensions` is
+// already on, so this is the repository's own form for a runtime import that
+// has to survive outside the bundler.
+import {
+  clampMicGateThreshold,
+  MIC_ACTIVATION_DEFAULT,
+  MIC_GATE_THRESHOLD_DEFAULT,
+  MIC_TALK_KEY_DEFAULT,
+  micTalkKeyRefusal,
+  readMicActivation,
+  type MicActivation,
+} from "../lib/micGate.ts";
 
 export type AudioProcessingMode = "clean" | "raw" | "custom";
 
@@ -24,6 +42,21 @@ export interface AudioSettings {
   monitorGain: number;
   selectedInputDeviceId: string;
   selectedOutputDeviceId: string;
+  /**
+   * How the microphone opens in a call — Discord's «Voice Activity» versus
+   * «Push to Talk», plus the state this product has always been in.
+   *
+   * Absent in stored settings, which is what every value written before
+   * 2026-09-18 is, reads as `open`: the capture on the air until somebody
+   * presses mute, which is exactly what those builds did. The rule and the
+   * reasoning are in `lib/micGate.ts`; nothing about the meaning is decided
+   * here.
+   */
+  micActivation: MicActivation;
+  /** The voice-activity threshold as a position, 0..1. See `micGateOpenAt`. */
+  micGateThreshold: number;
+  /** The push-to-talk key, as a `KeyboardEvent.code`. */
+  micTalkKey: string;
 }
 
 export const AUDIO_SETTINGS_STORAGE_KEY = "kub:audio-settings:v1";
@@ -40,6 +73,9 @@ export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   monitorGain: 0.8,
   selectedInputDeviceId: DEFAULT_AUDIO_DEVICE_ID,
   selectedOutputDeviceId: DEFAULT_AUDIO_DEVICE_ID,
+  micActivation: MIC_ACTIVATION_DEFAULT,
+  micGateThreshold: MIC_GATE_THRESHOLD_DEFAULT,
+  micTalkKey: MIC_TALK_KEY_DEFAULT,
 };
 
 function toFiniteNumber(value: unknown, fallback: number) {
@@ -119,7 +155,26 @@ export function normalizeAudioSettings(value: unknown): AudioSettings {
     monitorGain: clampMonitorGain(settings?.monitorGain),
     selectedInputDeviceId: readDeviceId(settings?.selectedInputDeviceId),
     selectedOutputDeviceId: readDeviceId(settings?.selectedOutputDeviceId),
+    // Each read through `lib/micGate.ts` rather than clamped again here: the
+    // rule about what a stored value may be is the same rule the gate obeys,
+    // and two copies of it would be two answers to «what does an old settings
+    // value mean».
+    micActivation: readMicActivation(settings?.micActivation),
+    micGateThreshold: clampMicGateThreshold(settings?.micGateThreshold),
+    micTalkKey: readTalkKey(settings?.micTalkKey),
   };
+}
+
+/**
+ * A stored talk key, or the default.
+ *
+ * The same refusal the recorder applies, so a value hand-edited into storage —
+ * `Escape`, a bare modifier — cannot bind a key the interface would never have
+ * offered.
+ */
+function readTalkKey(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) return MIC_TALK_KEY_DEFAULT;
+  return micTalkKeyRefusal(value) === null ? value : MIC_TALK_KEY_DEFAULT;
 }
 
 export function getAudioSettings(): AudioSettings {

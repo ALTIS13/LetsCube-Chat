@@ -5,9 +5,11 @@ import { TinyUserAvatar } from "./MessageReactions";
 import { VoiceSpeakingAvatar } from "./VoiceSpeakingAvatar";
 import { VoiceConnectionPanel } from "./VoiceConnectionPanel";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
-import { useVoiceSpeechRevoked } from "@/hooks/useVoiceCall";
+import { holdVoiceTalk, useVoiceSpeechRevoked, useVoiceTalkHeld } from "@/hooks/useVoiceCall";
+import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { CAPSULE_GLASS, CAPSULE_CONTROL_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING } from "@/lib/controlSurface";
+import { micControlWords } from "@/lib/micGate";
 import { cn } from "@/lib/utils";
 import { orderVoiceParticipants, type VoiceCapsuleView, type VoiceChannelSummary, type VoiceParticipant } from "@/lib/voiceChannel";
 
@@ -82,6 +84,20 @@ const FACES = 3;
 const CAPSULE_CONTROL_UNAVAILABLE_GLASS =
   "rounded-full border border-[color:var(--glass-line)] bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]";
 
+/**
+ * The talk control while it is being held.
+ *
+ * A fill rather than a veil, because this is the one state in the capsule that
+ * says «you are on the air»: the veils are for hover and press, and a held
+ * push-to-talk key is neither — it is the control's own state, and the fill is
+ * what the call bar's headset badge already uses for the same job. A
+ * `color-mix` of a token, not an `rgba()` written by hand (rule 1), and not
+ * `opacity` (rule 5 measured a faded control on translucent material at 2.23:1
+ * against a floor of 4.5).
+ */
+const CAPSULE_CONTROL_LIVE_GLASS =
+  "rounded-full border border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_22%,transparent)]";
+
 export function VoiceCallCapsule({
   channel,
   participants,
@@ -105,6 +121,19 @@ export function VoiceCallCapsule({
   // Above the early return with it, and scoped to this chat's channel so a
   // capsule drawing some other room cannot say this person was silenced in it.
   const speechRevoked = useVoiceSpeechRevoked(channel?.id ?? null);
+  // The mode is a stored setting and the hold is one live fact about this
+  // client, so neither arrives in `view` — which is built by a pure function
+  // from things a `node --test` process can hold. The same reasoning
+  // `useVoiceSpeechRevoked` is read here under, one line above. What the two
+  // controls then *say* is a rule, and it is `micControlWords`.
+  const { settings } = useAudioSettings();
+  const talkHeld = useVoiceTalkHeld();
+  const words = micControlWords({
+    activation: settings.micActivation,
+    muted: view.muted,
+    held: talkHeld,
+    talkKey: settings.micTalkKey,
+  });
 
   if (!view.visible || !channel) return null;
 
@@ -279,20 +308,12 @@ export function VoiceCallCapsule({
               speechRevoked && "cursor-not-allowed",
             )}
             aria-pressed={view.muted}
-            aria-label={
-              speechRevoked
-                ? "Модератор выключил ваш микрофон"
-                : view.muted
-                  ? "Включить микрофон"
-                  : "Выключить микрофон"
-            }
-            title={
-              speechRevoked
-                ? "Модератор выключил ваш микрофон"
-                : view.muted
-                  ? "Включить микрофон"
-                  : "Выключить микрофон"
-            }
+            // The words are `lib/micGate.ts`'s, because the mode changes what
+            // this control means: in «Рация» a microphone that is not muted is
+            // still not transmitting, and the title is where that becomes
+            // discoverable without opening the settings.
+            aria-label={speechRevoked ? "Модератор выключил ваш микрофон" : words.muteLabel}
+            title={speechRevoked ? "Модератор выключил ваш микрофон" : words.muteTitle}
             data-testid="voice-capsule-mute"
             data-muted={view.muted ? "true" : "false"}
             data-unavailable={speechRevoked ? "true" : "false"}
@@ -306,6 +327,98 @@ export function VoiceCallCapsule({
                 size={15}
                 tone={view.muted ? "danger" : "default"}
               />
+            </span>
+          </button>
+        )}
+
+        {/* Hold to talk, in «Рация» and nowhere else.
+
+            It is here rather than only on a key because the owner refuses a
+            function that exists on one shell and silently not on another, and a
+            phone has no key to hold. So the key and this button are one
+            mechanism: both call `holdVoiceTalk`, and both are released by the
+            same window-level listeners in `useVoiceCall` — a pointer let go
+            anywhere, a window that lost focus, a tab that went away.
+
+            `onPointerDown` and no `onPointerUp`: the release is the module's,
+            deliberately. `MessageInput` records why in the composer's own
+            recorder — a button that is re-parented mid-gesture loses its
+            pointer capture, after which the release is delivered somewhere
+            else and the gesture never ends. One listener on the window cannot
+            be re-parented.
+
+            `select-none touch-none` so a held thumb neither selects the word
+            nor scrolls the conversation, and the callout that a long press
+            raises on a phone is refused outright. */}
+        {view.mute && words.talk && (
+          <button
+            type="button"
+            disabled={!words.talkAvailable || speechRevoked}
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              event.preventDefault();
+              holdVoiceTalk(true);
+            }}
+            // A focused control held with the space bar, which is what a
+            // keyboard's «hold» is. `repeat` is the OS saying the key has not
+            // moved, and acting on it would republish the same state.
+            onKeyDown={(event) => {
+              if (event.key !== " " && event.key !== "Enter") return;
+              event.preventDefault();
+              if (event.repeat) return;
+              holdVoiceTalk(true);
+            }}
+            onKeyUp={(event) => {
+              if (event.key !== " " && event.key !== "Enter") return;
+              holdVoiceTalk(false);
+            }}
+            onContextMenu={(event) => event.preventDefault()}
+            className={cn(
+              "kub-hold-target group/capsule relative h-8 shrink-0 select-none touch-none rounded-full px-2.5",
+              !words.talkAvailable && "cursor-not-allowed",
+            )}
+            aria-pressed={talkHeld}
+            aria-label={words.talkLabel}
+            title={words.talkTitle}
+            data-testid="voice-capsule-talk"
+            data-talking={talkHeld ? "true" : "false"}
+            data-unavailable={words.talkAvailable ? "false" : "true"}
+          >
+            <KubGlassLayer
+              className={
+                !words.talkAvailable
+                  ? CAPSULE_CONTROL_UNAVAILABLE_GLASS
+                  : talkHeld
+                    ? CAPSULE_CONTROL_LIVE_GLASS
+                    : CAPSULE_CONTROL_GLASS
+              }
+            />
+            {/* The word and the glyph carry the state as well as the material
+                does. Measured at 1440 in the dark theme: the sink veil takes
+                the pill's ground from rgb(13,35,72) to rgb(9,24,50), which is a
+                real step — but the label stayed rgb(220,223,231), so an
+                unavailable control read *brighter* than an available one
+                against its own darker ground. `--kub-muted` is a colour rather
+                than a fade, which is what rule 5 asks for on translucent
+                material. */}
+            <span className="relative flex h-full items-center gap-1">
+              <KubIcon
+                name="voice"
+                size={14}
+                tone={!words.talkAvailable ? "muted" : talkHeld ? "accent" : "default"}
+              />
+              <span
+                className={cn(
+                  "text-[11px] font-semibold whitespace-nowrap",
+                  !words.talkAvailable
+                    ? "text-[color:var(--kub-muted)]"
+                    : talkHeld
+                      ? "text-[color:var(--kub-accent-text)]"
+                      : "text-[color:var(--kub-text)]",
+                )}
+              >
+                {words.talkWord}
+              </span>
             </span>
           </button>
         )}

@@ -129,6 +129,44 @@ for (const { name, selector, property, value } of nativeControls) {
   });
 }
 
+/**
+ * The one control in the capsule that is held rather than tapped.
+ *
+ * Push-to-talk is where the 32px strip stops being a defensible bargain: a
+ * finger rests on it for a whole sentence, and sliding off it publishes
+ * nothing while the person keeps speaking. The floor is given as hit area
+ * only -- `inset-block: -6px` on an empty pseudo-element over a 32px control
+ * is 44 -- because raising the control itself would push the capsule's row
+ * and take the room's name below what is left of it at 390.
+ *
+ * Both halves again, and here the negative one is the point of the design:
+ * growing the painted control is precisely the change not made.
+ */
+test("the held control reaches the target without the paint moving", () => {
+  const coarse = coarseRule(".kub-hold-target::after");
+  assert.match(coarse, /inset-block:\s*-6px/, "the area a finger gets is not 32 + 6 + 6");
+  assert.match(coarse, /content:\s*""/, "a pseudo-element without `content` is never generated");
+  assert.match(coarse, /position:\s*absolute/, "in flow it would take space and move the row");
+});
+
+test("the held control is 32px on a pointer device, and carries no paint anywhere", () => {
+  assert.equal(
+    pointerRules(".kub-hold-target::after").length,
+    0,
+    "the hit area leaked out of the coarse-pointer query onto every device",
+  );
+  const coarse = coarseRule(".kub-hold-target::after");
+  // An invisible target: anything that draws would put a 44px slab behind a
+  // 32px pill, which is the layout change this rule exists to avoid.
+  for (const property of ["background", "border", "box-shadow", "outline"]) {
+    assert.doesNotMatch(
+      coarse,
+      new RegExp(`\\b${property}`),
+      `the hit area paints \`${property}\`, so it is no longer only a hit area`,
+    );
+  }
+});
+
 const staffSearches = [
   "artifacts/kub/src/pages/admin/UsersTab.tsx",
   "artifacts/kub/src/pages/admin/AuditTab.tsx",
@@ -275,8 +313,35 @@ const OPTED_IN = [
   },
   {
     file: "artifacts/kub/src/components/sidebar/AudioSettingsSection.tsx",
+    // `kub-range` beside `kub-field` since 2026-09-18, when the voice-activity
+    // threshold joined the two gain sliders in this panel. The touch opt-in is
+    // unchanged — `kub-field` is still what carries the 44px for a control
+    // whose whole area is the target — and what was added is the empty half of
+    // the track: `accent-color` alone leaves it to the browser, which in the
+    // dark theme returned a pure neutral grey on a navy panel. Three sliders in
+    // one panel drawn two different ways was the alternative.
     what: "the volume sliders, which were 314x16",
-    expect: [/className="kub-field w-full accent-\[var\(--kub-cyan\)\]"/],
+    expect: [/className="kub-field kub-range w-full"/],
+  },
+  {
+    file: "artifacts/kub/src/components/chat/VoiceCallCapsule.tsx",
+    // The only control in this file that opts in, and deliberately so: the
+    // other three are taps on a strip of chrome and keep the 32px the design
+    // chose for them. `relative` is load-bearing beside it -- an absolutely
+    // positioned pseudo-element with no positioned ancestor resolves against
+    // the viewport, and the hit area would land somewhere else entirely.
+    what: "hold-to-talk, which was a 32px target for a press held through a sentence",
+    expect: [/"kub-hold-target group\/capsule relative h-8 shrink-0 select-none touch-none rounded-full px-2\.5"/],
+  },
+  {
+    file: "artifacts/kub/src/components/chat/VoiceCallBar.tsx",
+    // The same mechanism in the other surface. In the chat-list column
+    // `.kub-voice-call-bar__extra` carries `overflow: hidden` so the controls
+    // can collapse as the column narrows, which clips this area with them --
+    // correct, and not where the floor is owed: the phone's band is not in
+    // that column.
+    what: "hold-to-talk in the bar, which was the same 32px",
+    expect: [/"kub-hold-target kub-voice-call-bar__extra group\/capsule relative h-8 shrink-0 select-none touch-none rounded-full"/],
   },
   {
     file: "artifacts/kub/src/components/settings/InfoHint.tsx",

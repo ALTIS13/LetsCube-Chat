@@ -3,14 +3,18 @@
 import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { useAppStore } from "@/store/app.store";
 import {
+  holdVoiceTalk,
   leaveVoiceCall,
   setVoiceDeafened,
   setVoiceMuted,
   useVoiceCall,
   useVoiceSpeechRevoked,
+  useVoiceTalkHeld,
 } from "@/hooks/useVoiceCall";
+import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { CAPSULE_CONTROL_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING_INSET } from "@/lib/controlSurface";
+import { micControlWords } from "@/lib/micGate";
 import { voiceCallBarState } from "@/lib/voiceCallBar";
 import { cn } from "@/lib/utils";
 
@@ -69,6 +73,22 @@ export function VoiceCallBar({ placement }: { placement: "column" | "top" }) {
     (state) => state.chats.find((chat) => chat.id === call.chatId)?.name ?? null,
   );
   const speechRevoked = useVoiceSpeechRevoked(call.channelId);
+  // The same two live facts the capsule reads directly, for the same reason and
+  // through the same rule: the bar and the capsule are two windows onto one
+  // call, so what a control says has to come from one function.
+  const { settings } = useAudioSettings();
+  const talkHeld = useVoiceTalkHeld();
+
+  // The words first: what the bar has room to say depends on whether it is
+  // carrying a fourth control, so the mode has to be read before the view is
+  // built. `view.muted` is not available yet, which costs nothing — the mute
+  // this needs is the call's own, and that is where `view.muted` comes from.
+  const words = micControlWords({
+    activation: settings.micActivation,
+    muted: call.micMuted,
+    held: talkHeld,
+    talkKey: settings.micTalkKey,
+  });
 
   const view = voiceCallBarState({
     phase: call.phase,
@@ -80,6 +100,7 @@ export function VoiceCallBar({ placement }: { placement: "column" | "top" }) {
     micMuted: call.micMuted,
     deafened: call.deafened,
     speechRevoked,
+    talkControl: words.talk,
   });
 
   if (!view.visible) return null;
@@ -213,20 +234,11 @@ export function VoiceCallBar({ placement }: { placement: "column" | "top" }) {
                 view.speechRevoked && "cursor-not-allowed",
               )}
               aria-pressed={view.muted}
-              aria-label={
-                view.speechRevoked
-                  ? "Модератор выключил ваш микрофон"
-                  : view.muted
-                    ? "Включить микрофон"
-                    : "Выключить микрофон"
-              }
-              title={
-                view.speechRevoked
-                  ? "Модератор выключил ваш микрофон"
-                  : view.muted
-                    ? "Включить микрофон"
-                    : "Выключить микрофон"
-              }
+              // `micControlWords` for the same reason the capsule uses it: the
+              // mode changes what this control means, and the two surfaces must
+              // not say it differently.
+              aria-label={view.speechRevoked ? "Модератор выключил ваш микрофон" : words.muteLabel}
+              title={view.speechRevoked ? "Модератор выключил ваш микрофон" : words.muteTitle}
               data-testid="voice-call-bar-mute"
               data-muted={view.muted ? "true" : "false"}
               data-unavailable={view.speechRevoked ? "true" : "false"}
@@ -251,6 +263,104 @@ export function VoiceCallBar({ placement }: { placement: "column" | "top" }) {
                 />
               </span>
             </button>
+
+            {/* Hold to talk, out here as well as in the capsule.
+                This is the conversation somebody has walked away from, and on
+                a phone it is the **only** surface the call has — the capsule
+                lives in the chat that owns it. A push-to-talk mode whose
+                on-screen control disappeared the moment you opened another
+                conversation would be a mode that only works while you are
+                looking at one screen.
+
+                `kub-voice-call-bar__extra` with the other two: in a column
+                dragged down to a strip of avatars it closes and «Выйти» stays,
+                which is the rule at the head of this file. That narrowing only
+                happens on a computer, where the key is the way to talk anyway. */}
+            {words.talk && (
+              <button
+                type="button"
+                disabled={!words.talkAvailable || view.speechRevoked}
+                onPointerDown={(event) => {
+                  if (event.button !== 0) return;
+                  event.preventDefault();
+                  holdVoiceTalk(true);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== " " && event.key !== "Enter") return;
+                  event.preventDefault();
+                  if (event.repeat) return;
+                  holdVoiceTalk(true);
+                }}
+                onKeyUp={(event) => {
+                  if (event.key !== " " && event.key !== "Enter") return;
+                  holdVoiceTalk(false);
+                }}
+                onContextMenu={(event) => event.preventDefault()}
+                className={cn(
+                  "kub-hold-target kub-voice-call-bar__extra group/capsule relative h-8 shrink-0 select-none touch-none rounded-full",
+                  // The word in the band, the glyph alone in the column, and
+                  // the reason is width rather than shell. Measured at 1440
+                  // with the label in the column: the room came out «Общий
+                  // г…» and the state — the one fact this bar exists to keep
+                  // readable — «· Вы в разго», clipped mid-word. The column is
+                  // 360 points by default and already carries three controls
+                  // and two names; the band across a phone is the whole width
+                  // and carries the same row with room to spare.
+                  //
+                  // It is also where the label is worth most: a computer has
+                  // the key, a phone has only this. The glyph keeps its name
+                  // through `aria-label` and `title` either way.
+                  column ? "w-8" : "px-2.5",
+                  !words.talkAvailable && "cursor-not-allowed",
+                )}
+                aria-pressed={talkHeld}
+                aria-label={words.talkLabel}
+                title={words.talkTitle}
+                data-testid="voice-call-bar-talk"
+                data-talking={talkHeld ? "true" : "false"}
+                data-unavailable={words.talkAvailable ? "false" : "true"}
+              >
+                <KubGlassLayer
+                  className={cn(
+                    CAPSULE_CONTROL_GLASS,
+                    // `border` restated beside the colour, not by accident: a
+                    // colour written without a width is the failure mode
+                    // `edge-vocabulary.test.mjs` exists for — the declaration
+                    // survives, draws nothing, and looks deliberate. The width
+                    // is already on `CAPSULE_CONTROL_GLASS`; saying it here too
+                    // keeps this line true on its own.
+                    talkHeld &&
+                      "border border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_22%,transparent)]",
+                    !words.talkAvailable &&
+                      "bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
+                  )}
+                />
+                {/* Muted words for a control that is not on offer, measured
+                    rather than chosen — see the note beside the same line in
+                    `VoiceCallCapsule`. */}
+                <span className="relative flex h-full w-full items-center justify-center gap-1">
+                  <KubIcon
+                    name="voice"
+                    size={15}
+                    tone={!words.talkAvailable ? "muted" : talkHeld ? "accent" : "default"}
+                  />
+                  {!column && (
+                    <span
+                      className={cn(
+                        "text-[11px] font-semibold whitespace-nowrap",
+                        !words.talkAvailable
+                          ? "text-[color:var(--kub-muted)]"
+                          : talkHeld
+                            ? "text-[color:var(--kub-accent-text)]"
+                            : "text-[color:var(--kub-text)]",
+                      )}
+                    >
+                      {words.talkWord}
+                    </span>
+                  )}
+                </span>
+              </button>
+            )}
 
             <button
               type="button"

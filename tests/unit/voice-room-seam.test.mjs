@@ -492,6 +492,162 @@ test("the person who was silenced is told, and the control is sunk rather than f
   );
 });
 
+/* ── The gate: voice activity and push to talk ────────────────────────────────
+ *
+ * The rules are `lib/micGate.ts` and `tests/unit/mic-gate.test.mts` holds every
+ * one of them without a browser. What cannot be reached from there is the
+ * moment the answer meets the track — the SDK owns the same `enabled` flag the
+ * gate writes, and it writes it back on every unmute — so the three guards
+ * below read the source, on the same terms as everything above.
+ */
+
+test("the gate is a seam method, named for the meaning rather than for LiveKit", () => {
+  assert.ok(
+    code.includes("setMicrophoneOpen(open: boolean): Promise<void>;"),
+    "the transport seam no longer offers the gate, so nothing above it can hold a " +
+      "microphone open without naming LiveKit itself",
+  );
+  // And the decisions stay out of here, exactly as they do for the volume: the
+  // seam applies an answer, it does not work one out.
+  for (const decision of ["nextMicGate", "micGateOpenAt", "MIC_GATE_HOLD_MS", "threshold"]) {
+    assert.ok(
+      !code.includes(decision),
+      `the seam decides «${decision}», which is a rule in a module no test can load`,
+    );
+  }
+});
+
+test("the gate disables the capture rather than muting the publication", () => {
+  // The difference is what everybody else sees. A mute is propagated by the
+  // SFU and draws a crossed microphone beside this person's name, so a gate
+  // built on it would blink that glyph through every sentence — and it would
+  // fight `setMuted` over the same state. Disabling sends silence and leaves
+  // the publication, the permission and the participant list alone.
+  const start = code.indexOf("const applyMicrophoneOpen = () => {");
+  assert.ok(start > 0, "the gate's applier is gone from the seam");
+  const end = code.indexOf("const audioSourceOf = (", start);
+  assert.ok(end > start, "audioSourceOf no longer follows the gate's applier — check this slice");
+  const body = code.slice(start, end);
+  assert.match(
+    body,
+    /published\.mediaStreamTrack\.enabled = microphoneOpen && !published\.isMuted;/,
+    "the gate no longer writes the track's own enabled flag, or it has stopped " +
+      "deferring to a self-mute — a syllable would then re-enable a track the SDK " +
+      "still believes is muted, audible to the room with the interface saying «выключен»",
+  );
+  assert.ok(
+    !body.includes(".mute()") && !body.includes(".unmute()"),
+    "the gate reaches for the SDK's mute, which tells the whole room what this " +
+      "client is doing between two words",
+  );
+});
+
+test("an unmute puts the gate back, because the SDK undoes it", () => {
+  // `LocalTrack.setTrackMuted` writes `enabled = !muted` with no regard for who
+  // else owns that flag (livekit-client 2.22.3), so every unmute re-enables the
+  // track. Without the re-application, a person in «Рация» who turned their
+  // microphone back on would be transmitting with nothing held.
+  const start = code.indexOf("async setMuted(");
+  assert.ok(start > 0, "setMuted is gone from the seam");
+  const end = code.indexOf("async sampleHealth()", start);
+  assert.ok(end > start, "sampleHealth no longer follows setMuted — check this slice");
+  const body = code.slice(start, end);
+  const unmute = body.indexOf("await published.unmute();");
+  assert.ok(unmute >= 0, "setMuted no longer unmutes the track");
+  const reapply = body.indexOf("applyMicrophoneOpen();", unmute);
+  assert.ok(
+    reapply > unmute,
+    "the gate is not re-applied after the unmute, so turning a microphone back on " +
+      "opens it whatever the mode says",
+  );
+
+  // And the join applies it at all, before anything is reported: a call joined
+  // in «Рация» must not be audible for the length of one event loop.
+  const join = code.indexOf("async join(url, token, microphone)");
+  const published = code.indexOf("publishTrack(published, { source: Track.Source.Microphone })", join);
+  const applied = code.indexOf("applyMicrophoneOpen();", published);
+  const announced = code.indexOf("reportAndAnnounce();", published);
+  assert.ok(applied > published, "the join publishes the capture without applying the gate to it");
+  assert.ok(applied < announced, "the gate is applied after the call has already been reported as up");
+});
+
+/* ── And the wiring above the seam, for the same reason the two guards at the
+ * top of this file read `useVoiceCall.ts`: `tests/e2e/voice-call.spec.ts`
+ * replaces the transport, so what the store does with a held key is provable
+ * there — but the releases that are *not* a keyup have no browser event a spec
+ * can raise (a window really losing focus to Alt+Tab is not one of them), and
+ * they are the difference between a feature and a microphone left open.
+ */
+
+test("a held talk key is released by every event that can swallow the keyup", () => {
+  const start = callCode.indexOf("function watchTalkKey()");
+  assert.ok(start > 0, "the talk key is no longer watched");
+  const end = callCode.indexOf("function readGateSettings()", start);
+  assert.ok(end > start, "readGateSettings no longer follows watchTalkKey — check this slice");
+  const body = callCode.slice(start, end);
+  // The **binding**, not the name. Asking for the string alone was a guard that
+  // passed on a mutation that deleted the `addEventListener` and left the
+  // matching `removeEventListener` behind — measured on 2026-09-18, and it is
+  // the shape every «green mutation» in this repository has had: the assertion
+  // was about the presence of a word rather than about the thing the word is
+  // part of.
+  for (const [target, event] of [
+    ["window", "blur"],
+    ["window", "pointerup"],
+    ["window", "pointercancel"],
+    ["document", "visibilitychange"],
+  ]) {
+    assert.ok(
+      body.includes(`${target}.addEventListener("${event}"`),
+      `${event} no longer releases a held key — this is the class of event that ` +
+        "leaves a microphone open after somebody alt-tabs",
+    );
+    assert.ok(
+      body.includes(`${target}.removeEventListener("${event}"`),
+      `${event} is bound for the length of the application rather than the call`,
+    );
+  }
+  // The keyup asks for the code and nothing else. Guarding it the way the
+  // keydown is guarded is how a release goes missing: hold the key, press Ctrl
+  // or tab into the composer, let go.
+  const up = body.indexOf("const onKeyUp = ");
+  const release = body.indexOf("const release = ", up);
+  assert.ok(up > 0 && release > up, "the keyup handler is gone");
+  const upBody = body.slice(up, release);
+  assert.ok(upBody.includes("micTalkKeyReleases(event.code, settings.talkKey)"), "the release no longer asks the rule");
+  for (const guard of ["editable", "ctrlKey", "repeat"]) {
+    assert.ok(
+      !upBody.includes(guard),
+      `the keyup is guarded by ${guard}, which is a release the microphone will not get`,
+    );
+  }
+});
+
+test("the meter stops with the call, and only runs for the mode that needs it", () => {
+  assert.ok(
+    callCode.includes("micGateNeedsLevel(settings.activation)"),
+    "a call now runs an AudioContext whatever the mode is, which is a battery cost " +
+      "with nothing reading it",
+  );
+  const start = callCode.indexOf("function forgetMicrophoneGate()");
+  assert.ok(start > 0, "nothing tears the gate down");
+  const end = callCode.indexOf("export function holdVoiceTalk(", start);
+  assert.ok(end > start, "holdVoiceTalk no longer follows forgetMicrophoneGate — check this slice");
+  const body = callCode.slice(start, end);
+  assert.ok(body.includes("levelSource?.close()"), "the level source outlives the call it belongs to");
+  assert.ok(body.includes("publishTalkHeld(false)"), "a call can end with the talk key still held");
+  // Every path that ends a call has to reach it, and there are four.
+  for (const path of ["function fail(", "export async function leaveVoiceCall(", "onClosed: () => {"]) {
+    const at = callCode.indexOf(path);
+    assert.ok(at > 0, `${path} is gone`);
+    const slice = callCode.slice(at, at + 600);
+    assert.ok(
+      slice.includes("forgetMicrophoneGate()"),
+      `${path} ends a call without stopping the meter or releasing the key`,
+    );
+  }
+});
+
 test("the SDK does not stop this client's capture when the room unpublishes it", () => {
   // The room option, not `userProvidedTrack`. `LocalParticipant.unpublishTrack`
   // reads `stopOnUnpublish ?? roomOptions.stopLocalTrackOnUnpublish ?? true`

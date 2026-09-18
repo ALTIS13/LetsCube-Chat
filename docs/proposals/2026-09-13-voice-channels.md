@@ -1109,10 +1109,14 @@ the channel row in `ChatInfoPanel`, the in-call bar, and self-mute. Cap 10. One
 voice channel per group chat, created by an owner or admin.
 
 **Not in this slice, named so nobody has to infer it:** video, screen share,
-recording, ringing, 1:1 calls, calls in private chats or channels, push-to-talk,
-noise gate, more than one voice channel per group, the speaking ring, output
+recording, ringing, 1:1 calls, calls in private chats or channels, ~~push-to-talk,
+noise gate~~, more than one voice channel per group, the speaking ring, output
 device selection, moderation, background audio on any shell, and anything at all
 above 10 participants.
+
+Two of those were struck through on 2026-09-18: push-to-talk and the noise gate
+were built. They were not in this slice and they are not a slice that was
+skipped — see the addendum under section 7.
 
 **Gate.**
 1. Two accounts on two different shells join and hear each other; a third
@@ -1264,5 +1268,43 @@ end-to-end encryption of the media (an SFU terminates DTLS, so media is
 encrypted in transit and readable at the server — LiveKit has E2EE via insertable
 streams, and it is a separate decision with its own key-distribution problem);
 voice in private chats or in channels; noise suppression beyond what the browser
-does; push-to-talk; soundboards, stage channels and every other Discord feature
+does; ~~push-to-talk~~; soundboards, stage channels and every other Discord feature
 that is not "a room you join"; and any participant count above 20.
+
+### Addendum, 2026-09-18: push-to-talk and the gate were built anyway
+
+**This proposal did not cover them and still does not describe them.** The line
+above is struck through rather than deleted so that the record stays legible:
+what shipped on 2026-09-18 is scope beyond the approved design, added during
+continuous work at the owner's standing instruction, and D-232 in the interface
+defect register is where it is specified and measured.
+
+Why it was not simply deferred to a later slice: the two exclusions were written
+as *features* and turned out to be a *defect*. What this document gives a person
+in a room is a mute toggle (section 4.3: «a mute toggle and a leave button») over
+a track constrained with the browser's own `echoCancellation`, `noiseSuppression`
+and `autoGainControl` (section 2, on `buildAudioTrackConstraints`). That is the
+whole of it — so an open microphone in a shared room published
+every keystroke, every room-mate and every breath, and the only remedy the
+product offered was to mute and then remember to unmute. Discord and Telegram
+both answer this with a gate and a hold-to-talk key; this product answered it
+with nothing at all, and that is not a missing feature but a room nobody can
+leave a microphone open in.
+
+What it does **not** change in this document: the LiveKit contract of section 3,
+the migration, the Edge Function, the participant caps, or the moderation model.
+The gate is entirely client-side, and deliberately below the SDK's mute: one
+`AudioContext` analyser over a **clone** of the local track (a disabled track
+reads 0, so measuring the real one would jam the gate shut), driving nothing but
+`MediaStreamTrack.enabled` on the published track. Nobody is told. A `setMuted`
+would have been the obvious implementation and is the wrong one — it draws a
+crossed microphone beside the name, so a gate built on it blinks that glyph
+through every sentence. Measured against a loopback `RTCPeerConnection`: 4902
+bytes in two seconds enabled, 482 disabled.
+
+The one thing it does make stale here: **section 4.3's inventory of the capsule**
+— «the channel name, up to four avatars with a «+N», a mute toggle and a leave
+button» — which has not been the whole of it since D-223 added deafen and D-217
+the connection panel, and is now short a hold-to-talk control in «Рация» as well.
+`AudioSettingsSection` likewise carries three microphone modes, a threshold and a
+key that no section here describes. Read D-232 for what the microphone now does.

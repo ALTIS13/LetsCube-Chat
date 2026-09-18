@@ -64,6 +64,16 @@ export interface VoiceCallBarInput {
   readonly deafened: boolean;
   /** A moderator took the microphone away (D-221). */
   readonly speechRevoked: boolean;
+  /**
+   * Whether the bar is carrying a hold-to-talk control — which it does in
+   * «Рация» and in no other mode. `lib/micGate.ts` decides that; this only
+   * needs to know the answer, because it changes what there is room to say.
+   *
+   * Required rather than optional, for the reason `deafened` is: a caller that
+   * stops passing it goes back to printing a name it has no room for, and that
+   * has to be a type error rather than a silent `false`.
+   */
+  readonly talkControl: boolean;
 }
 
 export interface VoiceCallBarView {
@@ -119,7 +129,21 @@ export function voiceCallBarState(input: VoiceCallBarInput): VoiceCallBarView {
   if (chatId !== null && chatId === input.selectedChatId) return HIDDEN;
 
   const room = (input.channelName ?? "").trim() || "Голосовой канал";
-  const where = (input.chatName ?? "").trim() || null;
+  /**
+   * The group's name, and the one state that has no room for it.
+   *
+   * A fourth control — hold to talk — takes about 90 points of a row that is
+   * 360 in the chat-list column and 390 on a phone. Measured at 390 with the
+   * name still printed: «Общий голос» survived and the line under it came out
+   * «К · Вы в разговоре», one letter of «Команда проекта» before the separator.
+   *
+   * So it is dropped rather than cut. That is this file's own rule taken one
+   * step further: the state is what somebody reads to know the call is up, the
+   * room is what they are looking for, and the group is the fact that gets cut
+   * — and a fact cut to one letter is not a shorter fact, it is noise. Pressing
+   * the bar still goes there.
+   */
+  const where = input.talkControl ? null : (input.chatName ?? "").trim() || null;
 
   if (phase === "joining") {
     return {

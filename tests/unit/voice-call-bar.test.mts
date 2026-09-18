@@ -36,6 +36,7 @@ function input(over: Partial<VoiceCallBarInput> = {}): VoiceCallBarInput {
     micMuted: false,
     deafened: false,
     speechRevoked: false,
+    talkControl: false,
     ...over,
   };
 }
@@ -162,4 +163,22 @@ test("each of the four states has its own line, and no two share one", () => {
     voiceCallBarState(input({ deafened: true, micMuted: true, speechRevoked: true })).detail,
     "Модератор выключил ваш микрофон",
   );
+});
+
+test("a bar carrying a hold-to-talk control stops printing the group", () => {
+  // A fourth control takes about 90 points of a row that is 360 in the column
+  // and 390 on a phone. Measured at 390 with the name still printed, the line
+  // under the room came out «К · Вы в разговоре» — one letter of «Команда
+  // проекта» before the separator. This file's rule is that the group is the
+  // fact allowed to be cut; a fact cut to one letter is not shorter, it is
+  // noise.
+  const plain = voiceCallBarState(input());
+  assert.equal(plain.where, "Команда проекта");
+  const talking = voiceCallBarState(input({ talkControl: true }));
+  assert.equal(talking.where, null);
+  // And nothing else moves: the room and the state are what the bar is for.
+  assert.equal(talking.room, plain.room);
+  assert.equal(talking.detail, plain.detail);
+  assert.equal(talking.controls, plain.controls);
+  assert.equal(talking.openChatId, plain.openChatId);
 });

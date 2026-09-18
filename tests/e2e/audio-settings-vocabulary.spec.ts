@@ -88,9 +88,12 @@ test.describe("the sound settings speak the settings screen's own vocabulary", (
     await openSound(page);
     const painted = await page.evaluate(() => {
       const panel = document.querySelector<HTMLElement>('[data-testid="settings-section-audio"]')!;
-      // A control is allowed a fill; so is the picker's track, which is a well
-      // rather than a box holding rows.
-      const ALLOWED = 'button, select, input, [role="switch"], [role="meter"], [data-testid="audio-mode-picker"]';
+      // A control is allowed a fill; so is a segmented picker's track, which is
+      // a well rather than a box holding rows. `[data-segment-track]` rather
+      // than the processing picker's own test id since 2026-09-18: there are
+      // two such wells now — the second is «Микрофон в звонке» — and they are
+      // one object drawn twice, from a single class list in the component.
+      const ALLOWED = 'button, select, input, [role="switch"], [role="meter"], [data-segment-track]';
       const out: string[] = [];
       for (const el of panel.querySelectorAll<HTMLElement>("*")) {
         if (el.closest(ALLOWED)) continue;
@@ -111,7 +114,10 @@ test.describe("the sound settings speak the settings screen's own vocabulary", (
         (el) => getComputedStyle(el).backgroundImage !== "none",
       ).length;
     });
-    expect(veiled).toBe(3);
+    // Four since 2026-09-18: «Микрофон в звонке» joined «Устройства»,
+    // «Уровень» and «Обработка голоса», drawn as the same object by the same
+    // `AudioGroup` — which is what this number is really counting.
+    expect(veiled).toBe(4);
   });
 
   /**
@@ -122,7 +128,7 @@ test.describe("the sound settings speak the settings screen's own vocabulary", (
   test("nothing inside the panel is nested inside anything else", async ({ page }) => {
     const panel = await openSound(page);
     const groups = panel.locator("[data-audio-group]");
-    await expect(groups).toHaveCount(3);
+    await expect(groups).toHaveCount(4);
     const nested = await page.evaluate(() => {
       const panel = document.querySelector<HTMLElement>('[data-testid="settings-section-audio"]')!;
       return [...panel.querySelectorAll<HTMLElement>("[data-audio-group]")].filter(
@@ -310,5 +316,93 @@ test.describe("the sound settings speak the settings screen's own vocabulary", (
     await panel.getByTestId("audio-reset").click();
     await expect(picker.locator('[data-audio-mode="clean"]')).toHaveAttribute("aria-checked", "true");
     await expect(panel.getByTestId("audio-echo-cancellation")).toHaveAttribute("aria-checked", "true");
+  });
+
+  /**
+   * «Микрофон в звонке»: each mode brings exactly the control it needs.
+   *
+   * The rules — what each mode does, which keys may be bound, what the
+   * threshold means — are `lib/micGate.ts` and are proved without a browser in
+   * `tests/unit/mic-gate.test.mts`. What is measured here is the surface: that
+   * the rows appear and disappear with the mode rather than standing there
+   * greyed out, which on a translucent panel is the thing rule 5 forbids.
+   */
+  test("the microphone mode brings its own control, and only its own", async ({ page }) => {
+    const panel = await openSound(page);
+    const picker = panel.getByTestId("mic-activation-picker");
+    await expect(picker.getByRole("radio")).toHaveCount(3);
+    // The default is the behaviour this product already had, and it asks for
+    // nothing: no threshold, no key.
+    await expect(picker.locator('[data-mic-activation="open"]')).toHaveAttribute("aria-checked", "true");
+    await expect(panel.getByTestId("mic-gate-level")).toHaveCount(0);
+    await expect(panel.getByTestId("mic-talk-key")).toHaveCount(0);
+
+    await picker.locator('[data-mic-activation="voice"]').click();
+    await expect(panel.getByTestId("mic-gate-level")).toBeVisible();
+
+    /*
+     * Every slider on this screen is **ours on both halves**, at both release
+     * widths.
+     *
+     * Measured on 2026-09-18 at 390: `appearance` came back `auto` and
+     * `background` `none`, so the control was the user agent's own — a white
+     * track on a dark panel, which is the defect `.kub-range` exists to fix.
+     * The class had been written inside `index.css`'s `min-width: 48rem` block
+     * and therefore did nothing on a phone, and the rail's per-person volume
+     * was drawn the same way and had the same defect. A screenshot at one
+     * width could not have caught it; this reads the computed value at both.
+     */
+    const sliders = await page.evaluate(() => {
+      const root = document.querySelector<HTMLElement>('[data-testid="settings-section-audio"]')!;
+      return [...root.querySelectorAll<HTMLInputElement>('input[type="range"]')].map((input) => {
+        const style = getComputedStyle(input);
+        return {
+          classes: input.className,
+          appearance: style.appearance,
+          paintsBothHalves: style.backgroundImage.includes("linear-gradient"),
+        };
+      });
+    });
+    expect(sliders.length).toBeGreaterThan(0);
+    for (const slider of sliders) {
+      expect(slider.classes, "a slider on this screen is not drawn with the product's own").toContain("kub-range");
+      expect(slider.appearance, `${slider.classes} fell back to the user agent's slider`).toBe("none");
+      expect(slider.paintsBothHalves, `${slider.classes} leaves its empty half to the browser`).toBe(true);
+    }
+    // Nothing is measuring until the microphone test above is running, and the
+    // bar says so by being empty rather than by inventing a level.
+    await expect(panel.getByTestId("mic-gate-level")).toHaveAttribute("data-open", "false");
+    await expect(panel.getByTestId("mic-talk-key")).toHaveCount(0);
+
+    await picker.locator('[data-mic-activation="ptt"]').click();
+    await expect(panel.getByTestId("mic-gate-level")).toHaveCount(0);
+    const key = panel.getByTestId("mic-talk-key");
+    await expect(key).toHaveText("Ё / ~");
+
+    // The recorder: a press is taken, and a key the interface owns is refused
+    // in words rather than swallowed.
+    await key.click();
+    await expect(key).toHaveText("Нажмите клавишу…");
+    await page.keyboard.press("F8");
+    await expect(key).toHaveText("F8");
+
+    await key.click();
+    await expect(key).toHaveAttribute("data-listening", "true");
+    // `Tab` rather than `Escape`, though both are refused. At 390 this screen
+    // is a dialog and `Escape` closes it — which is precisely the ownership the
+    // refusal list exists to respect (D-194), and it would take the panel this
+    // assertion reads away with it.
+    await page.keyboard.press("Tab");
+    await expect(key).toHaveText("F8", { timeout: 5000 });
+    await expect(panel.getByText(/уже занята интерфейсом/)).toBeVisible();
+
+    // The choice reaching storage is not re-proved here. A reload is how it
+    // would be shown, and the fixture does not survive one on WebKit — the
+    // chat list comes back empty, measured on `webkit-mobile-390` — so the
+    // claim would rest on a harness rather than on the product. What proves it
+    // instead: `tests/unit/mic-gate.test.mts` reads the stored shape through
+    // `normalizeAudioSettings`, and every «Рация» test in
+    // `tests/e2e/voice-call.spec.ts` seeds the mode into `localStorage` before
+    // the application boots and then watches the real capture follow it.
   });
 });

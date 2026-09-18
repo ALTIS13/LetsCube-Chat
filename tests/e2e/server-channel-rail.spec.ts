@@ -260,6 +260,11 @@ async function installLobbyTransport(page: Page, silenced: string[], oldBuild: s
           events.onParticipants(roster());
         },
         async setMuted() {},
+        // The gate (voice activity and push to talk). Nothing here exercises
+        // it — this file's calls run in the default «Всегда» — but a stand-in
+        // that omits a seam method is a stand-in that throws the day the store
+        // calls it, and the store calls this one on every join.
+        async setMicrophoneOpen() {},
         async leave() {},
         async sampleHealth() {
           return { at: Date.now(), rttMs: null, jitterMs: null, packetsSent: null, packetsLost: null };

@@ -48,6 +48,36 @@ export interface VoiceRoom {
    */
   setMuted(muted: boolean): Promise<void>;
   /**
+   * Whether the capture is on the air **right now**, which is not the same
+   * question as `setMuted`.
+   *
+   * This is the gate: voice activity opening on a syllable, or a held push-to-
+   * talk key. It happens several times a minute in a call and nobody else is
+   * told about it, because «not talking at this instant» is not a fact about
+   * the conversation — a self-mute is, which is why `setMuted` propagates and
+   * this does not. The rules that decide it are in `lib/micGate.ts`, where a
+   * `node --test` process can reach them; what is here is only the reaching of
+   * the track.
+   *
+   * It disables the underlying `MediaStreamTrack` rather than muting the
+   * publication, and the difference is what the other participants see: a mute
+   * draws a crossed microphone beside everybody's name, so a gate built on it
+   * would blink that glyph on and off through every sentence. Disabling sends
+   * silence instead — measured on 2026-09-18 against a loopback
+   * `RTCPeerConnection`: 4902 bytes in two seconds with the track enabled and
+   * 482 with it disabled, with `media-source.audioLevel` at 0 — and the
+   * publication, the permission and the participant list are all untouched.
+   *
+   * Accepts being called **before** the join and remembers it, like
+   * `setDeafened` and `setParticipantVolume`: a call in push-to-talk mode must
+   * not be audible for the moment between publishing and the first press, and
+   * the only way to guarantee that is for the state to exist before there is a
+   * track to apply it to.
+   *
+   * A self-mute wins over it. See `applyMicrophoneOpen`.
+   */
+  setMicrophoneOpen(open: boolean): Promise<void>;
+  /**
    * Stop hearing everybody, locally.
    *
    * Discord's «deafen», and the local half of it: nobody else learns about it,
@@ -240,6 +270,20 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
   // Kept rather than applied once: somebody who joins while this is on has to
   // arrive silent, and the SDK has no «default volume for this room».
   let deafened = false;
+  /**
+   * Whether the gate is letting the capture through.
+   *
+   * Kept for two reasons, and the second is the one that was measured rather
+   * than assumed. A call in push-to-talk mode sets it before there is a
+   * publication to apply it to; and `LocalTrack.setTrackMuted` writes
+   * `enabled = !muted` unconditionally, so every unmute puts the track back on
+   * the air whatever the gate had decided — read in livekit-client 2.22.3,
+   * where `unmute()` reaches `setTrackMuted(false)` and that line is
+   * `this._mediaStreamTrack.enabled = !muted`. Without the value held there is
+   * nothing to re-apply afterwards, and a person in «Рация» who muted and
+   * unmuted would be transmitting with nothing held.
+   */
+  let microphoneOpen = true;
 
   /**
    * How loud each person has been set to, by user id. Absent is the default.
@@ -273,6 +317,24 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
     for (const remote of room.remoteParticipants.values()) {
       remote.setVolume(volumeFor(remote.identity));
     }
+  };
+
+  /**
+   * The gate, reaching the track — and never reaching past a mute.
+   *
+   * `&& !published.isMuted` is the whole of the interaction between the two
+   * mechanisms, and it is not defensive tidiness. Both write the same flag:
+   * the SDK's `setTrackMuted` sets `enabled = !muted` and this sets
+   * `enabled = open`. Without the second half, a syllable arriving while
+   * somebody is muted would re-enable a track the SDK still believes is muted
+   * — audible to the room, with this client's own interface, the participant
+   * list and the SFU all saying «выключен». `lib/micGate.ts` refuses to open
+   * the gate while muted for the same reason one layer up; this is the layer
+   * that owns the flag, so it says so here too.
+   */
+  const applyMicrophoneOpen = () => {
+    if (!published) return;
+    published.mediaStreamTrack.enabled = microphoneOpen && !published.isMuted;
   };
 
   /**
@@ -461,7 +523,15 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
       // (`if (opts.source) track.source = opts.source`),
       // `Participant.getTrackPublication`, `RemoteParticipant.setVolume`.
       await room.localParticipant.publishTrack(published, { source: Track.Source.Microphone });
+      // Before anything is reported, because a call joined in «Рация» must not
+      // be audible for the length of one event loop. The value was set by the
+      // caller before this join and is applied here for the first time.
+      applyMicrophoneOpen();
       reportAndAnnounce();
+    },
+    async setMicrophoneOpen(open) {
+      microphoneOpen = open;
+      applyMicrophoneOpen();
     },
     async setDeafened(next) {
       deafened = next;
@@ -517,6 +587,12 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
         await room.localParticipant.publishTrack(published, { source: Track.Source.Microphone });
       }
       await published.unmute();
+      // The gate, put back after the unmute undid it. `setTrackMuted(false)`
+      // writes `enabled = true` with no regard for who else owns that flag
+      // (livekit-client 2.22.3), so an unmute in «Рация» would otherwise leave
+      // the microphone open with nothing held — the person pressed «включить
+      // микрофон» and got a live room.
+      applyMicrophoneOpen();
       report();
     },
     async sampleHealth() {

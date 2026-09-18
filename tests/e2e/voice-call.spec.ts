@@ -211,6 +211,16 @@ interface Seed {
    */
   outputDevice?: string;
   /**
+   * Stored audio settings, for the fields this file's tests care about:
+   * `micActivation`, `micGateThreshold`, `micTalkKey`.
+   *
+   * Written to `localStorage` for the same reason the output device is — the
+   * running application reads its own stored settings and is never handed
+   * them — and deliberately partial, so every test here also exercises the
+   * defaults around the one field it set.
+   */
+  audio?: Record<string, unknown>;
+  /**
    * Boot in this theme.
    *
    * Registered **after** `openFixture`, which writes `kub-theme = "dark"` in an
@@ -263,6 +273,12 @@ interface VoiceProbe {
   outputDevices: string[];
   /** Every deafen the call asked the transport for, in order. */
   deafened: boolean[];
+  /** Every gate the call asked the transport for, in order. */
+  micOpen: boolean[];
+  /** How many times the level meter was closed, which is how it stops. */
+  levelClosed: number;
+  /** Whether a meter is running at all — only «По голосу» needs one. */
+  levelRunning: boolean;
 }
 
 declare global {
@@ -304,6 +320,22 @@ declare global {
       revokeSpeech: ((allowed: boolean | null) => void) | null;
       /** Every per-person volume the call pushed at the transport, in order. */
       volumes: { userId: string; volume: number }[];
+      /** Every gate the call pushed at the transport, in order. */
+      micOpen: boolean[];
+      /**
+       * Push a microphone level at the gate, which is the only way a spec can.
+       *
+       * Chromium's fake capture device is a pulse — measured on 2026-09-18: a
+       * peak of 0.0078 most of the time with a spike to 1.0 about once a second
+       * — so a test that waited for a voice would be waiting on a beep, and one
+       * that set a threshold to keep the gate shut would be racing the same
+       * beep from the other side. `window.__letscubeMicLevel` replaces the
+       * instrument the way `__letscubeVoiceRoom` replaces the transport, so the
+       * assertions below are about the **track's own `enabled`** rather than
+       * about a fixture's arithmetic.
+       */
+      pushLevel: ((level: number) => void) | null;
+      levelClosed: number;
     };
   }
 }
@@ -337,8 +369,28 @@ async function probe(page: Page): Promise<VoiceProbe> {
       healthSamples: held?.healthSamples ?? 0,
       outputDevices: held?.outputDevices ?? [],
       deafened: held?.deafened ?? [],
+      micOpen: held?.micOpen ?? [],
+      levelClosed: held?.levelClosed ?? 0,
+      levelRunning: Boolean(held?.pushLevel),
     };
   });
+}
+
+/** Push one microphone level at the gate and let React commit what follows. */
+async function pushLevel(page: Page, level: number): Promise<void> {
+  await page.evaluate(async (value) => {
+    const held = window.__voiceProbe;
+    if (!held?.pushLevel) throw new Error("no meter is running, so no level can be pushed");
+    held.pushLevel(value);
+    const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await frame();
+    await frame();
+  }, level);
+}
+
+/** Whether the capture this browser really made is on the air right now. */
+async function micLive(page: Page): Promise<boolean> {
+  return page.evaluate(() => Boolean(window.__voiceProbe?.track?.enabled));
 }
 
 /**
@@ -375,8 +427,24 @@ async function installVoiceSeam(
         speak: null,
         revokeSpeech: null,
         volumes: [],
+        micOpen: [],
+        pushLevel: null,
+        levelClosed: 0,
       };
       window.__voiceProbe = held;
+      // The microphone's level, stood in for on the same terms as the SFU. A
+      // meter is opened only by the mode that needs one, so `pushLevel` being
+      // null is itself the assertion that «Всегда» and «Рация» run no
+      // `AudioContext`.
+      window.__letscubeMicLevel = (onLevel: (level: number) => void) => {
+        held.pushLevel = onLevel;
+        return {
+          close() {
+            held.levelClosed += 1;
+            held.pushLevel = null;
+          },
+        };
+      };
       const roster = (muted: boolean) =>
         [
           { userId: me, name: "", muted },
@@ -418,12 +486,35 @@ async function installVoiceSeam(
         async join(url: string, token: string, microphone: MediaStreamTrack | null) {
           held.joins.push({ url, token, hasTrack: Boolean(microphone) });
           held.track = microphone;
+          // The gate reaches the track when the track arrives, which is what
+          // the real seam does at the end of its own `join`: the call sets the
+          // opening state **before** joining, so a «Рация» call is never
+          // audible for the moment between publishing and the first press.
+          if (microphone && held.micOpen.length > 0) {
+            microphone.enabled = held.micOpen[held.micOpen.length - 1];
+          }
           events.onParticipants(roster(false));
         },
         async setMuted(muted: boolean) {
           held.muted.push(muted);
-          if (held.track) held.track.enabled = !muted;
+          // Both halves of what the real `setMuted` does, because this stands
+          // in for the **seam** rather than for the SDK. The SDK's own mute
+          // writes `enabled = !muted` with no regard for the gate (measured in
+          // livekit-client 2.22.3) and `createLiveKitRoom` re-applies the gate
+          // immediately afterwards — without that second line here, unmuting in
+          // «Рация» would leave this fixture's track live and a spec would be
+          // reporting a defect the product does not have.
+          const open = held.micOpen.length === 0 || held.micOpen[held.micOpen.length - 1];
+          if (held.track) held.track.enabled = !muted && open;
           events.onParticipants(roster(muted));
+        },
+        async setMicrophoneOpen(open: boolean) {
+          held.micOpen.push(open);
+          // What `applyMicrophoneOpen` does in the real seam, including the
+          // half that matters: a gate never opens a track the room believes is
+          // muted. `held.muted` is this stand-in's record of that.
+          const muted = held.muted.length > 0 && held.muted[held.muted.length - 1];
+          if (held.track) held.track.enabled = open && !muted;
         },
         async leave() {
           held.left += 1;
@@ -536,14 +627,21 @@ async function open(page: Page, seed: Seed = {}) {
   if (seed.theme) {
     await page.addInitScript((value) => localStorage.setItem("kub-theme", value as string), seed.theme);
   }
-  if (seed.outputDevice) {
-    // The shape `normalizeAudioSettings` parses. Only the one field is written:
-    // everything else falls back to its default, which is what a person who has
-    // touched nothing but the output device actually has in storage.
+  if (seed.outputDevice || seed.audio) {
+    // The shape `normalizeAudioSettings` parses. Only the fields a test asked
+    // for are written: everything else falls back to its default, which is what
+    // a person who has touched nothing else actually has in storage — and it is
+    // also the case that proves an old stored value still means what it meant,
+    // since none of these keys existed before 2026-09-18.
     await page.addInitScript(
-      ({ key, deviceId }) =>
-        localStorage.setItem(key as string, JSON.stringify({ selectedOutputDeviceId: deviceId })),
-      { key: AUDIO_SETTINGS_KEY, deviceId: seed.outputDevice },
+      ({ key, stored }) => localStorage.setItem(key as string, JSON.stringify(stored)),
+      {
+        key: AUDIO_SETTINGS_KEY,
+        stored: {
+          ...(seed.outputDevice ? { selectedOutputDeviceId: seed.outputDevice } : null),
+          ...(seed.audio ?? null),
+        },
+      },
     );
   }
   if (seed.countRenders) await page.addInitScript(installRenderCounter, RENDERS_KEY);
@@ -928,6 +1026,260 @@ test("mute stops what is published, and unmute puts it back", async ({ page, bro
   expect((await probe(page)).muted).toEqual([true, false]);
 });
 
+/* ── How the microphone decides to be open ────────────────────────────────────
+ *
+ * The rules are `lib/micGate.ts` and `tests/unit/mic-gate.test.mts` proves every
+ * one of them without a browser. What is proved here is the whole path from a
+ * stored mode to the **capture this browser really made**: every assertion below
+ * reads `track.enabled` on the live `MediaStreamTrack`, which is what a listener
+ * at the other end would or would not hear.
+ *
+ * Two stand-ins are in play and they replace different things. The transport is
+ * `__letscubeVoiceRoom`, as everywhere in this file; the microphone's level is
+ * `__letscubeMicLevel`, because Chromium's fake device is a once-a-second beep
+ * and a spec that waited for it would be timing a fixture rather than a gate.
+ */
+
+test("«Рация»: a call joins closed, and «выключен» is not how it says so", async ({ page, browserName }) => {
+  needsWebRtc(browserName);
+  await open(page, {
+    channel: { participantCount: 1 },
+    present: [ANNA.id],
+    audio: { micActivation: "ptt" },
+  });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+
+  // Closed from the first frame: the gate is set before the join, so there is
+  // no moment between publishing and the first press when the room is audible.
+  expect(await micLive(page)).toBe(false);
+  expect((await probe(page)).micOpen).toEqual([false]);
+  // And no meter: only «По голосу» needs an AudioContext.
+  expect((await probe(page)).levelRunning).toBe(false);
+
+  // The two states the brief names, told apart. Not held is an ordinary control
+  // at rest; muted is the slashed glyph this product has always drawn.
+  const talk = page.getByTestId("voice-capsule-talk");
+  const mute = page.getByTestId("voice-capsule-mute");
+  await expect(talk).toBeVisible();
+  await expect(talk).toHaveAttribute("data-talking", "false");
+  await expect(talk).toHaveAttribute("data-unavailable", "false");
+  await expect(talk).toHaveAttribute("aria-label", "Говорить");
+  await expect(mute).toHaveAttribute("data-muted", "false");
+  await expect(mute).toHaveAttribute("aria-label", "Выключить микрофон");
+  await expect(mute).toHaveAttribute("title", "Выключить микрофон · режим рации");
+});
+
+test("«Рация»: the button is held, on every shell, and released everywhere", async ({ page, browserName }) => {
+  needsWebRtc(browserName);
+  await open(page, {
+    channel: { participantCount: 1 },
+    present: [ANNA.id],
+    audio: { micActivation: "ptt" },
+  });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+  const talk = page.getByTestId("voice-capsule-talk");
+
+  // The phone's half of the feature: a press and a release, with no keyboard
+  // anywhere near it.
+  const box = (await talk.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect(talk).toHaveAttribute("data-talking", "true");
+  expect(await micLive(page)).toBe(true);
+
+  await page.mouse.up();
+  await expect(talk).toHaveAttribute("data-talking", "false");
+  expect(await micLive(page)).toBe(false);
+
+  // A release delivered **outside** the button still releases: the listener is
+  // on the window, not on a control that can be re-parented mid-gesture, which
+  // is the trap `MessageInput` records for the composer's own recorder.
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect(talk).toHaveAttribute("data-talking", "true");
+  await page.mouse.move(5, 5);
+  await page.mouse.up();
+  await expect(talk).toHaveAttribute("data-talking", "false");
+  expect(await micLive(page)).toBe(false);
+});
+
+test("«Рация»: the key talks, the composer types, and a lost window lets go", async ({ page, browserName }) => {
+  needsWebRtc(browserName);
+  await open(page, {
+    channel: { participantCount: 1 },
+    present: [ANNA.id],
+    audio: { micActivation: "ptt" },
+  });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+  const talk = page.getByTestId("voice-capsule-talk");
+
+  await page.keyboard.down("Backquote");
+  await expect(talk).toHaveAttribute("data-talking", "true");
+  expect(await micLive(page)).toBe(true);
+  await page.keyboard.up("Backquote");
+  await expect(talk).toHaveAttribute("data-talking", "false");
+  expect(await micLive(page)).toBe(false);
+
+  // The default key prints a character, so in the composer it has to print one.
+  // This is the cost the settings row names, and the reason the key is
+  // rebindable at all.
+  const composer = page.getByPlaceholder("Сообщение…");
+  await composer.click();
+  await page.keyboard.down("Backquote");
+  await expect(talk).toHaveAttribute("data-talking", "false");
+  expect(await micLive(page)).toBe(false);
+  await page.keyboard.up("Backquote");
+  await expect(composer).toHaveValue(/[`ё]/);
+  await composer.fill("");
+  // Out of the field again, or the rule above would go on refusing the key —
+  // which is the product being right and the test being in the wrong place.
+  await page.getByTestId("voice-capsule-title").click();
+  await expect(composer).not.toBeFocused();
+
+  // And the release that is not a keyup. `Alt+Tab` is delivered to the desktop
+  // and the keyup never arrives, so the microphone would stay open on the
+  // physical release — the one defect this feature is most likely to ship with.
+  // A spec cannot take the window's focus away for real; what it can do is
+  // raise the event the product listens for, and the binding itself is pinned
+  // by `tests/unit/voice-room-seam.test.mjs`.
+  await page.keyboard.down("Backquote");
+  await expect(talk).toHaveAttribute("data-talking", "true");
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await expect(talk).toHaveAttribute("data-talking", "false");
+  expect(await micLive(page)).toBe(false);
+  await page.keyboard.up("Backquote");
+});
+
+test("«Рация»: a mute wins over a held key, and unmuting does not leave it open", async ({ page, browserName }) => {
+  needsWebRtc(browserName);
+  await open(page, {
+    channel: { participantCount: 1 },
+    present: [ANNA.id],
+    audio: { micActivation: "ptt" },
+  });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+  const talk = page.getByTestId("voice-capsule-talk");
+  const mute = page.getByTestId("voice-capsule-mute");
+
+  // What the control looks like before the mute, so the two can be compared
+  // rather than described.
+  const paint = () =>
+    page.evaluate(() => {
+      const button = document.querySelector<HTMLElement>('[data-testid="voice-capsule-talk"]')!;
+      const word = button.querySelector<HTMLElement>("span > span")!;
+      const glass = button.querySelector<HTMLElement>(":scope > span, :scope > div")!;
+      return {
+        word: getComputedStyle(word).color,
+        opacity: getComputedStyle(button).opacity + "/" + getComputedStyle(glass).opacity,
+      };
+    });
+  const offered = await paint();
+
+  await mute.click();
+  await expect(mute).toHaveAttribute("data-muted", "true");
+  // The hold is no longer on offer, and it says why rather than disappearing.
+  await expect(talk).toHaveAttribute("data-unavailable", "true");
+  await expect(talk).toHaveAttribute("aria-label", "Микрофон выключен");
+  await expect(talk).toBeDisabled();
+
+  // And it **looks** unavailable, measured rather than asserted from the
+  // markup. Rule 5 of the material contract: a control on a translucent surface
+  // may not say «not offered» with opacity — it was measured at 2.23:1 against
+  // a floor of 4.5, because the wallpaper shows straight through the glyph — so
+  // the step is a colour and a veil. A control that is merely *not held* is an
+  // ordinary control at rest, which is the distinction this whole mode turns
+  // on.
+  const refused = await paint();
+  expect(refused.word, "the word reads the same whether the microphone is off or merely idle").not.toBe(
+    offered.word,
+  );
+  expect(refused.opacity, "the unavailable state is drawn with opacity (rule 5)").toBe(offered.opacity);
+
+  await page.keyboard.down("Backquote");
+  expect(await micLive(page)).toBe(false);
+  await page.keyboard.up("Backquote");
+
+  // Unmuting puts the *mode* back, not the microphone: the SDK re-enables the
+  // track on every unmute, so a call that stayed open here would be a room
+  // published by a press that says «включить микрофон».
+  await mute.click();
+  await expect(mute).toHaveAttribute("data-muted", "false");
+  expect(await micLive(page)).toBe(false);
+  await expect(talk).toHaveAttribute("data-unavailable", "false");
+});
+
+test("«По голосу»: the gate follows the voice, holds across a gap and closes after it", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  await open(page, {
+    channel: { participantCount: 1 },
+    present: [ANNA.id],
+    // A threshold of 0.4 of the range is −42 dBFS; the levels below are either
+    // far above it or silence, so nothing here depends on the exact number.
+    audio: { micActivation: "voice", micGateThreshold: 0.4 },
+  });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+
+  // A meter is running, and the call starts closed rather than open.
+  expect((await probe(page)).levelRunning).toBe(true);
+  expect(await micLive(page)).toBe(false);
+
+  await pushLevel(page, 0.5);
+  expect(await micLive(page)).toBe(true);
+
+  // The silence inside a sentence. The tail is 400ms, so a reading of silence
+  // taken straight afterwards must not cut the speaker off.
+  await pushLevel(page, 0);
+  expect(await micLive(page)).toBe(true);
+
+  // And it does close, once the tail has run out.
+  await page.waitForTimeout(500);
+  await pushLevel(page, 0);
+  expect(await micLive(page)).toBe(false);
+
+  // No hold-to-talk control in this mode: there is nothing to hold.
+  await expect(page.getByTestId("voice-capsule-talk")).toHaveCount(0);
+  await expect(page.getByTestId("voice-capsule-mute")).toHaveAttribute(
+    "title",
+    "Выключить микрофон · открывается по голосу",
+  );
+
+  // The meter stops with the call. One left running is an AudioContext and a
+  // timer alive after the conversation, which is a battery defect nobody sees.
+  await action(page).click();
+  await expect(action(page)).toHaveText("Присоединиться");
+  expect(await probe(page)).toMatchObject({ levelClosed: 1, levelRunning: false });
+});
+
+test("«Всегда» is the behaviour this product already had, and costs nothing new", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  // No `audio` seed at all: this is a stored settings value from before the
+  // feature existed, which is what every account has today.
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+
+  expect(await micLive(page)).toBe(true);
+  const after = await probe(page);
+  // No meter, and the gate asked the transport for nothing but «open» — a mode
+  // that pushed a stream of gate changes would be the old behaviour reimplemented
+  // rather than left alone.
+  expect(after.levelRunning).toBe(false);
+  expect(after.micOpen).toEqual([true]);
+  await expect(page.getByTestId("voice-capsule-talk")).toHaveCount(0);
+  await expect(page.getByTestId("voice-capsule-mute")).toHaveAttribute("title", "Выключить микрофон");
+});
+
 test("«Выйти» ends the call and closes the microphone", async ({ page, browserName }) => {
   needsWebRtc(browserName);
   await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
@@ -1045,6 +1397,149 @@ test("the SDK's own mute is what the seam stands in for", async ({ page, browser
     return { before, muted, unmuted };
   });
   expect(result).toEqual({ before: true, muted: false, unmuted: true });
+});
+
+/**
+ * The 44px floor, measured in a browser rather than read off the stylesheet.
+ *
+ * `tests/unit/touch-target-system.test.mjs` proves the rule is written and
+ * that it is written only for a coarse pointer. It cannot prove the rule
+ * reaches this control: an `overflow: hidden` on an ancestor, a stacking
+ * context, a `position: static` where `relative` was assumed — any of those
+ * leaves the declaration intact and the hit area gone, which is the failure
+ * mode the whole `.kub-range`-inside-a-media-query lesson is about.
+ *
+ * So the assertion is the one a finger makes: press 5px above the painted
+ * pill and ask the document what is there.
+ */
+test("the held control takes a press above its paint, and is still painted at 32", async ({
+  page,
+  browserName,
+}, info: TestInfo) => {
+  needsWebRtc(browserName);
+  // Pixel 7 — `hasTouch`, so `@media (pointer: coarse)` matches. At 1440 it
+  // deliberately does not, and the second half of this test is that check.
+  const coarse = info.project.name.includes("mobile");
+  await open(page, {
+    channel: { participantCount: 1 },
+    present: [ANNA.id],
+    audio: { micActivation: "ptt" },
+  });
+  if ((await action(page).textContent()) !== "Выйти") {
+    await action(page).click();
+    await expect(action(page)).toHaveText("Выйти");
+  }
+  const talk = page.getByTestId("voice-capsule-talk");
+  await expect(talk).toBeVisible();
+
+  const box = (await talk.boundingBox())!;
+  // The paint does not move. That is the point of doing this with a
+  // pseudo-element: `h-8` is 32 on every pointer, and the capsule's row keeps
+  // the height it had before this control existed.
+  expect(Math.round(box.height)).toBe(32);
+
+  // 5px above the pill's top edge — inside the 6px the rule adds, and outside
+  // the pill itself. `elementFromPoint` answers with the deepest element, and
+  // a pseudo-element is never itself an event target, so a hit inside the
+  // grown area answers with the button.
+  const at = async (dy: number) =>
+    await page.evaluate(
+      ([x, y]) => {
+        const el = document.elementFromPoint(x, y);
+        return el?.closest("[data-testid]")?.getAttribute("data-testid") ?? null;
+      },
+      [box.x + box.width / 2, box.y + dy] as [number, number],
+    );
+
+  expect(await at(box.height / 2)).toBe("voice-capsule-talk");
+  // Both directions have an exact answer, which is stronger than "not the
+  // button": on a pointer device the press falls through to the capsule's own
+  // `py-1.5`, and that is precisely the 6px this rule claims on a finger — the
+  // area it adds is ground the capsule already owned, so nothing outside the
+  // capsule is covered either way.
+  const above = coarse ? "voice-capsule-talk" : "voice-capsule";
+  expect(await at(-5)).toBe(
+    above,
+    coarse
+      ? "a press just above the pill missed the control a finger is meant to hold"
+      : "the touch hit area reached a pointer device, where the pill is the target",
+  );
+  expect(await at(box.height + 5)).toBe(
+    above,
+    "the area below the pill does not match the area above it",
+  );
+
+  // And it stays a hit area rather than becoming a control: nothing outside
+  // the pill's width answers, so the neighbouring controls keep their own
+  // presses.
+  const beside = await page.evaluate(
+    ([x, y]) => {
+      const el = document.elementFromPoint(x, y);
+      return el?.closest("[data-testid]")?.getAttribute("data-testid") ?? null;
+    },
+    [box.x - 5, box.y - 5] as [number, number],
+  );
+  expect(beside).not.toBe("voice-capsule-talk");
+});
+
+test("the hold-to-talk control, photographed in both themes", async ({ page, browserName }, info: TestInfo) => {
+  needsWebRtc(browserName);
+  // Three states in one frame each, because the whole argument about this
+  // control is that they must not look alike: waiting, held, and a microphone
+  // that is switched off — where only the last is the slashed glyph.
+  await open(page, {
+    channel: { participantCount: 1 },
+    present: [ANNA.id],
+    audio: { micActivation: "ptt" },
+  });
+  const shot = (name: string) => `output/voice-call/${name}-${info.project.name}.png`;
+  const talk = page.getByTestId("voice-capsule-talk");
+
+  for (const theme of ["dark", "light"] as const) {
+    await stampTheme(page, theme);
+    await page.evaluate(() => document.fonts.ready);
+    if ((await action(page).textContent()) !== "Выйти") {
+      await action(page).click();
+      await expect(action(page)).toHaveText("Выйти");
+    }
+    await expect(talk).toBeVisible();
+    await page.screenshot({ path: shot(`ptt-waiting-${theme}`) });
+
+    const box = (await talk.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await expect(talk).toHaveAttribute("data-talking", "true");
+    await page.screenshot({ path: shot(`ptt-held-${theme}`) });
+    await page.mouse.up();
+
+    await page.getByTestId("voice-capsule-mute").click();
+    await expect(talk).toHaveAttribute("data-unavailable", "true");
+    await page.screenshot({ path: shot(`ptt-muted-${theme}`) });
+    await page.getByTestId("voice-capsule-mute").click();
+  }
+
+  // And the other surface the same control lives on, which on a phone is the
+  // only one: the bar, in the conversation the call is not in.
+  await switchChat(page, "Смета и склад", OTHER_LINE);
+  const barTalk = bar(page).getByTestId("voice-call-bar-talk");
+  for (const theme of ["dark", "light"] as const) {
+    await stampTheme(page, theme);
+    await page.evaluate(() => document.fonts.ready);
+    await expect(barTalk).toBeVisible();
+    await page.screenshot({ path: shot(`ptt-bar-${theme}`) });
+    const barBox = (await barTalk.boundingBox())!;
+    await page.mouse.move(barBox.x + barBox.width / 2, barBox.y + barBox.height / 2);
+    await page.mouse.down();
+    await expect(barTalk).toHaveAttribute("data-talking", "true");
+    await page.screenshot({ path: shot(`ptt-bar-held-${theme}`) });
+    await page.mouse.up();
+  }
+  info.annotations.push({
+    type: "capture",
+    description:
+      `output/voice-call/ptt-{waiting,held,muted}-{dark,light}-${info.project.name}.png and ` +
+      `ptt-bar{,-held}-{dark,light}-${info.project.name}.png`,
+  });
 });
 
 test("the capsule and the row, photographed in both themes", async ({ page, browserName }, info: TestInfo) => {
@@ -1890,6 +2385,49 @@ test("a call in a conversation with no voice channel is visible and can be left"
   await expect.poll(async () => (await probe(page)).left).toBe(1);
   // And the bar goes with the call rather than lingering over nothing.
   await expect(bar(page)).toHaveCount(0);
+});
+
+test("«Рация» can be talked in from the bar, which on a phone is the only surface", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  // The claim being tested is the owner's rule about shells: a function that
+  // exists on one and silently not on another is not shipped. On a phone the
+  // capsule lives in the chat that owns the call, so a person who walked away
+  // from that conversation has this bar and nothing else — and in «Рация» the
+  // hold is the only way to be heard at all.
+  await open(page, {
+    channel: { participantCount: 1 },
+    present: [ANNA.id],
+    otherChannel: false,
+    audio: { micActivation: "ptt" },
+  });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+  await switchChat(page, "Смета и склад", OTHER_LINE);
+  await expect(capsule(page)).toHaveCount(0);
+
+  const talk = bar(page).getByTestId("voice-call-bar-talk");
+  await expect(talk).toBeVisible();
+  await expect(talk).toHaveAttribute("data-talking", "false");
+  expect(await micLive(page)).toBe(false);
+
+  const box = (await talk.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect(talk).toHaveAttribute("data-talking", "true");
+  expect(await micLive(page)).toBe(true);
+  await page.mouse.up();
+  await expect(talk).toHaveAttribute("data-talking", "false");
+  expect(await micLive(page)).toBe(false);
+
+  // And the same key, from a conversation that knows nothing about the call.
+  await page.keyboard.down("Backquote");
+  await expect(talk).toHaveAttribute("data-talking", "true");
+  expect(await micLive(page)).toBe(true);
+  await page.keyboard.up("Backquote");
+  expect(await micLive(page)).toBe(false);
 });
 
 test("voice-call-bar-one-visible: the bar stands down where the capsule stands", async ({

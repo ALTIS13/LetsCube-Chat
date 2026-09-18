@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { KubButton, KubIcon, KubSwitch } from "@/components/kub";
 import {
   DEFAULT_AUDIO_DEVICE_ID,
@@ -42,6 +42,25 @@ import {
   type AudioModeSegment,
 } from "@/lib/audioSettingsSurface";
 import { DISABLED_SINK, FOCUS_RING, PRESS_SINK } from "@/lib/controlSurface";
+import {
+  MIC_ACTIVATION_GROUP_CAPTION,
+  MIC_ACTIVATION_GROUP_LABEL,
+  MIC_ACTIVATION_SCOPE_NOTE,
+  MIC_ACTIVATION_SEGMENTS,
+  MIC_GATE_LEVEL_LABEL,
+  MIC_GATE_THRESHOLD_LABEL,
+  MIC_TALK_KEY_LISTENING,
+  MIC_TALK_KEY_ROW_LABEL,
+  MIC_TALK_TOUCH_NOTE,
+  micActivationHint,
+  micGateOpenAt,
+  micGateThresholdHint,
+  micLevelPosition,
+  micTalkKeyLabel,
+  micTalkKeyNote,
+  micTalkKeyRefusal,
+  type MicActivation,
+} from "@/lib/micGate";
 import { coarsePointer } from "@/lib/pointer";
 import { cn } from "@/lib/utils";
 
@@ -71,6 +90,11 @@ export function AudioSettingsSection() {
   const [applying, setApplying] = useState(false);
   const [selfMonitoring, setSelfMonitoring] = useState(false);
   const [monitorError, setMonitorError] = useState<string | null>(null);
+  // The key recorder's two states. `listening` is a control waiting for a
+  // press; `keyRefusal` is why the last press was not taken, because a control
+  // that swallows a key and changes nothing reads as broken.
+  const [listeningForKey, setListeningForKey] = useState(false);
+  const [keyRefusal, setKeyRefusal] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const contextRef = useRef<AudioContext | null>(null);
   const frameRef = useRef<number | null>(null);
@@ -193,6 +217,34 @@ export function AudioSettingsSection() {
       stopSelfMonitoring(false);
     };
   }, []);
+
+  /**
+   * The key recorder, while it is listening.
+   *
+   * Capture phase, so the press is read before whatever else the application
+   * binds keys to — `MainLayout` runs its own capture listener first, which is
+   * why `Escape` both closes the conversation behind this panel and lands here
+   * as a refusal. That is the honest outcome of pressing a key the interface
+   * already owns, and `micTalkKeyRefusal` says which ones those are.
+   *
+   * The whole rule is in `lib/micGate.ts`; this listener decides nothing.
+   */
+  useEffect(() => {
+    if (!listeningForKey || typeof window === "undefined") return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      event.preventDefault();
+      setListeningForKey(false);
+      const refusal = micTalkKeyRefusal(event.code);
+      if (refusal) {
+        setKeyRefusal(refusal);
+        return;
+      }
+      setKeyRefusal(null);
+      updateSettings({ micTalkKey: event.code });
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [listeningForKey, updateSettings]);
 
   const enableSelfMonitoring = async (stream: MediaStream, audioSettings = settings): Promise<boolean> => {
     setMonitorError(null);
@@ -486,6 +538,91 @@ export function AudioSettingsSection() {
         {monitorError && <AudioNote tone="danger">{monitorError}</AudioNote>}
       </AudioGroup>
 
+      {/*
+        How the microphone decides to be open, which is the choice Discord's
+        settings screen calls «Voice Activity» versus «Push to Talk».
+
+        It belongs on this screen and not on one of its own:
+        `docs/proposals/2026-09-13-voice-channels.md:1038` says in as many words
+        that the call's settings *are* this section — it already holds both
+        device pickers, the processing modes and the monitor.
+
+        Directly under «Уровень» on purpose. The threshold is calibrated against
+        a live level, and the live level is the meter in the group above: a
+        second capture opened by this group would be a settings screen turning
+        the microphone on by itself.
+      */}
+      <AudioGroup caption={MIC_ACTIVATION_GROUP_CAPTION}>
+        <div className="min-w-0 px-3 py-2">
+          <div
+            role="radiogroup"
+            aria-label={MIC_ACTIVATION_GROUP_LABEL}
+            data-testid="mic-activation-picker"
+            data-segment-track="true"
+            className={SEGMENT_TRACK}
+          >
+            {MIC_ACTIVATION_SEGMENTS.map((segment) => (
+              <ActivationSegment
+                key={segment.mode}
+                mode={segment.mode}
+                label={segment.label}
+                active={settings.micActivation === segment.mode}
+                onSelect={() => updateSettings({ micActivation: segment.mode })}
+              />
+            ))}
+          </div>
+        </div>
+        <AudioNote>{micActivationHint(settings.micActivation)}</AudioNote>
+
+        {settings.micActivation === "voice" && (
+          <>
+            <SliderRow
+              label={MIC_GATE_THRESHOLD_LABEL}
+              value={settings.micGateThreshold}
+              min={0}
+              max={1}
+              step={0.01}
+              onChange={(micGateThreshold) => updateSettings({ micGateThreshold })}
+              below={<GateLevel level={testing ? level : 0} threshold={settings.micGateThreshold} />}
+            />
+            <AudioNote>{micGateThresholdHint(testing)}</AudioNote>
+          </>
+        )}
+
+        {settings.micActivation === "ptt" && (
+          <>
+            <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 min-h-11">
+              <span className="min-w-0 text-sm text-[color:var(--kub-text)]">{MIC_TALK_KEY_ROW_LABEL}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setKeyRefusal(null);
+                  setListeningForKey((waiting) => !waiting);
+                }}
+                aria-live="polite"
+                data-testid="mic-talk-key"
+                data-listening={listeningForKey ? "true" : "false"}
+                className={cn(
+                  "kub-button h-9 shrink-0 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-text)] kub-raise",
+                  FOCUS_RING,
+                  PRESS_SINK,
+                )}
+              >
+                {listeningForKey ? MIC_TALK_KEY_LISTENING : micTalkKeyLabel(settings.micTalkKey)}
+              </button>
+            </div>
+            {keyRefusal ? (
+              <AudioNote tone="danger">{keyRefusal}</AudioNote>
+            ) : (
+              <AudioNote>{micTalkKeyNote(settings.micTalkKey)}</AudioNote>
+            )}
+            <AudioNote>{MIC_TALK_TOUCH_NOTE}</AudioNote>
+          </>
+        )}
+
+        <AudioNote>{MIC_ACTIVATION_SCOPE_NOTE}</AudioNote>
+      </AudioGroup>
+
       <AudioGroup caption={AUDIO_GROUP_PROCESSING}>
         <div className="min-w-0 px-3 py-2">
           {/*
@@ -501,7 +638,8 @@ export function AudioSettingsSection() {
             role="radiogroup"
             aria-label={AUDIO_MODE_GROUP_LABEL}
             data-testid="audio-mode-picker"
-            className="flex w-full min-w-0 gap-0.5 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] p-0.5"
+            data-segment-track="true"
+            className={SEGMENT_TRACK}
           >
             {AUDIO_MODE_SEGMENTS.map((segment) => (
               <ModeSegment
@@ -737,6 +875,125 @@ function DeviceRow({
 }
 
 /**
+ * The well a one-of-N choice is cut into, written once and used by both
+ * pickers.
+ *
+ * One constant rather than two identical class lists, and that is load-bearing
+ * rather than tidy: `tests/unit/audio-settings-surface.test.mts` counts the
+ * strings in this file that paint the page ground and the strings that draw a
+ * perimeter, and it names the two that are allowed — this track, and the device
+ * field. A second copy of the same line would read as a third box even though
+ * the pixels are the same object drawn twice.
+ */
+const SEGMENT_TRACK =
+  "flex w-full min-w-0 gap-0.5 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] p-0.5";
+
+/**
+ * A segment's own class list, shared by the two pickers for the same reason the
+ * track is. The `min-h-11` is measured — see the note in
+ * `tests/unit/touch-target-system.test.mjs`, which pins this exact string.
+ */
+function segmentClasses(active: boolean, selectable: boolean): string {
+  return cn(
+    // `min-h-11`, not `h-9`. Measured at 1440, where the settings column is
+    // 296px wide: a segment gets 87px and «Без обработки» needs 98.9, so the
+    // label wraps — and a fixed `h-9` clipped the second line off the bottom
+    // of the pill. A minimum lets it grow instead. 11 is 44px, exactly what
+    // `.kub-button` asks of a coarse pointer, so the `min-h-*` that outranks
+    // that class here agrees with it rather than defeating it (which is the
+    // trap `touch-target-system.test.mjs` guards, and why it allows >= 11).
+    "kub-button min-h-11 min-w-0 flex-1 rounded-md px-2 py-1.5 text-[12px] font-semibold leading-tight transition-colors",
+    FOCUS_RING,
+    active
+      ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
+      : selectable
+      ? "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
+      : "bg-[var(--kub-inset)] bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] text-[color:var(--kub-muted)] cursor-not-allowed",
+    selectable && PRESS_SINK,
+    selectable && !active && DISABLED_SINK,
+  );
+}
+
+/**
+ * One segment of the microphone-mode picker.
+ *
+ * A sibling of `ModeSegment` rather than the same component with a prop,
+ * because the two differ in exactly one thing that matters and it is not the
+ * pixels: the attribute. `tests/e2e/audio-settings-vocabulary.spec.ts` reads
+ * `[data-audio-mode]` **globally** to prove the processing picker is one
+ * unwrapped row of equal segments, so a second picker answering to the same
+ * attribute would silently join that measurement and the geometry assertion
+ * would start describing six segments across two rows.
+ *
+ * Every one of these three can be chosen — there is no state-rather-than-choice
+ * segment here, which is the other thing `ModeSegment` carries.
+ */
+function ActivationSegment({
+  mode,
+  label,
+  active,
+  onSelect,
+}: {
+  mode: MicActivation;
+  label: string;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      data-mic-activation={mode}
+      onClick={onSelect}
+      className={segmentClasses(active, true)}
+    >
+      {label}
+    </button>
+  );
+}
+
+/**
+ * The live level, drawn under the threshold on the **same axis**.
+ *
+ * `micLevelPosition` is the inverse of the mapping the slider's value goes
+ * through, so a bar at this width and the handle above it mean the same
+ * loudness — which is the whole reason the threshold is stored as a position
+ * rather than as a number of decibels. The two line up to within half a thumb
+ * (6px of a 272px track at 1440), because a range input insets its travel by
+ * that much and a plain box does not; the reading that matters is the colour
+ * rather than the alignment.
+ *
+ * Accent while the gate would be open and muted while it would not: that is
+ * the answer a person is looking for while dragging, and it is `micGateOpenAt`
+ * making it rather than this component.
+ */
+function GateLevel({ level, threshold }: { level: number; threshold: number }) {
+  const open = level > 0 && level >= micGateOpenAt(threshold);
+  const width = Math.round(micLevelPosition(level) * 100);
+  return (
+    <div
+      role="meter"
+      aria-label={MIC_GATE_LEVEL_LABEL}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={width}
+      data-testid="mic-gate-level"
+      data-open={open ? "true" : "false"}
+      className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--kub-range-track)]"
+    >
+      <div
+        className={cn(
+          "h-full rounded-full transition-[width]",
+          open ? "bg-[var(--kub-cyan)]" : "bg-[var(--kub-muted)]",
+        )}
+        style={{ width: `${width}%` }}
+      />
+    </div>
+  );
+}
+
+/**
  * One segment of the processing picker.
  *
  * `custom` is the state the three switches below put the settings into, not a
@@ -766,24 +1023,7 @@ function ModeSegment({
       disabled={!selectable || busy}
       data-audio-mode={segment.mode}
       onClick={onSelect}
-      className={cn(
-        // `min-h-11`, not `h-9`. Measured at 1440, where the settings column is
-        // 296px wide: a segment gets 87px and «Без обработки» needs 98.9, so the
-        // label wraps — and a fixed `h-9` clipped the second line off the bottom
-        // of the pill. A minimum lets it grow instead. 11 is 44px, exactly what
-        // `.kub-button` asks of a coarse pointer, so the `min-h-*` that outranks
-        // that class here agrees with it rather than defeating it (which is the
-        // trap `touch-target-system.test.mjs` guards, and why it allows >= 11).
-        "kub-button min-h-11 min-w-0 flex-1 rounded-md px-2 py-1.5 text-[12px] font-semibold leading-tight transition-colors",
-        FOCUS_RING,
-        active
-          ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
-          : selectable
-          ? "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
-          : "bg-[var(--kub-inset)] bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] text-[color:var(--kub-muted)] cursor-not-allowed",
-        selectable && PRESS_SINK,
-        selectable && !active && DISABLED_SINK,
-      )}
+      className={segmentClasses(active, selectable)}
     >
       {segment.label}
     </button>
@@ -797,6 +1037,7 @@ function SliderRow({
   max,
   step,
   onChange,
+  below,
 }: {
   label: string;
   value: number;
@@ -804,6 +1045,8 @@ function SliderRow({
   max: number;
   step: number;
   onChange: (value: number) => void;
+  /** Drawn under the track, on the same axis. Only the threshold uses it. */
+  below?: ReactNode;
 }) {
   return (
     <label className="block min-w-0 px-3 py-2">
@@ -821,10 +1064,26 @@ function SliderRow({
         // D-047: 314x16 before this. A slider is a control a finger aims at,
         // and `kub-field` is what carries the touch minimum for a box whose
         // whole area is the target.
-        className="kub-field w-full accent-[var(--kub-cyan)]"
+        //
+        // `kub-range` since 2026-09-18, and it is the same defect the rail's
+        // per-person volume met: `accent-color` paints the filled half and the
+        // thumb and leaves the rest of the track to the browser, which in the
+        // dark theme came back `rgb(59, 59, 59)` — a pure neutral grey, no hue
+        // — on a panel ground of `rgb(17, 42, 71)`. Both halves are ours now,
+        // in tokens, and the fill ratio arrives as a custom property because a
+        // gradient stop cannot be a Tailwind class.
+        className="kub-field kub-range w-full"
+        style={{ "--kub-range-filled": `${rangeFilled(value, min, max)}%` } as CSSProperties}
       />
+      {below}
     </label>
   );
+}
+
+/** Where the fill stops, as a percentage of the track. */
+function rangeFilled(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value) || !Number.isFinite(min) || !Number.isFinite(max) || max <= min) return 0;
+  return Math.round(((Math.min(max, Math.max(min, value)) - min) / (max - min)) * 100);
 }
 
 /**
