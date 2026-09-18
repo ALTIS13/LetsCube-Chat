@@ -610,7 +610,7 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
-### 2026-09-18 — `1af94092` (fifteen deploys, one day, and three production migrations)
+### 2026-09-18 — `fbbd5e2d` (eighteen deploys, one day, and five production migrations)
 
 - **`0b5d62df`** — the voice gateway's moderation half: `/force-mute` and
   `/remove`, with the authorisation matrix, the rate limit and the client's
@@ -618,6 +618,86 @@ hash run by hand, and it is worth writing down as one.
   and checked by a calibrated route probe: `token`, `force-mute` and `remove`
   all answer 400 to an empty body while `NoSuchRouteZZZ` answers 404 — a route
   that exists rejects the body, one that does not rejects the path.
+- **`fbbd5e2d`** — slice 5's server half (D-230) and slice 3's last two items
+  (D-228, D-229). Four deployables and two production migrations, each verified
+  separately rather than inferred from the push.
+
+  **`letscube-web`** and **`letscube-worker`** both read off the running
+  containers at `fbbd5e2d…7079e8`; the worker logged `voiceReconciler started`
+  with its 30-second tick, which is where the rate limit's prune lives.
+
+  **The Edge Function**, eight files copied to
+  `/srv/letscube/platform/supabase-docker/volumes/functions/voice-gateway` after
+  a backup to `/srv/letscube/backups/functions/voice-gateway-20260918T070527Z.tgz`,
+  and **all eight compared byte for byte** — local and remote sha256 identical
+  for `index.ts`, the new `admission.mjs`, and the six unchanged modules.
+
+  **Two environment names added**, with both files backed up first to
+  `/srv/letscube/backups/config/` (stamp `20260918T070649Z`):
+  `VOICE_ENABLED=true` — behaviour-neutral, because the gateway treats absent,
+  empty and `true` alike as open, so setting it is what makes the switch
+  *operable* — and `VOICE_MAX_TOTAL_PARTICIPANTS=` **left empty**, which is no
+  cap and today's behaviour. The insertion refuses rather than guesses: the
+  script checks its anchor matched exactly once before replacing the file.
+
+  **The kill switch was proved live, and proved scoped, by driving it.** With
+  `VOICE_ENABLED=false` and the container restarted:
+
+      token       -> 503 {"ok":false,"error":"voice_disabled"}
+      force-mute  -> 400 {"ok":false,"error":"invalid_request"}
+      remove      -> 400 {"ok":false,"error":"invalid_request"}
+      webhook     -> 401 {"ok":false,"error":"unauthorized"}
+
+  That single probe answers two questions at once. The switch works — and it
+  also proves the container is running the **new** code, because the old code
+  would have answered `400` there; no separate staleness check was needed. And
+  the three routes it must *not* touch still answer for themselves: a moderator
+  keeps their levers while a call drains, and the SFU's events still reach the
+  gateway, so no chat list is left showing calls that had ended.
+
+  Restored to `true` and re-probed: `token` back to 400, `NoSuchRouteZZZ` 404.
+  A route that exists rejects the body; one that does not rejects the path.
+
+  **Two production migrations, each backed up, rehearsed and proved
+  behaviourally after applying.**
+
+  `20260918200000_a_call_says_so_in_the_conversation.sql` as `supabase_admin`,
+  backup `pre-20260918200000-call-service-message-20260918T064858Z.sql`
+  (1,353,004 bytes, sha256 `ac9eeee7…`, 137 `CREATE TABLE`). Asked on production
+  after applying, `voice_call_transition` answers `start / nothing / end /
+  nothing` for 0→1 unannounced, 1→2 announced, 2→0 announced and 0→1 already
+  announced — which *is* «once per call, not once per join», stated as four
+  values rather than as a claim.
+
+  `20260918190000_voice_limits_bind_the_deployment.sql` as `supabase_admin`,
+  backup `pre-20260918190000-voice-limits-20260918T070048Z.sql` (1,359,780
+  bytes, sha256 `f5413a57…`, 137 `CREATE TABLE`). **Rehearsed twice**, and the
+  second time was not optional: the first rehearsal was on a throwaway
+  PostgreSQL 18.4 cluster, and production is **17.6** read off `version()`, so
+  the whole file was rehearsed again here inside a transaction that ended in
+  ROLLBACK. Proved behaviourally afterwards, inside another rolled-back
+  transaction: the 21st attempt in a window is refused with
+  `retry_after_seconds: 60`; **three refusals later the table still holds
+  exactly 20 rows**, which is the property that bounds it by the limit rather
+  than by the attack rate; a different caller is unaffected; `moderate` has its
+  own allowance; and with two in-flight mints and no connected rows
+  `voice_active_participants(30)` answers 2 while
+  `voice_active_participants(0)` answers 0 — the two terms of the cap, told
+  apart.
+
+  One probe of mine was refused by the table's own CHECK constraint because I
+  spent an action named `probe`, which is not one of the two it allows. The
+  constraint doing its job, and the cheapest possible confirmation that the
+  action vocabulary is closed.
+
+  **Waiting on the owner:** `VOICE_MAX_TOTAL_PARTICIPANTS` is empty, which means
+  no ceiling. The number cannot be derived from this repository — section 1.6 of
+  the voice proposal records no `nproc`, no `free -h` and no traffic allowance
+  for this host — and the only measured input is the egress table of section
+  2.3: **18.2 Mbps worst case for one room of twenty, 117.6 for one of fifty,
+  per room and quadratic.** Setting it is one line in the functions `.env` plus
+  a container restart.
+
 - **`1af94092`** — per-participant volume (D-227), and the slider track token it
   needed. Verified in the live bundle **and** the live stylesheet: four product
   sentences present, a control present, a fabricated one absent, and both
