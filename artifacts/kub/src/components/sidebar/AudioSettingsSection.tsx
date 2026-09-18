@@ -14,6 +14,16 @@ import {
   type AudioProcessingMode,
 } from "@/hooks/useAudioSettings";
 import { supportsAudioOutputSelection } from "@/lib/audioOutput";
+import { callSoundReadiness, primeCallSounds } from "@/lib/callSoundPlayer";
+import {
+  CALL_SOUND_HINT,
+  CALL_SOUND_LABEL,
+  NOTIFICATION_SOUND_HINT,
+  NOTIFICATION_SOUND_LABEL,
+  SOUND_BLOCKED_NOTE,
+  SOUND_GROUP_CAPTION,
+  SOUND_SCOPE_NOTE,
+} from "@/lib/callSounds";
 import {
   AUDIO_APPLYING_NOTE,
   AUDIO_DEFAULT_INPUT_LABEL,
@@ -95,6 +105,9 @@ export function AudioSettingsSection() {
   // that swallows a key and changes nothing reads as broken.
   const [listeningForKey, setListeningForKey] = useState(false);
   const [keyRefusal, setKeyRefusal] = useState<string | null>(null);
+  // What the player last found out about whether anything can be heard. Read
+  // rather than assumed, and read again after each press that could change it.
+  const [blocked, setBlocked] = useState(() => callSoundReadiness());
   const streamRef = useRef<MediaStream | null>(null);
   const contextRef = useRef<AudioContext | null>(null);
   const frameRef = useRef<number | null>(null);
@@ -456,6 +469,51 @@ export function AudioSettingsSection() {
         a person cannot read off any control here.
       */}
       <p className="px-1 text-xs leading-snug text-[color:var(--kub-muted)]">{AUDIO_INTRO_NOTE}</p>
+
+      {/*
+        First, and above the microphone chain the rest of this panel is. The
+        sounds belong to the whole product — a call arriving while nothing is
+        open, a message while the window is behind another one — where
+        «Устройства», «Уровень», «Микрофон в звонке» and «Обработка голоса» are
+        four views of one capture. Somebody opening this screen because the
+        telephone is too loud should not have to read past all of that.
+      */}
+      <AudioGroup caption={SOUND_GROUP_CAPTION}>
+        <SwitchRow
+          label={CALL_SOUND_LABEL}
+          hint={CALL_SOUND_HINT}
+          checked={settings.callSoundEnabled}
+          testId="audio-call-sound"
+          onChange={(callSoundEnabled) => {
+            updateSettings({ callSoundEnabled });
+            // The press is a gesture, and a gesture is the one thing a browser
+            // wants before it will play anything. Turning the sound on is
+            // therefore also the moment it becomes possible — which is why the
+            // note below can be true before this press and false after it.
+            if (callSoundEnabled) void primeCallSounds().then(() => setBlocked(callSoundReadiness()));
+          }}
+        />
+        <SwitchRow
+          label={NOTIFICATION_SOUND_LABEL}
+          hint={NOTIFICATION_SOUND_HINT}
+          checked={settings.notificationSoundEnabled}
+          testId="audio-notification-sound"
+          onChange={(notificationSoundEnabled) => {
+            updateSettings({ notificationSoundEnabled });
+            if (notificationSoundEnabled) void primeCallSounds().then(() => setBlocked(callSoundReadiness()));
+          }}
+        />
+        {/*
+          Said only once it has actually happened, never as a warning in
+          advance. A browser that refuses sound until the page has been touched
+          is the ordinary case for a tab opened and left alone, and on every
+          shell where it does not happen the sentence would be a lie about the
+          product. What it must never become is an excuse: the band itself is
+          the notice, and it is built to be missed by nobody.
+        */}
+        {blocked === "blocked" && <AudioNote>{SOUND_BLOCKED_NOTE}</AudioNote>}
+        <AudioNote>{SOUND_SCOPE_NOTE}</AudioNote>
+      </AudioGroup>
 
       <AudioGroup caption={AUDIO_GROUP_DEVICES}>
         <DeviceRow

@@ -107,8 +107,10 @@ export function MainLayout() {
           the flow: the whole shell moves down by its height and nothing is
           covered — measured, after a fixed card at 390 sat over the chat
           header's back button, which on a phone is the only way out of a
-          conversation (D-047). From `md` the same element is `fixed` and takes
-          no room at all. It draws nothing when nothing is ringing. */}
+          conversation (D-047). It is a band at every width, not a card from
+          `md`: photographed at 1440, the fixed card sat across the
+          conversation's date separator and its «НОВЫЕ СООБЩЕНИЯ» mark. It draws
+          nothing when nothing is ringing. */}
       <VoiceCallRing />
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden"

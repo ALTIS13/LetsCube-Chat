@@ -40,7 +40,12 @@ test.use({
   launchOptions: {
     // A real audio track, without a microphone and without a prompt — the two
     // switches `voice-call.spec.ts` uses for the same reason.
-    args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+    // `--mute-audio` because these tests really do start oscillators — the
+    // assertions below are about what the player was asked to do, and the only
+    // way to ask it for real is to let it run. Muting stops the workstation
+    // beeping through a suite; it does not stop the graph, so nothing the
+    // assertions read is affected.
+    args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--mute-audio"],
   },
 });
 
@@ -317,6 +322,62 @@ async function boot(page: Page, harness: Harness) {
 
 const card = (page: Page) => page.getByTestId("voice-ring");
 
+/**
+ * What the sound player was asked to do, in order.
+ *
+ * A sound cannot be photographed, so this is how «it rang» is proved as
+ * something other than a screenshot. `window.__letscubeCallSounds` is the
+ * observation half of the seam `voice-call.spec.ts` uses for the SFU — that one
+ * lets a spec *replace* the transport, this one lets a spec *read* what the
+ * player was told — and it is gated on `import.meta.env.DEV` exactly as that
+ * one is, so a production bundle has no path to it.
+ *
+ * Each entry reads `ask:sound:outcome:sounding`, where `sounding` says whether
+ * that ask actually scheduled anything. The last field is what keeps this
+ * honest: an ask recorded with `silent` is the player saying it was refused,
+ * and no assertion below may read it as a ring.
+ */
+async function soundAsks(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const held = (
+      window as unknown as {
+        __letscubeCallSounds?: {
+          asks: { ask: string; sound: string | null; outcome: string; bursts: number }[];
+        };
+      }
+    ).__letscubeCallSounds;
+    return (held?.asks ?? []).map(
+      (entry) =>
+        `${entry.ask}:${entry.sound ?? "-"}:${entry.outcome}:${entry.bursts > 0 ? "sounding" : "silent"}`,
+    );
+  });
+}
+
+/** The ring the player believes it is making, which is not the same as the row's. */
+async function soundPlaying(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const held = (window as unknown as { __letscubeCallSounds?: { playing: string | null } })
+      .__letscubeCallSounds;
+    return held?.playing ?? null;
+  });
+}
+
+/**
+ * How many oscillators are still scheduled — silence, as a number.
+ *
+ * The thing `soundPlaying` cannot say. A stop that cleared the bookkeeping and
+ * left the graph running would report `playing: null` while six seconds of
+ * ringtone — the two cycles already scheduled ahead — went on playing over a
+ * call that had been declined. Every stop below asserts this reaches nought.
+ */
+async function soundScheduled(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const held = (window as unknown as { __letscubeCallSounds?: { scheduled: number } })
+      .__letscubeCallSounds;
+    return held?.scheduled ?? 0;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // The control, offered to the participant who could not have made the room
 // ---------------------------------------------------------------------------
@@ -563,6 +624,348 @@ test("a ringing room is read but is not «somebody is talking here»", async ({ 
   harness.push();
   await expect(page.getByTestId("chat-list-voice")).toHaveCount(1, { timeout: 10_000 });
   await expect(page.getByTestId("chat-list-voice")).toHaveAttribute("data-voice-count", "2");
+});
+
+// ---------------------------------------------------------------------------
+// The sound
+//
+// Asked for by the owner on 2026-09-18 after the first real call: it arrived in
+// total silence and was missed. The rules — the cadence, the envelope, which
+// sound belongs to which state, when one must stop — are `lib/callSounds.ts`'s
+// and are proved without a browser in `tests/unit/call-sounds.test.mts`. What
+// is measured here is that the surface really asks for them, and really stops.
+//
+// **What this fixture cannot show.** A browser will not sound anything until
+// the page has been touched, and that gate is not observable from here:
+// measured on 2026-09-18, a context created before any gesture came back
+// `running` under the bundled Chromium and under the real branded Chrome alike,
+// headless and headed, because `navigator.userActivation.hasBeenActive` is
+// already true on a page the automation driver has navigated to — adding
+// `--autoplay-policy=document-user-activation-required` explicitly changed
+// nothing, which is how it is known the probe could not have seen a block
+// rather than that there was none. So no test below claims the gate. The test
+// that matters instead is the last one: a context that refuses is reported as a
+// refusal and the call is still on screen.
+// ---------------------------------------------------------------------------
+
+test("an incoming call rings, and the row clearing stops it", async ({ page }) => {
+  const harness = await open(page);
+  await boot(page, harness);
+  expect(await soundAsks(page)).toEqual([]);
+
+  harness.room.ring_started_at = new Date().toISOString();
+  harness.room.ring_caller = ANNA.id;
+  harness.room.participant_count = 0;
+  harness.push();
+  await expect(card(page)).toBeVisible({ timeout: 10_000 });
+
+  await expect
+    .poll(async () => (await soundAsks(page)).filter((ask) => ask.startsWith("start:ring:")), {
+      timeout: 10_000,
+    })
+    .toEqual(["start:ring:running:sounding"]);
+  expect(await soundPlaying(page)).toBe("ring");
+
+  // §4a from the losing device's side: the caller hung up, or somebody's other
+  // telephone answered. Nothing is pressed here and the page is not touched at
+  // all — which is the same mechanism that has to stop a ring in a tab nobody
+  // is looking at, since the row is what drives it rather than an interaction.
+  // (`document.hidden` itself cannot be forced in this environment; the note at
+  // the head of `lib/micLevel.ts` records that measurement.)
+  harness.room.ring_started_at = null;
+  harness.room.ring_caller = null;
+  harness.push();
+
+  await expect(card(page)).toHaveCount(0, { timeout: 10_000 });
+  await expect.poll(() => soundPlaying(page), { timeout: 10_000 }).toBe(null);
+  expect(await soundAsks(page)).toContain("stop:ring:running:silent");
+  // And the graph is empty, not merely the bookkeeping — read the instant the
+  // player says it has stopped, with no poll to hide behind. A stop that only
+  // cleared the bookkeeping would leave the two cycles already scheduled ahead
+  // to play out, and they end within a few seconds: a five-second poll was
+  // green over exactly that, measured, which is why this is a plain read.
+  expect(await soundScheduled(page)).toBe(0);
+});
+
+test("the caller hears a ringback rather than a ring", async ({ page }) => {
+  const harness = await open(page);
+  await openChat(page, "Анна Смирнова", LINE);
+  await page.getByTestId("chat-header-call").click();
+  await expect(card(page)).toBeVisible();
+
+  await expect
+    .poll(async () => (await soundAsks(page)).filter((ask) => ask.startsWith("start:")), {
+      timeout: 10_000,
+    })
+    .toEqual(["start:ringback:running:sounding"]);
+
+  // And cancelling it stops the ringback — the caller's own way out.
+  await page.getByTestId("voice-ring-cancel").click();
+  await expect(card(page)).toHaveCount(0);
+  await expect.poll(() => soundPlaying(page), { timeout: 10_000 }).toBe(null);
+  expect(await soundAsks(page)).toContain("stop:ringback:running:silent");
+  expect(await soundScheduled(page)).toBe(0);
+});
+
+test("answering stops the ring, and so does declining", async ({ page }) => {
+  const harness = await open(page, {
+    room: { ring_started_at: new Date().toISOString(), ring_caller: ANNA.id, participant_count: 0 },
+  });
+  await boot(page, harness);
+  await expect(card(page)).toBeVisible({ timeout: 10_000 });
+  await expect.poll(() => soundPlaying(page), { timeout: 10_000 }).toBe("ring");
+
+  await page.getByTestId("voice-ring-answer").click();
+  await expect(card(page)).toHaveCount(0, { timeout: 10_000 });
+  // The call is running now and `VoiceCallBar` carries it. A ringtone over a
+  // conversation is the defect this assertion exists for.
+  await expect.poll(() => soundPlaying(page), { timeout: 10_000 }).toBe(null);
+  expect(await soundScheduled(page)).toBe(0);
+  await expect(page.getByTestId("voice-call-bar")).toBeVisible();
+
+  // The other half, on a second ring: declining.
+  await page.reload({ waitUntil: "domcontentloaded" });
+  harness.room.ring_started_at = new Date().toISOString();
+  harness.room.ring_caller = ANNA.id;
+  harness.room.ring_answered_at = null;
+  harness.room.participant_count = 0;
+  await expect(page.getByTestId("chat-list-item").first()).toBeVisible();
+  await expect(card(page)).toBeVisible({ timeout: 10_000 });
+  await expect.poll(() => soundPlaying(page), { timeout: 10_000 }).toBe("ring");
+  await page.getByTestId("voice-ring-decline").click();
+  await expect(card(page)).toHaveCount(0);
+  await expect.poll(() => soundPlaying(page), { timeout: 10_000 }).toBe(null);
+  expect(await soundScheduled(page)).toBe(0);
+});
+
+test("a ring that runs out stops sounding", async ({ page }) => {
+  // The caller's side, which is the one that also writes the ring off. Aged
+  // just before the page opens, for the reason the expiry test above states.
+  const harness = await open(page);
+  harness.room.ring_started_at = new Date(Date.now() - 40_000).toISOString();
+  harness.room.ring_caller = ME.id;
+  harness.room.participant_count = 1;
+  await boot(page, harness);
+  await expect(card(page)).toBeVisible({ timeout: 10_000 });
+  await expect.poll(() => soundPlaying(page), { timeout: 10_000 }).toBe("ringback");
+
+  // Nothing is pressed. The store's own timer is the only thing that can end
+  // this, and the sound has to go with the band rather than outlive it.
+  await expect(card(page)).toHaveCount(0, { timeout: 15_000 });
+  await expect.poll(() => soundPlaying(page), { timeout: 10_000 }).toBe(null);
+  expect(await soundScheduled(page)).toBe(0);
+});
+
+test("the setting silences the ring and the band still arrives", async ({ page }) => {
+  const harness = await open(page);
+  await page.addInitScript(() => {
+    localStorage.setItem("kub:audio-settings:v1", JSON.stringify({ callSoundEnabled: false }));
+  });
+  await boot(page, harness);
+
+  harness.room.ring_started_at = new Date().toISOString();
+  harness.room.ring_caller = ANNA.id;
+  harness.push();
+  await expect(card(page)).toBeVisible({ timeout: 10_000 });
+
+  // A second and a half is far past the round trip that starts a ring — the
+  // test above sees one inside the first poll — so this is «nothing was asked
+  // for» rather than «nothing has been asked for yet».
+  await page.waitForTimeout(1_500);
+  expect(await soundAsks(page)).toEqual([]);
+  expect(await soundPlaying(page)).toBe(null);
+  // And the call is still unmistakably a call, which is the whole point of the
+  // setting being safe to turn off.
+  await expect(page.getByTestId("voice-ring-answer")).toBeVisible();
+  await expect(page.getByTestId("voice-ring-decline")).toBeVisible();
+});
+
+test("a browser that refuses to make a sound is reported, not pretended away", async ({ page }) => {
+  const harness = await open(page);
+  // The one thing this fixture cannot produce on its own: a context that stays
+  // suspended. Injected through the DEV-only seam, which exists for exactly
+  // this — the autoplay gate is real on a phone and in Safari and is not
+  // reachable from an automated page.
+  await page.addInitScript(() => {
+    class RefusingContext {
+      state = "suspended";
+      currentTime = 0;
+      destination = {};
+      async resume() {
+        throw new DOMException("not allowed to start", "NotAllowedError");
+      }
+      createOscillator() {
+        throw new Error("nothing may be scheduled on a suspended context");
+      }
+      createGain() {
+        throw new Error("nothing may be scheduled on a suspended context");
+      }
+    }
+    (window as unknown as { __letscubeAudioContext?: unknown }).__letscubeAudioContext =
+      RefusingContext;
+  });
+  await boot(page, harness);
+
+  harness.room.ring_started_at = new Date().toISOString();
+  harness.room.ring_caller = ANNA.id;
+  harness.push();
+  await expect(card(page)).toBeVisible({ timeout: 10_000 });
+
+  // The refusal is recorded as a refusal: asked for, blocked, nothing sounding.
+  await expect
+    .poll(async () => (await soundAsks(page)).filter((ask) => ask.startsWith("start:")), {
+      timeout: 10_000,
+    })
+    .toEqual(["start:ring:blocked:silent"]);
+  // Nothing anywhere claims a sound was made.
+  expect(await soundPlaying(page)).toBe(null);
+  // And the surface is the whole of the notice, which is what has to be true
+  // for the refusal to be survivable at all.
+  await expect(card(page)).toHaveAttribute("data-direction", "incoming");
+  await expect(page.getByTestId("voice-ring-who")).toHaveText("Анна Смирнова");
+  await expect(page.getByTestId("voice-ring-answer")).toBeVisible();
+  await expect(page.getByTestId("voice-ring-decline")).toBeVisible();
+});
+
+test("a notification sounds once, and not over a ringtone", async ({ page }) => {
+  const harness = await open(page);
+  await boot(page, harness);
+  await expect
+    .poll(() => harness.realtime.isJoined("notifications"), { timeout: 15_000 })
+    .toBe(true);
+
+  // A message from Anna, in a conversation nobody has open.
+  harness.realtime.emit({
+    type: "INSERT",
+    table: "notifications",
+    record: {
+      id: "66666666-6666-4666-8666-000000000001",
+      user_id: ME.id,
+      kind: "message",
+      payload: { chat_id: CHAT_PRIVATE, sender_id: ANNA.id, sender_kind: "user" },
+      read_at: null,
+      created_at: new Date().toISOString(),
+    },
+  });
+
+  await expect
+    .poll(async () => (await soundAsks(page)).filter((ask) => ask.startsWith("once:")), {
+      timeout: 10_000,
+    })
+    .toEqual(["once:notification:running:sounding"]);
+  // One tone and done: the graph empties on its own, with nothing asked to stop
+  // it, which is what makes a notification a notification rather than an alarm.
+  await expect.poll(() => soundScheduled(page), { timeout: 5_000 }).toBe(0);
+
+  // And now the same message while the telephone is ringing. A ping on top of a
+  // ringtone is noise, and it arrives exactly when it is least wanted.
+  harness.room.ring_started_at = new Date().toISOString();
+  harness.room.ring_caller = ANNA.id;
+  harness.push();
+  await expect(card(page)).toBeVisible({ timeout: 10_000 });
+  await expect.poll(() => soundPlaying(page), { timeout: 10_000 }).toBe("ring");
+
+  harness.realtime.emit({
+    type: "INSERT",
+    table: "notifications",
+    record: {
+      id: "66666666-6666-4666-8666-000000000002",
+      user_id: ME.id,
+      kind: "message",
+      payload: { chat_id: CHAT_PRIVATE, sender_id: ANNA.id, sender_kind: "user" },
+      read_at: null,
+      created_at: new Date().toISOString(),
+    },
+  });
+  await page.waitForTimeout(1_500);
+  expect((await soundAsks(page)).filter((ask) => ask.startsWith("once:"))).toEqual([
+    "once:notification:running:sounding",
+  ]);
+});
+
+// ---------------------------------------------------------------------------
+// What tells a call from a row, and accept from decline
+//
+// The pixels below are the proof of the design; these are the proof that the
+// four things holding accept and decline apart are all still there. A
+// screenshot cannot go red, and «the owner missed a call» is what it costs when
+// one of them quietly goes.
+// ---------------------------------------------------------------------------
+
+test("an incoming call cannot be mistaken for a list row, or accept for decline", async ({
+  page,
+}) => {
+  const harness = await open(page, {
+    room: { ring_started_at: new Date().toISOString(), ring_caller: ANNA.id, participant_count: 0 },
+  });
+  await boot(page, harness);
+  await expect(card(page)).toBeVisible({ timeout: 10_000 });
+
+  // 1. The band says what it is before it says who. Read as positions rather
+  //    than as «the element exists»: the whole defect was that the state sat
+  //    *under* the name, where a chat-list row puts its last message.
+  const order = await page.evaluate(() => {
+    const detail = document.querySelector<HTMLElement>('[data-testid="voice-ring-detail"]')!;
+    const who = document.querySelector<HTMLElement>('[data-testid="voice-ring-who"]')!;
+    return {
+      detailTop: Math.round(detail.getBoundingClientRect().top),
+      whoTop: Math.round(who.getBoundingClientRect().top),
+      whoSize: Math.round(parseFloat(getComputedStyle(who).fontSize)),
+      detailSize: Math.round(parseFloat(getComputedStyle(detail).fontSize)),
+    };
+  });
+  expect(order.detailTop, "«Входящий звонок» sits above the name").toBeLessThan(order.whoTop);
+  expect(order.whoSize, "and the name is the headline under it").toBeGreaterThan(order.detailSize);
+
+  // 2. The band is not the colour of the chrome.
+  await expect(page.getByTestId("voice-ring-wash")).toHaveCount(1);
+  // 3. Something moves — turned into a static mark under reduced motion rather
+  //    than removed, which is why this asks for the element and not for an
+  //    animation.
+  await expect(page.getByTestId("voice-ring-pulse")).toHaveCount(1);
+
+  // 4. Accept and decline: four separate things, each one of them enough on its
+  //    own to tell them apart, and all four asserted because the whole point is
+  //    that no single one is being relied on.
+  const actions = await page.evaluate(() => {
+    const read = (id: string) => {
+      const el = document.querySelector<HTMLElement>(`[data-testid="${id}"]`)!;
+      const box = el.getBoundingClientRect();
+      return {
+        words: (el.textContent ?? "").trim(),
+        fill: getComputedStyle(el).backgroundColor,
+        glyphs: el.querySelectorAll("svg").length,
+        left: Math.round(box.left),
+        height: Math.round(box.height),
+      };
+    };
+    return { decline: read("voice-ring-decline"), answer: read("voice-ring-answer") };
+  });
+  expect(actions.decline.words).toBe("Отклонить");
+  expect(actions.answer.words).toBe("Ответить");
+  expect(actions.decline.fill).not.toBe(actions.answer.fill);
+  expect(actions.decline.glyphs).toBe(1);
+  expect(actions.answer.glyphs).toBe(1);
+  // Decline to the left, where a thumb does not rest.
+  expect(actions.decline.left).toBeLessThan(actions.answer.left);
+  // And both are a real target on a finger as well as on a pointer (D-015).
+  expect(actions.decline.height).toBeGreaterThanOrEqual(44);
+  expect(actions.answer.height).toBeGreaterThanOrEqual(44);
+});
+
+test("an outgoing call is a quieter thing than an incoming one", async ({ page }) => {
+  const harness = await open(page);
+  await openChat(page, "Анна Смирнова", LINE);
+  await page.getByTestId("chat-header-call").click();
+  await expect(card(page)).toBeVisible();
+
+  // The two directions have to stay apart at a glance: a person who is calling
+  // somebody already knows they are, and a band that shouted the same way would
+  // make the incoming one ordinary.
+  await expect(page.getByTestId("voice-ring-wash")).toHaveCount(0);
+  await expect(page.getByTestId("voice-ring-pulse")).toHaveCount(0);
+  await expect(page.getByTestId("voice-ring-cancel")).toHaveText("Отменить");
+  await expect(page.getByTestId("voice-ring-answer")).toHaveCount(0);
 });
 
 // ---------------------------------------------------------------------------

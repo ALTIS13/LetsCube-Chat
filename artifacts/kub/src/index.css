@@ -1657,6 +1657,12 @@ textarea::placeholder, input::placeholder {
   }
 }
 
+@keyframes kub-call-pulse {
+  0% { transform: scale(1); opacity: 0.6; }
+  70% { transform: scale(1.32); opacity: 0; }
+  100% { transform: scale(1.32); opacity: 0; }
+}
+
 @keyframes kub-shimmer {
   0% {
     background-position: -280px 0;
@@ -2291,6 +2297,29 @@ textarea::placeholder, input::placeholder {
      this rail already (the chosen row and its accent bar), and a second meaning
      on the same colour reads as a selection. Green is the mark tone, tuned for
      exactly this -- a graphic against a surface rather than a word. */
+  /* An incoming call, on the avatar in `VoiceCallRing`.
+
+     A ring that expands and fades, absolutely placed over the avatar so it
+     takes no part in layout: the band is in the flow and the whole shell sits
+     under it, so anything here that changed size would move the application
+     every 1.6 seconds.
+
+     1.6s is half the ring's own 3.2-second cadence. That is a matter of feel
+     and not of synchrony -- the sound starts when the audio context resumes,
+     which is a different clock, and nothing in either half knows about the
+     other.
+
+     A border and a transform, with no shadow written by hand: rule 1 of
+     docs/operations/interface-material.md. */
+  .kub-call-pulse {
+    position: absolute;
+    inset: -4px;
+    border-radius: 9999px;
+    border: 2px solid var(--kub-cyan);
+    pointer-events: none;
+    animation: kub-call-pulse 1600ms var(--kub-ease-standard) infinite;
+  }
+
   .kub-voice-speaking {
     outline: 2px solid transparent;
     outline-offset: 1px;
@@ -2343,6 +2372,15 @@ textarea::placeholder, input::placeholder {
     .kub-subview {
       animation: none;
       transition-duration: 1ms;
+    }
+
+    /* The preference removes the movement, not the mark. A static ring at rest
+       is still the thing that says «this is a call», where `animation: none`
+       alone would leave it at whichever keyframe the engine computed. */
+    .kub-call-pulse {
+      animation: none;
+      opacity: 0.55;
+      transform: none;
     }
   }
 }

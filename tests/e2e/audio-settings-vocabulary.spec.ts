@@ -114,10 +114,11 @@ test.describe("the sound settings speak the settings screen's own vocabulary", (
         (el) => getComputedStyle(el).backgroundImage !== "none",
       ).length;
     });
-    // Four since 2026-09-18: «Микрофон в звонке» joined «Устройства»,
-    // «Уровень» and «Обработка голоса», drawn as the same object by the same
-    // `AudioGroup` — which is what this number is really counting.
-    expect(veiled).toBe(4);
+    // Five since 2026-09-18: «Звуки» and «Микрофон в звонке» joined
+    // «Устройства», «Уровень» and «Обработка голоса», all drawn as the same
+    // object by the same `AudioGroup` — which is what this number is really
+    // counting.
+    expect(veiled).toBe(5);
   });
 
   /**
@@ -128,7 +129,7 @@ test.describe("the sound settings speak the settings screen's own vocabulary", (
   test("nothing inside the panel is nested inside anything else", async ({ page }) => {
     const panel = await openSound(page);
     const groups = panel.locator("[data-audio-group]");
-    await expect(groups).toHaveCount(4);
+    await expect(groups).toHaveCount(5);
     const nested = await page.evaluate(() => {
       const panel = document.querySelector<HTMLElement>('[data-testid="settings-section-audio"]')!;
       return [...panel.querySelectorAll<HTMLElement>("[data-audio-group]")].filter(
@@ -142,12 +143,51 @@ test.describe("the sound settings speak the settings screen's own vocabulary", (
   test("every on/off control is a switch", async ({ page }) => {
     const panel = await openSound(page);
     await expect(panel.locator('input[type="checkbox"]')).toHaveCount(0);
-    // Noise suppression, echo cancellation, auto gain, self-monitoring.
-    await expect(panel.getByRole("switch")).toHaveCount(4);
+    // The call sound, the notification sound, noise suppression, echo
+    // cancellation, auto gain, self-monitoring.
+    await expect(panel.getByRole("switch")).toHaveCount(6);
     await expect(panel.getByTestId("audio-self-monitor")).toBeDisabled();
     for (const id of ["audio-noise-suppression", "audio-echo-cancellation", "audio-auto-gain"]) {
       await expect(panel.getByTestId(id)).toHaveAttribute("aria-checked", "true");
     }
+  });
+
+  /**
+   * «Звуки», which is two switches and the one sentence saying where they live.
+   *
+   * The rules are `lib/callSounds.ts`'s and are proved without a browser in
+   * `tests/unit/call-sounds.test.mts`; what is measured here is that the panel
+   * really offers them, that they are two rather than one, and that both start
+   * on — which is the state every settings blob written before 2026-09-18 also
+   * normalises to, and the state the owner asked for.
+   */
+  test("the sounds are two switches, both on, and the panel says where they live", async ({ page }) => {
+    const panel = await openSound(page);
+    const call = panel.getByTestId("audio-call-sound");
+    const notification = panel.getByTestId("audio-notification-sound");
+    await expect(call).toHaveAttribute("aria-checked", "true");
+    await expect(notification).toHaveAttribute("aria-checked", "true");
+
+    // Separate, which is the point: somebody who wants a silent office still
+    // wants their telephone to ring.
+    await call.click();
+    await expect(call).toHaveAttribute("aria-checked", "false");
+    await expect(notification).toHaveAttribute("aria-checked", "true");
+
+    const stored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("kub:audio-settings:v1") ?? "{}"),
+    );
+    expect(stored.callSoundEnabled).toBe(false);
+    expect(stored.notificationSoundEnabled).toBe(true);
+
+    // The setting is this browser's, not the account's, and the panel says so
+    // rather than letting somebody discover it from a telephone that rang
+    // anyway. The same honesty §4a asks of the per-device call switch.
+    await expect(panel.getByText("Настройка действует на этом устройстве.")).toBeVisible();
+
+    // And the reset puts them back, like every other setting in this panel.
+    await panel.getByTestId("audio-reset").click();
+    await expect(call).toHaveAttribute("aria-checked", "true");
   });
 
   /**

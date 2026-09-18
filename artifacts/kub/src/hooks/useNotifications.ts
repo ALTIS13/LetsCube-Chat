@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { playNotificationSoundFor } from "@/hooks/useCallSound";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { mapPgError } from "@/lib/errors";
@@ -188,8 +189,22 @@ export function useNotifications() {
             return;
           }
           if (isMutedNotification(row, mutedChatIds)) return;
+          // After the two refusals above and before anything is drawn: a
+          // notification that is this reader's own echo, or one from a muted
+          // conversation, must not make a sound either — and both have already
+          // returned. Whether this one does is `notificationSoundAllowed`'s,
+          // which also refuses a ping over a ringtone and a ping for the
+          // conversation being read right now.
+          //
+          // `osToast` is the same condition the desktop branch below runs on,
+          // written once and read twice rather than guessed: the Windows
+          // application raises a real toast for this row and Windows sounds it,
+          // so a second sound from here would be two for one message.
+          const osToast =
+            isDesktopApp() && !row.read_at && !presentedDesktopIdsRef.current.has(row.id);
+          playNotificationSoundFor({ chatId: payloadString(row.payload, "chat_id") ?? null, osToast });
           setItems((prev) => mergeRows(prev, [row]));
-          if (isDesktopApp() && !row.read_at && !presentedDesktopIdsRef.current.has(row.id)) {
+          if (osToast) {
             presentDesktopNotification(row);
           }
         },

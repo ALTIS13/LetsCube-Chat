@@ -19,6 +19,13 @@ import {
   readMicActivation,
   type MicActivation,
 } from "../lib/micGate.ts";
+// The same form, and the same reason: read by `node --test` as well.
+import {
+  CALL_SOUND_DEFAULT,
+  NOTIFICATION_SOUND_DEFAULT,
+  readCallSoundEnabled,
+  readNotificationSoundEnabled,
+} from "../lib/callSounds.ts";
 
 export type AudioProcessingMode = "clean" | "raw" | "custom";
 
@@ -57,6 +64,23 @@ export interface AudioSettings {
   micGateThreshold: number;
   /** The push-to-talk key, as a `KeyboardEvent.code`. */
   micTalkKey: string;
+  /**
+   * Whether a call makes a sound — the ring coming in, the ringback going out.
+   *
+   * Absent in stored settings, which is what every value written before
+   * 2026-09-18 is, reads as **on**: a person who has never seen this setting
+   * asked for the product to make a sound, and that request is what this whole
+   * change answers. The rule is `lib/callSounds.ts`'s and nothing about the
+   * meaning is decided here.
+   */
+  callSoundEnabled: boolean;
+  /**
+   * Whether a notification makes a sound.
+   *
+   * A separate switch from the call's, on purpose: somebody who wants a silent
+   * office still wants their telephone to ring.
+   */
+  notificationSoundEnabled: boolean;
 }
 
 export const AUDIO_SETTINGS_STORAGE_KEY = "kub:audio-settings:v1";
@@ -76,6 +100,8 @@ export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   micActivation: MIC_ACTIVATION_DEFAULT,
   micGateThreshold: MIC_GATE_THRESHOLD_DEFAULT,
   micTalkKey: MIC_TALK_KEY_DEFAULT,
+  callSoundEnabled: CALL_SOUND_DEFAULT,
+  notificationSoundEnabled: NOTIFICATION_SOUND_DEFAULT,
 };
 
 function toFiniteNumber(value: unknown, fallback: number) {
@@ -162,6 +188,11 @@ export function normalizeAudioSettings(value: unknown): AudioSettings {
     micActivation: readMicActivation(settings?.micActivation),
     micGateThreshold: clampMicGateThreshold(settings?.micGateThreshold),
     micTalkKey: readTalkKey(settings?.micTalkKey),
+    // Each through `lib/callSounds.ts`, for the reason the three above are read
+    // through `lib/micGate.ts`: what an absent or hand-edited value means is one
+    // rule, and a second copy of it here would be a second answer.
+    callSoundEnabled: readCallSoundEnabled(settings?.callSoundEnabled),
+    notificationSoundEnabled: readNotificationSoundEnabled(settings?.notificationSoundEnabled),
   };
 }
 
