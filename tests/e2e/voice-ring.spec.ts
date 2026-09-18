@@ -99,6 +99,13 @@ interface Seed {
   room?: Partial<RoomRow>;
   /** Refuse `voice_call_ring` with this body, as PostgREST would. */
   ringRefusal?: { status: number; body: unknown };
+  /**
+   * What `voice_calls_allowed_here` answers — slice F's gate.
+   *
+   * `"never"` leaves the request hanging, which is the one thing a boolean
+   * cannot express and the one the gate's own deadline exists for.
+   */
+  callsAllowedHere?: boolean | "never";
 }
 
 interface Harness {
@@ -109,6 +116,12 @@ interface Harness {
   push(): void;
   rpcCalls: { name: string; body: Row }[];
   probe(): Promise<{ joins: number; left: number }>;
+  /**
+   * Slice F's gate, kept out of `rpcCalls` on purpose: three tests above assert
+   * the whole of that array, and a question this client asks before it draws a
+   * ring is not one of the four functions those tests are about.
+   */
+  gate: { asks: number; allowed: boolean | "never" };
 }
 
 /**
@@ -295,9 +308,33 @@ async function open(page: Page, seed: Seed = {}): Promise<Harness> {
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(GRANT) }),
   );
 
+  /**
+   * `voice_calls_allowed_here`, asked before an incoming call is drawn.
+   *
+   * Registered after `openFixture`, so it wins over that fixture's blanket
+   * handler — which means the ask is counted here and nowhere else. The count is
+   * the instrument: the schedule this gate promises is «once per incoming call
+   * and never otherwise», and a count is the only way to see it.
+   */
+  const gate: { asks: number; allowed: boolean | "never" } = {
+    asks: 0,
+    allowed: seed.callsAllowedHere ?? true,
+  };
+  await page.route("**/rest/v1/rpc/voice_calls_allowed_here", async (route) => {
+    gate.asks += 1;
+    // Deliberately never answered: the surface must not be left waiting for it.
+    if (gate.allowed === "never") return;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(gate.allowed),
+    });
+  });
+
   return {
     realtime,
     room,
+    gate,
     push: () => {
       realtime.emit({ type: "UPDATE", table: "voice_channels", record: { ...room } });
     },
@@ -1002,3 +1039,165 @@ for (const theme of ["dark", "light"] as const) {
     await page.screenshot({ path: `output/voice-ring/outgoing-${theme}-${info.project.name}.png` });
   });
 }
+
+// ---------------------------------------------------------------------------
+// Slice F: a device that refuses calls
+//
+// The registry and its switch are `tests/e2e/session-devices.spec.ts`'s. What
+// is measured here is the half that has to be true for the switch to mean
+// anything: a silenced device shows nothing and sounds nothing for an incoming
+// call, and a device that was not silenced still does both.
+//
+// `voice_calls_allowed_here` is a route mock — it is applied and verified on
+// production and there is nothing at 127.0.0.1:54321 to answer it — but the
+// gate, the cache, the deadline and the wiring into the ring are all the code
+// that ships.
+// ---------------------------------------------------------------------------
+
+test("a device with calls turned off gets no ring and no sound", async ({ page }) => {
+  const harness = await open(page, { callsAllowedHere: false });
+  await boot(page, harness);
+
+  harness.room.ring_started_at = new Date().toISOString();
+  harness.room.ring_caller = ANNA.id;
+  harness.room.participant_count = 0;
+  harness.push();
+
+  // The ring really did arrive: this client asked whether it may draw it.
+  await expect.poll(() => harness.gate.asks, { timeout: 10_000 }).toBe(1);
+  // And then nothing happened, which is Telegram's behaviour and the owner's
+  // answer to open question 7 of the proposal.
+  await expect(card(page)).toHaveCount(0);
+  expect(await soundAsks(page)).toEqual([]);
+  expect(await soundPlaying(page)).toBe(null);
+  expect(await soundScheduled(page)).toBe(0);
+
+  // Held for long enough to be sure it is silence rather than slowness — the
+  // gate's own deadline is two seconds, so a verdict that was merely late
+  // would have rung by now.
+  await page.waitForTimeout(3_000);
+  await expect(card(page)).toHaveCount(0);
+  expect(await soundPlaying(page)).toBe(null);
+});
+
+test("a device with calls left on rings at the same row", async ({ page }) => {
+  // The control that makes the test above mean something. Same fixture, same
+  // push, one boolean different.
+  const harness = await open(page, { callsAllowedHere: true });
+  await boot(page, harness);
+
+  harness.room.ring_started_at = new Date().toISOString();
+  harness.room.ring_caller = ANNA.id;
+  harness.room.participant_count = 0;
+  harness.push();
+
+  await expect(card(page)).toBeVisible({ timeout: 10_000 });
+  await expect(card(page)).toHaveAttribute("data-direction", "incoming");
+  await expect
+    .poll(async () => (await soundAsks(page)).filter((ask) => ask.startsWith("start:ring:")), {
+      timeout: 10_000,
+    })
+    .toEqual(["start:ring:running:sounding"]);
+  expect(harness.gate.asks).toBe(1);
+});
+
+test("a call this person started is never silenced by the switch", async ({ page }) => {
+  // The switch is about calls arriving here. An outgoing ring is this device's
+  // own call, and its «Отменить» is the only thing that clears the row from the
+  // caller's side — silencing it would strand the ring.
+  const harness = await open(page, { callsAllowedHere: false });
+  await openChat(page, "Анна Смирнова", LINE);
+  await page.getByTestId("chat-header-call").click();
+
+  await expect(card(page)).toBeVisible();
+  await expect(card(page)).toHaveAttribute("data-direction", "outgoing");
+  await expect
+    .poll(async () => (await soundAsks(page)).filter((ask) => ask.startsWith("start:")), {
+      timeout: 10_000,
+    })
+    .toEqual(["start:ringback:running:sounding"]);
+  // And it was not even asked: the rule refuses to look at an outgoing ring.
+  expect(harness.gate.asks).toBe(0);
+});
+
+test("the gate is asked once per call and not once per render", async ({ page }) => {
+  const harness = await open(page, { callsAllowedHere: true });
+  await boot(page, harness);
+
+  harness.room.ring_started_at = new Date().toISOString();
+  harness.room.ring_caller = ANNA.id;
+  harness.push();
+  await expect(card(page)).toBeVisible({ timeout: 10_000 });
+  expect(harness.gate.asks).toBe(1);
+
+  // A ring lasts forty-five seconds and the surface re-renders throughout it —
+  // the clock, the store, the chat list. None of that is a question for the
+  // server, and the decision is sticky for the ring it was taken about.
+  await page.waitForTimeout(2_000);
+  await page.mouse.move(200, 200);
+  expect(harness.gate.asks).toBe(1);
+
+  // A second call inside the freshness window reuses the answer.
+  harness.room.ring_started_at = null;
+  harness.room.ring_caller = null;
+  harness.push();
+  await expect(card(page)).toHaveCount(0, { timeout: 10_000 });
+  harness.room.ring_started_at = new Date().toISOString();
+  harness.room.ring_caller = ANNA.id;
+  harness.push();
+  await expect(card(page)).toBeVisible({ timeout: 10_000 });
+  expect(harness.gate.asks).toBe(1);
+});
+
+test("turning calls off elsewhere reaches this device without a reload", async ({ page }) => {
+  // The whole point of shape B, and the one thing a cache can break. Nothing is
+  // reloaded, nothing is pressed here, and the page is not touched: the answer
+  // goes stale, the next ring asks again, and the new answer is obeyed.
+  test.setTimeout(120_000);
+  const harness = await open(page, { callsAllowedHere: true });
+  await boot(page, harness);
+
+  harness.room.ring_started_at = new Date().toISOString();
+  harness.room.ring_caller = ANNA.id;
+  harness.push();
+  await expect(card(page)).toBeVisible({ timeout: 10_000 });
+  expect(harness.gate.asks).toBe(1);
+  harness.room.ring_started_at = null;
+  harness.room.ring_caller = null;
+  harness.push();
+  await expect(card(page)).toHaveCount(0, { timeout: 10_000 });
+
+  // Somebody opens the list on their telephone and turns this device off.
+  harness.gate.allowed = false;
+  // CALLS_GATE_FRESH_MS is fifteen seconds; past it the next ring asks again.
+  await page.waitForTimeout(16_000);
+
+  harness.room.ring_started_at = new Date().toISOString();
+  harness.room.ring_caller = ANNA.id;
+  harness.push();
+  await expect.poll(() => harness.gate.asks, { timeout: 15_000 }).toBe(2);
+  await page.waitForTimeout(3_000);
+  await expect(card(page)).toHaveCount(0);
+  expect(await soundPlaying(page)).toBe(null);
+});
+
+test("an answer that never comes back rings anyway, after its deadline", async ({ page }) => {
+  // The safe direction, and the same one `voice_calls_allowed_here` takes when
+  // it cannot identify the session. A call that rings when it should not is a
+  // nuisance; one that silently does not is a missed call nobody can explain.
+  const harness = await open(page, { callsAllowedHere: "never" });
+  await boot(page, harness);
+
+  harness.room.ring_started_at = new Date().toISOString();
+  harness.room.ring_caller = ANNA.id;
+  harness.push();
+  await expect.poll(() => harness.gate.asks, { timeout: 10_000 }).toBe(1);
+
+  // Nothing yet: the surface really is waiting rather than ringing on a guess.
+  await page.waitForTimeout(700);
+  await expect(card(page)).toHaveCount(0);
+
+  // And then the deadline passes and the telephone rings.
+  await expect(card(page)).toBeVisible({ timeout: 10_000 });
+  await expect(card(page)).toHaveAttribute("data-direction", "incoming");
+});

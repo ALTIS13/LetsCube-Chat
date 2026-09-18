@@ -38,7 +38,7 @@ test("an empty query is the whole screen, in the order the screen draws it", () 
   assert.deepEqual(idsOf(all), [
     "name", "username", "bio", "phone", "decoration",
     "push", "push-messages", "push-tasks", "push-invites",
-    "presence", "blocked",
+    "presence", "blocked", "devices",
     "theme", "audio", "updates",
   ]);
   // Whitespace is not a query. A field holding only spaces must not empty the
@@ -65,15 +65,27 @@ test("a row is found by what a person calls it, not only by what it is called", 
 test("a heading finds the whole block under it", () => {
   const result = settingsSearchResult("конфиденциальность", EVERYONE);
   assert.deepEqual([...result.sections], ["privacy"]);
-  // Two rows since 2026-09-14: presence, and the list of people this person has
-  // blocked. The heading still wins the whole section rather than one row.
-  assert.deepEqual(idsOf(matchSettingsRows("конфиденциальность", EVERYONE)), ["presence", "blocked"]);
+  // Three rows since 2026-09-18: presence, the list of people this person has
+  // blocked, and where they are signed in. The heading still wins the whole
+  // section rather than one row.
+  assert.deepEqual(idsOf(matchSettingsRows("конфиденциальность", EVERYONE)), [
+    "presence",
+    "blocked",
+    "devices",
+  ]);
 
   // And the new row is reachable by what a person would actually type. A block
   // nobody can find again is the trap the row exists to close, and a row with
   // no entry in SETTINGS_ROWS cannot be filtered at all.
   assert.deepEqual(idsOf(matchSettingsRows("заблокирован", EVERYONE)), ["blocked"]);
   assert.deepEqual(idsOf(matchSettingsRows("чёрный список", EVERYONE)), ["blocked"]);
+
+  // «Активные сеансы» shares no letter with either word somebody arrives with:
+  // «устройства», because that is what the list is of, and «звонки», because
+  // being rung on a laptop in another room is what sends them looking for it.
+  assert.deepEqual(idsOf(matchSettingsRows("устройства", EVERYONE)), ["devices"]);
+  assert.deepEqual(idsOf(matchSettingsRows("сеансы", EVERYONE)), ["devices"]);
+  assert.deepEqual(idsOf(matchSettingsRows("звонки", EVERYONE)), ["devices"]);
 
   // «Уведомления» is both a heading and part of one row's label. The heading
   // has to win the whole section rather than the row winning alone.
@@ -158,8 +170,9 @@ test("the catalogue is not handed out for mutation", () => {
   const length = first.length;
   first.length = 0;
   assert.equal(matchSettingsRows("", EVERYONE).length, length);
-  // 15 since 2026-09-14: «Заблокированные» joined the privacy section. The
-  // number is the point of this line — a row that vanishes is invisible — so it
-  // is moved deliberately rather than widened into a range.
-  assert.equal(SETTINGS_ROWS.length, 15);
+  // 16 since 2026-09-18: «Активные сеансы» joined the privacy section with it
+  // (slice F of the call proposal). The number is the point of this line — a
+  // row that vanishes is invisible — so it is moved deliberately rather than
+  // widened into a range.
+  assert.equal(SETTINGS_ROWS.length, 16);
 });

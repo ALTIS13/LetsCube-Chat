@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useTheme } from "@/hooks/useTheme";
 import { usePrivacyPreferences } from "@/hooks/usePrivacyPreferences";
+import { useSessionDevices } from "@/hooks/useSessionDevices";
 import { usePush } from "@/hooks/usePush";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { useIsAdmin, useIsManagerOrAdmin } from "@/hooks/useRole";
@@ -22,6 +23,7 @@ import { ReleaseDistributionSection } from "@/components/settings/ReleaseDistrib
 import { StorageSection } from "@/components/settings/StorageSection";
 import { WindowsStartupSection } from "@/components/settings/WindowsStartupSection";
 import { IosCallsSection } from "@/components/settings/IosCallsSection";
+import { SessionDevicesSection } from "@/components/settings/SessionDevicesSection";
 import { ProfileDecorationSection } from "@/components/settings/ProfileDecorationSection";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
@@ -58,6 +60,7 @@ import {
 import { requestAppConfirm } from "@/lib/appDialogs";
 import { avatarRemovalPrompt } from "@/lib/settingsPrompts";
 import { showActionFeedback } from "@/lib/actionFeedback";
+import { sessionDevicesSummary } from "@/lib/sessionDevices";
 import { usePersonalBlocks, type BlockedPerson } from "@/hooks/usePersonalModeration";
 import {
   BLOCKS_EMPTY,
@@ -93,7 +96,7 @@ const THEME_OPTIONS: ReadonlyArray<{ value: Theme; label: string; icon: KubIconN
 ];
 
 /** The heavy sections, which stay unmounted until their row is opened. */
-type DisclosureId = "phone" | "decoration" | "audio" | "application" | "blocked";
+type DisclosureId = "phone" | "decoration" | "audio" | "application" | "blocked" | "devices";
 
 export interface SettingsScreen {
   ready: boolean;
@@ -127,6 +130,14 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
   // The same store the chat surfaces read, so a block made from a conversation
   // is already in this list when settings is opened next.
   const blocks = usePersonalBlocks();
+  /**
+   * Read when the screen opens rather than when the disclosure does, exactly as
+   * the blocked list above is: the closed row prints how many devices there are
+   * and how many of them are silent, so the list has to exist before anybody
+   * presses the row. The read also answers «may this device ring» for free —
+   * its current row carries the same column the ring's gate asks about.
+   */
+  const sessionDevices = useSessionDevices({ enabled: true });
   const nativeAndroid = isNativeAndroid();
   const desktopWindows = isDesktopApp();
   const { settings: audioSettings } = useAudioSettings();
@@ -709,6 +720,34 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
               />
             </DisclosureRow>
           )}
+          {shows("devices") && (
+            /* A key, because a row here is an authorisation rather than a piece
+               of hardware — and because this vocabulary has no glyph for a
+               computer or a telephone, and borrowing the telephone for a
+               Windows session would be a picture that lies. */
+            <DisclosureRow
+              id="devices"
+              icon="key"
+              title="Активные сеансы"
+              value={sessionDevicesSummary({
+                count: sessionDevices.devices.length,
+                silenced: sessionDevices.devices.filter((device) => !device.callsEnabled).length,
+                loading: sessionDevices.loading,
+                failed: sessionDevices.failed,
+              })}
+              open={openSections.has("devices")}
+              onToggle={toggleSection}
+            >
+              <SessionDevicesSection
+                devices={sessionDevices.devices}
+                loading={sessionDevices.loading}
+                failed={sessionDevices.failed}
+                error={sessionDevices.error}
+                pending={sessionDevices.pending}
+                onSetCalls={sessionDevices.setCalls}
+              />
+            </DisclosureRow>
+          )}
         </SettingsGroup>
       ),
 
@@ -827,7 +866,7 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
     const sectionHasRows: Record<SettingsSectionId, boolean> = {
       profile: ["name", "username", "bio", "phone", "decoration"].some((id) => shows(id as SettingsRowId)),
       notifications: ["push", "push-messages", "push-tasks", "push-invites"].some((id) => shows(id as SettingsRowId)),
-      privacy: ["presence", "blocked"].some((id) => shows(id as SettingsRowId)),
+      privacy: ["presence", "blocked", "devices"].some((id) => shows(id as SettingsRowId)),
       application: ["theme", "audio", "updates"].some((id) => shows(id as SettingsRowId)),
       service: shows("admin"),
     };

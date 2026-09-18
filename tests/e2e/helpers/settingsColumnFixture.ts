@@ -1,5 +1,13 @@
 import { expect, type Page } from "@playwright/test";
-import { chat, membership, message, openFixture, person, type Row } from "./messageActionsFixture";
+import {
+  chat,
+  membership,
+  message,
+  openFixture,
+  person,
+  type Row,
+  type RpcAnswer,
+} from "./messageActionsFixture";
 
 /**
  * The settings screen, seeded and reachable without signing in.
@@ -214,6 +222,15 @@ export interface SettingsFixtureOptions {
    * product.
    */
   webFont?: boolean;
+  /**
+   * Answers a database function the screen calls, ahead of this fixture's own.
+   *
+   * The screen reads more than achievements now — «Активные сеансы» asks
+   * `session_devices_list` as it mounts, before a spec could register a route of
+   * its own — so a spec that needs one of those answers has to hand it in here.
+   * Returning `undefined` leaves this fixture's behaviour alone.
+   */
+  rpc?: (name: string, body: Row) => RpcAnswer | undefined;
 }
 
 export async function openSettingsScreen(page: Page, options: SettingsFixtureOptions = {}) {
@@ -229,7 +246,8 @@ export async function openSettingsScreen(page: Page, options: SettingsFixtureOpt
     me: ME,
     people: [ANNA],
     ...seed(),
-    rpc: (name) => (name === "achievements_sync" ? { body: SYNC } : undefined),
+    rpc: (name, body) =>
+      options.rpc?.(name, body) ?? (name === "achievements_sync" ? { body: SYNC } : undefined),
   });
 
   const table = (name: string, rows: unknown) =>
@@ -366,7 +384,7 @@ export async function openSettingsScreen(page: Page, options: SettingsFixtureOpt
 }
 
 /** Opens one of the screen's disclosures and lets it settle. */
-export async function openDisclosure(page: Page, id: "decoration" | "application") {
+export async function openDisclosure(page: Page, id: "decoration" | "application" | "devices") {
   await page.getByTestId(`settings-open-${id}`).click();
   await expect(page.getByTestId(`settings-section-${id}`)).toBeVisible();
   await page.evaluate(() => document.fonts.ready);

@@ -269,6 +269,7 @@ export type SettingsRowId =
   | "push-invites"
   | "presence"
   | "blocked"
+  | "devices"
   | "theme"
   | "audio"
   | "updates"
@@ -317,6 +318,11 @@ export const SETTINGS_ROWS: readonly SettingsRowMeta[] = [
   // people they have blocked has to be reachable by search as well as by
   // scrolling — and a row with no entry here cannot be filtered at all.
   { id: "blocked", section: "privacy", label: "Заблокированные", keywords: ["блок", "заблокировать", "чёрный список", "черный список", "block", "жалоба"] },
+  // 2026-09-18, slice F of the call proposal. «Где я вошёл» is the question
+  // somebody arrives with, and «звонки» is the one they arrive with after being
+  // rung on a laptop in another room — both have to find this row, and neither
+  // shares a letter with «Активные сеансы».
+  { id: "devices", section: "privacy", label: "Активные сеансы", keywords: ["устройства", "устройство", "сеансы", "сессии", "вход", "звонки", "телефон", "компьютер", "devices", "sessions"] },
   { id: "theme", section: "application", label: "Тема", keywords: ["тёмная", "темная", "светлая", "dark", "light", "внешний вид", "оформление"] },
   { id: "audio", section: "application", label: "Звук", keywords: ["микрофон", "аудио", "голос", "громкость", "усиление"] },
   { id: "updates", section: "application", label: "Обновления", keywords: ["версия", "update", "загрузка", "приложение"] },

@@ -16,6 +16,7 @@ import {
   type VoiceRingOutcome,
 } from "@/hooks/useVoiceRing";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
+import { useIncomingRingGate } from "@/hooks/useSessionDevices";
 import { useCallSoundPriming, useVoiceRingSound } from "@/hooks/useCallSound";
 import { cn } from "@/lib/utils";
 
@@ -96,7 +97,30 @@ import { cn } from "@/lib/utils";
  */
 export function VoiceCallRing() {
   const selfId = useAppStore((state) => state.currentUser?.id ?? null);
-  const pick = useVoiceRingPick(selfId);
+  const offered = useVoiceRingPick(selfId);
+  /**
+   * Slice F: a device its owner has turned off shows **nothing** for an
+   * incoming call, which is Telegram's behaviour and the owner's answer to open
+   * question 7 of the proposal.
+   *
+   * Applied to the pick rather than inside the drawing, and that is what makes
+   * it silence the sound as well: with no pick there is no ring to render and
+   * `useVoiceRingSound` is handed `idle`, which is silence in every direction. A
+   * second switch inside the JSX would have had to be remembered twice.
+   *
+   * **Only an incoming ring** — `incomingRingVerdict` refuses to touch an outgoing
+   * one. A call this person started is theirs to cancel whatever they have said
+   * about calls arriving here, and the cancel control is the only thing that
+   * clears the row from the caller's side.
+   *
+   * `wait` draws nothing either, and it lasts one round trip at most: the gate
+   * carries its own deadline and answers `true` if the server does not.
+   */
+  const gate = useIncomingRingGate({
+    ringKey: offered ? `${offered.ring.channelId}@${offered.ring.startedAt}` : null,
+    direction: offered?.direction ?? null,
+  });
+  const pick = gate === "show" ? offered : null;
   const chatId = pick?.ring.chatId ?? null;
   // Scalar selectors, so a change anywhere else in the chat list does not
   // re-render this card, and read from the list the reader already has rather

@@ -432,8 +432,16 @@ nowhere. So «active» is `refreshed_at within 30 days`, which gives a person tw
 entries on average and seven at worst — a list somebody can read. The other
 definition gives one person **127**, which is not a device list, it is a log.
 
-Every session inside that window has a `user_agent`, so a label is always
-available and none of them has to be called «unknown device».
+Every session inside that window has a `user_agent` — but **present is not
+readable**, and the first draft of this paragraph conflated the two. A session
+opened by a non-browser client carries a string no pattern can name (`okhttp/4.12.0`
+is the example the client half keeps in its fixture), so «a label is always
+available» is true only of the field, not of the name. Corrected by the agent
+building that half, and it matters because this sentence is what would have
+justified *not* building the unreadable path: what ships instead is «Неизвестное
+устройство» with the raw string printed under it, on the grounds that a person
+may recognise what no pattern does and a confident wrong name is worth less than
+either.
 
 One wart, named rather than solved: a session that has just signed in and not yet
 refreshed is **not** in its own list until it does. Measured: no session created
