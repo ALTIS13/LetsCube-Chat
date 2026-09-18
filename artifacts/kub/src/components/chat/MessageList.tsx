@@ -25,6 +25,7 @@ import {
   type GroupReadReceiptInfo,
 } from "@/lib/groupReadReceipts";
 import { sameData } from "@/lib/structuralSharing";
+import type { ChatRole } from "@/lib/chatRoles";
 import { visibleConversation } from "@/lib/deletedMessages";
 import { groupReadInfoWithTimes, readMarksSignature, type ReadTimesLoader } from "@/lib/messageReadTimes";
 import { useMessageReadTimes } from "@/hooks/useMessageReadTimes";
@@ -81,6 +82,17 @@ interface MessageListProps {
   isSavedChat?: boolean;
   /** Role of the current user in this chat — propagated to MessageBubble. */
   myRole?: "owner" | "admin" | "member" | null;
+  /**
+   * The highest tag each tagged person wears IN THIS GROUP (D-215), which is
+   * what an author's name is coloured by.
+   *
+   * A map rather than a reader function, and computed by the component that
+   * owns the conversation rather than here: this list is handed the answer, it
+   * does not ask for it. Absent, undefined or empty are one state — nobody is
+   * tagged — which is what a private chat, a channel with no vocabulary and a
+   * deployment older than the tables all look like.
+   */
+  authorChatRoles?: ReadonlyMap<string, ChatRole>;
   onLoadOlder?: () => Promise<{ loaded: number } | void> | { loaded: number } | void;
   hasMoreOlder?: boolean;
   loadingOlder?: boolean;
@@ -225,6 +237,7 @@ export function MessageList({
   chatId,
   quickReactions: quickReactionsOverride,
   loadReadTimes,
+  authorChatRoles,
 }: MessageListProps) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1265,6 +1278,10 @@ export function MessageList({
               replyTarget={msg.reply_to_id ? messagesMap[msg.reply_to_id] : undefined}
               mediaVariant={messageMediaVariants[msg.id]}
               senderAvatarVariant={msg.sender?.id ? senderAvatarVariants[msg.sender.id] : undefined}
+              // The same shape as the avatar variant above, and for the same
+              // reason: the row is memoised, so what it is handed has to be the
+              // stored object and not one built here per render.
+              authorChatRole={msg.user_id ? authorChatRoles?.get(msg.user_id) : undefined}
               deliveryState={receiptsByMessageId.delivery.get(msg.id) ?? null}
               groupReadInfo={receiptsByMessageId.groupRead.get(msg.id) ?? null}
               messageRefs={messageRefs}
@@ -1435,6 +1452,8 @@ interface MessageRowProps {
   replyTarget: MessageWithSender | undefined;
   mediaVariant: MessageMediaVariantUrls | undefined;
   senderAvatarVariant: AvatarVariantUrls | undefined;
+  /** This author's highest tag in this group, or undefined where they wear none. */
+  authorChatRole: ChatRole | undefined;
   deliveryState: MessageDeliveryState | null;
   groupReadInfo: GroupReadReceiptInfo | null;
   messageRefs: React.MutableRefObject<Record<string, HTMLDivElement>> | undefined;
@@ -1521,6 +1540,7 @@ const MessageRow = React.memo(function MessageRow({
   replyTarget,
   mediaVariant,
   senderAvatarVariant,
+  authorChatRole,
   deliveryState,
   groupReadInfo,
   messageRefs,
@@ -1858,6 +1878,7 @@ const MessageRow = React.memo(function MessageRow({
               messagesMap={replyMap}
               mediaVariant={mediaVariant}
               senderAvatarVariant={senderAvatarVariant}
+              authorChatRole={authorChatRole}
               deliveryState={deliveryState}
               groupReadInfo={groupReadInfo}
               onOpenGroupReadReceipts={handlers.onOpenGroupReadReceipts}

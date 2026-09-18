@@ -20,6 +20,8 @@ import { ChannelManageDialogHost, requestChannelManage } from "./ChannelManageMo
 import { VoiceCallCapsule } from "./VoiceCallCapsule";
 import { useTopics } from "@/hooks/useTopics";
 import { useServerChannels } from "@/hooks/useServerChannels";
+import { useChatRoles } from "@/hooks/useChatRoles";
+import { topChatRolesByMember } from "@/lib/chatRoles";
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import {
   capsuleNamesARoom,
@@ -363,6 +365,35 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   // room it names is decided against the call rather than against the list —
   // see the note there, and `voiceCallLostItsChannel`.
   const voiceEnabled = chat?.type === "group";
+  /**
+   * The group's own vocabulary, read once for the whole conversation (D-215).
+   *
+   * **Here rather than in the bubble, and rather than in `MessageList`**, for
+   * the two reasons `useProfileBadges` and `useChatRoles` both state. In the
+   * bubble it would be one round trip per message — two hundred for a chat
+   * somebody has scrolled — and in `MessageList` it would be a second copy
+   * beside `ChatInfoPanel`'s, because both are children of this component and
+   * the panel is on screen at the same time as the list. This is the one place
+   * that owns the conversation and everything drawn around it, so the answer is
+   * fetched once here and handed to both.
+   *
+   * `enabled` is the chat's own type, because `private.enforce_chat_role_scope`
+   * refuses a role in a private chat outright: a private conversation must not
+   * spend a request finding out what the schema already guarantees.
+   */
+  const chatRolesEnabled = chat?.type === "group" || chat?.type === "channel";
+  const chatRoles = useChatRoles(chatRolesEnabled ? chatId : null, chatRolesEnabled);
+  /**
+   * Whose name takes a colour, resolved once per read rather than per bubble.
+   *
+   * A primitive-stable map: the same `ChatRole` objects the hook holds, so a
+   * memoised row that is handed one keeps comparing equal and does not render
+   * again. See `topChatRolesByMember`.
+   */
+  const authorChatRoles = useMemo(
+    () => topChatRolesByMember(chatRoles.assignments, chatRoles.roles),
+    [chatRoles.assignments, chatRoles.roles],
+  );
   const call = useVoiceCall();
   const serverChannels = useServerChannels(voiceEnabled ? chatId : null, voiceEnabled, topics);
   const voice = useVoiceChannel(serverChannels, call.channelId);
@@ -1428,6 +1459,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             chatType={chat?.type}
             isSavedChat={savedChat}
             myRole={myRole}
+            authorChatRoles={authorChatRoles}
             onLoadOlder={loadOlderMessages}
             hasMoreOlder={hasMoreOlder}
             loadingOlder={loadingOlder}
@@ -1638,6 +1670,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           chat={chat}
           onClose={() => setShowInfo(false)}
           onClearForMe={clearChatForMe}
+          // The same read the conversation is drawn from. The panel used to
+          // mount `useChatRoles` itself; with the author line now needing the
+          // answer too, that would have been two identical round trips
+          // whenever the card is open beside the list.
+          chatRoles={chatRoles}
           voice={{
             // The same rule the capsule uses, and for the same reason: with
             // several rooms in the group, naming one of them here would be

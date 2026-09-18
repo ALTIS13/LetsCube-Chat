@@ -17,6 +17,8 @@ import { MessageActorAvatar } from "@/components/ui/ChatAvatar";
 import type { AvatarVariantUrls, MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 import { AudioMessage } from "./AudioMessage";
 import { cn } from "@/lib/utils";
+import { chatRoleColourOnChat, readChatRoleColour } from "@/lib/chatRolePalette";
+import type { ChatRole } from "@/lib/chatRoles";
 import { useAppStore } from "@/store/app.store";
 import { FormattedText, isLocationPreviewMessage } from "@/lib/formatText";
 import { KubIcon } from "@/components/kub";
@@ -78,6 +80,13 @@ interface MessageBubbleProps {
   deliveryState?: MessageDeliveryState | null;
   groupReadInfo?: GroupReadReceiptInfo | null;
   onOpenGroupReadReceipts?: () => void;
+  /**
+   * The highest tag this author wears IN THIS GROUP (D-215, D-180 slice 4).
+   *
+   * Handed down, never fetched: `ChatWindow` reads the two tables once for the
+   * conversation. A hook here would be one round trip per message.
+   */
+  authorChatRole?: ChatRole | null;
 }
 
 function getMessageTextLayoutKind(type: MessageWithSender["type"], content: string): TextLayoutKind {
@@ -814,6 +823,7 @@ export function MessageBubble({
   onRetrySend, onEditFailedSend, onDiscardLocalMessage,
   isSelectionMode = false,
   messagesMap = {}, mediaVariant, senderAvatarVariant, deliveryState, groupReadInfo, onOpenGroupReadReceipts,
+  authorChatRole = null,
 }: MessageBubbleProps) {
   // D-046. `.msg-appear` carries `will-change: opacity, transform` under a
   // comment saying the hint is dropped when the animation ends. Nothing dropped
@@ -845,6 +855,22 @@ export function MessageBubble({
   const currentUserId = useAppStore((state) => state.currentUser?.id);
   const actor = resolveMessageActor(message);
   const actorName = messageActorDisplayName(actor);
+  /**
+   * The colour the author's name takes, or null (D-215).
+   *
+   * Discord's mechanic read literally: in a server's message list a name is
+   * drawn in the colour of that person's highest role IN THAT SERVER, and
+   * nothing else about the role appears there — the word and the icon are on
+   * the popout. Here the word is in the member row and on the person's card,
+   * which is where D-213 put it, and repeating it above every run of messages
+   * would print the same two words down the whole conversation.
+   *
+   * `readChatRoleColour` rather than the raw column, so a key this build does
+   * not know paints the accent colour it always painted instead of a custom
+   * property nothing declares — which resolves to nothing and would silently
+   * leave the name unstyled.
+   */
+  const authorRoleColour = readChatRoleColour(authorChatRole?.colour ?? null);
   const textContent = message.content ?? "";
   const mediaCaption = getVisibleMediaCaption(message);
   const mediaDimensions = getMessageMediaDimensions(message);
@@ -1265,7 +1291,18 @@ export function MessageBubble({
 
           {!isMe && isFirstInGroup && actor.kind !== "system" && (
             <span className="ml-3 mb-0.5 inline-flex min-w-0 items-center gap-1.5 text-xs font-semibold text-[color:var(--kub-accent-text)]">
-              <span className="truncate">{actorName}</span>
+              <span
+                className="truncate"
+                data-message-author="true"
+                // Which tag decided the colour, for a spec that has to tell
+                // «coloured by a role» from «happens to look like one».
+                data-author-chat-role={authorRoleColour ? authorChatRole?.id ?? "" : ""}
+                // The colour of this person's highest standing IN THIS GROUP,
+                // and nothing at all when they have none — see above.
+                style={authorRoleColour ? { color: chatRoleColourOnChat(authorRoleColour) } : undefined}
+              >
+                {actorName}
+              </span>
               {actor.kind === "bot" && (
                 <span className="rounded-sm bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] px-1 py-px text-[9px] font-semibold uppercase text-[color:var(--kub-accent-text)]">
                   Бот

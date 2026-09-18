@@ -13491,3 +13491,63 @@ D-180 re-scoped — it has to carry the group's standing rather than LETSCUBE's,
 for the same reason the member row does. And reordering a group's roles, which
 the table supports (`priority`, not unique, ties broken by name) and the screen
 does not yet offer.
+
+---
+
+**D-215 — the author line, 2026-09-18.** Slice 4 of D-180, re-scoped: in a
+group, the name above the first bubble of a run is drawn in the author's
+highest role colour for this group. Colour only — no role word, no icon.
+
+**The word was built and photographed before it was rejected.** In eight
+messages from three people it printed five times; in a real conversation it
+prints once per run of messages, for ever. At the rendered size the second word
+is the same hue as the name, so «Анна Смирнова Наставник» reads as one phrase
+and the name loses its edge, which is the line's whole job. The crown at 10px
+is a blob — D-213's own finding about 11px chips, arriving one size smaller.
+The word already lives on the member row and on the person's card, which is
+exactly where D-213 put it, and Discord colours the name only in the message
+list.
+
+**One measurement nobody had taken, and it is D-214's shape one surface
+further along.** The palette is pinned at 4.5:1 against `--kub-surface`, `-2`
+and `-3`. An author's name sits on none of them: it sits on the chat ground
+under the wallpaper, and **in the light theme that composite is darker than all
+three panel surfaces, darkest at the bottom left — which is exactly where
+author names are**. Measured off the rendered pixels at 1440: 4.57 at the top
+of the window falling to **3.65** at the bottom (blue 3.77, teal 3.74, green
+3.65, amber 3.72). The accent already there reads 6.03 at that same point, so
+shipping the raw token would have been a regression.
+
+Resolved by composing the palette colour 80/20 toward `--kub-text` for this one
+surface — near-black in light so it darkens, near-white in dark so it lightens.
+Measured after: light 4.71–6.59, dark 7.42–8.48.
+
+**The cost, written down rather than waved through.** Pulling every entry
+toward one neutral compresses them: the closest light pair, slate and teal,
+falls from ΔE\*ab 24.1 to 19.9, a hair under the 20 the palette test holds
+member-row chips to. That floor was set for two short words side by side in a
+280px row; two author names are multi-word and a message apart, and the
+photographed pixels read as three distinct colours. Kept, and reversible in one
+constant. The cleaner fix is a `--kub-role-*` set inside `.kub-chat-screen`,
+beside the `--kub-cyan`, `--kub-muted` and `--kub-accent-text` that block
+already re-points for this exact reason — worth doing when somebody is next in
+that file with the wallpaper's gradient in front of them, because the darkest
+point of a gradient is what any such token has to clear.
+
+**One request pair per conversation, measured rather than reasoned about.**
+The hook is mounted in `ChatWindow`, the one component that renders both the
+message list and the information panel; the panel no longer mounts its own.
+With the fixture's request recorder: a group with one message costs 1 + 1, a
+group with sixty messages from three authors costs 1 + 1, with the card open
+1 + 1, and **a private chat costs 0 + 0**. Mounting it per row instead takes
+the private chat to 6 and the card-open case to 7.
+
+**Two mutation findings worth keeping.** The first render guard was *green*
+under the mutation it was written for: it typed a short word, and the draft
+lives in the composer's own state, so the component under test never rendered
+at all. It provokes a composer wrap now and asserts the parent rendered before
+counting bubbles, so a zero can never mean «nothing happened». And the
+«hands back the very objects» mutation is invisible in renders on its own,
+because the memo pins the map — the end-to-end guard only goes red with copies
+*and* the memo removed. That is reported rather than claimed as a stronger
+guard than exists.

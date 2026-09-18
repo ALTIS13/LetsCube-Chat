@@ -181,6 +181,57 @@ export function topChatRole(worn: readonly ChatRole[]): ChatRole | null {
   return worn.length > 0 ? worn[0] : null;
 }
 
+/**
+ * Everybody's highest tag at once, for a surface that draws the same author
+ * many times (D-180 slice 4).
+ *
+ * A conversation is not a member list. A member list asks about each person
+ * once and `chatRolesOfMember` per row costs one pass over the assignments per
+ * row, which is nothing at twenty rows. A conversation asks about the same
+ * three people two hundred times, and it asks on every render of every row, so
+ * the per-row form is O(messages × assignments) inside the render path of the
+ * one list in the product that must not stutter.
+ *
+ * So the answer is computed once per read — one pass over the assignments, one
+ * lookup per tagged person — and handed down as a map. Only people who wear
+ * something are in it: absence is «no tag», which is what the author line
+ * needs, and it keeps the map the size of the tagged few rather than of the
+ * membership.
+ *
+ * The returned `ChatRole` objects are the very ones in `roles`, not copies.
+ * That is load-bearing rather than incidental: a memoised message row compares
+ * its props with `Object.is`, so a fresh object per render would render every
+ * bubble on every commit and undo what `message-render-stability.spec.ts`
+ * measures.
+ */
+export function topChatRolesByMember(
+  assignments: readonly ChatMemberRoleRow[],
+  roles: readonly ChatRole[],
+): Map<string, ChatRole> {
+  const byId = new Map<string, ChatRole>();
+  // `orderChatRoles` has already sorted `roles`; rank is that position, so the
+  // highest of two tags is the one with the lower index and no second sort is
+  // needed.
+  const rankOf = new Map<string, number>();
+  roles.forEach((role, index) => {
+    byId.set(role.id, role);
+    rankOf.set(role.id, index);
+  });
+
+  const best = new Map<string, ChatRole>();
+  const bestRank = new Map<string, number>();
+  for (const row of assignments) {
+    const role = byId.get(row.role_id);
+    if (!role) continue;
+    const rank = rankOf.get(row.role_id) ?? Number.MAX_SAFE_INTEGER;
+    const held = bestRank.get(row.user_id);
+    if (held !== undefined && held <= rank) continue;
+    best.set(row.user_id, role);
+    bestRank.set(row.user_id, rank);
+  }
+  return best;
+}
+
 /** Why a write must not be offered. Named after the server's own refusals. */
 export type ChatRoleDenial =
   /** `chat_role_private_chat`: a private conversation has no group to name. */

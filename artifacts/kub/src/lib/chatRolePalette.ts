@@ -125,6 +125,66 @@ export function chatRoleColourValue(key: ChatRoleColour): string {
   return `var(${chatRoleColourVariable(key)})`;
 }
 
+/**
+ * How much of the palette's own colour survives on the conversation's
+ * wallpaper. The rest is the theme's text colour. See below.
+ */
+export const CHAT_ROLE_ON_CHAT_STRENGTH = 80;
+
+/**
+ * The same colour, composed for the conversation's wallpaper.
+ *
+ * **This exists because the wallpaper is a FOURTH surface, and the palette was
+ * measured on three.** `tests/unit/chat-role-palette.test.mts` holds every entry
+ * at 4.5:1 on `--kub-surface`, `--kub-surface-2` and `--kub-surface-3`; a
+ * message's author line sits on none of them. It sits on `.chat-bg`, which is
+ * `--kub-chat-ground` under `--kub-chat-wallpaper` — and in the LIGHT theme
+ * that composite is darker than all three panel surfaces, darkest at the
+ * bottom-left, which is exactly where author names are.
+ *
+ * Measured off the rendered pixels at 1440 on 2026-09-18, the modal ground
+ * inside each name's own box, top of the conversation to bottom:
+ *
+ *     y=50   rgb(217,228,245)   slate 6.40
+ *     y=160  rgb(214,226,244)   blue  4.57
+ *     y=277  rgb(212,224,243)   green 4.54
+ *     y=451  rgb(207,218,242)   rose  4.27
+ *     y=509  rgb(203,212,240)   violet 4.11
+ *     y=625  rgb(200,203,240)   blue  3.77
+ *     y=741  rgb(199,197,238)   green 3.65
+ *
+ * So the raw token starts at the 4.5 line at the top of the window and is a
+ * fifth under it at the bottom — where a conversation opens. The dark theme has
+ * no such problem: the same measurement reads 6.23 to 7.03 throughout, because
+ * `--kub-chat-ground` is darker there than any panel surface rather than
+ * lighter. That is D-214's shape one surface further along, and it was found by
+ * photographing the change rather than by reading the palette's guarantee.
+ *
+ * **What this does.** It keeps 80% of the palette's colour and takes 20% of
+ * `--kub-text`, which is the theme's own extreme: near-black in the light theme,
+ * so the colour darkens and gains contrast on a light ground, and near-white in
+ * the dark one, so it lightens on a dark ground. One expression, both
+ * directions, and it carries no hard-coded colour of its own — which is why it
+ * is not the material written by hand that `interface-material.md` rule 1
+ * forbids. Measured against the worst ground above: light 4.63 to 6.04, dark
+ * 7.25 to 7.58.
+ *
+ * **What it costs, stated rather than hidden.** Pulling every entry toward one
+ * neutral compresses them. The closest pair in the light theme, `slate`/`teal`,
+ * goes from ΔE*ab 24.1 to 19.9, a hair under the 20 the palette test holds a
+ * member list's chips to. That floor is set for two short words side by side in
+ * a 280px row; two author names are multi-word and a message apart. It is
+ * recorded here because the honest fix is not this at all: it is a
+ * `--kub-role-*` set declared inside `.kub-chat-screen` in `index.css`, next to
+ * the `--kub-cyan`, `--kub-muted` and `--kub-accent-text` that block already
+ * re-points for exactly this reason — «the values measured over the tinted
+ * wallpaper». That is a change to `index.css`, which the work that found this
+ * was not allowed to make.
+ */
+export function chatRoleColourOnChat(key: ChatRoleColour): string {
+  return `color-mix(in srgb, ${chatRoleColourValue(key)} ${CHAT_ROLE_ON_CHAT_STRENGTH}%, var(--kub-text))`;
+}
+
 /** What the picker calls a key, for a colour read back out of a stored role. */
 export function chatRoleColourLabel(key: ChatRoleColour): string {
   const entry = CHAT_ROLE_COLOURS.find((candidate) => candidate.key === key);

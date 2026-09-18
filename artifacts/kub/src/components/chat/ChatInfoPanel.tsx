@@ -11,7 +11,7 @@ import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvat
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { chatVocabulary, countedMemberLabel } from "@/lib/chatVocabulary";
 import { usePermissionAccess } from "@/hooks/useRole";
-import { useChatRoles } from "@/hooks/useChatRoles";
+import type { ChatRolesView } from "@/hooks/useChatRoles";
 import { ChatRolesModal } from "./ChatRolesModal";
 import { ChatRoleChip } from "./ChatRoleChip";
 import { DISABLED_SINK } from "@/lib/controlSurface";
@@ -191,6 +191,18 @@ interface ChatInfoPanelProps {
   onClose: () => void;
   onClearForMe?: () => Promise<{ ok: boolean; error: string | null }>;
   voice?: ChatInfoVoice;
+  /**
+   * The group's own vocabulary and who wears what (D-215), read by whoever owns
+   * the conversation rather than here.
+   *
+   * It was `useChatRoles(chat.id, isGroup)` in this component until the author
+   * line of a message needed the same answer. Two mounts are two identical
+   * round trips whenever this card is open beside the conversation — which is
+   * its normal state on a wide window — so the read moved up to `ChatWindow`,
+   * the one component that renders both. A prop rather than a context because
+   * there is exactly one caller and a context would hide the count.
+   */
+  chatRoles: ChatRolesView;
 }
 
 type Tab = "info" | "members";
@@ -279,7 +291,7 @@ const MEDIA_SECTION_ICONS: Record<MessageMediaKind, KubIconName> = {
   audio: "volume",
 };
 
-export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPanelProps) {
+export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }: ChatInfoPanelProps) {
   const { currentUser, setSelectedChatId, chats, setChats, setMessages } = useAppStore();
   const supabase = createClient();
   // The identity, not the object. The store hands back a fresh `currentUser`
@@ -1607,15 +1619,6 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
    * with the dot and the sentence disagreeing on one row.
    */
   const presenceNow = usePresenceNow();
-  /**
-   * The group's own vocabulary (D-215).
-   *
-   * Read once for the whole list, like the badges beside it, and asked for only
-   * where it can exist: `private.enforce_chat_role_scope` refuses a role in a
-   * private chat, so a private conversation must not spend a round trip finding
-   * that out.
-   */
-  const chatRoles = useChatRoles(chat.id, isGroup);
   const memberRowFacts = useMemo(() => {
     const facts = new Map<string, ChatMemberRowFacts>();
     for (const member of members) {

@@ -25,6 +25,7 @@ import {
   normalizeChatRoleName,
   orderChatRoles,
   topChatRole,
+  topChatRolesByMember,
   type ChatRoleRow,
 } from "../../artifacts/kub/src/lib/chatRoles.ts";
 
@@ -187,6 +188,90 @@ test("the row takes the highest tag and only the highest", () => {
   ]);
   assert.equal(topChatRole(roles)?.name, "Основатель");
   assert.equal(topChatRole([]), null, "an untagged member must get no tag rather than a blank one");
+});
+
+// ---------------------------------------------------------------------------
+// Everybody at once, for a surface that draws the same author many times
+// ---------------------------------------------------------------------------
+
+test("the map holds each person's highest tag, and nobody else", () => {
+  const roles = orderChatRoles([
+    row({ id: "top", name: "Основатель", priority: 90 }),
+    row({ id: "mid", name: "Наставник", priority: 50 }),
+    row({ id: "low", name: "Дежурный", priority: 10 }),
+  ]);
+  const worn = topChatRolesByMember(
+    [
+      { chat_id: CHAT, user_id: "anna", role_id: "low" },
+      { chat_id: CHAT, user_id: "anna", role_id: "mid" },
+      { chat_id: CHAT, user_id: "maksim", role_id: "top" },
+    ],
+    roles,
+  );
+  assert.equal(worn.get("anna")?.name, "Наставник", "the lower of Анна's two tags won");
+  assert.equal(worn.get("maksim")?.name, "Основатель");
+  assert.equal(
+    worn.get("olga"),
+    undefined,
+    "somebody who wears nothing must be absent rather than present with null",
+  );
+  assert.equal(worn.size, 2, "the map is the size of the tagged few, not of the membership");
+});
+
+test("the order the assignments arrive in does not decide who is highest", () => {
+  const roles = orderChatRoles([
+    row({ id: "top", name: "Основатель", priority: 90 }),
+    row({ id: "low", name: "Дежурный", priority: 10 }),
+  ]);
+  const forward = topChatRolesByMember(
+    [
+      { chat_id: CHAT, user_id: "anna", role_id: "top" },
+      { chat_id: CHAT, user_id: "anna", role_id: "low" },
+    ],
+    roles,
+  );
+  const backward = topChatRolesByMember(
+    [
+      { chat_id: CHAT, user_id: "anna", role_id: "low" },
+      { chat_id: CHAT, user_id: "anna", role_id: "top" },
+    ],
+    roles,
+  );
+  // PostgREST returns `chat_member_roles` in no promised order, so «the first
+  // row wins» would make an author's colour depend on the physical order of a
+  // table nobody sorts.
+  assert.equal(forward.get("anna")?.id, "top");
+  assert.equal(backward.get("anna")?.id, "top");
+});
+
+test("the map hands back the very objects the list holds, so a memoised row does not re-render", () => {
+  const roles = orderChatRoles([row({ id: "top", name: "Основатель", priority: 90 })]);
+  const worn = topChatRolesByMember([{ chat_id: CHAT, user_id: "anna", role_id: "top" }], roles);
+  // `Object.is`, not `deepEqual`. `MessageRow` is memoised on its props, and a
+  // fresh object per call would render every bubble in the conversation on
+  // every commit — the defect `message-render-stability.spec.ts` measures.
+  assert.ok(
+    worn.get("anna") === roles[0],
+    "a copy was handed out, which defeats the memo on every message row",
+  );
+});
+
+test("a tag naming a role the group no longer has leaves that person untagged", () => {
+  const roles = orderChatRoles([row({ id: "top", name: "Основатель", priority: 90 })]);
+  const worn = topChatRolesByMember(
+    [
+      { chat_id: CHAT, user_id: "anna", role_id: "deleted" },
+      { chat_id: CHAT, user_id: "maksim", role_id: "top" },
+    ],
+    roles,
+  );
+  assert.equal(worn.get("anna"), undefined, "a dangling assignment painted a name");
+  assert.equal(worn.get("maksim")?.id, "top");
+});
+
+test("no assignments at all is an empty map rather than a throw", () => {
+  assert.equal(topChatRolesByMember([], orderChatRoles([row()])).size, 0);
+  assert.equal(topChatRolesByMember([{ chat_id: CHAT, user_id: "anna", role_id: "x" }], []).size, 0);
 });
 
 // ---------------------------------------------------------------------------
