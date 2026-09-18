@@ -611,6 +611,121 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-18 — `09c6ae76` (one-to-one calls complete: A, B, C and E, and three more migrations)
+
+**`main` is at `09c6ae76`. Production is not, yet** — deployment 445 failed at
+the clone, for the third time today with the same signature (see the section
+below). `b5c02b3b` is what is serving, so slices A, B and C are live and slice
+E's notice is not. The database half of every slice was applied directly and is
+unaffected either way.
+
+What a person can now do that they could not this morning: **call the other
+participant of a private chat**, from either side; be rung on **every device
+they are signed in on**, with the rest stopping the moment one answers; and read
+in the conversation afterwards **what the call was** — answered with its length,
+missed, declined or cancelled, worded from their own side of it.
+
+#### The commits
+
+- **`7cee6672`** — slice C, the missed-call sweep (`pg_cron`, every minute).
+- **`b5c02b3b`** — slice B's client half: the row in the conversation, the
+  chat-list preview, and the hours arm the renderer's author found missing in my
+  migration.
+- **`09c6ae76`** — slice E: the notice the iPhone gets and nobody else does.
+- **`c7a63529`, `0d771881`, `fdf97646`, `2b295493`** — the deploy records, the
+  failed-deployment diagnosis, the slice F fork, and D-234/235/236.
+
+#### Three more production migrations, each backed up, rehearsed and verified
+
+- `20260918250000_a_call_says_so_in_the_private_chat.sql` — backup
+  `pre-20260918250000-call-record-20260918T150815Z.sql` (1,382,869 bytes, sha256
+  `fd29d841…`). The outcome is **derived, never reported**: the function still
+  validates the word the client sends and then ignores it. Rehearsed with a
+  client deliberately lying — `declined` on an answered call — and the record
+  came out `answered` with 192000 ms.
+- `20260918260000_a_missed_call_is_recorded_even_if_nobody_is_there.sql` — backup
+  `pre-20260918260000-missed-sweep-20260918T152548Z.sql` (1,386,487 bytes, sha256
+  `5c0eb7c1…`). Observed running rather than assumed scheduled: three consecutive
+  minutes in `cron.job_run_details`, each `succeeded`.
+- `20260918270000_a_call_over_an_hour_says_hours.sql` — backup
+  `pre-20260918270000-hour-arm-20260918T162419Z.sql` (1,389,591 bytes, sha256
+  `4a445552…`). An hour read «Звонок, 60 мин 0 с»; it now reads «Звонок, 1 ч».
+  The self-check asserts **every older arm case by case** rather than trusting
+  that an added branch changed nothing.
+
+#### The grant trap, twice, with opposite answers
+
+Worth recording together because the same question produced two different right
+answers on two tables the same day.
+
+On `voice_channels`, INSERT is held at the **table** level and UPDATE column by
+column, so three new columns arrived writable-on-insert — and a blocked caller
+could have inserted a room already ringing, stepping around the one gate the
+owner's «every private chat, minus the block list» rests on. Closing it needed
+the grant **replaced**, because a column-level revoke against a table-level grant
+is accepted without complaint and changes nothing.
+
+On `messages`, the identical shape does **not** matter, and that was measured
+rather than hoped: the INSERT policy requires `uid() = user_id` and UPDATE
+requires `user_id = uid()`, while a system row must carry `user_id IS NULL`. A
+client can neither insert nor update one, whatever the column grants say — proved
+in the rehearsal by trying it, where RLS refuses. Narrowing a twenty-column
+table-level grant on `messages` would have been a far riskier change than the one
+it was protecting against.
+
+#### Two defects that would have shipped, both found by the people building them
+
+**Every call-back button in the product, dead until reload.** The busy guard read
+`channelId !== null`, and `useVoiceCall` publishes a failure as
+`{...IDLE, phase: "failed", channelId}` — so one dismissed microphone prompt
+would have made every «call back» answer «Вы в другом голосовом чате» for the
+rest of the session.
+
+**A ring that outlived its call locked a pair out for ever.** `voice_call_ring`
+refuses a `ringing` **or** `answered` room, and nothing cleared an `answered`
+one — so a call whose clients all died left those two people unable to call each
+other again, with nothing in any interface able to fix it. Repaired on two
+clocks: the recount's existing two-minute grace for the residue, and thirty
+seconds inside `voice_call_ring` itself, because two minutes of «you cannot call
+this person» is a shorter defect rather than none.
+
+#### What is still not built, named so it is not mistaken for done
+
+**Slice D** — Android ringing while closed — is not startable without a device.
+**Slice F** — the per-device switch — has a fork recorded in the proposal: the
+registry should probably be `auth.sessions` rather than `user_push_devices`, and
+it needs a product decision about what «active» means (342 sessions across 15
+users, `not_after` null on every one) plus one verification (`session_id` in the
+access token, strongly evidenced against the deployed gotrue binary and not yet
+read off a real token).
+
+#### The clone failure is now a recurrence, not an incident
+
+Deployments **438, 439 and 445** all died at `check_git_if_build_needed()` with
+«Failed to connect to github.com port 443» — and the number is nearly identical
+each time: **134872 ms, 133969 ms**. That is a connect timeout being exhausted,
+not a refusal, which is the signature of SYN packets being dropped rather than
+answered.
+
+Everything measured around it says the pieces are healthy: the same command,
+from the same network, with the same helper image, answers in **0.65 s**
+immediately afterwards and returns the right commit; GitHub delivers its
+webhooks with 200; Horizon cycles its workers normally; the address pools are
+the custom ones this server needs. Deployments 440–444 succeeded in between.
+
+So it is sporadic and it is **not diagnosed** — three out of roughly eight
+deployments today. Stated as an open question rather than as a closed incident,
+because «transient, recovered» was the honest reading after the first two and is
+no longer a sufficient one. What would settle it: whether the failure correlates
+with the provider's egress or with something Coolify does to the build
+container's network, which needs a failure caught while it is happening rather
+than read afterwards.
+
+**Gates at `09c6ae76`:** typecheck clean across four packages, unit **3095/3095**,
+and at each commit the specs covering what it touched at 1440 and 390. Pixels at
+every step, looked at rather than scanned — and they earned it twice: the ring
+card was photographed sitting on the conversation's date separator, and the
+release card's chips were photographed still ellipses after the grid fix.
 ### 2026-09-18 — two deployments failed on a transient GitHub outage, and three wrong hypotheses first
 
 **Not a code failure, and the diagnosis is the point.** Deployments 438 and 439
