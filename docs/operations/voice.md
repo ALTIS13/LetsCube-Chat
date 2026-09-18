@@ -169,6 +169,78 @@ reconciler sweeps at most 64 channels that have somebody in them per tick
 (`VOICE_RECONCILER_CHANNEL_LIMIT`), which is a bound on *occupied* rooms rather
 than on how many a group may have.
 
+## Silencing and disconnecting somebody who is already inside
+
+Added 2026-09-18. **The gateway is four routes, not two.** It was `/token` and
+`/webhook`; it is now also:
+
+- `POST /functions/v1/voice-gateway/force-mute` — `{channelId, userId, muted}`
+- `POST /functions/v1/voice-gateway/remove` — `{channelId, userId}`
+
+Both take the caller's Supabase JWT, verified the way `/token` verifies it, plus
+the publishable key in `apikey` because Kong wants it on every function call
+here. Owner and administrator of the chat only; nobody may act on themselves,
+and nobody at all may act on the owner — one step stricter than
+`enforce_chat_member_update`, which lets an owner change a co-owner's role.
+
+**Four things about this are measurements, and each one cost a round trip.**
+
+**`MuteRoomTrack` does not exist.** It is the name of the *request message* for
+`MutePublishedTrack`, not a method. Probed against the deployed v1.8.4 with a
+negative control (`NoSuchMethodZZZ`): `MuteRoomTrack` answers 404 `bad_route`
+byte for byte like the fake, while `UpdateParticipant`, `RemoveParticipant`,
+`MutePublishedTrack` and eight others answer 401.
+
+**`UpdateParticipant` is used rather than `MutePublishedTrack`, because of the
+configuration.** `room.enable_remote_unmute` is absent from `livekit.yaml` and
+therefore false, and the binary carries the string «cannot unmute track, remote
+unmute is disabled». Muting that way would work and could never be undone.
+
+**The SFU discards request fields it does not recognise**, so a misspelled name
+is a 200 that changes nothing. Measured: `permissionZZZ` and `permission`
+produce identical answers. Every name is proved positively instead — send a
+string where a bool is expected and a known field answers 400 while an unknown
+one is dropped and the request goes through. The permission is written whole for
+the same reason: omitting `canSubscribe` would set it to proto3's default of
+false and turn a force-mute into a force-deafen.
+
+**`is_chat_admin(cid)` cannot be used here.** It takes no user — it reads
+`auth.uid()` internally, which is null on a service-role connection — so from
+this gateway the predicate reduces to `user_id = null` and refuses everybody.
+Safe and useless. The gateway establishes the caller the way `/token` does:
+verify the JWT, then read the membership row for that `sub` with the service
+role.
+
+**Nothing is written to `public.mutes`, and each of three reasons is enough.**
+That table is the staff penalty matrix. A voice silence there would (1) also
+stop the person writing, because `messages` carries a restrictive
+`not is_muted(...)` policy; (2) bypass the penalty ranking, which returns early
+when `auth.uid()` is null — exactly the service-role case — so an administrator
+of a chat who is not staff would be writing an unranked penalty; and (3) put a
+row in the staff panel beside real bans. So the action is deliberately live, and
+the price is stated: a reconnect mints a fresh token, so a force-mute is lifted
+by leaving and rejoining. Discord's «server mute» behaves the same way.
+
+**Where it is used:** a press on somebody in the channel rail, for an owner or
+an administrator. The menu offers only what the rules allow, so the owner of a
+group is never offered a control that would be refused. Whether the lift is
+offered depends on whether the SFU reports a permission at all: inside the room
+this client is connected to it does, and only the direction that changes
+something is drawn; for any other room the table answers, which carries presence
+and nothing else, and both directions are offered because both are idempotent.
+
+**A lift is not a grant.** `muted: false` makes the gateway recompute what a
+fresh token would give that person — their role against the channel's
+`speak_role`, and any staff mute from `public.mutes` — and answers with
+`canPublish`. Somebody below the speaking bar stays unable to publish, and the
+interface says so rather than claiming they can speak.
+
+**Not verified, and it needs a live SFU with two people in a room:** whether
+`canPublish: false` stops a microphone that is **already** publishing or only
+forbids publishing afresh. If it is the second, the continuation is
+`MutePublishedTrack(muted: true)` per track — which this build can do in the
+silencing direction and, per the configuration above, cannot undo.
+
 ## Proved in production, 2026-09-14
 
 Each of these was run against the real thing rather than a stub:

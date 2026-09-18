@@ -610,6 +610,31 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-18 — `e094d4bd` (thirteen deploys, one day)
+
+- **`0b5d62df`** — the voice gateway's moderation half: `/force-mute` and
+  `/remove`, with the authorisation matrix, the rate limit and the client's
+  refusal vocabulary. Deployed to the functions volume after a verified backup
+  and checked by a calibrated route probe: `token`, `force-mute` and `remove`
+  all answer 400 to an empty body while `NoSuchRouteZZZ` answers 404 — a route
+  that exists rejects the body, one that does not rejects the path.
+- **`e094d4bd`** — the client half, which closes D-221, and two SDK defaults it
+  uncovered (D-223, D-224). Image tag read off the running container; the
+  previous replica retired. Verified in the live bundle in both directions: the
+  six new sentences and the three seam markers
+  (`stopLocalTrackOnUnpublish`, `ParticipantPermissionsChanged`,
+  `LocalTrackUnpublished`) are present, a known older string
+  («Вы сможете только слушать») is present so the read is working, and a
+  fabricated near-miss is absent so `includes` is not trivially true.
+
+  D-223 is the one to read first: the microphone had been published with no
+  `source`, so `isMicrophoneEnabled` answered false for everybody and every
+  person in every call was drawn permanently muted, while `setVolume` found no
+  publication to change and **deafening — shipped the same day — did nothing at
+  all.** Neither was reachable by any test here, because the e2e suite replaces
+  the whole transport; both were found by reading the installed
+  `livekit-client` bundle.
+
 ### 2026-09-18 — `a4592b94` (eight deploys, one day)
 
 The owner reported four things on 2026-09-18 and all four are on production.
