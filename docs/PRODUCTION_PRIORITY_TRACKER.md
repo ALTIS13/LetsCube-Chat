@@ -611,6 +611,110 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-19 — `b35da2e2` (the owner's first real call, three defects it found, and slice F)
+
+**Current baseline.** `letscube-web` runs image
+`l64kyyu1sysev2izzjjbizhe:b35da2e2…`, single replica. Deployments 450, 451 and
+452 all finished; the clone failures recorded below have not recurred since.
+
+#### The owner made one test call, and it found three defects no test could
+
+This is the entry's reason for existing. Every gate was green, every spec
+passed, and one real call produced five system messages where one belonged, a
+connection that hung itself up every few seconds, and a participant count that
+flapped. **The three share a shape**, and it is worth more than any of the
+fixes:
+
+| | the old rule | the new subject matter it was handed |
+|---|---|---|
+| D-237 | the group-call trigger announces a room | a room in a **private chat** |
+| D-238 | the participant count is presence | a count driven by a hanging-up client |
+| D-239 | the rail's view decides a call is over | a call **the rail never lists** |
+
+Each rule was correct when written. Each was given a case its author could not
+have had in mind. And **every test of each one passed**, because a test supplies
+the subject matter the rule was written for — a group chat, a healthy client, a
+rail channel. A feature that changes what an old rule's inputs *mean* is not a
+change that rule's tests can see.
+
+**D-239 is the one that made the feature unusable**, and the SFU's own log named
+it while ruling out the obvious answer: every disconnect said
+`CLIENT_REQUEST_LEAVE` with ICE healthy and on UDP, and every return was a fresh
+session with `Reconnect: false`. Not a network fault — the application hanging
+up on itself, because `voiceCallLostItsChannel` read «this chat's view lists no
+such channel» as «an administrator ended it», which is true of a group and is
+the permanent state of every private chat.
+
+#### What else shipped
+
+- **Sound.** Synthesised rather than sampled — oscillators and an envelope, no
+  audio files and no licensing question. The ring is 440 + 480 Hz on a
+  1.2s-on / 2s-off cadence; the 40 Hz beat is what makes it read as a telephone.
+  Silence is one rule rather than eight handlers: the sound is driven by the ring
+  row's state, so every way a call can end is the same `state !== "ringing"`.
+- **The band a person cannot miss** — accent wash, pulsing avatar ring, state as
+  an eyebrow above the name (the old order was the shape of a chat-list row,
+  which is what the owner read it as), and filled labelled buttons.
+- **Slice F, «Активные сеансы»** — the device list and a per-device call switch,
+  built on `auth.sessions` rather than `user_push_devices`, because that table is
+  keyed on a push token and a browser tab with no notification permission still
+  rings.
+- **D-222 tier 2** — where the register's own instruction («one screenshot each
+  at 768 and 1024 before anybody edits them») paid for itself: 3 of 8 lines bite,
+  5 do not, and the worst was understated — a grid **103px wider than its pane**,
+  so «удалить команду» was painted past the edge of the window.
+
+#### Five more production migrations
+
+`20260918250000` (the call record), `20260918260000` (the missed-call sweep, on
+`pg_cron`, observed running), `20260918270000` (the hours arm), `20260918280000`
+(the private chat stops being told about a channel, with four stray rows deleted
+under a predicate narrow enough to reach only them), `20260918290000` (the device
+registry) and `20260919000000` (session times said in UTC). Each backed up,
+rehearsed in a rolled-back transaction on production, and verified on values.
+
+**The last one is a latent defect found by an agent reviewing my work, and
+proved by mutation.** `auth.sessions.refreshed_at` is `timestamp WITHOUT time
+zone` while its neighbours are not, and the listing cast it `::timestamptz` —
+which interprets it in the **reading** session's zone. A session refreshed 29
+days 20 hours ago was listed for a reader in UTC and **absent** for one in
+Asia/Tokyo:
+
+```
+old (::timestamptz)      UTC 1 | Tokyo 0 | UTC+14 0
+new (at time zone 'UTC') UTC 1 | Tokyo 1 | UTC+14 1
+```
+
+A no-op on this deployment, where the server is UTC and no role overrides it —
+which is exactly why it would have gone unnoticed until somebody's device
+vanished from their own list.
+
+#### The deployment failures, closed as far as they can be
+
+Six of roughly fourteen deployments failed at `git clone` with a ~133-second
+connect timeout. Ruled out by measurement: Docker's address pools (unchanged and
+not conflicting), conntrack (381 of 262144), NAT and FORWARD (present, millions
+of packets passing), GitHub's webhooks (all 200), Horizon (cycling normally),
+and DNS (stable, both addresses reachable). Twelve fresh containers on the same
+network cloned the same repository in 0.65 s each, and the exact failing command
+run by hand completed in 2.9 s.
+
+**One wrong turn is recorded because it was mine.** A probe reporting every
+destination blocked — GitHub, Cloudflare, Google DNS, Docker's registry —
+briefly looked like proof of a network fault. It was written with `</dev/tcp/…>`,
+which is a bash construct, against an image whose `sh` is not bash: every address
+answered «no such file». A probe that answers the same thing about everything is
+not evidence, and this project already had a note saying so.
+
+**Gates at `b35da2e2`:** typecheck clean across four packages, unit **3148/3148**,
+and at each commit the specs covering what it touched at 1440 and 390. Pixels at
+every step. One pre-existing flake is named rather than absorbed:
+`voice-call.spec.ts`'s connection-panel test fails about half the time at 390,
+A/B'd at 9/9 with the new work and 8/10 without it over 18 runs per arm.
+
+**Still open:** D-238, which cannot be closed without watching a call made after
+D-239's fix — and no call has been made since. Slice D needs a device. Slice G is
+specified in §4b of the proposal and is being built.
 ### 2026-09-18 — `09c6ae76` (one-to-one calls complete: A, B, C and E, and three more migrations)
 
 **`main` is at `09c6ae76`. Production is not, yet** — deployment 445 failed at
