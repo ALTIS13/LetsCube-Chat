@@ -2225,6 +2225,43 @@ textarea::placeholder, input::placeholder {
   .desktop-update-channel-control__option:disabled { cursor: wait; opacity: 0.65; }
 }
 
+@layer components {
+  /* Who is talking, drawn as a ring around their face -- Discord's affordance,
+     asked for on 2026-09-18, and the one thing a voice channel's member list is
+     read for while a call is running.
+
+     An `outline`, not a `box-shadow` and not Tailwind's `ring-*` (which is a
+     box-shadow underneath). Two reasons, and neither is taste. Rule 1 of
+     docs/operations/interface-material.md: no component writes a shadow by
+     hand. And an outline takes no part in layout at any size, so a ring that
+     comes and goes several times a second cannot move the row it is on -- the
+     transparent outline is declared at rest for the same reason, so that the
+     only thing which ever changes is a colour.
+
+     It does not pulse, deliberately. The active-speaker list is replaced by the
+     SDK at syllable rate, so the appearing and disappearing IS the movement; a
+     pulse on top would be an animation driven by noise rather than by meaning,
+     which is what the motion contract's second rule rules out. What is left is
+     a 140ms colour fade, which stops the ring strobing on a run of short words,
+     and `--kub-motion-fast` already collapses to 1ms under
+     `prefers-reduced-motion` in the block below -- so the ring simply snaps
+     there and there is no animation for that block to have to switch off.
+
+     `--kub-online` rather than `--kub-cyan`: cyan is «the room you are in» in
+     this rail already (the chosen row and its accent bar), and a second meaning
+     on the same colour reads as a selection. Green is the mark tone, tuned for
+     exactly this -- a graphic against a surface rather than a word. */
+  .kub-voice-speaking {
+    outline: 2px solid transparent;
+    outline-offset: 1px;
+    transition: outline-color var(--kub-motion-fast) var(--kub-ease-standard);
+  }
+
+  .kub-voice-speaking[data-speaking="true"] {
+    outline-color: var(--kub-online);
+  }
+}
+
 /* One reduced-motion block, not three competing ones. The preference removes
    movement; it does not remove feedback, so --kub-motion-feedback keeps its
    full duration here and is shortened in script instead, where the message can

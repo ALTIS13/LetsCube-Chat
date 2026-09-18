@@ -59,6 +59,7 @@ function capsule(over: Partial<Parameters<typeof voiceCapsuleState>[0]> = {}) {
     micMuted: false,
     canPublish: true,
     refusal: null,
+    outputDeviceRefused: false,
     ...over,
   });
 }
@@ -281,6 +282,45 @@ test("a refusal is a state with words, and a way to try again", () => {
   // A failure with no sentence is not a state the interface can show, so it
   // falls back to the ordinary offer rather than drawing an empty red line.
   assert.equal(capsule({ phase: "failed", refusal: null }).detail, "Никого нет");
+});
+
+/**
+ * The output device, and the one state where the capsule has to contradict the
+ * settings screen.
+ *
+ * `setOutputDevice` answers `false` where the browser would not move the call's
+ * audio — Firefox has no `setSinkId` — and a settings screen showing a headset
+ * selected while the call comes out of the laptop is the failure this exists to
+ * prevent. The mark belongs to a call that is running **here**: a capsule
+ * offering the way in has no audio that could have failed to move, and one
+ * speaking for a call in another chat's channel is already saying it cannot act
+ * for it.
+ */
+test("a refused output device is marked on the call it belongs to and nowhere else", () => {
+  const inCall = { phase: "connected" as VoiceCallPhase, callChannelId: CHANNEL.id, participants: [person(ME, "Яна")] };
+  assert.equal(capsule({ ...inCall, outputDeviceRefused: true }).outputRefused, true);
+  assert.equal(capsule({ ...inCall, outputDeviceRefused: false }).outputRefused, false);
+  // A dropped transport is still this call, and the headset is still not
+  // carrying it.
+  assert.equal(
+    capsule({ ...inCall, phase: "reconnecting", outputDeviceRefused: true }).outputRefused,
+    true,
+  );
+
+  // Everywhere else the flag is refused, whatever the state says, because there
+  // is no audio here to have gone to the wrong place.
+  assert.equal(capsule({ outputDeviceRefused: true }).outputRefused, false);
+  assert.equal(capsule({ phase: "joining", callChannelId: CHANNEL.id, outputDeviceRefused: true }).outputRefused, false);
+  assert.equal(
+    capsule({ phase: "connected", callChannelId: "44444444-4444-4444-8444-000000000009", outputDeviceRefused: true })
+      .outputRefused,
+    false,
+  );
+  assert.equal(
+    capsule({ phase: "failed", refusal: "Нет доступа к микрофону.", outputDeviceRefused: true }).outputRefused,
+    false,
+  );
+  assert.equal(capsule({ channel: null, outputDeviceRefused: true }).outputRefused, false);
 });
 
 test("a call in another chat's channel offers no control here", () => {

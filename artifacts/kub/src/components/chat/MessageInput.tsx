@@ -1011,6 +1011,46 @@ export function MessageInput({
     setTimeout(() => { el.selectionStart = el.selectionEnd = start + emoji.length; el.focus(); }, 0);
   };
 
+  /**
+   * Above the early returns, and that is a rule rather than a preference.
+   *
+   * `recording`, `useIsMobile` and `useHint` stood BELOW **both** of this
+   * component's early returns — `if (muteState.muted) return (…)` and
+   * `if (showVoice) return (…)` — so it rendered two fewer hooks while the
+   * voice recorder was open, or while the person was muted in this chat, than
+   * it did otherwise. React throws «Rendered fewer hooks than expected» the
+   * moment either state ends. Moving them above only the second return fixed
+   * half of it and the rule said so, which is why they are above the first. Found on
+   * 2026-09-18 by running biome's `correctness/useHookAtTopLevel` over
+   * `artifacts/kub/src`, after the same mistake was made and caught in
+   * `VoiceCallCapsule`. It was shipped code, and opening and closing the voice
+   * recorder is an ordinary thing to do.
+   *
+   * `recording` comes with them because the hint's `enabled` reads it; it is a
+   * pure expression and moving it changes nothing else.
+   */
+  const recording = holdRecorderState !== null;
+
+  // The round button has a second mode and nothing on screen says so. Its
+  // `aria-label` and `title` name the mode it is **in** — «Голосовое» — and
+  // «Режим: видеосообщение» arrives only after the switch, which is feedback
+  // rather than discovery. `shouldOfferRecorderModeHint` holds every condition,
+  // including the two device ones that keep this plate from ever sharing a
+  // screen with the sidebar's search hint.
+  const isPhoneWidth = useIsMobile();
+  const modeHint = useHint(RECORDER_MODE_HINT_ID, {
+    enabled: shouldOfferRecorderModeHint({
+      mode: recorderMode,
+      recording,
+      feedbackVisible: Boolean(modeFeedback || shortHint),
+      coarsePointer: coarsePointer(),
+      phoneWidth: isPhoneWidth,
+      buttonOnScreen: !(hasText || hasAttachments || hasForwardDraft),
+      overlayOpen: showAttach || showCamera || showVideoMessage || showVoice || showEmoji,
+      refusalVisible: Boolean(refusal),
+    }),
+  });
+
   if (muteState.muted) {
     const expires = muteState.mute?.expires_at
       ? new Date(muteState.mute.expires_at).toLocaleString("ru-RU", {
@@ -1072,28 +1112,6 @@ export function MessageInput({
       </div>
     );
   }
-
-  const recording = holdRecorderState !== null;
-
-  // The round button has a second mode and nothing on screen says so. Its
-  // `aria-label` and `title` name the mode it is **in** — «Голосовое» — and
-  // «Режим: видеосообщение» arrives only after the switch, which is feedback
-  // rather than discovery. `shouldOfferRecorderModeHint` holds every condition,
-  // including the two device ones that keep this plate from ever sharing a
-  // screen with the sidebar's search hint.
-  const isPhoneWidth = useIsMobile();
-  const modeHint = useHint(RECORDER_MODE_HINT_ID, {
-    enabled: shouldOfferRecorderModeHint({
-      mode: recorderMode,
-      recording,
-      feedbackVisible: Boolean(modeFeedback || shortHint),
-      coarsePointer: coarsePointer(),
-      phoneWidth: isPhoneWidth,
-      buttonOnScreen: !(hasText || hasAttachments || hasForwardDraft),
-      overlayOpen: showAttach || showCamera || showVideoMessage || showVoice || showEmoji,
-      refusalVisible: Boolean(refusal),
-    }),
-  });
 
   /**
    * The round button, held in one place.

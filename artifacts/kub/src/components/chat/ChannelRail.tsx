@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { TinyUserAvatar } from "./MessageReactions";
+import { VoiceSpeakingAvatar } from "./VoiceSpeakingAvatar";
 import { CAPSULE_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING, FOCUS_RING_INSET, PRESS_SINK } from "@/lib/controlSurface";
 import {
@@ -392,14 +393,16 @@ function VoiceChannelRailRow({
               className="flex items-center gap-2 rounded-md px-2 py-[3px]"
               data-testid="channel-rail-occupant"
             >
-              <TinyUserAvatar
-                user={{
-                  id: person.userId,
-                  full_name: person.name,
-                  username: null,
-                  avatar_url: faces?.get(person.userId) ?? null,
-                }}
-              />
+              <VoiceSpeakingAvatar userId={person.userId} channelId={channel.id}>
+                <TinyUserAvatar
+                  user={{
+                    id: person.userId,
+                    full_name: person.name,
+                    username: null,
+                    avatar_url: faces?.get(person.userId) ?? null,
+                  }}
+                />
+              </VoiceSpeakingAvatar>
               <span
                 className="min-w-0 flex-1 truncate text-xs text-[color:var(--kub-text)]"
                 data-testid="channel-rail-occupant-name"

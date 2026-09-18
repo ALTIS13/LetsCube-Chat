@@ -462,6 +462,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     micMuted: call.micMuted,
     canPublish: call.canPublish,
     refusal: call.refusal,
+    // The browser's answer to «send this call to that headset», carried through
+    // so the capsule can decline to claim a move that did not happen.
+    outputDeviceRefused: call.outputDeviceRefused,
   });
   const joinVoice = useCallback(() => {
     if (!voice.channel || !chat) return;

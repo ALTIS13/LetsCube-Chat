@@ -1,6 +1,5 @@
 "use client";
 
-import { useId } from "react";
 import { KubIcon } from "@/components/kub";
 import { useVoiceHealth } from "@/hooks/useVoiceHealth";
 import {
@@ -55,7 +54,6 @@ export function VoiceConnectionPanel({
   className?: string;
 }) {
   const { health, scale, serverName, connected } = useVoiceHealth(open);
-  const gradientId = useId();
 
   if (!connected) return null;
 
@@ -65,7 +63,7 @@ export function VoiceConnectionPanel({
       data-testid="voice-connection-panel"
       data-voice-verdict={health.verdict}
     >
-      <VoiceLatencyGraph scale={scale} gradientId={gradientId} />
+      <VoiceLatencyGraph scale={scale} />
 
       {serverName && (
         <p
@@ -85,7 +83,16 @@ export function VoiceConnectionPanel({
         <Row label="Последняя задержка" value={ms(health.lastRttMs)} testId="voice-connection-last" />
         <Row
           label="Потеря исходящих пакетов"
-          value={health.outboundLossPercent === null ? "—" : `${health.outboundLossPercent}%`}
+          // `toFixed(1)`, not the number as it is. `roundLoss` returns 0 for a
+          // clean connection and «0%» reads like a default while «0.0%» reads
+          // like somebody measured — which is the distinction
+          // `voice-connection-health.test.mts` states and which this line was
+          // quietly dropping. The owner's screenshot shows «0.0%».
+          value={
+            health.outboundLossPercent === null
+              ? "—"
+              : `${health.outboundLossPercent.toFixed(1)}%`
+          }
           testId="voice-connection-loss"
         />
       </dl>
@@ -170,7 +177,7 @@ function VerdictMark({ verdict }: { verdict: VoiceHealthVerdict }) {
  * grows leftwards as history accumulates — because that is where a reader's eye
  * goes for «now», and it is what the owner's screenshot shows.
  */
-function VoiceLatencyGraph({ scale, gradientId }: { scale: VoiceHealthScale; gradientId: string }) {
+function VoiceLatencyGraph({ scale }: { scale: VoiceHealthScale }) {
   const { points, maxMs } = scale;
   const slots = Math.max(points.length, 2);
   const x = (index: number) => (index / (slots - 1)) * GRAPH_WIDTH;
@@ -205,13 +212,6 @@ function VoiceLatencyGraph({ scale, gradientId }: { scale: VoiceHealthScale; gra
         aria-label={`График задержки, максимум ${maxMs} миллисекунд`}
         preserveAspectRatio="none"
       >
-        <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--kub-cyan)" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="var(--kub-cyan)" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
         {/* The ceiling, so the axis is readable without a label per gridline. */}
         <line
           x1="0"
@@ -225,10 +225,13 @@ function VoiceLatencyGraph({ scale, gradientId }: { scale: VoiceHealthScale; gra
 
         {runs.map((segment) => {
           const path = segment.map((point) => `${x(point.index)},${y(point.value)}`).join(" ");
-          const area = `${x(segment[0].index)},${GRAPH_HEIGHT} ${path} ${x(segment[segment.length - 1].index)},${GRAPH_HEIGHT}`;
           return (
             <g key={`${segment[0].index}-${segment.length}`}>
-              {segment.length > 1 && <polygon points={area} fill={`url(#${gradientId})`} />}
+              {/* A line, and no area under it. The fill was there first and the
+                  pixels refused it: a healthy connection reads 40–49 against a
+                  50ms floor, so the area covered nearly the whole frame as one
+                  solid block and the line it was meant to support disappeared
+                  into its own top edge. Discord's draws a line. */}
               <polyline
                 points={path}
                 fill="none"

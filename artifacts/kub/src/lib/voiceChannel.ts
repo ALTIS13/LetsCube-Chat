@@ -278,6 +278,16 @@ export interface VoiceCapsuleView {
   muted: boolean;
   /** Set while something is in flight, so the control can say so and refuse a second press. */
   busy: boolean;
+  /**
+   * The browser would not send this call's audio to the chosen output device.
+   *
+   * Only ever set on a call that is running **here**: a refusal is a fact about
+   * a live connection, and a capsule offering the way in has no audio to have
+   * failed to move. It exists so the interface can decline to claim a success
+   * it did not have — a headset selected in settings, and the call still coming
+   * out of the laptop speaker, is the state this is here to make visible.
+   */
+  outputRefused: boolean;
   tone: "neutral" | "live" | "danger";
 }
 
@@ -290,6 +300,7 @@ const HIDDEN: VoiceCapsuleView = {
   mute: false,
   muted: false,
   busy: false,
+  outputRefused: false,
   tone: "neutral",
 };
 
@@ -322,8 +333,16 @@ export function voiceCapsuleState(input: {
   canPublish: boolean;
   /** A sentence, already in Russian, when the last attempt was refused. */
   refusal: string | null;
+  /**
+   * Whether the browser refused to move this call's audio to the device the
+   * person chose. Required rather than optional: a caller that stops passing it
+   * is a capsule that has quietly gone back to claiming a success it never had,
+   * and that has to be a type error rather than a silent `undefined`.
+   */
+  outputDeviceRefused: boolean;
 }): VoiceCapsuleView {
-  const { channel, phase, callChannelId, participants, selfId, micMuted, canPublish, refusal } = input;
+  const { channel, phase, callChannelId, participants, selfId, micMuted, canPublish, refusal, outputDeviceRefused } =
+    input;
   const here = channel !== null && callChannelId === channel.id;
 
   if (here && (phase === "connected" || phase === "reconnecting")) {
@@ -342,6 +361,7 @@ export function voiceCapsuleState(input: {
       mute: canPublish,
       muted: micMuted,
       busy: phase === "reconnecting",
+      outputRefused: outputDeviceRefused,
       tone: phase === "reconnecting" ? "danger" : "live",
     };
   }
@@ -357,6 +377,7 @@ export function voiceCapsuleState(input: {
       mute: false,
       muted: micMuted,
       busy: true,
+      outputRefused: false,
       tone: "neutral",
     };
   }
@@ -374,6 +395,7 @@ export function voiceCapsuleState(input: {
       mute: false,
       muted: micMuted,
       busy: false,
+      outputRefused: false,
       tone: "neutral",
     };
   }
@@ -390,6 +412,7 @@ export function voiceCapsuleState(input: {
       mute: false,
       muted: false,
       busy: false,
+      outputRefused: false,
       tone: "danger",
     };
   }
@@ -405,6 +428,7 @@ export function voiceCapsuleState(input: {
     mute: false,
     muted: false,
     busy: false,
+    outputRefused: false,
     tone: "neutral",
   };
 }

@@ -2,6 +2,7 @@
 
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { KubIcon } from "@/components/kub";
+import { VoiceSpeakingAvatar } from "./VoiceSpeakingAvatar";
 import { cn } from "@/lib/utils";
 import {
   orderVoiceParticipants,
@@ -151,15 +152,17 @@ export function VoiceChannelRow({
               className="flex items-center gap-3 rounded-xl px-2 py-1.5"
               data-testid="chat-info-voice-participant"
             >
-              <UserAvatar
-                size="sm"
-                user={{
-                  id: participant.userId,
-                  full_name: participant.name,
-                  username: null,
-                  avatar_url: faces?.get(participant.userId) ?? null,
-                }}
-              />
+              <VoiceSpeakingAvatar userId={participant.userId} channelId={channel?.id ?? null}>
+                <UserAvatar
+                  size="sm"
+                  user={{
+                    id: participant.userId,
+                    full_name: participant.name,
+                    username: null,
+                    avatar_url: faces?.get(participant.userId) ?? null,
+                  }}
+                />
+              </VoiceSpeakingAvatar>
               <span
                 className="min-w-0 flex-1 truncate text-sm text-[color:var(--kub-text)]"
                 data-testid="chat-info-voice-participant-name"

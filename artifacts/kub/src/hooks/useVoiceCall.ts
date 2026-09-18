@@ -1,8 +1,13 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import { createClient, getSupabasePublicUrl, getSupabasePublishableKey } from "@/lib/supabase/client";
-import { buildAudioTrackConstraints, getAudioSettings } from "@/hooks/useAudioSettings";
+import {
+  AUDIO_SETTINGS_EVENT,
+  AUDIO_SETTINGS_STORAGE_KEY,
+  buildAudioTrackConstraints,
+  getAudioSettings,
+} from "@/hooks/useAudioSettings";
 import { microphonePermissionHelp } from "@/lib/platform/capabilities";
 import {
   classifyMicrophoneError,
@@ -52,15 +57,15 @@ export interface VoiceCallState {
   /** The SDK's own view, replaced whole on every event. Never patched. */
   participants: VoiceParticipant[];
   /**
-   * Who is speaking right now, by user id — the SDK's own answer, replaced
-   * whole like the list above.
+   * True when the browser refused to send this call's audio to the chosen
+   * output device.
    *
-   * Separate from `participants` rather than a flag on each, because the two
-   * change at completely different rates: the membership moves when somebody
-   * joins, the speakers move several times a second. Merging them would rebuild
-   * every row of the rail on every syllable.
+   * Recorded rather than swallowed, because the alternative is an interface
+   * that shows a headset selected while the call is still coming out of the
+   * laptop. Firefox has no `setSinkId` at all; a device that has been unplugged
+   * since it was chosen is refused everywhere.
    */
-  speakers: string[];
+  outputDeviceRefused: boolean;
   micMuted: boolean;
   /**
    * Whether the token this call was joined with may publish. Always true in
@@ -79,7 +84,7 @@ const IDLE: VoiceCallState = {
   chatId: null,
   channelName: null,
   participants: [],
-  speakers: [],
+  outputDeviceRefused: false,
   micMuted: false,
   canPublish: true,
   refusal: null,
@@ -87,6 +92,38 @@ const IDLE: VoiceCallState = {
 
 let state: VoiceCallState = IDLE;
 const listeners = new Set<() => void>();
+
+/**
+ * Who is speaking right now, by user id — the SDK's own answer, replaced whole
+ * and never patched.
+ *
+ * **Beside `VoiceCallState` rather than inside it, and the reason is a
+ * measurement.** It was a field of the state for an afternoon, which is the
+ * obvious place for it: same store, same listeners, one snapshot. Then
+ * `tests/e2e/voice-call.spec.ts` counted the React commits. With eight people
+ * in a room and nineteen faces on screen, ten speaker changes rendered
+ * `VoiceSpeakingAvatar` 190 times — **every face on screen, on every syllable**
+ * — and with it `ChatWindow`, `ChatInfoPanel`, `VoiceChannelRow`,
+ * `VoiceCallCapsule` and the message list, ten times each.
+ *
+ * Nothing read `state.speakers`. The cost came from its being in the object at
+ * all: `useVoiceCall` hands out `state`, `patch` makes a new one, and every
+ * reader of the call — `ChatWindow` above all — therefore renders its whole
+ * subtree each time the SFU changes its mind about who is talking. A leaf that
+ * subscribes to a boolean cannot help while its parents are being rebuilt
+ * around it.
+ *
+ * Held here, the same listener set can still be notified: every subscriber's
+ * `getSnapshot` runs, `useVoiceCall`'s returns the **unchanged** `state`
+ * object, and `useSyncExternalStore` compares with `Object.is` and renders
+ * nothing. Only `useVoiceSpeaking`, whose snapshot is a boolean for one person,
+ * sees a change — and only for the person whose turn it was. The same
+ * measurement after the move is in the spec.
+ *
+ * Do not move it back into `VoiceCallState`. The test that would go red is the
+ * one named above, and it is red for the right reason.
+ */
+let speakers: readonly string[] = [];
 
 /**
  * Monotonic, incremented by every join and every leave.
@@ -128,6 +165,25 @@ function patch(fields: Partial<VoiceCallState>) {
   publish({ ...state, ...fields });
 }
 
+/**
+ * The speaker list, replaced and announced.
+ *
+ * The same listeners as `publish`, on purpose: a reader of the call state will
+ * run its `getSnapshot`, find the object it already had, and not render. That
+ * is what makes this cheap, and it is why there is no second listener set to
+ * keep in step with the first.
+ */
+function publishSpeakers(next: readonly string[]) {
+  speakers = next;
+  for (const listener of listeners) listener();
+}
+
+/** Nobody is speaking in a call that is not running. */
+function forgetSpeakers() {
+  if (speakers.length === 0) return;
+  publishSpeakers([]);
+}
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
@@ -147,6 +203,40 @@ export function voiceCallSnapshot(): VoiceCallState {
   return state;
 }
 
+/**
+ * Whether one person is speaking right now — a boolean, and that is the whole
+ * point of it.
+ *
+ * `speakers` is replaced several times a second, so every reader of the state
+ * object renders on every syllable anybody in the room utters. This hands a row
+ * a **primitive** instead: `useSyncExternalStore` compares snapshots with
+ * `Object.is`, so a component subscribed through here renders only when its own
+ * person started or stopped talking — and a room where three people are talking
+ * over each other costs three rows, not the list.
+ *
+ * The measurement, rather than the claim, is in `tests/e2e/voice-call.spec.ts`:
+ * "a speaker change renders the rows that changed and nothing else".
+ *
+ * `channelId` scopes the answer to one room. The speaker list belongs to the
+ * call this client is connected to and to no other, while the rail draws a row
+ * per person per room from a table that is up to one reconciliation period
+ * stale — so without the scope, somebody who has just moved rooms would be
+ * ringed in the room they left, for as long as the table still said they were
+ * in it.
+ */
+export function useVoiceSpeaking(userId: string | null, channelId: string | null): boolean {
+  const read = useCallback(
+    () => userId !== null && state.channelId === channelId && speakers.includes(userId),
+    [channelId, userId],
+  );
+  return useSyncExternalStore(subscribe, read, read);
+}
+
+/** Read once, outside React. The whole set, as the SDK last sent it. */
+export function voiceSpeakersSnapshot(): readonly string[] {
+  return speakers;
+}
+
 function stopCapture() {
   if (!capture) return;
   for (const track of capture.getTracks()) {
@@ -157,6 +247,78 @@ function stopCapture() {
     }
   }
   capture = null;
+}
+
+/* ── Where the call's audio comes out ──────────────────────────────────────
+ *
+ * Until 2026-09-18 the chosen output device reached a voice **message**, media
+ * playback and the composer's preview — `lib/audioOutput.ts` applied to three
+ * `<audio>` elements — and reached a call nowhere at all. Picking a headset
+ * moved everything except the one thing people pick a headset for.
+ *
+ * Two differences from `applyAudioOutputDevice`, both deliberate:
+ *
+ *   - **`default` is applied rather than skipped.** The element helper may skip
+ *     it, because an `<audio>` element is created fresh per media and starts on
+ *     the system device anyway. A room is not: it outlives the choice, so
+ *     somebody moving back to the system device mid-call would otherwise stay
+ *     on the headset they have just unplugged.
+ *   - **A refusal is recorded rather than swallowed.** `setOutputDevice`
+ *     answers `false` where the browser would not do it — Firefox ships no
+ *     `setSinkId`, and any browser refuses a device that has gone — and
+ *     `outputDeviceRefused` is what stops the capsule reporting a move that did
+ *     not happen.
+ *
+ * The listener belongs to the module rather than to a component for the reason
+ * at the top of this file: a call outlives every component that can draw it, so
+ * a device chosen in settings while another conversation is open still has to
+ * reach it. `storage` beside the custom event, because `useAudioSettings`
+ * listens to both — the choice may have been made in another tab.
+ */
+let appliedOutputDevice: string | null = null;
+let stopWatchingOutputDevice: (() => void) | null = null;
+
+async function applyOutputDevice(target: VoiceRoom, deviceId: string, mine: number): Promise<void> {
+  if (appliedOutputDevice === deviceId) return;
+  let taken = false;
+  try {
+    taken = await target.setOutputDevice(deviceId);
+  } catch {
+    // A transport that threw moved no audio. That is the same answer as
+    // `false` and has to read the same way round.
+    taken = false;
+  }
+  // The call this was asked for may be over, or be a different one.
+  if (mine !== generation || room !== target) return;
+  // Only a device the transport actually took is remembered, so a refusal is
+  // asked again next time rather than mistaken for work already done.
+  appliedOutputDevice = taken ? deviceId : null;
+  patch({ outputDeviceRefused: !taken });
+}
+
+function watchOutputDevice(target: VoiceRoom, mine: number): void {
+  forgetOutputDevice();
+  if (typeof window === "undefined") return;
+  const apply = () => {
+    if (mine !== generation || room !== target) return;
+    void applyOutputDevice(target, getAudioSettings().selectedOutputDeviceId, mine);
+  };
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === AUDIO_SETTINGS_STORAGE_KEY) apply();
+  };
+  window.addEventListener(AUDIO_SETTINGS_EVENT, apply);
+  window.addEventListener("storage", onStorage);
+  stopWatchingOutputDevice = () => {
+    window.removeEventListener(AUDIO_SETTINGS_EVENT, apply);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+/** Safe to call twice, during a join, and when there was never a call. */
+function forgetOutputDevice(): void {
+  stopWatchingOutputDevice?.();
+  stopWatchingOutputDevice = null;
+  appliedOutputDevice = null;
 }
 
 /**
@@ -215,6 +377,8 @@ async function requestVoiceToken(channelId: string): Promise<VoiceTokenOutcome> 
 
 function fail(refusal: string) {
   stopCapture();
+  forgetOutputDevice();
+  forgetSpeakers();
   room = null;
   publish({ ...IDLE, phase: "failed", channelId: state.channelId, chatId: state.chatId, channelName: state.channelName, refusal });
 }
@@ -239,6 +403,7 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
   if (room) await leaveVoiceCall();
 
   const mine = ++generation;
+  forgetSpeakers();
   publish({
     ...IDLE,
     phase: "joining",
@@ -291,9 +456,9 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
         if (mine !== generation) return;
         patch({ participants });
       },
-      onSpeakers: (speakers) => {
+      onSpeakers: (talking) => {
         if (mine !== generation) return;
-        patch({ speakers });
+        publishSpeakers(talking);
       },
       onReconnecting: () => {
         if (mine !== generation) return;
@@ -306,6 +471,8 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
       onClosed: () => {
         if (mine !== generation) return;
         stopCapture();
+        forgetOutputDevice();
+        forgetSpeakers();
         room = null;
         publish({ ...IDLE, phase: "failed", refusal: "Звонок прерван." });
       },
@@ -355,6 +522,11 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
 
   room = opened;
   patch({ phase: "connected", canPublish: outcome.grant.canPublish, refusal: null });
+  // The stored choice, reaching a call for the first time. After the patch, so
+  // that a refusal lands on a capsule which already exists: a sentence about a
+  // call has nowhere to appear while the capsule still says «Подключаемся…».
+  watchOutputDevice(opened, mine);
+  void applyOutputDevice(opened, getAudioSettings().selectedOutputDeviceId, mine);
 }
 
 /** Leave. Safe during a join, after a failure, and when there is no call at all. */
@@ -363,6 +535,8 @@ export async function leaveVoiceCall(): Promise<void> {
   const open = room;
   room = null;
   stopCapture();
+  forgetOutputDevice();
+  forgetSpeakers();
   publish(IDLE);
   if (open) await open.leave().catch(() => undefined);
 }

@@ -13551,3 +13551,103 @@ counting bubbles, so a zero can never mean «nothing happened». And the
 because the memo pins the map — the end-to-end guard only goes red with copies
 *and* the memo removed. That is reported rather than claimed as a stronger
 guard than exists.
+
+---
+
+## D-217 `[x]` A call could not say how it was doing, because nothing ever asked
+
+**Severity:** medium as a gap, and it is the owner's own example of what the
+voice channels are missing.
+
+**Asked for** by the owner on 2026-09-18, with a screenshot of Discord's
+connection monitor: a latency graph over the last few minutes, the media
+server's name, average and latest round trip, outbound packet loss, and two
+sentences saying what the numbers mean.
+
+**What the audit found, and it reframes the whole voice list.** The stack is
+self-hosted LiveKit v1.8.4 with `livekit-client 2.22.3`, and the SDK already
+carries `ConnectionQuality`, `connectionQualityChanged`, `getRTCStatsReport`,
+`activeSpeakers`, `switchActiveDevice` and `serverInfo`. What it does not carry
+is a caller: **`getStats` appears zero times in this product and so does
+`ConnectionQuality`.** The whole SDK sits behind a three-method interface in
+`hooks/voiceRoom.ts` — `join`, `setMuted`, `leave` — and four events. The
+numbers were never missing; they were never asked for.
+
+That is why a latency graph turned out to be a small feature wearing a large
+disguise, and why three Discord affordances landed together once the seam was
+widened by four things: `sampleHealth()`, `setOutputDevice()`, `serverName()`
+and `onSpeakers()`.
+
+**Three decisions in the arithmetic, each producing reassuring numbers if taken
+the obvious way.** The panel is read almost only when something is broken,
+which is the trap it sets.
+
+- **Loss is a rate over a window, not a lifetime total.** WebRTC's counters are
+  cumulative. An hour of clean audio followed by ten bad seconds reports about
+  0.1% for the call — which is what somebody would read at the exact moment
+  their voice broke up. The test computes both figures from the same numbers:
+  0.083% against 30%.
+- **A missing reading is a gap, not a zero.** `getStats` can fail, a metric can
+  be absent before the first RTCP report, a connection can be re-establishing.
+  A zero draws a line on the graph's floor, which reads as a perfect connection
+  at the moment there is none — and the graph breaks the line rather than
+  bridging it, because a bridge invents a measurement across the failure.
+- **The thresholds are Discord's**, 250ms and 10%, because they are the numbers
+  in the owner's screenshot and ours differing would need explaining. The
+  sentences quote the constants rather than repeating them, so the panel cannot
+  explain a rule it does not apply.
+
+**Sampling runs only while the panel is open.** A call lasts hours and the panel
+is read for seconds; a timer on every call means a `getStats` round trip a
+second on every device for a graph nobody asked to see. The cost is stated: the
+graph starts empty and fills over four minutes, so opening it the moment a call
+breaks shows the break and not what led to it.
+
+**One token was wrong and the contract caught it before the pixels did.**
+`--kub-warn-text` does not exist: `--kub-warn` is a tone for a dot, and
+`--kub-online` had to be split into `--kub-online-text` for exactly that
+reason. Painting a sentence in a tone tuned for a mark is the pairing D-214
+measured at 1.50:1. The two problem states use `--kub-danger-text`, which is
+measured for text.
+
+---
+
+## D-218 `[x]` Three hooks below an early return, one of them shipped
+
+**Severity:** high. React throws and an error boundary replaces the subtree.
+
+**Found** on 2026-09-18, in two steps, and the second step is the finding.
+
+**Mine first.** `VoiceCallCapsule` was written with `useState` **below**
+`if (!view.visible || !channel) return null`. That renders fewer hooks while
+hidden than while visible, so React throws «Rendered fewer hooks than expected»
+the instant the state changes. Typecheck cannot see it. **The e2e suite could
+not reach it either, and the reason is worth keeping:** every path in those
+specs that hides the capsule also remounts its whole subtree — `openChat`
+reloads and `switchChat` clicks the list — so the component is never rendered
+twice with its visibility moving. In production a group whose `voice_channels`
+read lands after the conversation is on screen does exactly that.
+
+**Then the rule was run over the whole client and found two more, in shipped
+code.** `MessageInput.tsx` called `useIsMobile()` and `useHint(...)` below
+**both** of its early returns — `if (muteState.muted) return (…)` and
+`if (showVoice) return (…)` — so opening and closing the voice recorder, or
+being muted in a chat, crashed the composer. Moving them above only the second
+return fixed half of it and the rule said so, which is how they ended up above
+the first.
+
+**Guarded by a linter rather than by a test, because a test cannot see this.**
+`tests/unit/rules-of-hooks.test.mjs` runs exactly one biome rule —
+`correctness/useHookAtTopLevel` — over `artifacts/kub/src` with its own
+configuration in `tests/unit/helpers/hook-lint/`. The project's own
+`biome.json` has `linter.enabled: false` and a `files` list that does not
+include the client at all, so turning the linter on globally is a separate and
+much larger decision; this changes nothing about it. Zero findings across 501
+files, and putting the conditional hook back turns it red.
+
+Two things the test had to learn about its own harness, both recorded in it: on
+Windows `execFileSync("pnpm.cmd", …)` needs a shell and without one threw with
+both streams empty, which reads as «biome produced no output» rather than «the
+command never ran»; and biome answers «no files were processed» rather than
+failing when a path is ignored by configuration. So the test asserts the file
+count it was given — «Checked 501 files» — before it trusts a clean result.

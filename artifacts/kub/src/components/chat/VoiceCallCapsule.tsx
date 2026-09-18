@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { TinyUserAvatar } from "./MessageReactions";
+import { VoiceSpeakingAvatar } from "./VoiceSpeakingAvatar";
 import { VoiceConnectionPanel } from "./VoiceConnectionPanel";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { CAPSULE_GLASS, CAPSULE_CONTROL_GLASS } from "@/lib/chatChrome";
@@ -27,9 +28,11 @@ import { orderVoiceParticipants, type VoiceCapsuleView, type VoiceChannelSummary
  * is no `z-index` and no `order` anywhere in it: paint order is tree order
  * (rule 12), and the whole stack is already rendered after the message list.
  *
- * What this slice does **not** draw, named so it is not mistaken for an
- * oversight: who is speaking. That is `RoomEvent.ActiveSpeakersChanged` and
- * slice 4.
+ * It does draw who is speaking, as of 2026-09-18: `RoomEvent.ActiveSpeakersChanged`
+ * reaches the store through `VoiceRoomEvents.onSpeakers`, and each face is
+ * wrapped in `VoiceSpeakingAvatar`, which subscribes to a boolean of its own so
+ * that a syllable renders one face rather than the capsule. Until then this
+ * note said the capsule deliberately did not, and named it slice 4.
  */
 
 export interface VoiceCallCapsuleProps {
@@ -59,9 +62,18 @@ export function VoiceCallCapsule({
   onLeave,
   onToggleMute,
 }: VoiceCallCapsuleProps) {
+  // Every hook above the early return, without exception. This block read
+  // `if (!view.visible || !channel) return null;` and then `useState`, which is
+  // a conditional hook: going from hidden to visible while mounted renders more
+  // hooks than the previous render and React throws. The suite did not catch it
+  // because every path that hides this capsule in a test also remounts
+  // `ChatWindow` — `switchChat` is a remount — while in production a group
+  // whose channel list arrives after mount goes hidden to visible in place,
+  // which is the ordinary case rather than an edge one.
+  const [healthOpen, setHealthOpen] = useState(false);
+
   if (!view.visible || !channel) return null;
 
-  const [healthOpen, setHealthOpen] = useState(false);
   const ordered = orderVoiceParticipants(participants, selfId);
   const shown = ordered.slice(0, FACES);
   const rest = ordered.length - shown.length;
@@ -96,6 +108,30 @@ export function VoiceCallCapsule({
             tone={view.tone === "danger" ? "danger" : view.tone === "live" ? "accent" : "muted"}
           />
         </button>
+        {/* The one place this interface declines to claim a success it did not
+            have. The chosen output device reaches a running call through
+            `useVoiceCall`, and `setOutputDevice` answers `false` where the
+            browser would not do it -- Firefox ships no `setSinkId` at all, and
+            every browser refuses a device that has been unplugged since it was
+            chosen. Without this mark, settings would show a headset selected
+            while the call was still coming out of the laptop, and nothing
+            anywhere would say so. `warn` rather than `danger`: the call is
+            fine, its routing is not, and `--kub-warn` is the tone tuned for a
+            mark rather than for a word. */}
+        {view.outputRefused && (
+          <span
+            className="shrink-0"
+            title="Звук звонка остался на системном устройстве"
+            data-testid="voice-capsule-output-refused"
+          >
+            <KubIcon
+              name="warning"
+              size={14}
+              tone="warn"
+              label="Звук звонка остался на системном устройстве"
+            />
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           <div className="truncate text-xs font-semibold text-[color:var(--kub-text)]" data-testid="voice-capsule-title">
             {view.title}
@@ -120,16 +156,21 @@ export function VoiceCallCapsule({
              exists because of exactly this. */
           <div className="hidden shrink-0 items-center -space-x-1 sm:flex" data-testid="voice-capsule-faces">
             {shown.map((participant) => (
-              <TinyUserAvatar
+              <VoiceSpeakingAvatar
                 key={participant.userId}
-                ringed
-                user={{
-                  id: participant.userId,
-                  full_name: participant.name,
-                  username: null,
-                  avatar_url: faces?.get(participant.userId) ?? null,
-                }}
-              />
+                userId={participant.userId}
+                channelId={channel.id}
+              >
+                <TinyUserAvatar
+                  ringed
+                  user={{
+                    id: participant.userId,
+                    full_name: participant.name,
+                    username: null,
+                    avatar_url: faces?.get(participant.userId) ?? null,
+                  }}
+                />
+              </VoiceSpeakingAvatar>
             ))}
             {rest > 0 && (
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-[color:var(--kub-surface)] bg-[var(--kub-inset)] text-[10px] font-semibold text-[color:var(--kub-muted)]">
