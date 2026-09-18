@@ -610,7 +610,7 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
-### 2026-09-18 — `8d0898ca` (fourteen deploys, one day, and three production migrations)
+### 2026-09-18 — `1af94092` (fifteen deploys, one day, and three production migrations)
 
 - **`0b5d62df`** — the voice gateway's moderation half: `/force-mute` and
   `/remove`, with the authorisation matrix, the rate limit and the client's
@@ -618,6 +618,17 @@ hash run by hand, and it is worth writing down as one.
   and checked by a calibrated route probe: `token`, `force-mute` and `remove`
   all answer 400 to an empty body while `NoSuchRouteZZZ` answers 404 — a route
   that exists rejects the body, one that does not rejects the path.
+- **`1af94092`** — per-participant volume (D-227), and the slider track token it
+  needed. Verified in the live bundle **and** the live stylesheet: four product
+  sentences present, a control present, a fabricated one absent, and both
+  `--kub-range-track` declarations shipped — `#081629` and `#dcebf7`.
+
+  Worth recording because it nearly became a false report: the probe said
+  `#DCEBF7` was **absent**. The production CSS pipeline lower-cases hex, and the
+  needle that matched was the one whose digits contain no letters. Reading the
+  declaration out whole (`--kub-range-track:[^;]+;`) printed both values at once
+  and settled it; a case-sensitive hex needle against a built stylesheet cannot.
+
 - **`8d0898ca`** — the call bar (D-225) and the record of the database change
   applied the same hour (D-226). Image tag read off the running container;
   markers verified in the live bundle with a control present and a fabricated
