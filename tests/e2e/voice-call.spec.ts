@@ -249,6 +249,8 @@ interface VoiceProbe {
   healthSamples: number;
   /** Every output device the call asked the transport to switch to. */
   outputDevices: string[];
+  /** Every deafen the call asked the transport for, in order. */
+  deafened: boolean[];
 }
 
 declare global {
@@ -262,6 +264,8 @@ declare global {
       healthSamples: number;
       /** Every output device the call asked the transport to switch to. */
       outputDevices: string[];
+      /** Every deafen the call asked the transport for, in order. */
+      deafened: boolean[];
       /**
        * Answer `false` to `setOutputDevice`, as Firefox does — it has no
        * `setSinkId` — and as every browser does for a device that has been
@@ -308,6 +312,7 @@ async function probe(page: Page): Promise<VoiceProbe> {
       // Received undefined» rather than with anything about the product.
       healthSamples: held?.healthSamples ?? 0,
       outputDevices: held?.outputDevices ?? [],
+      deafened: held?.deafened ?? [],
     };
   });
 }
@@ -341,6 +346,7 @@ async function installVoiceSeam(
         track: null,
         healthSamples: 0,
         outputDevices: [],
+        deafened: [],
         refuseOutput: Boolean(refuseOutput),
         speak: null,
       };
@@ -416,6 +422,9 @@ async function installVoiceSeam(
             packetsSent: 1000 + step * 100,
             packetsLost: 0,
           };
+        },
+        async setDeafened(next: boolean) {
+          held.deafened.push(next);
         },
         async setOutputDevice(deviceId: string) {
           held.outputDevices.push(deviceId);
@@ -1547,6 +1556,85 @@ test("a transport that measures nothing says so, rather than drawing a flat line
     () => document.querySelectorAll('[data-testid="voice-connection-graph"] polyline').length,
   );
   expect(drawn, "a line was drawn from readings that measured nothing").toBe(0);
+});
+
+test("deafening also mutes, and undeafening does not unmute somebody who was muted", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+
+  const deafen = page.getByTestId("voice-capsule-deafen");
+  const mute = page.getByTestId("voice-capsule-mute");
+  await expect(deafen).toHaveAttribute("data-deafened", "false");
+  await expect(mute).toHaveAttribute("data-muted", "false");
+
+  // Deafening mutes as well. Every product with this control does it, and the
+  // alternative is worse than inconsistent: somebody who cannot hear the room
+  // cannot hear themselves being asked to stop talking.
+  await deafen.click();
+  await expect(deafen).toHaveAttribute("data-deafened", "true");
+  await expect(mute).toHaveAttribute("data-muted", "true");
+  expect((await probe(page)).deafened).toEqual([true]);
+  expect((await probe(page)).muted, "the microphone was not muted with the ears").toContain(true);
+
+  // Undeafening gives the microphone back, because it was not muted first.
+  await deafen.click();
+  await expect(deafen).toHaveAttribute("data-deafened", "false");
+  await expect(mute).toHaveAttribute("data-muted", "false");
+  expect((await probe(page)).deafened).toEqual([true, false]);
+});
+
+test("somebody already muted stays muted after undeafening", async ({ page, browserName }) => {
+  needsWebRtc(browserName);
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+
+  const deafen = page.getByTestId("voice-capsule-deafen");
+  const mute = page.getByTestId("voice-capsule-mute");
+
+  // Muted first, deliberately, and this is the case a naive implementation
+  // gets wrong: undeafening unmutes and the person is publishing again without
+  // having asked to be.
+  await mute.click();
+  await expect(mute).toHaveAttribute("data-muted", "true");
+  await deafen.click();
+  await expect(mute).toHaveAttribute("data-muted", "true");
+  await deafen.click();
+  await expect(deafen).toHaveAttribute("data-deafened", "false");
+  await expect(
+    mute,
+    "undeafening unmuted somebody who had muted themselves first",
+  ).toHaveAttribute("data-muted", "true");
+});
+
+test("a listener who may not publish can still stop hearing the room", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  // The gateway refusing publication is the `canPublish: false` grant. The mute
+  // control is gated on it — a control over a microphone the SFU will not carry
+  // has nothing behind it — and deafening is not, because not hearing the room
+  // needs no permission to speak.
+  await open(page, {
+    channel: { participantCount: 1 },
+    present: [ANNA.id],
+    token: { status: 200, body: { ...GRANT, canPublish: false } },
+  });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+
+  await expect(page.getByTestId("voice-capsule-mute")).toHaveCount(0);
+  const deafen = page.getByTestId("voice-capsule-deafen");
+  await expect(deafen).toBeVisible();
+  await deafen.click();
+  await expect(deafen).toHaveAttribute("data-deafened", "true");
+  expect((await probe(page)).deafened).toEqual([true]);
 });
 
 /* ── The pixels ───────────────────────────────────────────────────────────── */

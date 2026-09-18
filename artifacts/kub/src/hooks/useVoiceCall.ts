@@ -68,6 +68,14 @@ export interface VoiceCallState {
   outputDeviceRefused: boolean;
   micMuted: boolean;
   /**
+   * Whether this person has stopped hearing the room (Discord's «deafen»).
+   *
+   * Local, and nobody else is told: it is a decision about their own ears.
+   * Self-mute is the opposite and the SFU propagates it, because a silent
+   * microphone is a fact about the conversation rather than about one listener.
+   */
+  deafened: boolean;
+  /**
    * Whether the token this call was joined with may publish. Always true in
    * slice 2 — `speak_role` defaults to «member» and nothing sets it otherwise —
    * but the gateway already computes it, so reading it costs nothing now and
@@ -86,6 +94,7 @@ const IDLE: VoiceCallState = {
   participants: [],
   outputDeviceRefused: false,
   micMuted: false,
+  deafened: false,
   canPublish: true,
   refusal: null,
 };
@@ -137,6 +146,14 @@ let speakers: readonly string[] = [];
  */
 let generation = 0;
 let room: VoiceRoom | null = null;
+/**
+ * Whether the microphone was already muted when this person deafened.
+ *
+ * Module state beside `room`, not a field of the view: it is not something a
+ * screen draws, and putting it in the state would make every consumer re-render
+ * when it changed. Reset with the call, because a new call is not the old one.
+ */
+let mutedBeforeDeafened = false;
 
 /**
  * The transport of the call that is running, or null.
@@ -380,6 +397,7 @@ function fail(refusal: string) {
   forgetOutputDevice();
   forgetSpeakers();
   room = null;
+  mutedBeforeDeafened = false;
   publish({ ...IDLE, phase: "failed", channelId: state.channelId, chatId: state.chatId, channelName: state.channelName, refusal });
 }
 
@@ -539,6 +557,37 @@ export async function leaveVoiceCall(): Promise<void> {
   forgetSpeakers();
   publish(IDLE);
   if (open) await open.leave().catch(() => undefined);
+}
+
+/**
+ * Deafen, and the one thing it does beyond going quiet.
+ *
+ * Deafening also mutes, because that is what every product with the control
+ * does and because the alternative is worse than inconsistent: somebody who
+ * cannot hear the room cannot hear themselves being asked to stop talking.
+ * Undeafening does **not** unmute — somebody who was muted before they
+ * deafened stays muted, and the state remembers which.
+ *
+ * Optimistic in the same direction as the mute above, and for the same reason:
+ * the thing a person is trying to do is stop hearing something *now*. On a
+ * refusal the flag goes back, because «заглушено» over audio that is still
+ * playing is the lie this ordering exists to avoid.
+ */
+export async function setVoiceDeafened(deafened: boolean): Promise<void> {
+  if (!room) return;
+  const beforeDeafened = state.deafened;
+  const beforeMuted = state.micMuted;
+  // Remembered before the patch, so undeafening restores what was true rather
+  // than unmuting somebody who had muted themselves first.
+  const mutedNext = deafened ? true : mutedBeforeDeafened;
+  if (deafened) mutedBeforeDeafened = beforeMuted;
+  patch({ deafened, micMuted: mutedNext });
+  try {
+    await room.setDeafened(deafened);
+    if (mutedNext !== beforeMuted) await room.setMuted(mutedNext);
+  } catch {
+    patch({ deafened: beforeDeafened, micMuted: beforeMuted });
+  }
 }
 
 /**

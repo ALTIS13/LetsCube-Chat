@@ -32,6 +32,23 @@ export interface VoiceRoom {
   join(url: string, token: string, microphone: MediaStreamTrack | null): Promise<void>;
   /** Self-mute, which the SFU propagates to everyone connected. */
   setMuted(muted: boolean): Promise<void>;
+  /**
+   * Stop hearing everybody, locally.
+   *
+   * Discord's «deafen», and the local half of it: nobody else learns about it,
+   * because it is a decision about this person's own ears rather than about the
+   * room. Self-mute is the opposite — the SFU tells everyone, because a muted
+   * microphone is a fact about the conversation.
+   *
+   * `setVolume(0)` on every remote audio track rather than
+   * `setEnabled(false)`, which would unsubscribe and save the bandwidth. The
+   * trade is deliberate: unsubscribing makes undeafening take a round trip to
+   * resubscribe, and a control that is instant one way and laggy the other is
+   * the one people press twice. It has to hold for participants who join while
+   * it is on, which is why the value is kept and re-applied on every event
+   * rather than set once.
+   */
+  setDeafened(deafened: boolean): Promise<void>;
   /** Leave. Must be safe to call twice and after a failed join. */
   leave(): Promise<void>;
   /**
@@ -134,6 +151,15 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
   const room = new Room();
   let published: InstanceType<typeof LocalAudioTrack> | null = null;
   let left = false;
+  // Kept rather than applied once: somebody who joins while this is on has to
+  // arrive silent, and the SDK has no «default volume for this room».
+  let deafened = false;
+
+  const applyDeafened = () => {
+    for (const remote of room.remoteParticipants.values()) {
+      remote.setVolume(deafened ? 0 : 1);
+    }
+  };
 
   const report = () => {
     const list: VoiceParticipant[] = [];
@@ -147,9 +173,15 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
     events.onParticipants(list);
   };
 
+  const reportAndApply = () => {
+    applyDeafened();
+    report();
+  };
+
   room
-    .on(RoomEvent.ParticipantConnected, report)
+    .on(RoomEvent.ParticipantConnected, reportAndApply)
     .on(RoomEvent.ParticipantDisconnected, report)
+    .on(RoomEvent.TrackSubscribed, reportAndApply)
     .on(RoomEvent.TrackMuted, report)
     .on(RoomEvent.TrackUnmuted, report)
     .on(RoomEvent.LocalTrackPublished, report)
@@ -183,6 +215,10 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
       published = new LocalAudioTrack(microphone, undefined, true);
       await room.localParticipant.publishTrack(published);
       report();
+    },
+    async setDeafened(next) {
+      deafened = next;
+      applyDeafened();
     },
     async setMuted(muted) {
       if (!published) return;

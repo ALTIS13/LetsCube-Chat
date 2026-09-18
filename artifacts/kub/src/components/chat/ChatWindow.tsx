@@ -37,8 +37,7 @@ import {
   leaveVoiceCall,
   setVoiceMuted,
   useVoiceCall,
-  voiceCallSnapshot,
-} from "@/hooks/useVoiceCall";
+  voiceCallSnapshot, setVoiceDeafened } from "@/hooks/useVoiceCall";
 import {
   renameVoiceParticipants,
   resolveVoiceParticipants,
@@ -465,6 +464,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     // The browser's answer to «send this call to that headset», carried through
     // so the capsule can decline to claim a move that did not happen.
     outputDeviceRefused: call.outputDeviceRefused,
+    deafened: call.deafened,
   });
   const joinVoice = useCallback(() => {
     if (!voice.channel || !chat) return;
@@ -475,6 +475,17 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   }, []);
   const toggleVoiceMute = useCallback(() => {
     void setVoiceMuted(!voiceCallSnapshot().micMuted);
+  }, []);
+  /**
+   * Deafen, read from the snapshot rather than from `call`.
+   *
+   * The same reason the mute above does it: this callback has no dependencies
+   * and is therefore stable, so the capsule does not get a new function on every
+   * render of this component — and a stale `call.deafened` captured in a closure
+   * is how a toggle stops toggling.
+   */
+  const toggleVoiceDeafen = useCallback(() => {
+    void setVoiceDeafened(!voiceCallSnapshot().deafened);
   }, []);
 
   // ── The channel rail ─────────────────────────────────────────────────────
@@ -1552,6 +1563,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onJoin={joinVoice}
             onLeave={leaveVoice}
             onToggleMute={toggleVoiceMute}
+            onToggleDeafen={toggleVoiceDeafen}
           />
 
           {/* The strip survives exactly where the rail is not offered: a forum

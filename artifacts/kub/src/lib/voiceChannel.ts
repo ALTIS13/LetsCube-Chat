@@ -276,6 +276,17 @@ export interface VoiceCapsuleView {
   /** Whether the mute control is drawn, and how it reads. */
   mute: boolean;
   muted: boolean;
+  /**
+   * Whether this person has stopped hearing the room, and whether the control
+   * is drawn at all.
+   *
+   * Drawn whenever the capsule is a live call, including for somebody whose
+   * token may not publish: deafening is about their own ears and does not need
+   * permission to speak. That is why it is not gated on `canPublish` the way
+   * `mute` is.
+   */
+  deafen: boolean;
+  deafened: boolean;
   /** Set while something is in flight, so the control can say so and refuse a second press. */
   busy: boolean;
   /**
@@ -299,6 +310,8 @@ const HIDDEN: VoiceCapsuleView = {
   actionLabel: null,
   mute: false,
   muted: false,
+  deafen: false,
+  deafened: false,
   busy: false,
   outputRefused: false,
   tone: "neutral",
@@ -340,9 +353,26 @@ export function voiceCapsuleState(input: {
    * and that has to be a type error rather than a silent `undefined`.
    */
   outputDeviceRefused: boolean;
+  /**
+   * Whether this person has stopped hearing the room. Required rather than
+   * optional, for the reason `outputDeviceRefused` is: a caller that stops
+   * passing it draws a control whose state it no longer knows, and that has to
+   * be a type error rather than a silent `false`.
+   */
+  deafened: boolean;
 }): VoiceCapsuleView {
-  const { channel, phase, callChannelId, participants, selfId, micMuted, canPublish, refusal, outputDeviceRefused } =
-    input;
+  const {
+    channel,
+    phase,
+    callChannelId,
+    participants,
+    selfId,
+    micMuted,
+    canPublish,
+    refusal,
+    outputDeviceRefused,
+    deafened,
+  } = input;
   const here = channel !== null && callChannelId === channel.id;
 
   if (here && (phase === "connected" || phase === "reconnecting")) {
@@ -359,6 +389,10 @@ export function voiceCapsuleState(input: {
       action: "leave",
       actionLabel: "Выйти",
       mute: canPublish,
+      // Not gated on `canPublish`: deafening is about this person's own ears
+      // and needs no permission to speak.
+      deafen: true,
+      deafened,
       muted: micMuted,
       busy: phase === "reconnecting",
       outputRefused: outputDeviceRefused,
@@ -375,6 +409,8 @@ export function voiceCapsuleState(input: {
       action: "cancel",
       actionLabel: "Отмена",
       mute: false,
+      deafen: false,
+      deafened,
       muted: micMuted,
       busy: true,
       outputRefused: false,
@@ -393,6 +429,8 @@ export function voiceCapsuleState(input: {
       action: null,
       actionLabel: null,
       mute: false,
+      deafen: false,
+      deafened,
       muted: micMuted,
       busy: false,
       outputRefused: false,
@@ -410,6 +448,8 @@ export function voiceCapsuleState(input: {
       action: "join",
       actionLabel: "Повторить",
       mute: false,
+      deafen: false,
+      deafened,
       muted: false,
       busy: false,
       outputRefused: false,
@@ -426,6 +466,8 @@ export function voiceCapsuleState(input: {
     action: full ? null : "join",
     actionLabel: full ? null : "Присоединиться",
     mute: false,
+    deafen: false,
+    deafened,
     muted: false,
     busy: false,
     outputRefused: false,

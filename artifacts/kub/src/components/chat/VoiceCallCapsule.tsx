@@ -47,6 +47,7 @@ export interface VoiceCallCapsuleProps {
   onJoin: () => void;
   onLeave: () => void;
   onToggleMute: () => void;
+  onToggleDeafen: () => void;
 }
 
 /** How many faces fit beside two names at 360 CSS pixels, measured by counting. */
@@ -61,6 +62,7 @@ export function VoiceCallCapsule({
   onJoin,
   onLeave,
   onToggleMute,
+  onToggleDeafen,
 }: VoiceCallCapsuleProps) {
   // Every hook above the early return, without exception. This block read
   // `if (!view.visible || !channel) return null;` and then `useState`, which is
@@ -178,6 +180,33 @@ export function VoiceCallCapsule({
               </span>
             )}
           </div>
+        )}
+
+        {/* Deafen, beside the microphone and before it, because that is the
+            order every product with both controls uses and because they are
+            read as a pair. Drawn even for somebody whose token may not publish:
+            not hearing the room needs no permission to speak, which is why
+            `view.deafen` is not gated on `canPublish` the way `view.mute` is. */}
+        {view.deafen && (
+          <button
+            type="button"
+            onClick={onToggleDeafen}
+            className="group/capsule relative h-8 w-8 shrink-0 rounded-full"
+            aria-pressed={view.deafened}
+            aria-label={view.deafened ? "Включить звук" : "Заглушить звук"}
+            title={view.deafened ? "Включить звук" : "Заглушить звук"}
+            data-testid="voice-capsule-deafen"
+            data-deafened={view.deafened ? "true" : "false"}
+          >
+            <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />
+            <span className="relative flex h-full w-full items-center justify-center">
+              <KubIcon
+                name={view.deafened ? "muted" : "volume"}
+                size={15}
+                tone={view.deafened ? "danger" : "default"}
+              />
+            </span>
+          </button>
         )}
 
         {view.mute && (

@@ -13651,3 +13651,84 @@ both streams empty, which reads as «biome produced no output» rather than «th
 command never ran»; and biome answers «no files were processed» rather than
 failing when a path is ignored by configuration. So the test asserts the file
 count it was given — «Checked 501 files» — before it trusts a clean result.
+
+---
+
+## D-219 `[x]` There was no way to stop hearing the room
+
+**Severity:** medium. Discord has it, Telegram's calls have it, and the absence
+is felt in exactly the situation voice channels are for — somebody leaves a room
+open while they do something else.
+
+**Measured 2026-09-18:** zero occurrences of `deafen` anywhere in the client.
+
+**Built as the local half of a pair, and the distinction matters.** Self-mute is
+propagated by the SFU because a silent microphone is a fact about the
+conversation; deafening is local and nobody is told, because it is a decision
+about one person's own ears. That is why `setDeafened` touches only remote
+volumes and never the room.
+
+**Deafening also mutes.** Every product with the control does it, and the
+alternative is worse than inconsistent: somebody who cannot hear the room cannot
+hear themselves being asked to stop talking. **Undeafening does not unmute** —
+somebody who muted themselves first stays muted, which needed the previous state
+to be remembered rather than inferred, and is the case a naive implementation
+gets wrong by putting the person back on air without their asking.
+
+**It is not gated on `canPublish`.** The mute control is, because a control over
+a microphone the SFU will not carry has nothing behind it. Not hearing the room
+needs no permission to speak, so a listener the gateway refused publication to
+still gets this.
+
+**`setVolume(0)` rather than `setEnabled(false)`**, which would unsubscribe and
+save the bandwidth. Undeafening would then cost a round trip to resubscribe, and
+a control that is instant one way and laggy the other is the one people press
+twice.
+
+**The value is held and re-applied rather than set once**, because `setVolume`
+is per participant and the SDK has nowhere to say «everybody who joins from now
+on». Somebody arriving while it is on has to arrive silent.
+
+**Five mutations red, and the sixth is why there is a second test file.**
+Deafening no longer muting, the remembered mute forgotten, the control gated on
+`canPublish`, the transport never told — all red. But **taking the
+re-application off `TrackSubscribed` left all three end-to-end tests green**,
+because `voice-call.spec.ts` replaces the whole transport with a stand-in, so
+every rule inside `createLiveKitRoom` is invisible to it. That is the price of a
+seam that lets a call be tested without an SFU, and it had not been paid
+attention to.
+
+`tests/unit/voice-room-seam.test.mjs` reads that file as source instead. It is
+the weaker instrument and says so: it proves a call site exists, not that the
+SDK does what the call site asks. It catches the change that actually happens —
+somebody simplifying an event handler and dropping a re-application nothing
+else notices. Five mutations red there too, and **two of them were green on the
+first attempt** because a slice ran to `async setDeafened`, which comes *before*
+`sampleHealth` in the returned object: `indexOf` answered −1, `slice(0, −1)`
+kept almost the whole file, and the assertion matched a different method's
+`try`. Both slices are bounded by the method that really follows, and assert
+that it does.
+
+---
+
+## D-220 `[ ]` A locked screen ends a call on Android
+
+**Severity:** high on a phone, which is where calls happen.
+
+**MEASURED 2026-09-18:** `android/app/src/main/AndroidManifest.xml` declares
+`android.permission.RECORD_AUDIO` at line 49 and **nothing else** — no
+`FOREGROUND_SERVICE` permission, no `FOREGROUND_SERVICE_MICROPHONE`, no
+`<service>` element, no `foregroundServiceType="microphone"` anywhere. Android
+stops a background process from holding the microphone, so the call ends when
+the screen locks.
+
+**Deliberately not built blind.** A call that survives a locked screen needs a
+real foreground service — a `Service` class, a notification channel, a
+persistent notification a person can return to the call from, and start/stop
+plumbing from the web layer through a Capacitor plugin — and none of it can be
+verified without a device. Shipping an unverified foreground service risks the
+opposite failure, a notification that cannot be dismissed and a microphone held
+after the call ends, which is worse than the defect.
+
+Recorded with the measurement so the next person with a phone in their hand
+starts from a fact rather than from a search.
