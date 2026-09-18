@@ -14468,3 +14468,104 @@ browser, each of the latter verified as **served by Vite** before the run,
 because a scripted write landing between watcher events gives a green run that
 proves nothing. One mutation was refused by its own harness for a non-unique
 anchor and re-run with a unique needle.
+
+---
+
+## D-228 `[x]` Nothing told anybody that a call was happening in a group they were not looking at
+
+**Severity:** medium, and the kind that makes a whole feature look unused. A
+voice channel nobody happens to be watching is a voice channel nobody joins.
+
+Slice 3 of `docs/proposals/2026-09-13-voice-channels.md:1141` calls this «the
+chat-list indicator». Of that slice's four items, three were done — the call
+survives navigation (module state), and the desktop bar docked in the left
+region shipped the same day as D-225 — and this was the one left: **a call in
+progress was visible only from inside the group it was in.** The bar tells a
+person about *their own* call from anywhere; nothing told them about anybody
+else's.
+
+### What was built
+
+A mark on the chat row: a headset glyph and a number, in `--kub-online-text`,
+at the head of the second line's meta cluster. The specifics — which room, and
+whether there is more than one — go in the hover sentence, where there is room
+to be specific: «5 человек в «Планёрка» и ещё в 1 канале».
+
+Four decisions worth stating:
+
+**The count is everybody in the conversation, not the busiest room's.** A group
+with two in «Общая» and three in «Планёрка» has five people talking in it, and
+the row is answering «is anything happening here» rather than «which room». The
+fullest room is the one the sentence names, because it is the one somebody
+looking for company would join; ties break by name so two reads that say the
+same thing cannot print different sentences.
+
+**Leftmost of the meta cluster**, ahead of the pin, the mute and the unread
+counter, because it is the only one of the four about something happening right
+now — the other three are states of the row.
+
+**It fades with the column, on purpose.** The mark sits inside
+`data-chat-row-body`, which closes as the chat list is dragged down to a
+66-point strip of avatars. That is the same rule the unread counter already
+follows, and following it is the point: at 66 points the row *is* the avatar,
+and an exception here would be a second answer to a question the column has
+already settled.
+
+**The counter is all there is, and the cost is named.**
+`voice_channels.participant_count` is denormalised — written by the SFU's
+webhooks, reconciled twice a minute — so for a few seconds after the last person
+leaves a row can still say somebody is there. The rail does better by preferring
+the listed people, but listing people means reading `voice_participants` for
+every room of every chat in the list: a request per room, for a mark the width of
+a glyph. The opposite error — a call in progress the list does not mention — is
+the one this exists to fix, and it is the worse of the two.
+
+### The render cost, measured by the project's own instrument
+
+The chat list is the most render-sensitive surface here and already has a
+contract in `tests/e2e/chat-list-event-cost.spec.ts`. A map of chats handed to
+every row through a prop or a context renders **every** row whenever anybody
+anywhere joins or leaves a call — which is the measurement that turned
+`useVoiceSpeaking` into a boolean per person (190 face renders for 10 speaker
+changes).
+
+So the map is module state and each row subscribes to **its own entry** through
+`useSyncExternalStore`. That only works if an unchanged entry stays the *same
+object*, because the read rebuilds every entry from rows: hence
+`mergeVoicePresence`, which hands back **the held map itself** when nothing
+changed and reuses each unchanged entry when something did. It is in the pure
+module rather than in the hook precisely so it has a test — a rule inside a
+`"use client"` module is a rule with no test.
+
+The proof is not my own assertion. `chat-list-event-cost.spec.ts`'s own counter,
+run with this in place, reports for a return to the tab:
+
+    requests={… "GET voice_channels":1 …} renders={"ChatListItem":0, "rows":{}}
+
+One read, and **zero rows re-rendered**.
+
+### Two stale comments corrected on the way, and one open question
+
+Both said `public.chats` is not in the `supabase_realtime` publication —
+`hooks/useChats.ts:456` and the header of `lib/realtimeTableChannels.ts`, which
+offered it as the *explanation* for the 2026-09-05 outage where a channel
+carrying `messages` and `chats` bindings delivered nothing while reporting
+SUBSCRIBED.
+
+Measured read-only on production on 2026-09-18: **it is published**, one of 33
+tables in `public`, and no migration in `.migration-backup` adds it. So either it
+was added outside a tracked migration at some point after that outage, or it was
+published all along and **the cause of that outage is still unknown.**
+
+The rule those comments protect is untouched and does not depend on the
+explanation: the contamination was proven by construction against the live
+server — the same channel minus the `chats` bindings delivered, and two orderings
+of the pair did not — and `realtimeTableChannels.ts` was deliberately written as
+«one channel per table» rather than as an allowlist of published tables, so that
+nobody has to reason from the publication at all. Both comments now say what was
+measured and when.
+
+Fourteen mutations, all red, including the three that break the render-cost rule
+specifically: a merge that always builds a new map, one that ignores a shrinking
+map (an ended call would stay on the list for ever), and one that replaces an
+unchanged entry anyway.

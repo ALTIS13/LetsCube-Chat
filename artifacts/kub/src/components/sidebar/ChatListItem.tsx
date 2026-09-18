@@ -12,6 +12,8 @@ import type { AvatarVariantUrls } from "@/hooks/useMediaVariants";
 import { formatChatMessagePreview } from "@/lib/messagePreview";
 import { getMessageDeliveryState } from "@/lib/messageDelivery";
 import { isUserOnline } from "@/lib/presence";
+import { useChatVoicePresence } from "@/hooks/useVoicePresence";
+import { voicePresenceTitle } from "@/lib/voicePresence";
 import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
 import {
   getGroupReadReceiptAriaLabel,
@@ -107,6 +109,13 @@ export const ChatListItem = memo(function ChatListItem({
   });
   const showGroupReadIndicator = Boolean(groupReadInfo && groupReadInfo.readCount > 0);
   const hasUnread = (chat.unread_count ?? 0) > 0;
+  // Subscribed per row rather than handed down: the whole map through a prop
+  // or a context would render every row whenever anybody anywhere joins a
+  // call, which is the measurement that turned `useVoiceSpeaking` into a
+  // boolean per person. `useVoicePresence` holds each entry identical while
+  // its own numbers have not moved, so this subscription is free for a row
+  // whose call did not change.
+  const voice = useChatVoicePresence(chat.id);
   const isMuted = isMutedProp ?? chat.is_muted;
   const muteTitle = muteLabel ? `Уведомления отключены ${muteLabel}` : "Уведомления отключены";
   const isPinned = chat.is_pinned;
@@ -336,6 +345,33 @@ export const ChatListItem = memo(function ChatListItem({
           </span>
 
           <div className="flex shrink-0 items-center gap-1">
+            {/* A call in progress, leftmost of this cluster because it is the
+                only one of the four about something happening right now — the
+                pin, the mute and the counter are all states of the row.
+
+                `--kub-online-text` rather than `--kub-online`: the tone exists
+                in both forms precisely because the dot's value does not clear
+                4.5:1 as text, and this is a glyph beside a number.
+
+                Inside `data-chat-row-body`, which fades to nothing as the
+                column is dragged down to a strip of avatars. That is the same
+                rule the unread counter follows, and following it is the point:
+                at 66 points the row IS the avatar, and making one exception
+                would be a second answer to a question the column has already
+                settled. */}
+            {voice && (
+              <span
+                className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-semibold leading-none text-[color:var(--kub-online-text)]"
+                data-testid="chat-list-voice"
+                data-voice-count={voice.count}
+                data-voice-rooms={voice.rooms}
+                title={voicePresenceTitle(voice)}
+                aria-label={voicePresenceTitle(voice)}
+              >
+                <KubIcon name="headset" size={12} tone="currentColor" />
+                <span className="tabular-nums">{voice.count}</span>
+              </span>
+            )}
             {isPinned && !hasUnread && (
               <KubIcon name="pin" size={11} className="text-[color:var(--kub-muted)]" />
             )}

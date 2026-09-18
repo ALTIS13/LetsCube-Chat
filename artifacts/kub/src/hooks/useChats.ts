@@ -452,8 +452,17 @@ export function useChats() {
       ],
       (name, status) => {
         if (import.meta.env.DEV) console.debug(`[${name}]`, userId, status);
-        // `public.chats` is not published, so its channel joining says nothing
-        // about what was missed.
+        // Only the messages channel's own status is trusted to mean «I have
+        // not missed anything».
+        //
+        // This said «`public.chats` is not published». Measured read-only on
+        // production on 2026-09-18: it **is** — one of 33 tables in
+        // `supabase_realtime` — and no migration in `.migration-backup` adds
+        // it, so either it was added outside a tracked migration or it was
+        // always there. The gate stays as it is either way: `messages` is the
+        // table whose events this list would actually miss, and a `chats`
+        // channel joining says nothing about a message that arrived while it
+        // was away.
         if (name.endsWith(":messages")) revalidateWhenSubscribed(status);
       },
     );

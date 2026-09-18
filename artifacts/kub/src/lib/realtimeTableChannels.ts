@@ -12,14 +12,26 @@
  * every one of its four bindings, so nothing in the client's own state said
  * anything was wrong.
  *
- * The reason is that `public.chats` is not in the `supabase_realtime`
- * publication (it is the only table this application subscribes to from the
- * chat surface that is not), and a channel that asks for an unpublished table
- * silently stops delivering *all* of its bindings. The isolation was proven by
- * construction against the live server: an identical channel minus the `chats`
- * bindings delivered, `messages INSERT + chats UPDATE` did not, and
- * `chats UPDATE + messages INSERT` did not either — so it is not an ordering
- * effect, it is contamination.
+ * The contamination itself was proven by construction against the live
+ * server: an identical channel minus the `chats` bindings delivered,
+ * `messages INSERT + chats UPDATE` did not, and `chats UPDATE + messages
+ * INSERT` did not either — so it is not an ordering effect. **That proof
+ * stands and it is what this module rests on.**
+ *
+ * The *explanation* offered for it does not, and saying so is worth more than
+ * leaving it. This paragraph read: «`public.chats` is not in the
+ * `supabase_realtime` publication, and a channel that asks for an unpublished
+ * table silently stops delivering all of its bindings.» Measured read-only on
+ * production on 2026-09-18, `public.chats` **is** in that publication — one of
+ * 33 tables — and no migration in `.migration-backup` adds it. So either it
+ * was added outside a tracked migration at some point after 2026-09-05, or it
+ * was published all along and the cause of that outage is still unknown.
+ *
+ * Nothing about the rule below changes: a channel carrying two tables was
+ * measured dead and the same channel carrying one was measured alive, whatever
+ * the reason turns out to be. What changes is that nobody should reason from
+ * the publication claim — and the rule was deliberately written so that
+ * nobody has to.
  *
  * What that cost: `chats:user:{id}` is the sidebar's entire live path, so a
  * device with the chat closed learned about a new message only when something

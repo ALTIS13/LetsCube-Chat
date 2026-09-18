@@ -568,6 +568,10 @@ async function open(page: Page, seed: Seed = {}) {
     name: entry.name,
     participant_count: entry.count,
     max_participants: entry.max,
+    // For the chat list's presence read, which asks with no `chat_id`
+    // filter and therefore has to attribute each room itself.
+    chat_id: CHAT_TEAM,
+    archived: false,
   });
 
   // Each chat gets its **own** channel, keyed off the `chat_id` filter the hook
@@ -615,6 +619,27 @@ async function open(page: Page, seed: Seed = {}) {
     }
 
     const filter = url.searchParams.get("chat_id") ?? "";
+    // No `chat_id` at all is the chat list's presence read (slice 3): it
+    // asks for every room with somebody in it across the whole list and
+    // lets RLS decide the scope. Answering one chat's rooms here would
+    // have made the list's mark untestable and, worse, testable-looking.
+    if (filter === "") {
+      return answer([
+        ...(team ? [asRow(team)] : []),
+        ...(channel && seed.otherChannel !== false
+          ? [
+              {
+                id: OTHER_CHANNEL_ID,
+                chat_id: CHAT_OTHER,
+                name: "Склад",
+                participant_count: 0,
+                max_participants: channel.maxParticipants ?? 10,
+                archived: false,
+              },
+            ]
+          : []),
+      ]);
+    }
     if (filter.endsWith(CHAT_TEAM)) return answer(team ? [asRow(team)] : []);
     return answer(
       channel && seed.otherChannel !== false
@@ -1922,6 +1947,7 @@ test("a moderator's silence reaches the bar, and the microphone stops being pres
   await action(page).click();
   await expect(action(page)).toHaveText("Выйти");
   await switchChat(page, "Смета и склад", OTHER_LINE);
+  expect(await probe(page)).toMatchObject({ left: 0 });
   await expect(bar(page)).toBeVisible();
 
   await revokeSpeech(page, false);
@@ -1972,6 +1998,94 @@ for (const theme of ["dark", "light"] as const) {
     await page.waitForTimeout(400);
     await page.screenshot({
       path: `output/voice-call-bar/bar-${info.project.name}-${theme}.png`,
+    });
+  });
+}
+
+/**
+ * The chat list says which conversations have somebody talking in them
+ * (slice 3, D-228).
+ *
+ * `tests/unit/voice-presence.test.mjs` holds the arithmetic and the sentence,
+ * including the render-cost rule that makes a call in one conversation cost the
+ * list one row. What is measured here is that the mark reaches the row at all,
+ * that it does not reach a row with no call, and that the number on it is the
+ * room's rather than something the list invented.
+ */
+/**
+ * Put the chat list on screen.
+ *
+ * On a computer it already is — both panes stand side by side. On a phone
+ * there is one pane and `open()` ends inside a conversation, so the list is
+ * behind it: the mark lives in the list, and the first version of the three
+ * tests below passed at 1440 and went red at 390 for exactly that reason.
+ * Going back is also the gesture a person makes, which is the point.
+ */
+async function showChatList(page: Page) {
+  const row = page.getByTestId("chat-list-item").first();
+  if (await row.isVisible().catch(() => false)) return;
+  await page.getByTestId("chat-control-row").getByLabel("Назад").click();
+  await expect(row).toBeVisible();
+}
+
+const voiceMark = (page: Page, chatName: string) =>
+  page
+    .getByTestId("chat-list-item")
+    .filter({ hasText: chatName })
+    .getByTestId("chat-list-voice");
+
+test("the chat list marks a conversation with a call in it, and only that one", async ({
+  page,
+}) => {
+  // Two people in the team's room; «Смета и склад» has a room with nobody in it,
+  // which is the negative that matters — a mark there would mean the list was
+  // reading «has a voice channel» rather than «has a call».
+  await open(page, { channel: { participantCount: 2 }, present: [ANNA.id, PETR.id] });
+  await showChatList(page);
+
+  const mark = voiceMark(page, "Команда проекта");
+  await expect(mark).toBeVisible();
+  await expect(mark).toHaveAttribute("data-voice-count", "2");
+  await expect(mark).toHaveAttribute("data-voice-rooms", "1");
+  await expect(mark).toHaveText("2");
+  // The specifics live in the hover sentence, where there is room to be
+  // specific, and it names the room rather than the channel id.
+  await expect(mark).toHaveAttribute("title", "2 человека в «Общий голос»");
+
+  await expect(voiceMark(page, "Смета и склад")).toHaveCount(0);
+});
+
+test("a conversation whose room empties loses its mark", async ({ page, browserName }) => {
+  needsWebRtc(browserName);
+  const opened = await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
+  await showChatList(page);
+  await expect(voiceMark(page, "Команда проекта")).toBeVisible();
+
+  // The room goes away entirely, which is what «removed in Каналы» looks like
+  // to every other client: a read that no longer contains it.
+  opened.removeTeamChannel();
+  // The list re-reads on return to the tab, which is the path a person actually
+  // takes — Realtime replays nothing after a sleep, so the answer is re-read
+  // rather than trusted.
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect(voiceMark(page, "Команда проекта")).toHaveCount(0);
+});
+
+for (const theme of ["dark", "light"] as const) {
+  test("the chat list's voice mark, photographed in the " + theme + " theme", async ({
+    page,
+  }, info: TestInfo) => {
+    await open(page, {
+      channel: { participantCount: 2 },
+      present: [ANNA.id, PETR.id],
+      theme,
+    });
+    await showChatList(page);
+    await expect(voiceMark(page, "Команда проекта")).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(400);
+    await page.screenshot({
+      path: `output/voice-presence/list-${info.project.name}-${theme}.png`,
     });
   });
 }

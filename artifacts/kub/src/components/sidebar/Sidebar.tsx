@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { KubButton, KubGlassLayer, KubIcon, KubNotice } from "@/components/kub";
 import { SidebarHeader } from "./SidebarHeader";
 import { VoiceCallBar } from "@/components/chat/VoiceCallBar";
+import { useVoicePresenceReader } from "@/hooks/useVoicePresence";
 import { FolderTabs } from "./FolderTabs";
 import { FolderRail } from "./FolderRail";
 import { SideMenuLayer } from "./SideMenuLayer";
@@ -59,6 +60,13 @@ export function Sidebar() {
   const [sideMenuOpen, setSideMenuOpen] = useState(false);
   const [showNewGroup, setShowNewGroup] = useState(false);
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
+
+  // Who has somebody talking in them, read once for the whole list (slice 3).
+  // Mounted here because this is the one component guaranteed to exist while a
+  // chat list is on screen; it renders nothing, and every row takes its own
+  // answer through `useChatVoicePresence`. Gated on there being a session at
+  // all, so a signed-out shell opens no channel.
+  useVoicePresenceReader(userId !== null);
 
   const editFolder = (id: string) => {
     const target = folders.find((f) => f.id === id);
