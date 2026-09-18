@@ -395,12 +395,22 @@ Two facts about it that a design has to answer, both measured:
 
 **The assumption this rests on, stated as one.** For a device to read *its own*
 row it must know which session it is, and the natural answer is the `session_id`
-claim in the access token (`auth.jwt() ->> 'session_id'`). GoTrue has emitted it
-for a long time and this deployment runs v2.189.0, so it is very probably there
-— **and it has not been verified here.** Nothing in this repository reads it
-today. Verify it against a real signed-in token before building on it; if it is
-absent, the whole shape changes and a client-generated installation id comes
-back into play.
+claim in the access token (`auth.jwt() ->> 'session_id'`). Nothing in this
+repository reads it today, so it was measured against the deployed binary
+instead — `supabase/gotrue:v2.189.0`, counting struct tags:
+
+    session_id: 2    user_metadata: 2    app_metadata: 3
+    aal: 2           amr: 2              is_anonymous: 2
+
+`session_id` appears with the same multiplicity as four claims that are
+certainly in `AccessTokenClaims`, which is strong evidence it sits in that same
+struct rather than in a refresh-token type.
+
+**Strong evidence, not proof.** What is still missing is a real signed-in access
+token decoded and read, and that needs an account this track does not sign in to
+on production. Take that last step before building on it; if the claim turns out
+absent, the whole shape changes and a client-generated installation id comes back
+into play.
 
 So slice F has a fork in it that §4a did not have, and the honest order is:
 verify the claim, decide what «active» means, then build. The switch itself is
