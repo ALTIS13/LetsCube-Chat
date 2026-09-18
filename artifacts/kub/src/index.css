@@ -388,6 +388,42 @@ html[data-ios-standalone] {
      meet. */
   --kub-accent-text: #7FAEE2;
   --kub-warn: #F5B50A;
+  /* Per-group role colours: the palette a group owner picks a role's colour
+     FROM. `chat_roles.colour` holds a KEY — `^[a-z][a-z0-9_]{1,31}$`,
+     constraint `chat_roles_colour_palette_key` in
+     `20260918120000_chat_roles_and_member_tags.sql` — and never a hex, so
+     these eight tokens are the only place the colour of a role tag is
+     decided.
+
+     Why a key rather than a free picker, and why two values rather than one:
+     D-214 measured the global catalogue's free hex colours against the three
+     surfaces a chip sits on. Owner #F5B50A reads 9.94 / 8.89 / 7.87 in this
+     theme and 1.83 / 1.63 / 1.50 in the light one; manager #4DCD5E reads
+     8.82 / 7.90 / 6.99 here and 2.06 / 1.83 / 1.69 there, against a 3:1 floor
+     they were not even meeting as marks. Both hexes were taken out of THIS
+     block and used unchanged in a theme nobody measured them in. A free hex
+     column per group reproduces that once per group, with nobody to audit it.
+
+     Held to 4.5:1 as TEXT on all three surfaces in both themes, not the 3:1 a
+     dot or a border answers to: the mechanic being copied is Discord's, where
+     the colour sits on the member's NAME. A token tuned for a dot cannot
+     later be moved onto a word — that is the trade --kub-online had to make
+     twice, and it is why --kub-online-text exists beside it.
+     tests/unit/chat-role-palette.test.mts holds every entry to that floor and
+     holds this list and artifacts/kub/src/lib/chatRolePalette.ts to being the
+     same set in both directions; a key with no token here paints nothing.
+
+     Values are the smallest step along each hue that clears the floor with
+     margin, chosen the way --kub-cyan and --kub-online were. Here that lands
+     near 6:1 on --kub-surface-3, the worst of the three. */
+  --kub-role-slate: #9DA9B8;
+  --kub-role-blue: #75ACEB;
+  --kub-role-teal: #22BABF;
+  --kub-role-green: #33C159;
+  --kub-role-amber: #D3A117;
+  --kub-role-orange: #F2925A;
+  --kub-role-rose: #EE8BA9;
+  --kub-role-violet: #BD9CE8;
   --kub-chat-bg: var(--kub-bg);
 
   /* ── The chat screen ───────────────────────────────────────────────────────
@@ -754,6 +790,30 @@ html[data-ios-standalone] {
   /* Darkened along the same hue: at #C2870A the warning dot measured 2.55:1 on
      --kub-surface-3, under the 3:1 an indicator needs. */
   --kub-warn: #A8760A;
+  /* Per-group role colours; see .dark for what the palette is and why the
+     database stores a key rather than a hex. This block is the half D-214 is
+     actually about: the catalogue's owner gold measured 1.83 / 1.63 / 1.50
+     here and its manager green 2.06 / 1.83 / 1.69 — invisible, not marginal —
+     because both values were copied out of .dark unchanged.
+
+     Same eight hues as there, walked down instead of up, each to the smallest
+     step that clears 4.5:1 as text on all three surfaces. They land near
+     4.9:1 on --kub-surface-3, which is the tightest of the six columns this
+     palette has to satisfy: a light theme simply has less room below its
+     surfaces than a dark one has above them.
+
+     Amber and orange read as dark golds here rather than the bright ones in
+     .dark, and that is the measurement rather than a compromise: at the
+     brightness that still reads as yellow, this is precisely the colour D-214
+     found at 1.50:1. A readable yellow on white is a brown. */
+  --kub-role-slate: #44505F;
+  --kub-role-blue: #1A63B7;
+  --kub-role-teal: #146E71;
+  --kub-role-green: #1E7134;
+  --kub-role-amber: #7C5F0E;
+  --kub-role-orange: #A5450D;
+  --kub-role-rose: #C01B4D;
+  --kub-role-violet: #7D3DD1;
   --kub-chat-bg: var(--kub-bg);
   /* The chat screen: see the note in .dark. The own bubble is the same blue
      in both themes, and so is everything inside it. */

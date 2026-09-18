@@ -194,17 +194,35 @@ export interface ChatMemberRowFacts {
  * `roleLabel` comes from `chatRoleLabel` in `chatMemberRules.ts` — scoped to
  * this chat («Владелец группы»), because a badge chip beside it may say
  * «Владелец» about LETSCUBE itself (D-180).
+ *
+ * **`tagLabel` takes its place when the group has a word of its own** (D-215).
+ * That is Telegram's mechanic read literally: an administrator carrying a
+ * custom title reads as that title rather than as «админ», because the group
+ * chose the word and the word is more informative than the tier. It replaces
+ * rather than joins — «Наставник · Администратор группы · был(а) недавно» is
+ * three facts on a 280px line and neither reference shows it.
+ *
+ * **What it does not replace is the glyph's accessible name.** The crown and
+ * the shield on the line above are still named «Владелец группы» and
+ * «Администратор группы» by `roleLabel`, so a screen reader is still told who
+ * can do what even when the visible word is the group's. Losing that was the
+ * first thing this change nearly did: passing the tag in as `roleLabel` is one
+ * line shorter and renames the glyph with it.
  */
 export function chatMemberRowFacts({
   member,
   roleLabel,
+  tagLabel,
   presence,
 }: {
   member: ChatMemberListEntry;
   roleLabel: string;
+  /** The group's own word for this person, if it has one. */
+  tagLabel?: string | null;
   presence: ChatMemberPresence | null;
 }): ChatMemberRowFacts {
-  const role = roleLabel.trim();
+  const tag = tagLabel?.trim() ?? "";
+  const role = tag || roleLabel.trim();
   const handle = member.username?.trim() ? formatUsername(member.username) : "";
   const presenceLabel = presence?.label.trim() ?? "";
   // «Без имени пользователя» is the last resort, not the identity slot. Saying

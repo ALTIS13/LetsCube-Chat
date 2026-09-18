@@ -327,7 +327,10 @@ const veiled = [
   // went — paging is the observer's now — and the two controls that replaced it
   // are the ones a refusal needs: «Повторить» under an empty list that could
   // not be read, and «Повторить» beside a page that did not arrive.
-  ["components/chat/ChatInfoPanel.tsx", 17],
+  // 17 until D-215 added «Выдать роль» to the member card — the dashed chip
+  // that hands a group's tag to somebody. It is a row control like every
+  // other one here, so it wears the veil rather than a fixed hover colour.
+  ["components/chat/ChatInfoPanel.tsx", 18],
   // Two, down from eleven on 2026-09-11: the hover cluster, the per-message
   // context menu and its reaction pickers left the bubble for
   // `MessageActionLayer` and `MessageReactions`, which are counted below.

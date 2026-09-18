@@ -13421,3 +13421,73 @@ when somebody gets to them: `chat_channel_categories` is subscribed to by
 that binding has never fired; and `voice_channels` grants `authenticated` no
 UPDATE while its `FOR ALL` policy promises one — latent only because the client
 just reads it.
+
+---
+
+**D-215 — the interface, first slice, 2026-09-18.**
+
+The tables were applied earlier the same day and held nothing. This is what
+reads and writes them.
+
+**The row: Telegram's mechanic, read literally.** A group's own word takes the
+tier's place on the second line — «Основатель · был(а) недавно» where the row
+used to say «Владелец группы · был(а) недавно». Telegram prints a custom admin
+title instead of «админ» for exactly this reason: the group chose the word and
+the word says more than the tier. The highest tag only, because
+`orderChatRoles` has already decided what highest means and because a row
+carrying both would put three facts on a 280px line, which neither reference
+does.
+
+**What it does not replace is the glyph's accessible name.** The crown and the
+shield are still «Владелец группы» and «Администратор группы» to a screen
+reader even when the visible word is the group's, so nobody loses the fact
+about who can do what. That was the first thing this change nearly broke:
+passing the tag in as `roleLabel` is one line shorter and renames the glyph
+with it. There is a test for it, and a second test that had to be scoped to the
+second line rather than the row, because `toContainText` on the row reads the
+aria-label too and the two assertions contradicted each other on the first run.
+
+**The card stacks both, group first** — Discord's popout order, and the two
+answer different questions. The group's tags carry a control to take one off,
+and the roles this person does not wear are offered as dashed chips to give.
+Asserted by measured position rather than by reading the source, because the
+order of a flex column is a fact about the rendered box.
+
+**Who may do what is the server's answer, asked once.** `lib/chatRoles.ts`
+mirrors the applied policies: defining the vocabulary is `is_chat_owner`,
+handing a tag out is `is_chat_admin`. A member sees the list and is offered
+nothing to press — hiding it from them would be wrong in one direction and
+offering «Новая роль» wrong in the other, and only the second produces a 403
+nobody can explain. The chat's type is checked **before** the standing, because
+the private-chat refusal is a trigger and fires whatever the policy decided.
+
+**The palette is the part that could quietly have repeated D-214.** Eight
+entries, theme-aware tokens, every one pinned at **4.5:1 as text** on all three
+surfaces in both themes — the threshold a word needs, not the 3:1 a mark needs,
+because colouring the name is Discord's actual mechanic and D-214 exists
+because nobody checked the harder threshold. `--kub-surface-3` binds in every
+case, which is the same surface the global catalogue failed on. Distinctness is
+pinned too, at ΔE*ab 20 in CIELAB; the measured minimums are 28.0 and 24.1.
+Five mutations red, including one that still cleared the 3:1 mark floor and
+missed only the text floor — the exact shape of D-214.
+
+**Two hues could not stay the colour they are named.** A yellow readable on
+white is a brown: the dark theme's amber measures 1.94:1 against the light
+surfaces and the catalogue's original `#F5B50A` measures 1.50:1, so «Янтарный»
+and «Оранжевый» land as dark golds in the light theme. The picker shows the
+theme's real value, so it is honest rather than hidden, but it is a thing to
+look at rather than to read about.
+
+**Two source-scanning guards read prose as code**, in one session: the theme
+token contract saw a `var()` example inside a doc comment and the control
+vocabulary saw the forbidden opacity class named in a comment explaining why it
+was not used. Both guards are right and both comments were the thing to change.
+Worth recording because the instinct is to weaken the guard, and the guard is
+the only thing standing between «this token resolves to nothing» and a pixel
+nobody looks at.
+
+**Still open on D-215:** the author line of a message, which is slice 4 of
+D-180 re-scoped — it has to carry the group's standing rather than LETSCUBE's,
+for the same reason the member row does. And reordering a group's roles, which
+the table supports (`priority`, not unique, ties broken by name) and the screen
+does not yet offer.

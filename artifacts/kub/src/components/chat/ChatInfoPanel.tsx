@@ -11,6 +11,11 @@ import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvat
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { chatVocabulary, countedMemberLabel } from "@/lib/chatVocabulary";
 import { usePermissionAccess } from "@/hooks/useRole";
+import { useChatRoles } from "@/hooks/useChatRoles";
+import { ChatRolesModal } from "./ChatRolesModal";
+import { ChatRoleChip } from "./ChatRoleChip";
+import { DISABLED_SINK } from "@/lib/controlSurface";
+import { chatRoleAssignDenial, topChatRole, type ChatRole } from "@/lib/chatRoles";
 import { chatInviteAdmission } from "@/lib/chatInviteAccess";
 import {
   inviteState,
@@ -316,6 +321,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
   const [deleteGroupOpen, setDeleteGroupOpen] = useState(false);
   const [leaveGroupOpen, setLeaveGroupOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [rolesOpen, setRolesOpen] = useState(false);
+  const [assigningRole, setAssigningRole] = useState<string | null>(null);
   const [destructiveError, setDestructiveError] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   /** Starting a voice chat, ending one, the question before the end, and its refusal. */
@@ -1600,6 +1607,15 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
    * with the dot and the sentence disagreeing on one row.
    */
   const presenceNow = usePresenceNow();
+  /**
+   * The group's own vocabulary (D-215).
+   *
+   * Read once for the whole list, like the badges beside it, and asked for only
+   * where it can exist: `private.enforce_chat_role_scope` refuses a role in a
+   * private chat, so a private conversation must not spend a round trip finding
+   * that out.
+   */
+  const chatRoles = useChatRoles(chat.id, isGroup);
   const memberRowFacts = useMemo(() => {
     const facts = new Map<string, ChatMemberRowFacts>();
     for (const member of members) {
@@ -1608,12 +1624,52 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
         chatMemberRowFacts({
           member,
           roleLabel: chatRoleLabel(member.chat_role, words.possessive),
+          // The highest tag only. Telegram shows the group's word instead of
+          // the tier and Discord shows one role beside a name; both keep the
+          // whole set for the person's card.
+          tagLabel: topChatRole(chatRoles.rolesOf(member.id))?.name ?? null,
           presence: getUserPresenceState(member, presenceNow),
         }),
       );
     }
     return facts;
-  }, [members, presenceNow, words.possessive]);
+  }, [chatRoles, members, presenceNow, words.possessive]);
+  /**
+   * Hand a tag to somebody, or take it back (D-215).
+   *
+   * Two statements rather than an RPC, because `chat_member_roles` takes direct
+   * RLS-gated DML the way `topics` and `voice_channels` do — the migration says
+   * so and says why. Neither reads the row back: `INSERT ... RETURNING` is
+   * judged by the SELECT policy as well, which is what made group creation
+   * answer 403 for three days, and there is nothing here worth learning from
+   * the answer that the client did not already send.
+   */
+  const toggleGroupRole = useCallback(
+    async (userId: string, role: ChatRole, wear: boolean) => {
+      setAssigningRole(role.id);
+      const written = wear
+        ? await supabase
+            .from("chat_member_roles" as never)
+            .insert({ chat_id: chat.id, user_id: userId, role_id: role.id } as never)
+        : await supabase
+            .from("chat_member_roles" as never)
+            .delete()
+            .eq("chat_id", chat.id)
+            .eq("user_id", userId)
+            .eq("role_id", role.id);
+      setAssigningRole(null);
+      if (written.error) {
+        showAppAlert(
+          mapPgError(written.error),
+          wear ? "Не удалось выдать роль" : "Не удалось снять роль",
+        );
+        return;
+      }
+      chatRoles.refresh();
+    },
+    [chat.id, chatRoles, supabase],
+  );
+
   const memberCard = memberCardId ? members.find((m) => m.id === memberCardId) ?? null : null;
   /**
    * The card's one action: the private conversation with this person (D-168).
@@ -2276,6 +2332,27 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
                     <span className="min-w-0 flex-1 truncate">Пригласить пользователя</span>
                   </button>
                 </div>
+              )}
+              {/* Roles, for anyone who can see them — which is every member,
+                  because the SELECT policy is `is_chat_member`. The owner gets
+                  the controls inside; everybody else gets the group's own
+                  vocabulary and nothing to press. Offered only where roles can
+                  exist: a private chat is refused by the trigger, and asking
+                  would be a control that answers 403. */}
+              {isGroup && chatRoles.supported && (
+                <button
+                  onClick={() => setRolesOpen(true)}
+                  data-testid="chat-info-roles"
+                  className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
+                >
+                  <KubIcon name="shield" size={17} tone="muted" className="shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">Роли группы</span>
+                  {chatRoles.ready && chatRoles.roles.length > 0 && (
+                    <span className="shrink-0 text-xs tabular-nums text-[color:var(--kub-muted)]">
+                      {chatRoles.roles.length}
+                    </span>
+                  )}
+                </button>
               )}
             </div>
             {/* Who is in the group's voice room, and a way in.
@@ -3022,6 +3099,23 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
             presenceLabel={getUserPresenceState(memberCard, presenceNow).label}
             showOnlineDot={getUserPresenceState(memberCard, presenceNow).isOnline}
             badges={memberBadgeStrips.get(memberCard.id) ?? null}
+            groupRoles={chatRoles.rolesOf(memberCard.id)}
+            // Null hides every control rather than drawing a disabled one: the
+            // mirror answers with the server's own gate, and an administrator
+            // is the one who may hand a tag out — inventing it is the owner's.
+            groupVocabulary={
+              chatRoleAssignDenial({
+                chatType: chat.type ?? null,
+                standing: myRole,
+                wornCount: chatRoles.rolesOf(memberCard.id).length,
+              }) === null
+                ? chatRoles.roles.filter(
+                    (role) => !chatRoles.rolesOf(memberCard.id).some((worn) => worn.id === role.id),
+                  )
+                : null
+            }
+            assigning={assigningRole}
+            onToggleGroupRole={(role, wear) => void toggleGroupRole(memberCard.id, role, wear)}
             opening={openingMemberChat}
             onOpenChat={() => void openMemberChat(memberCard.id)}
           />
@@ -3136,6 +3230,16 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice }: ChatInfoPa
           stamp: mediaDayLabel(openMediaRow.created_at, Date.now()),
         } : undefined}
       />
+      {rolesOpen && (
+        <ChatRolesModal
+          open
+          onClose={() => setRolesOpen(false)}
+          chatId={chat.id}
+          chatType={chat.type ?? null}
+          standing={myRole}
+          roles={chatRoles}
+        />
+      )}
       {inviteOpen && (
         <GroupInviteModal
           chatId={chat.id}
@@ -3312,6 +3416,10 @@ function MemberCard({
   presenceLabel,
   showOnlineDot,
   badges,
+  groupRoles,
+  groupVocabulary,
+  onToggleGroupRole,
+  assigning,
   opening,
   onOpenChat,
 }: {
@@ -3322,6 +3430,13 @@ function MemberCard({
   presenceLabel: string;
   showOnlineDot: boolean;
   badges: BadgeStrip | null;
+  /** What this group calls this person, highest first (D-215). */
+  groupRoles: ChatRole[];
+  /** Every role the group has, or null when this account may not hand them out. */
+  groupVocabulary: ChatRole[] | null;
+  onToggleGroupRole: (role: ChatRole, wear: boolean) => void;
+  /** The role id being written, so one control shows it rather than all of them. */
+  assigning: string | null;
   opening: boolean;
   onOpenChat: () => void;
 }) {
@@ -3356,6 +3471,62 @@ function MemberCard({
       <div className="mt-1 text-xs text-[color:var(--kub-muted)]" data-testid="member-card-joined">
         {formatJoinedAt(member.joined_at)}
       </div>
+      {/* This group's own words for this person, above LETSCUBE's (D-215).
+          Above, and separated, because the two answer different questions —
+          «кто он здесь» and «кто он вообще» — and the row above has already
+          shown only the first. Discord's popout stacks them the same way: the
+          server's roles first, the account's badges under them. */}
+      {(groupRoles.length > 0 || (groupVocabulary?.length ?? 0) > 0) && (
+        <div className="mt-4 w-full" data-testid="member-card-group-roles">
+          <div className="flex max-w-full flex-wrap items-center justify-center gap-1.5">
+            {groupRoles.map((role) => (
+              <ChatRoleChip
+                key={role.id}
+                role={role}
+                onRemove={groupVocabulary ? () => onToggleGroupRole(role, false) : undefined}
+              />
+            ))}
+            {groupRoles.length === 0 && (
+              <span className="text-xs text-[color:var(--kub-muted)]">Ролей в группе нет</span>
+            )}
+          </div>
+          {/* What is left to give. Only the roles this person does not wear, so
+              the control is «дать» and never a toggle that looks like a filter. */}
+          {groupVocabulary && groupVocabulary.length > 0 && (
+            <div
+              className="mt-2 flex max-w-full flex-wrap items-center justify-center gap-1.5"
+              data-testid="member-card-role-picker"
+            >
+              {groupVocabulary.map((role) => (
+                <button
+                  key={role.id}
+                  type="button"
+                  onClick={() => onToggleGroupRole(role, true)}
+                  disabled={assigning !== null}
+                  aria-label={`Выдать роль «${role.name}»`}
+                  data-testid="member-card-role-give"
+                  data-role-id={role.id}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border border-dashed border-[color:var(--kub-border-color)] px-2 py-0.5 text-[12px] text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
+                    // The sink, not a fade: this card is translucent, and
+                    // lowering a control's opacity on it shows the wallpaper
+                    // through the control rather than dimming it.
+                    // `control-vocabulary` refuses the fade for that reason and
+                    // it caught this one. (It scans source and cannot tell
+                    // prose from code, so naming the forbidden class here would
+                    // turn it red again — the second guard in one session to
+                    // read a comment as a violation.)
+                    DISABLED_SINK,
+                  )}
+                >
+                  <KubIcon name="create" size={11} className="shrink-0" />
+                  <span className="min-w-0 truncate">{role.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {/* Everything this person wears on LETSCUBE, words included — the whole
           strip, because `PROFILE_CARD_BADGE_LIMITS` is uncapped. This is the
           surface D-213 moved it to: a card is about the person, so a word has

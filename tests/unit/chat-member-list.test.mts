@@ -136,6 +136,50 @@ test("a role takes the identity slot, and presence stands beside it", () => {
   assert.equal(facts.secondary, "Владелец группы · в сети");
 });
 
+test("a group's own word takes the role's place, the way a Telegram title does", () => {
+  // D-215. The group chose the word, and the word says more than the tier.
+  // Telegram prints a custom admin title instead of «админ» for exactly this
+  // reason, and Discord's member list shows the role rather than «Moderator».
+  const facts = chatMemberRowFacts({
+    member: who({ id: "1", full_name: "Пётр", username: "petr", chat_role: "admin" }),
+    roleLabel: "Администратор группы",
+    tagLabel: "Наставник",
+    presence: { isOnline: true, label: "в сети" },
+  });
+  assert.equal(facts.secondary, "Наставник · в сети");
+  assert.ok(
+    !facts.secondary.includes("Администратор"),
+    "the tier and the group's word are both on the line — three facts on a 280px row",
+  );
+});
+
+test("a blank tag is not a tag, and the tier comes back", () => {
+  // The hook answers with an empty list before it has read anything, and a
+  // role whose name is whitespace is a row the database would have refused.
+  // Either way the row must not lose the fact it had.
+  for (const tagLabel of [undefined, null, "", "   "]) {
+    const facts = chatMemberRowFacts({
+      member: who({ id: "1", full_name: "Пётр", chat_role: "owner" }),
+      roleLabel: "Владелец группы",
+      tagLabel,
+      presence: null,
+    });
+    assert.equal(facts.secondary, "Владелец группы", `tagLabel ${JSON.stringify(tagLabel)}`);
+  }
+});
+
+test("an ordinary member's tag reaches the line that used to hold their nickname", () => {
+  // Somebody with no tier had `@petr` in that slot. A tag outranks it: it is
+  // what this group calls them, and the nickname is on their card.
+  const facts = chatMemberRowFacts({
+    member: who({ id: "1", full_name: "Пётр", username: "petr", chat_role: "member" }),
+    roleLabel: "",
+    tagLabel: "Дежурный",
+    presence: null,
+  });
+  assert.equal(facts.secondary, "Дежурный");
+});
+
 test("the second line is never more than two facts", () => {
   // Measured rather than preferred: `d424f96` photographed this row at 390 and
   // rejected a third element for wrapping every decorated row onto a third
