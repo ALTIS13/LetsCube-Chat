@@ -1115,6 +1115,9 @@ export function useMessages(
       bot_reply_markup: null,
       content: trimmedContent,
       type: input.type,
+      // Never anything else on a row a client wrote: the column is only ever
+      // set by `voice_call_stop`, on a `system` row nothing here can produce.
+      system_payload: null,
       media_bucket: input.mediaBucket ?? null,
       media_path: input.mediaPath ?? null,
       media_url: input.mediaUrl ?? null,

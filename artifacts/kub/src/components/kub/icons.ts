@@ -60,6 +60,8 @@ import {
   MapPin,
   Microphone,
   MicrophoneSlash,
+  PhoneIncoming,
+  PhoneOutgoing,
   Monitor,
   Moon,
   MusicNotes,
@@ -181,6 +183,8 @@ export type KubIconName =
   | "pause"
   | "paw"
   | "phone"
+  | "phoneIncoming"
+  | "phoneOutgoing"
   | "phoneOff"
   | "pin"
   | "pinOff"
@@ -329,6 +333,11 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   pause: { Icon: Pause, weight: "fill" },
   paw: { Icon: PawPrint },
   phone: { Icon: Phone },
+  // A call that has already happened, in the conversation it happened in. The
+  // arrow is the direction and the colour is the outcome -- Telegram's
+  // language, and the reason there are two of these rather than eight.
+  phoneIncoming: { Icon: PhoneIncoming },
+  phoneOutgoing: { Icon: PhoneOutgoing },
   // Ending a voice chat, and nothing else. A «×» there reads as "dismiss this
   // row" — the same glyph every closable thing in the product wears — where
   // what the row does is hang up on everybody in the call.

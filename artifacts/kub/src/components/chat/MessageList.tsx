@@ -31,7 +31,16 @@ import { groupReadInfoWithTimes, readMarksSignature, type ReadTimesLoader } from
 import { useMessageReadTimes } from "@/hooks/useMessageReadTimes";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { formatFullTime } from "@/lib/format";
-import { copyWithFeedback } from "@/lib/actionFeedback";
+import { copyWithFeedback, showActionFeedback } from "@/lib/actionFeedback";
+import {
+  CALL_BACK_BUSY_TEXT,
+  callBackBlockedByCall,
+  callBackPerson,
+  callRecordView,
+  type CallBackPerson,
+} from "@/lib/callRecord";
+import { startVoiceRing } from "@/hooks/useVoiceRing";
+import { voiceCallSnapshot } from "@/hooks/useVoiceCall";
 import { messageActionKind, type MessageActionId } from "@/lib/messageActions";
 import { canReportMessage } from "@/lib/personalModeration";
 import { requestContentReport } from "./ReportDialog";
@@ -179,13 +188,110 @@ function shouldShowDateSeparator(prev: MessageWithSender | null, current: Messag
  * the unread separator its pink form. That is what carried them before as
  * well: 75-82% of the ground over the ground is the ground.
  */
-function SystemMessageNotice({ message }: { message: MessageWithSender }) {
+function SystemMessageNotice({
+  message,
+  viewerId,
+  onCallBack,
+}: {
+  message: MessageWithSender;
+  viewerId: string | null;
+  onCallBack: (() => void) | null;
+}) {
+  // The one branch slice B adds. `callRecordView` answers null for every system
+  // row that is not a one-to-one call -- the group-call line of D-229 first
+  // among them, which carries no payload at all -- and null for a payload this
+  // bundle cannot read and for a reader it cannot name. Every one of those
+  // falls through to `content`, which the database wrote as a complete neutral
+  // sentence for exactly this purpose.
+  const call = callRecordView(message.system_payload, viewerId);
+  if (call) return <CallRecordNotice message={message} view={call} onCallBack={onCallBack} />;
   const text = message.content?.trim() || "Системное уведомление";
   return (
     <div className="my-2 flex w-full justify-center px-8" data-system-message={message.id}>
       <span className="max-w-[min(82vw,32rem)] rounded-full bg-[var(--kub-chat-chip)] px-3 py-1 text-center text-[12px] leading-snug text-[color:var(--kub-chat-chip-text)]">
         {text}
       </span>
+    </div>
+  );
+}
+
+/**
+ * A call that happened, in the conversation it happened in.
+ *
+ * The same chip every other in-list notice wears -- `--kub-chat-chip`, no fill
+ * of its own, no blur (rule 6 of `docs/operations/interface-material.md`) --
+ * with a glyph and, when there is one, a length. Nothing new is written by
+ * hand, so this stays one material with the date separator beside it.
+ *
+ * **Direction is the arrow and the outcome is the colour**, which is Telegram's
+ * language and the reason the icon vocabulary grew by two rather than eight.
+ * The colour is spent once: on a call that came to this reader and got no
+ * answer from them. A call you declined is not a call you missed, and `missed`
+ * says so.
+ *
+ * `--kub-danger-text` rather than `--kub-danger`: the token comment is
+ * explicit that the first is for words and the second for fills, borders and
+ * icon shapes, and this row uses both -- the glyph takes the fill colour
+ * through `tone="danger"` and the words take the measured text one.
+ *
+ * Tappable, as Telegram's is. The press is slice A's `startVoiceRing`, and
+ * every refusal it can answer already has a sentence.
+ */
+function CallRecordNotice({
+  message,
+  view,
+  onCallBack,
+}: {
+  message: MessageWithSender;
+  view: NonNullable<ReturnType<typeof callRecordView>>;
+  onCallBack: (() => void) | null;
+}) {
+  const body = (
+    <>
+      <KubIcon name={view.icon} size={14} tone={view.missed ? "danger" : "muted"} />
+      <span data-call-record-headline="true">{view.headline}</span>
+      {view.duration && (
+        <span className="opacity-70" data-call-record-duration="true">
+          {view.duration}
+        </span>
+      )}
+    </>
+  );
+  const chip = cn(
+    "inline-flex max-w-[min(82vw,32rem)] items-center gap-1.5 rounded-full bg-[var(--kub-chat-chip)] px-3 py-1 text-center text-[12px] leading-snug",
+    view.missed ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-chat-chip-text)]",
+  );
+  return (
+    <div
+      className="my-2 flex w-full justify-center px-8"
+      data-system-message={message.id}
+      data-call-record="true"
+      data-call-outcome={view.outcome}
+      data-call-direction={view.direction}
+      data-call-missed={view.missed ? "true" : "false"}
+    >
+      {onCallBack ? (
+        <button
+          type="button"
+          onClick={onCallBack}
+          // The length is read out in words here and abbreviated on screen:
+          // «три мин двенадцать с» is not a sentence, and «3 мин 12 с» has to
+          // match the `content` a bundle without this branch renders.
+          aria-label={`${view.spoken}. Позвонить`}
+          title="Позвонить"
+          className={cn(
+            chip,
+            "transition-colors hover:bg-[color-mix(in_srgb,var(--kub-chat-chip)_70%,var(--kub-cyan)_16%)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
+          )}
+          data-testid="call-record-back"
+        >
+          {body}
+        </button>
+      ) : (
+        <span className={chip} aria-label={view.spoken}>
+          {body}
+        </span>
+      )}
     </div>
   );
 }
@@ -419,6 +525,29 @@ export function MessageList({
     };
   });
 
+  /**
+   * The other participant, when this conversation has exactly one.
+   *
+   * `callBackPerson` is not a second `voiceCallOffer`: that one decides whether
+   * the header draws a control right now and so consults the live state, while
+   * this is a permanent fact about the chat. A record in the conversation is a
+   * row that will still be there tomorrow, and its tap must not blink out
+   * because a call started somewhere else -- the live refusals stay on the
+   * press, where slice A already words them.
+   *
+   * Memoised on what it is computed from, because it reaches every row as a
+   * boolean in `rowCapabilities`, and read through a ref by the press so
+   * `rowActions` stays the object it was.
+   */
+  const callBackTarget = React.useMemo<CallBackPerson | null>(
+    () => callBackPerson({ chatType, selfId: userId, members: chatMembers }),
+    [chatMembers, chatType, userId],
+  );
+  const callBackRef = useRef<{ chatId: string; person: CallBackPerson } | null>(null);
+  useLayoutEffect(() => {
+    callBackRef.current = chatId && callBackTarget ? { chatId, person: callBackTarget } : null;
+  });
+
   const rowActions = React.useMemo<MessageRowActions>(() => ({
     reply: (message) => {
       setMenu(null);
@@ -455,6 +584,25 @@ export function MessageList({
     },
     toggleSelected,
     openGroupReadReceipts: (messageId) => setReadReceiptsMessageId(messageId),
+    callBack: () => {
+      const target = callBackRef.current;
+      if (!target) return;
+      // The one refusal the database cannot raise. `voice_call_ring` refuses a
+      // room that has people in it -- a fact about THIS conversation's room --
+      // and says nothing about a call this client is holding somewhere else.
+      // Joining a new room is what ends the old one, so a press that went
+      // through would hang up a conversation without having said so.
+      if (callBackBlockedByCall(voiceCallSnapshot())) {
+        showActionFeedback({ kind: "error", title: CALL_BACK_BUSY_TEXT, key: "voice-ring" });
+        return;
+      }
+      void startVoiceRing({ chatId: target.chatId, who: target.person.name }).then((outcome) => {
+        if (outcome.ok) return;
+        // The same key the header's press uses, so two refusals replace each
+        // other rather than stacking.
+        showActionFeedback({ kind: "error", title: outcome.refusal, key: "voice-ring" });
+      });
+    },
   }), [toggleSelected]);
 
   const hasJumpToReply = Boolean(onJumpToReply);
@@ -478,8 +626,9 @@ export function MessageList({
     togglePin: hasTogglePin,
     forward: hasForward,
     openMedia: hasOpenMedia,
+    callBack: callBackTarget !== null,
   }), [
-    hasDelete, hasDiscardLocalMessage, hasEdit, hasEditFailedSend, hasForward,
+    callBackTarget, hasDelete, hasDiscardLocalMessage, hasEdit, hasEditFailedSend, hasForward,
     hasHideForMe, hasJumpToReply, hasOpenMedia, hasRetrySend, hasTogglePin,
   ]);
 
@@ -1411,6 +1560,8 @@ interface MessageRowActions {
   startSelection: (messageId: string) => void;
   toggleSelected: (messageId: string) => void;
   openGroupReadReceipts: (messageId: string) => void;
+  /** Ring the other participant again, from a call record in this conversation. */
+  callBack: () => void;
 }
 
 /**
@@ -1429,6 +1580,8 @@ interface MessageRowCapabilities {
   editFailedSend: boolean;
   discardLocalMessage: boolean;
   togglePin: boolean;
+  /** Whether this conversation has somebody at the other end to call back. */
+  callBack: boolean;
   forward: boolean;
   openMedia: boolean;
 }
@@ -1552,7 +1705,6 @@ const MessageRow = React.memo(function MessageRow({
   const isLocalSend = msg.id.startsWith("tmp:") || Boolean(msg.pending || msg.checking || msg.failed);
   const canReply = canSelect && !isLocalSend;
   const hasGroupReadInfo = groupReadInfo !== null;
-  void userId;
 
   // Once per message rather than once per render, so the bubble's memo sees the
   // same functions until the message, or what it may do, changes.
@@ -1816,7 +1968,11 @@ const MessageRow = React.memo(function MessageRow({
         </div>
       )}
       {isSystemMessage ? (
-        <SystemMessageNotice message={msg} />
+        <SystemMessageNotice
+          message={msg}
+          viewerId={userId}
+          onCallBack={capabilities.callBack ? actions.callBack : null}
+        />
       ) : (
         <div
           data-message-row="true"

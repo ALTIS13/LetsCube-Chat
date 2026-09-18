@@ -135,7 +135,10 @@ export const ChatListItem = memo(function ChatListItem({
 
   const getMessagePreview = () => {
     if (!lastMsg) return chat.cleared_at ? "История очищена" : "Сообщений пока нет";
-    const preview = formatChatMessagePreview(lastMsg);
+    // The reader, for the one preview that is not the same for both people in
+    // a conversation: a call record says «Входящий» to one of them and
+    // «Исходящий» to the other, from one row.
+    const preview = formatChatMessagePreview(lastMsg, currentUserId);
     const actor = resolveMessageActor(lastMsg);
     return chat.type !== "private" && (actor.kind === "bot" || actor.kind === "deleted_bot")
       ? `${messageActorDisplayName(actor)}: ${preview}`

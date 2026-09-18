@@ -666,6 +666,14 @@ export interface Database {
           media_path: string | null
           media_url: string | null
           media_metadata: Json | null
+          /**
+           * Structured detail for a system row, read by the renderer. Null on
+           * every other row, and a CHECK enforces it
+           * (`messages_system_payload_shape_check`). A call record is
+           * `{ kind, outcome, caller, duration_ms }`; `lib/callRecord.ts` is
+           * the only thing that reads it, and it treats this as untrusted JSON.
+           */
+          system_payload: Json | null
           reply_to_id: string | null
           forwarded_from_id: string | null
           edited_at: string | null

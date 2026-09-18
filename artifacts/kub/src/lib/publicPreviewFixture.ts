@@ -471,6 +471,7 @@ export function previewChats(fixture: PublicPreviewFixture): ChatWithLastMessage
         media_path: null,
         media_url: null,
         media_metadata: null,
+        system_payload: null,
         reply_to_id: null,
         forwarded_from_id: null,
         edited_at: null,
@@ -515,6 +516,7 @@ export function previewMessages(fixture: PublicPreviewFixture): MessageWithSende
           ...(image.sizeBytes ? { size_bytes: image.sizeBytes, original_size_bytes: image.sizeBytes } : {}),
         }
         : null,
+      system_payload: null,
       reply_to_id: null,
       forwarded_from_id: message.forwardedFrom ? `${PREVIEW_IDS.activeChat}-f${index}` : null,
       forward_origin: message.forwardedFrom ? { name: message.forwardedFrom } : null,
@@ -559,6 +561,7 @@ export function previewForwardDraft(fixture: PublicPreviewFixture): MessageWithS
       media_path: null,
       media_url: null,
       media_metadata: null,
+      system_payload: null,
       reply_to_id: null,
       forwarded_from_id: null,
       edited_at: null,
