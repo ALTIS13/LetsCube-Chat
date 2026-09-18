@@ -87,10 +87,22 @@ export function ReleaseDistributionSection() {
 
   return (
     <div
-      className="release-distribution-card kub-glass rounded-xl overflow-hidden border border-[color:var(--kub-border-color)]"
+      // D-222: the card is the container, because the thing that decides this
+      // layout is how wide the card is — and inside the chat-list column that is
+      // whatever the owner last dragged, not what the window is.
+      className="release-distribution-card @container kub-glass rounded-xl overflow-hidden border border-[color:var(--kub-border-color)]"
       data-testid="release-distribution-card"
     >
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
+      {/* 27rem, measured. The three-column form costs the content column the
+          button and its gap — 109px of the card, whatever the card is — so it is
+          worth paying only while what is left still holds the widest info chip
+          on one line. «Версия установки: Windows EXE» needs 248px and the
+          content column is `card - 171`, so the form becomes honest at a 420px
+          card; 432px is the first whole rem past it. At the 360pt column the
+          card is 296px and `sm:` was true anyway, which left the content column
+          at 125px and both chips wrapped inside a `rounded-full` — the ellipses
+          the owner photographed. */}
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 px-4 py-3 @min-[27rem]:grid-cols-[auto_minmax(0,1fr)_auto]">
         <KubIcon
           name={target === "windows_download" ? "cloud" : "phone"}
           size={16}
@@ -103,9 +115,32 @@ export function ReleaseDistributionSection() {
           <div className="text-xs text-[color:var(--kub-muted)]" data-testid="pwa-install-description">
             {installCopy.description}
           </div>
+          {/* A pill is only a pill while it is one line high, so above 20rem it
+              is one and below it is not. 310px measured: the widest chip,
+              «Версия установки: Windows EXE», needs 248px, and in the two-column
+              form the chips get `card - 62`. 20rem is the first whole rem past
+              it, and the three-column form above 27rem gives `card - 171`, which
+              is 261px at its own threshold — so one number covers both forms.
+
+              **The obvious cheaper fix does not work here, and the measurement
+              is worth keeping.** A radius is clamped — when two radii on one
+              side exceed that side, all of them scale down — so `rounded-3xl`
+              looked like a shape that would be a stadium on one line and a
+              rectangle on two, with no threshold at all. In the paint it is
+              byte-identical on one line (42px, because the `InfoHint` inside
+              carries the 32px touch target) and byte-identical on **two** as
+              well: two lines are 46px, and 24px still clamps to 23. The clamp
+              cannot tell 42 from 46, and 42-versus-46 is the whole of this
+              defect at the width the owner photographed. Only a radius below
+              21px separates them, and 21px is what one line already paints —
+              so there is no single radius that is a stadium at 42 and a
+              rectangle at 46. The shape has to be told which case it is in.
+
+              `rounded-lg` below is the product's own `--radius`, 10px, not a
+              number invented here. */}
           <div className="mt-2 flex flex-wrap gap-1.5 text-[12px] text-[color:var(--kub-muted)]">
             <span
-              className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-1"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-1 @min-[20rem]:rounded-full"
               data-testid="pwa-install-variant"
             >
               Версия установки: {installCopy.variantLabel}
@@ -115,7 +150,7 @@ export function ReleaseDistributionSection() {
               />
             </span>
             <span
-              className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-1"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-1 @min-[20rem]:rounded-full"
               data-testid="pwa-install-mode"
             >
               Режим: {installCopy.modeLabel}
@@ -258,7 +293,7 @@ export function ReleaseDistributionSection() {
           <KubButton
             size="sm"
             onClick={() => void promptInstall()}
-            className="col-span-2 w-full sm:col-span-1 sm:w-auto"
+            className="col-span-2 w-full @min-[27rem]:col-span-1 @min-[27rem]:w-auto"
             data-testid="pwa-install-button"
           >
             {installCopy.buttonLabel}
@@ -271,7 +306,7 @@ export function ReleaseDistributionSection() {
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => setHandoff(true)}
-            className="col-span-2 inline-flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[var(--kub-cyan)] px-3 text-xs font-semibold text-[color:var(--kub-bg)] transition-[transform,filter] hover:brightness-110 active:scale-[0.98] sm:col-span-1 sm:w-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+            className="col-span-2 inline-flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[var(--kub-cyan)] px-3 text-xs font-semibold text-[color:var(--kub-bg)] transition-[transform,filter] hover:brightness-110 active:scale-[0.98] @min-[27rem]:col-span-1 @min-[27rem]:w-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
             data-testid="release-download-button"
           >
             <KubIcon name="externalLink" size={13} />
@@ -283,7 +318,7 @@ export function ReleaseDistributionSection() {
             size="sm"
             variant="secondary"
             onClick={() => void release.refresh()}
-            className="col-span-2 w-full sm:col-span-1 sm:w-auto"
+            className="col-span-2 w-full @min-[27rem]:col-span-1 @min-[27rem]:w-auto"
           >
             Повторить
           </KubButton>

@@ -175,9 +175,20 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
                 <button
                   key={u.id}
                   onClick={() => toggle(u)}
-                  className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-soft"
+                  // D-222: a person's name is unbounded, and on a pill it was
+                  // wrapping into an ellipse. `ChatRoleChip` had the answer
+                  // already — bound the box, truncate the name, keep the full
+                  // value on `title` — and this is that pattern, not a second one.
+                  title={u.full_name ?? u.username ?? undefined}
+                  className="flex min-w-0 max-w-full items-center gap-1 whitespace-nowrap text-xs px-2 py-1 rounded-full bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-soft"
                 >
-                  {u.full_name ?? u.username} <KubIcon name="close" size={10} />
+                  <span className="min-w-0 truncate">{u.full_name ?? u.username}</span>
+                  {/* Measured, not assumed: without this the × renders 8px
+                      instead of 10 once the name is long enough to squeeze the
+                      row. The icon carries no intrinsic width the flex
+                      algorithm will respect, so `min-w-0` on the name is not on
+                      its own enough to keep the pressure off it. */}
+                  <KubIcon name="close" size={10} className="shrink-0" />
                 </button>
               ))}
             </div>

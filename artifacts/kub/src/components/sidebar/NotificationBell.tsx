@@ -544,7 +544,7 @@ function NotificationItem({
               <span
                 key={chip.key}
                 data-testid={`notification-chip-${chip.key}`}
-                className="rounded-full px-1.5 py-0.5 font-medium"
+                className="min-w-0 max-w-full truncate rounded-full px-1.5 py-0.5 font-medium"
                 style={
                   chip.emphasis === "alert"
                     ? {
@@ -560,16 +560,7 @@ function NotificationItem({
                 {chip.label}
               </span>
             ))}
-            {accent.attachment && (
-              <span
-                data-testid="notification-attachment"
-                className="inline-flex items-center gap-1 rounded-full bg-[var(--kub-surface)] px-1.5 py-0.5"
-                style={{ color: accent.textColor }}
-              >
-                <KubIcon name={accent.attachment.icon as KubIconName} size={11} />
-                {accent.attachment.label}
-              </span>
-            )}
+            <NotificationAttachmentChip accent={accent} />
             <span>{display.typeLabel}</span>
             <span aria-hidden="true">·</span>
             <span>{formatRelative(item.created_at)}</span>
@@ -689,16 +680,7 @@ function MessageGroupItem({
           </div>
 
           <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[color:var(--kub-muted)]">
-            {accent.attachment && (
-              <span
-                data-testid="notification-attachment"
-                className="inline-flex items-center gap-1 rounded-full bg-[var(--kub-surface)] px-1.5 py-0.5"
-                style={{ color: accent.textColor }}
-              >
-                <KubIcon name={accent.attachment.icon as KubIconName} size={11} />
-                {accent.attachment.label}
-              </span>
-            )}
+            <NotificationAttachmentChip accent={accent} />
             <span>Сообщения</span>
             <span aria-hidden="true">·</span>
             <span>{formatRelative(latest.created_at)}</span>
@@ -718,6 +700,39 @@ function MessageGroupItem({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * «Фото», «Голосовое», «Местоположение» — what the latest message carried.
+ *
+ * One component rather than the two byte-identical copies that stood in
+ * `NotificationItem` and `MessageGroupItem` until D-222 — the register calls
+ * them `NotificationCard` and `NotificationMessageGroup`, which is not what
+ * they are called here. The pill contract had to be written twice, and the next
+ * change to it would have had the same chance of being written once.
+ *
+ * The pill contract here is a guard, not a repair, and the register was wrong
+ * to list this line among the ones already broken on screen. Measured at the
+ * panel's own 280px floor — which needs a viewport under 296px, narrower than
+ * anything in the release matrix — the row that holds these chips is 190px
+ * and the widest pill the accent can produce is 124px («Местоположение» with
+ * its icon; «От администратора» is 123px). Patched and unpatched render
+ * identically at 296, 320, 360 and 390. Every label here is fixed copy, so
+ * the day one of them grows is the day it would matter, and the three
+ * utilities cost nothing until then.
+ */
+function NotificationAttachmentChip({ accent }: { accent: NotificationAccent }) {
+  if (!accent.attachment) return null;
+  return (
+    <span
+      data-testid="notification-attachment"
+      className="inline-flex min-w-0 max-w-full items-center gap-1 whitespace-nowrap rounded-full bg-[var(--kub-surface)] px-1.5 py-0.5"
+      style={{ color: accent.textColor }}
+    >
+      <KubIcon name={accent.attachment.icon as KubIconName} size={11} />
+      <span className="min-w-0 truncate">{accent.attachment.label}</span>
+    </span>
   );
 }
 

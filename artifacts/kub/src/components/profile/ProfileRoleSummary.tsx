@@ -153,7 +153,13 @@ export function ProfileRoleSummary({ user, compact = false, routing: routingProp
             </KubBadge>
           )}
           {primaryMembership && (
-            <KubBadge tone="muted" pill>
+            /* Same reason as the roles above: a dynamic role's name reaches
+               this chip unbounded. */
+            <KubBadge
+              tone="muted"
+              pill
+              title={getLocationRoleDisplay(primaryMembership.dynamicRole, primaryMembership.member.role)}
+            >
               {getLocationRoleDisplay(primaryMembership.dynamicRole, primaryMembership.member.role)}
             </KubBadge>
           )}
@@ -164,7 +170,17 @@ export function ProfileRoleSummary({ user, compact = false, routing: routingProp
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         {hasDynamicContent ? (
           globalRoles.slice(0, 2).map((role) => (
-            <KubBadge key={role.id} tone={roleTone(role.key)} pill>
+            /* `title` because this label is the one thing on the chip nobody
+               here wrote: `getRoleLabel` returns `role.name`, typed by an
+               administrator and bounded by nothing. Since D-222 the pill keeps
+               to one line and ellipsises, which is right for the shape and
+               takes the word away — and a name the reader cannot recover is
+               the same failure as the clipped achievement titles that entry
+               opens with. Not on `KubBadge` itself: about fifty call sites
+               pass fixed copy that fits, and a native tooltip repeating text
+               already on screen is noise. The call site knows whose text it
+               is, which is exactly why `ChatRoleChip` carries its own. */
+            <KubBadge key={role.id} tone={roleTone(role.key)} pill title={getRoleLabel(role)}>
               {role.key === "tech_admin" && <KubIcon name="settings" size={10} />}
               {getRoleLabel(role)}
             </KubBadge>

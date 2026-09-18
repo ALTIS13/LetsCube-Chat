@@ -93,7 +93,11 @@ export function ProfileDecorationSection() {
     <div className="space-y-4">
       <Preview user={currentUser} />
 
-      <div>
+      {/* D-222. The box this list is measured against, and it is this box and
+          not the window: the settings screen is the body of the chat-list
+          column, which the owner drags between 260 and 540 points, so no
+          viewport width predicts how wide the list is. */}
+      <div className="@container">
         <h3 className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-[color:var(--kub-muted)]">
           Достижения
           <InfoHint
@@ -105,7 +109,22 @@ export function ProfileDecorationSection() {
         {loading ? (
           <p className="text-xs text-[color:var(--kub-muted)]">Загружаем…</p>
         ) : (
-          <ul className="grid gap-1.5 sm:grid-cols-2">
+          // D-222, and the worst of it: this read `sm:grid-cols-2`, so at a
+          // 1440 window it split a 296px list into two 145px cards whatever the
+          // column was. Each card then had 91px for its text, and the title
+          // carries `truncate` — it does not wrap at that width, it clips, which
+          // is «Тестиро…» and «Альфа-т…» in the owner's screenshot while the
+          // description below it ran seven lines down a 91px ribbon. One card,
+          // two different failures, and only one of them is recoverable by
+          // reading harder.
+          //
+          // 26rem is measured, with Inter loaded — Segoe UI is the fallback when
+          // the font host is blocked and it is narrow enough to hide the clip
+          // entirely. Against this catalogue the widest title, «Альфа-тестер»,
+          // needs 95px and stops clipping at a 304px list; the longest
+          // description stops being a ribbon (7 lines → 3) at 414px. 416px is
+          // the first whole rem past both.
+          <ul className="grid gap-1.5 @min-[26rem]:grid-cols-2">
             {state.achievements.map((achievement) => {
               const held = state.earned.has(achievement.key);
               const progress = state.progress[achievement.key];

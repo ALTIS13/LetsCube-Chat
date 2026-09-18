@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { pillTextChildren } from "./KubBadge";
 import { KubIcon } from "./KubIcon";
 
 interface KubFilterChipProps {
@@ -29,12 +30,16 @@ export function KubFilterChip({ children, onRemove, label, className }: KubFilte
   return (
     <span
       className={cn(
-        "kub-field inline-flex items-center gap-1.5 rounded-full border border-[color:var(--kub-border-color)]",
+        // The same one-line contract `KubBadge` carries, and for a sharper
+        // reason: a filter chip is built out of what somebody typed —
+        // «Поиск: …» — into a `flex-wrap` row, so its text is unbounded by
+        // construction rather than by accident.
+        "kub-field inline-flex max-w-full min-w-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-[color:var(--kub-border-color)]",
         "bg-[var(--kub-surface-2)] py-0.5 pl-3 pr-1 text-xs text-[color:var(--kub-text)]",
         className,
       )}
     >
-      {children}
+      {pillTextChildren(children)}
       <button
         type="button"
         onClick={onRemove}

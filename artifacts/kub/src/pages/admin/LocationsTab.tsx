@@ -571,7 +571,18 @@ export function LocationsTab() {
                           )}
                         </span>
                       </div>
-                      <KubBadge tone={member.role === "staff" ? "cyan" : "pink"} pill>
+                      {/* `title` for the same reason as `ProfileRoleSummary`:
+                          a dynamic role's name is an administrator's own text
+                          and the pill now ellipsises rather than wrapping. The
+                          fixed `LOCATION_ROLE_LABEL` half needs none, and gets
+                          it anyway rather than making the reader wonder why one
+                          chip in the column has a tooltip and its neighbour
+                          does not. */}
+                      <KubBadge
+                        tone={member.role === "staff" ? "cyan" : "pink"}
+                        pill
+                        title={dynamicRole ? getRoleLabel(dynamicRole) : LOCATION_ROLE_LABEL[member.role]}
+                      >
                         {dynamicRole ? getRoleLabel(dynamicRole) : LOCATION_ROLE_LABEL[member.role]}
                       </KubBadge>
                       {/* Only says something when there is something to say: the

@@ -13864,7 +13864,7 @@ the muting direction and, as above, not in the other.
 
 ---
 
-## D-222 `[ ]` A viewport breakpoint deciding a layout that lives in a column the owner drags
+## D-222 `[~]` A viewport breakpoint deciding a layout that lives in a column the owner drags
 
 **Severity:** medium, and cosmetic in the sense that nothing breaks — but it is
 the first thing the owner saw when they opened «Обновления», and what they saw
@@ -14087,6 +14087,185 @@ card's pills are ugly and readable, and these titles are not readable at all.
 Nothing else about this entry changes. The mechanism is the one measured above —
 a viewport breakpoint deciding a layout inside a column the owner drags — the
 count stands, and the fix vocabulary stands.
+
+### Fixed on 2026-09-18: tier 1 and half B, with five corrections to this entry
+
+**What is done:** every tier-1 line, both pill primitives, and every half-B site
+except the two the tier-1 work owned. **What is not:** tier 2 (which the entry
+says needs a screenshot each at 768 and 1024 before anybody edits it — still
+true, still unscreenshotted), tier 3, and `SidebarHeader`. The status is `[~]`
+rather than `[x]` for that reason.
+
+#### The vocabulary, established once
+
+`@container` on the measured box, `@min-[Nrem]:` on the utilities. **No `@sm:`
+or `@md:` anywhere** — the trap this entry names is real and the compiled output
+confirms it (`--container-sm: 24rem`, not `sm`'s 40rem), so every threshold is a
+measured number written out. Three:
+
+| Line | Threshold | The measurement behind it |
+|---|---|---|
+| `ProfileDecorationSection.tsx` (the grid's wrapper) | **26rem / 416px** | widest title «Альфа-тестер» is 95.06px; a two-column cell is `list/2 − 57`, so clipping stops at a 304px list and the longest description stops being a ribbon (7 lines → 3) at 414px |
+| `ReleaseDistributionSection.tsx` (the card) | **27rem / 432px** | the third column costs the content 109px (button 97 + gap 12); the widest chip needs 247.64px, so the three-column form becomes honest at a 420px card |
+| `StorageSection.tsx` (the card) | **38rem / 608px** | the row form is honest only while «Хранилище приложения» keeps its ⓘ on one line (205.27px) beside both buttons unwrapped (327.23px) |
+
+A fourth, for the chip shape, is below.
+
+#### Five things this entry got wrong, which is the useful part
+
+1. **The defect is invisible without the shipped font.** `openFixture` aborts
+   every off-machine request, which kills Inter; Windows falls back to Segoe UI,
+   where «Альфа-тестер» is 86.6px against a 91px cell and **does not clip**. With
+   Inter it is 95.06px and clips — the owner's screenshot. So a capture spec
+   without the shipped font is a picture of a different product, while a
+   *contract* with it is flaky. The two were split: the capture spec lets the
+   font hosts through, the contract spec asserts only font-independent things
+   (track counts and track widths).
+2. **«at a 700px viewport the card is ~640px wide» — it is 562px.** At 767, the
+   widest viewport below `md`, it is 629px.
+3. **«at a 700px viewport the three-column form is correct» is true of the
+   release card and false of the storage card.** Measured at 700 before any
+   change: tracks of `16px 161px 327px`, the heading broken over two lines with
+   its ⓘ alone on a third, and the path wrapping mid-word.
+4. **`StorageSection` was not «cramped», it was gone.** At the 360 default the
+   path column measured **0px** and the heading text *overlapped* «Вернуть по
+   умолчанию»; at 260 the path rendered one character per line. The grid had no
+   `sm:` gate at all, so the actions held a third column at `max-content` at
+   every width.
+5. **`ReleaseDistributionSection.tsx:286` is «Повторить»**, drawn when the
+   catalogue is unreachable — it is what holds the outer grid's third column in
+   the common browser case, which is why that column was never empty.
+
+And four on half B:
+
+1. `sidebar/ChatRoleChip.tsx` is **`chat/ChatRoleChip.tsx`**.
+2. **`NotificationBell.tsx:547, :566, :695` are latent, not «already broken on
+   screen».** Measured at the panel's own 280px floor — which needs a viewport
+   under 296px, narrower than anything in the release matrix — the row is 190px
+   and the widest pill is 124.27px. Patched and unpatched are geometrically
+   identical at 296, 320, 360 and 390, and a pixel diff of the panel is **2
+   differing pixels of 223,600**, max channel delta 19.
+3. **`ChatInfoPanel.tsx:3004` is latent too, and for a different reason than
+   this entry implies.** The marker is `absolute left-1/2` with no width, so it
+   is laid out in the **half of the card to the right of that line** — 190px of
+   a 379px panel — and then centred by `-translate-x-1/2`. The widest label
+   `mediaMonthLabel` can build is ~115px, so it never wrapped: before and after
+   are byte-identical. The fix makes the preferred width the text's own.
+4. **`NewGroupModal:178` is live**, and nearly was not tested: the first attempt
+   used a 44-character name, which fitted. Nothing caps `full_name`, and a
+   57-character name is 428px against a 342–358px row.
+
+Net: of the ~15 half-B sites called «already broken», **two are live** (the two
+primitives' unbounded feeds, and the group-modal name) and four are latent.
+
+#### The primitives: one line, and the recovery at the call site
+
+`KubBadge` takes `pill ? "max-w-full min-w-0 whitespace-nowrap rounded-full"`,
+and a new `pillTextChildren` wraps **runs of text** in `min-w-0 truncate`. Three
+things were measured rather than assumed:
+
+- **the contract is gated on `pill`**, because `rounded-md` is 6px and a square
+  badge on two lines is cramped rather than broken — so the ~20 `pill={false}`
+  call sites render byte-identically;
+- **the obvious spelling breaks call sites that were already correct.** One
+  wrapper around `children` makes `RolesPermissionsTab`'s `h-1.5 w-1.5` swatch
+  an inline box that collapses to 0, and costs `ProfileBadgeChip`/`TaskCard`
+  their 6px gap. Runs matter too: `+{n}` arrives as two children and wrapping
+  them apart puts a gap between the plus and its digit;
+- **nothing else moved.** Measured before and after at fixed widths, in both
+  themes: every already-correct case identical to 0.01px, and only the three
+  that wrapped changed height (42→24, 42→24, 40.66→38).
+
+**A truncated pill takes the word away, which is the failure this entry opens
+with**, so the two feeds that carry an administrator's own text — `getRoleLabel`
+in `ProfileRoleSummary` and `LocationsTab` — now pass `title`. Deliberately at
+the call site and not on `KubBadge`: about fifty call sites pass fixed copy that
+fits, and a native tooltip repeating text already on screen is noise. It is the
+reason `ChatRoleChip` carries its own.
+
+`components/ui/badge.tsx` is **deleted**. Zero importers proved three ways:
+`<Badge` matches nowhere in the repository, `badgeVariants` only in the two
+badge files themselves, and there is no `components/ui` barrel.
+
+#### The chip shape, and a cheaper fix that does not work
+
+The two release-card chips were left unowned by the split above and are the
+owner's literal complaint, so they were done last: `rounded-lg` with
+`@min-[20rem]:rounded-full`. 310px measured — «Версия установки: Windows EXE»
+needs 248px and the chips get `card − 62` in the two-column form; the
+three-column form above 27rem gives `card − 171`, which is 261px at its own
+threshold, so one number covers both.
+
+**The measurement worth keeping is the fix that failed.** A border radius is
+clamped — when two radii on one side exceed that side, all of them scale — so
+`rounded-3xl` promised a stadium on one line and a rectangle on two, with no
+threshold at all. In the paint it is byte-identical on one line (42px, because
+the `InfoHint` inside carries the 32px touch target) **and byte-identical on two
+as well**: two lines are 46px, and 24px still clamps to 23. The clamp cannot
+tell 42 from 46, and 42-versus-46 is the whole of this defect at the width the
+owner photographed. Only a radius under 21px separates them, and 21px is what
+one line already paints — so no single radius is a stadium at 42 and a rectangle
+at 46.
+
+Two instrument notes from the same hour:
+**`getComputedStyle().borderTopLeftRadius` cannot see the clamp** — it reports
+the specified 24px whatever the box does, because the overlap rule of CSS
+Backgrounds 3 §5.5 is applied at paint time. The instrument that answered was
+`Buffer.compare` on two element screenshots. And the assertion that shipped asks
+**«is this a stadium»** — radius ≥ its own height — rather than which class is
+present, so it survives a change of token.
+
+`StorageSection`'s two chips were reverted to `rounded-full`: they are one line
+at every width the handle allows, so a shape switch there would have been a
+class nobody could reach.
+
+#### Two rulings
+
+**The storage card's row form at a 700pt sheet was changed on purpose**, against
+the instruction «if your change breaks that form you have written the wrong
+fix». The instruction assumed the form was right there; correction 3 above is
+the measurement that it was not. A threshold of ~35rem would have kept 700 in
+the row form at the cost of a 161px path column. The measured number wins, and
+the pixels for both are in the set.
+
+**`NotificationBell`'s three utilities are kept although two mutations of them
+stay green.** A green mutation is redundancy or unreachability and never «fine»
+— here it is unreachability, and the reason is written in the component rather
+than left to be rediscovered: every label there is fixed copy, the widest is
+124px in a 190px row, and the day one grows is the day it matters. An unchecked
+claim is only dangerous while it is silent.
+
+#### Still open, and one new candidate
+
+Tier 2 and tier 3 stand exactly as written above, screenshots at 768 and 1024
+still owed before anybody edits them. One thing found while measuring and left
+alone: **`StorageSection`'s heading drops its ⓘ to a line of its own at the 260
+column** (`flex flex-wrap`, 205px wanted against 136px). Pre-existing in the
+stacked form, the same class as the defect `WindowsStartupSection`'s own comment
+already records at its heading, and not a grid problem — so it is a tier-3
+candidate rather than part of this fix.
+
+#### Coverage
+
+`tests/e2e/settings-container-queries.spec.ts` (8 contracts) and
+`tests/e2e/pill-one-line.spec.ts` (14), each **a pair of widths at one
+viewport**, which is the instrument the mechanism demands: a `@media` query
+cannot tell two column widths apart at 1440, so putting `sm:` back turns the
+narrow half of every pair red while the wide half keeps passing for the wrong
+reason. Pixels in `output/d222/png/{before,after}` (30 files each, same names; the grid fix
+alone, before the chip shape, is kept beside them as `after-grid-only`)
+and `output/d222-half-b/` (46).
+
+**Twenty-four mutations, twenty-two red.** The two green ones are the
+`NotificationBell` pair ruled on above. Three taught something and changed the
+patch: a `whitespace-nowrap` on `KubBadge` was unreached because `truncate`
+already implies it, so the case that reaches it — an element child carrying
+text — was added rather than the guard deleted; `shrink-0` on
+`KubFilterChip`'s «×» was genuinely redundant (`.kub-icon-action` sets a 32px
+minimum) and was removed; and removing it from `NewGroupModal`'s «×» on the same
+reasoning went **red at 8px instead of 10** — a bare `<svg>` carries no
+intrinsic width the flex algorithm respects. It is back, with the number.
+
 
 ---
 

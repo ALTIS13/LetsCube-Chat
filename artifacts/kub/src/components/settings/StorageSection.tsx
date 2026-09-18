@@ -107,10 +107,27 @@ export function StorageSection() {
 
   return (
     <div
-      className="kub-glass overflow-hidden rounded-xl border border-[color:var(--kub-border-color)]"
+      // D-222: the card, not the window. See `ReleaseDistributionSection` — the
+      // same screen, the same column, the same reason.
+      className="@container kub-glass overflow-hidden rounded-xl border border-[color:var(--kub-border-color)]"
       data-testid="desktop-storage-card"
     >
-      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 px-4 py-3">
+      {/* This grid had no gate at all, so its third column existed at every
+          width, and the actions took it at their own max-content. Both buttons
+          come to 327px; a 296px card has 224px to give, so the path column was
+          measured at **0px** — the location was not cramped, it was gone — and
+          with only «Изменить папку» rendered it was 76px, a Windows path in a
+          ribbon.
+
+          38rem is measured and it is deliberately larger than the column can
+          ever be: the row form is honest only while the heading «Хранилище
+          приложения» keeps its ⓘ on one line (205px) beside both buttons
+          unwrapped (327px), which needs a 608px card. The chat-list column tops
+          out at a 476px card, so inside it this card now always stacks — which
+          is the true answer, not a threshold picked to make it look decided.
+          Below `md`, where the screen is a viewport sheet instead, a 767pt
+          window gives a 629px card and the row form is reachable. */}
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 px-4 py-3 @min-[38rem]:grid-cols-[auto_minmax(0,1fr)_auto]">
         <KubIcon name="folder" size={16} className="mt-0.5 text-[color:var(--kub-cyan)]" />
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-1.5 text-sm text-[color:var(--kub-text)]">
@@ -149,7 +166,7 @@ export function StorageSection() {
           )}
         </div>
         {state && !editingLocation && (
-          <div className="col-start-2 flex flex-wrap gap-2 sm:col-start-3 sm:justify-end">
+          <div className="col-start-2 flex flex-wrap gap-2 @min-[38rem]:col-start-3 @min-[38rem]:justify-end">
             {(!state.isDefaultLocation || state.pendingLocation) && (
               <KubButton
                 size="sm"

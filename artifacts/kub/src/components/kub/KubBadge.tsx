@@ -1,4 +1,4 @@
-import type { HTMLAttributes, ReactNode } from "react";
+import { Children, type HTMLAttributes, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 type Tone = "cyan" | "pink" | "muted" | "online" | "danger" | "warn";
@@ -48,6 +48,55 @@ const dotClass: Record<Tone, string> = {
   warn: "bg-[var(--kub-warn)]",
 };
 
+/**
+ * The text inside a pill, made able to shrink.
+ *
+ * A pill is only a pill while it is one line high. Above that the
+ * `rounded-full` radius clamps to half the box, the corners are eaten and the
+ * chip renders as an ellipse with the words crammed into it, which is what
+ * D-222 recorded. Staying on one line therefore has to be the primitive's job:
+ * roughly fifty call sites inherit this component and none of them can be
+ * asked to remember it.
+ *
+ * The obvious spelling — one `min-w-0 truncate` wrapper around `children` —
+ * breaks the call sites that are already correct. `ProfileBadgeChip` and
+ * `RolesPermissionsTab` pass an icon or a colour swatch beside the label and
+ * depend on the flex row for both: the 6px `gap-1.5` between the two, and
+ * `h-1.5 w-1.5` on the swatch, which an inline box would ignore entirely. One
+ * wrapper turns those children into inline content, the gap disappears and the
+ * swatch collapses to nothing.
+ *
+ * So only text is wrapped, and *runs* of text are wrapped together: React hands
+ * `+{n}` two children, «+» and the number, and wrapping them apart would put a
+ * gap between the plus and its digit. Grouped this way the result is box for
+ * box what the browser already built — contiguous text is one anonymous flex
+ * item either way — with `min-width: 0` and `text-overflow: ellipsis` added,
+ * which is the whole of the change.
+ */
+export function pillTextChildren(children: ReactNode): ReactNode {
+  const out: ReactNode[] = [];
+  let run: ReactNode[] = [];
+  const flush = () => {
+    if (run.length === 0) return;
+    out.push(
+      <span key={`pill-text-${out.length}`} className="min-w-0 truncate">
+        {run}
+      </span>,
+    );
+    run = [];
+  };
+  for (const part of Children.toArray(children)) {
+    if (typeof part === "string" || typeof part === "number") {
+      run.push(part);
+      continue;
+    }
+    flush();
+    out.push(part);
+  }
+  flush();
+  return out;
+}
+
 export function KubBadge({
   tone = "cyan",
   pill = false,
@@ -62,14 +111,23 @@ export function KubBadge({
     <span
       className={cn(
         "inline-flex items-center gap-1.5 border px-2 py-0.5 text-[12px] font-semibold text-[color:var(--kub-text)]",
-        pill ? "rounded-full" : "rounded-md",
+        // The one-line contract travels with the radius, and only with it.
+        // `rounded-md` is 6px: a `rounded-md` badge that takes two lines is
+        // cramped, which is a different complaint. `rounded-full` is half the
+        // height, so the second line turns the chip into an ellipse — that is
+        // the defect, and the fix belongs exactly where it is caused.
+        // `max-w-full` and `min-w-0` let the box give way instead of pushing
+        // past its container; `whitespace-nowrap` is the contract itself, and
+        // it reaches an element child too, not only the text
+        // `pillTextChildren` wraps.
+        pill ? "max-w-full min-w-0 whitespace-nowrap rounded-full" : "rounded-md",
         borderClass[tone],
         className,
       )}
       {...rest}
     >
       {showDot && <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dotClass[tone])} />}
-      {children}
+      {pill ? pillTextChildren(children) : children}
     </span>
   );
 }

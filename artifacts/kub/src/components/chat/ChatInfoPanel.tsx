@@ -3001,7 +3001,19 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
             data-shown={monthMarker.shown ? "true" : "false"}
             aria-hidden="true"
             className={cn(
-              "pointer-events-none absolute left-1/2 top-2 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--kub-text)] kub-glass-strong",
+              // The one-line pill contract of D-222, and a guard rather than a
+              // repair: the register listed this line among the ones already
+              // broken on screen and measurement refuses that. `mediaMonthLabel`
+              // can only produce twelve months and a year, the widest of which
+              // renders at about 115px, and an absolutely positioned box with
+              // `left-1/2` and no width is laid out in the half of the card to
+              // the right of that line — 190px of the 379px this panel is at a
+              // 1440 window. So it never wrapped, and before and after are the
+              // same pixels. What the three utilities buy is that the label can
+              // grow: `white-space: nowrap` makes the preferred width the text's
+              // own instead of that half, and the max-width keeps the centred
+              // result inside the card with a gutter either side.
+              "pointer-events-none absolute left-1/2 top-2 z-10 max-w-[calc(100%-1.5rem)] -translate-x-1/2 truncate rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--kub-text)] kub-glass-strong",
               // From the token, not from a literal: the tokens collapse to 1ms
               // under `prefers-reduced-motion` and a number does not.
               "transition-opacity duration-[var(--kub-motion-fast)] ease-[var(--kub-ease-standard)]",
