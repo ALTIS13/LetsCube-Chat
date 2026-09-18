@@ -611,6 +611,81 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-18 — `313c5b83` (six more deploys the same day; the microphone stops being open all the time)
+
+**Current baseline.** `letscube-web` runs image
+`l64kyyu1sysev2izzjjbizhe:313c5b836e6646bc0b80a9fd9e3a2fcd22721714`, read off the
+running container rather than trusted from the webhook, and the previous replica
+(`db6742eb…`) was retired during the rollover — both were observed alive together
+for about a minute and then only the new one.
+
+**Proved in the served assets, in both directions**, because a marker absent from
+a live bundle proves nothing on its own. The asset paths were taken from the page
+on the same request: `/assets/index-BP5tNQzl.css` (239,714 bytes) carries
+`kub-hold-target`, with `kub-voice-call-bar` as the control that the sheet is the
+real one; `/assets/index-DxspfRVI.js` (3,113,057 bytes) carries «Говорить», with
+«Выйти» ×5 as its control. Both markers are **absent at `HEAD~1`**, which is the
+half that makes their presence mean anything. Neither marker has an upper-case
+letter, so the CSS build's lower-casing — which has silently sunk a marker before
+on this project — could not apply.
+
+Six pushes since `fbbd5e2d`, each of which rebuilds `letscube-web` whether or not
+it touches the application (docs-only pushes redeploy it here):
+
+- **`d3341661`** — the privacy policy says what a voice call does, section 7 added
+  and 15 sections renumbered to 16; the Android listing stops describing the
+  microphone permission as only a recorder and gives live call audio its own Data
+  Safety item naming Play's «processed ephemerally».
+- **`49eec894`** — D-231: a pre-call connection test cannot honestly be built
+  here, with the measurement that says why. A feature deliberately **not** built,
+  because it would have lied to every user.
+- **`465653cc`, `d4790286`, `03fff708`, `db6742eb`** — the one-to-one call
+  proposal and its three revisions: the ring measured per shell, the owner's
+  Windows decision and what a «device» actually is here, and the hidden-window
+  throttling risk that nobody has checked (open question 8).
+- **`41d23fb2`** — Windows autostart, to the tray and normally. Slice D2 of that
+  proposal, complete: `winreg` directly rather than `tauri-plugin-autostart`,
+  which bakes its launch arguments at init (so «start minimised» could not be
+  toggled) and writes the program path unquoted (so any account with a space in
+  the user name would get a command line Windows truncates). Observed in the
+  registry at every step with a known-present control read in the same call.
+- **`313c5b83`** — push-to-talk and the voice gate (D-232). See below.
+
+**What `313c5b83` changes for a person in a call.** The microphone had two states
+— publishing, or self-muted — so a shared room heard everything in between.
+Three modes now: «Всегда» (what the product has always done, and the default, so
+a stored setting goes on meaning what it meant), «По голосу» (a gate with 6 dB of
+hysteresis and a 400 ms hold), «Рация» (a held key or a held button, with no
+hold-open at all).
+
+The gate drives `MediaStreamTrack.enabled` rather than a mute, and that was
+measured rather than preferred: against a loopback `RTCPeerConnection`, **4902
+bytes in two seconds enabled and 482 disabled**, with `media-source.audioLevel`
+at 0 — so the room hears silence while the publication, the permission and the
+participant list stay untouched. A mute would have blinked a crossed microphone
+beside the person's name through every sentence.
+
+**Scope, stated rather than buried:** push-to-talk and the noise gate are named
+twice as *out of scope* in `docs/proposals/2026-09-13-voice-channels.md`. Both
+lines are struck through in place with an addendum under section 7 saying what
+was built and why, rather than quietly deleted. D-232 in
+`docs/INTERFACE_DEFECT_REGISTER.md` carries the measurements.
+
+**Gates at this commit:** typecheck clean across all four packages; unit
+**3035/3035**; the voice e2e **54/54 at both 1440 and 390**; audio settings and
+the channel rail 70 passed with 24 skipped (width-dependent tests and opt-in
+captures, each with a named reason). Pixels re-captured in both themes at both
+viewports and looked at, not scanned.
+
+**Two contracts proved by mutation rather than asserted.** Four mutations of the
+44px hold target turn `tests/unit/touch-target-system.test.mjs` red — removing
+the opt-in, shrinking the area to 2px, painting a ground on it, and lifting it
+out of the coarse-pointer query. And the e2e half, which is the one that matters:
+a press 5px above the painted pill resolves to the talk control on a phone and to
+the capsule's own padding on a computer; with the class removed the phone answers
+«capsule» too. A stylesheet rule that reaches nothing looks identical to one that
+works, which is exactly how `.kub-range` spent half a day inside a desktop-only
+media query.
 ### 2026-09-18 — `fbbd5e2d` (eighteen deploys, one day, and five production migrations)
 
 - **`0b5d62df`** — the voice gateway's moderation half: `/force-mute` and
