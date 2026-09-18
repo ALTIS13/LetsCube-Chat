@@ -15663,3 +15663,77 @@ property that something other than the body sets the width — a forwarded heade
 an attachment caption, a link preview, an edited mark, a bubble carrying a
 reaction row. Each needs a look, at both 390 and 1440, in both themes, and the
 existing spec is the place to pin whatever is found.
+
+## D-235 `[ ]` A bot cannot be put in a group chat at all, and not because the list hides it
+
+**Severity:** high as a product gap. Bot Platform v1 is built, deployed and
+canary-verified; a bot that can only ever be talked to alone is a fraction of
+what it is for, and the owner found it by trying.
+
+**Reported by the owner on 2026-09-18:** «бота нельзя добавить в групповой чат
+(его не видно в списке приглашения)». Recorded and deliberately **not** fixed
+now, at their instruction.
+
+**The report names the symptom; the cause is one layer deeper, and it changes
+the size of the fix.** Measured on production before writing this:
+
+| what | measured |
+|---|---|
+| `public.chat_bot_members` policies | **one**, `SELECT` — «chat members and owners read bot membership» |
+| any INSERT policy on it | **none** |
+| write paths in the schema | `open_or_create_bot_chat` only, which makes the **private** chat |
+| live rows | **1 membership, 1 chat, `type = private`** |
+| client code that writes it | **none** — `useBotChat`, `SearchShared` and `botCallback` all read |
+
+So the invite list is not hiding anything. `GroupInviteModal` searches
+`public.profiles` (`:184`, `supabase.from("profiles").select("*")`) and **a bot
+is not a profile** — it is a row in `public.bots` whose membership lives in
+`chat_bot_members`. Even if the list offered one, there is no statement anywhere
+that could add it: the table has no INSERT policy and no RPC but the private-chat
+opener.
+
+**The database already models it.** `chat_bot_members.chat_id` references any
+chat, and the row carries `privacy_mode`, `full_visibility_requested_at` and
+`full_visibility_approved_by` — a privacy model that only makes sense in a group,
+where a bot seeing every message is a decision somebody has to take. That work
+was done and then never reached from anywhere.
+
+**So the fix is a slice, not a patch**, and its parts are: a definer RPC that
+adds a bot to a group with the same authorisation `bot_membership_authorize_internal`
+already expresses; a decision about who may do it (owner and admin, presumably,
+matching `is_chat_admin`); the privacy mode chosen at the moment of adding rather
+than defaulted silently; the invite surface offering bots alongside people; and
+removal, which has the same absence.
+
+---
+
+## D-236 `[ ]` A conversation with a bot looks exactly like a conversation with a person
+
+**Severity:** medium. It is on every bot chat, and the owner's words are the test:
+«выглядит будто я в диалоге просто с человеком».
+
+**Reported by the owner on 2026-09-18**, alongside D-235, and recorded rather
+than fixed at their instruction.
+
+**The surface knows what a bot is and declines to say so in this one place.**
+`artifacts/kub/src/components/sidebar/ChatListItem.tsx:143` reads:
+
+```
+return chat.type !== "private" && (actor.kind === "bot" || actor.kind === "deleted_bot")
+```
+
+— the bot actor is used to word the **preview line** in a group, and the
+condition excludes `private` explicitly. A bot conversation is private, so that
+branch never fires for it, and nothing else on the row marks it. The row's name
+and picture come from the chat record like any other.
+
+The same question should be asked of every surface the owner did not happen to
+open: the chat header, the profile sheet behind the avatar, search results, the
+forward picker, a mention. One of them saying «бот» while the rest do not would
+be its own defect.
+
+**Not measured yet, and it decides the shape:** whether the mark should be a
+badge beside the name (Telegram's), a line under it, or part of the avatar. The
+product already has `KubBadge` with a `pill` variant, and D-222 has just given it
+a one-line contract — so the vocabulary exists. What is missing is a decision
+about which of the surfaces above carry it.
