@@ -123,11 +123,14 @@ async function seed(page: Page, options: Options = {}): Promise<Fixture> {
       // here — and the client's `eq`/`limit` filters are server-side, so both
       // memberships come back and the reader picks.
       if (resource === "chat_bot_members") {
+        // The embed is what `useBotChat` asks for since D-244: the bot's
+        // username has to arrive in the same row as the `bot_id` whose
+        // commands are being loaded, or a group addresses the wrong one.
         return {
           status: 200,
           body: [
-            { chat_id: CHAT_STARTED, bot_id: BOT_ID, removed_at: null },
-            { chat_id: CHAT_FRESH, bot_id: BOT_ID, removed_at: null },
+            { chat_id: CHAT_STARTED, bot_id: BOT_ID, joined_at: AT, removed_at: null, bot: { username: BOT.username } },
+            { chat_id: CHAT_FRESH, bot_id: BOT_ID, joined_at: AT, removed_at: null, bot: { username: BOT.username } },
           ],
         };
       }

@@ -63,7 +63,7 @@ import { getChatDisplayInfo, isSavedChat } from "@/lib/chatDisplay";
 import { reportError } from "@/lib/monitoring";
 import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
 import { useBotChat } from "@/hooks/useBotChat";
-import { BOT_START_COMMAND, botChatNeedsStart } from "@/lib/botChatSurfaces";
+import { BOT_START_COMMAND, botChatNeedsStart, type BotChatAddressing } from "@/lib/botChatSurfaces";
 // One copy of "is this a voice note / a round video", shared with the profile
 // card's shared-media sections. A second copy drifts, and then playback and the
 // gallery disagree about the same row.
@@ -185,10 +185,26 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const botChat = useBotChat(chatId);
   const botNeedsStart = botChat.ready && botChatNeedsStart({
     hasBot: botChat.botId !== null,
+    // The fact D-243 was missing. A group that holds a bot is still a group,
+    // and «I have not written here» is not «I have not started this bot».
+    chatType: chat?.type ?? null,
     currentUserId: userId,
     messages,
     historyComplete: !hasMoreOlder,
   });
+  /**
+   * What a command has to carry here for the bot to hear it (D-244).
+   *
+   * The username is `useBotChat`'s, read in the same row as the bot whose
+   * commands the menu is about; the type is the chat's own. A chat still
+   * settling into the store answers `null`, which addresses the command — the
+   * form a private chat accepts as well, so an unknown type costs a few
+   * characters rather than a message nobody receives.
+   */
+  const botAddressing = useMemo<BotChatAddressing>(
+    () => ({ chatType: chat?.type ?? null, botUsername: botChat.botUsername }),
+    [chat?.type, botChat.botUsername],
+  );
 
   useEffect(() => { markChatRead(chatId); }, [chatId, markChatRead]);
   // What the conversation shows: a private chat draws no deleted message, since
@@ -1716,6 +1732,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
                 ? {
                     commands: botChat.commands,
                     needsStart: botNeedsStart,
+                    addressing: botAddressing,
                     // «Запустить» sends `/start`, which is the whole of what
                     // Telegram's Start does: the bot learns about the person
                     // from an ordinary message, and the composer comes back

@@ -11,6 +11,55 @@ Keep public bot creation disabled in the existing rollout admission control.
 Making the gateway reachable does not authorize bot creation for a broader
 cohort.
 
+**Superseded on 2026-09-02, corrected here on 2026-09-19.** Bot creation went to
+general availability on the owner's instruction; the canary cohort is retired in
+code and `BOT_CREATION_ENABLED` is a kill switch whose production value is
+`true`. The paragraph above describes the packaging stage and is kept as
+history. Every other sentence in this file that says creation is disabled
+(the canary record, rollback step 4) is history for the same reason.
+
+## What Is Actually Running (measured 2026-09-19)
+
+Read off the host, not from a webhook, because this is the one application of
+five with Coolify auto-deploy switched off:
+
+| Fact | Value |
+| --- | --- |
+| Coolify application | `twezs89u2m6d6ln6c0rpaqxe` |
+| Image tag / commit | `935a670db6ab90f289164c7e2c27faa5b5c62a35` (2026-09-02) |
+| Distance from `main` | 599 commits; **one route** of difference inside `artifacts/api-server/src/bot` |
+| `BOT_CREATION_ENABLED` | `true` |
+| Health | `Up`, healthy; `"Bot Gateway listening"` logged once at start, zero error-level lines since |
+| Traffic | ~1440 POSTs to `/bot/v1/:method` per day, all `200` |
+
+The one route of difference is `PATCH /bots/:botId/avatar`
+(`b5402f7d`, 2026-09-04), which is therefore **absent in production** while the
+browser bundle and the database function both have their halves. See D-241 and
+D-242 in `docs/INTERFACE_DEFECT_REGISTER.md`. A deployment of this service at a
+commit containing `b5402f7d` is the fix.
+
+`BOT_CREATION_CANARY_USER_IDS` is still set in the Coolify environment. It is
+inert — the deployed code ignores it deliberately — but it should be deleted.
+
+Queue and delivery state, read read-only off production the same day:
+
+| Table | State |
+| --- | --- |
+| `public.bots` | 3 active, `count(avatar_url) = 0` |
+| `private.bot_webhooks` | **0 rows** — no webhook has ever been configured |
+| `private.bot_delivery_attempts` | 0 rows |
+| `private.bot_delivery_leases` | 0 rows at every sample |
+| `private.bot_updates` | 2 rows, both unacknowledged, ~10 h old, expiring at 24 h |
+| `public.chat_bot_members` | 1 live row, a private chat, `restricted` |
+
+Not accumulating, and not draining either: the two queued updates belong to a bot
+whose token has **never** been used, while the bot that authenticates every few
+minutes is in no chat at all and has no counter row. So the transport is proved
+(auth, routing and the database round trip, ~1440 × `200` a day) and an update
+actually reaching a bot is **unproved since the 2026-08-31 canary**. Webhook
+delivery — `validateWebhookTarget`, the encrypted secret, the retry worker — has
+never run in production at all.
+
 The public method URL remains:
 
 ```text
@@ -22,6 +71,13 @@ Authenticated management traffic from the LETSCUBE app uses
 `https://api.letscube.ru/bots/docs` permanently redirects to the public SPA
 route `https://app.letscube.ru/bots/docs`. The page is served by `kub-web`, not
 by the Bot Gateway.
+
+**Not true in production, measured 2026-09-19 (D-245).** The redirect router is
+declared in `docs/deploy/docker-compose.coolify.yml` and was never applied: no
+container on the host carries a label mentioning `bots/docs`, and neither does
+Traefik's file provider. `https://api.letscube.ru/bots/docs` falls through to the
+release catch-all and answers `404` from nginx. `https://app.letscube.ru/bots/docs`
+serves the page normally, so only the convenience address is dead.
 
 ## Runtime Boundary
 
@@ -99,9 +155,16 @@ holds that it cannot narrow admission.
 Admission is not the same as eligibility, and abuse control has not moved.
 `bot_creation_eligibility_internal` still requires a confirmed email, a verified
 phone, an account older than 24 hours, no active ban, and fewer than three live
-bots. Because phone verification is currently restricted to administrators, an
-ordinary user still cannot satisfy the phone requirement; opening bot creation
-to everyone therefore also needs a separate decision on phone verification.
+bots.
+
+**Corrected on 2026-09-19.** This paragraph used to end «Because phone
+verification is currently restricted to administrators, an ordinary user still
+cannot satisfy the phone requirement; opening bot creation to everyone therefore
+also needs a separate decision on phone verification.» That decision was taken:
+phone verification has been open to every authenticated account since
+2026-09-02 (`20260902120000_phone_verification_open_to_all_users`; see
+`CLAUDE.md` §12). The five eligibility requirements above are unchanged and are
+still the whole of the abuse control.
 
 When creation is refused, list and detail management remain available and list
 eligibility reports `can_create=false`. The client names the reason: the unmet
@@ -149,7 +212,7 @@ unchanged. The Compose labels add only higher-priority, narrower routers:
 
 | Priority | Public path | Target | Behavior |
 | --- | --- | --- | --- |
-| `210` | Exact `/bots/docs` or `/bots/docs/` | Redirect middleware | Permanent redirect to `https://app.letscube.ru/bots/docs`; query/suffix is preserved. |
+| `210` | Exact `/bots/docs` or `/bots/docs/` | Redirect middleware | Permanent redirect to `https://app.letscube.ru/bots/docs`; query/suffix is preserved. **Declared but never deployed — see D-245.** |
 | `200` | Exact `/bot/v1` or `/bot/v1/*` | `letscube-bot-gateway:8098` | Rule is `Path('/bot/v1') || PathPrefix('/bot/v1/')`; sibling names such as `/bot/v10` do not match. |
 | `200` | Exact `/bot/manage/v1` or `/bot/manage/v1/*` | `letscube-bot-gateway:8098` | Rule is `Path('/bot/manage/v1') || PathPrefix('/bot/manage/v1/')`; sibling names do not match. |
 
@@ -194,7 +257,11 @@ curl -fsS -o /dev/null https://api.letscube.ru/healthz
 The API-host documentation request must return a permanent redirect whose
 `Location` is `https://app.letscube.ru/bots/docs`; use `curl -I` without `-L`
 when checking that header, then load the app-host URL and confirm its scripts
-and styles come from `app.letscube.ru/assets/*`. Expected remaining results are
+and styles come from `app.letscube.ru/assets/*`. **That step is red today and has
+been for the whole life of this deployment — see D-245.** Until the redirect
+labels are actually applied, `curl -fsSI https://api.letscube.ru/bots/docs`
+fails and the app-host check is the only meaningful one. Expected remaining
+results are
 a healthy internal check, HTTP `401` for both unauthenticated Bot API and
 management probes, and an unchanged successful response from the existing
 public health path. A `404` or release-catalog response on either bot path means
@@ -203,6 +270,39 @@ the higher-priority router is absent or does not match.
 Recheck at least one known-good `/releases/v1/*` manifest and its immutable
 artifact URL from the release catalog's existing verification procedure. Do
 not change or republish a release as part of this check.
+
+### Route inventory (added 2026-09-19 after D-241)
+
+Because this service does not auto-deploy, its route table can fall behind the
+client that calls it, and every repository test will stay green while it does:
+the e2e specs mock the management API and the unit tests read this repository's
+own source. Neither can see what is running.
+
+Check the routes themselves. Management routes authenticate **inside** each
+handler, so an existing route answers `401` with the gateway's JSON envelope and
+an absent one falls through to Express and answers `404` in HTML — which makes a
+calibrated probe possible without any credential:
+
+```bash
+U=00000000-0000-4000-8000-000000000000
+for r in profile avatar commands; do
+  printf '%s -> ' "$r"
+  curl -sS -o /dev/null -w '%{http_code}\n' -X PATCH -H 'Content-Type: application/json' \
+    --data '{}' "https://api.letscube.ru/bot/manage/v1/bots/$U/$r"
+done
+# control: a route that must NOT exist
+curl -sS -o /dev/null -w 'control -> %{http_code}\n' -X PATCH \
+  "https://api.letscube.ru/bot/manage/v1/bots/$U/definitelyNotARoute"
+```
+
+Every route the client calls must answer `401`; only the control may answer
+`404`. The client's full call list is the `botManagement` object in
+`artifacts/kub/src/lib/botManagement.ts`. Read the running commit from the
+container rather than from Coolify's webhook history:
+
+```bash
+docker ps --format '{{.Names}}\t{{.Image}}' | grep twezs89u2m6d6ln6c0rpaqxe
+```
 
 ## Operational Signals
 
@@ -228,7 +328,9 @@ transactional schema smoke and isolated RLS validation. Coolify deployment
 `bot-gateway-runtime` target.
 
 Public bot creation remains disabled except for one explicitly pinned internal
-owner. The production canary verified:
+owner. *(True on 2026-08-31 and kept as the canary's record. Creation went to
+general availability on 2026-09-02; see the top of this file.)* The production
+canary verified:
 
 - token creation and rotation, including rejection of the previous token;
 - private updates and restricted-group mention delivery;
@@ -256,8 +358,11 @@ repository or broaden the current creation cohort without a separate review.
    `/bots/docs` redirect labels from this deployment revision.
 3. Confirm the release catch-all, `/releases/*` and its public health path are
    unchanged and healthy.
-4. Keep public bot creation disabled. Do not delete bot rows, messages, update
-   queues or release manifests during packaging rollback.
+4. Do not delete bot rows, messages, update queues or release manifests during
+   packaging rollback. *(This step used to begin «Keep public bot creation
+   disabled». Creation is generally available since 2026-09-02; a rollback that
+   needs it closed sets `BOT_CREATION_ENABLED=false` deliberately, which is what
+   the kill switch is for.)*
 
 With the scoped routers absent, bot paths may fall through to the release
 catch-all and return its normal not-found response. Human messaging, existing

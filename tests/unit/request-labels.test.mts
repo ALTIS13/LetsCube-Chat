@@ -124,7 +124,7 @@ test("the sidebar's bot read and the open chat's are different labels", () => {
   );
   assert.equal(
     label("/rest/v1/chat_bot_members", {
-      select: "bot_id",
+      select: "bot_id,joined_at,bot:bots(username)",
       chat_id: "eq.22222222-2222-4222-8222-2222222222a1",
       removed_at: "is.null",
     }),

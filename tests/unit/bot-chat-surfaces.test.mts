@@ -31,12 +31,14 @@ import {
   botButtonKey,
   botCallbackFailureMessage,
   botChatNeedsStart,
+  botCommandAddress,
   botCommandDraft,
   botCommandQuery,
   botCommandSlash,
   botMessageExplainsInternals,
   chooseBotChat,
   classifyBotCallbackFailure,
+  isBotPartnerChat,
   matchBotCommands,
   parseBotCommands,
   parseBotInlineKeyboard,
@@ -216,15 +218,139 @@ test("nothing readable is an empty list, never a throw", () => {
   assert.deepEqual(parseBotCommands({}), []);
 });
 
+const PRIVATE = { chatType: "private", botUsername: "shiftbot" } as const;
+const GROUP = { chatType: "group", botUsername: "shiftbot" } as const;
+
 test("choosing a command fills the field and leaves room for an argument", () => {
   const command = { command: "shift", description: "Смена" };
   assert.equal(botCommandSlash(command), "/shift");
-  assert.equal(botCommandDraft(command), "/shift ");
+  assert.equal(botCommandDraft(command, PRIVATE), "/shift ");
   assert.ok(
-    botCommandDraft(command).endsWith(" "),
+    botCommandDraft(command, PRIVATE).endsWith(" "),
     "without the space, «/shift 12» has to be repaired before it can be typed",
   );
-  assert.equal(botCommandDraft(command).includes("\n"), false, "a newline here would send it");
+  assert.equal(botCommandDraft(command, PRIVATE).includes("\n"), false, "a newline here would send it");
+});
+
+// ---------------------------------------------------------------------------
+// D-244: a command in a group has to name the bot, or it is never delivered
+// ---------------------------------------------------------------------------
+
+/**
+ * `private.bot_can_receive_message`'s restricted branch, as Postgres runs it.
+ *
+ * Both patterns are transcribed from the live function, read off production
+ * read-only on 2026-09-19 and byte-identical to
+ * `.migration-backup/supabase/migrations/20260831100000_bot_platform_foundation.sql`.
+ * Postgres lowercases the content first and interpolates the username raw;
+ * `bots_username_check` is `^[a-z][a-z0-9_]{4,31}$`, so the username can carry
+ * no regex metacharacter and needs no escaping here either.
+ *
+ * `[[:space:]]` has no JavaScript spelling, so it is written `\s`. The two
+ * differ only on characters `\s` also admits — no ASCII character separates
+ * them — and every string asserted below was additionally run against the real
+ * function on production before this test was written.
+ */
+function databaseWouldDeliver(content: string, username: string): boolean {
+  const lowered = content.toLocaleLowerCase("en-US");
+  const asCommand = new RegExp(`^/[a-z][a-z0-9_]{0,31}@${username}(\\s|$)`);
+  const asMention = new RegExp(`(^|[^a-z0-9_])@${username}([^a-z0-9_]|$)`);
+  return asCommand.test(lowered) || asMention.test(lowered);
+}
+
+test("in a group the chosen command names the bot, which is the only form delivered (D-244)", () => {
+  const command = { command: "shift", description: "Смена" };
+  const draft = botCommandDraft(command, GROUP);
+  assert.equal(draft, "/shift@shiftbot ");
+  // The composer trims before it sends (`MessageInput.handleSend`), so what
+  // the database sees is the trimmed draft. That is the string the rule is
+  // measured against.
+  assert.equal(
+    databaseWouldDeliver(draft.trim(), "shiftbot"),
+    true,
+    "the delivery rule admits it",
+  );
+  assert.equal(
+    databaseWouldDeliver(`${draft.trim()} завтра`, "shiftbot"),
+    true,
+    "and still admits it once an argument is typed after the space",
+  );
+  assert.equal(
+    databaseWouldDeliver("/shift", "shiftbot"),
+    false,
+    "the control: the bare command this used to produce reaches nothing",
+  );
+  assert.equal(
+    databaseWouldDeliver("/shift завтра", "shiftbot"),
+    false,
+    "and an argument does not rescue it",
+  );
+});
+
+test("a conversation with the bot is addressed to nobody, because it needs no address", () => {
+  const command = { command: "shift", description: "Смена" };
+  assert.equal(
+    botCommandDraft(command, PRIVATE),
+    "/shift ",
+    "`chat.type = 'private'` short-circuits the whole restricted branch",
+  );
+  assert.equal(botCommandAddress(PRIVATE), "");
+  assert.equal(botCommandAddress(GROUP), "@shiftbot");
+  assert.equal(isBotPartnerChat("private"), true);
+  assert.equal(isBotPartnerChat("group"), false);
+  assert.equal(isBotPartnerChat("channel"), false);
+  assert.equal(isBotPartnerChat(null), false);
+  assert.equal(isBotPartnerChat(undefined), false);
+});
+
+test("a chat whose type is not known yet is addressed rather than left silent", () => {
+  const command = { command: "shift", description: "Смена" };
+  // Addressing costs a few characters in a private chat and nothing at all in
+  // a group; not addressing costs the whole message in a group. The unknown
+  // side is therefore the addressed one.
+  assert.equal(botCommandDraft(command, { chatType: null, botUsername: "shiftbot" }), "/shift@shiftbot ");
+  assert.equal(botCommandDraft(command, { chatType: undefined, botUsername: "shiftbot" }), "/shift@shiftbot ");
+});
+
+test("an unknown username invents none", () => {
+  const command = { command: "shift", description: "Смена" };
+  assert.equal(botCommandDraft(command, { chatType: "group", botUsername: null }), "/shift ");
+  assert.equal(botCommandDraft(command, { chatType: "group", botUsername: "  " }), "/shift ");
+  assert.equal(botCommandDraft(command, { chatType: "group", botUsername: undefined }), "/shift ");
+});
+
+test("the address ends where the username ends, so a longer name is not answered for", () => {
+  const command = { command: "shift", description: "Смена" };
+  // `([[:space:]]|$)` after the username is what stops `@botone` matching
+  // `@botonetwo`; the client's job is only to write the whole name.
+  const draft = botCommandDraft(command, { chatType: "group", botUsername: "botone" }).trim();
+  assert.equal(draft, "/shift@botone");
+  assert.equal(databaseWouldDeliver(draft, "botone"), true);
+  assert.equal(
+    databaseWouldDeliver(draft, "botonetwo"),
+    false,
+    "the other bot in the group is not addressed by a name it merely starts with",
+  );
+  assert.equal(
+    databaseWouldDeliver("/shift@botonetwo", "botone"),
+    false,
+    "and neither is this one by the longer name",
+  );
+});
+
+test("the longest command a bot may register still fits the addressed form", () => {
+  // `bot_commands.command` is `^[a-z][a-z0-9_]{0,31}$`; the delivery rule reads
+  // `^/[a-z][a-z0-9_]{0,31}@`. The two agree at 32 characters and nowhere past
+  // it, so the boundary is asserted rather than trusted.
+  const longest = "a".repeat(32);
+  assert.equal(longest.length, 32);
+  const draft = botCommandDraft({ command: longest, description: "Граница" }, GROUP).trim();
+  assert.equal(databaseWouldDeliver(draft, "shiftbot"), true);
+  assert.equal(
+    databaseWouldDeliver(`/${"a".repeat(33)}@shiftbot`, "shiftbot"),
+    false,
+    "one character more and the database stops recognising it as a command",
+  );
 });
 
 test("«/» asks only while the whole field is one unfinished command", () => {
@@ -271,7 +397,7 @@ test("«/» filters by the name's prefix, in the bot's order", () => {
 const ME = "11111111-1111-4111-8111-111111111111";
 
 test("«Запустить» stands in for the composer until the person has said something", () => {
-  const base = { hasBot: true, currentUserId: ME, historyComplete: true };
+  const base = { hasBot: true, chatType: "private", currentUserId: ME, historyComplete: true };
   assert.equal(botChatNeedsStart({ ...base, messages: [] }), true);
   assert.equal(
     botChatNeedsStart({ ...base, messages: [{ user_id: null }, { user_id: null }] }),
@@ -282,25 +408,75 @@ test("«Запустить» stands in for the composer until the person has sai
   assert.equal(
     botChatNeedsStart({ ...base, messages: [{ user_id: "22222222-2222-4222-8222-222222222222" }] }),
     true,
-    "somebody else writing in a group the bot is in is not this person starting it",
+    "somebody else in the conversation is not this person starting the bot",
   );
 });
 
 test("an incomplete history never offers to start a bot", () => {
   assert.equal(
-    botChatNeedsStart({ hasBot: true, currentUserId: ME, messages: [], historyComplete: false }),
+    botChatNeedsStart({ hasBot: true, chatType: "private", currentUserId: ME, messages: [], historyComplete: false }),
     false,
     "older pages unloaded means the chat has been used; there is no column saying otherwise",
   );
 });
 
 test("a chat with no bot, and a reader with no session, never show the button", () => {
-  assert.equal(botChatNeedsStart({ hasBot: false, currentUserId: ME, messages: [], historyComplete: true }), false);
-  assert.equal(botChatNeedsStart({ hasBot: true, currentUserId: null, messages: [], historyComplete: true }), false);
+  assert.equal(botChatNeedsStart({ hasBot: false, chatType: "private", currentUserId: ME, messages: [], historyComplete: true }), false);
+  assert.equal(botChatNeedsStart({ hasBot: true, chatType: "private", currentUserId: null, messages: [], historyComplete: true }), false);
+});
+
+// ---------------------------------------------------------------------------
+// D-243: «Запустить» belongs to a conversation with a bot and nowhere else
+// ---------------------------------------------------------------------------
+
+test("a group holding a bot never replaces the composer with «Запустить» (D-243)", () => {
+  // Every other fact is the one that made the button appear before 2026-09-19:
+  // a bot is in the chat, the whole history is loaded, and this member has been
+  // reading rather than writing. In a group that is a reader, not an unstarted
+  // bot, and taking the field, the attach button and the recorder away from
+  // them is what D-243 records.
+  const reading = {
+    hasBot: true,
+    currentUserId: ME,
+    messages: [{ user_id: "22222222-2222-4222-8222-222222222222" }],
+    historyComplete: true,
+  };
+  assert.equal(botChatNeedsStart({ ...reading, chatType: "group" }), false);
+  assert.equal(botChatNeedsStart({ ...reading, chatType: "channel" }), false);
+  assert.equal(
+    botChatNeedsStart({ ...reading, chatType: null }),
+    false,
+    "a chat whose type is not known yet keeps its composer; nothing is guessed",
+  );
+  assert.equal(
+    botChatNeedsStart({ ...reading, chatType: undefined }),
+    false,
+    "and neither is an absent one",
+  );
+  assert.equal(
+    botChatNeedsStart({ ...reading, chatType: "private" }),
+    true,
+    "the control: the same chat as a conversation with the bot still offers it",
+  );
 });
 
 test("«Запустить» sends exactly the command bots answer to", () => {
   assert.equal(BOT_START_COMMAND, "/start");
+  // It carries no address, and may not until the button can appear outside a
+  // private chat: `chat.type = 'private'` is what makes a bare `/start`
+  // deliverable at all. `botChatNeedsStart` is the guard, so it is asserted
+  // here rather than assumed.
+  assert.equal(
+    botChatNeedsStart({
+      hasBot: true,
+      chatType: "group",
+      currentUserId: ME,
+      messages: [],
+      historyComplete: true,
+    }),
+    false,
+    "an unaddressed /start must never be reachable from a group",
+  );
 });
 
 test("a bot opens the chat the reader is in, and a private one before a group", () => {

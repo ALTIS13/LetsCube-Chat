@@ -611,6 +611,90 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-19 — PocketFlow, and the audit of the Bot Platform it forced
+
+**Nothing deployed.** A new workspace package, `artifacts/pocketflow`, plus a
+Docker stage and a compose service behind a `pocketflow` profile. `main` is
+untouched; the work is on `integration/message-actions` through `b08b20f1`.
+
+#### Why this exists, and why the audit came first
+
+The owner commissioned a reference bot that is useful to an ordinary person and
+is at the same time a compliance test of the Bot Platform from outside — with a
+stated requirement that the same source run against Telegram with only
+`BOT_API_BASE_URL` and `BOT_TOKEN` changed.
+
+**That requirement does not hold, and the audit is how we know.** The public
+API is seventeen methods and four update types, and the disagreement with
+Telegram is structural rather than a matter of coverage:
+
+| | LETSCUBE | Telegram |
+|---|---|---|
+| chat / message ids | UUID | 64-bit integers |
+| a file to send | a storage object reference | a `file_id` or an upload |
+| a write | `idempotency_key` required | no such field |
+| a date | timestamptz string | unix seconds |
+
+So the promise is kept one level up: `src/app/` is written against a neutral
+transport interface and never sees a UUID, a storage path or an idempotency
+key, and `transport/letscube.ts` is the only module that knows the wire format.
+A `transport/telegram.ts` beside it is the whole of a Telegram build.
+
+#### Seven gaps, three of them blocking
+
+Recorded in `docs/proposals/2026-09-19-pocketflow-reference-bot.md`.
+
+**G-1 is the one worth reading.** A bot cannot send a file at all. `sendPhoto`
+takes a `chat-media` object path; `bot_upload_authorize_internal` requires the
+object to **already exist**; `getFile` returns a signed URL and **not** the
+path; and `private.bot_upload_grants` exists, looks like an upload mechanism,
+and is referenced by no `storage.objects` policy — so it grants nothing. The
+minimal fix is to accept a `file_id` in place of the storage reference, which
+is Telegram’s own model and therefore **raises** compatibility rather than
+lowering it.
+
+G-2 no inline mode. G-3 no polls. G-4 no `editMessageReplyMarkup`. **G-5 no
+`parse_mode`, and the client formats every message anyway** — verified against
+`formatText.tsx`, which is why `lib/render.ts` exists and why a test reads that
+file and fails if its grammar changes. G-6 nothing from P1 upward. G-7 there is
+no SDK and no examples in this repository at all; PocketFlow is the first
+external consumer of this API.
+
+#### Three defects found by tests rather than by use
+
+This is the part worth keeping, because each was invisible to inspection:
+
+- `mailto:a@b.c` classified as a **URL carrying credentials**. The scheme check
+  required `://`, so a schemeless string with a colon and an `@` became
+  `https://mailto:a@b.c`, which parses as host `b.c` with userinfo `mailto:a` —
+  and would have been stored by the watcher.
+- `завтра Позвонить в 18:00` would have fired **nine hours early**, with a
+  confirmation correctly saying «завтра». Nobody would have reported it.
+- `net.BlockList.check()` answers **"not blocked"** for a string that is not an
+  IP at all, so an SSRF guard built on it fails **open** on garbage.
+
+And two dead controls the wiring test caught on its first run: the «Webhooks»
+button on `/start` named an action nobody had registered, and `/help`
+advertised `/hook` when the command is `/webhooks`.
+
+#### One of mine, recorded because the mechanism is invisible
+
+Every scripted edit this session wrote through Python’s text mode, which on
+Windows converts **every** newline in the file to CRLF. Eighteen files were
+rewritten and nothing noticed: `grep` cannot see a CR, and the diff reads as an
+ordinary change. It surfaced only when a Dockerfile contract test quoted its
+actual value. Scripted edits must read and write bytes.
+
+**Gates at `b08b20f1`:** typecheck clean across the workspace, unit
+**3191/3191**, pocketflow **245/245**, compose parses, and the built bundle
+proved by running it against a deliberately unreachable database — it loads,
+validates its configuration and fails at `connect ECONNREFUSED`, which is the
+first thing it should not be able to do.
+
+**Not done:** inline mode and polls are unreachable (G-2, G-3); the `/hook`
+endpoint and the update webhook have never run against the real platform,
+because a bot token is the owner’s to issue.
+
 ### 2026-09-19 — one production migration (D-242), and why `letscube-bot-gateway` was not deployed
 
 **No application was deployed.** `letscube-web` keeps the baseline below; the bot

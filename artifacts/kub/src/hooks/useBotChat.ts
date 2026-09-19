@@ -28,15 +28,77 @@ import type { BotCommand } from "@/lib/botChatSurfaces";
  * could not be read look identical — an ordinary composer — and that is the
  * correct degradation: the alternative is an error about bots on the screen of
  * somebody talking to a person.
+ *
+ * ── Why the username comes from here and not from the chat list (D-244) ────
+ *
+ * In a group, a command only reaches a bot when it names it:
+ * `private.bot_can_receive_message` admits `/shift@shiftbot` and refuses
+ * `/shift`. The name therefore has to be right, and it has to belong to the
+ * bot whose commands are on the screen. `useChats` already hangs a `bots` array
+ * on every chat, but it is a snapshot of the sidebar's last fetch and its
+ * entries are sorted by display name — pairing a command with the first of them
+ * would address the wrong bot in a group that holds two, and a rename between
+ * the two fetches would address a name that no longer matches. So the
+ * membership read asks for the bot in the same row as the command's owner, and
+ * the two cannot disagree.
+ *
+ * A membership whose bot row does not come back is reported as no bot rather
+ * than as a bot without a name. It cannot happen for a chat member — the `bots`
+ * SELECT policy admits anyone sharing a live chat with the bot, which is the
+ * same reader the membership policy admits — and the alternative is a command
+ * menu that offers what nothing can deliver.
+ *
+ * ── Which bot, when a group holds more than one ───────────────────────────
+ *
+ * One of them, and always the same one: the one that joined first. The composer
+ * has room for a single bot's menu, so this is a choice the product has to make
+ * either way; before this change it was `limit(1)` with no ordering, which is
+ * whichever row Postgres handed back that time. A group with two bots still
+ * only reaches one of them from the menu — recorded rather than fixed here,
+ * because a per-bot menu is a different surface.
  */
 export interface BotChatState {
   readonly botId: string | null;
+  /** `bots.username` of that same bot, for addressing it (D-244). */
+  readonly botUsername: string | null;
   readonly commands: readonly BotCommand[];
   /** False until both reads have settled, so nothing flickers into place. */
   readonly ready: boolean;
 }
 
-const EMPTY: BotChatState = { botId: null, commands: [], ready: false };
+const EMPTY: BotChatState = { botId: null, botUsername: null, commands: [], ready: false };
+const NO_BOT: BotChatState = { botId: null, botUsername: null, commands: [], ready: true };
+
+/** How many memberships are read before one is chosen. A group holds few. */
+const MEMBERSHIP_READ_LIMIT = 16;
+
+interface BotMembershipRow {
+  readonly botId: string;
+  readonly username: string;
+  readonly joinedAt: string;
+}
+
+/**
+ * A row of `chat_bot_members` with its bot embedded, or null.
+ *
+ * PostgREST answers a to-one embed as an object; some versions answer an array
+ * of one. Both are read, the way `fetchChatBots` reads them, because guessing
+ * wrong turns every bot chat into a chat without a bot.
+ */
+function readMembership(value: unknown): BotMembershipRow | null {
+  if (typeof value !== "object" || value === null) return null;
+  const row = value as Record<string, unknown>;
+  const embedded = Array.isArray(row.bot) ? row.bot[0] : row.bot;
+  const bot = typeof embedded === "object" && embedded !== null ? (embedded as Record<string, unknown>) : null;
+  const botId = typeof row.bot_id === "string" ? row.bot_id : null;
+  const username = typeof bot?.username === "string" ? bot.username : null;
+  if (!botId || !username) return null;
+  return {
+    botId,
+    username,
+    joinedAt: typeof row.joined_at === "string" ? row.joined_at : "",
+  };
+}
 
 export function useBotChat(chatId: string): BotChatState {
   const [state, setState] = useState<BotChatState>(EMPTY);
@@ -60,25 +122,40 @@ export function useBotChat(chatId: string): BotChatState {
       };
       const { data, error } = await supabase
         .from("chat_bot_members")
-        .select("bot_id")
+        .select("bot_id,joined_at,bot:bots(username)")
         .eq("chat_id", chatId)
         .is("removed_at", null)
-        .limit(1);
+        .limit(MEMBERSHIP_READ_LIMIT);
       if (cancelled) return;
       if (error) {
         console.error("useBotChat membership error:", error);
-        setState({ botId: null, commands: [], ready: true });
+        setState(NO_BOT);
         return;
       }
-      const rows = Array.isArray(data) ? (data as { bot_id?: unknown }[]) : [];
-      const botId = typeof rows[0]?.bot_id === "string" ? rows[0].bot_id : null;
-      if (!botId) {
-        setState({ botId: null, commands: [], ready: true });
+      const rows = (Array.isArray(data) ? data : [])
+        .map(readMembership)
+        .filter((row): row is BotMembershipRow => row !== null)
+        // The one that joined first, and its username as a tie-break so that
+        // two memberships written in the same transaction still order the same
+        // way on every load.
+        .sort((left, right) =>
+          left.joinedAt === right.joinedAt
+            ? left.username.localeCompare(right.username, "en-US")
+            : left.joinedAt.localeCompare(right.joinedAt),
+        );
+      const membership = rows[0];
+      if (!membership) {
+        setState(NO_BOT);
         return;
       }
-      const commands = await loadBotCommands(botId);
+      const commands = await loadBotCommands(membership.botId);
       if (cancelled) return;
-      setState({ botId, commands, ready: true });
+      setState({
+        botId: membership.botId,
+        botUsername: membership.username,
+        commands,
+        ready: true,
+      });
     })();
 
     return () => {

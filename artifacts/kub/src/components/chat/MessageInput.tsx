@@ -64,6 +64,7 @@ import {
   botCommandDraft,
   botCommandQuery,
   matchBotCommands,
+  type BotChatAddressing,
   type BotCommand,
 } from "@/lib/botChatSurfaces";
 import { locationMessageText, type AttachIncoming, type AttachSendRequest } from "@/lib/attachSheet";
@@ -145,11 +146,15 @@ interface MessageInputProps {
    * Absent in every other chat, so nothing about an ordinary composer changes:
    * no menu button, no «/» list, no «Запустить». `commands` is what the bot
    * registered with `setMyCommands`, read from `public.bot_commands`;
-   * `needsStart` is `botChatNeedsStart` decided by the chat, not here.
+   * `needsStart` is `botChatNeedsStart` decided by the chat, not here, and so
+   * is `addressing` — the chat's type and the bot's username, which together
+   * decide whether a chosen command has to name the bot to be delivered at all
+   * (D-244). Neither decision is remade in the composer.
    */
   bot?: {
     commands: readonly BotCommand[];
     needsStart: boolean;
+    addressing: BotChatAddressing;
     onStart: () => void | Promise<void>;
   } | null;
 }
@@ -261,16 +266,19 @@ export function MessageInput({
   const commandMatches =
     commandMenuVariant === "typed" ? matchBotCommands(botCommands, commandQuery) : botCommands;
 
+  const botAddressing = bot?.addressing;
   const chooseCommand = useCallback(
     (command: BotCommand) => {
       // Fills the field and stops. `botCommandDraft` leaves the trailing space
       // an argument would go after; the caret follows the text, so the next
-      // keystroke continues the command rather than landing before it.
-      setText(botCommandDraft(command));
+      // keystroke continues the command rather than landing before it. In a
+      // group it also writes the bot's name into the command, which is the only
+      // form `private.bot_can_receive_message` delivers (D-244).
+      setText(botCommandDraft(command, botAddressing ?? { chatType: null, botUsername: null }));
       setShowCommands(false);
       setTimeout(() => textareaRef.current?.focus(), 0);
     },
-    [],
+    [botAddressing],
   );
 
   const startBot = useCallback(async () => {

@@ -83,11 +83,13 @@ async function open(page: Page, theme: "dark" | "light", chatId: string, pressMi
     rest: ({ resource, method }) => {
       if (method !== "GET") return undefined;
       if (resource === "chat_bot_members") {
+        // `useBotChat` embeds the bot since D-244; a row without it is a chat
+        // with no bot, so the capture would draw an ordinary composer.
         return {
           status: 200,
           body: [
-            { chat_id: CHAT_STARTED, bot_id: BOT_ID, removed_at: null },
-            { chat_id: CHAT_FRESH, bot_id: BOT_ID, removed_at: null },
+            { chat_id: CHAT_STARTED, bot_id: BOT_ID, joined_at: AT, removed_at: null, bot: { username: BOT.username } },
+            { chat_id: CHAT_FRESH, bot_id: BOT_ID, joined_at: AT, removed_at: null, bot: { username: BOT.username } },
           ],
         };
       }

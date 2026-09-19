@@ -40,7 +40,8 @@ export const MESSAGES_PREVIEW = "GET messages:preview";
  *
  * `public.chat_bot_members` is read by the sidebar for every visible chat at
  * once (D-236's mark: `chat_id=in.(…)`, embedding `bots`) and by the open
- * conversation for itself (`useBotChat`: `chat_id=eq.<id>`, `select=bot_id`).
+ * conversation for itself (`useBotChat`: `chat_id=eq.<id>`, embedding the one
+ * bot it is about).
  * Measured on 2026-09-19: with both in one bucket, opening a chat counted as a
  * whole-list refetch, because `useBotChat` had always asked and the list's
  * request had just been added to the refetch set.

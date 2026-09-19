@@ -15833,7 +15833,7 @@ an attachment caption, a link preview, an edited mark, a bubble carrying a
 reaction row. Each needs a look, at both 390 and 1440, in both themes, and the
 existing spec is the place to pin whatever is found.
 
-## D-235 `[ ]` A bot cannot be put in a group chat at all, and not because the list hides it
+## D-235 `[x]` A bot cannot be put in a group chat at all, and not because the list hides it
 
 **Severity:** high as a product gap. Bot Platform v1 is built, deployed and
 canary-verified; a bot that can only ever be talked to alone is a fraction of
@@ -15900,7 +15900,7 @@ Counted on production before fixing: zero such pairs exist.
 
 ---
 
-## D-236 `[ ]` A conversation with a bot looks exactly like a conversation with a person
+## D-236 `[~]` A conversation with a bot looks exactly like a conversation with a person
 
 **Severity:** medium. It is on every bot chat, and the owner's words are the test:
 «выглядит будто я в диалоге просто с человеком».
@@ -16144,3 +16144,478 @@ wiring worth its cost.
 
 A private conversation is unaffected — it has neither capsule nor rail, so the
 band stays.
+
+## D-241 `[ ]` A bot's picture cannot be set: the client and the database have the feature, the running gateway does not
+
+**Severity:** high. The whole of `b5402f7d feat(bots): let an owner give a bot a
+picture` (2026-09-04) is unreachable in production, and has been since the day it
+was written. `public.bots` holds three bots and `count(avatar_url) = 0`.
+
+**Found by an audit of the bot platform on 2026-09-19**, asked for by the owner:
+«сделай проверку системы ботов, точно ли она сейчас функционирует, нет ли багов в
+работе».
+
+**`letscube-bot-gateway` is the one application of five with Coolify auto-deploy
+switched off**, so it does not follow a push. It runs image tag
+`935a670db6ab90f289164c7e2c27faa5b5c62a35` — 2026-09-02, 599 commits behind
+`main` — read off the running container rather than trusted from a webhook. The
+avatar route was added two days later:
+
+```
+git diff --stat 935a670 origin/main -- artifacts/api-server/src/bot
+ artifacts/api-server/src/bot/managementRoutes.ts | 19 +
+```
+
+Nineteen lines, and they are the *only* difference in the gateway's own source
+between the deployed commit and `main`.
+
+**Probed live, calibrated so that «it answered» is distinguishable from
+«something answered».** Management routes authenticate inside each handler, so a
+route that exists answers 401 with the gateway's JSON envelope and a route that
+does not falls through to Express and answers 404 in HTML:
+
+```
+PATCH /bot/manage/v1/bots/<uuid>/profile             -> 401 {"ok":false,"error":{"code":"unauthorized",...
+PUT   /bot/manage/v1/bots/<uuid>/commands            -> 401 {"ok":false,"error":{"code":"unauthorized",...
+POST  /bot/manage/v1/bots/<uuid>/pause               -> 401 {"ok":false,"error":{"code":"unauthorized",...
+PATCH /bot/manage/v1/bots/<uuid>/definitelyNotARoute -> 404 <!DOCTYPE html> ... Cannot PATCH ...
+PATCH /bot/manage/v1/bots/<uuid>/avatar              -> 404 <!DOCTYPE html> ... Cannot PATCH ...
+```
+
+**Both other halves are in place**, which is what makes this a deployment defect
+and not a missing feature. In production: `public.bot_set_avatar_internal` exists
+with its ownership, state and «this bot's own file» checks; the four
+`storage.objects` policies for the `bot-avatars/` prefix exist and
+`_kub_bot_avatar_path_allowed` is granted to `authenticated` (the 2026-09-05
+repair). The deployed browser bundle carries the client half — `bot-avatars/`,
+`/bot/manage/v1` and `Не удалось загрузить изображение.` are all in
+`/assets/index-lQG7DLCF.js`.
+
+**What the owner sees.** `uploadBotAvatar` uploads the prepared file to
+`media/bot-avatars/{bot id}/` and only then records it
+(`artifacts/kub/src/lib/botAvatar.ts:45-70`). The upload succeeds; the recording
+call gets a 404 whose body is HTML, so `response.json()` throws in
+`artifacts/kub/src/lib/botManagement.ts:165`, `uncertainOnAmbiguousFailure` is not
+set for `setAvatar`, and the panel says **«Не удалось связаться с сервером.
+Попробуйте снова.»** — a network sentence for a route that is simply absent. Each
+retry leaves another orphan object in the bucket. Preflight passes (the router's
+CORS middleware runs before route matching; measured `204` with
+`Access-Control-Allow-Origin: https://app.letscube.ru`), so the browser really
+does send the PATCH and really does read the 404.
+
+**Nobody has met it yet.** The gateway's logs retain its whole life
+(2026-09-02T01:24Z onward) and contain **no** 404 on `/bot/manage/v1` before the
+probes above. The feature has never been exercised in production.
+
+**Why no test caught it.** `tests/e2e/bot-management.spec.ts:416` mocks
+`PATCH .../avatar`, and `tests/unit/bot-management-ui-contract.test.mjs` reads the
+repository's own source. Both are right about `main`, and neither can see what is
+running. Nothing anywhere compares the deployed gateway's route table with the
+client's call list.
+
+**The fix is a deployment, not a patch**: deploy `letscube-bot-gateway` at a
+commit containing `b5402f7d`. Read D-242 first — it is behind this door.
+
+### 2026-09-19: the door behind it is open, the deployment is blocked on two things
+
+D-242 is fixed and verified on production, so the database half now answers with
+named refusals and the gateway's role can reach the function at all. This entry
+stays open: nothing was deployed, and the calibrated probe still reads exactly as
+it did this morning, with each route asked by its own method —
+
+```
+PATCH profile              401 {"ok":false,"error":{"code":"unauthorized",...
+PUT   commands             401 {"ok":false,"error":{"code":"unauthorized",...
+POST  pause                401 {"ok":false,"error":{"code":"unauthorized",...
+PATCH avatar               404 <!DOCTYPE html> ...
+PATCH definitelyNotARoute  404 <!DOCTYPE html> ...
+```
+
+Running container: `twezs89u2m6d6ln6c0rpaqxe:935a670db6ab…c62a35`, `Up 2 weeks
+(healthy)`, read off `docker ps` rather than from Coolify.
+
+**Blocker 1 — no credential on this instance can trigger a deployment.**
+`personal_access_tokens` in `coolify-db` holds exactly one row, abilities
+`["read"]`. Coolify's deploy endpoint needs a write/deploy ability, auto-deploy
+is off (`application_settings.is_auto_deploy_enabled = false`, confirmed rather
+than assumed), and `php artisan` in the `coolify` container offers no deploy
+command. Every past deployment of this application was made through the API
+(`application_deployment_queues.is_api = true`), including `935a670` on
+2026-09-02, with a token that no longer exists here. Creating one is an owner
+action.
+
+**Blocker 2 — the application does not build `main`.** `applications.git_branch`
+for `twezs89u2m6d6ln6c0rpaqxe` is **`codex/bot-platform`**. Deploying it «at
+`main`» would mean changing the branch the application follows, which is a
+configuration change with a life beyond this defect, and nobody has asked for it.
+
+**And it does not need to be changed.** `origin/codex/bot-platform` is
+`33a3bb83` (2026-09-12), an ancestor of `main`, and it already contains
+`b5402f7d`. Everything that enters this image is byte-identical between that
+commit and `main`: `artifacts/api-server/src/bot` and `docs/deploy` have no
+diff at all, and inside `artifacts/api-server` the only differences are
+`src/index.ts`, three worker files and one extra esbuild entry point — none of
+them reachable from `src/botGatewayIndex.ts`, which imports only `./bot/*` and
+`./lib/logger`. `artifacts/api-server/package.json` is identical, so the bundled
+dependency versions are too. A deployment of the application exactly as
+configured therefore delivers the same route table as `main` would, with the
+smaller build delta.
+
+For the record, what deploying `main` itself would additionally build (not run):
+17 commits touch `artifacts/api-server` since `935a670` — the 19-line avatar
+route plus the voice reconciler, the media variants worker and the preview
+backfill, and a `pnpm-lock.yaml` grown by 139 lines. None of it is reachable
+from the gateway entry; all of it has to compile for the image to build.
+
+---
+
+## D-242 `[x]` Every refusal from `bot_set_avatar_internal` becomes a 500, and the reason is thrown away
+
+**Severity:** medium, and **latent behind D-241** — it cannot be met until the
+avatar route is deployed, and it will be met on the first refusal after that.
+
+**Found while auditing D-241 on 2026-09-19.** `bot_set_avatar_internal` is the
+only one of the nineteen bot management functions in production that raises
+`P0001`:
+
+```
+proname                                  | errcodes
+bot_set_avatar_internal                  | P0001
+bot_update_profile_internal              | 22023, 42501, 55000, P0002
+bot_pause_internal                       | 22023, 42501, 55000, P0002
+bot_management_webhook_set_internal      | 22023, 42501, 55000, P0002
+bot_developer_add_internal               | 22023, 23505, 42501, 55000, P0002
+... every other one carries the mapped set
+```
+
+`P0001` is what a bare `raise exception` gets when no `using errcode` is given.
+`databaseError` in `artifacts/api-server/src/bot/managementRoutes.ts:389-416` maps
+`22023`/`22P02` to `validation_failed`, `42501` to `forbidden` or `not_found`,
+`23505`/`55000` to `conflict`, `P0002` to `not_found`, and everything else to
+`internal_error` — HTTP 500.
+
+So all five of that function's refusals — `invalid_request`, `forbidden` (a
+developer rather than the owner), `not_found`, `bot_deleted`, and `invalid_avatar`
+(a URL that is another bot's file) — will arrive as **500 internal_error**. The
+client has no sentence for it either: `internal_error` is not a key of
+`ERROR_MESSAGES` in `artifacts/kub/src/lib/botManagement.ts:113-123`, so it falls
+back to `network_error`, and a permission problem is reported as
+«Не удалось связаться с сервером».
+
+That is exactly what `b5402f7d`'s own commit message set out to prevent — *«a
+route that forwards junk turns a clear rejection into a 500 and loses the
+reason»* — achieved on the schema side and missed on the database side.
+
+**The fix is one migration** giving those five `raise exception` lines the
+SQLSTATEs the rest of the family already uses: `42501` for the ownership refusal,
+`P0002` for a missing bot, `55000` for a deleted one, `22023` for a foreign URL.
+Nothing in the client changes.
+
+### Fixed on 2026-09-19 by `20260919030000_a_refusal_to_set_a_picture_says_why.sql`
+
+Applied to production as `supabase_admin` — `postgres` neither owns this function
+nor, as it turned out, could execute it — after a fresh verified schema backup
+and a rehearsal that called every path on production inside a rolled-back
+transaction. The five refusals now carry `22023`, `42501`, `P0002`, `55000`,
+`22023`. Measured, not inspected; as `supabase_admin` and again as the role the
+gateway actually resolves to:
+
+| Path | before | after |
+| --- | --- | --- |
+| `invalid_request` | `P0001` | `22023` -> `validation_failed` 400 |
+| `forbidden` | `P0001` | `42501` -> `not_found` 404 |
+| `not_found` | `P0001` | `P0002` -> `not_found` 404 |
+| `bot_deleted` | `P0001` | `55000` -> `conflict` 409 |
+| `invalid_avatar` | `P0001` | `22023` -> `validation_failed` 400 |
+
+**Two things this entry had wrong, both found by measuring instead of reading.**
+
+**1. `42501` becomes `not_found`, not `forbidden`.** This entry reads
+`databaseError`'s `switch` and stops there. Four lines above it,
+`if (options.actorScoped && (code === "42501" || code === "P0002")) return
+not_found` gets there first, and `mutationRoute` defaults to
+`{ actorScoped: true }` while `/bots/:botId/avatar` passes no options. So the
+ownership refusal reaches the owner as «Бот не найден или больше недоступен.»
+That is deliberate and it is what `/bots/:botId/profile` already does with the
+identical refusal — an actor-scoped route will not tell a stranger that a bot
+exists. `42501` is still the right code, because there is no SQLSTATE that
+produces «you are not the owner» on such a route; the sentence could only come
+from the gateway opting out of actor scoping, which is not a migration's call.
+
+**2. The gateway could not call the function at all**, so none of the five would
+ever have reached a 500 — they would have arrived as a 404 with the wrong
+sentence, which is a *worse* outcome than the one this entry predicted, and it
+would have survived the fix above untouched. `20260904010000_bot_avatar.sql`
+ends with `revoke all on function public.bot_set_avatar_internal(...) from
+public, anon, authenticated` and grants EXECUTE to nobody; the function is owned
+by `supabase_admin`, so `service_role` — the role the Bot Gateway's supabase-js
+client resolves to through PostgREST — held it only by inheritance from PUBLIC
+and lost it there. Read off production before the fix:
+
+```
+proacl                                {supabase_admin=X/supabase_admin}
+service_role EXECUTE                  false      (true on all 18 siblings)
+postgres     EXECUTE                  false
+call as service_role, every path ->   42501 permission denied for function bot_set_avatar_internal
+```
+
+This is the 2026-09-05 `_kub_bot_avatar_path_allowed` repair again: same
+migration, one function over, same mistake of revoking from PUBLIC without
+granting to anyone. The migration adds `grant execute … to service_role` and
+nothing else; `anon`, `authenticated` and PUBLIC stay out and the self-check
+refuses the migration if any of them can execute it. After it, the same call as
+`service_role` runs the function's own checks, and the success path returns
+`{"ok": true, …}` — rolled back, since a real write needs a real owner.
+
+**The general lesson.** A function's SQLSTATEs are only half of «the caller is
+told what happened». The other half is whether the caller may call it, and a
+`revoke … from public` in a migration that never grants is invisible to every
+test in this repository, to `pg_get_functiondef`, and to a reviewer reading the
+function body. It shows up in `proacl` and in one call as the real role.
+
+**The `not_found` branch is unreachable through real data**, and was rehearsed
+anyway. `bot_owners_bot_id_fkey` is ON DELETE RESTRICT, so an owner row cannot
+outlive its bot; a bot that does not exist has no owner row and is refused as
+`forbidden` one check earlier. The rehearsal stood the FK triggers down for a
+single insert inside the rolled-back transaction to reach the branch. Both
+answers map to the same 404, so nothing was reordered to fix it.
+
+Rehearsal and rollback are recorded beside the migration in
+`.migration-backup/supabase/migrations/`. The rehearsal splices the migration's
+own text verbatim, so it cannot drift from what was applied.
+
+---
+
+## D-243 `[x]` A bot in a group takes the message field away from everyone who has not written there
+
+**Severity:** high. It removes the composer — field, attach and recorder — from a
+group member, and it became reachable for the first time on 2026-09-19, when
+`chat_bot_add` gave people a way to put a bot in a group (D-235).
+
+**Found by an audit of the bot platform on 2026-09-19.**
+
+**Where it lives.** `useBotChat` (`artifacts/kub/src/hooks/useBotChat.ts:60-66`)
+reads `chat_bot_members` for whatever chat is open and **never looks at the
+chat's type**. `ChatWindow` hands what it finds to the composer
+(`artifacts/kub/src/components/chat/ChatWindow.tsx:185-187` and `1714-1726`), and
+`botChatNeedsStart` (`artifacts/kub/src/lib/botChatSurfaces.ts:346-349`) answers
+true whenever the chat holds a bot, the history is complete, and I have never
+written in it. `MessageInput.tsx:1406-1415` then replaces the whole composer with
+the single «Запустить» button.
+
+Every one of those decisions is right for the conversation it was written for — a
+private chat with a bot, where «you have not written yet» really does mean «you
+have not started this bot». In a group it means «you have been reading».
+
+**Measured**, with a control so the difference is attributable. Fixture only, on
+the DEV host; no production screen was rendered and no production data fetched:
+
+```
+CONTROL  group, no bot, I have never written  -> composer present, no bot surfaces
+         group, bot,    I have never written  -> «Запустить» shown;
+                                                 composer fields: 0, recorder buttons: 0
+         group, bot,    I have written        -> composer back, command menu offered
+```
+
+**The consequence.** A member of a group that has a bot, who has not yet posted,
+cannot type, attach or record. The only control offered is «Запустить», which
+sends `/start` **into the group** — see D-244 for what becomes of it.
+
+**Do not fix it by hiding the button.** The same read decides three other things
+(the command menu, the typed `/` list, and the command load itself), and all four
+want the same missing fact: whether this is a *conversation with* a bot or a room
+that *contains* one. `chatBotPartner` in `artifacts/kub/src/lib/chatBots.ts:118-122`
+already answers exactly that question, and answers `null` for a group; the
+composer path simply never asks it.
+
+**Fixed on 2026-09-19.** The missing fact is the chat's type, and it is now read
+where the rule is rather than where the button is. `botChatNeedsStart`
+(`artifacts/kub/src/lib/botChatSurfaces.ts`) takes `chatType` and answers false
+unless `isBotPartnerChat` — the same line `chatBotPartner` draws in
+`chatBots.ts`, restated in a module that imports nothing so that a `node --test`
+process can reach it. `ChatWindow` hands it `chat?.type ?? null`. Nothing else
+about the composer changed: the command menu, the typed «/» list and the command
+load all stay in a group, where D-244 is what makes them work.
+
+Two consequences worth naming. A chat whose type is not in the store yet answers
+`null` and therefore keeps its composer — the unknown state is the one that costs
+nothing. And «Запустить» is now unreachable outside a private chat, which is the
+whole reason `BOT_START_COMMAND` is safe as a bare `/start`: `chat.type =
+'private'` short-circuits `private.bot_can_receive_message` entirely. The
+constant carries that reasoning, and a unit test asserts the guard rather than
+trusting the intention.
+
+**Proved by mutation, twice.** Dropping the `isBotPartnerChat` clause from
+`botChatNeedsStart` turns 2 of 31 unit tests and 3 of 7 mounted tests red — the
+three group tests, with the private and the no-bot controls still green. Making
+`ChatWindow` claim every chat is private turns the same three red, which pins
+the wiring rather than the rule. `tests/unit/bot-chat-surfaces.test.mts` and
+`tests/e2e/bot-in-group.spec.ts`.
+
+**Photographed**, since the composer is the visible half: before and after at
+1440 and 390 in both themes, in the ignored tree — `output/bot-shots/before/`
+and `output/bot-shots/after/`, `d243-composer-*.png`.
+
+---
+
+## D-244 `[x]` In a group, the bot's own command menu offers commands the bot cannot receive
+
+**Severity:** medium. Nothing breaks visibly — the message sends, appears in the
+conversation, and is simply never delivered to the bot. Reachable since
+2026-09-19 for the same reason as D-243.
+
+**Found by an audit of the bot platform on 2026-09-19.**
+
+**The restriction, read off production.** `private.bot_can_receive_message`
+admits a message under a `restricted` membership — the only kind `chat_bot_add`
+creates — only when it is the bot's own message, or its text begins
+`/command@username` addressed to this bot, or its text mentions `@username`, or
+it replies to one of the bot's own messages. A bare `/command` matches none of
+them. (`chat.type = 'private'` short-circuits the whole branch, which is why this
+has never mattered before.)
+
+**What the interface sends.** `botCommandDraft`
+(`artifacts/kub/src/lib/botChatSurfaces.ts:261-274`) fills the field with
+`/command ` and `BOT_START_COMMAND` is the bare string `/start`; neither carries
+the `@username` the database requires. Measured in the group fixture:
+
+```
+choose «shift» from the group's bot menu -> composer holds "/shift "
+```
+
+So in a group the product offers a bot's commands, sends them, shows them in the
+conversation, and the bot hears none of them. The «Запустить» button of D-243 has
+the same fate.
+
+**The shape of the fix** is to address the command to the bot when the chat is a
+group — `/shift@shiftbot` — which is what Telegram does and what this project's
+own delivery rule was plainly written for. It is **not** to widen
+`bot_can_receive_message`: that rule is the privacy contract the sentence «Бот
+получит только обращённые к нему сообщения» promises, and `BOT_VISIBILITY_NOTE`
+is read off it.
+
+**Fixed on 2026-09-19, after measuring the rule rather than reading it.** The
+live `private.bot_can_receive_message` was read off production read-only and is
+identical to the migration backup; its two regexes were then run there against
+14 candidate strings. What they admit: `/shift@shiftbot`, with or without an
+argument after the space, in any case (the content is lowered first), and with a
+command name of up to 32 characters — the same bound `bot_commands.command`
+carries. What they refuse: a bare `/shift` with or without an argument; anything
+with leading whitespace, since `^` anchors at position 0 (the composer trims, so
+that is already true of everything it sends); and `@botone` as an address for
+`botonetwo`, which the trailing `([[:space:]]|$)` stops.
+
+`botCommandDraft` now takes the two facts that decide the form — the chat's type
+and the bot's username — and `botCommandAddress` is the rule. In a group the menu
+and the typed «/» list both insert `/shift@shiftbot `; in a private chat they
+insert `/shift `, because the private branch short-circuits the rule and an
+address there would be noise in front of a bot whose own parser may not strip
+it. `bot_can_receive_message` is untouched, as this entry said it must be.
+
+**The two cases the fix had to answer.** A group holding two bots: the composer
+has room for one menu, so `useBotChat` reads the bot's username from the *same*
+`chat_bot_members` row as the `bot_id` whose commands it loads, and chooses the
+membership that joined first instead of whichever row Postgres handed a
+`limit(1)` with no ordering. Addressing `@dutybot` with a command only
+`@shiftbot` knows would be this same silence with a plausible string on screen.
+A renamed bot: the name comes from that read rather than from `chat.bots`, which
+is the sidebar's snapshot, so it is exactly as fresh as the commands beside it;
+a membership whose bot row does not come back is reported as no bot at all
+rather than as a bot without a name.
+
+**Proved by mutation, twice.** Returning `botCommandDraft` to the bare command
+turns 5 of 31 unit tests and 3 of 7 mounted tests red; making `ChatWindow` tell
+the composer that every chat is private turns the same three red. The private
+control stays green in both. `tests/unit/bot-chat-surfaces.test.mts` reruns the
+database's own regexes against every string it asserts, and
+`tests/e2e/bot-in-group.spec.ts` reads what the message POST carried rather than
+only what the field held.
+
+**Photographed:** `output/bot-shots/{before,after}/d244-*.png` at 1440 and 390 in
+both themes — `/shift` before, `/shift@shiftbot` after.
+
+**Still one bot per composer.** A group with two bots offers only the first
+one's commands, which this fix makes deterministic and correctly addressed but
+does not widen. A per-bot menu is a different surface and is not filed here.
+
+---
+
+## D-245 `[ ]` The documented Bot API documentation entrypoint returns the release catalogue's 404
+
+**Severity:** low. `https://app.letscube.ru/bots/docs` serves the page correctly;
+only the `api.letscube.ru` convenience address is dead. It is filed because a
+runbook states the redirect as current behaviour and puts it in its verification
+list, so the next operator will check it and find it false.
+
+**Found by an audit of the bot platform on 2026-09-19.** Measured:
+
+```
+curl -I https://api.letscube.ru/bots/docs   -> 404, Server: nginx   (expected: 301 to app.letscube.ru)
+curl -I https://api.letscube.ru/bots/docs/  -> 404, Server: nginx
+curl    https://app.letscube.ru/bots/docs   -> 200, the page
+```
+
+**Why.** `docs/deploy/docker-compose.coolify.yml:30-39` declares the
+priority-`210` router and its `redirectregex` middleware, but the deployed
+Coolify service never received those labels. The running gateway container
+carries only the priority-`200` rule
+`Host(api.letscube.ru) && (Path(/bot/v1) || PathPrefix(/bot/v1/) || Path(/bot/manage/v1) || PathPrefix(/bot/manage/v1/))`;
+no container on the host has a label mentioning `bots/docs`, and neither does
+Traefik's file provider under `/data/coolify/proxy`. The request therefore falls
+through to the `api.letscube.ru` catch-all, which is the release-catalogue nginx.
+
+`docs/operations/bot-gateway.md` states the redirect twice as current behaviour
+and lists `curl -fsSI https://api.letscube.ru/bots/docs` among its verification
+commands; that step has been red for the whole life of the deployment.
+
+## D-246 `[ ]` At 390 the recorder’s hint paints over the bot command menu
+
+**Severity:** medium. The menu is the only place a person meets a bot’s
+commands, and at 390 it is unreadable the first time they open it — which is
+the only time the hint is shown.
+
+**Found on 2026-09-19** while photographing D-244’s fix, by the agent that
+fixed it. Not caused by that work: **reproduced in a private bot chat, where
+it predates the change.** D-244 only makes it reachable in a group as well.
+
+**Measured, not eyeballed.** At 390 the command menu’s box is top 682, bottom
+780; the recorder hint is 709–763 — entirely inside it. What is left of the
+menu is two ⚡ glyphs and a sliver of `/` down the left edge. The screenshot is
+`output/bot-shots/after/d244-menu-390-dark.png`, and the private-chat control
+is `output/bot-shots/probe/private-390.png` (both git-ignored).
+
+**It is a paint defect and nothing more**, which is worth saying because it
+looks worse than it is: the composer’s hints are Radix popovers portalled to
+the body at `z-50` with `pointer-events-none`, so the menu underneath is still
+clickable. `ChannelRail.tsx:1061-1068` already documents the same mechanism,
+which is the second time this portal layer has painted over something.
+
+**Not a proposed fix, because this register has had three entries in one day
+whose proposed fix the system refused.** Two directions worth measuring: give
+the command menu a stacking context above the hint layer, or suppress the
+recorder hint while the menu is open — the second is probably right, since two
+overlays competing for the same corner is the actual problem and a z-index
+race only decides which of them wins.
+
+**Also worth knowing:** the D-244 evidence at 390 is therefore *not* usable as
+proof of that fix — the command text it was meant to show is hidden. The 1440
+captures show it, and the field capture shows `/shift@shiftbot` at both widths.
+
+---
+
+## D-247 `[ ]` A disabled or deleted bot still has its commands offered
+
+**Severity:** low as damage, but it is exactly D-244’s shape: the product
+offers something the platform will refuse.
+
+**Found on 2026-09-19** by the agent fixing D-244, and deliberately left alone
+there because fixing it changes behaviour beyond that defect.
+
+`useBotChat` does not filter on `bots.state`, while `private.bot_can_receive_message`
+requires `state = 'active'`. So a paused or deleted bot keeps its command menu
+in the composer, the commands send, and nothing arrives. `fetchChatBots`
+**does** filter state for the sidebar, so the two readers of the same fact
+disagree — which is the part that makes this worth an entry rather than a
+comment.
+
+---

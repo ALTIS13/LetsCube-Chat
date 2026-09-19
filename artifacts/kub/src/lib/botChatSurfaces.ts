@@ -257,9 +257,73 @@ export function parseBotCommands(rows: unknown): readonly BotCommand[] {
   return parsed;
 }
 
-/** «/ping», as it is written in the menu and in the field. */
+/** «/ping», as the menu writes it. The field may need more — see below. */
 export function botCommandSlash(command: BotCommand): string {
   return `/${command.command}`;
+}
+
+/**
+ * The two facts that decide whether a command has to name the bot (D-244).
+ *
+ * Both come from the chat that is open: `chats.type`, and the username of the
+ * bot whose commands are being offered. The username is deliberately read
+ * beside the commands rather than taken from the chat list the sidebar already
+ * holds — a bot that has been renamed since that list was fetched would be
+ * addressed under a name the delivery rule no longer matches, and the failure
+ * is silent.
+ */
+export interface BotChatAddressing {
+  readonly chatType: string | null | undefined;
+  /** `bots.username`, of the bot these commands belong to. */
+  readonly botUsername: string | null | undefined;
+}
+
+/**
+ * Whether this is a conversation **with** the bot rather than a room that
+ * merely contains one — the same line `chatBotPartner` draws in `chatBots.ts`,
+ * restated here because this module imports nothing.
+ *
+ * It is the fact four surfaces were missing until 2026-09-19, when
+ * `chat_bot_add` first made a bot in a group possible: the «Запустить» screen,
+ * the command menu, the typed «/» list and the command load all read «this chat
+ * holds a bot» and acted as though it read «this chat is a bot».
+ */
+export function isBotPartnerChat(chatType: string | null | undefined): boolean {
+  return chatType === "private";
+}
+
+/**
+ * «@shiftbot», or nothing at all.
+ *
+ * Read off `private.bot_can_receive_message`, and measured against the live
+ * function on 2026-09-19 rather than inferred from it. A membership created by
+ * `chat_bot_add` is always `restricted` — `privacy_mode` defaults to it and
+ * `chat_bot_members_visibility_approval_check` forbids `full` without an
+ * approver — and the restricted branch admits a message only when
+ *
+ *   `lower(content) ~ '^/[a-z][a-z0-9_]{0,31}@' || username || '([[:space:]]|$)'`
+ *
+ * or the text mentions `@username`, or it replies to the bot's own message.
+ * A bare `/shift` matches none of the three. `chat.type = 'private'`
+ * short-circuits the whole branch, which is why a private chat addresses
+ * nothing: there `/shift@shiftbot` would only be noise in front of a bot whose
+ * own parser may not strip it.
+ *
+ * What the regex tolerates, measured: any argument after a space, any case
+ * (the content is lowered first), and a username that is a prefix of another
+ * bot's — `([[:space:]]|$)` ends the match. What it refuses: leading
+ * whitespace, since `^` anchors at position 0. The composer trims before it
+ * sends, so that is already true of everything it produces.
+ *
+ * An unknown username answers «» rather than inventing one. It cannot happen
+ * for a chat member — the `bots` SELECT policy admits anyone sharing a live
+ * chat with the bot, which is the same reader the membership policy admits —
+ * and `useBotChat` reports no bot at all when the row does not come back.
+ */
+export function botCommandAddress(addressing: BotChatAddressing): string {
+  if (isBotPartnerChat(addressing.chatType)) return "";
+  const username = addressing.botUsername?.trim();
+  return username ? `@${username}` : "";
 }
 
 /**
@@ -268,9 +332,12 @@ export function botCommandSlash(command: BotCommand): string {
  * A trailing space, and no send: Telegram's menu fills the composer and leaves
  * the person to add an argument or press send. Sending on the choice would make
  * every command that takes an argument unusable from the menu.
+ *
+ * In a group the command carries the bot's name, because otherwise it is sent,
+ * shown in the conversation, and never delivered (D-244).
  */
-export function botCommandDraft(command: BotCommand): string {
-  return `${botCommandSlash(command)} `;
+export function botCommandDraft(command: BotCommand, addressing: BotChatAddressing): string {
+  return `${botCommandSlash(command)}${botCommandAddress(addressing)} `;
 }
 
 /**
@@ -312,13 +379,26 @@ export function matchBotCommands(
 // Opening a bot, and starting it (D-127)
 // ---------------------------------------------------------------------------
 
-/** What «Запустить» sends. Telegram's «Start», and the bot's own convention. */
+/**
+ * What «Запустить» sends. Telegram's «Start», and the bot's own convention.
+ *
+ * Unaddressed, and that is safe for exactly one reason: `botChatNeedsStart`
+ * offers the button in a private chat and nowhere else (D-243), and a private
+ * chat short-circuits `private.bot_can_receive_message` entirely. Bring the
+ * button to a group and this string has to go through `botCommandAddress`
+ * first, or the bot never hears the start it is being started with.
+ */
 export const BOT_START_COMMAND = "/start";
 export const BOT_START_LABEL = "Запустить";
 
 export interface BotChatStartInput {
   /** Whether this chat holds a bot at all. A chat without one never starts. */
   readonly hasBot: boolean;
+  /**
+   * `chats.type`. «Запустить» belongs to a conversation with a bot and nowhere
+   * else — see `isBotPartnerChat` and D-243.
+   */
+  readonly chatType: string | null | undefined;
   readonly currentUserId: string | null;
   readonly messages: readonly { readonly user_id: string | null }[];
   /**
@@ -337,14 +417,21 @@ export interface BotChatStartInput {
 /**
  * Whether the composer is replaced by one «Запустить».
  *
- * True only while the person has never written in a chat that holds a bot and
- * the whole history is loaded. A bot talking first — a greeting, a keyboard —
- * does not count as having started it, which is exactly Telegram's behaviour
- * and the reason this looks for the reader's own `user_id` rather than for an
- * empty conversation.
+ * True only in a **private chat with a bot**, while the person has never
+ * written in it and the whole history is loaded. A bot talking first — a
+ * greeting, a keyboard — does not count as having started it, which is exactly
+ * Telegram's behaviour and the reason this looks for the reader's own `user_id`
+ * rather than for an empty conversation.
+ *
+ * The chat's type is load-bearing and was missing until D-243. «I have not
+ * written here» means «I have not started this bot» in a conversation with one
+ * and «I have been reading» in a group, and a group member who has been reading
+ * lost the message field, the attach button and the recorder to a button that
+ * sent `/start` into the room.
  */
 export function botChatNeedsStart(input: BotChatStartInput): boolean {
-  if (!input.hasBot || !input.currentUserId || !input.historyComplete) return false;
+  if (!input.hasBot || !isBotPartnerChat(input.chatType)) return false;
+  if (!input.currentUserId || !input.historyComplete) return false;
   return !input.messages.some((message) => message.user_id === input.currentUserId);
 }
 
