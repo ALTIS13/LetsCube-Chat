@@ -640,6 +640,26 @@ its own `sw.js build 6240c6270d61df0a` line. The migration behind it
 `UPDATE 10`) went in between the two client commits and is recorded under
 Priority 2.
 
+**All five applications were then surveyed the same way**, because a `failed`
+row turned out to be no evidence either way (the rule is now written into
+`CLAUDE.md` §15: Coolify decides whether a build is needed *inside* the step
+that clones, so the address fault marks applications failed that would not have
+built anything, and a build skipped by `watch_paths` leaves the old tag in
+place). The running image tag against
+`git log <deployed sha>..HEAD -- <that app's watch paths>`:
+
+| app | running | verdict |
+|---|---|---|
+| `letscube-web` | `164887bb` | current |
+| `letscube-worker` | `7325634c` → **redeployed to `164887bb`** (485, `finished`) | was missing `6c63e132`, the media preview backfill repair — a real staleness behind a harmless-looking `failed` row |
+| `letscube-releases` | `3fcea10c` | current; nothing has touched `docs/deploy/release-catalog/**` since |
+| `letscube-support-mail` | `7325634c` (image `:latest`, built 04:16) | one commit behind on its build inputs, and that commit is `6c63e132` — a worker file the mail bridge does not run. **Deliberately not redeployed**: a rollover of a live bridge buys nothing here |
+| `letscube-bot-gateway` | `7325634c` | same one commit, same reasoning, and its auto-deploy is `false` by design. `56c8f2b8` — the `file_id` support PocketFlow's «Отправить обратно» needs — is **already in** `7325634c`; `git log 7325634c..HEAD -- artifacts/api-server/src/bot` is empty |
+
+The api-server build at `HEAD` is proved good by the worker's own successful
+build at `164887bb`, so neither of the two applications left behind is sitting
+on a broken build it will discover during an emergency.
+
 ### 2026-09-19 — one production migration (D-208 step three): the legacy `media_path` back-fill
 
 **No application was deployed and nothing on screen changed.** `letscube-web`
