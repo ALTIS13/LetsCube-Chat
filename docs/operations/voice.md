@@ -40,7 +40,7 @@ TURN and without a certificate, which is why there is no TURN server here.
 | | |
 | --- | --- |
 | Compose project | `/srv/letscube/voice/` on `ms.letscube.ru` (not a Coolify application) |
-| Container | `letscube-voice`, `livekit/livekit-server:v1.8.4`, capped at 2 cores / 1 GiB |
+| Container | `letscube-voice`, `livekit/livekit-server:v1.13.7`, capped at 2 cores / 1 GiB |
 | Key pair | `/srv/letscube/voice/livekit.env`, mode 600, generated on the host |
 | Config | `/srv/letscube/voice/livekit.yaml` |
 | Gateway | `supabase/functions/voice-gateway/`, deployed to `…/volumes/functions/voice-gateway` |
@@ -185,6 +185,13 @@ and nobody at all may act on the owner — one step stricter than
 
 **Four things about this are measurements, and each one cost a round trip.**
 
+> **These four were measured against `v1.8.4` and the server now runs `v1.13.7`
+> (2026-09-19).** They are recorded as what was true of the version that was
+> deployed when they were taken, not as facts about the Twirp API in general —
+> a method set, a 404 shape and a build's embedded strings are all things a
+> release may change. Re-probe before relying on any of them; the negative
+> control (`NoSuchMethodZZZ`) is what makes that cheap to repeat.
+
 **`MuteRoomTrack` does not exist.** It is the name of the *request message* for
 `MutePublishedTrack`, not a method. Probed against the deployed v1.8.4 with a
 negative control (`NoSuchMethodZZZ`): `MuteRoomTrack` answers 404 `bad_route`
@@ -312,6 +319,10 @@ twenty per caller per minute and nothing else breaks.
 
 ## Proved in production, 2026-09-14
 
+**Read the correction under this list before trusting it.** Every one of the
+seven ran against the real thing and every one passed, and the feature still
+could not do the single thing it exists for.
+
 Each of these was run against the real thing rather than a stub:
 
 1. `CreateRoom` over the internal network → 200.
@@ -337,6 +348,82 @@ Each of these was run against the real thing rather than a stub:
 
 A voice channel exists on one group whose only member is a test account, left in
 place as the staging state. No real user's group has one.
+
+### The correction, 2026-09-19: none of the seven was «somebody heard somebody»
+
+Read the list again with that sentence in mind. One is `CreateRoom`. Two is a
+WebSocket reaching the SFU. Three is four webhooks moving four columns. Four and
+five are a token and its grant. Six is the SFU accepting that token. Seven is
+the reconciler clearing a ghost. Every one is about **signalling, admission or
+bookkeeping**, and the list is genuinely thorough about those — which is exactly
+what made it convincing.
+
+The owner reported on 2026-09-19 that two people in a channel hear nothing from
+each other. The cause was that `hooks/voiceRoom.ts` has never attached a
+subscribed remote track to anything that can play it: no `track.attach()`, no
+`srcObject`, no `room.startAudio()` — measured across all six commits the file
+has ever had, so there was never an attach to lose. livekit-client does not
+attach for you; the SDK's own line is that it autoplays audio tracks *when you
+attach them to audio elements*. The same absence is why per-person volume,
+deafen and output-device selection had never done anything either: all three
+operate on `attachedElements`, and there were none.
+
+`tests/e2e/voice-call.spec.ts` could not have caught it, and says so honestly in
+its own header: it replaces the transport with the DEV stand-in
+`window.__letscubeVoiceRoom`, so it proves everything between the press and the
+transport and nothing after it.
+
+**The rule this earns:** a checklist for a feature must contain the sentence a
+user would say. «Кто-то кого-то услышал» for a call, «письмо пришло» for mail,
+«файл открылся» for an upload. A list that is complete about the plumbing and
+silent about the purpose passes in full while the feature does not work at all,
+and its very thoroughness is what stops anyone looking further.
+
+## Upgraded to `v1.13.7`, 2026-09-19
+
+`v1.8.4` was an eighteen-month-old release and the client is
+`livekit-client ^2.22.3`. The gap was visible in the server's own log: the
+client opens a publisher data channel labelled `_data_track` and the server
+answered `unsupported datachannel added` once per session, 69 times in an hour,
+because that feature postdates it. Measured alongside: ~8 new RTC sessions per
+minute across two participants, median 15–16 seconds between one participant's
+own successive sessions, every close `CLIENT_REQUEST_LEAVE` and every join a
+fresh one with no resume attempted — while ICE reached connected over UDP on
+127 of 127 attempts. Kong logged **7** token requests against **92** new
+sessions, so the application was not re-joining: the client library was
+restarting its own connection on a saved token.
+
+Done on the owner's explicit instruction to move the server rather than pin the
+client down.
+
+**How it was done**, and the order matters:
+
+1. **Rehearsed first.** `v1.13.7` was pulled and run in a throwaway container in
+   its own network namespace, with the **real** `livekit.yaml` mounted read-only
+   and a throwaway key whose *name* matches `webhook.api_key` — the first
+   attempt used an unrelated key name and failed on `api_key is required to use
+   webhooks`, which is a fact about the rehearsal, not about the version. It
+   then started clean: same `portHttp 7880`, `rtc.portTCP 7881`,
+   `rtc.portUDP 7882`, the explicit node IP read as before, no deprecation and
+   no config error. The config needed **no** edit.
+2. **Backed up and verified**: `docker-compose.yml` and `livekit.yaml` copied to
+   `/srv/letscube/voice/.backup/*.20260919-171358` with a `sha256` file beside
+   them, and both copies diffed against the originals before anything changed.
+3. One line rewritten — the image tag — then `docker compose up -d`.
+4. Healthy on `v1.13.7`, `nodeIP` unchanged, ports unchanged.
+
+**Rollback** is the same shape: put `v1.8.4` back in the image line and
+`docker compose up -d`. The old image is still in the local cache, so it needs
+no network.
+
+**One consequence to expect, and it is not a fault.** LiveKit single-node keeps
+rooms in memory and `room.auto_create` is `false` here, so the restart emptied
+every room and the clients still holding a session got
+`404 requested room does not exist` on `/rtc/v1`. The system heals on the next
+join: the gateway's join path calls `CreateRoom`, which is idempotent. The
+reconciler is safe across this too — it takes the **union** of the channels the
+database believes are live and the rooms the SFU reports, so an empty room list
+never by itself deletes anything.
 
 ## Not done
 
