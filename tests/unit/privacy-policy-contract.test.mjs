@@ -86,6 +86,54 @@ test("privacy policy states retention, rights, minors, and deletion controls", (
   }
 });
 
+test("the call record clause answers what is kept, who sees it and for how long", () => {
+  // Added 2026-09-19, after the clause about the group channel's service
+  // message was removed and the private chat's call record turned out never to
+  // have been described at all. Every fragment below was measured against
+  // production read-only before it was written; this pins the three questions a
+  // privacy policy has to answer about a stored fact, so a later trim cannot
+  // quietly leave one of them out.
+  const voice = PRIVACY_POLICY.sections.find((section) => section.id === "voice-calls");
+  assert.ok(voice, "there is no voice-calls section to carry the clause");
+  const text = JSON.stringify(voice);
+
+  // What is kept. All four outcomes: a policy naming only answered calls while
+  // the database records declines would understate, which is the error the
+  // section 4 clause was deliberately not trimmed into.
+  for (const outcome of ["состоявшийся", "пропущенный", "отклонённый", "отменённый"]) {
+    assert.ok(text.includes(outcome), `the clause does not name the outcome «${outcome}»`);
+  }
+  assert.ok(
+    text.includes("идентификатор участника, начавшего звонок"),
+    "the clause does not say that who started the call is kept",
+  );
+  assert.ok(text.includes("длительность"), "the clause does not say the duration is kept");
+
+  // Who sees it, and for how long.
+  assert.ok(
+    text.includes("видна обоим участникам личного чата"),
+    "the clause does not say who can read the record",
+  );
+  assert.ok(
+    text.includes("Удаление такой записи у обоих участников в сервисе не предусмотрено"),
+    "the clause no longer says that neither participant can delete it for both",
+  );
+
+  // And the sound, in the same words the rest of the section uses.
+  assert.ok(
+    text.includes("звук разговора в неё не входит"),
+    "the clause leaves the reader to infer that the audio is not in the record",
+  );
+
+  // The section must no longer be scoped to group chats alone, or the clause
+  // sits under a heading that says it does not apply.
+  assert.doesNotMatch(
+    text,
+    /Голосовой звонок в групповом чате передаёт/,
+    "section 7 still opens as though only a group chat has calls",
+  );
+});
+
 test("privacy policy has unique navigable sections", () => {
   assert.ok(PRIVACY_POLICY.sections.length >= 12);
   const sectionIds = PRIVACY_POLICY.sections.map((section) => section.id);
