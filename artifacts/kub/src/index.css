@@ -2642,6 +2642,29 @@ textarea::placeholder, input::placeholder {
       max-width: calc(2rem * (1 - var(--kub-chat-list-narrow, 0) * 1.1));
     }
 
+    /* The other band on this edge: «you are in this conversation on another
+       device». It narrows by the same ratio and by the same two steps — the
+       words first, then the control — with one difference that is a rule
+       rather than a copy.
+
+       Its control closes too. The call bar has to keep «Выйти» drawn at a
+       66px strip because its own body press goes to the conversation, so
+       closing the control would leave no way out of a call; this band's body
+       press IS its one action, so at ratio 1 the telephone badge alone is
+       still the move. */
+
+    .kub-chat-list-column .kub-voice-elsewhere-bar__names {
+      overflow: hidden;
+      opacity: calc(1 - var(--kub-chat-list-narrow, 0) * 1.6);
+      max-width: calc(24rem * (1 - var(--kub-chat-list-narrow, 0)));
+    }
+
+    .kub-chat-list-column .kub-voice-elsewhere-bar__action {
+      overflow: hidden;
+      opacity: calc(1 - var(--kub-chat-list-narrow, 0) * 2.2);
+      max-width: calc(8rem * (1 - var(--kub-chat-list-narrow, 0) * 1.1));
+    }
+
     /* No `pointer-events` rule, and that is deliberate rather than missing. A
        button whose `max-width` has reached 0 with `overflow: hidden` has no
        hit area at all, so it stops taking presses on its own — and the first

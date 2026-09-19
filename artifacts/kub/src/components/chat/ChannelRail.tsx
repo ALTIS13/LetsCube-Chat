@@ -42,6 +42,7 @@ import {
   seatLabel,
 } from "@/lib/channelRail";
 import { canManageChannels, voiceJoinVerdict, type ChannelGroup, type ServerChannel } from "@/lib/serverChannels";
+import { VOICE_ELSEWHERE_MOVE, VOICE_ELSEWHERE_PROMISE } from "@/lib/voiceElsewhere";
 import type { VoiceParticipant } from "@/lib/voiceChannel";
 import { cn } from "@/lib/utils";
 
@@ -115,6 +116,17 @@ export interface ChannelRailProps {
   roleOf?: (userId: string) => string | null;
   /** The room this client's call is in, which need not be one of these. */
   callChannelId: string | null;
+  /**
+   * The room this person is in on **another** of their devices, which likewise
+   * need not be one of these.
+   *
+   * A row for it must not offer the ordinary way in. Pressing it is the same
+   * `joinVoiceChannel` either way, so the danger is not that the database
+   * would hold one person twice — its primary key forbids that — it is that
+   * somebody would press «join» without being told it takes the conversation
+   * off their computer. `lib/voiceElsewhere.ts`.
+   */
+  elsewhereChannelId: string | null;
   /** True while a join is in flight, so a second press cannot start a second one. */
   joining: boolean;
   onSelectText: (channel: ServerChannel) => void;
@@ -143,6 +155,7 @@ function ChannelRailList({
   role,
   roleOf,
   callChannelId,
+  elsewhereChannelId,
   joining,
   onSelectText,
   onJoinVoice,
@@ -422,6 +435,7 @@ function ChannelRailList({
                   selfId={selfId}
                   role={role}
                   inCall={callChannelId === channel.id}
+                  elsewhere={elsewhereChannelId === channel.id}
                   joining={joining}
                   onJoin={onJoinVoice}
                   moderatableBy={{ selfId, role }}
@@ -692,6 +706,7 @@ function VoiceChannelRailRow({
   selfId,
   role,
   inCall,
+  elsewhere,
   joining,
   onJoin,
   moderatableBy,
@@ -704,6 +719,8 @@ function VoiceChannelRailRow({
   selfId: string | null;
   role: string | null;
   inCall: boolean;
+  /** This person is in this room on another of their devices. */
+  elsewhere: boolean;
   joining: boolean;
   onJoin: (channel: ServerChannel) => void;
   /** The reader, for the moderation rules. Same pair the list holds. */
@@ -724,7 +741,10 @@ function VoiceChannelRailRow({
   // `full` and `listen-only` are different answers and must not be one: the
   // first says come back later, the second says you are welcome now but will
   // not be heard. `voiceJoinVerdict` keeps them apart and this row draws both.
-  const verdict = voiceJoinVerdict({ channel, role, alreadyInside: inCall });
+  // `alreadyInside` for the other device too: a room this person is already in
+  // has no seat to refuse them, and «В канале уже максимум участников» over a
+  // room they are sitting in is the interface arguing with the table.
+  const verdict = voiceJoinVerdict({ channel, role, alreadyInside: inCall || elsewhere });
   const seats = seatLabel(channel);
   const full = verdict === "full";
 
@@ -738,13 +758,16 @@ function VoiceChannelRailRow({
         data-testid="channel-rail-voice"
         data-channel-id={channel.id}
         data-active={inCall ? "true" : "false"}
+        data-elsewhere={elsewhere ? "true" : "false"}
         data-verdict={verdict}
         title={
-          full
-            ? "В канале уже максимум участников"
-            : verdict === "listen-only"
-              ? "Вы сможете только слушать"
-              : undefined
+          elsewhere
+            ? `${VOICE_ELSEWHERE_MOVE} · ${VOICE_ELSEWHERE_PROMISE}`
+            : full
+              ? "В канале уже максимум участников"
+              : verdict === "listen-only"
+                ? "Вы сможете только слушать"
+                : undefined
         }
         className={cn(
           "relative mt-0.5 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors",
@@ -768,13 +791,28 @@ function VoiceChannelRailRow({
         {verdict === "listen-only" && (
           <KubIcon name="microphoneSlash" size={13} tone="muted" label="Только слушать" />
         )}
-        {seats && (
+        {/* The seat count gives way to the word, rather than standing beside
+            it. A room this person is already in on another device is not a room
+            with seats left to consider — the question is no longer «is there
+            room», it is «bring it here», and the rail has one slot at this
+            width to say which. The full sentence is the row's `title`, and the
+            band at the foot of the column carries it in plain sight. */}
+        {elsewhere ? (
           <span
-            className="shrink-0 text-[11px] tabular-nums text-[color:var(--kub-muted)]"
-            data-testid="channel-rail-seats"
+            className="shrink-0 text-[11px] font-semibold text-[color:var(--kub-accent-text)]"
+            data-testid="channel-rail-elsewhere"
           >
-            {seats}
+            {VOICE_ELSEWHERE_MOVE}
           </span>
+        ) : (
+          seats && (
+            <span
+              className="shrink-0 text-[11px] tabular-nums text-[color:var(--kub-muted)]"
+              data-testid="channel-rail-seats"
+            >
+              {seats}
+            </span>
+          )
         )}
       </button>
 

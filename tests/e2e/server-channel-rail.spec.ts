@@ -129,6 +129,18 @@ interface Shape {
   /** What the two moderation routes answer. A grant by default. */
   moderation?: { status: number; body: unknown };
   /**
+   * Put **this account** in a room, as the table sees it, with no call running
+   * in this browser.
+   *
+   * That pair of facts is «вы в этом разговоре на другом устройстве»: the
+   * participant row is this person's own, and this client's call state says it
+   * is connected to nothing. `docs/proposals/2026-09-18-one-to-one-calls.md`
+   * §4b — nothing else is needed, and nothing else is read.
+   */
+  meElsewhereIn?: string;
+  /** How many the table says are in «Планёрка», whose cap is four. */
+  standupCount?: number;
+  /**
    * Per-person volumes already in storage when the page loads.
    *
    * A listener's choices are meant to outlive the room being rejoined, and the
@@ -164,9 +176,23 @@ function tablesFor(shape: Shape) {
     if (call.resource === "voice_channels") {
       if (roomsFail) return { status: 500, body: { message: "upstream said no" } };
       if (bare) return { status: 200, body: [] };
-      return { status: 200, body: forum ? ROOMS : ROOMS.filter((room) => room.id === ROOM_LOBBY) };
+      // `standupCount` fills «Планёрка» to its own cap, which is the only way
+      // to reach the «full» verdict from this fixture.
+      const rooms = ROOMS.map((room) =>
+        room.id === ROOM_STANDUP && shape.standupCount !== undefined
+          ? { ...room, participant_count: shape.standupCount }
+          : room,
+      );
+      return { status: 200, body: forum ? rooms : rooms.filter((room) => room.id === ROOM_LOBBY) };
     }
-    if (call.resource === "voice_participants") return { status: 200, body: OCCUPANTS };
+    if (call.resource === "voice_participants") {
+      return {
+        status: 200,
+        body: shape.meElsewhereIn
+          ? [...OCCUPANTS, { channel_id: shape.meElsewhereIn, user_id: ME.id, joined_at: AT, confirmed_at: AT }]
+          : OCCUPANTS,
+      };
+    }
     return undefined;
   };
 }
@@ -690,6 +716,85 @@ test.describe("the channel rail", () => {
     await openGroup(page, { role: "member" });
     await expect(page.getByTestId("channel-rail")).toBeVisible();
     await expect(page.getByTestId("channel-rail-manage")).toHaveCount(0);
+  });
+
+  test("a room this person is in on another device offers the move, not the seat", async ({ page }, testInfo) => {
+    test.skip(!paneIsWide(testInfo), "the column's row is the same row the sheet draws");
+    // The state the owner described: the conversation is running on the
+    // computer and the phone is being picked up. Nothing is running in this
+    // browser — no join has been clicked — so every row here is drawn from the
+    // table alone.
+    await openGroup(page, { meElsewhereIn: ROOM_STANDUP });
+    await expect(page.getByTestId("channel-rail")).toBeVisible();
+
+    const standup = page.locator(
+      `[data-testid="channel-rail-voice-group"][data-channel-id="${ROOM_STANDUP}"]`,
+    );
+    const row = standup.getByTestId("channel-rail-voice");
+    await expect(row).toHaveAttribute("data-elsewhere", "true");
+    // The word replaces the seat count rather than standing beside it: a room
+    // this person is already sitting in is not a room with seats to consider.
+    await expect(standup.getByTestId("channel-rail-elsewhere")).toHaveText("Перейти сюда");
+    await expect(standup.getByTestId("channel-rail-seats")).toHaveCount(0);
+    // And the whole sentence, where a row has no space for it.
+    await expect(row).toHaveAttribute(
+      "title",
+      "Перейти сюда · Разговор перейдёт сюда и прервётся там",
+    );
+
+    // Every other room is untouched: this is a fact about one room, not a mode
+    // the rail goes into. «Общая» has two other people in it and keeps its
+    // count; a mark there would mean the rail was reading «somebody is in a
+    // call» rather than «I am in this one».
+    const lobby = page.locator(
+      `[data-testid="channel-rail-voice-group"][data-channel-id="${ROOM_LOBBY}"]`,
+    );
+    await expect(lobby.getByTestId("channel-rail-voice")).toHaveAttribute("data-elsewhere", "false");
+    await expect(lobby.getByTestId("channel-rail-seats")).toHaveText("2/10");
+    await expect(lobby.getByTestId("channel-rail-elsewhere")).toHaveCount(0);
+
+    // The band at the foot of the column stands down here, because this
+    // conversation already offers the same move with the same words. Two
+    // «Перейти сюда» on one screen is the relabelled duplicate this product
+    // refuses.
+    await expect(page.getByTestId("voice-elsewhere-bar")).toHaveCount(0);
+  });
+
+  for (const theme of ["dark", "light"] as const) {
+    test("a room on another device in the rail, photographed in the " + theme + " theme", async ({
+      page,
+    }, testInfo) => {
+      test.skip(!paneIsWide(testInfo), "the sheet draws the same row");
+      await openGroup(page, { meElsewhereIn: ROOM_STANDUP, theme });
+      const rail = page.getByTestId("channel-rail");
+      await expect(rail).toBeVisible();
+      await expect(
+        page
+          .locator(`[data-testid="channel-rail-voice-group"][data-channel-id="${ROOM_STANDUP}"]`)
+          .getByTestId("channel-rail-elsewhere"),
+      ).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(400);
+      await rail.screenshot({
+        path: `output/voice-elsewhere/rail-${testInfo.project.name}-${theme}.png`,
+      });
+    });
+  }
+
+  test("a full room this person is already sitting in is not «В канале уже максимум»", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!paneIsWide(testInfo), "one shape is enough for a verdict");
+    // «Планёрка» holds four. Put this person in it on their computer and put
+    // four people in it: without `alreadyInside` the rail would refuse them a
+    // seat they are already occupying, and the row would go inert — the one
+    // press this whole rule exists to offer.
+    await openGroup(page, { meElsewhereIn: ROOM_STANDUP, standupCount: 4 });
+    const row = page
+      .locator(`[data-testid="channel-rail-voice-group"][data-channel-id="${ROOM_STANDUP}"]`)
+      .getByTestId("channel-rail-voice");
+    await expect(row).not.toHaveAttribute("data-verdict", "full");
+    await expect(row).toBeEnabled();
   });
 
   test("the capsule under the header stops offering a room the rail lists", async ({ page }, testInfo) => {

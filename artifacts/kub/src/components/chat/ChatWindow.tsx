@@ -23,6 +23,8 @@ import { useServerChannels } from "@/hooks/useServerChannels";
 import { useChatRoles } from "@/hooks/useChatRoles";
 import { topChatRolesByMember } from "@/lib/chatRoles";
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
+import { useVoiceElsewhere } from "@/hooks/useVoiceElsewhere";
+import { voiceJoinIsAMove } from "@/lib/voiceElsewhere";
 import {
   capsuleNamesARoom,
   currentTextChannelId,
@@ -466,6 +468,17 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
    * the room the call is in whatever the capsule draws.
    */
   const capsuleChannel = capsuleNamesARoom(serverChannels.channels, call.channelId) ? voice.channel : null;
+  /**
+   * The room this person is in on another of their devices, read once here and
+   * handed to all three surfaces that offer a way into a room.
+   *
+   * One answer rather than three, for the reason the bar and the capsule share
+   * one `VoiceCallState`: a rail that thought the press was a join while the
+   * capsule thought it was a move would be two answers to one question. The
+   * fact itself is global — the reader is mounted by `Sidebar` — so this is a
+   * subscription, not a read.
+   */
+  const voiceElsewhereRoom = useVoiceElsewhere();
   const voiceCapsule = voiceCapsuleState({
     channel: capsuleChannel,
     phase: call.phase,
@@ -479,6 +492,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     // so the capsule can decline to claim a move that did not happen.
     outputDeviceRefused: call.outputDeviceRefused,
     deafened: call.deafened,
+    // Never a plain «Присоединиться» to a room this person is already in
+    // somewhere else: that is the press that takes the conversation off their
+    // other device without saying so. `lib/voiceElsewhere.ts` holds the rule.
+    elsewhere: voiceJoinIsAMove(capsuleChannel?.id ?? null, voiceElsewhereRoom),
   });
   const joinVoice = useCallback(() => {
     if (!voice.channel || !chat) return;
@@ -593,6 +610,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     selfId: userId,
     role: myRole,
     callChannelId: call.channelId,
+    // The room on another device, so a row for it says «Перейти» rather than
+    // drawing as an ordinary room somebody may walk into twice.
+    elsewhereChannelId: voiceElsewhereRoom?.channelId ?? null,
     joining: call.phase === "joining",
     onSelectText: selectChannel,
     onJoinVoice: joinVoiceRoom,
@@ -1726,6 +1746,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             participants: voiceParticipants,
             faces: voiceDirectory.faces,
             inCall: inThisChannel && (call.phase === "connected" || call.phase === "reconnecting"),
+            // The same answer the capsule takes, from the same place.
+            elsewhere: voiceJoinIsAMove(capsuleChannel?.id ?? null, voiceElsewhereRoom),
             busy: inThisChannel && call.phase === "joining",
             refusal: call.refusal,
             supported: voice.supported,

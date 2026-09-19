@@ -13,13 +13,22 @@
  * deliberately absent: that is slice 4, and section 3.1 explains why it is not
  * a column and not a rule here either.
  *
- * The one import below is a **type** and erases at build, so this module still
- * pulls nothing into a `node --test` process and nothing into a bundle. The
- * union it names belongs beside the decisions that read it, in
+ * The first import below is a **type** and erases at build, so this module
+ * still pulls nothing into a `node --test` process and nothing into a bundle.
+ * The union it names belongs beside the decisions that read it, in
  * `lib/voiceVolume.ts`, rather than being written out twice.
+ *
+ * The second is not a type, and it is the one exception: two words, from a
+ * sibling that itself imports nothing — the same shape `voicePresence.ts` has.
+ * They are the sentence the capsule says when this person is already in the
+ * room on another device, and the bar and the rail say the same sentence from
+ * the same constant. A word written out twice is two surfaces that can drift,
+ * which is the thing this product refuses more firmly than it refuses an
+ * import.
  */
 
 import type { VoiceAudioSource } from "./voiceVolume";
+import { VOICE_ELSEWHERE_DETAIL, VOICE_ELSEWHERE_MOVE } from "./voiceElsewhere.ts";
 
 /** Where the call is, from the interface's point of view. */
 export type VoiceCallPhase =
@@ -322,8 +331,15 @@ export interface VoiceCapsuleView {
   visible: boolean;
   title: string;
   detail: string;
-  /** The primary control, or null when the capsule offers none in this state. */
-  action: "join" | "leave" | "cancel" | null;
+  /**
+   * The primary control, or null when the capsule offers none in this state.
+   *
+   * `move` is a join with its consequence said out loud: this person is
+   * already in this room on another device, so the press takes the conversation
+   * off that device. It replaces the plain join rather than standing beside it
+   * — see `lib/voiceElsewhere.ts`.
+   */
+  action: "join" | "leave" | "cancel" | "move" | null;
   actionLabel: string | null;
   /** Whether the mute control is drawn, and how it reads. */
   mute: boolean;
@@ -412,6 +428,16 @@ export function voiceCapsuleState(input: {
    * be a type error rather than a silent `false`.
    */
   deafened: boolean;
+  /**
+   * Whether this person is already in **this** room on another of their
+   * devices, as `voiceJoinIsAMove` answers it.
+   *
+   * Required rather than optional, for the reason `deafened` is: a caller that
+   * stops passing it goes back to offering a plain «Присоединиться» to somebody
+   * whose press would take the conversation off their computer without saying
+   * so, and that has to be a type error rather than a silent `false`.
+   */
+  elsewhere: boolean;
 }): VoiceCapsuleView {
   const {
     channel,
@@ -484,6 +510,32 @@ export function voiceCapsuleState(input: {
       deafen: false,
       deafened,
       muted: micMuted,
+      busy: false,
+      outputRefused: false,
+      tone: "neutral",
+    };
+  }
+
+  /**
+   * Already in this room, on another of this person's devices.
+   *
+   * Before the failed-join branch and before the seat count, and both are
+   * deliberate. A room that is «full» is full **of this person among others**,
+   * so «Мест больше нет» would refuse somebody a seat they are already sitting
+   * in; and a refusal from an earlier attempt on this device says nothing about
+   * a connection that is up on another one.
+   */
+  if (input.elsewhere) {
+    return {
+      visible: true,
+      title: channel.name,
+      detail: VOICE_ELSEWHERE_DETAIL,
+      action: "move",
+      actionLabel: VOICE_ELSEWHERE_MOVE,
+      mute: false,
+      deafen: false,
+      deafened,
+      muted: false,
       busy: false,
       outputRefused: false,
       tone: "neutral",

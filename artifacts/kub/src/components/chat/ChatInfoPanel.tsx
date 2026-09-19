@@ -163,6 +163,12 @@ export interface ChatInfoVoice {
   faces?: ReadonlyMap<string, string | null>;
   /** True when this client is connected to this chat's channel. */
   inCall: boolean;
+  /**
+   * True when this person is in this chat's channel on **another** of their
+   * devices. The row then offers the move and not the ordinary join — see
+   * `lib/voiceElsewhere.ts`.
+   */
+  elsewhere: boolean;
   /** True while a join to this chat's channel is in flight. */
   busy: boolean;
   refusal: string | null;
@@ -2376,6 +2382,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
                 selfId={currentUserId}
                 full={voiceOffer.full}
                 inCall={voice.inCall}
+                elsewhere={voice.elsewhere}
                 busy={voice.busy}
                 refusal={voice.refusal}
                 rowClassName={actionRowClass}

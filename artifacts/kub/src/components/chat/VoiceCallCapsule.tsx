@@ -426,7 +426,12 @@ export function VoiceCallCapsule({
         {view.action && view.actionLabel && (
           <button
             type="button"
-            onClick={view.action === "join" ? onJoin : onLeave}
+            // `move` goes to `onJoin` as well: the move IS the join, which
+            // already leaves whatever this client is in first. Spelled out
+            // rather than left to the `join` test, because the fall-through
+            // here is `onLeave` — a new action added without this line would
+            // hang up instead of connecting, silently and only at run time.
+            onClick={view.action === "join" || view.action === "move" ? onJoin : onLeave}
             disabled={view.busy && view.action !== "cancel"}
             className="group/capsule relative h-8 shrink-0 rounded-full px-3"
             data-testid="voice-capsule-action"
@@ -436,7 +441,7 @@ export function VoiceCallCapsule({
             <span
               className={cn(
                 "relative text-xs font-semibold whitespace-nowrap",
-                view.action === "join"
+                view.action === "join" || view.action === "move"
                   ? "text-[color:var(--kub-accent-text)]"
                   : "text-[color:var(--kub-danger-text)]",
               )}

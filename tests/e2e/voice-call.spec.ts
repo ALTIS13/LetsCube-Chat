@@ -2878,3 +2878,173 @@ for (const theme of ["dark", "light"] as const) {
     },
   );
 }
+
+/**
+ * The conversation that is running on this person's **other** device (§4b).
+ *
+ * `tests/unit/voice-elsewhere.test.mts` holds the rule — when the band is
+ * drawn, what it says, and that the press is offered as a move rather than as a
+ * join. What is measured here is everything that cannot be: that two facts
+ * already on the client reach the screen at all — a participant row carrying
+ * this account's own id, and a call state that says this device is connected to
+ * nothing — that the band and the in-call bar are never both up, and that the
+ * press reaches the same gateway a join does.
+ *
+ * Nothing is joined in most of these, so there is no WebRTC to need: the whole
+ * point is a device that is **not** in the call.
+ */
+
+/** The band the person can actually see. Two are mounted; one at most is shown. */
+const elsewhereBand = (page: Page) => page.locator('[data-testid="voice-elsewhere-bar"]:visible');
+
+test("a call on another device reaches this one, and says what taking it costs", async ({
+  page,
+}) => {
+  // The table says this account is in «Склад», which belongs to «Смета и
+  // склад». Nothing is running in this browser. That pair is the whole of the
+  // fact — no new table, no device identity, no round trip to ask.
+  await open(page, {
+    channel: { participantCount: 1 },
+    present: [ANNA.id],
+    presentElsewhere: [ME.id],
+  });
+
+  const band = elsewhereBand(page);
+  await expect(band).toBeVisible();
+  await expect(band.getByTestId("voice-elsewhere-room")).toHaveText("Склад");
+  await expect(band.getByTestId("voice-elsewhere-where")).toHaveText("Смета и склад");
+  await expect(band.getByTestId("voice-elsewhere-state")).toHaveText("На другом устройстве");
+  await expect(band.getByTestId("voice-elsewhere-action")).toHaveText("Перейти сюда");
+  // The sentence the press has to have been read before — on the screen, not in
+  // a title attribute, because a tooltip is not read on a phone.
+  await expect(band.getByTestId("voice-elsewhere-promise")).toHaveText(
+    "Разговор перейдёт сюда и прервётся там",
+  );
+  // Exactly one: both placements are mounted and CSS decides which shell shows
+  // which, so a mistake there is two bands rather than none.
+  await expect(band).toHaveCount(1);
+  // And the in-call bar is not up beside it. They say opposite things about one
+  // person, and they are docked in the same two places.
+  await expect(bar(page)).toHaveCount(0);
+  // The state, not clipped — measured rather than looked at, the way the call
+  // bar's own line had to be after its first capture cut it.
+  const fits = await band.getByTestId("voice-elsewhere-state").evaluate((node) => {
+    const box = node as HTMLElement;
+    return box.scrollWidth <= box.clientWidth + 1;
+  });
+  expect(fits, "«На другом устройстве» does not fit its own box").toBe(true);
+});
+
+test("a room this person is in elsewhere offers the move and never a plain join", async ({
+  page,
+}) => {
+  // The team's own room, with this account in it according to the table and no
+  // call running here. Its capsule is the surface that would otherwise say
+  // «Присоединиться» — the press that takes the conversation off the other
+  // device without saying so.
+  await open(page, { channel: { participantCount: 1 }, present: [ME.id] });
+
+  await expect(action(page)).toHaveText("Перейти сюда");
+  await expect(action(page)).toHaveAttribute("data-voice-action", "move");
+  await expect(detail(page)).toHaveText(
+    "На другом устройстве · Разговор перейдёт сюда и прервётся там",
+  );
+  // Replaced, not accompanied: there is one control, and it is not a join.
+  await expect(capsule(page).getByText("Присоединиться")).toHaveCount(0);
+  // The band stands down in this conversation, because the capsule above is
+  // already offering the same move in the same words.
+  await expect(elsewhereBand(page)).toHaveCount(0);
+
+  // The information panel is the third place a join is offered, and it obeys
+  // the same rule: the row says where the conversation is and offers the move.
+  await openInfo(page);
+  await expect(page.getByTestId("chat-info-voice-move")).toHaveText("Перейти сюда");
+  await expect(page.getByTestId("chat-info-voice-join")).toHaveCount(0);
+  await expect(page.getByTestId("chat-info-voice-occupancy")).toHaveText(
+    "На другом устройстве · Разговор перейдёт сюда и прервётся там",
+  );
+});
+
+test("the move presses through to the same gateway a join does, and the band goes", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  const { tokenCalls } = await open(page, {
+    channel: { participantCount: 1 },
+    present: [ME.id],
+  });
+
+  await expect(action(page)).toHaveText("Перейти сюда");
+  await action(page).click();
+  // The same join, for the same room. There is deliberately no second mechanism
+  // for a move: `joinVoiceChannel` already leaves whatever this client is in
+  // before it joins, and a server-side eviction is a separate decision.
+  await expect(action(page)).toHaveText("Выйти");
+  expect(tokenCalls).toEqual([{ channelId: CHANNEL_ID }]);
+
+  // And now this device is the one in the room. Walk to another conversation:
+  // the **ordinary** bar is what stands there, never the band — which is the
+  // case that matters most, seen from the other side.
+  await switchChat(page, "Смета и склад", OTHER_LINE);
+  await expect(bar(page)).toBeVisible();
+  await expect(bar(page).getByTestId("voice-call-bar-state")).toHaveText("Вы в разговоре");
+  await expect(elsewhereBand(page)).toHaveCount(0);
+});
+
+for (const theme of ["dark", "light"] as const) {
+  test(
+    "the band for a call on another device, photographed in the " + theme + " theme",
+    async ({ page }, info: TestInfo) => {
+      await open(page, {
+        channel: { participantCount: 1 },
+        present: [ANNA.id],
+        presentElsewhere: [ME.id],
+        theme,
+      });
+      await expect(elsewhereBand(page)).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(400);
+      await page.screenshot({
+        path: `output/voice-elsewhere/band-${info.project.name}-${theme}.png`,
+      });
+    },
+  );
+
+  test(
+    "the band and the in-call bar are not the same object, in the " + theme + " theme",
+    async ({ page, browserName }, info: TestInfo) => {
+      needsWebRtc(browserName);
+      // One frame with both shapes in it, so «not confusable» can be looked at
+      // rather than argued. They can never be on screen together — that is the
+      // rule — so the two crops are taken one after the other and the second
+      // begins where the first ends: the band, then a call joined here and the
+      // ordinary bar in the same place.
+      await open(page, {
+        channel: { participantCount: 1 },
+        present: [ANNA.id],
+        presentElsewhere: [ME.id],
+        theme,
+      });
+      const band = elsewhereBand(page);
+      await expect(band).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(300);
+      await band.screenshot({
+        path: `output/voice-elsewhere/pair-band-${info.project.name}-${theme}.png`,
+      });
+
+      // The team's own room, joined here. Its capsule is a plain
+      // «Присоединиться» — this account is not in **that** room elsewhere.
+      await expect(action(page)).toHaveText("Присоединиться");
+      await action(page).click();
+      await expect(action(page)).toHaveText("Выйти");
+      await switchChat(page, "Смета и склад", OTHER_LINE);
+      await expect(bar(page)).toBeVisible();
+      await page.waitForTimeout(300);
+      await bar(page).screenshot({
+        path: `output/voice-elsewhere/pair-bar-${info.project.name}-${theme}.png`,
+      });
+    },
+  );
+}

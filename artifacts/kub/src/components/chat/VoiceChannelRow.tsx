@@ -11,6 +11,11 @@ import {
   type VoiceChannelSummary,
   type VoiceParticipant,
 } from "@/lib/voiceChannel";
+import {
+  VOICE_ELSEWHERE_DETAIL,
+  VOICE_ELSEWHERE_MOVE,
+  VOICE_ELSEWHERE_PROMISE,
+} from "@/lib/voiceElsewhere";
 
 /**
  * The voice channel in the group information panel: the channel, who is in it,
@@ -52,6 +57,15 @@ export interface VoiceChannelRowProps {
   full: boolean;
   /** True when this client is in this channel. */
   inCall: boolean;
+  /**
+   * True when this person is in this channel on another of their devices.
+   *
+   * The way in then reads as a move, because that is what pressing it does: the
+   * conversation comes here and stops there. A plain «Присоединиться» would be
+   * the one press this whole rule exists to prevent — see
+   * `lib/voiceElsewhere.ts`.
+   */
+  elsewhere: boolean;
   /** True while a join is in flight, so a second press cannot start a second one. */
   busy: boolean;
   /** A sentence when the last attempt was refused, already in Russian. */
@@ -68,6 +82,7 @@ export function VoiceChannelRow({
   selfId,
   full,
   inCall,
+  elsewhere,
   busy,
   refusal,
   rowClassName,
@@ -96,10 +111,16 @@ export function VoiceChannelRow({
             {channel.name}
           </div>
           <div className="truncate text-xs text-[color:var(--kub-muted)]" data-testid="chat-info-voice-occupancy">
-            {voiceOccupancyLabel(
-              voiceOccupancy({ inCall, rowCount: channel.participantCount, listed: ordered.length }),
-              channel.maxParticipants,
-            )}
+            {/* The state before the count, where there is one: somebody looking
+                at this row needs to know the conversation is already theirs and
+                on another screen before they need to know how many seats are
+                left. */}
+            {elsewhere
+              ? VOICE_ELSEWHERE_DETAIL
+              : voiceOccupancyLabel(
+                  voiceOccupancy({ inCall, rowCount: channel.participantCount, listed: ordered.length }),
+                  channel.maxParticipants,
+                )}
           </div>
         </div>
         {inCall ? (
@@ -110,6 +131,20 @@ export function VoiceChannelRow({
             data-testid="chat-info-voice-leave"
           >
             Выйти
+          </button>
+        ) : elsewhere ? (
+          // Before `full`, deliberately: a room that is full is full **of this
+          // person among others**, and «Заполнен» over a room they are sitting
+          // in would refuse them a seat they already have.
+          <button
+            type="button"
+            onClick={onJoin}
+            disabled={busy}
+            className={cn(rowClassName, "w-auto shrink-0 px-3 text-xs font-semibold text-[color:var(--kub-accent-text)]")}
+            title={VOICE_ELSEWHERE_PROMISE}
+            data-testid="chat-info-voice-move"
+          >
+            {busy ? "Подключаемся…" : VOICE_ELSEWHERE_MOVE}
           </button>
         ) : full ? (
           // A full channel keeps its row and its people: hiding it would tell

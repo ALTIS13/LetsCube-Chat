@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/sidebar/Sidebar";
 import { ChatListResizer } from "@/components/sidebar/ChatListResizer";
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { VoiceCallBar } from "@/components/chat/VoiceCallBar";
+import { VoiceElsewhereBar } from "@/components/chat/VoiceElsewhereBar";
 import { VoiceCallRing } from "@/components/chat/VoiceCallRing";
 import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { BottomNav } from "./BottomNav";
@@ -149,6 +150,12 @@ export function MainLayout() {
         {isMobileChatOpen && (
           <div className="md:hidden">
             <VoiceCallBar placement="top" />
+            {/* The other band, for a conversation running on another of this
+                person's devices — the state this whole feature exists for,
+                since the device being picked up is usually the phone. At most
+                one of the two is drawn; the rule is in
+                `lib/voiceElsewhere.ts`. */}
+            <VoiceElsewhereBar placement="top" />
           </div>
         )}
 

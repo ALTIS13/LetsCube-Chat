@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { KubButton, KubGlassLayer, KubIcon, KubNotice } from "@/components/kub";
 import { SidebarHeader } from "./SidebarHeader";
 import { VoiceCallBar } from "@/components/chat/VoiceCallBar";
+import { VoiceElsewhereBar } from "@/components/chat/VoiceElsewhereBar";
 import { useVoicePresenceReader } from "@/hooks/useVoicePresence";
+import { useVoiceElsewhereReader } from "@/hooks/useVoiceElsewhere";
 import { FolderTabs } from "./FolderTabs";
 import { FolderRail } from "./FolderRail";
 import { SideMenuLayer } from "./SideMenuLayer";
@@ -70,6 +72,13 @@ export function Sidebar() {
   // ring, and the store behind it has to know who is reading before it may
   // decide that a ring which ran out was this person's to write off.
   useVoicePresenceReader(userId);
+
+  // And whether this person is in a room on a device that is not this one.
+  // Mounted here rather than folded into the reader above because it is a
+  // different question with a different cost: one person, so the subscription
+  // is filtered to them and fires only when they join or leave a room
+  // anywhere. See the head of `useVoiceElsewhere.ts`.
+  useVoiceElsewhereReader(userId);
 
   const editFolder = (id: string) => {
     const target = folders.find((f) => f.id === id);
@@ -270,6 +279,13 @@ export function Sidebar() {
               when there is no call, and nothing when the conversation that owns
               the call is the one on screen — the capsule is already there. */}
           <VoiceCallBar placement="column" />
+
+          {/* And the other band on this edge, for a call running on another of
+              this person's devices. At most one of the two is ever drawn:
+              `voiceElsewhereBarState` stands this one down whenever a call is
+              running here, because the two say opposite things about the same
+              person. */}
+          <VoiceElsewhereBar placement="column" />
         </div>
       </div>
 

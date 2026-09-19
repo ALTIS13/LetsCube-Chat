@@ -16068,3 +16068,38 @@ answer is the owner pressing «позвонить» again on seeing the call dro
 fits `Reconnect: false` and the ~17-second spacing without needing a hidden
 timer. It is not, however, measured, and D-238 stays open until a call is
 watched after this fix: if the flap survives, something else is doing it.
+
+## D-240 `[ ]` The «move the call here» band stands down in one case where nothing replaces it
+
+**Severity:** low, and it is a **known gap accepted deliberately** rather than a
+defect discovered later. Recorded so that the next person to meet it finds the
+reasoning instead of the symptom.
+
+Slice G's band — «Вы в этом разговоре на другом устройстве · Перейти сюда» —
+stands down in the conversation that owns the room, because that conversation
+already offers the same move through its capsule or its channel rail. Without
+that rule a phone with the chat open shows the band *and* the capsule underneath
+it, both saying the same thing with the same button, which is the relabelled
+duplicate this codebase refuses.
+
+**The rule is an approximation.** It asks `chat.type === "group"` — reused from
+`VoiceCallBar`'s `capsuleHere` — rather than «did this conversation actually draw
+a surface offering the move». The two differ in one case: **a group with several
+voice rooms, on a pane too narrow for the rail column**, where the rail is a
+sheet behind a button. There the band stands down and what remains on screen is
+the rail trigger's live mark, with the move one press further away than it
+should be.
+
+**Why it is accepted.** Closing it means threading «I drew a move surface» out of
+`ChatWindow`, up through `MainLayout` and into `Sidebar` — coupling a banner's
+visibility to another component's render decision, which is the kind of wiring
+that produces the *next* defect rather than the kind that prevents one. The gap
+degrades to «the information is one press away», not to «the information is
+gone».
+
+**What would change the ruling:** somebody meeting it in use, or the narrow-pane
+rail becoming the common shape rather than the exception. Either makes the
+wiring worth its cost.
+
+A private conversation is unaffected — it has neither capsule nor rail, so the
+band stays.
