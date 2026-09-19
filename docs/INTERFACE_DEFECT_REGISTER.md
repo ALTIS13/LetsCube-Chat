@@ -18869,3 +18869,174 @@ Reproduced first and photographed in both states before anything was changed:
 
 ---
 
+## D-254 `[x]` Nobody had ever heard anybody in a voice channel
+
+**Severity:** the feature did not work, at all, for its one purpose — and every
+surface around it reported success.
+
+**Surface:** `artifacts/kub/src/hooks/voiceRoom.ts`. Reported by the owner on
+2026-09-19: «Сейчас в голосовом канале ничего не слышу от собеседника».
+
+**Defect:** a subscribed remote track was never attached to anything that could
+play it. `TrackSubscribed` was bound to a handler that rebuilt the roster and
+re-applied volumes; there is no `track.attach()`, no `srcObject`, no
+`room.startAudio()` anywhere in the client — the only `srcObject` in
+`artifacts/kub/src` is local video preview in the two recorder modals.
+livekit-client does not attach for you; the SDK's own line is that it autoplays
+audio tracks **when you attach them** to audio elements.
+
+**Not a regression.** `git show <commit>:…/voiceRoom.ts | grep -c '\.attach('`
+answers 0 for all six commits the file has ever had, back to `7260ee80`
+(2026-09-13) — whose subject is «a call you can hear».
+
+**Measured rather than reasoned**, in real Chromium against livekit-client
+2.22.3 itself, a 440 Hz tone over a loopback peer connection, with a control
+read on both sides of the attach:
+
+| | `packetsReceived` | `totalAudioEnergy` |
+|---|---|---|
+| before any element | 60 | **0** |
+| after the attach | — | **1.174** (85,920 samples) |
+
+Sixty packets arriving against zero energy is the signature, and it is the whole
+explanation of why the connection panel read «Связь стабильна» throughout.
+
+**Three controls had never done anything either**, for the same reason: per-person
+volume, deafen and output-device selection all act on `attachedElements`, and
+there were none, so `setVolume` reached nothing. Attached, the same calls land:
+1 → 0.25 → 0 → 1, still playing while deafened, which is the design.
+
+**A correction the author found in their own first patch and reported rather
+than quietly fixing**, because it changes a documented behaviour: `attach` does
+**not** drop the chosen volume — it re-applies it behind
+`if (this.elementVolume)`, and **zero is falsy**. The single value an attach
+loses is therefore *silence*, so a track deafened before it arrived attached
+audible. Applying volumes on mount is load-bearing rather than tidy, and the
+repository's existing rule — somebody who joins while you are deafened arrives
+silent — became true for the first time.
+
+**Why nothing caught it, and this is the part worth keeping.**
+
+- `tests/e2e/voice-call.spec.ts` replaces the transport with the DEV stand-in
+  `window.__letscubeVoiceRoom` and says so in its own header. It proves
+  everything between the press and the transport and nothing after it. **A stub
+  boundary is also a coverage boundary.**
+- `docs/operations/voice.md` carried seven checks under «Proved in production»,
+  every one run against the real thing and every one passing: `CreateRoom`, a
+  WebSocket reaching the SFU, four webhooks moving four columns, a token, its
+  grant, the SFU accepting it, the reconciler clearing a ghost. All seven are
+  about signalling, admission or bookkeeping. **None of them was «somebody heard
+  somebody».** The list's thoroughness about the plumbing is what stopped anyone
+  looking further; the correction is now written into that document.
+- The connection panel could not see it either, and that is **D-255** below.
+
+**Fix:** the element lifecycle is its own module that imports nothing
+(`lib/voiceAudioSink.ts`) — attach, mark, place off-screen, mount; detach **and**
+remove, keyed by track sid. `startAudio()` on the join press, which is the user
+gesture the browser requires. `AudioPlaybackStatusChanged` makes a blocked
+autoplay **words** — «Звук заблокирован — включить» — because replacing one
+silent failure with another would be the same defect again.
+
+**Leak-checked against the shape production was actually in**: the client was
+re-establishing its session every 15–16 seconds at the time (D-256), so this
+path ran about four times a minute per participant. Forty cycles with two
+tracks: element count peaks at 2 and ends at 0; and with sids reused and no
+unsubscribe ever, likewise.
+
+**Mutation:** thirteen, all red, among them detach-without-remove, no attach on
+subscribe, unsubscribe unbound, no prime on join, no playback event, and leave
+and disconnect keeping their elements.
+
+**Stated plainly and not glossed:** as of the fix landing, nobody had yet *heard*
+anybody — that needs a real room, which is a production write. The chain is
+proved link by link up to `el.volume`; the last link is the browser's.
+
+---
+
+## D-255 `[ ]` The connection panel measures only what we send
+
+**Severity:** it is the instrument a person opens **when audio is missing**, and
+it is structurally incapable of seeing that.
+
+**Surface:** `sampleHealth` in `artifacts/kub/src/hooks/voiceRoom.ts`, drawn by
+`components/chat/VoiceConnectionPanel.tsx`, judged by
+`lib/voiceConnectionHealth.ts`.
+
+**Defect:** the sampler picks **one** stats source — the published track if
+there is one, otherwise any remote track. For anybody who is speaking, that is
+their own outgoing track, so the report carries `outbound-rtp`,
+`remote-inbound-rtp` and `candidate-pair`. There *is* an `inbound-rtp` branch,
+but it is guarded by `packetsSent === null` while the outbound branch above it
+assigns `packetsSent` with no guard — so for a publisher it is unreachable.
+
+**Consequence, observed rather than deduced.** While D-254 was live, the owner's
+panel read «Средняя задержка 19 мс», «Потеря исходящих пакетов 0.0%» and «Связь
+стабильна» at the moment they could hear nothing at all. Every one of those
+numbers was true: they describe what the person **sends**, and the transport
+really was healthy. The verdict (`voiceConnectionHealth.ts`, 250 ms / 10 %) is
+computed from those outbound numbers alone.
+
+**«Потеря исходящих пакетов» is honest and still misleads**, because nothing
+beside it says the other direction is not measured at all. A label that is
+accurate about itself can still be a lie about the whole.
+
+**What a fix needs.** Inbound as its own axis rather than as a fallback: inbound
+packets, loss, jitter — and, since D-254 proved it is the thing that actually
+matters, whether anything is being **heard**: `totalAudioEnergy` and
+`totalSamplesReceived` moving is precisely the difference between «packets
+arrive» and «a person hears», and 60 packets against zero energy was the
+measured signature of the silence. The verdict must then answer the case this
+entry exists for: outbound perfect, inbound silent.
+
+---
+
+## D-256 `[x]` The client re-established its session every fifteen seconds
+
+**Severity:** high — the owner saw «собеседник переподключается» permanently for
+somebody who was sitting still, and every cycle tore down the conversation.
+
+**Surface:** the pairing of `livekit-client ^2.22.3` in
+`artifacts/kub/package.json` with `livekit/livekit-server:v1.8.4` in
+`/srv/letscube/voice/docker-compose.yml`. An eighteen-month gap.
+
+**Measured live on the SFU, read-only:** ~8 new RTC sessions a minute across two
+participants; 128 in 25 minutes; median interval between one participant's own
+successive sessions **15.0 s and 16.0 s**; every close `CLIENT_REQUEST_LEAVE`
+with `isExpectedToResume: false`; every join fresh, `"Reconnect": false`, 92 of
+92, no resume ever attempted. **ICE reached connected over UDP on 127 of 127** —
+so not a network failure, which is why the panel was honest about the transport.
+
+**The discriminator that settled it:** Kong logged **7** token requests in 30
+minutes against **92** new SFU sessions. The application mints a token on every
+join, so the application was not re-joining — the client library was restarting
+its own connection on a saved token.
+
+**The gap, visible in the server's own log:** the client opens a publisher data
+channel labelled `_data_track` and v1.8.4 answered `unsupported datachannel
+added`, once per session, 69 times in an hour. Read from each release's bundle
+constants: `_data_track` arrives in client 2.18.0, `singlePeerConnection` in
+2.17.0, the 4-second connection-reconcile net in 2.15.15, the 10-second
+quality-lost net in 2.22.x. The deployed server predates all four.
+
+**Fix, on the owner's explicit instruction to move the server rather than pin
+the client down:** `letscube-voice` upgraded to `livekit/livekit-server:v1.13.7`
+(released 2026-09-14). Rehearsed first on the real `livekit.yaml` in a throwaway
+container in its own network namespace — it parsed the config with **no edit**
+and started on the same ports — then both files backed up and diffed, then one
+line changed. Recorded in `docs/operations/voice.md`; rollback is the old tag,
+whose image is still in the local cache.
+
+**The road not taken, recorded because it is the evidence for the direction:**
+the newest client carrying none of the four mechanisms is **2.15.14**
+(2025-10-28). Pinning down to it would also have worked and would have been
+reversible by an ordinary deploy; moving the server forward is what the vendor
+expects and keeps the client supported.
+
+**A ten-second measurement if it ever recurs:** in devtools,
+`detected connection state mismatch, attempting full reconnect` is the 4-second
+net; `local connection quality lost while publishing, triggering full reconnect`
+is the 10-second one. The server cannot tell them apart — a full reconnect
+reaches it as a plain new join either way.
+
+---
+
