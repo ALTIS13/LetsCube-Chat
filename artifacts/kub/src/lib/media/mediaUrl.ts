@@ -23,12 +23,15 @@
 
 import { createClient } from "@/lib/supabase/client";
 import {
-  avatarMediaObjectRef,
-  messageMediaObjectRef,
   variantMediaObjectRef,
   type MediaObjectRef,
   type MediaObjectRefMessage,
 } from "./mediaObjectRef.ts";
+import {
+  avatarMediaSource,
+  messageMediaSource,
+  type MediaSource,
+} from "./mediaSource.ts";
 import {
   modeAllowsPublicFallback,
   modeSignsUrls,
@@ -155,11 +158,60 @@ export async function ensureMediaObjectUrl(
  * The shapes the product actually holds, so a caller never assembles a ref.
  * ------------------------------------------------------------------------- */
 
-/** A message's own media — the photograph, the video, the voice, the file. */
+/** One source, resolved. The mode-dependent choice is in `mediaSource.ts`. */
+function resolveSource(source: MediaSource): string | null {
+  if (source.kind === "stored") return source.url;
+  if (source.kind === "object") return mediaObjectUrl(source.ref);
+  return null;
+}
+
+/** Whether the answer for this source is known — including "there is none". */
+function isSourceSettled(source: MediaSource): boolean {
+  return source.kind === "object" ? isMediaObjectUrlSettled(source.ref) : true;
+}
+
+/**
+ * A message's own media — the photograph, the video, the voice, the file.
+ *
+ * This is what the five original shapes read instead of `message.media_url`.
+ * Which of the two sources wins is `messageMediaSource`'s decision and is
+ * documented there; in `"public"` mode it is the column, unchanged.
+ */
 export function messageMediaUrl(
   message: MediaObjectRefMessage | null | undefined,
 ): string | null {
-  return mediaObjectUrl(messageMediaObjectRef(message));
+  return resolveSource(messageMediaSource(message, MODE));
+}
+
+/**
+ * Whether the address for a message's media is known yet.
+ *
+ * Always true in `"public"` mode and for anything not addressed as an object,
+ * so a consumer that draws a different placeholder while waiting draws nothing
+ * different in the shipped build. `AudioMessage` is the one that needs it: a
+ * voice message has no variant to fall back to, so `null` there is the whole
+ * answer and a listener has to be told which kind of `null` it is.
+ */
+export function isMessageMediaUrlSettled(
+  message: MediaObjectRefMessage | null | undefined,
+): boolean {
+  return isSourceSettled(messageMediaSource(message, MODE));
+}
+
+/**
+ * A message's media, waited for.
+ *
+ * For copying a picture to the clipboard and for "сохранить как", which fetch
+ * the bytes from a press rather than from a render. Both used to hand
+ * `message.media_url` straight to `fetch`.
+ */
+export async function ensureMessageMediaUrl(
+  message: MediaObjectRefMessage | null | undefined,
+  timeoutMs?: number,
+): Promise<string | null> {
+  const source = messageMediaSource(message, MODE);
+  if (source.kind !== "object") return resolveSource(source);
+  return await ensureMediaObjectUrl(source.ref, timeoutMs);
 }
 
 /** A generated variant: a preview, a thumbnail, a poster, a 720p re-encode. */
@@ -170,12 +222,20 @@ export function variantMediaUrl(row: {
   return mediaObjectUrl(variantMediaObjectRef(row));
 }
 
-/** A picture whose only record is a URL: a profile's, a chat's, a bot's. */
+/**
+ * A picture whose only record is a URL: a profile's, a chat's, a bot's.
+ *
+ * A URL that is not one of ours — nothing in production has one, but a bot's
+ * avatar is set through an API and the column is only text — is passed through
+ * untouched rather than dropped, in every mode. In `"public"` mode the column
+ * is passed through as well: it may carry a query string this client did not
+ * put there, and rebuilding the address would drop it.
+ */
 export function avatarMediaUrl(url: string | null | undefined): string | null {
-  const ref = avatarMediaObjectRef(url);
-  // A URL that is not one of ours — nothing in production has one, but a bot's
-  // avatar is set through an API and the column is only text — is passed
-  // through untouched rather than dropped.
-  if (!ref) return url ?? null;
-  return mediaObjectUrl(ref);
+  return resolveSource(avatarMediaSource(url, MODE));
+}
+
+/** Whether the address for an avatar is known yet. True in `"public"` mode. */
+export function isAvatarMediaUrlSettled(url: string | null | undefined): boolean {
+  return isSourceSettled(avatarMediaSource(url, MODE));
 }

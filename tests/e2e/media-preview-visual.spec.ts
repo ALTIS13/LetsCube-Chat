@@ -82,6 +82,14 @@ const FIXTURE = {
       },
     },
     { sender: "Максим", text: "Оба годятся", time: "09:05", own: true },
+    // A voice bubble, without touching the fixture module: `isVoiceMessage`
+    // routes on the text when the row is not typed `audio`, so this draws
+    // `AudioMessage` with no address — which is the exact state whose label
+    // D-208 changed («загрузка...» when the answer has not arrived,
+    // «Не удалось…» when there is no answer). The row carries no `media_url`,
+    // so the shipped mode must still say «загрузка...», and this screenshot is
+    // what proves it.
+    { sender: "Аня", text: "Голосовое сообщение 0:07", time: "09:06", own: false },
   ],
 };
 
@@ -138,6 +146,12 @@ test("every picture on the conversation surface loads", async ({ page }, testInf
   // Two photographs in bubbles. Fewer means the fixture stopped rendering them
   // and this case has quietly stopped measuring anything.
   expect(media.length, `images on the page: ${JSON.stringify(media)}`).toBeGreaterThanOrEqual(2);
+
+  // And the voice bubble, whose whole point here is that it has no address:
+  // the shipped mode must draw the waiting label, not the refused one.
+  const voice = page.locator('[data-voice-message="true"]');
+  await expect(voice).toHaveCount(1);
+  await expect(voice).toContainText("загрузка...");
 
   const broken = media.filter((entry) => !entry.complete || entry.width === 0);
   expect(broken, `broken images: ${JSON.stringify(broken)}`).toEqual([]);

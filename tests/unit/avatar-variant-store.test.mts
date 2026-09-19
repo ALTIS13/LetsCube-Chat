@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   avatarVariantSrc,
   createAvatarVariantStore,
+  sameAvatarVariantUrls,
   type AvatarVariantUrls,
 } from "../../artifacts/kub/src/lib/avatarVariantStore.ts";
 
@@ -281,4 +282,106 @@ test("asking again while the answer is in flight does not start a second query",
 
   assert.equal(calls.length, 1, "and no second query was started for the same id");
   assert.deepEqual(store.get("a"), { avatar128Url: "a-128" });
+});
+
+/* --------------------------------------------------------------------------- *
+ * D-208: following a renewed signature without asking the database again.
+ * --------------------------------------------------------------------------- */
+
+test("a re-derived address replaces the cached one and notifies once", async () => {
+  // This store asks once per profile and then never again, so a signature
+  // replaced at 80% of its life would otherwise never reach a single small
+  // avatar: the surface holding it would serve a dead URL until it unmounted.
+  const scheduler = manualScheduler();
+  const { fetcher } = recordingFetcher({
+    a: { avatar128Url: "a-128?token=old" },
+    b: { avatar128Url: "b-128?token=old" },
+  });
+  const store = createAvatarVariantStore(fetcher, { schedule: scheduler.schedule });
+
+  store.request("a");
+  store.request("b");
+  await scheduler.run();
+
+  let notifications = 0;
+  store.subscribe(() => {
+    notifications += 1;
+  });
+
+  store.reproject((id) => ({ avatar128Url: `${id}-128?token=new` }));
+
+  assert.deepEqual(store.get("a"), { avatar128Url: "a-128?token=new" });
+  assert.deepEqual(store.get("b"), { avatar128Url: "b-128?token=new" });
+  assert.equal(notifications, 1, "one notification for the whole re-derivation");
+});
+
+test("re-deriving the same addresses changes nothing and notifies nobody", async () => {
+  // `get` feeds `useSyncExternalStore`, which compares with `Object.is`. A new
+  // object holding the same two strings would re-render every avatar on screen
+  // for no reason, and the store emits on every signature the client obtains —
+  // including ones about a photograph in a conversation.
+  const scheduler = manualScheduler();
+  const { fetcher } = recordingFetcher({ a: { avatar128Url: "a-128", avatar128Width: 128 } });
+  const store = createAvatarVariantStore(fetcher, { schedule: scheduler.schedule });
+
+  store.request("a");
+  await scheduler.run();
+  const before = store.get("a");
+
+  let notifications = 0;
+  store.subscribe(() => {
+    notifications += 1;
+  });
+  store.reproject(() => ({ avatar128Url: "a-128", avatar128Width: 128 }));
+
+  assert.equal(store.get("a"), before, "the same object, not an equal one");
+  assert.equal(notifications, 0);
+});
+
+test("an id the caller cannot re-derive keeps what it had", async () => {
+  // Including the frozen «this profile has no variant», which is what stops it
+  // being asked about on every render.
+  const scheduler = manualScheduler();
+  const { fetcher } = recordingFetcher({ a: { avatar128Url: "a-128" } });
+  const store = createAvatarVariantStore(fetcher, { schedule: scheduler.schedule });
+
+  store.request("a");
+  store.request("nobody");
+  await scheduler.run();
+
+  store.reproject(() => undefined);
+
+  assert.deepEqual(store.get("a"), { avatar128Url: "a-128" });
+  assert.deepEqual(store.get("nobody"), {});
+});
+
+test("re-deriving asks the database for nothing", async () => {
+  // Deliberately not «clear the cache and ask again»: clearing would put every
+  // avatar back on its 734 kB original for the length of a query, which is the
+  // cost this store exists to avoid. The old address is still valid while the
+  // new one is derived — that is what renewing at 80% is for.
+  const scheduler = manualScheduler();
+  const { calls, fetcher } = recordingFetcher({ a: { avatar128Url: "a-128" } });
+  const store = createAvatarVariantStore(fetcher, { schedule: scheduler.schedule });
+
+  store.request("a");
+  await scheduler.run();
+  store.reproject((id) => ({ avatar128Url: `${id}-128-new` }));
+  await scheduler.run();
+
+  assert.equal(calls.length, 1);
+});
+
+test("two answers are the same only when every field is", () => {
+  const base: AvatarVariantUrls = { avatar128Url: "a", avatar128Width: 128, avatar256Url: "b" };
+  assert.equal(sameAvatarVariantUrls(base, { ...base }), true);
+  assert.equal(sameAvatarVariantUrls(base, { ...base, avatar128Url: "a2" }), false);
+  assert.equal(sameAvatarVariantUrls(base, { ...base, avatar256Url: "b2" }), false);
+  // A width that arrived as null and one that was never written are the same
+  // answer: the row is nullable and the consumer drops the descriptor either
+  // way.
+  assert.equal(sameAvatarVariantUrls({ avatar128Url: "a" }, { avatar128Url: "a", avatar128Width: null }), true);
+  assert.equal(sameAvatarVariantUrls({}, {}), true);
+  assert.equal(sameAvatarVariantUrls(undefined, undefined), true);
+  assert.equal(sameAvatarVariantUrls(undefined, {}), false);
 });

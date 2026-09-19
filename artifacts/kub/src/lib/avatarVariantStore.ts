@@ -40,6 +40,27 @@ export interface AvatarVariantStoreOptions {
 /** Nothing known for this profile. Frozen so a caller cannot poison the cache. */
 const NONE: Readonly<AvatarVariantUrls> = Object.freeze({});
 
+/**
+ * Whether two answers would draw the same picture.
+ *
+ * Only the addresses and their declared widths — everything this shape carries.
+ * Compared field by field rather than by `JSON.stringify`, which would call two
+ * equal answers different for writing their keys in a different order.
+ */
+export function sameAvatarVariantUrls(
+  a: AvatarVariantUrls | undefined,
+  b: AvatarVariantUrls | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.avatar128Url === b.avatar128Url
+    && a.avatar256Url === b.avatar256Url
+    && (a.avatar128Width ?? null) === (b.avatar128Width ?? null)
+    && (a.avatar128Height ?? null) === (b.avatar128Height ?? null)
+    && (a.avatar256Width ?? null) === (b.avatar256Width ?? null)
+    && (a.avatar256Height ?? null) === (b.avatar256Height ?? null);
+}
+
 export function createAvatarVariantStore(
   fetcher: AvatarVariantFetcher,
   options: AvatarVariantStoreOptions = {},
@@ -118,6 +139,43 @@ export function createAvatarVariantStore(
       if (!profileId) return true;
       if (known.has(profileId)) return true;
       return !pending.has(profileId) && !inFlight.has(profileId);
+    },
+
+    /**
+     * Re-derive what is already known, without asking the database again.
+     *
+     * D-208. This store caches *addresses*, and an address has a lifetime now:
+     * a signature is replaced at 80% of its life, and nothing here would ever
+     * notice, so every small avatar on screen would keep a dead URL until the
+     * surface holding it happened to unmount. The message-variant cache solved
+     * the same problem by keeping its last rows and re-projecting them
+     * (`projectMessageVariantRows`); this is that, for avatars.
+     *
+     * Deliberately not "clear the cache and ask again": clearing would make
+     * every avatar fall back to its 734 kB original for the length of a query,
+     * which is the exact cost this store exists to avoid. The old address is
+     * still valid when the new one is derived — that is what the 80% is for —
+     * so the picture never blinks.
+     *
+     * `project` returning `undefined` leaves an id alone, so an id whose rows
+     * are not held any more keeps whatever it had, including the frozen "this
+     * profile has no variant".
+     */
+    reproject(project: (id: string) => AvatarVariantUrls | undefined): void {
+      let changed = false;
+      for (const id of [...known.keys()]) {
+        const next = project(id);
+        if (!next) continue;
+        const current = known.get(id);
+        // The identity has to survive an unchanged re-derivation: `get` feeds
+        // `useSyncExternalStore`, which compares with `Object.is` and would
+        // re-render every avatar on screen for a new object holding the same
+        // two strings.
+        if (current && sameAvatarVariantUrls(current, next)) continue;
+        known.set(id, next);
+        changed = true;
+      }
+      if (changed) emit();
     },
 
     subscribe(listener: () => void): () => void {

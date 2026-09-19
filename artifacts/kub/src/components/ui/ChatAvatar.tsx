@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { ChatWithLastMessage, Profile } from "@/types/database";
 import { KubIcon } from "@/components/kub";
 import { useAvatarVariant, useChatAvatarVariant, type AvatarVariantUrls } from "@/hooks/useMediaVariants";
+import { useAvatarMediaUrl } from "@/hooks/useMediaObjectUrl";
 import { isSavedChatLikeName } from "@/lib/chatDisplay";
 import { cn } from "@/lib/utils";
 import { messageActorAvatarUrl, messageActorDisplayName, type MessageActor } from "@/lib/messageActor";
@@ -108,6 +109,17 @@ function AvatarImage({
   // A caller that already batched its own lookup keeps it; the stores are only
   // asked when nobody has answered. At most one of the two ids is ever set, so
   // the other resolves to "nothing to wait for" immediately.
+  /**
+   * The full-size picture's own address (D-208).
+   *
+   * Every avatar in the product arrives here as a column — `avatar_url` on
+   * a profile, a chat or a bot — and this is where it becomes a `src`. The
+   * variants beside it were routed when the variant store was; the
+   * original never was, because it never called `getPublicUrl` either. In
+   * `"public"` mode this is the column, character for character,
+   * including any query string it carries.
+   */
+  const resolvedOriginalUrl = useAvatarMediaUrl(originalUrl);
   const { variant: resolvedProfile, settled: profileSettled } = useAvatarVariant(profileId);
   const { variant: resolvedChat, settled: chatSettled } = useChatAvatarVariant(chatId);
   const settled = profileSettled && chatSettled;
@@ -120,8 +132,10 @@ function AvatarImage({
   // 734 kB request that is abandoned the moment the 3 kB one arrives. The
   // monogram fills the same box in the meantime, so nothing moves.
   const waiting = !settled && !variantUrl;
-  const primaryUrl = waiting ? undefined : variantUrl ?? originalUrl ?? undefined;
-  const fallbackUrl = variantUrl && originalUrl && variantUrl !== originalUrl ? originalUrl : undefined;
+  const primaryUrl = waiting ? undefined : variantUrl ?? resolvedOriginalUrl ?? undefined;
+  const fallbackUrl = variantUrl && resolvedOriginalUrl && variantUrl !== resolvedOriginalUrl
+    ? resolvedOriginalUrl
+    : undefined;
   const [status, setStatus] = useState<"primary" | "fallback" | "failed">("primary");
 
   useEffect(() => {

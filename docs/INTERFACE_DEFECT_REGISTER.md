@@ -12746,7 +12746,7 @@ and the tests calibrated against the old ones were never re-read.
 
 ---
 
-## D-207 `[ ]` The preview backfill marks rows for a worker that stopped looking for them
+## D-207 `[x]` The preview backfill marks rows for a worker that stopped looking for them
 
 **Severity:** medium, and latent until somebody runs the script — which is
 exactly when it will not be noticed.
@@ -12761,6 +12761,11 @@ the worker's candidate set». That was true when it was written. `6a26bc8` —
 the worker consume `private.media_variant_jobs` and nothing else. **It does not
 look for `stale` rows any more.** So the script marks rows and nothing ever
 regenerates them.
+
+> Corrected 2026-09-19: that sentence is too strong. `6a26bc8` moved the
+> heartbeat onto the queue and kept the old scan as a half-hourly safety net,
+> which does still take a `stale` row — over the newest 1200 media messages, 12
+> at a time. See the closing section.
 
 **Consequence:** `useMediaVariants` skips any row that is not `ready`
 (`useMediaVariants.ts:285`), so each marked picture silently falls back to its
@@ -12783,6 +12788,95 @@ own path and therefore the one that cannot drift.
 **Not fixed now**, deliberately: there is nothing left to back-fill, so any fix
 would ship untested end to end. A warning naming this entry is in the script's
 header instead, where the next person to run it will actually read it.
+
+**Superseded on 2026-09-19.** Both halves of that sentence were wrong, and the
+closing section below measures each. The fix shipped.
+
+---
+
+## D-207 — closed 2026-09-19, and the entry was wrong on both of its excuses
+
+**The fix.** `scripts/media-preview-backfill.mjs` now enqueues what it marks, in
+the same run, and reports `marked_stale` and `enqueued` as separate lines so the
+two cannot be read as one number. It writes `messages.media_url` back to its own
+value, which fires `trg_enqueue_media_variant_job_on_update` — the product's own
+path — and it refuses to mark any row whose message that trigger would ignore,
+because marking without enqueuing is the whole of this defect. An interrupted
+run leaves at most one row marked-but-not-queued, and the next run looks for
+exactly that shape before it marks anything new. Which column to write and which
+messages qualify live in `artifacts/api-server/src/workers/mediaPreviewBackfill.ts`
+with their own cases in `tests/unit/media-preview-backfill.test.mjs`; eight
+mutations of that rule were each run and each turns the suite red.
+
+**Excuse one: «there is nothing left to back-fill».** There were two rows.
+Counted read-only on production on 2026-09-19 with the selection's own geometry
+— `image_preview`, `ready`, long side exactly 1280, upright, short side under
+930 — against 174 ready previews. Small, but not nothing, and not a reason to
+leave a tool that degrades what it touches.
+
+**Excuse two: «it does not look for `stale` rows any more».** Too strong, and it
+matters because it is the sentence that made the defect sound total. `6a26bc8`
+moved the *heartbeat* onto the queue; it kept the old scan as a safety net, and
+that scan still treats a `stale` row as work — `shouldAttemptVariantKind`
+attempts anything that is neither `ready` nor a terminal `failed`, and
+`tests/server/media-preview-backfill-tick.test.mjs` drives the real tick to
+prove it. The scan runs every **30 minutes** (`DEFAULT_SCAN_MS`), over the
+newest **1200** media messages, at most **12** per pass, and no container on
+production overrides any of those. So the 2026-09-15 measurement — still stale
+one minute later — is exactly what a half-hourly scan predicts and proves
+nothing about «never». What is true is narrower and still damning: a back-fill
+is about old pictures by definition, old pictures are the first to leave a
+newest-1200 window, and a tool that degrades a picture now and relies on a
+half-hourly sweep to undo it is not a tool anyone should run.
+
+**The enqueue was proved without writing to production.** Four transactions on
+the live database, each rolled back, each performing the write as `service_role`
+and counting `private.media_variant_jobs` before and after:
+
+| probe | write | queue |
+| --- | --- | --- |
+| control | `pinned` back to its own value | 0 → **0** |
+| the claim | `media_url` back to its own value | 0 → **1** |
+| control | `media_url` on a deleted media message | 0 → **0** |
+| control | `media_url` on a text message | 0 → **0** |
+
+`UPDATE 1` in every case, and the claim's row was verified unchanged in the same
+transaction. After the rollbacks the queue held 0 rows and `public.messages`
+still held 200 live media messages. So an identical value does fire the trigger
+— it carries no unchanged-value guard, and Postgres fires a column-list trigger
+on whatever appears in the SET clause — and the queue count is not merely
+responding to the fact that an update happened.
+
+**`media_url`, not `media_path` as this entry proposed.** Read live from
+`pg_get_triggerdef`: of the three columns the enqueue trigger watches,
+`media_url` is the only one no other trigger on `public.messages` watches.
+`media_bucket` and `media_path` are also watched by `trg_guard_message_media_path`,
+which raises `message_media_path_not_owned`, and by
+`trg_enqueue_bot_message_updates_after_update`, which is stopped only by its own
+`row(...) is not distinct from row(...)` early return. Both are harmless today.
+Neither belongs to this tool.
+
+**What a run costs the people using the product.** `public.messages` is in the
+`supabase_realtime` publication, and the client answers a message UPDATE by
+re-fetching that row with its joins (`useMessages.ts`) — so each touch costs
+every reader with that chat open two PostgREST round trips and a list re-render
+for a row that did not change. That is the cost of an ordinary edit, the default
+batch of 12 bounds it, and it is recorded in the script's header as a reason to
+run the tool while the product is quiet rather than as an objection to it.
+
+**One thing that had aged the same way, found alongside.** The argument check
+refused `--batch N` — the very form its own usage line advertises — because it
+treated the value as an unknown argument; only `--batch=N` ever worked. Fixed
+with the rest.
+
+**Not proved end to end.** No service-role credential exists on this workstation
+and one was not brought here for a dry run, so the script itself was not
+executed. What was measured instead: the exact select it now issues was put to
+production's PostgREST with the browser bundle's public `anon` key and answered
+`42501` — the privilege boundary — byte for byte identically to the select it
+replaces, while a deliberately wrong embed answered `PGRST200` and a wrong
+embedded column answered `42703`. So the relationship and every column resolve;
+what is untested is the two writes in sequence against a real row.
 
 ---
 
@@ -12954,6 +13048,292 @@ already never a stored picture. Nothing there changes either way.
 **Nothing moved on screen.** The conversation fixture was captured at 390 and
 1440 in both themes, before and after the patch, and all four PNGs are
 byte-identical. Eleven mutations were run and all eleven go red.
+
+### 2026-09-19 — step nought is applied, and the order needed one more correction
+
+`20260919120000_media_read_policy_admits_a_chat_member.sql` **is applied to
+production**, as `supabase_admin`, in one transaction with a self-check that
+raises rather than committing half of itself. 16,196 bytes, sha256
+`2c5592b5…c661e06d33`, byte-identical to the copy in
+`.migration-backup/supabase/migrations/`; rollback beside it
+(`dfdb8e5c…`) and the rehearsal script kept with the evidence. Reading now has
+its own predicate, `_kub_media_read_allowed`; the write predicate is untouched.
+
+**Nothing on screen changed, and that is the point.** The bucket is still
+`public = true` — step four is the owner's and was not touched. An anonymous
+request with no token for one real object still returns **200 and 99,344 bytes
+of `image/webp`**, with an invented path in the same bucket still returning
+**400**. This migration grants nobody anything they could not already fetch
+without an account; it makes the *authenticated* route capable of the same
+thing, which is what every later step needs and none of them had.
+
+**Live vs file, read off production before anything was written.** The deployed
+`_kub_media_path_allowed` matches what the file assumes, branch for branch. Two
+facts the file did not have: `storage.objects` is owned by
+**`supabase_storage_admin`**, not by `postgres` and not by `supabase_admin`, and
+`pg_has_role('postgres','supabase_storage_admin','MEMBER')` is **false** — so
+`postgres` cannot create or drop a policy here at all and the apply had to be
+`supabase_admin`. And the `media` bucket carries **two** SELECT policies, not
+one: `media bot avatars owner read` is separate, untouched, and still lets a bot
+owner reach their own bot's avatar.
+
+**The object layout was re-counted rather than trusted**, and three of its
+numbers had moved: 778 objects, not 771; `chat-avatars/` 11, not 9;
+`variants/chats/` 8, not 6. 412/412 `variants/messages` objects confirmed to
+carry a real chat in segment three and a real message in segment four, 20/20
+profile variants and 8/8 chat variants likewise. Three objects sit one segment
+short (`avatars/{file}` twice, `chat-avatars/{file}` once) and match no branch —
+before or after — and no `avatar_url` names them.
+
+**Backup, taken and verified first:**
+`/srv/letscube/backups/pre-migrations/20260919-134918-before-media-read-policy-admits-a-chat-member.schema.dump`,
+1,648,191 bytes, sha256 `0c706012…fa5b6627c`, read back with `pg_restore -l`
+inside the container: 2,521 TOC entries, and **all ten** `storage.objects`
+policies are in it by name, the one being replaced included. Read back rather
+than assumed — a 0-byte dump from the same directory earlier today is why.
+
+**Rehearsed on production inside a transaction that was rolled back**, with
+three real accounts impersonated by `set local role authenticated` plus real
+`request.jwt.claims` — a policy measured as its table's owner is not measured.
+The harness was first calibrated against the known result: it reproduced
+yesterday's four values exactly (`f f t f`, and 0 rows of 2 where `postgres`
+sees 2) before it was trusted for anything new. Both migration and rollback were
+spliced in **verbatim**, only their `begin;`/`commit;` removed.
+
+| as a member | as a non-member | before → after → after the rollback |
+| --- | --- | --- |
+| another member's photo | refused throughout | false → **true** → false |
+| its generated variants | refused throughout | false → **true** → false |
+| variants of a chat they are not in | refused | false → **false** → false |
+| that chat's avatar, and its variants | refused | false → **true** → false |
+| a chat's avatar they are not in | refused | false → **false** → false |
+| a sidecar preview beside the original | refused | false → **true** → false |
+
+The non-member column is also the **removed** member: the predicate's only input
+is the presence of a `chat_members` row, and leaving a chat deletes it.
+
+**Writes are provably unchanged.** As that member, in all three phases
+identically: inserting into the chat's own variant folder **42501**, under
+another account's prefix **42501**, into a chat-avatar folder of a chat they
+belong to **42501**, and — the control, so the probe is known to distinguish —
+under their own prefix **allowed**. Updating another account's object touched
+**0 rows** in every phase, *including after* the read widened, which is the
+exact thing worth proving: seeing a row is now permitted and changing it still
+is not. There is deliberately no DELETE probe: `storage.protect_delete` raises
+**42501**, the same code an RLS refusal carries, so the two could not be told
+apart.
+
+**Four things the review changed before it was applied.**
+
+1. **A banned account was going to keep reading everything.** `messages` and
+   `chat_members` each carry a RESTRICTIVE `block banned reads`, and the
+   predicate is SECURITY DEFINER — it bypasses precisely that rule. Rehearsed on
+   a real ban row created and rolled back: a banned member goes **true → false**
+   on the photo, the variants, the chat avatar, the sidecar and even another
+   person's avatar, while a banned *uploader* still reads **its own** upload,
+   because the check sits below that branch and so takes nothing away that works
+   today.
+2. **`LIKE` in the sidecar branch was a wildcard hole**, and 484 of the 778
+   object names in this bucket contain an underscore. Proved rather than
+   argued: against a name whose stem differs from an entitled original by one
+   character replaced with `_`, the old form answers **true** and `starts_with`
+   answers **false**.
+3. **The predicate is owned by `postgres`, not `supabase_admin`.** Both work;
+   `supabase_admin` is a superuser here and `postgres` is not, and `postgres`
+   measurably has everything the body needs (SELECT on both tables, BYPASSRLS,
+   EXECUTE on `is_banned`). It is also what the sibling predicate runs as.
+4. **The self-check proved the write predicate rather than naming it.** It
+   asserted only that a policy with a given name existed; it now asserts all
+   three write policies still carry `_kub_media_path_allowed`, that the new
+   function is a stable security-definer owned by `postgres`, and that `anon`
+   cannot execute it.
+
+**Verified after the apply, on values.** The policy carries the new predicate;
+all ten policies are present and the three write ones still name the write
+predicate, whose definition hash is unchanged; the function is
+`postgres`-owned, SECURITY DEFINER, STABLE, `search_path` pinned, ACL
+`{postgres=X, authenticated=X}` with **no** `anon` and no `service_role` — the
+latter needs none, it holds BYPASSRLS. The whole value matrix was measured again
+live and matches the rehearsal's *after* column exactly. Cost, measured: signing
+one object is **4.1 ms** (the index on `(bucket_id, name)` runs first and the
+predicate filters one row); the worst case, listing the entire
+`variants/messages/` prefix through the predicate, is **71 ms** for 778 rows.
+Residue: 778 objects, 0 bans, 0 probe rows, 0 synthetic previews.
+
+**Who can read an avatar now, stated plainly.** A **person's** avatar, that
+person's avatar **variants**, and a **bot's** avatar: any authenticated account.
+A **chat's** avatar and its variants: members of that chat only. The migration's
+own header claimed a chat's avatar was in the wide group; the code has never
+done that and the truth table refutes it, so the header was corrected and the
+file re-applied so that what is recorded is what ran.
+
+**I agree with the judgement, with one qualification.** Measured rather than
+argued: through the authenticated route **5 of 18** accounts can already read
+somebody else's avatar today — the ones holding a critical global role or
+`users.manage`/`media.moderate` — and after this it is 18 of 18; through the
+route the product actually uses it is, and remains until step four, the entire
+internet with no account at all. Avatars are drawn in global search, member
+lists, forward headers and notifications, none of which implies a shared chat,
+so membership would blank all four. The qualification is that the branch is a
+**path test, not a lookup**: it admits a well-formed uuid path whether or not
+the object exists, case-insensitively, which means every *superseded* avatar a
+person ever uploaded stays readable too. That is tolerable only because the file
+name carries its own random uuid, so the profile id alone does not yield the
+address. If avatar file naming ever becomes predictable, this branch has to be
+revisited.
+
+**Two corrections to the section above.**
+
+- **The back-fill is a prerequisite, not a tidy-up.** Ten live messages carry a
+  `media_url` and no `media_path`, and all ten name an object that still exists.
+  This predicate reaches an original through `messages.media_path`, so for those
+  ten only the uploader passes; every other member loses the picture the moment
+  the bucket stops being public. `messageMediaObjectRef` parsing the URL does
+  not help — deriving the address is not the same as being allowed to sign it.
+  So `20260919130000_media_path_backfill_for_legacy_messages.sql` has to run
+  before step four.
+- **17 avatar URLs, not 16** (10 profiles, 7 chats, 0 bots). All 17 are
+  two-segment, carry a uuid, and their object exists, so all 17 are readable
+  under the new predicate.
+
+**What is still not proved here.** The sidecar branch matches **nothing** on
+production — not one of the 778 names contains `.preview.` — so the only
+evidence it works is the rehearsal's synthetic object. And the end-to-end proof
+that a signed URL now succeeds for a member belongs with the client step: it
+needs a real session, and this pass touched no credentials. What is proved is
+the layer the defect lives in: `select` on `storage.objects`, which signing
+requires and which a member did not have.
+
+### 2026-09-19 — the originals are routed, and the shapes table was half wrong
+
+The section above lists what step one's seven call sites do not cover. That list
+was a reading of the code, so it was re-measured against the tree before
+anything was changed, and it was wrong in both directions.
+
+**Right:** the message bubble's photograph, the viewer, `AudioMessage`, video
+and round-video playback, the mini-player, the file link, the copy-image and
+save-as `fetch()` path, the two bare `<img>` avatars in `SearchShared.tsx` and
+`NotificationBell.tsx`, and the avatar-variant store's missing renewal. All ten
+confirmed unrouted and all ten now routed.
+
+**Missed, and each found by reading a consumer rather than a list:**
+
+- **`ChatInfoPanel` had two of its own.** The shared-media viewer took
+  `openMediaRow.media_url!`, and «Файлы» / «Аудио» / «Голосовые» drew
+  `href={m.media_url!}` per row. The entry says the info panel «reads variants,
+  so it follows for free», which is true of the grid and of nothing else.
+- **Every avatar original, not just two.** `avatarMediaUrl` was exported by
+  `mediaUrl.ts` with **zero callers**, so `AvatarImage`'s `originalUrl` — the
+  full-size picture behind all forty-two avatar call sites, reached whenever a
+  variant is absent or fails — was unrouted as well. The two bare `<img>`s are
+  the ones that skip `AvatarImage`; they are not the only ones that mattered.
+- **`useAvatarVariantUrls` needed the renewal too.** The entry names the
+  avatar-variant *store*; the older hook beside it holds the same resolved
+  strings in component state for the chat list, the chat header and the sender
+  avatars beside a message, and asks once per set of ids and then never again.
+
+**Wrong in the other direction:** «`AudioMessage` — the only shape with no
+fallback at all» is right about the fallback and wrong about the consequence.
+The bubble is not silent: `<audio onError>` already sets
+«Не удалось загрузить голосовое сообщение» in place of the time, and with no
+address at all the play button is disabled and the label reads «загрузка...».
+The failure worth fixing was that the *second* state never ends — a refused
+address prints «загрузка...» for the rest of the session. So the bubble now
+takes an `unavailable` flag, set only when the row has a `media_url` that the
+resolver has settled on and refused, and says the same sentence the element's
+own failure says. In `"public"` mode a present `media_url` always resolves to
+itself, so the flag is false by construction and the shipped label is untouched.
+
+**The rule that decides where an original's address comes from** is the whole
+risk of this step, and it lives in `lib/media/mediaSource.ts`, which imports
+nothing but two other pure modules so `node --test` can reach it — the split
+`lib/supabase/config.ts` exists for. In `"public"` the **column wins**: not a
+rebuilt address, because the two agreeing on all 294 production rows that carry
+both is a weaker promise than «this cannot change what is on screen». In a
+signing mode the **object wins and the column is not consulted**, not even as a
+fallback — `"signed"`'s fallback rebuilds the public URL *from the object*, so
+`"signed-only"` really does prove the client no longer needs the public route.
+An address that is not ours — a `blob:` mid-send, the preview fixture's `data:`
+pictures, a bot avatar set through the API — is passed through untouched in
+every mode. That arm is not hypothetical: `publicPreviewFixture.ts` gives every
+photograph a `data:` URI with both path columns null, so a resolver that
+answered `null` there would empty the only surface this work can be looked at.
+
+**A `<video>` that is playing must not have its `src` swapped, and that cannot
+be «never swap».** Two swaps the product already makes are deliberate: the 720p
+re-encode arriving beside the original, and the fallback to the original after a
+failure. So `lib/media/playbackUrlPin.ts` holds back exactly one thing — the
+same object signed again, recognised by the pathname, which is the token's only
+stable part. In `"public"` neither address is ever a signature, so nothing can
+be held back there at all, whatever the element is doing.
+
+**The seek-past-expiry hazard, decided.** Holding a signature means holding one
+that will die, so the hold is paired with its other half: on `error`, an element
+whose address is a signature drops the pin, takes the one the resolver is
+offering — fresh, because the renewal the pin refused has already happened — and
+resumes at the position it had. A second failure on that same fresh address is
+not retried, so it falls through to the error the component already shows rather
+than looping. None of this exists in `"public"`: the first thing it asks is
+whether the failed address was signed.
+
+**Eleven mutations, all red**, including two that had nothing to do with the
+change and everything to do with trusting a test:
+
+| mutation | what goes red |
+| --- | --- |
+| a column back into an `href` | the new address scan |
+| `"public"` rebuilds instead of reading the column | the public-mode case |
+| a signing mode falls back to the column | the signing case |
+| an address that is not ours is dropped | the pass-through case, the fixture's own shape |
+| the playback hold removed | «a renewal does not reach an element mid-playback» |
+| the hold stops asking whether it is the same object | four cases, `"public"` among them |
+| `reproject` replaces the object when nothing changed | the identity case |
+| `reproject` changes the cache silently | the notification case |
+| the scan is blinded | its own reach check, by name |
+
+**The scan that was measuring nothing.** The first of those mutations was
+*green*: a column put back into an `href` in `MessageBubble.tsx` and the guard
+said the tree was clean. `code()` in `media-url-mode.test.mts` — shared by the
+three guards written with step one — turned that file's 104,952 characters into
+**3,989**, taking every `href={…}` with them, because
+``/`(?:[^`\\]|\\.)*`/g`` cannot see that template literals nest and one bite
+swallowed 15,136 characters of real code. A hand-rolled scanner replaced it and
+fell over too, on line 111 of the same file, where a regex character class
+contains a backtick. The compiler that already builds this project knows where a
+`/` begins a regex; it is now asked, literals are blanked in place, and comments
+are stripped afterwards, when no `/*` can survive inside one. Repairing it
+immediately surfaced a `getPublicUrl` the old form had been hiding — a doc
+comment, this time, and harmless, which is precisely how little the guard had
+been able to see. The scan now counts what it examined (**122**, read off a run;
+the first guess written into the comment was 344) and fails naming the count if
+it stops reaching the components, because an empty result means nothing unless
+the probe is known to match something.
+
+**Nothing moved on screen**, and the measurement needed its own calibration. The
+conversation fixture — which now also draws a voice bubble, at no cost, because
+`isVoiceMessage` routes on the text — was captured at 390 and 1440 in both
+themes, before and after, from two separately started dev servers. Three of the
+four pairs were byte-identical at once; `preview-1440-dark` differed by **3
+pixels** at a maximum channel delta of **4/255**. It is not the patch: the
+unmodified tree produces *both* hashes, and so does the patched one. The first
+capture against a freshly started server rasterises one antialiased edge in the
+sidebar-header icon row a step differently, at 1440 in either theme — 3 pixels
+dark, 7 pixels light, all inside x 301..476, y 31..52 — and every subsequent run
+on either tree agrees. Stated the other way: `before3` (HEAD) and `after2`
+(patched) hash identically at 1440 dark, and four separate 1440-light runs
+across both trees share one hash against a single outlier.
+
+**What still stands between here and `signed-only`.** The back-fill, as the
+section above corrects — ten live rows reach their original only through
+`media_path`, which the new read predicate requires and which parsing the URL
+does not supply. A signed URL succeeding end to end for a real member, which
+needs a session and was not attempted here. And one thing this step did not
+change and should be read before step four is scheduled: a signature is renewed
+by being *read*, and a render is what reads it, so a tab left untouched for an
+hour renews nothing until something re-renders. Every failure path below that is
+covered — a spent URL is not handed out, a dead one recovers on `error` — but
+the renewal is demand-driven by design, and that design is worth re-reading with
+a private bucket in view.
 
 ---
 

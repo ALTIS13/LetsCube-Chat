@@ -6,6 +6,7 @@ import { useLocation } from "wouter";
 import { KubButton, KubIcon } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useCreateChat } from "@/hooks/useCreateChat";
+import { useAvatarMediaUrl } from "@/hooks/useMediaObjectUrl";
 import { EDGE_ARROW_CLASS, useEdgeScroll } from "@/hooks/useEdgeScroll";
 import type { GlobalSearchResult, GlobalSearchResultType } from "@/hooks/useGlobalSearch";
 import { useRoleAccess } from "@/hooks/useRole";
@@ -470,13 +471,18 @@ export function SearchProfilePreview({
 }
 
 function SearchResultIcon({ result, compact = false }: { result: GlobalSearchResult; compact?: boolean }) {
+  // D-208. A bare `<img src={column}>`: the one avatar shape that does not
+  // go through `AvatarImage`, so routing that component left this one
+  // behind. Unconditional, because it sits above an early return. In
+  // `"public"` mode it is `result.avatarUrl`, unchanged.
+  const avatarUrl = useAvatarMediaUrl(result.avatarUrl);
   if (result.resultType === "user" && result.profile) {
     return <UserAvatar user={result.profile} size="sm" />;
   }
-  if (result.avatarUrl) {
+  if (avatarUrl) {
     return (
       <img
-        src={result.avatarUrl}
+        src={avatarUrl}
         alt=""
         className={cn("shrink-0 rounded-full object-cover", compact ? "h-8 w-8" : "h-8 w-8")}
       />

@@ -39,6 +39,7 @@ import { groupReactions, type ReactionGroup } from "@/lib/messageReactions";
 import { isUncompressedMedia } from "@/lib/mediaCompression";
 import { mediaBubbleStyle } from "@/lib/mediaBubbleLayout";
 import { resolveOriginalPreviewUrl } from "@/hooks/useMediaVariants";
+import { useMessageMediaSource, usePlaybackUrl } from "@/hooks/useMediaObjectUrl";
 import {
   messageActorDisplayName,
   resolveMessageActor,
@@ -900,9 +901,34 @@ export function MessageBubble({
   const uncompressedMedia = (message.type === "image" || message.type === "video")
     && isUncompressedMedia(message.media_metadata);
   const originalPreview = message.type === "image" && uncompressedMedia ? resolveOriginalPreviewUrl(message) : null;
+  /**
+   * The address of the file this message *is* — not of a preview of it.
+   *
+   * D-208. Every shape below used to read `message.media_url` straight out of
+   * the row, which is why none of them was touched when the variants were
+   * routed: they never called `getPublicUrl` in the first place, they read a
+   * column somebody else's `getPublicUrl` had filled in months earlier. In the
+   * shipped `"public"` mode this is that same column value, unchanged; under a
+   * signature it is resolved from `media_path` and renewed while the bubble is
+   * on screen.
+   *
+   * `settled` separates "no address yet" from "there is no address", which only
+   * the voice bubble needs — it is the one shape with nothing to fall back to.
+   */
+  const { url: originalUrl, settled: originalSettled } = useMessageMediaSource(message);
+  /**
+   * Whether the file cannot be addressed at all, as opposed to not yet.
+   *
+   * Guarded by the column as well as by the resolver: a row whose `media_url`
+   * is null has never had an address, and saying so where the product used to
+   * say «загрузка...» would be a change in the shipped mode. With the column
+   * present, `"public"` always resolves to it, so this is false there by
+   * construction.
+   */
+  const originalUnavailable = Boolean(message.media_url) && originalSettled && !originalUrl;
   const imageDisplayUrl = message.type === "image"
-    ? mediaVariant?.previewUrl ?? originalPreview?.url ?? message.media_url
-    : message.media_url;
+    ? mediaVariant?.previewUrl ?? originalPreview?.url ?? originalUrl
+    : originalUrl;
   const imageDimensions = message.type === "image" && mediaVariant?.previewWidth && mediaVariant?.previewHeight
     ? { width: mediaVariant.previewWidth, height: mediaVariant.previewHeight }
     : mediaDimensions;
@@ -930,13 +956,13 @@ export function MessageBubble({
         : mediaDimensions?.width ?? null)
     : null;
   const videoPosterUrl = message.type === "video" ? mediaVariant?.videoPosterUrl : undefined;
-  const videoPlaybackUrl = message.type === "video" && message.media_url
+  const videoPlaybackUrl = message.type === "video" && originalUrl
     ? selectVideoPlaybackUrl({
-      originalUrl: message.media_url,
+      originalUrl,
       video720pUrl: mediaVariant?.video720pUrl,
       mediaMetadata: message.media_metadata,
     })
-    : message.media_url;
+    : originalUrl;
   const textLayoutKind = getMessageTextLayoutKind(message.type, textContent);
   const widthClasses = getMessageWidthClasses(textLayoutKind);
   const stackStyle = getMessageStackStyle(textLayoutKind);
@@ -1422,79 +1448,91 @@ export function MessageBubble({
 
             {isVoiceMessage(message) ? (
               <AudioMessage
-                url={message.media_url}
+                url={originalUrl}
+                unavailable={originalUnavailable}
                 duration={parseAudioDuration(message.content)}
                 isMe={isMe}
-                playbackItem={createPlaybackItemFromMessage(message, isMe)}
+                playbackItem={createPlaybackItemFromMessage(message, isMe, originalUrl)}
               />
             ) : message.type === "image" && message.media_url ? (
               <MediaWithCaption caption={mediaCaption}>
                 <MediaImage
-                  url={imageDisplayUrl ?? message.media_url}
-                  originalUrl={message.media_url}
+                  url={imageDisplayUrl ?? originalUrl}
+                  originalUrl={originalUrl}
                   thumbUrl={mediaVariant?.thumbUrl}
                   thumbWidth={mediaVariant?.thumbWidth ?? null}
                   mainWidth={imageDisplayWidth}
                   title={message.content ?? "Фото"}
                   dimensions={imageDimensions}
                   original={uncompressedMedia}
-                  onOpen={() => onOpenMedia?.({
-                    type: "image",
-                    url: message.media_url!,
-                    title: message.content ?? "Фото",
-                    // What the stored file is, read from the row rather than
-                    // inferred from the absence of a flag (D-097).
-                    originality: mediaOriginality(message.media_metadata),
-                    ...(uncompressedMedia
-                      ? {
-                        original: true,
-                        previewUrl: imageDisplayUrl && imageDisplayUrl !== message.media_url ? imageDisplayUrl : undefined,
-                      }
-                      : {}),
-                  })}
+                  onOpen={() => {
+                    // The viewer is always the original, so there is nothing to
+                    // open until the original has an address.
+                    if (!originalUrl) return;
+                    onOpenMedia?.({
+                      type: "image",
+                      url: originalUrl,
+                      title: message.content ?? "Фото",
+                      // What the stored file is, read from the row rather than
+                      // inferred from the absence of a flag (D-097).
+                      originality: mediaOriginality(message.media_metadata),
+                      ...(uncompressedMedia
+                        ? {
+                          original: true,
+                          previewUrl: imageDisplayUrl && imageDisplayUrl !== originalUrl ? imageDisplayUrl : undefined,
+                        }
+                        : {}),
+                    });
+                  }}
                 />
               </MediaWithCaption>
             ) : message.type === "video" && message.media_url ? (
               isRoundVideoMessage(message) ? (
                 <RoundVideoMessage
-                  url={videoPlaybackUrl ?? message.media_url}
-                  originalUrl={message.media_url}
+                  url={videoPlaybackUrl}
+                  originalUrl={originalUrl}
                   title={message.content ?? "Видео-сообщение"}
                   posterUrl={videoPosterUrl}
                   durationLabel={parseVideoMessageDuration(message.content, message)}
-                  playbackItem={createPlaybackItemFromMessage(message, isMe, videoPlaybackUrl ?? message.media_url)}
-                  onOpen={() => onOpenMedia?.({
-                    type: "video",
-                    url: message.media_url!,
-                    title: message.content ?? "Видео-сообщение",
-                    // A round message's metadata carries neither the flag nor a
-                    // picked size, so this is «unknown» and the viewer says
-                    // nothing — which is the honest answer, not an oversight.
-                    originality: mediaOriginality(message.media_metadata),
-                  })}
+                  playbackItem={createPlaybackItemFromMessage(message, isMe, videoPlaybackUrl)}
+                  onOpen={() => {
+                    if (!originalUrl) return;
+                    onOpenMedia?.({
+                      type: "video",
+                      url: originalUrl,
+                      title: message.content ?? "Видео-сообщение",
+                      // A round message's metadata carries neither the flag nor
+                      // a picked size, so this is «unknown» and the viewer says
+                      // nothing — which is the honest answer, not an oversight.
+                      originality: mediaOriginality(message.media_metadata),
+                    });
+                  }}
                 />
               ) : (
                 <MediaWithCaption caption={mediaCaption}>
                   <MediaVideo
-                    url={videoPlaybackUrl ?? message.media_url}
-                    originalUrl={message.media_url}
+                    url={videoPlaybackUrl}
+                    originalUrl={originalUrl}
                     title={message.content ?? "Видео"}
                     posterUrl={videoPosterUrl}
                     dimensions={mediaDimensions}
-                    playbackItem={createPlaybackItemFromMessage(message, isMe, videoPlaybackUrl ?? message.media_url)}
-                    onOpen={() => onOpenMedia?.({
-                      type: "video",
-                      url: message.media_url!,
-                      title: message.content ?? "Видео",
-                      originality: mediaOriginality(message.media_metadata),
-                      ...(uncompressedMedia ? { original: true } : {}),
-                    })}
+                    playbackItem={createPlaybackItemFromMessage(message, isMe, videoPlaybackUrl)}
+                    onOpen={() => {
+                      if (!originalUrl) return;
+                      onOpenMedia?.({
+                        type: "video",
+                        url: originalUrl,
+                        title: message.content ?? "Видео",
+                        originality: mediaOriginality(message.media_metadata),
+                        ...(uncompressedMedia ? { original: true } : {}),
+                      });
+                    }}
                   />
                 </MediaWithCaption>
               )
             ) : message.type === "file" && message.media_url ? (
               <a
-                href={message.media_url}
+                href={originalUrl ?? undefined}
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity text-[color:var(--kub-accent-text)]"
@@ -1650,8 +1688,16 @@ function MediaImage({
   original = false,
   onOpen,
 }: {
-  url: string;
-  originalUrl: string;
+  /**
+   * The address to draw, or `null` while the original has not got one.
+   *
+   * Nullable since D-208: a signed address is not known at first paint. In the
+   * shipped `"public"` mode it is never null when the bubble draws a picture at
+   * all, because the caller gates on `message.media_url` and that column is
+   * what `"public"` resolves to.
+   */
+  url: string | null;
+  originalUrl: string | null;
   thumbUrl?: string;
   thumbWidth?: number | null;
   mainWidth?: number | null;
@@ -1705,7 +1751,7 @@ function MediaImage({
    * every viewport and pixel ratio in the project matrix lands on the preview,
    * never on the 360px thumb.
    */
-  const srcSet = !usingOriginal && thumbUrl && thumbWidth && mainWidth && thumbWidth < mainWidth
+  const srcSet = !usingOriginal && url && thumbUrl && thumbWidth && mainWidth && thumbWidth < mainWidth
     ? `${thumbUrl} ${thumbWidth}w, ${url} ${mainWidth}w`
     : undefined;
 
@@ -1727,10 +1773,23 @@ function MediaImage({
       <div className="flex max-w-[260px] items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
         <KubIcon name="warning" size={16} />
         <span className="min-w-0 flex-1">Не удалось загрузить изображение.</span>
-        <a href={originalUrl} target="_blank" rel="noreferrer" className="text-[color:var(--kub-accent-text)] hover:underline">
+        <a href={originalUrl ?? undefined} target="_blank" rel="noreferrer" className="text-[color:var(--kub-accent-text)] hover:underline">
           Открыть
         </a>
       </div>
+    );
+  }
+
+  // No address yet. The box is the one the picture will fill, so nothing moves
+  // when it arrives — and this is not the failure box, because nothing has
+  // failed. Unreachable in the shipped mode; see the prop's note.
+  if (!activeUrl) {
+    return (
+      <div
+        className="block w-[min(360px,calc(100vw-7.5rem))] max-w-full overflow-hidden rounded-xl bg-[var(--kub-surface-2)] sm:w-[min(420px,70vw)]"
+        style={boxStyle}
+        aria-hidden="true"
+      />
     );
   }
 
@@ -1790,8 +1849,8 @@ function MediaVideo({
   playbackItem,
   onOpen,
 }: {
-  url: string;
-  originalUrl: string;
+  url: string | null;
+  originalUrl: string | null;
   title: string;
   posterUrl?: string;
   dimensions: MediaDimensions | null;
@@ -1804,9 +1863,14 @@ function MediaVideo({
   const mediaPlayback = useChatMediaPlayback();
   const replaceCurrentItemUrl = mediaPlayback.replaceCurrentItemUrl;
   const aspectStyle = getVideoAspectStyle(dimensions, 16 / 9);
-  const activeUrl = usingOriginal ? originalUrl : url;
+  const offeredUrl = usingOriginal ? originalUrl : url;
+  // D-208. A renewed signature must not reach a `<video>` that is playing, and
+  // an address held back for that reason must not be the one a seek dies on.
+  // Both halves are `usePlaybackUrl`; in `"public"` mode it returns `offeredUrl`
+  // and `recoverFromError` is always false.
+  const { url: activeUrl, recoverFromError } = usePlaybackUrl(offeredUrl, videoRef);
   const activePlaybackItem = useMemo(
-    () => playbackItem && { ...playbackItem, url: activeUrl },
+    () => (playbackItem && activeUrl ? { ...playbackItem, url: activeUrl } : null),
     [activeUrl, playbackItem],
   );
 
@@ -1820,7 +1884,8 @@ function MediaVideo({
   }, [activePlaybackItem?.id, activePlaybackItem?.url, replaceCurrentItemUrl]);
 
   const handleError = () => {
-    const fallbackUrl = getVideoPlaybackFallbackUrl(activeUrl, originalUrl);
+    if (recoverFromError()) return;
+    const fallbackUrl = activeUrl && originalUrl ? getVideoPlaybackFallbackUrl(activeUrl, originalUrl) : null;
     if (fallbackUrl) {
       if (activePlaybackItem) {
         replaceCurrentItemUrl(activePlaybackItem.id, fallbackUrl, { suppressCurrentError: true });
@@ -1836,7 +1901,7 @@ function MediaVideo({
       <div className="flex max-w-[280px] items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
         <KubIcon name="warning" size={16} />
         <span className="min-w-0 flex-1">Не удалось загрузить видео.</span>
-        <a href={originalUrl} target="_blank" rel="noreferrer" className="text-[color:var(--kub-accent-text)] hover:underline">
+        <a href={originalUrl ?? undefined} target="_blank" rel="noreferrer" className="text-[color:var(--kub-accent-text)] hover:underline">
           Открыть
         </a>
       </div>
@@ -1850,7 +1915,7 @@ function MediaVideo({
     >
       <video
         ref={videoRef}
-        src={activeUrl}
+        src={activeUrl ?? undefined}
         poster={posterUrl}
         preload="metadata"
         controls
@@ -1883,8 +1948,8 @@ function RoundVideoMessage({
   playbackItem,
   onOpen,
 }: {
-  url: string;
-  originalUrl: string;
+  url: string | null;
+  originalUrl: string | null;
   title: string;
   posterUrl?: string;
   durationLabel: string | null;
@@ -1899,9 +1964,12 @@ function RoundVideoMessage({
   const mediaPlayback = useChatMediaPlayback();
   const activateMediaPlayback = mediaPlayback.activate;
   const replaceCurrentItemUrl = mediaPlayback.replaceCurrentItemUrl;
-  const activeUrl = usingOriginal ? originalUrl : url;
+  const offeredUrl = usingOriginal ? originalUrl : url;
+  // See `MediaVideo`: a circle is a `<video>` too, and a swapped `src` restarts
+  // it in exactly the same way.
+  const { url: activeUrl, recoverFromError } = usePlaybackUrl(offeredUrl, videoRef);
   const activePlaybackItem = useMemo(
-    () => playbackItem && { ...playbackItem, url: activeUrl },
+    () => (playbackItem && activeUrl ? { ...playbackItem, url: activeUrl } : null),
     [activeUrl, playbackItem],
   );
 
@@ -1960,7 +2028,8 @@ function RoundVideoMessage({
   const isActiveMedia = Boolean(activePlaybackItem && mediaPlayback.isCurrent(activePlaybackItem.id));
 
   const handleError = () => {
-    const fallbackUrl = getVideoPlaybackFallbackUrl(activeUrl, originalUrl);
+    if (recoverFromError()) return;
+    const fallbackUrl = activeUrl && originalUrl ? getVideoPlaybackFallbackUrl(activeUrl, originalUrl) : null;
     if (fallbackUrl) {
       if (activePlaybackItem) {
         replaceCurrentItemUrl(activePlaybackItem.id, fallbackUrl, { suppressCurrentError: true });
@@ -2024,7 +2093,7 @@ function RoundVideoMessage({
       >
         <video
           ref={videoRef}
-          src={activeUrl}
+          src={activeUrl ?? undefined}
           poster={posterUrl}
           preload="metadata"
           playsInline
@@ -2071,10 +2140,18 @@ function parseVideoMessageDuration(content: string | null | undefined, message?:
   return content?.match(/(\d{1,2}:\d{2})/)?.[1] ?? null;
 }
 
+/**
+ * The mini-player's copy of this message.
+ *
+ * `mediaUrl` has no default any more (D-208). It used to fall back to
+ * `message.media_url`, which is the column rather than the resolved address —
+ * precisely the habit this step exists to remove, and a default is the hardest
+ * kind to notice, because a call site that forgets to pass one looks correct.
+ */
 function createPlaybackItemFromMessage(
   message: MessageWithSender,
   isMe: boolean,
-  mediaUrl: string | null | undefined = message.media_url,
+  mediaUrl: string | null | undefined,
 ): ChatMediaPlaybackItem | null {
   if (!mediaUrl || message.deleted_at) return null;
   if (message.type !== "audio" && message.type !== "video") return null;

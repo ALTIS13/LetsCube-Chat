@@ -3,6 +3,7 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { publicMediaObjectUrl } from "@/lib/media/mediaUrl";
+import { useMessageMediaUrl } from "@/hooks/useMediaObjectUrl";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
 import { KubBadge, KubButton, KubIcon, KubModal, KubNotice, KubStableSkeleton, type KubIconName } from "@/components/kub";
@@ -1849,6 +1850,14 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
   );
   const openMediaRow = openMediaIndex === null ? null : galleryItems[openMediaIndex] ?? null;
   /**
+   * The address of the picture or video the viewer is on (D-208).
+   *
+   * The tiles behind it draw variants and were routed with them; this one
+   * reads the message row, so it was not. In `"public"` mode it is
+   * `openMediaRow.media_url`, which is what stood here.
+   */
+  const openMediaUrl = useMessageMediaUrl(openMediaRow);
+  /**
    * The row as the viewer takes it.
    *
    * Built here rather than in the tile's press, which is what makes moving to
@@ -1857,10 +1866,10 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
    * reached by an arrow key cannot lose the «Оригинал» badge a photo reached by
    * a tap keeps.
    */
-  const openMediaItem: MediaViewerItem | null = openMediaRow
+  const openMediaItem: MediaViewerItem | null = openMediaRow && openMediaUrl
     ? {
       type: openMediaRow.type === "video" ? "video" : "image",
-      url: openMediaRow.media_url!,
+      url: openMediaUrl,
       title: openMediaRow.content ?? (openMediaRow.type === "video" ? "Видео" : "Фото"),
       ...(isUncompressedMedia(openMediaRow.media_metadata)
         ? {
@@ -3055,18 +3064,12 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
                   ) : (
                     <div>
                       {group.items.map((m) => (
-                        <a
+                        <MediaSectionFileLink
                           key={m.id}
-                          href={m.media_url!}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[color:var(--kub-text)] transition-colors kub-raise-hover"
-                        >
-                          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]">
-                            <KubIcon name={MEDIA_SECTION_ICONS[activeSection.kind]} size={15} tone="accent" />
-                          </div>
-                          <span className="truncate text-sm">{m.content ?? activeSection.label}</span>
-                        </a>
+                          message={m}
+                          icon={MEDIA_SECTION_ICONS[activeSection.kind]}
+                          label={activeSection.label}
+                        />
                       ))}
                     </div>
                   )}
@@ -3491,6 +3494,40 @@ function readChatInvitePolicy(chat: ChatWithLastMessage): InvitePolicy | null {
 
 function normalizeInvitePolicy(value: string | null | undefined): InvitePolicy {
   return value === "members_can_invite" ? "members_can_invite" : DEFAULT_INVITE_POLICY;
+}
+
+/**
+ * One row of «Файлы», «Аудио» or «Голосовые» in the shared-media list.
+ *
+ * A component rather than an `<a>` in the map, because the address is
+ * resolved per message and a hook cannot be called in a loop. D-208: this
+ * used to be `href={m.media_url!}` — the column — which is the one shape of
+ * this defect that is a link rather than a picture, and so had no `onError`
+ * to make a dead address visible.
+ */
+function MediaSectionFileLink({
+  message,
+  icon,
+  label,
+}: {
+  message: Message;
+  icon: KubIconName;
+  label: string;
+}) {
+  const url = useMessageMediaUrl(message);
+  return (
+    <a
+      href={url ?? undefined}
+      target="_blank"
+      rel="noreferrer"
+      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[color:var(--kub-text)] transition-colors kub-raise-hover"
+    >
+      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]">
+        <KubIcon name={icon} size={15} tone="accent" />
+      </div>
+      <span className="truncate text-sm">{message.content ?? label}</span>
+    </a>
+  );
 }
 
 function MediaGalleryTile({

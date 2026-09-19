@@ -6,16 +6,31 @@ import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
 import { reportError } from "@/lib/monitoring";
 import { cn } from "@/lib/utils";
+import { usePlaybackUrl } from "@/hooks/useMediaObjectUrl";
 import { useChatMediaPlayback, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 
 interface AudioMessageProps {
   url?: string | null;
+  /**
+   * The file has no address and is not going to get one (D-208).
+   *
+   * A voice message is the one media shape with nothing to fall back to: there
+   * is no thumbnail, no poster and no re-encode, so `url === null` is the whole
+   * of what this bubble knows. Without this flag the two quite different states
+   * — "the address has not arrived yet" and "there is no address" — both print
+   * «загрузка...», and the second one prints it for the rest of the session.
+   *
+   * False in the shipped `"public"` mode, always: the caller only sets it when
+   * the row has a `media_url` that the resolver has settled on and refused, and
+   * in `"public"` a present `media_url` always resolves to itself.
+   */
+  unavailable?: boolean;
   duration?: number;
   isMe: boolean;
   playbackItem?: ChatMediaPlaybackItem | null;
 }
 
-export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMessageProps) {
+export function AudioMessage({ url, unavailable = false, duration = 0, isMe, playbackItem }: AudioMessageProps) {
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [durationSeconds, setDurationSeconds] = useState(0);
@@ -25,6 +40,17 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
   const [metadataWarmupElapsed, setMetadataWarmupElapsed] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const rafRef = useRef<number | null>(null);
+  /**
+   * The address this element is loaded with (D-208).
+   *
+   * Not the prop: replacing an `<audio>`'s `src` reloads it, and a signature
+   * is replaced while the conversation is open, so a renewal would put a
+   * voice message somebody is halfway through back to 0:00. `usePlaybackUrl`
+   * holds the old one until the element is idle, and takes a fresh one if the
+   * held one dies under it. In `"public"` mode the prop never changes and
+   * this is the prop.
+   */
+  const { url: audioSrc, recoverFromError } = usePlaybackUrl(url ?? null, audioRef);
   const durationPrimingRef = useRef(false);
   const { settings } = useAudioSettings();
   const mediaPlayback = useChatMediaPlayback();
@@ -123,7 +149,7 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
 
   useEffect(() => {
     void applyAudioOutputDevice(audioRef.current, settings.selectedOutputDeviceId);
-  }, [settings.selectedOutputDeviceId, url]);
+  }, [settings.selectedOutputDeviceId, audioSrc]);
 
   useEffect(() => {
     stopProgressLoop();
@@ -136,7 +162,7 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
     setMetadataWarmupElapsed(false);
 
     const audio = audioRef.current;
-    if (!audio || !url) return;
+    if (!audio || !audioSrc) return;
 
     audio.preload = "auto";
     // Deliberately not a dependency of this effect: it reloads the file, and
@@ -156,13 +182,13 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
     }, 1200);
 
     return () => window.clearTimeout(syncTimer);
-  }, [duration, url, stopProgressLoop, primeInfiniteDuration]);
+  }, [duration, audioSrc, stopProgressLoop, primeInfiniteDuration]);
 
   useEffect(() => stopProgressLoop, [stopProgressLoop]);
 
   const toggle = () => {
     const audio = audioRef.current;
-    if (!audio || !url || loadError) return;
+    if (!audio || !audioSrc || loadError) return;
     if (playing) {
       audio.pause();
       setPlaying(false);
@@ -246,7 +272,7 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
   const fmt = (s: number) =>
     `${Math.floor(s / 60).toString().padStart(2, "0")}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
 
-  const srcReady = Boolean(url);
+  const srcReady = Boolean(audioSrc);
   const isCurrentPlayback = Boolean(playbackItem && mediaPlayback.isCurrent(playbackItem.id));
   const displayPlaying = isCurrentPlayback ? mediaPlayback.isPlaying : playing;
   const displayDuration = isCurrentPlayback && mediaPlayback.duration > 0 ? mediaPlayback.duration : durationSeconds;
@@ -268,10 +294,10 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
       data-voice-message="true"
       data-active-media={isCurrentPlayback ? "true" : "false"}
     >
-      {url && (
+      {audioSrc && (
         <audio
           ref={audioRef}
-          src={url}
+          src={audioSrc}
           preload="auto"
           onLoadedMetadata={handleLoadedMetadata}
           onDurationChange={handleLoadedMetadata}
@@ -284,6 +310,10 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
           onPause={handlePause}
           onEnded={handleEnded}
           onError={() => {
+            // A dead signature is not a dead file: the element takes the
+            // address the resolver is offering and carries on. False in
+            // `"public"` mode, where no address is ever a signature.
+            if (recoverFromError()) return;
             stopProgressLoop();
             setPlaying(false);
             setLoadError("Не удалось загрузить голосовое сообщение");
@@ -323,7 +353,14 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
           onChange={handleSeekChange}
         />
         <span className="text-[12px] text-[color:var(--kub-muted)]">
-          {loadError || (!url ? "загрузка..." : `${fmt(currentTime)} / ${metadataReady ? fmt(durationSeconds) : "--:--"}`)}
+          {loadError
+            || (!audioSrc
+              // Told rather than left spinning: a voice message has no
+              // thumbnail, poster or re-encode to fall back to, so a refused
+              // address is the end of it and «загрузка...» would be a lie
+              // that never resolves.
+              ? (unavailable ? "Не удалось загрузить голосовое сообщение" : "загрузка...")
+              : `${fmt(currentTime)} / ${metadataReady ? fmt(durationSeconds) : "--:--"}`)}
         </span>
       </div>
     </div>

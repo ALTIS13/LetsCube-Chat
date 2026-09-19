@@ -46,6 +46,7 @@ import { canReportMessage } from "@/lib/personalModeration";
 import { requestContentReport } from "./ReportDialog";
 import { messageLink } from "@/lib/messageLink";
 import { copyImageToClipboard, mediaDownloadName, saveMediaAs } from "@/lib/messageMediaActions";
+import { ensureMessageMediaUrl } from "@/lib/media/mediaUrl";
 import { QUICK_REACTION } from "@/lib/messageReactions";
 import {
   RECENT_REACTIONS_EVENT,
@@ -732,6 +733,17 @@ export function MessageList({
         error: "Не удалось скопировать сообщение",
         key: "message",
       });
+    /**
+     * The address of the file this message is, for a press that fetches it.
+     *
+     * D-208, and the reason `ensureMediaObjectUrl` was written and left
+     * unwired: copying a picture and «сохранить как» both `fetch()` the
+     * bytes, so a placeholder is no use to them — they need the address, and
+     * under a signature it may be a moment away. A promise is the natural
+     * shape there; a render's is not. Resolves immediately in `"public"`
+     * mode, where it is `message.media_url`.
+     */
+    const mediaAddress = () => ensureMessageMediaUrl(message);
     switch (action) {
       case "reply":
         handlers.onReply(message);
@@ -745,26 +757,36 @@ export function MessageList({
         handlers.onTogglePin?.(message);
         return;
       case "copy":
-        if (messageActionKind(message) === "photo" && message.media_url) void copyImageToClipboard(message.media_url);
-        else copyText();
+        if (messageActionKind(message) === "photo" && message.media_url) {
+          void mediaAddress().then((url) => {
+            if (url) void copyImageToClipboard(url);
+          });
+        } else copyText();
         return;
       case "copyText":
         copyText();
         return;
       case "copyImage":
-        if (message.media_url) void copyImageToClipboard(message.media_url);
+        if (message.media_url) {
+          void mediaAddress().then((url) => {
+            if (url) void copyImageToClipboard(url);
+          });
+        }
         return;
       case "saveAs":
         if (message.media_url) {
-          void saveMediaAs(
-            message.media_url,
-            mediaDownloadName({
-              type: message.type,
-              content: message.content,
-              mimeType: mediaMimeType(message),
-              createdAt: message.created_at,
-            }),
-          );
+          void mediaAddress().then((url) => {
+            if (!url) return;
+            void saveMediaAs(
+              url,
+              mediaDownloadName({
+                type: message.type,
+                content: message.content,
+                mimeType: mediaMimeType(message),
+                createdAt: message.created_at,
+              }),
+            );
+          });
         }
         return;
       case "copyLink":

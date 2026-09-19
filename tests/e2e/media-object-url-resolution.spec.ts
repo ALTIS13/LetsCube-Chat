@@ -121,6 +121,48 @@ test("a message with only a legacy media_url still resolves to its object", asyn
   expect(answer.textMessage).toBeNull();
 });
 
+test("the originals resolve without ever rebuilding the column", async ({ page }) => {
+  // The shapes routed in step two's second half: a message's own photograph,
+  // video, voice message and file, and the presses that fetch their bytes.
+  // Unlike a variant, each of these has the address sitting in a column as
+  // well, and in `"public"` mode that column is what must come back — not a
+  // rebuilt address that merely happens to match on today's rows.
+  test.skip(
+    process.env.KUB_EXPECT_MEDIA_SIGNED_URLS === "1",
+    "this server was started with VITE_MEDIA_SIGNED_URLS=signed; the public-mode case belongs on a server without it",
+  );
+
+  await page.goto("/login");
+  await page.waitForLoadState("domcontentloaded");
+
+  const answer = await page.evaluate(async (owner) => {
+    const media = await import("/src/lib/media/mediaUrl.ts");
+    const path = `${owner}/1757000000000-voice.webm`;
+    // A column whose text is deliberately NOT what `getPublicUrl` would build:
+    // if the resolver rebuilds, this comes back different, and that difference
+    // is the whole assertion.
+    const column = `https://core.letscube.ru/storage/v1/object/public/media/${path}?v=20260919`;
+    const row = { media_bucket: "media", media_path: path, media_url: column };
+    const dataUri = "data:image/webp;base64,UklGRhYAAABXRUJQVlA4TAoAAAAvAAAAAAfQ//73v/+BiOh/AAA=";
+    return {
+      column,
+      fromRow: media.messageMediaUrl(row),
+      settled: media.isMessageMediaUrlSettled(row),
+      ensured: await media.ensureMessageMediaUrl(row),
+      // `publicPreviewFixture.ts` gives every photograph one of these, with
+      // both path columns null. A resolver that dropped it would take every
+      // picture out of the preview fixture.
+      fixturePicture: media.messageMediaUrl({ media_bucket: null, media_path: null, media_url: dataUri }),
+      dataUri,
+    };
+  }, OWNER);
+
+  expect(answer.fromRow).toBe(answer.column);
+  expect(answer.ensured).toBe(answer.column);
+  expect(answer.settled).toBe(true);
+  expect(answer.fixturePicture).toBe(answer.dataUri);
+});
+
 test("with the flag on, an address still comes back", async ({ page }) => {
   test.skip(
     process.env.KUB_EXPECT_MEDIA_SIGNED_URLS !== "1",

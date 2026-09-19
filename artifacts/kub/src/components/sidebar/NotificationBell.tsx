@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import { KubIcon, KubTooltip, type KubIconName } from "@/components/kub";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useAvatarMediaUrl } from "@/hooks/useMediaObjectUrl";
 import { createClient } from "@/lib/supabase/client";
 import { safeOpenChat } from "@/lib/safeOpenChat";
 import { requestChatMessageJump } from "@/lib/chatJumpEvents";
@@ -761,6 +762,11 @@ function NotificationSenderIcon({
   color?: string;
 }) {
   const toned = color ?? "var(--kub-cyan)";
+  // D-208. The second of the two bare `<img src={column}>` avatars. Note
+  // that a notification *toast* never carries a stored picture —
+  // `safeNotificationAvatarUrl` refuses anything containing `/storage/v1/`
+  // — but this list, inside the application, draws the real one.
+  const resolvedAvatarUrl = useAvatarMediaUrl(avatarUrl);
   return (
     <div
       className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl"
@@ -771,9 +777,9 @@ function NotificationSenderIcon({
       }
     >
       <KubIcon name={icon} size={17} />
-      {avatarUrl && (
+      {resolvedAvatarUrl && (
         <img
-          src={avatarUrl}
+          src={resolvedAvatarUrl}
           alt=""
           className="absolute inset-0 h-9 w-9 object-cover"
           onError={(event) => event.currentTarget.remove()}
