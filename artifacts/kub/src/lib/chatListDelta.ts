@@ -111,7 +111,9 @@ export type ChatListEvent =
   | { kind: "message-insert"; row: MessageRowLike }
   | { kind: "message-update"; row: MessageRowLike }
   | { kind: "own-membership"; row: MembershipRowLike }
-  | { kind: "peer-receipt"; row: MembershipRowLike };
+  | { kind: "peer-receipt"; row: MembershipRowLike }
+  | { kind: "peer-joined"; row: MembershipRowLike }
+  | { kind: "peer-left"; row: MembershipRowLike };
 
 export type ChatListEventOutcome = IncomingMessageOutcome | MessageUpdateOutcome | MembershipUpdateOutcome;
 
@@ -349,6 +351,102 @@ export function applyOwnMembershipUpdate<T extends ChatLike>(
   return { chats: replaceAt(chats, index, next), outcome };
 }
 
+/**
+ * Somebody else joined a chat this user is in. (D-260)
+ *
+ * The count on the header came from `chat.members.length` and nothing ever
+ * added to it: `useChats` bound `chat_members` INSERT with
+ * `filter: user_id=eq.<me>`, so the only join it could hear was this user's
+ * own. An owner watched somebody accept an invitation and the subtitle went on
+ * saying the old number until the list was fetched again for some other reason.
+ *
+ * **The row Realtime carries has no profile.** `chat.members` is selected with
+ * `profile:profiles(*)` and a `postgres_changes` payload is columns only, so
+ * the member appended here has a name of `undefined`. That is deliberate and it
+ * is why this returns `needs-refetch` rather than `applied`: the count is right
+ * within the tick, the name arrives with the refetch the caller schedules. Every
+ * reader of `chat.members` reaches the profile through `?.`, checked for all of
+ * them on 2026-09-19 — `ChatWindow`'s voice-rail name map degrades to `""` for
+ * the ~350ms in between, and nothing throws.
+ *
+ * Appending is idempotent by `user_id`, which `replayChatListEvents` requires:
+ * an event is applied as it lands and once more over any fetch that was already
+ * in flight.
+ */
+export function applyPeerJoined<T extends ChatLike>(
+  chats: readonly T[],
+  row: MembershipRowLike,
+  context: Pick<ChatListEventContext, "currentUserId">,
+): { chats: T[]; outcome: MembershipUpdateOutcome } {
+  const unchanged = chats as T[];
+  if (!row.chat_id || !row.user_id) return { chats: unchanged, outcome: "ignored" };
+  // This user's own join is `own-membership`'s business, and it brings a chat
+  // that may not be in the list at all.
+  if (row.user_id === context.currentUserId) return { chats: unchanged, outcome: "ignored" };
+  const index = chats.findIndex((chat) => chat.id === row.chat_id);
+  if (index === -1) return { chats: unchanged, outcome: "unknown-chat" };
+
+  const chat = chats[index];
+  const members = chat.members;
+  // A chat whose members were never read cannot have one added to it. Asking
+  // for the list back is the only honest answer; appending to `[]` would
+  // invent a group of one.
+  if (!members) return { chats: unchanged, outcome: "needs-refetch" };
+  if (members.some((member) => member.user_id === row.user_id)) {
+    return { chats: unchanged, outcome: "ignored" };
+  }
+
+  const joined: MemberLike = {
+    user_id: row.user_id,
+    role: row.role ?? null,
+    joined_at: row.joined_at ?? null,
+    last_read_at: row.last_read_at ?? null,
+    last_delivered_at: row.last_delivered_at ?? null,
+  };
+  return {
+    chats: replaceAt(chats, index, { ...chat, members: [...members, joined] } as T),
+    outcome: "needs-refetch",
+  };
+}
+
+/**
+ * Somebody else left a chat this user is in, or was removed from it. (D-260)
+ *
+ * `chat_members` keeps the default replica identity on production (read from
+ * `pg_class` on 2026-09-19), so a DELETE carries the primary key and nothing
+ * else — and the primary key is `(chat_id, user_id)`, which is exactly what is
+ * needed to drop the row. No refetch is asked for: unlike a join, nothing about
+ * a departure is missing from the event.
+ *
+ * A chat that is not in the list is **ignored rather than refetched**. Supabase
+ * Realtime's RLS filtering of DELETE has the old row's non-key columns to work
+ * from and here there are none, so a client may be handed departures from chats
+ * it cannot see; answering those with a refetch would turn every membership
+ * change anywhere on the deployment into a request from every connected client.
+ */
+export function applyPeerLeft<T extends ChatLike>(
+  chats: readonly T[],
+  row: MembershipRowLike,
+  context: Pick<ChatListEventContext, "currentUserId">,
+): { chats: T[]; outcome: MembershipUpdateOutcome } {
+  const unchanged = chats as T[];
+  if (!row.chat_id || !row.user_id) return { chats: unchanged, outcome: "ignored" };
+  if (row.user_id === context.currentUserId) return { chats: unchanged, outcome: "ignored" };
+  const index = chats.findIndex((chat) => chat.id === row.chat_id);
+  if (index === -1) return { chats: unchanged, outcome: "ignored" };
+
+  const chat = chats[index];
+  const members = chat.members;
+  if (!members) return { chats: unchanged, outcome: "ignored" };
+  const nextMembers = members.filter((member) => member.user_id !== row.user_id);
+  if (nextMembers.length === members.length) return { chats: unchanged, outcome: "ignored" };
+
+  return {
+    chats: replaceAt(chats, index, { ...chat, members: nextMembers } as T),
+    outcome: "applied",
+  };
+}
+
 /** Someone else in a chat read or received up to a point. Only that chat changes. */
 export function applyPeerReceipt<T extends ChatLike>(
   chats: readonly T[],
@@ -492,6 +590,10 @@ export function reduceChatListEvent<T extends ChatLike>(
       const next = applyPeerReceipt(chats, event.row, context);
       return { chats: next, outcome: next === chats ? "ignored" : "applied" };
     }
+    case "peer-joined":
+      return applyPeerJoined(chats, event.row, context);
+    case "peer-left":
+      return applyPeerLeft(chats, event.row, context);
     default:
       return { chats: chats as T[], outcome: "ignored" };
   }

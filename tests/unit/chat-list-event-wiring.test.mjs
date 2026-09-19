@@ -95,3 +95,48 @@ test("a receipt keeps its object while it draws the same thing", () => {
   assert.match(messageList, /sameGroupReadReceiptFace\(priorGroupRead, nextGroupRead\) \? priorGroupRead : nextGroupRead/);
   assert.match(messageList, /sameData\(priorDelivery, nextDelivery\) \? priorDelivery : nextDelivery/);
 });
+
+/**
+ * D-260: the subscription half, and it is the weaker half.
+ *
+ * What is actually proved elsewhere: `tests/unit/chat-list-delta.test.mts`
+ * executes the arithmetic of a join and a departure. What nothing here proves
+ * is that the server sends this client a peer's `chat_members` row at all —
+ * that is Realtime plus the `chat_members select` policy, and observing it
+ * needs two signed-in sessions and a write to production. These scans say the
+ * bindings are still written; they cannot say a row ever arrives.
+ */
+test("a peer's join and departure are subscribed to, unfiltered, on the chat_members channel", () => {
+  const peers = chatsHook.match(/const receiptsChannelName[\s\S]*?registerChannel\(receiptsChannelName\);/);
+  assert.ok(peers, "the peer chat_members channel could not be found in useChats");
+  const block = peers[0];
+
+  for (const event of ["INSERT", "DELETE", "UPDATE"]) {
+    assert.match(
+      block,
+      new RegExp(`\{ event: "${event}", schema: "public", table: "chat_members" \}`),
+      `a peer's ${event} on chat_members is no longer subscribed to`,
+    );
+  }
+  assert.doesNotMatch(
+    block,
+    /table: "chat_members", filter:/,
+    "a filter on this channel narrows it to one column; «any chat I am in» is RLS's answer, not a filter's",
+  );
+  assert.match(block, /applyEvent\(\{ kind: "peer-joined", row: payload\.new \}\)/, "a peer's join no longer goes through the delta");
+  assert.match(block, /applyEvent\(\{ kind: "peer-left", row: \{ chat_id: chatId, user_id: memberId \} \}\)/, "a peer's departure no longer goes through the delta");
+  assert.match(block, /!== "ignored"\) scheduleRefetch\(\)/, "a join no longer fetches the profile the Realtime row cannot carry");
+
+  // The bindings that were already here, and which this channel must not lose:
+  // they are the only thing that moves a peer's read receipt.
+  assert.match(block, /applyEvent\(\{ kind: "peer-receipt", row: payload\.new \}\)/);
+});
+
+test("the three chat_members bindings share one channel, because they share one table", () => {
+  const peers = chatsHook.match(/const receiptsChannelName[\s\S]*?registerChannel\(receiptsChannelName\);/)[0];
+  assert.equal(
+    (peers.match(/\.channel\(/g) ?? []).length,
+    1,
+    "the peer bindings were split across channels; realtimeTableChannels.ts groups by table, not by event",
+  );
+});

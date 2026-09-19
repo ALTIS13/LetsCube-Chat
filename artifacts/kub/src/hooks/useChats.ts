@@ -477,7 +477,24 @@ export function useChats() {
     );
     for (const { name } of channels) registerChannel(name);
 
-    const receiptsChannelName = `chat-members:receipts:${userId}`;
+    // Everybody else's membership rows, in every chat this user may read.
+    //
+    // Unfiltered on purpose: Realtime takes one `eq` filter and the question
+    // here is «any chat I am in», which no single column answers. RLS answers
+    // it instead — `chat_members select` is
+    // `user_id = auth.uid() OR is_chat_member(chat_id)` (read from
+    // `pg_policies` on 2026-09-19), so the server sends this client rows from
+    // its own chats and no others. The three bindings share one channel
+    // because they share one table, which is what `realtimeTableChannels.ts`
+    // requires and all it requires.
+    //
+    // D-260: the INSERT and the DELETE are new. Before them the only join or
+    // departure this hook could hear was this user's own — the bindings below
+    // carry `filter: user_id=eq.${userId}` — so `chat.members` grew and shrank
+    // for nobody else, and the header's «N участников», the channel header's
+    // «N подписчиков» and every other reader of that array stood still until
+    // something unrelated refetched the list.
+    const receiptsChannelName = `chat-members:peers:${userId}`;
     const receiptsChannel = rt
       .channel(receiptsChannelName)
       .on(
@@ -488,8 +505,30 @@ export function useChats() {
           applyEvent({ kind: "peer-receipt", row: payload.new });
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "chat_members" },
+        (payload: { new: MembershipRowLike }) => {
+          if (!payload.new?.chat_id || payload.new.user_id === userId) return;
+          // `needs-refetch` every time it lands: the appended row has the count
+          // right but no profile, and the refetch is what gives it a name.
+          if (applyEvent({ kind: "peer-joined", row: payload.new }) !== "ignored") scheduleRefetch();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "chat_members" },
+        // `Partial`, and not for tidiness: a DELETE payload carries only the
+        // columns of the replica identity, which for `chat_members` is its
+        // primary key. The guard below is what makes the row whole.
+        (payload: { old: Partial<MembershipRowLike> }) => {
+          const { chat_id: chatId, user_id: memberId } = payload.old ?? {};
+          if (!chatId || !memberId || memberId === userId) return;
+          applyEvent({ kind: "peer-left", row: { chat_id: chatId, user_id: memberId } });
+        },
+      )
       .subscribe((status: string) => {
-        if (import.meta.env.DEV) console.debug("[chat-members:receipts]", userId, status);
+        if (import.meta.env.DEV) console.debug("[chat-members:peers]", userId, status);
         revalidateWhenSubscribed(status);
       });
     registerChannel(receiptsChannelName);

@@ -6,8 +6,11 @@ import {
   applyIncomingMessage,
   applyMessageUpdate,
   applyOwnMembershipUpdate,
+  applyPeerJoined,
+  applyPeerLeft,
   applyPeerReceipt,
   clearUnread,
+  reduceChatListEvent,
   replayChatListEvents,
   samePreviewMessage,
   type ChatLike,
@@ -341,4 +344,135 @@ test("reading a chat clears its count, and a chat with none is left alone", () =
   const cleared = clearUnread(list, "b");
   assert.equal(cleared[0], list[0]);
   assert.equal(cleared[1].unread_count, 0);
+});
+
+/**
+ * D-260: somebody else joining or leaving a chat.
+ *
+ * `chat.members.length` is what the chat header counts — «N участников» for a
+ * group, «N подписчиков» for a channel — and until these, nothing but a full
+ * fetch ever changed it for anybody but this user.
+ *
+ * These reach the arithmetic and nothing else. That the server actually sends
+ * the client a peer's `chat_members` INSERT is a fact about Realtime and RLS
+ * that no test in this repository observes; see the note in
+ * `chat-list-event-wiring.test.mjs`.
+ */
+
+const THIRD = "44444444-4444-4444-8444-444444444444";
+
+const membershipRow = (chatId: string, userId: string) => ({
+  chat_id: chatId,
+  user_id: userId,
+  role: "member",
+  joined_at: T2,
+  last_read_at: null,
+  last_delivered_at: null,
+});
+
+test("somebody else joining raises the count and asks for the name", () => {
+  const list = [chat("a", T0, { members: [member(ME, T0), member(PEER, T0)] }), chat("b", T1)];
+  const { chats: next, outcome } = applyPeerJoined(list, membershipRow("a", THIRD), { currentUserId: ME });
+  assert.equal(next[0].members?.length, 3, "the count the header reads did not move");
+  assert.equal(next[0].members?.[2].user_id, THIRD);
+  assert.equal(next[0].members?.[2].role, "member");
+  assert.equal(
+    (next[0].members?.[2] as { profile?: unknown }).profile,
+    undefined,
+    "a postgres_changes row has no join, so the appended member must carry no profile",
+  );
+  assert.equal(outcome, "needs-refetch", "the count is right but the name is not; the caller must fetch it");
+  assert.equal(next[1], list[1], "another chat was rebuilt for a membership change in the first");
+});
+
+test("the same join applied twice lands once", () => {
+  const list = [chat("a", T0, { members: [member(ME, T0)] })];
+  const once = applyPeerJoined(list, membershipRow("a", PEER), { currentUserId: ME });
+  const twice = applyPeerJoined(once.chats, membershipRow("a", PEER), { currentUserId: ME });
+  assert.equal(once.chats[0].members?.length, 2);
+  assert.equal(twice.chats, once.chats, "replaying the event over a fetch added the member a second time");
+  assert.equal(twice.outcome, "ignored");
+});
+
+test("this user's own join is not this event's business", () => {
+  const list = [chat("a", T0, { members: [member(PEER, T0)] })];
+  const { chats: next, outcome } = applyPeerJoined(list, membershipRow("a", ME), { currentUserId: ME });
+  assert.equal(next, list);
+  assert.equal(outcome, "ignored", "own-membership carries a chat that may not be in the list at all");
+});
+
+test("a join in a chat that is not in the list is a chat to fetch", () => {
+  const list = [chat("a", T0, { members: [member(ME, T0)] })];
+  const { chats: next, outcome } = applyPeerJoined(list, membershipRow("zz", PEER), { currentUserId: ME });
+  assert.equal(next, list);
+  assert.equal(outcome, "unknown-chat");
+});
+
+test("a chat whose members were never read is fetched, not invented", () => {
+  const list = [chat("a", T0, { members: undefined })];
+  assert.equal(list[0].members, undefined, "the fixture must start without a members array");
+  const { chats: next, outcome } = applyPeerJoined(list, membershipRow("a", PEER), { currentUserId: ME });
+  assert.equal(next, list, "appending to an absent list would claim the group has exactly one person");
+  assert.equal(outcome, "needs-refetch");
+});
+
+test("somebody else leaving lowers the count, and needs nothing fetched for it", () => {
+  const list = [chat("a", T0, { members: [member(ME, T0), member(PEER, T0)] }), chat("b", T1)];
+  const { chats: next, outcome } = applyPeerLeft(list, membershipRow("a", PEER), { currentUserId: ME });
+  assert.equal(next[0].members?.length, 1);
+  assert.equal(next[0].members?.[0].user_id, ME);
+  assert.equal(outcome, "applied", "a departure is complete in the event; asking for a fetch is a wasted request");
+  assert.equal(next[1], list[1]);
+});
+
+test("a departure carrying only the primary key is enough", () => {
+  const list = [chat("a", T0, { members: [member(ME, T0), member(PEER, T0)] })];
+  // What `replica identity default` actually delivers on a DELETE: the key,
+  // and none of the other columns.
+  const { chats: next, outcome } = applyPeerLeft(list, { chat_id: "a", user_id: PEER }, { currentUserId: ME });
+  assert.equal(next[0].members?.length, 1);
+  assert.equal(outcome, "applied");
+});
+
+test("a departure from a chat this client cannot see costs nothing", () => {
+  const list = [chat("a", T0, { members: [member(ME, T0)] })];
+  const { chats: next, outcome } = applyPeerLeft(list, membershipRow("zz", PEER), { currentUserId: ME });
+  assert.equal(next, list);
+  assert.equal(
+    outcome,
+    "ignored",
+    "answering an unseen chat's DELETE with a refetch makes every membership change anywhere a request from every client",
+  );
+});
+
+test("a departure applied twice, and this user's own, change nothing", () => {
+  const list = [chat("a", T0, { members: [member(ME, T0), member(PEER, T0)] })];
+  const once = applyPeerLeft(list, membershipRow("a", PEER), { currentUserId: ME });
+  const twice = applyPeerLeft(once.chats, membershipRow("a", PEER), { currentUserId: ME });
+  assert.equal(twice.chats, once.chats);
+  assert.equal(twice.outcome, "ignored");
+  const mine = applyPeerLeft(list, membershipRow("a", ME), { currentUserId: ME });
+  assert.equal(mine.chats, list, "leaving a chat yourself removes the chat, not a row from its member list");
+  assert.equal(mine.outcome, "ignored");
+});
+
+test("both kinds are routed by the reducer the hook actually calls", () => {
+  const context = { currentUserId: ME, readingChatId: null };
+  const list = [chat("a", T0, { members: [member(ME, T0)] })];
+  const joined = reduceChatListEvent(list, { kind: "peer-joined", row: membershipRow("a", PEER) }, context);
+  assert.equal(joined.chats[0].members?.length, 2, "peer-joined fell through to the reducer's default");
+  assert.equal(joined.outcome, "needs-refetch");
+  const left = reduceChatListEvent(joined.chats, { kind: "peer-left", row: membershipRow("a", PEER) }, context);
+  assert.equal(left.chats[0].members?.length, 1, "peer-left fell through to the reducer's default");
+  const replayed = replayChatListEvents(
+    list,
+    [
+      { kind: "peer-joined", row: membershipRow("a", PEER) },
+      { kind: "peer-joined", row: membershipRow("a", PEER) },
+      { kind: "peer-joined", row: membershipRow("a", THIRD) },
+      { kind: "peer-left", row: membershipRow("a", PEER) },
+    ],
+    context,
+  );
+  assert.deepEqual(replayed[0].members?.map((m) => m.user_id), [ME, THIRD]);
 });
