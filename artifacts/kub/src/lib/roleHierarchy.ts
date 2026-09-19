@@ -25,6 +25,12 @@
  * shared by several roles rather than as an ordering accident to be broken.
  */
 
+import {
+  chatRoleColourValue,
+  isChatRoleColour,
+  type ChatRoleColour,
+} from "./chatRolePalette.ts";
+
 /** The scopes, in the order a reader should meet them. */
 export const ROLE_SCOPE_ORDER = ["global", "location", "chat"] as const;
 
@@ -227,9 +233,63 @@ export function isValidRoleColour(value: unknown): boolean {
   return normalizeRoleColour(value) !== null;
 }
 
-/** The swatch colour for a role, or `null` when it has none and gets a neutral. */
+/**
+ * What `roles.colour` was found to be holding, and the CSS value that draws it.
+ *
+ * **Two shapes on purpose, and only for as long as it takes.** D-214 measured
+ * the free `#rrggbb` this column carries and found it cannot be made legible:
+ * one value, two themes, and the three rescues — paint it, compose it toward
+ * the text colour, ring it — all fail, the first at 1.58:1 for the owner's gold
+ * on the light ground. The answer is the one D-215 already shipped at the other
+ * scope: `chat_roles.colour` holds a palette KEY and `index.css` owns both of
+ * its theme values, each pinned at 4.5:1 by `chat-role-palette.test.mts`.
+ *
+ * `20260919170000_a_role_colour_a_reader_can_see.sql` converts the ten coloured
+ * rows to those keys. A database and a client cannot be switched at the same
+ * instant, so this function reads BOTH shapes: with it deployed, a row holding
+ * `#F5B50A` and a row holding `amber` are each drawn correctly, and the
+ * migration can land on its own afterwards without a single mark going neutral.
+ * The hex branch stays after the migration too — it is what makes the rollback
+ * reversible without a second client deploy.
+ *
+ * **The palette is asked first, and that ordering is load-bearing.** A key is
+ * `^[a-z][a-z0-9_]{1,31}$` and a hex is six characters out of `[0-9a-f]`, so
+ * the two shapes OVERLAP: a key spelled `decade` or `defaced` is also a legal
+ * hex body, and `normalizeRoleColour` accepts a bare one without the `#`. Asked
+ * in the other order, such a key would silently paint a colour nobody picked.
+ * None of today's eight collide — `role-hierarchy.test.mts` refuses a palette
+ * that gains one — but the order costs nothing and removes the question.
+ *
+ * **Nothing new reaches a style attribute.** The palette branch does not
+ * interpolate the stored string: `isChatRoleColour` narrows it to one of eight
+ * literals and `chatRoleColourValue` builds the reference from that, so the CSS
+ * is one of eight fixed strings. The hex branch is `normalizeRoleColour`
+ * unchanged, which still answers null for `var(--kub-danger)` and for every
+ * other injection in that function's test.
+ */
+export type RoleColour =
+  | { kind: "palette"; key: ChatRoleColour; css: string }
+  | { kind: "hex"; hex: string; css: string };
+
+export function readRoleColour(value: unknown): RoleColour | null {
+  if (isChatRoleColour(value)) {
+    return { kind: "palette", key: value, css: chatRoleColourValue(value) };
+  }
+  const hex = normalizeRoleColour(value);
+  return hex === null ? null : { kind: "hex", hex, css: hex };
+}
+
+/**
+ * The swatch colour for a role, or `null` when it has none and gets a neutral.
+ *
+ * `null` also covers a key this build of the client has never heard of, which
+ * is the migration's stated contract and has to be: the column's constraint
+ * bounds the SHAPE of a key and cannot enumerate the palette, so a row may hold
+ * `purple` forever after that entry is dropped. Rendering a neutral is visible
+ * and honest; guessing a colour is neither.
+ */
 export function roleSwatchColour(role: { colour?: string | null }): string | null {
-  return normalizeRoleColour(role.colour);
+  return readRoleColour(role.colour)?.css ?? null;
 }
 
 /**

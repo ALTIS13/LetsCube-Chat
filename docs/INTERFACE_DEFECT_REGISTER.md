@@ -18207,7 +18207,8 @@ title.** Still `[ ]`: what is left is a decision the owner has to take, and a
 migration is written for it but nothing has been applied.
 
 **The chain, end to end, read rather than reasoned about.** `roles.colour` is
-written by exactly one thing and read by exactly three.
+written by exactly one thing and read by exactly two, and the second of those
+two hands it to a component that throws it away.
 
 1. **Written** by `public.role_update`'s `p_colour`, from the free
    `<input type="color">` and the `#rrggbb` field in `RolesPermissionsTab.tsx`.

@@ -21,12 +21,17 @@ import {
   parseRolePriorityInput,
   planPriorityMove,
   rankLevels,
+  readRoleColour,
   roleFormSignature,
   roleSwatchColour,
   sortRolesByHierarchy,
   type PriorityMoveDirection,
   type RoleRankFields,
 } from "../../artifacts/kub/src/lib/roleHierarchy.ts";
+import {
+  CHAT_ROLE_COLOUR_KEYS,
+  chatRoleColourValue,
+} from "../../artifacts/kub/src/lib/chatRolePalette.ts";
 
 type Role = RoleRankFields & { colour: string | null; is_active: boolean };
 
@@ -320,6 +325,93 @@ test("a role with no colour asks for a neutral rather than a broken one", () => 
     roleSwatchColour(PRODUCTION_ROLES.find((role) => role.key === "user")!),
     null,
   );
+});
+
+// ---------------------------------------------------------------------
+// The two shapes, while the column is being moved off a hex (D-214)
+// ---------------------------------------------------------------------
+
+/**
+ * Six hex digits, or the three-digit shorthand, with no leading `#`.
+ *
+ * This is the overlap between the two shapes `roles.colour` can hold: the
+ * palette-key constraint is `^[a-z][a-z0-9_]{1,31}$` and every string below
+ * also satisfies it. `normalizeRoleColour` accepts a bare body, so a palette
+ * key spelled out of `[0-9a-f]` would be BOTH a key and a colour.
+ */
+const HEX_SHAPED = /^[0-9a-f]{3}$|^[0-9a-f]{6}$/;
+
+test("a stored colour is read as a palette key or as a hex, and neither is guessed", () => {
+  // A migrated row.
+  assert.deepEqual(readRoleColour("amber"), {
+    kind: "palette",
+    key: "amber",
+    css: "var(--kub-role-amber)",
+  });
+  // A row the migration has not reached yet, or one restored by the rollback.
+  assert.deepEqual(readRoleColour("#F5B50A"), { kind: "hex", hex: "#f5b50a", css: "#f5b50a" });
+  assert.equal(readRoleColour(null), null);
+  assert.equal(readRoleColour(undefined), null);
+  // A key this build of the client has never heard of. The column's constraint
+  // bounds the SHAPE of a key and cannot enumerate the palette, so this is a
+  // row the database accepts and the interface must render plain rather than
+  // colour in by guesswork.
+  assert.equal(readRoleColour("purple"), null);
+  // The injections normalizeRoleColour already refuses must not be let back in
+  // through the palette branch, `var()` above all: the palette branch is the
+  // one that legitimately produces a var() reference.
+  for (const rejected of ["var(--kub-danger)", "var(--kub-role-amber)", "red", "AMBER", " amber "]) {
+    assert.equal(readRoleColour(rejected), null, `${rejected} must not become a colour`);
+  }
+});
+
+test("the swatch draws a migrated row and a not-yet-migrated row alike", () => {
+  // The whole point of shipping this before the migration: with both branches
+  // present, neither state of the database takes a mark neutral.
+  const MIGRATION_MAPPING = [
+    ["#F5B50A", "amber"],
+    ["#4d8bd0", "blue"],
+    ["#f04a92", "rose"],
+    ["#4DCD5E", "green"],
+  ] as const;
+  for (const [hex, key] of MIGRATION_MAPPING) {
+    assert.equal(roleSwatchColour({ colour: hex }), hex.toLowerCase());
+    assert.equal(roleSwatchColour({ colour: key }), chatRoleColourValue(key));
+  }
+  // The three rows the migration leaves alone keep asking for a neutral, before
+  // and after. `user` is the role everybody holds.
+  for (const key of ["user", "location_client", "chat_member"]) {
+    assert.equal(roleSwatchColour(PRODUCTION_ROLES.find((role) => role.key === key)!), null);
+  }
+  // Every coloured production row is drawn today, and would still be drawn on
+  // the key the migration writes for it.
+  for (const role of PRODUCTION_ROLES) {
+    const before = roleSwatchColour(role);
+    assert.equal(before === null, role.colour === null, `${role.key} changed whether it is drawn`);
+  }
+});
+
+test("the palette is asked before the hex, and no key could be read as a colour", () => {
+  // Order is only safe while the two shapes do not overlap, so the overlap is
+  // what is checked. A palette that gains a key like `decade` or `bad` would
+  // be a key `normalizeRoleColour` also reads as #decade / #bbaadd; asked in
+  // the other order it would paint a colour nobody picked.
+  for (const key of CHAT_ROLE_COLOUR_KEYS) {
+    assert.equal(
+      HEX_SHAPED.test(key),
+      false,
+      `the palette key "${key}" is also a legal hex body, so the two shapes ` +
+        `roles.colour can hold now overlap. readRoleColour asks the palette first, ` +
+        `which keeps this key a key — but rename it, because the database, the ` +
+        `rollback and every future reader have no such tiebreak.`,
+    );
+    // And the branch that wins is the palette one, for every key as it stands.
+    assert.deepEqual(readRoleColour(key), {
+      kind: "palette",
+      key,
+      css: chatRoleColourValue(key),
+    });
+  }
 });
 
 // ---------------------------------------------------------------------

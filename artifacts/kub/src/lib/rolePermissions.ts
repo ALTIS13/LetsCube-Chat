@@ -297,6 +297,19 @@ export function mapRolesPermissionsError(error: unknown, fallback = "Не уда
   if (text.includes("system_role_protected") || text.includes("system role")) {
     return "Нельзя удалить системную роль.";
   }
+  // The two shapes `roles.colour` can be constrained to, named before the
+  // generic branches below for the same reason `last_owner` is: a client and a
+  // database that disagree about the shape must say so, not fall through to
+  // «Не удалось выполнить действие». A client still sending a hex to a
+  // migrated database raises the first; a client sending a palette key to a
+  // database that has not been migrated yet raises the second. Both windows
+  // are real and both are short — see D-214's ordering.
+  if (text.includes("colour_must_be_palette_key")) {
+    return "Цвет нужно выбрать из палитры. Обновите страницу, если выбора ещё нет.";
+  }
+  if (text.includes("colour_must_be_hex")) {
+    return "Этот сервер пока принимает цвет только в формате #rrggbb.";
+  }
   if (text.includes("already") || text.includes("duplicate") || text.includes("unique")) {
     return "Пользователь уже имеет эту роль.";
   }
