@@ -611,6 +611,99 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-19 — one production migration (D-208 step nought): the media read policy admits a chat member
+
+**No application was deployed and nothing on screen changed.** `letscube-web`
+keeps its baseline. The `media` bucket is still `public = true` — making it
+private is step four of D-208 and it is the owner's — so this migration hands
+nobody anything they could not already fetch anonymously. It makes the
+*authenticated* route capable of the same thing, which every later step of
+D-208 needs and none of them had: signing an object requires `select` on
+`storage.objects`, and a chat member did not have it for a photograph another
+member sent, nor for any `variants/` object at all.
+
+**`20260919120000_media_read_policy_admits_a_chat_member.sql`**, applied as
+`supabase_admin`. One transaction, self-check, `COMMIT`. 16,196 bytes, sha256
+`2c5592b5…c661e06d33`; rehearsal (`6c7defda…`) and rollback (`dfdb8e5c…`)
+beside it in `.migration-backup/supabase/migrations/`, and the applied file is
+byte-identical to the recorded one — proved by hashing it on the workstation,
+on the host and inside the container before it ran.
+
+- **It had to be `supabase_admin`, and not for the usual reason.**
+  `storage.objects` is owned by **`supabase_storage_admin`**, and
+  `pg_has_role('postgres','supabase_storage_admin','MEMBER')` is **false** here,
+  so `postgres` cannot create or drop a policy on it at all. The new predicate
+  is nevertheless owned by `postgres`, not by `supabase_admin`: both work, but
+  `supabase_admin` is a superuser on this deployment and `postgres` is not,
+  `postgres` measurably holds everything the body needs, and it is what the
+  sibling `_kub_media_path_allowed` already runs as.
+- **Backup, taken and verified first:**
+  `/srv/letscube/backups/pre-migrations/20260919-134918-before-media-read-policy-admits-a-chat-member.schema.dump`,
+  1,648,191 bytes, sha256 `0c706012…fa5b6627c`. Read back with `pg_restore -l`
+  inside the container: 2,521 TOC entries, and **all ten** `storage.objects`
+  policies present by name, the one being replaced included. Read back rather
+  than assumed: a 0-byte dump sits in the same directory from earlier today.
+- **Live vs file before anything was written.** The deployed
+  `_kub_media_path_allowed` matches what the file assumes branch for branch. The
+  object layout was re-counted rather than trusted and three numbers had moved:
+  778 objects not 771, `chat-avatars/` 11 not 9, `variants/chats/` 8 not 6. And
+  the bucket carries **two** SELECT policies, not one — `media bot avatars owner
+  read` is separate and untouched.
+- **Rehearsed on production inside a rolled-back transaction**, with three real
+  accounts impersonated by `set local role authenticated` and real
+  `request.jwt.claims`. The harness was calibrated against the known result
+  first — it reproduced yesterday's `f f t f` and «0 rows of 2» exactly — before
+  it was trusted for anything new. Migration and rollback both spliced in
+  verbatim, and the rollback was run **because it was written**: every value
+  returned to its pre-migration reading.
+- **Both directions, on values.** A member goes false → **true** on another
+  member's photo, its generated variants, their chat's avatar and its variants,
+  and a sidecar preview; a non-member — which is also a *removed* member, since
+  the predicate's only input is the `chat_members` row — stays **false** on
+  every one of them, as does a member on the variants of a chat they are not in.
+- **Writes are provably unchanged**, which is the assertion that mattered: in
+  all three phases identically, three refused inserts (**42501**) and one
+  control insert under the member's own prefix **allowed**, so the probe is
+  known to distinguish; and an update of another account's object touched **0
+  rows** *including after* the read widened. There is no DELETE probe on
+  purpose: `storage.protect_delete` raises 42501, the same code an RLS refusal
+  carries, so the two cannot be told apart.
+- **Four defects were fixed in the file before it ran.** A banned account would
+  have kept reading everything, because `messages` and `chat_members` carry a
+  RESTRICTIVE `block banned reads` that a SECURITY DEFINER predicate bypasses —
+  now checked, and rehearsed on a real ban row created and rolled back. `LIKE`
+  in the sidecar branch was a wildcard hole with 484 of 778 object names
+  carrying an underscore — proved by a name the old form admits and
+  `starts_with` refuses, not argued. The predicate's owner moved from superuser
+  to `postgres`. And the self-check, which had only asserted that a policy of a
+  given *name* existed, now proves all three write policies still carry the
+  write predicate.
+- **Verified after the apply, on values.** Policy on the new predicate; ten
+  policies present and the three write ones unchanged, the write predicate's
+  definition hash identical; the function `postgres`-owned, SECURITY DEFINER,
+  STABLE, `search_path` pinned, ACL `{postgres=X, authenticated=X}` with no
+  `anon`; the full value matrix re-measured live and matching the rehearsal.
+  Signing one object costs **4.1 ms**; the worst case, the whole
+  `variants/messages/` prefix through the predicate, **71 ms** for 778 rows. An
+  anonymous request for a real object still returns **200 / 99,344 bytes /
+  `image/webp`** with an invented path still **400**, so the route users
+  actually use is untouched.
+
+**The ordering correction worth carrying forward.**
+`20260919130000_media_path_backfill_for_legacy_messages.sql` is a
+**prerequisite for step four**, not the tidy-up D-208 calls it. Ten live
+messages carry a `media_url` and no `media_path`, all ten name an object that
+exists, and this predicate reaches an original through `messages.media_path` —
+so for those ten only the uploader passes. Deriving the address from the URL is
+not the same as being allowed to sign it.
+
+**Who can read an avatar now.** A person's avatar, their avatar variants and a
+bot's avatar: any authenticated account — 18 of 18 here, where **5 of 18** could
+already through the administrator branch, and where the live route is still the
+whole internet. A chat's avatar and its variants: members of that chat only. The
+migration's header claimed otherwise about a chat's avatar; it was corrected and
+the file re-applied so that what is recorded is what ran.
+
 ### 2026-09-19 — the clone failure is diagnosed: one of GitHub’s two addresses is unreachable from this host
 
 **Closed as a question after four wrong hypotheses across two days.** It is
