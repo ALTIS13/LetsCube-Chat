@@ -8,16 +8,20 @@ import { fileURLToPath } from "node:url";
  * A structural guard on the one-channel-per-table rule.
  *
  * The failure this protects against cannot be observed from the client: a
- * channel that binds a table missing from the `supabase_realtime` publication
- * reports SUBSCRIBED, reaches state `joined`, and is assigned a server-side id
- * for every binding — and then delivers nothing, for *any* of its bindings. So
- * no behavioural test can catch the regression on a developer's machine, and
- * the feature that dies is whichever one happened to share the channel.
+ * channel carrying two tables was measured, on production on 2026-09-05, to
+ * report SUBSCRIBED, reach state `joined`, be assigned a server-side id for
+ * every binding — and then deliver nothing, for *any* of its bindings, while
+ * the same channel carrying one table delivered. So no behavioural test can
+ * catch the regression on a developer's machine, and the feature that dies is
+ * whichever one happened to share the channel.
  *
- * See `artifacts/kub/src/lib/realtimeTableChannels.ts` for the measurement and
- * for why the rule is stated as "one channel per table" rather than "isolate
- * the unpublished tables": an allowlist of published tables would be a second
- * copy of a fact that lives in the database, and it would go stale silently and
+ * This paragraph used to attribute that to a binding on a table missing from
+ * the `supabase_realtime` publication. That explanation was measured wrong on
+ * 2026-09-18 and the rule never rested on it — see
+ * `artifacts/kub/src/lib/realtimeTableChannels.ts`, which also says why the
+ * rule is stated as "one channel per table" rather than "isolate the
+ * unpublished tables": an allowlist of published tables would be a second copy
+ * of a fact that lives in the database, and it would go stale silently and
  * dangerously.
  *
  * This scan does not read the publication, and it needs no list of published
@@ -41,11 +45,19 @@ type ChannelSite = {
 /**
  * Chained channels that still carry more than one table.
  *
- * Every one of these binds only tables that are in the publication today, so
- * they work — but they hold exactly the shape that failed, and they are one
- * `alter publication ... drop table` away from going silent. They are listed
- * rather than converted so the residual risk is visible in the tree instead of
- * only in a report.
+ * **Empty as of 2026-09-20, and it should stay that way.** Every entry this
+ * list ever held has been converted; the last five went together — `useTask`,
+ * `useTaskRouting`, `lib/support/operatorApi`, `BansMutesTab` and `UsersTab`.
+ *
+ * The paragraph that used to stand here said these were safe because every
+ * table they bind is in the publication today. That reasoning is retired, and
+ * for a better reason than tidiness: the publication explanation for the
+ * 2026-09-05 outage was itself measured wrong (see
+ * `lib/realtimeTableChannels.ts`), so «the tables are published» was never the
+ * assurance it read as. What is known is that a channel carrying two tables
+ * was measured dead while reporting SUBSCRIBED, and the same channel carrying
+ * one was measured alive. An exception to that has to earn its place here with
+ * a measurement, not with an argument.
  *
  * This list cannot rot the way a list of published tables would. It describes
  * the source, and the source is what this test reads: converting one of these
@@ -53,16 +65,7 @@ type ChannelSite = {
  * assertion below until the entry is updated or deleted. It never silently
  * excuses something it no longer describes.
  */
-const KNOWN_MULTI_TABLE_CHANNELS: { file: string; tables: string[] }[] = [
-  { file: "hooks/useTask.ts", tables: ["task_events", "tasks"] },
-  { file: "hooks/useTaskRouting.ts", tables: ["location_members", "locations"] },
-  {
-    file: "lib/support/operatorApi.ts",
-    tables: ["support_ticket_events", "support_ticket_messages", "support_tickets"],
-  },
-  { file: "pages/admin/BansMutesTab.tsx", tables: ["bans", "mutes"] },
-  { file: "pages/admin/UsersTab.tsx", tables: ["profiles", "user_global_roles"] },
-];
+const KNOWN_MULTI_TABLE_CHANNELS: { file: string; tables: string[] }[] = [];
 
 function sourceFiles(dir: string): string[] {
   const found: string[] = [];
@@ -140,7 +143,8 @@ test("no chained realtime channel binds two tables outside the known list", () =
   assert.deepEqual(
     offenders,
     [],
-    "one binding to an unpublished table silences every other binding on the same channel; " +
+    "a channel carrying two tables was measured dead on production while reporting SUBSCRIBED, " +
+      "and the same channel carrying one was measured alive; " +
       "pass these through subscribeByTable (artifacts/kub/src/lib/realtimeTableChannels.ts)",
   );
 });
@@ -169,6 +173,14 @@ test("the repaired channels no longer chain more than one table", () => {
     // sidebar's folders, and the only place outside this hook that heard a
     // membership row at all. It reported SUBSCRIBED throughout.
     "hooks/useFolders.ts",
+    // 2026-09-20, the rest of the allow-list, emptied in one pass. Each had
+    // held the two-table shape since the commit named beside it, and each
+    // reported SUBSCRIBED the whole time.
+    "hooks/useTask.ts", //            tasks + task_events, since c1ae9c67 (2026-05-05)
+    "hooks/useTaskRouting.ts", //     locations + location_members, since ade989c6 (2026-05-15)
+    "lib/support/operatorApi.ts", //  three support tables, since c44df3e9 (2026-07-27)
+    "pages/admin/BansMutesTab.tsx", //bans + mutes, since c1ae9c67 (2026-05-05)
+    "pages/admin/UsersTab.tsx", //    profiles + user_global_roles, since 92e18bf2 (2026-05-13)
   ];
   for (const file of repaired) {
     const chained = sites.filter((site) => site.file === file && site.tables.length > 0);

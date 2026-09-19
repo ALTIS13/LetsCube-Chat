@@ -1,5 +1,6 @@
 import { mapPgError } from "@/lib/errors";
 import { createClient } from "@/lib/supabase/client";
+import { subscribeByTable } from "@/lib/realtimeTableChannels";
 
 export const SUPPORT_PERMISSIONS = [
   "support.view",
@@ -465,16 +466,41 @@ export function subscribeToSupportChanges(onChange: () => void): () => void {
     if (timer) clearTimeout(timer);
     timer = setTimeout(onChange, 250);
   };
-  const channel = dataClient
-    .channel(`support-operator:${crypto.randomUUID()}`)
-    .on("postgres_changes", { event: "*", schema: "public", table: "support_tickets" }, notify)
-    .on("postgres_changes", { event: "*", schema: "public", table: "support_ticket_messages" }, notify)
-    .on("postgres_changes", { event: "*", schema: "public", table: "support_ticket_events" }, notify)
-    .subscribe();
+  // One channel per table, through the helper, because a channel is only as
+  // live as its least live binding — measured on production on 2026-09-05 and
+  // written up in `lib/realtimeTableChannels.ts`. This subscription carried
+  // three tables on one channel from the day the operator workspace landed
+  // (c44df3e9, 2026-07-27), the exact construction that measurement outlawed,
+  // and it reported SUBSCRIBED throughout.
+  //
+  // Nothing is narrowed, and the policies say why, read read-only on
+  // production on 2026-09-20. The operator select policy on `support_tickets`
+  // is has_permission(uid, support.view) with no row key at all; the messages
+  // and events policies reach the same permission through the parent ticket.
+  // The only reader-keyed branch is the requester one
+  // (requester_user_id = uid), and this function serves the operator console,
+  // which exists to watch every ticket it may see. All three tables carry the
+  // default replica identity (measured the same day), so by Supabase's
+  // documented rule — a filter reaches a DELETE only under REPLICA IDENTITY
+  // FULL, read rather than measured here — a filter on any column but `id`
+  // would have dropped their DELETE events as well.
+  //
+  // `RealtimeChannel` here is this file's own structural shim below, not the
+  // supabase-js type the other repaired call sites import: importing that name
+  // into this module collides with the local declaration and fails typecheck.
+  const channels = subscribeByTable<typeof notify, RealtimeChannel>(
+    dataClient,
+    `support-operator:${crypto.randomUUID()}`,
+    [
+      { event: "*", schema: "public", table: "support_tickets", handler: notify },
+      { event: "*", schema: "public", table: "support_ticket_messages", handler: notify },
+      { event: "*", schema: "public", table: "support_ticket_events", handler: notify },
+    ],
+  );
 
   return () => {
     if (timer) clearTimeout(timer);
-    void dataClient.removeChannel(channel);
+    for (const { channel } of channels) void dataClient.removeChannel(channel);
   };
 }
 

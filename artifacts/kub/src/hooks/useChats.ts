@@ -444,11 +444,14 @@ export function useChats() {
 
     // One channel per table. These four bindings used to share a channel, and
     // the two `chats` ones took the two `messages` ones down with them: the
-    // channel reported SUBSCRIBED and delivered nothing at all, because
-    // `public.chats` is not in the `supabase_realtime` publication. That is the
+    // channel reported SUBSCRIBED and delivered nothing at all. That is the
     // sidebar's whole live path, so a chat that was not open never moved its
     // unread badge or its preview until some unrelated refetch happened to run.
-    // See lib/realtimeTableChannels.ts for the measurement.
+    //
+    // The cause given here used to be `public.chats` missing from the
+    // `supabase_realtime` publication — withdrawn, for the reason set out in
+    // the status callback below and in lib/realtimeTableChannels.ts, which also
+    // holds the measurement the rule actually rests on.
     const baseName = `chats:user:${userId}`;
     const channels = subscribeByTable<(payload: RealtimeRowPayload) => void, RealtimeChannel>(
       rt,

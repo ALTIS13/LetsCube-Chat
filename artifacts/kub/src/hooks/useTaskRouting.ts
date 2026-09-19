@@ -12,6 +12,8 @@ import {
   setLocationRoutingEnabled,
 } from "@/lib/locationRouting";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
+import { subscribeByTable } from "@/lib/realtimeTableChannels";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useAppStore } from "@/store/app.store";
 import type { Location, LocationMember, Profile } from "@/types/database";
 
@@ -154,19 +156,43 @@ export function useTaskRouting(options: UseTaskRoutingOptions = {}): TaskRouting
       clearRoleAccessCache(payload.new?.user_id ?? payload.old?.user_id);
       debounced();
     };
-    const channelName = `${channelIdRef.current}:locations`;
-    const channel = rt
-      .channel(channelName)
-      .on("postgres_changes", { event: "*", schema: "public", table: "locations" }, debounced)
-      .on("postgres_changes", { event: "*", schema: "public", table: "location_members" }, handleMembershipChange)
-      .subscribe((status: string) => {
-        if (import.meta.env.DEV) console.debug("[task-routing]", status);
-      });
-    registerChannel(channelName);
+    // One channel per table, through the helper, because a channel is only as
+    // live as its least live binding — measured on production on 2026-09-05 and
+    // written up in `lib/realtimeTableChannels.ts`. `locations` arrived alone
+    // (6dee8da6, 2026-05-10) and `location_members` joined it on the same
+    // channel five days later (ade989c6, 2026-05-15), which is the day this
+    // channel took the shape that measurement outlawed. It reported SUBSCRIBED
+    // throughout.
+    //
+    // Neither binding is narrowed, and the policies say why, read read-only on
+    // production on 2026-09-20. `locations select scoped` is `is_admin(uid) OR
+    // EXISTS (location_members lm WHERE lm.location_id = locations.id AND
+    // lm.user_id = uid)` — the reader-side key lives on the other table, so
+    // `locations` carries no column to filter on. `location_members select
+    // scoped` is `is_admin(uid) OR user_id = uid OR is_location_admin(
+    // location_id, uid)`: unlike `can_see_shared_folder`, it does **not** key
+    // entirely on the reader, and the two branches that do not are precisely
+    // the callers this hook serves — every consumer but one passes
+    // `includeMembers: true` to list other people. A `user_id=eq.me` filter
+    // would silence exactly the case the hook exists for.
+    const channels = subscribeByTable<typeof handleMembershipChange, RealtimeChannel>(
+      rt,
+      channelIdRef.current,
+      [
+        { event: "*", schema: "public", table: "locations", handler: debounced },
+        { event: "*", schema: "public", table: "location_members", handler: handleMembershipChange },
+      ],
+      (name, status) => {
+        if (import.meta.env.DEV) console.debug("[task-routing]", name, status);
+      },
+    );
+    for (const { name } of channels) registerChannel(name);
     return () => {
       if (timer) window.clearTimeout(timer);
-      rt.removeChannel(channel);
-      unregisterChannel(channelName);
+      for (const { name, channel } of channels) {
+        rt.removeChannel(channel);
+        unregisterChannel(name);
+      }
     };
   }, [enabled, available, rt, load]);
 

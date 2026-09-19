@@ -15,6 +15,8 @@ import {
   bulkLocationAssignPrompt,
 } from "@/lib/adminPrompts";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
+import { subscribeByTable } from "@/lib/realtimeTableChannels";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { publicMediaObjectUrl } from "@/lib/media/mediaUrl";
 import { useAppStore } from "@/store/app.store";
 import type { AppRole, DynamicRole, LocationRole, Profile } from "@/types/database";
@@ -527,31 +529,52 @@ export function UsersTab() {
 
   useEffect(() => {
     if (!isAdmin) return;
-    const channelName = `${realtimeChannelIdRef.current}:live`;
     let refreshTimer: number | null = null;
-    const scheduleRefresh = () => {
+    const scheduleRefresh = (_payload?: { new?: { user_id?: string }; old?: { user_id?: string } }) => {
       if (refreshTimer) window.clearTimeout(refreshTimer);
       refreshTimer = window.setTimeout(() => {
         refreshTimer = null;
         void refreshAdminData();
       }, 250);
     };
+    const forgetRoleAccess = (payload: { new?: { user_id?: string }; old?: { user_id?: string } }) => {
+      clearRoleAccessCache(payload.new?.user_id ?? payload.old?.user_id);
+    };
 
-    const channel = rt
-      .channel(channelName)
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "user_global_roles" }, (payload: { new?: { user_id?: string }; old?: { user_id?: string } }) => {
-        clearRoleAccessCache(payload.new?.user_id ?? payload.old?.user_id);
-      })
-      .subscribe((status: string) => {
-        if (import.meta.env.DEV) console.debug("[admin-users:live]", status);
-      });
-    registerChannel(channelName);
+    // One channel per table, through the helper, because a channel is only as
+    // live as its least live binding — measured on production on 2026-09-05 and
+    // written up in `lib/realtimeTableChannels.ts`. This tab has carried
+    // `profiles` and `user_global_roles` on one channel since 92e18bf2
+    // (2026-05-13), the exact construction that measurement outlawed, and it
+    // reported SUBSCRIBED throughout — which is why an enumeration can record
+    // this tab as live and be wrong.
+    //
+    // Neither binding is narrowed, and the policies say why, read read-only on
+    // production on 2026-09-20. Profiles are viewable by everyone (qual `true`,
+    // with a restrictive clause that only limits a *banned* reader), and
+    // `user_global_roles select scoped` is user_id = uid OR has_permission(uid,
+    // users.assign_roles) — this effect is already gated on `isAdmin`, so it
+    // runs only for the reader the second branch admits, and that branch has no
+    // row key. A list of every account cannot be filtered down to one account.
+    const channels = subscribeByTable<typeof forgetRoleAccess, RealtimeChannel>(
+      rt,
+      `${realtimeChannelIdRef.current}:live`,
+      [
+        { event: "*", schema: "public", table: "profiles", handler: scheduleRefresh },
+        { event: "*", schema: "public", table: "user_global_roles", handler: forgetRoleAccess },
+      ],
+      (name, status) => {
+        if (import.meta.env.DEV) console.debug("[admin-users:live]", name, status);
+      },
+    );
+    for (const { name } of channels) registerChannel(name);
 
     return () => {
       if (refreshTimer) window.clearTimeout(refreshTimer);
-      rt.removeChannel(channel);
-      unregisterChannel(channelName);
+      for (const { name, channel } of channels) {
+        rt.removeChannel(channel);
+        unregisterChannel(name);
+      }
     };
   }, [isAdmin, refreshAdminData, rt]);
 

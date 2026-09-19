@@ -101,11 +101,15 @@ test("names a channel after its base and its table", () => {
 /**
  * The regression this file exists for.
  *
- * `public.chats` is not in the `supabase_realtime` publication, and a channel
- * that carries a binding for an unpublished table delivers nothing at all —
- * including the bindings for tables that *are* published. Putting the sidebar's
- * two `messages` bindings on the same channel as its two `chats` bindings
- * therefore silenced the sidebar completely while still reporting SUBSCRIBED.
+ * Measured on production on 2026-09-05: a channel carrying the sidebar's two
+ * `messages` bindings together with its two `chats` bindings delivered nothing
+ * at all — not the `chats` events, not the `messages` events — while still
+ * reporting SUBSCRIBED, and the same channel carrying one table delivered.
+ *
+ * This comment used to give the cause as `public.chats` being absent from the
+ * `supabase_realtime` publication. That was measured wrong on 2026-09-18 —
+ * `chats` is published, one of 33 tables — so the cause is unknown and the
+ * construction is all that stands. See `lib/realtimeTableChannels.ts`.
  */
 test("never puts two tables on one channel", () => {
   const { client, channels } = fakeClient();

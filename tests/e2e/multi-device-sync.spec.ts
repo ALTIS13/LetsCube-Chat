@@ -8,10 +8,14 @@ import { gotoOrSkip, loadQaCredentials, loadQaEnvValues, signInFreshOrSkip } fro
  * ever exercised the case the owner actually asked about: the same person
  * signed in twice at once. That gap hid a real outage. `chats:user:{id}`
  * carried four postgres_changes bindings — two on `messages`, two on `chats` —
- * and `public.chats` is not in the `supabase_realtime` publication, so the
- * channel reported SUBSCRIBED, was assigned a server id for every binding, and
- * delivered nothing whatsoever. The sidebar's unread badge and last-message
- * preview only moved when some unrelated refetch happened to run.
+ * and the channel reported SUBSCRIBED, was assigned a server id for every
+ * binding, and delivered nothing whatsoever. The sidebar's unread badge and
+ * last-message preview only moved when some unrelated refetch happened to run.
+ *
+ * That sentence used to give the cause as `public.chats` being absent from the
+ * `supabase_realtime` publication. Measured read-only on production on
+ * 2026-09-18 and again on 2026-09-20, `chats` **is** published — one of 33
+ * tables. The cause is unknown; the construction is what was measured.
  *
  * That reads as a two-device bug because one device hides it: you focus the
  * tab, the visibility refetch fires, and the sidebar catches up before you
@@ -111,18 +115,23 @@ test.describe("two devices, one account", () => {
   /**
    * The root cause, guarded directly and cheaply.
    *
-   * Mixing tables on one channel is only fatal when one of those tables is
-   * absent from the publication, and that is a fact about the database this
-   * test cannot see. So it asserts the rule that makes the failure impossible
-   * for the sidebar: its bindings are split per table, so a dead binding can
-   * only ever take down its own table.
+   * It asserts the rule that makes the failure impossible for the sidebar: its
+   * bindings are split per table, so a dead binding can only ever take down its
+   * own table.
    *
-   * Scoped to `chats:user:` deliberately. Other channels in this application
-   * still mix tables — `chat-info:{id}`, `admin-dashboard-v2` and `roles:*` all
-   * carry a binding on an unpublished table and are silently inert because of
-   * it — and a blanket assertion here would fail for reasons this suite is not
-   * fixing. It would also be wrong as a universal rule: `task-routing:*` mixes
-   * `locations` with `location_members` and works, because both are published.
+   * Scoped to `chats:user:` for history rather than for necessity, and that has
+   * changed. This comment used to justify the scope by saying other channels —
+   * `chat-info:{id}`, `admin-dashboard-v2`, `roles:*` — were inert because they
+   * bound an unpublished table, and that `task-routing:*` mixed two tables and
+   * worked «because both are published». All of that is now wrong twice over:
+   * the publication reasoning was measured wrong on 2026-09-18, and as of
+   * 2026-09-20 no channel in this application mixes tables at all — the last
+   * five were converted together (`useTask`, `useTaskRouting`,
+   * `lib/support/operatorApi`, `BansMutesTab`, `UsersTab`).
+   *
+   * So the natural next step is to widen this to every channel the page holds
+   * and drop the scope. It is left scoped only because that widening has not
+   * been run against a signed-in session.
    */
   test("the sidebar subscribes one channel per table", async () => {
     const sidebar = await A.evaluate(async () => {

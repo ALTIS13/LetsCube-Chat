@@ -813,11 +813,16 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
       }, 150);
     };
     // One channel per table. These three bindings used to share a channel, and
-    // the `chats` one silenced the other two: `public.chats` is not in the
-    // `supabase_realtime` publication, and a channel that binds an unpublished
-    // table delivers nothing at all while still reporting SUBSCRIBED. So this
-    // panel's member list and its invites have never updated live — they moved
-    // only when the panel was reopened. See lib/realtimeTableChannels.ts.
+    // a channel carrying more than one table was measured on production on
+    // 2026-09-05 to deliver nothing for any of its bindings while still
+    // reporting SUBSCRIBED. So this panel's member list and its invites have
+    // never updated live — they moved only when the panel was reopened.
+    //
+    // This comment used to name the cause: `public.chats` missing from the
+    // `supabase_realtime` publication. Measured read-only on production,
+    // `chats` **is** published — on 2026-09-18 and again on 2026-09-20, one of
+    // 33 tables — so that reason is withdrawn and the measured rule is what
+    // stands. See lib/realtimeTableChannels.ts.
     const channels = subscribeByTable<typeof scheduleRefresh, RealtimeChannel>(
       supabase,
       `chat-info:${chat.id}`,

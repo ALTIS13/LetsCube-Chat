@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { subscribeByTable } from "@/lib/realtimeTableChannels";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { KubButton, KubIcon, KubNotice, KubPanel, KubSkeletonRows, type KubIconName } from "@/components/kub";
 import type { AuditAction, AuditLogWithActor, Ban, Mute, Profile, Chat } from "@/types/database";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
@@ -107,14 +109,35 @@ export function BansMutesTab() {
         void load({ background: true });
       }, 500);
     };
-    const channel = supabase
-      .channel("admin-bans-mutes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "bans" }, debouncedLoad)
-      .on("postgres_changes", { event: "*", schema: "public", table: "mutes" }, debouncedLoad)
-      .subscribe();
+    // One channel per table, through the helper, because a channel is only as
+    // live as its least live binding — measured on production on 2026-09-05 and
+    // written up in `lib/realtimeTableChannels.ts`. This tab has carried `bans`
+    // and `mutes` on one channel since the first commit in this repository
+    // (c1ae9c67, 2026-05-05), the exact construction that measurement outlawed,
+    // and it reported SUBSCRIBED throughout.
+    //
+    // Neither binding is narrowed, and the policies say why, read read-only on
+    // production on 2026-09-20. The manager policies on both tables are
+    // is_manager_or_admin(uid) with no row key; the reader-keyed policy beside
+    // them (user_id = uid AND not expired) is for somebody reading their own
+    // restriction, not for this tab, which lists everybody's. Both tables also
+    // carry the default replica identity with `id` as the primary key
+    // (measured the same day), so by Supabase's documented rule — a filter
+    // reaches a DELETE only under REPLICA IDENTITY FULL, read rather than
+    // measured here — a `user_id` filter would have dropped every DELETE. And
+    // a DELETE here is a lifted restriction, the one event this list most
+    // needs to hear.
+    const channels = subscribeByTable<typeof debouncedLoad, RealtimeChannel>(
+      supabase,
+      "admin-bans-mutes",
+      [
+        { event: "*", schema: "public", table: "bans", handler: debouncedLoad },
+        { event: "*", schema: "public", table: "mutes", handler: debouncedLoad },
+      ],
+    );
     return () => {
       if (timer) clearTimeout(timer);
-      supabase.removeChannel(channel);
+      for (const { channel } of channels) supabase.removeChannel(channel);
     };
   }, [supabase, load]);
 
