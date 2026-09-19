@@ -103,8 +103,6 @@ RUN set -eu; \
 
 RUN pnpm --filter @workspace/api-server run build
 
-RUN pnpm --filter @workspace/pocketflow run build
-
 # ---------- Optional API/worker runtime ----------
 FROM base AS api-runtime
 
@@ -158,21 +156,29 @@ CMD ["node", "artifacts/api-server/dist/botGatewayIndex.mjs"]
 
 # ---------- PocketFlow, the reference bot ----------
 #
-# A third-party application by design (see artifacts/pocketflow/README.md), so
-# it shares the build stage and nothing else: its own image, its own
-# configuration, no Supabase credential and no service role. If this needed a
-# private door into the platform it would prove nothing about whether an
-# outside developer could write the same thing.
+# A third-party application by design (artifacts/pocketflow/README.md): its own
+# image, its own configuration, its own database, and **no Supabase credential
+# and no service role**. It reaches the messenger only through the public Bot
+# API, because a private door would prove nothing about whether an outside
+# developer could write the same thing.
 #
-# The bundle carries `pg`, so this stage installs no dependencies at all — it
-# holds the bundle and the migration files it reads at boot, and nothing else.
+# Built in its own stage rather than in the shared `build` one. Docker only
+# builds the stages a target depends on, so `letscube-web` and the gateway
+# never run this — a package that has nothing to do with them cannot fail
+# their deployment. It costs nothing, because the stage starts from `build`,
+# where the install and the source already are.
+FROM build AS pocketflow-build
+RUN pnpm --filter @workspace/pocketflow run build
+
+# The bundle carries `pg`, so the runtime image installs no dependencies at
+# all: the bundle, the migration files it reads at boot, and nothing else.
 FROM base AS pocketflow-runtime
 
 ENV NODE_ENV=production \
     PORT=8099
 
-COPY --chown=node:node --from=build /app/artifacts/pocketflow/dist/index.mjs /app/artifacts/pocketflow/dist/
-COPY --chown=node:node --from=build /app/artifacts/pocketflow/migrations/ /app/artifacts/pocketflow/migrations/
+COPY --chown=node:node --from=pocketflow-build /app/artifacts/pocketflow/dist/index.mjs /app/artifacts/pocketflow/dist/
+COPY --chown=node:node --from=pocketflow-build /app/artifacts/pocketflow/migrations/ /app/artifacts/pocketflow/migrations/
 
 USER node
 
