@@ -611,6 +611,61 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-19 — `12b6acea` deployed, and the clone failure recurred with new evidence
+
+**Deployed.** `letscube-web` runs image
+`l64kyyu1sysev2izzjjbizhe:12b6aceafcf494aa218ca21e5e2855547dcf5f04`, read off
+the running container rather than trusted from the webhook. It carries D-234
+(the time at the bubble’s corner, including when a forwarded header sets the
+width), D-243 (a group with a bot keeps its composer) and D-244 (a group’s
+commands reach the bot). PocketFlow ships in the same commits but is not in
+this bundle; it has its own image and is not started.
+
+**Gates:** typecheck clean across the workspace, unit **3202/3202**, mounted
+routing matrix **15/15**, production build proved by its own lines
+(`sw.js build 639c9360c3db11be`, `built in 10.23s`), bot specs 21/21, the
+D-234 contract 14/14 at both viewports. Pixels looked at for every visual
+change, before and after.
+
+#### The clone failure recurred — deployment 457 — and one new fact narrows it
+
+Same signature as 438, 439 and 445: `Failed to connect to github.com port 443
+after **134990 ms**`. With `net.ipv4.tcp_syn_retries = 6` that is a SYN series
+exhausting its retries, not a refusal — the packets left and nothing answered.
+
+**The new fact:** deployments **458 and 459 cloned the same repository
+successfully within the same two minutes** (all three were created within two
+seconds of each other). So at the moment 457 was timing out, this host could
+reach GitHub. That rules out the provider’s egress as a whole and rules out
+GitHub, which the earlier entries could only infer from a retry afterwards.
+
+**What was tested and did not reproduce it.** Six containers on the `coolify`
+network connecting to `140.82.121.3:443` at once: **12 of 12 succeeded**. The
+probe was calibrated in both directions before being believed — a blackholed
+address FAILed at the timeout and a closed port FAILed instantly.
+
+**And the probe’s timings were garbage, which is worth recording.** The helper
+image’s `date` does not support `%3N`: `date +%s%3N` returns ten digits, so
+every «ms» it printed was a seconds difference. The verdicts were sound and the
+numbers were not — exactly the shape this project already has a note about.
+
+**One observation, offered as a lead rather than a cause.** The host’s
+`MASQUERADE` rules carry no `--random-fully`, which is a known source of
+precisely this symptom: two containers allocating the same SNAT source port to
+the same destination, one SYN silently dropped, a ~130 s timeout, and a retry
+seconds later succeeding. It fits every observation — including why six
+deliberate simultaneous connects did **not** reproduce it, since a collision
+needs the same source port rather than merely the same moment. It is **not
+demonstrated**, and adding the flag would be a change to the host’s firewall
+made on a hypothesis.
+
+**What would settle it:** the source port of a failing clone. `conntrack` is
+not installed on this host and `/proc/net/stat/nf_conntrack` does not exist, so
+the counter that would show `insert_failed` cannot be read as things stand.
+
+**Operationally it costs one retry.** A push to `main` re-triggers the webhook,
+and deployment 460 of the next commit finished normally.
+
 ### 2026-09-19 — PocketFlow, and the audit of the Bot Platform it forced
 
 **Nothing deployed.** A new workspace package, `artifacts/pocketflow`, plus a
@@ -694,6 +749,94 @@ first thing it should not be able to do.
 **Not done:** inline mode and polls are unreachable (G-2, G-3); the `/hook`
 endpoint and the update webhook have never run against the real platform,
 because a bot token is the owner’s to issue.
+
+### 2026-09-19 — one production migration (D-248): a bot can send back the file it was sent
+
+**No application was deployed.** `letscube-web` keeps its baseline; the gateway
+half of this change is written, typechecked and tested but **undeployed**, and
+blocked on the same two owner actions as D-241 (the only Coolify token has
+`read` abilities, and `letscube-bot-gateway` follows branch `codex/bot-platform`).
+Until it is deployed, the wire still refuses `file_id` at the zod schema and the
+database's new branch is unreachable from outside. The database change is inert
+until then, and harmless: every existing payload behaves exactly as before.
+
+**G-1 of `docs/proposals/2026-09-19-pocketflow-reference-bot.md`, the half that
+is closable without a new upload route.** The four media methods could not
+succeed for any input and never had — measured, not inferred: `chat-media` holds
+**0** objects, `private.bot_upload_grants` **0** rows, and **0** of 294 media
+messages were ever sent by a bot. Full statement of the defect, the
+authorization rule and the mutation table is D-248.
+
+**`20260919040000_a_bot_can_send_back_the_file_it_was_sent.sql`**, applied as
+`postgres` — the owner of both functions and of `messages`, `bots`, `chats` and
+`chat_bot_members`, and holding BYPASSRLS. One transaction, self-check,
+`COMMIT`. 35,363 bytes, sha256
+`c480bbd4a53bfb4d46c888d7fda1e09cb1506e1de018e2442f5d6eccda53189b`; rehearsal
+(`183bda47…`) and rollback (`6deaafcd…`) recorded beside it in
+`.migration-backup/supabase/migrations/`.
+
+- **Backup, taken and verified first:**
+  `/srv/letscube/backups/pre-migrations/20260919-030109-before-bot-file-id-resend.schema.dump`,
+  1,405,995 bytes, sha256
+  `5567f094545fab159c312a72513a9ae204c98b7f318b3aacb21729437b60aaf1`.
+  Verified by `sha256sum -c` after writing, and by content: the
+  «PostgreSQL database dump complete» marker present, 138 `CREATE TABLE`, 421
+  `CREATE FUNCTION`, 212 `CREATE POLICY`, 89 `CREATE TRIGGER`, both target
+  functions named.
+- **Live vs file, before touching anything:** the deployed
+  `bot_send_message_internal` and `bot_message_command_internal` agree with
+  `20260831100000_bot_platform_foundation.sql` byte for byte (6,726 and 8,146
+  normalised characters, identical). The new bodies were then generated **from
+  that file by exact string replacement**, so the unchanged parts cannot drift.
+- **Rehearsed on production inside a rolled-back transaction, on values.** A
+  bot, two group chats and five media messages; the before state read
+  (`22023 bot_send_media_input_invalid` for a `file_id` send;
+  `42501 bot_media_grant_required` for the storage-reference send), then the two
+  bodies spliced in verbatim and ten rules asserted. Production unchanged
+  afterwards: 0 leftover rows, 0 grant rows, and the live bodies still without
+  `file_id` before the apply.
+- **Proved by mutation, on the database.** Removing one predicate at a time from
+  the rehearsal's DDL and re-running it on production: dropping
+  `source_message.chat_id = p_chat_id` makes the cross-chat send **succeed**
+  (`00000`), dropping `bot_can_receive_message` admits a message older than
+  `joined_at`, dropping `deleted_at is null` admits a deleted message, and
+  dropping the `type` match sends an image as a video. Four rules, four
+  assertions, each red for its own reason; the unmutated control passes.
+- **Verified after the apply:** the same ten rules pass on the committed
+  functions; the ACL is byte-identical to the pre-apply measurement
+  (`postgres=X/postgres service_role=X/postgres`, owner `postgres`, security
+  definer), `service_role` still holds EXECUTE on both, and the live bodies now
+  match the migration file exactly.
+
+**The authorization rule, written down because it is the whole design.** A
+`file_id` resolves only when the bot may **read** the source
+(`private.bot_can_receive_message`, unchanged), may **send** into the
+destination (`bot_membership_authorize_internal`, unchanged), **and the source
+message is in that same chat**. The third is a deliberate narrowing of Telegram:
+a same-chat re-send points at an object an already-visible message in that chat
+points at, so nobody gains a byte, whereas a cross-chat re-send would turn «may
+see in A» into «may publish in B» — the escalation `joined_at` exists to
+prevent, with a bot choosing when. Narrowing is reversible; a leak is not.
+
+**Two defects the measurement turned up, recorded and not fixed.** D-249:
+`bot_file_lookup_internal` looks only in `chat-media`, so `getFile` has returned
+404 for **every** real file since the platform shipped — and the gateway
+re-asserts the same literal, so relaxing the database alone would turn the 404
+into a 500. D-250: the app writes `size_bytes`/`duration_ms` while the bot API
+reads `size`/`duration`, so every `attachment.byte_size` a bot has ever seen was
+null. **Uploading new bytes remains open** and is the larger half of G-1; it
+needs a real upload route, and `private.bot_upload_grants` cannot serve as one
+because no `storage.objects` policy references it.
+
+**Gates:** `@workspace/api-server` typecheck clean; `tests/unit`
+bot suites **94/94** (83 existing plus 11 new in
+`tests/unit/bot-file-id-resend.test.mts`); nine source-side mutations killed
+9/9. `tests/server` **123/124** — the one failure,
+`voice-call-service-message-db.test.mjs` «the end line lands with no
+room_finished webhook at all», is **pre-existing and belongs to the voice
+track**: that test loads a fixed list of four voice migrations plus
+`20260918200000`, names none of this work, and runs on PGlite rather than on
+anything this change touches.
 
 ### 2026-09-19 — one production migration (D-242), and why `letscube-bot-gateway` was not deployed
 
