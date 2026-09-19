@@ -103,6 +103,8 @@ RUN set -eu; \
 
 RUN pnpm --filter @workspace/api-server run build
 
+RUN pnpm --filter @workspace/pocketflow run build
+
 # ---------- Optional API/worker runtime ----------
 FROM base AS api-runtime
 
@@ -153,6 +155,30 @@ USER node
 EXPOSE 8098
 
 CMD ["node", "artifacts/api-server/dist/botGatewayIndex.mjs"]
+
+# ---------- PocketFlow, the reference bot ----------
+#
+# A third-party application by design (see artifacts/pocketflow/README.md), so
+# it shares the build stage and nothing else: its own image, its own
+# configuration, no Supabase credential and no service role. If this needed a
+# private door into the platform it would prove nothing about whether an
+# outside developer could write the same thing.
+#
+# The bundle carries `pg`, so this stage needs no node_modules — only the
+# bundle and the migration files it reads at boot.
+FROM base AS pocketflow-runtime
+
+ENV NODE_ENV=production \
+    PORT=8099
+
+COPY --chown=node:node --from=build /app/artifacts/pocketflow/dist/index.mjs /app/artifacts/pocketflow/dist/
+COPY --chown=node:node --from=build /app/artifacts/pocketflow/migrations/ /app/artifacts/pocketflow/migrations/
+
+USER node
+
+EXPOSE 8099
+
+CMD ["node", "artifacts/pocketflow/dist/index.mjs"]
 
 # ---------- Stage 3: runtime ----------
 FROM nginx:alpine AS runtime

@@ -129,6 +129,22 @@ pnpm --filter @workspace/pocketflow run build
 node artifacts/pocketflow/dist/index.mjs
 ```
 
+Or through Docker, which is how it would actually be deployed here:
+
+```bash
+docker compose --profile pocketflow up --build pocketflow
+```
+
+The image is the `pocketflow-runtime` stage of `docs/deploy/Dockerfile`: the
+bundle, the migration files, and nothing else — `pg` is bundled, so there is no
+`node_modules` in it. It holds **no Supabase credential and no service role**,
+which is the deployment shape of the same rule as everything else here: this is
+an outside application, and a private door would prove nothing.
+
+It sits behind a `pocketflow` compose profile rather than starting by default,
+because it needs a bot token only its owner has, and a service that fails to
+start on every `compose up` is noise in everybody else’s logs.
+
 ### Tests
 
 ```bash

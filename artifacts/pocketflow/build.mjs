@@ -29,10 +29,14 @@ await esbuild({
   outExtension: { ".js": ".mjs" },
   sourcemap: true,
   logLevel: "info",
-  // `pg` loads native bindings when they are present and falls back to its
-  // pure-JS implementation when they are not; bundling it hides that decision
-  // from the runtime, so it stays external and is installed in the image.
-  external: ["pg", "pg-native"],
+  // `pg` is bundled so the runtime image needs no `node_modules` at all — the
+  // same shape the Bot Gateway's image has, and the reason it can be a
+  // read-only filesystem with nothing on it but a bundle.
+  //
+  // Only `pg-native` stays external. `pg` reaches for it inside a `try`, so
+  // with the `require` shim in the banner the miss is caught and the pure-JS
+  // driver is used, which is what this application wants anyway.
+  external: ["pg-native"],
   banner: {
     js: "import { createRequire as __pfRequire } from 'node:module'; const require = __pfRequire(import.meta.url);",
   },

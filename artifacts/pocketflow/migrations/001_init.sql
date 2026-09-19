@@ -11,9 +11,11 @@
 -- larger than a signed 32-bit integer be safe — text is the only column type
 -- that is correct for both and cannot silently truncate either.
 --
--- Applied by `pnpm --filter @workspace/pocketflow run migrate`, which runs the
--- files in this directory in name order inside one transaction each and
--- records them in `pf_migrations`.
+-- Applied at boot by `migrate()` in `src/store/db.ts`: the files in this
+-- directory run in name order, each in its own transaction, each recorded in
+-- `pf_migrations` in that same transaction. A file that fails halfway leaves
+-- nothing behind and is retried on the next start, which is the property that
+-- makes migrating on boot safe rather than reckless.
 
 create table if not exists pf_migrations (
   name text primary key,
@@ -74,9 +76,11 @@ create table if not exists pf_saved_items (
 create index if not exists pf_saved_items_owner_idx
   on pf_saved_items (owner_id, created_at desc);
 
--- Search is «find the thing I saved», so a trigram-free prefix/substring match
--- on a lowercased copy is enough and needs no extension. The column is
--- generated so it cannot drift from `content`.
+-- Search is «find the thing I saved», so a case-insensitive substring match is
+-- enough and needs no extension. An expression index on `lower(content)`, not
+-- a second column: there is nothing to keep in step, and `searchItems` uses
+-- `position(... in lower(content))` rather than LIKE so that a `%` in somebody's
+-- query is a percent sign rather than a wildcard that matches everything.
 create index if not exists pf_saved_items_search_idx
   on pf_saved_items (owner_id, lower(content) text_pattern_ops);
 

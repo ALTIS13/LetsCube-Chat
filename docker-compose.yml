@@ -64,3 +64,44 @@ services:
       retries: 3
       start_period: 10s
     restart: unless-stopped
+
+  # PocketFlow, the reference bot (artifacts/pocketflow/README.md).
+  #
+  # Deliberately holds no Supabase credential and no service role: it reaches
+  # the messenger only through the public Bot API, exactly as an outside
+  # developer’s application would. Its database is its own.
+  #
+  # Not started by default — `docker compose --profile pocketflow up` — because
+  # it needs a bot token that only its owner has, and a service that fails to
+  # start on every `compose up` is noise in everybody else’s logs.
+  pocketflow:
+    profiles: ["pocketflow"]
+    build:
+      context: .
+      dockerfile: docs/deploy/Dockerfile
+      target: pocketflow-runtime
+    environment:
+      PORT: 8099
+      BOT_TOKEN: ${POCKETFLOW_BOT_TOKEN:?POCKETFLOW_BOT_TOKEN is required}
+      BOT_API_BASE_URL: ${POCKETFLOW_BOT_API_BASE_URL:-https://api.letscube.ru}
+      DATABASE_URL: ${POCKETFLOW_DATABASE_URL:?POCKETFLOW_DATABASE_URL is required}
+      TRANSPORT: ${POCKETFLOW_TRANSPORT:-polling}
+      PUBLIC_BASE_URL: ${POCKETFLOW_PUBLIC_BASE_URL:-}
+      WEBHOOK_SECRET: ${POCKETFLOW_WEBHOOK_SECRET:-}
+      DEVELOPER_IDS: ${POCKETFLOW_DEVELOPER_IDS:-}
+      DEFAULT_TIME_ZONE: ${POCKETFLOW_DEFAULT_TIME_ZONE:-Europe/Moscow}
+      LOG_LEVEL: ${POCKETFLOW_LOG_LEVEL:-info}
+    expose:
+      - "8099"
+    healthcheck:
+      # /healthz is liveness, not readiness: it deliberately does not touch
+      # the database, so a brief Postgres blip cannot restart a process that
+      # was about to recover.
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://127.0.0.1:8099/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
