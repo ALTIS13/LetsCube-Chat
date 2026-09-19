@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   LEGACY_PREVIEW_LONG_SIDE_CAP,
+  MEDIA_VARIANT_JOB_TRIGGER_COLUMNS,
   PREVIEW_BACKFILL_MIN_SHORT_SIDE,
+  PREVIEW_BACKFILL_TOUCH_COLUMN,
+  canEnqueueMessageVariantJob,
   isPreviewBackfillCandidate,
   legacyPreviewSize,
+  planPreviewBackfill,
   previewNeedsRegeneration,
   selectPreviewBackfillRows,
 } from "../../artifacts/api-server/src/workers/mediaPreviewBackfill.ts";
@@ -225,4 +232,234 @@ test("the cap the selection reads is the cap the preview rule uses", () => {
     width: LEGACY_PREVIEW_LONG_SIDE_CAP,
     height: 960,
   });
+});
+
+/**
+ * Handing the marked row back to the worker (D-207).
+ *
+ * Marking is half the job and stopped being the whole of it at `6a26bc8`: the
+ * worker drains `private.media_variant_jobs` every five seconds and keeps its
+ * old scan only as a half-hourly safety net over the newest 1200 media
+ * messages. A back-fill is about old pictures, so it must put the job in the
+ * queue itself. It cannot insert there -- `private` is not exposed through
+ * PostgREST -- so it writes a column the enqueue trigger watches, which fires
+ * the trigger even though the value does not change.
+ *
+ * The two decisions in that sentence are what these tests pin: *which* column,
+ * and *which* messages the trigger will actually accept.
+ */
+
+const MIGRATIONS_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  ".migration-backup",
+  "supabase",
+  "migrations",
+);
+
+/**
+ * Every trigger this repository creates on `public.messages`, with the columns
+ * it watches.
+ *
+ * Comments are stripped first: these migrations carry long prose headers, and
+ * prose that says "create trigger" reads exactly like code to a regular
+ * expression.
+ *
+ * What it can and cannot see: a trigger dropped by a later migration is still
+ * counted, so this can raise a false alarm but not miss a real one. A false
+ * alarm here means "go and read `pg_get_triggerdef` on the database", which is
+ * the correct response either way.
+ */
+function triggersOnMessages() {
+  const stripComments = (sql) =>
+    sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
+  const triggerPattern =
+    /create\s+trigger\s+([a-z0-9_]+)\s+([\s\S]{0,400}?)\son\s+public\.messages\b/gi;
+  const columnsPattern = /update\s+of\s+([a-z0-9_,\s]+)/i;
+
+  const triggers = [];
+  for (const file of fs.readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith(".sql"))) {
+    const sql = stripComments(fs.readFileSync(path.join(MIGRATIONS_DIR, file), "utf8"));
+    triggerPattern.lastIndex = 0;
+    let match;
+    while ((match = triggerPattern.exec(sql))) {
+      const columns = columnsPattern.exec(match[2]);
+      triggers.push({
+        name: match[1],
+        columns: columns
+          ? columns[1].split(",").map((column) => column.trim()).filter(Boolean)
+          : [],
+      });
+    }
+  }
+  return triggers;
+}
+
+test("the column written back is one the enqueue trigger actually watches", () => {
+  // If it is not in this list the write is silent: the row is marked, no job is
+  // queued, and the picture falls back to its full original for good. That is
+  // D-207 exactly, so it is the first thing to hold.
+  assert.ok(
+    MEDIA_VARIANT_JOB_TRIGGER_COLUMNS.includes(PREVIEW_BACKFILL_TOUCH_COLUMN),
+    `${PREVIEW_BACKFILL_TOUCH_COLUMN} is not one of the columns the trigger is declared on`,
+  );
+
+  const triggers = triggersOnMessages();
+  const enqueue = triggers.find((row) => row.name === "trg_enqueue_media_variant_job_on_update");
+  assert.ok(enqueue, "the enqueue trigger was not found in the migrations at all");
+  assert.deepEqual(
+    [...enqueue.columns].sort(),
+    [...MEDIA_VARIANT_JOB_TRIGGER_COLUMNS].sort(),
+    "the constant and the trigger's own column list have drifted apart",
+  );
+});
+
+test("and it is the one column no other trigger on messages watches", () => {
+  // Not tidiness. `media_bucket` and `media_path` are also watched by
+  // `trg_guard_message_media_path`, which raises when a path is not the
+  // sender's, and by `trg_enqueue_bot_message_updates_after_update`, which is
+  // stopped only by its own unchanged-row early return. Both are harmless
+  // today and neither belongs to this tool. Writing the column that fires one
+  // trigger keeps the blast radius a fact rather than a promise made by two
+  // functions somebody else maintains.
+  const triggers = triggersOnMessages();
+  const others = triggers.filter(
+    (row) => row.name !== "trg_enqueue_media_variant_job_on_update",
+  );
+
+  // A scan that found no other watching trigger would satisfy the loop below
+  // without checking anything.
+  assert.ok(
+    others.some((row) => row.columns.length > 0),
+    "the scan found no other column-watching trigger, so it proves nothing",
+  );
+
+  for (const trigger of others) {
+    assert.ok(
+      !trigger.columns.includes(PREVIEW_BACKFILL_TOUCH_COLUMN),
+      `${trigger.name} also watches ${PREVIEW_BACKFILL_TOUCH_COLUMN}, so the touch no longer fires one trigger`,
+    );
+  }
+});
+
+test("a message qualifies exactly when the enqueue trigger would take it", () => {
+  // A transcription of `private.enqueue_media_variant_job_for_message`: type in
+  // ('image','video'), deleted_at is null, and a path or a URL present. Being
+  // merely conservative is not good enough in either direction. Too strict and
+  // a picture is never fixed; too loose and a row is marked `stale` that
+  // nothing will ever regenerate, which is worse than leaving it alone.
+  const live = { id: "m", type: "image", deleted_at: null, media_path: "p", media_url: null };
+
+  assert.equal(canEnqueueMessageVariantJob(live), true, "an image with a path");
+  assert.equal(
+    canEnqueueMessageVariantJob({ ...live, media_path: null, media_url: "u" }),
+    true,
+    "a URL alone is enough: the trigger accepts either",
+  );
+  assert.equal(canEnqueueMessageVariantJob({ ...live, type: "video" }), true, "video too");
+
+  assert.equal(
+    canEnqueueMessageVariantJob({ ...live, media_path: null, media_url: null }),
+    false,
+    "neither a path nor a URL: the trigger reads the row and does nothing",
+  );
+  assert.equal(
+    canEnqueueMessageVariantJob({ ...live, deleted_at: "2026-09-19T00:00:00Z" }),
+    false,
+    "a deleted message is never enqueued, however it is touched",
+  );
+  for (const type of ["text", "audio", "file", "system", "", null, undefined]) {
+    assert.equal(
+      canEnqueueMessageVariantJob({ ...live, type }),
+      false,
+      `type ${String(type)} is outside the trigger's set`,
+    );
+  }
+  assert.equal(canEnqueueMessageVariantJob(null), false);
+  assert.equal(canEnqueueMessageVariantJob(undefined), false);
+  assert.equal(
+    canEnqueueMessageVariantJob({ id: "m", type: "image", media_path: "p" }),
+    false,
+    "an absent deleted_at is a column that was not selected, which is not a claim that it is null",
+  );
+});
+
+test("each row to mark is paired with the write that hands it back", () => {
+  const message = {
+    id: "message-1",
+    type: "image",
+    deleted_at: null,
+    media_path: "sender/1.png",
+    media_url: "https://example.invalid/object/media/sender/1.png",
+  };
+  const plan = planPreviewBackfill([
+    { id: "variant-1", message_id: "message-1", width: 591, height: 1280, messages: message },
+  ]);
+
+  assert.equal(plan.unenqueueable.length, 0);
+  assert.deepEqual(plan.regenerate[0].touch, {
+    message_id: "message-1",
+    column: PREVIEW_BACKFILL_TOUCH_COLUMN,
+    // The value read, written back unchanged. Anything else would edit a
+    // person's message to make a picture regenerate.
+    value: message[PREVIEW_BACKFILL_TOUCH_COLUMN],
+  });
+});
+
+test("a to-one embed that arrives as a one-element array is still one message", () => {
+  // PostgREST returns an object for a to-one relation and an array when it
+  // reads the same relation as to-many. Both are truthy, so the caller cannot
+  // see this going wrong: it would simply stop pairing rows and report that
+  // there was nothing to do.
+  const message = { id: "m", type: "image", deleted_at: null, media_path: "p", media_url: null };
+  const asObject = planPreviewBackfill([{ id: "v", width: 591, height: 1280, messages: message }]);
+  const asArray = planPreviewBackfill([{ id: "v", width: 591, height: 1280, messages: [message] }]);
+
+  assert.deepEqual(asArray.regenerate[0].touch, asObject.regenerate[0].touch);
+  assert.equal(asArray.unenqueueable.length, 0);
+});
+
+test("a row that cannot be handed back is never marked", () => {
+  // The safety property, and the reason the predicate above has to be exact.
+  // Marking without enqueuing degrades the picture permanently, so a row whose
+  // message the trigger would ignore is reported and left alone.
+  const thin = { width: 591, height: 1280 };
+  const plan = planPreviewBackfill([
+    { id: "deleted", ...thin, messages: { id: "a", type: "image", deleted_at: "2026-09-19T00:00:00Z", media_path: "p" } },
+    { id: "no-source", ...thin, messages: { id: "b", type: "image", deleted_at: null, media_path: null, media_url: null } },
+    { id: "wrong-type", ...thin, messages: { id: "c", type: "text", deleted_at: null, media_path: "p" } },
+    { id: "no-message", ...thin, messages: null },
+    { id: "no-id", ...thin, messages: { type: "image", deleted_at: null, media_path: "p" } },
+    { id: "ok", ...thin, messages: { id: "e", type: "image", deleted_at: null, media_path: "p", media_url: null } },
+  ]);
+
+  assert.deepEqual(
+    plan.unenqueueable.map((row) => row.id),
+    ["deleted", "no-source", "wrong-type", "no-message", "no-id"],
+  );
+  assert.deepEqual(
+    plan.regenerate.map((entry) => entry.row.id),
+    ["ok"],
+  );
+  // Every row is accounted for exactly once: a row quietly dropped by the plan
+  // would be a row the caller never marks and never reports either.
+  assert.equal(plan.regenerate.length + plan.unenqueueable.length, 6);
+});
+
+test("the message id falls back to the variant row's own column", () => {
+  // `media_variants.message_id` and the embedded `messages.id` are the same
+  // value, and a select that narrows the embed could stop returning the second.
+  // The touch needs an id whichever one is present.
+  const plan = planPreviewBackfill([
+    {
+      id: "v",
+      message_id: "message-1",
+      width: 591,
+      height: 1280,
+      messages: { type: "image", deleted_at: null, media_path: "p", media_url: null },
+    },
+  ]);
+  assert.equal(plan.regenerate[0].touch.message_id, "message-1");
+  assert.equal(plan.regenerate[0].touch.value, null, "a null URL is written back as null");
 });

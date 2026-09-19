@@ -148,3 +148,172 @@ export function selectPreviewBackfillRows<T extends StoredPreviewRow>(rows: read
       isPreviewBackfillCandidate(row.width, row.height),
   );
 }
+
+/*
+ * ── Handing a marked row back to the worker (D-207) ─────────────────────────
+ *
+ * Marking a row `stale` used to be the whole mechanism: the worker rescanned
+ * every minute, and a row that was not `ready` was work. `6a26bc8` moved it
+ * onto `private.media_variant_jobs`, which it drains every five seconds, and
+ * demoted the scan to a half-hourly safety net over the newest
+ * `MEDIA_VARIANTS_CANDIDATE_SCAN_LIMIT` (1200) media messages, at most
+ * `MEDIA_VARIANTS_PROCESS_LIMIT` (12) of them per pass. So a marked row is no
+ * longer regenerated *because* it was marked. It is regenerated because
+ * something put a job in the queue — or, eventually and only while the message
+ * is still young enough to be swept, because the safety net reached it. A
+ * back-fill is by definition about old pictures, which are the first to fall
+ * out of that window, so it must enqueue rather than hope.
+ *
+ * The operator tool cannot insert the job itself: the queue lives in `private`,
+ * which PostgREST does not expose, and is owned by `supabase_admin`. What it
+ * can do is what the product does — write one of the columns the enqueue
+ * trigger watches.
+ */
+
+/**
+ * The columns `trg_enqueue_media_variant_job_on_update` is declared on.
+ *
+ * `after update of media_bucket, media_path, media_url`. Postgres fires a
+ * column-list trigger whenever one of the named columns appears in the SET
+ * clause, **whether or not the value changes**, and
+ * `private.enqueue_media_variant_job_for_message` carries no unchanged-value
+ * guard of its own: it checks the type, the deletion flag and that a path or a
+ * URL is present, then inserts `on conflict do nothing`. So writing a column
+ * back to its own value enqueues the message through the product's own path.
+ */
+export const MEDIA_VARIANT_JOB_TRIGGER_COLUMNS = [
+  "media_bucket",
+  "media_path",
+  "media_url",
+] as const;
+
+/**
+ * The one of them to write, and why it is that one rather than either other.
+ *
+ * `media_url` is the only column of the three that no other trigger on
+ * `public.messages` watches. The other two are also watched by
+ * `trg_guard_message_media_path`, a BEFORE trigger that raises
+ * `message_media_path_not_owned` when the path does not belong to the sender,
+ * and by `trg_enqueue_bot_message_updates_after_update`, which today returns
+ * early on an unchanged row and so sends nothing. Both are harmless as they
+ * stand — the guard lets a null `auth.uid()` through on purpose, the bot
+ * trigger compares old and new — and both are somebody else's code, free to
+ * change for reasons that have nothing to do with a back-fill. Writing the
+ * column that fires one trigger rather than three is not tidiness: it is the
+ * difference between a tool whose blast radius is stated and one whose blast
+ * radius is a promise made by two functions it does not own.
+ *
+ * Measured on production on 2026-09-19, inside a transaction that was rolled
+ * back, as `service_role`: writing `media_url` back to its own value took
+ * `private.media_variant_jobs` from 0 rows to 1 while `media_url` itself was
+ * unchanged; writing `pinned` back to its own value in the same shape left the
+ * queue at 0, which is what makes the first measurement mean anything.
+ */
+export const PREVIEW_BACKFILL_TOUCH_COLUMN = "media_url";
+
+/** The message columns the enqueue trigger reads, as PostgREST returns them. */
+export interface BackfillMessageRow {
+  id?: string | null;
+  type?: string | null;
+  deleted_at?: string | null;
+  media_bucket?: string | null;
+  media_path?: string | null;
+  media_url?: string | null;
+}
+
+/** One write that asks the database to enqueue one message. */
+export interface PreviewBackfillTouch {
+  /** The message to write back to. */
+  message_id: string;
+  /** Which column is written. Always `PREVIEW_BACKFILL_TOUCH_COLUMN`. */
+  column: typeof PREVIEW_BACKFILL_TOUCH_COLUMN;
+  /** What to write: the column's own current value, so the row does not change. */
+  value: string | null;
+}
+
+/**
+ * Whether the trigger would enqueue this message if the column were written.
+ *
+ * A transcription of `private.enqueue_media_variant_job_for_message`'s body and
+ * nothing else. It matters that this is exact rather than merely conservative:
+ * a row the trigger would ignore must not be marked `stale`, because marking
+ * without enqueuing is the whole of D-207 — the picture falls back to its
+ * full-size original and nothing ever puts it back.
+ */
+export function canEnqueueMessageVariantJob(
+  message: BackfillMessageRow | null | undefined,
+): boolean {
+  if (!message) return false;
+  if (message.type !== "image" && message.type !== "video") return false;
+  // `deleted_at is null` in the trigger. An absent key is a column that was not
+  // selected, which is not the same claim as a null, so it is not accepted.
+  if (message.deleted_at !== null) return false;
+  return (
+    (message.media_path ?? null) !== null || (message.media_url ?? null) !== null
+  );
+}
+
+/**
+ * A variant row as the back-fill selects it, with its message embedded.
+ *
+ * PostgREST returns a to-one embed as an object, but returns an array for the
+ * same relation when it reads it as to-many — which is a shape the caller
+ * cannot see going wrong, because both are truthy. Both are accepted here and
+ * both are tested.
+ */
+export interface StoredPreviewRowWithMessage extends StoredPreviewRow {
+  message_id?: string | null;
+  messages?: BackfillMessageRow | readonly BackfillMessageRow[] | null;
+}
+
+function embeddedMessage(row: StoredPreviewRowWithMessage): BackfillMessageRow | null {
+  const embed = row.messages;
+  if (!embed) return null;
+  if (Array.isArray(embed)) return embed.length === 1 ? (embed[0] ?? null) : null;
+  return embed as BackfillMessageRow;
+}
+
+/** What the back-fill will do with the rows it has selected. */
+export interface PreviewBackfillPlan<T> {
+  /** Rows to mark `stale`, each with the write that hands it back to the worker. */
+  regenerate: { row: T; touch: PreviewBackfillTouch }[];
+  /**
+   * Rows that qualify on geometry but whose message the trigger would ignore.
+   *
+   * Left alone rather than marked. There is no honest thing to do with a row
+   * that cannot be enqueued: marking it would degrade the picture for good.
+   */
+  unenqueueable: T[];
+}
+
+/**
+ * Pair each selected row with the one write that puts it back in front of the
+ * worker, and separate out the rows for which there is no such write.
+ *
+ * Deliberately does no selecting of its own: the caller has already decided
+ * which rows it is talking about, either `selectPreviewBackfillRows` for the
+ * rows to mark or the already-`stale` rows an interrupted earlier run left
+ * behind.
+ */
+export function planPreviewBackfill<T extends StoredPreviewRowWithMessage>(
+  rows: readonly T[],
+): PreviewBackfillPlan<T> {
+  const plan: PreviewBackfillPlan<T> = { regenerate: [], unenqueueable: [] };
+  for (const row of rows) {
+    const message = embeddedMessage(row);
+    const messageId = message?.id ?? row.message_id ?? null;
+    if (!messageId || !canEnqueueMessageVariantJob(message)) {
+      plan.unenqueueable.push(row);
+      continue;
+    }
+    plan.regenerate.push({
+      row,
+      touch: {
+        message_id: messageId,
+        column: PREVIEW_BACKFILL_TOUCH_COLUMN,
+        value: message?.[PREVIEW_BACKFILL_TOUCH_COLUMN] ?? null,
+      },
+    });
+  }
+  return plan;
+}

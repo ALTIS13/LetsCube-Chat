@@ -15,15 +15,20 @@ const rules = await import("../../artifacts/api-server/dist/workers/mediaVariant
 /**
  * The backfill's premise: marking a preview `stale` makes the worker redo it.
  *
- * `scripts/media-preview-backfill.mjs` writes nothing but that status flip, so
- * the entire design rests on the worker treating a stale row as work. Nothing
- * in the worker mentions `stale` by name — it falls out of
- * `shouldAttemptVariantKind`, which attempts anything that is neither `ready`
- * nor a terminal `failed` — and a behaviour nobody wrote down is a behaviour
- * that can be removed without noticing.
+ * Half of the design rests on this. `scripts/media-preview-backfill.mjs` makes
+ * two writes — the status flip, and a touch on the message that enqueues a job
+ * (D-207) — and the second only matters because of the first: the job would
+ * find nothing outstanding if a stale row were not work. Nothing in the worker
+ * mentions `stale` by name; it falls out of `shouldAttemptVariantKind`, which
+ * attempts anything that is neither `ready` nor a terminal `failed`, and a
+ * behaviour nobody wrote down is a behaviour that can be removed without
+ * noticing.
  *
  * So this drives the real tick against a stubbed backend rather than asserting
  * on the helper: the helper is only right if the candidate loader consults it.
+ * `{ scan: true }` drives the scan path, which is also what proves the scan
+ * still takes a stale row — the half-hourly safety net the queue did not
+ * replace.
  */
 
 const SUPABASE_URL = "https://storage.invalid";
