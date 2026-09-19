@@ -13335,6 +13335,202 @@ covered — a spent URL is not handed out, a dead one recovers on `error` — bu
 the renewal is demand-driven by design, and that design is worth re-reading with
 a private bucket in view.
 
+### 2026-09-19 — the back-fill is applied, and it was filed as the wrong kind of change
+
+`20260919130000_media_path_backfill_for_legacy_messages.sql` **is applied to
+production**, as **`postgres`**, in one transaction with a self-check that
+raises rather than committing half of itself. 16,076 bytes, sha256
+`69746b1f…550e5fd026`, hashed on the workstation, on the host and inside the
+container before it ran and identical at all three; rollback beside it
+(`5667f6e1…86da67c8c`) and the rehearsal kept with the evidence.
+
+**`postgres`, and that had to be established rather than copied.** The sibling
+migration earlier today needed `supabase_admin` because `storage.objects`
+belongs to `supabase_storage_admin`. This one writes `public.messages`, which
+`postgres` owns; it also owns the `private` schema, holds BYPASSRLS, and is what
+`20260913120000_media_variant_job_queue` names for this table. A third owner
+appears in the same story: `private.media_variant_jobs` belongs to
+`supabase_admin` and `postgres` holds **SELECT on it and nothing else**, which
+is how the rollback acquired a bug (below).
+
+**Re-measured, read-only, before anything was written.** The shape held and one
+number in the section above is confirmed rather than moved:
+
+| | earlier today | now |
+|---|---|---|
+| media messages (`media_url` not null) | 314 | **314** |
+| carrying both columns | 294 | **294** |
+| `media_url` only | 20 | **20** — 10 live, 10 on deleted messages |
+| objects in `media` | 778 | **778** |
+| avatar URLs | 17 | **17** (10 profiles, 7 chats, 0 bots) |
+
+The derivation was re-verified on today's data by **string equality, not a
+pattern**: in 294 of 294 rows carrying both, `media_url` is exactly
+`<base>/storage/v1/object/public/media/` + `media_path`. Two facts the file did
+not have. There are **two** distinct bases among the 314, and the split is not
+noise: all ten live legacy rows sit on the current host, and the other base
+accounts for precisely the ten deleted ones. And there is a third, independent
+witness to the inversion — the variant pipeline already derived these same paths
+from these same URLs: all 12 `media_variants` rows belonging to the six
+image/video candidates carry `source_bucket = 'media'` and a `source_path`
+equal to the path this migration derives.
+
+The ten: 5 image, 1 video, 4 file, across 4 chats; **all ten carry
+`media_bucket` NULL as well**, which matters because the read predicate needs
+both halves; nine are forwards; all ten derive a `{uuid}/{file}` path whose
+first segment is a real profile; none contains a query string, a percent sign or
+an underscore.
+
+**What the triggers did, predicted before the write and then measured.** Eleven
+triggers exist on `public.messages`; `UPDATE OF` narrows it to three.
+
+- `trg_guard_message_media_path` fired and admitted, because
+  `private.message_media_path_allowed` opens with
+  `when p_actor is null then true -- service role: not the subject` and a psql
+  session has no `request.jwt.claims`. **It must be applied that way.** Nine of
+  the ten are forwards whose path begins with the *original* uploader's id, so
+  only 2 of 10 satisfy `split_part(media_path,'/',1) = author`, and
+  `v_forward_matches` rescues only 7 of the 9 — two of the source rows are
+  themselves legacy with a null path. Impersonating the author would have been
+  refused on three rows. This is the opposite of the usual advice and it is
+  written into the file's header.
+- `trg_enqueue_media_variant_job_on_update` enqueued **6** jobs (5 image, 1
+  video; the four `file` rows enqueue nothing) into a queue that held 0.
+  Predicted to be no-ops, and they were: every expected kind for all six was
+  already recorded `ready`, so `loadMessageJobTarget` returns null and the job
+  settles without downloading anything. Measured afterwards — queue back to
+  **0**, the twelve `media_variants` rows **untouched** (none updated in two
+  hours), and **778** objects with **none created or updated** in two hours.
+- `trg_enqueue_bot_message_updates_after_update` did **not** take its
+  unchanged-value early return — that return needs the watched values to be
+  equal and `media_path` changes — and then found nothing: its loop is over
+  `chat_bot_members` with `removed_at is null`, and **0** of the four chats has
+  one. Production has 2 active bot memberships; none is in these chats.
+
+The eight that did not fire include `trg_guard_message_client_times` and
+`trg_messages_sender_on_update`, so these messages are **not** marked edited:
+`edited_at` is null on all ten before and after.
+
+**The constraint that could have refused it.** `messages_media_metadata_shape`
+is a CHECK marked `NOT VALID`, and a NOT VALID check is still enforced on
+UPDATE. It ties `media_metadata #>> '{preview,path}'` to `media_path` the moment
+`media_path` stops being null — so a legacy row carrying a preview path would
+have aborted the migration. Measured: all ten carry `media_metadata = '{}'`,
+zero keys, and 0 rows in the whole table would violate the check if it were
+validated today. A near miss that was checked rather than discovered.
+
+**Four defects in the file, found by review before it ran.**
+
+1. **The self-check demanded the opposite of the migration's own design.** It
+   raised unless *no* live legacy row remained, while the candidate filter
+   deliberately excludes a row whose object is gone. A row correctly skipped
+   would have aborted the migration that correctly skipped it. It now asserts
+   that no row which *qualified* was left behind, and reports the deliberate
+   skips as a count.
+2. **`LIKE` with the path interpolated into the pattern**, in the assertion that
+   each back-filled row still agrees with its own URL. An object name is not a
+   pattern and 484 of the 778 names in this bucket contain an underscore. This
+   is the same hole the sibling migration's review found in its sidecar branch,
+   repeated in a self-check. It is string equality now.
+3. **Nothing asserted that no other row moved.** Two digests are taken before
+   the write — one over every column the migration does not name, across all
+   3,431 rows; one over `media_bucket`/`media_path` across every row it is not
+   about to touch — and both are re-computed and compared after.
+4. **No timeouts, and a greedy strip.** `lock_timeout`/`statement_timeout` are
+   set as the house style has them, and the derivation now takes everything
+   after the **first** marker rather than the last, which makes
+   `base || marker || derived` the original string by construction. (Measured:
+   both spellings agree on all 314 rows today, so this is hardening, not a fix.)
+
+**The fifth was found by the rehearsal, in the rollback, on its first run.** A
+tidy-up had been added to withdraw the six queue rows so that a rollback left no
+trace — and it was refused: `permission denied for table media_variant_jobs`.
+`postgres` can only SELECT there; the trigger reaches the table through a
+SECURITY DEFINER function, which is why the insert succeeds where a direct
+delete does not. The tidy-up was removed rather than escalated: it would have
+made the rollback require a superuser in order to remove six rows that settle
+themselves. **Running the rollback inside the rehearsal has now caught a real
+bug in a rollback three times in one day.**
+
+**Backup, taken and read back first**, and deliberately two files, because this
+migration changes data and a schema dump cannot restore a row:
+
+- `…/pre-migrations/20260919-142208-before-media-path-backfill-for-legacy-messages.schema.dump`,
+  1,653,522 bytes, sha256 `91cfdde3…71091c0b69`. Read back with `pg_restore -l`:
+  **2,508** TOC entries, `public.messages` present with **all 11** of its
+  triggers by name, the NOT VALID check, `idx_messages_media_path`, the guard
+  function and both predicates.
+- `….messages-media-columns.csv`, 161,001 bytes, sha256
+  `73c3e58a…cbf2fcf56c` — `(id, media_bucket, media_path)` for every one of the
+  3,431 rows, which is exactly what this migration can destroy and contains no
+  message body. Read back by restoring it into a table inside a rolled-back
+  transaction: 3,431 rows, 294 paths, and a digest **identical to live**.
+
+The first read-back attempt failed on its own method — `pg_restore -l` cannot
+read a pipe, and answered «did not find magic string in file header» about a
+dump that is fine. The file was copied into the container and hashed there
+before being listed. A failed probe is not a failed backup, and the distinction
+had to be made rather than assumed.
+
+**Rehearsed on production inside a transaction that was rolled back**, with both
+files spliced in **verbatim** — by a script that removes only the lines equal to
+`begin;` or `commit;` and then asserts that every remaining line of both sources
+appears in the result; it reports 2 lines removed from each and 0 missing.
+Accounts were impersonated with `set_config('request.jwt.claims', …)` plus
+`set_config('role','authenticated')`, and the harness was **calibrated against a
+known answer first**: three rows that already carry a path, where a member must
+read and a non-member must not.
+
+| | before | after | after the rollback |
+| --- | --- | --- | --- |
+| the ten carry the correct bucket and path | 0 of 10 | **10 of 10** | 0 of 10 |
+| a chat member may select the original | 0 of 9 | **9 of 9** | 0 of 9 |
+| a non-member may select it | 0 of 9 | **0 of 9** | 0 of 9 |
+| CONTROL — the path owner may select it | 9 of 9 | 9 of 9 | 9 of 9 |
+| CALIBRATION — member on a row that already had a path | 3 of 3 | 3 of 3 | 3 of 3 |
+| CALIBRATION — non-member on that same row | 0 of 3 | 0 of 3 | 0 of 3 |
+| digest of every column not written | `a9aebfe363f1` | `a9aebfe363f1` | `a9aebfe363f1` |
+| `private.media_variant_jobs` | 0 | **6** | 6 |
+
+**Nine of ten, not ten of ten, and the tenth is not a silence.** One of the four
+chats has a single member, who is both the author and the uploader, so no third
+party exists to probe with. That row is proved on values only, and the
+rehearsal prints the fixture counts so an empty probe set cannot read as a pass;
+it also raises outright if the calibration set or the probe set is empty.
+
+**Three mutations, all red**, each naming the check it was aimed at: the UPDATE
+skipping one recorded row gives «back-fill is half applied: 9 of 10 rows carry
+the path»; a stray write to a row outside the back-fill gives «a row outside the
+back-fill has changed its media_bucket or media_path»; corrupting a back-filled
+row's URL gives «1 back-filled rows disagree with their own URL» — which is the
+check that had been a `LIKE` pattern.
+
+**Verified after the apply, on values and on behaviour.** Rows with a path 294 →
+**304**; live legacy rows **0**; the ten still in the `media_url`-only
+population are the deleted ten, untouched by design. All ten: bucket `media`,
+path as recorded, URL exactly the path, object present, `edited_at` still null,
+still live. The untouched digest is `a9aebfe363f1dd63f17a23c9f45949f5`, the
+same value read before the apply and in all three rehearsal phases. A chat
+member now reads **9 of 9** where they read 0; a non-member **0 of 9**; the
+uploader **9 of 9** throughout, so nothing was taken away. And the pre-apply CSV
+was diffed against live: **exactly 10 rows differ, and all 10 are the recorded
+ten**, with no row present on one side and absent from the other.
+
+**The bucket is still `public = true`.** Step four is the owner's and was not
+touched. `anon` still cannot execute the read predicate; ten policies on
+`storage.objects`, unchanged.
+
+**What now stands between here and step four.** The database side of D-208 is
+finished: every live media message reaches its original through the pair the
+read predicate asks for. What remains is client-side and outward-facing —
+a signed URL succeeding end to end for a real member, which needs a session and
+has still not been attempted; the demand-driven renewal read against a private
+bucket, as the section above asks; and the sidecar `.preview.` branch, which
+still matches nothing on production and is therefore still evidenced only by a
+synthetic object. The ten legacy rows on **deleted** messages stay as they are:
+their objects are gone, the predicate requires `deleted_at is null` anyway, and
+a path to a removed file would be worse than a visibly dead URL.
+
 ---
 
 ## D-106 — closed 2026-09-15, and it was closed by somebody else's work
@@ -18003,3 +18199,189 @@ recorded `.rollback.sql`, and the other two are the production repairs whose
 rollbacks are documented in their own headers.
 
 `tests/server` stands at **127/127**, from 124 plus these three cases.
+
+---
+
+**D-214 — measured on 2026-09-19, and the entry was wrong twice in its own
+title.** Still `[ ]`: what is left is a decision the owner has to take, and a
+migration is written for it but nothing has been applied.
+
+**The chain, end to end, read rather than reasoned about.** `roles.colour` is
+written by exactly one thing and read by exactly three.
+
+1. **Written** by `public.role_update`'s `p_colour`, from the free
+   `<input type="color">` and the `#rrggbb` field in `RolesPermissionsTab.tsx`.
+   `colour = coalesce(p_colour, colour)`, so there is no value that clears one.
+2. **Stored** in `public.roles.colour`, `text`, bounded by
+   `roles_colour_format_check` — `^#[0-9a-fA-F]{6}$`. Thirteen rows, ten
+   coloured: `#F5B50A` ×3, `#f04a92` ×3, `#4DCD5E` ×2, `#4d8bd0` ×2, null ×3.
+   No view mentions the table; `profile_badges` and `role_update` are the only
+   two routines in `public` or `private` whose body names the column.
+3. **Read** by `public.profile_badges(uuid[])`, which returns `r.colour`, and
+   by `roleSwatchColour` in `lib/roleHierarchy.ts`, which the administration
+   panel calls twice.
+4. **Carried** into `ProfileBadge.colour` at `lib/profileBadges.ts:123`.
+5. **Dropped.** `ProfileBadgeChip` takes `badgeTone(family, key)` and never
+   reads `colour`. A search of the whole client for `.colour` finds the
+   assignment above, the type declarations, the panel, and nothing else.
+
+**«Never reaches a pixel» is wrong: it reaches fifteen.** All of them inside the
+administration panel, and the entry above did not look there. Read off the
+running panel at 1440 by enumerating every element with an inline
+`background-color` — which in that screen is exactly the set painted from
+`roles.colour` and nothing else:
+
+- **ten 12×12 swatches with a 1px ring** in the roles list;
+- **five 6×6 unringed dots** in «Глобальные роли пользователей». That list
+  passes `dot={!swatch}` to `KubBadge`, so the role's raw hex *replaces* the
+  tone dot — the one `KubBadge`'s own header calls «load-bearing rather than
+  decorative», the carrier that exists so status is never signalled by colour
+  alone. Five, because `owner` has three holders and `tech_admin` two; they are
+  the only two public global roles anybody wears.
+
+Against the composited ground those marks measure
+
+| | gold `#F5B50A` | blue `#4d8bd0` | pink `#f04a92` | green `#4DCD5E` |
+| --- | --- | --- | --- | --- |
+| dark, on rgb(5,11,24) | 10.77 | 5.55 | 5.71 | 9.56 |
+| light, on rgb(233,239,246) | **1.58** | 3.06 | 2.97 | **1.78** |
+
+so D-214's arithmetic was right and its conclusion that nothing was drawn was
+not: three of the five dots in the light theme sit at **1.58:1**, under the
+3:1 a mark needs. The composite ground is slightly darker than
+`--kub-surface`, which is why 1.58 rather than the 1.83 the entry computed.
+Introduced by `057a85b3` on 2026-09-04, the same commit that added the ladder.
+
+**Stated precisely, because the easy overstatement is wrong.** This is not a
+colour-alone failure: the badge keeps its tone *border* and the role's *word*,
+so nothing about it is unreadable. What it is, is the colour an administrator
+chose arriving as a 1.58:1 mark — D-214's own arithmetic landing on a live
+pixel, in the one place nobody thought to look, three weeks before the entry
+said it could not happen. The ten 12x12 swatches measure the same and read
+fine, photographed in both themes, because at that size the eye finds a disc
+of *some* hue; the 6x6 dot has neither the size nor a ring.
+
+**And the panel promises the thing that does not happen.** Its own hint card
+reads «Порядок и цвет — Стрелки меняют место роли в списке, **цвет — её
+метку**», and the column comment written by `20260904080000` says «for the
+role's swatch in the admin panel **and its badge on a profile**». The second
+half of both is false. That is the defect stated at its sharpest: not dead
+configuration, a written promise.
+
+**«And cannot» is right, and the thing in the way is one line.** It is not the
+chip, and it is not `badgeTone`. It is that `roles.colour` holds **one** value
+and this product has **two** themes, so «is this colour legible» has no single
+answer the column can carry. Three ways to keep the free hex were measured and
+all three fail:
+
+- **Paint it as it stands.** 1.83 / 3.55 / 3.44 / 2.06 against the three light
+  surfaces, as the entry above already measured.
+- **Compose it toward the theme's own text colour**, which is what
+  `chatRoleColourOnChat` does for the conversation wallpaper and the one trick
+  in the product that is theme-aware without a token. Swept 100% → 30% in steps
+  of five: the four seeded values do not all clear 4.5:1 until **50%**, at which
+  point «Владелец»'s gold has become `#7e6315`, an olive (55%
+  leaves it at 4.12:1). Worse, it cannot work in general, because the picker accepts any hex — `#FFFFFF` composed 80%
+  toward the light theme's text still reads **1.28:1** (2.16 at 60%, 4.11 at
+  40%), and `#000000` composed 80% toward the dark theme's text reads
+  **1.11:1**. Composition raises a mid-tone; it does nothing for a colour that
+  is already the ground.
+- **Give the mark a ring** so it keeps an edge whatever it holds — which is why
+  the 12×12 swatches read and the 6×6 dots do not. `--kub-border-color` is
+  `rgba(66,127,194,0.24)` in the light theme, about **1.3:1** against that
+  ground: thinner than the fill it was meant to rescue. It works at 12px
+  because the eye finds a 12px disc of *some* hue, not because the ring is
+  visible.
+
+**The product already has the answer, and it was built out of this entry.**
+`chat_roles.colour` has held a palette KEY since
+`20260918120000_chat_roles_and_member_tags.sql`, bounded by
+`chat_roles_colour_palette_key` (`^[a-z][a-z0-9_]{1,31}$`); `lib/chatRolePalette.ts`
+holds eight entries; `index.css` declares `--kub-role-<key>` in **both** theme
+blocks; `tests/unit/chat-role-palette.test.mts` pins every entry at **4.5:1 as
+text** on `--kub-surface`, `--kub-surface-2` and `--kub-surface-3` in both
+themes, and at ΔE\*ab 20 apart. Measured again today, the palette's worst case
+is 4.92:1 in the light theme and 6.03:1 in the dark — it clears the 3:1 a mark
+needs with the 4.5 a word needs to spare. That module's own header names D-214
+as the reason it exists.
+
+So D-214 and D-215 are **one defect at two scopes**, and D-215 has already paid
+for the expensive half. The remaining question is only whether the global
+catalogue joins it.
+
+**The mapping, if it does, is measured rather than chosen.** Each seeded hex to
+the palette entry nearest it in CIELAB against that entry's dark token — the
+hexes are dark-theme values — and the nearest is unambiguous every time:
+
+    #F5B50A -> amber  ΔE 13.7   (next: orange 40.6)
+    #4d8bd0 -> blue   ΔE 13.2   (next: violet 29.8)
+    #f04a92 -> rose   ΔE 29.9   (next: violet 53.1)
+    #4DCD5E -> green  ΔE  5.5   (next: teal   62.4)
+
+**Written, not applied:**
+`.migration-backup/supabase/migrations/20260919170000_a_role_colour_a_reader_can_see.sql`
+and its rollback. One transaction, `lock_timeout 5s`, a self-check that raises
+rather than committing a half-applied state, and `role_update` reproduced from
+the **live** definition rather than from `20260904080000` — because
+`20260904100000` changed its `is_active` handling afterwards and the file in
+that directory does not carry the change. It must be applied as
+`supabase_admin`: `public.roles` is owned by `postgres` but `role_update` is
+owned by `supabase_admin` and `postgres` is not a member, which is the same trap
+`20260905140000_bot_avatar_policy_repair.sql` records.
+
+What could be checked without writing anything was checked read-only on
+production: the mapping reaches exactly **10** rows and leaves the three nulls
+alone; each new value passes `^[a-z][a-z0-9_]{1,31}$` and each old one fails it;
+and the constraint text the self-check asserts is `chat_roles_colour_palette_key`'s
+own, compared whole rather than with LIKE — in LIKE an `_` is a wildcard and a
+`[` is an ordinary character, so `'%[a-z][a-z0-9_]{1,31}%'` would also match a
+predicate that is not this one. Every `like` in the self-check whose needle
+carries an underscore is `strpos` for the same reason.
+
+**It cannot be applied alone**, and that is the reason nothing else here
+changed. `roleSwatchColour` answers null for anything that is not six hex
+digits, so a migrated database with today's client takes **all fifteen** marks
+neutral. The three files that have to move with it are named in the migration's
+header; only one of them, the picker, must change at the same instant, because a
+picker that still writes a hex meets the new constraint and the save fails.
+
+**What was deliberately not built.** No pixel changed. The register already said
+the choice is the owner's — «either way the free colour picker in the
+administration panel stops being free, and that is a product choice rather than
+a defect» — and the measurements above only sharpen that: there is no third
+option that keeps it free. The case for the other answer is worth stating
+fairly, because it is not weak:
+
+- by D-213's settled scope rule a global badge appears on one surface, the
+  person's card, where there are at most four standings;
+- those four are already told apart three ways — a distinct glyph each, which
+  `badge-vocabulary.test.mts` refuses to let collide even by silhouette; a
+  distinct word each; and a weight, fill/bold/regular;
+- Discord, which is the reference, colours **server** roles — D-215, shipped —
+  and does not let anybody colour an account badge;
+- so the colour would be a fourth channel on a closed set of four, bought with a
+  migration and a second place to pick the same eight colours.
+
+Against that: the panel promises it in writing, the owner asked for configurable
+role colours twice (2026-09-04 and 2026-09-13), and today the two standings
+anybody actually wears — `owner` and `tech_admin` — are **both** drawn `pink` by
+`badgeTone`, so the card cannot tell the founder from the technical
+administrator by colour while the catalogue distinguishes them. Dropping the
+colour does not fix that; it only stops pretending.
+
+**Photographed** at 1440 and 390 in both themes, signed in read-only with
+`KUB_QA_ALLOW_MUTATIONS=0` against a dev server carrying the production public
+configuration, on its own port rather than the shared one:
+`output/d-214/admin-roles-{dark,light}-{1440,390}.png` (the page, including the
+hint card that makes the promise), `roles-list-{dark,light}-{1440,390}.png`
+(the four 12x12 swatches) and `role-colour-dot-{dark,light}-{1440,390}.png`
+(the 6x6 dot). The last two are cropped to their own boxes, and every frame
+showing the assignment list was deleted rather than kept, because that list is
+real accounts' names and pictures and none of it is needed to show a dot.
+
+**The probe was controlled before it was believed.** «Every element with an
+inline `background-color`» answers 15 on `/admin/roles` (5 at 6px, 10 at 12px),
+**0** on `/admin/users`, `/admin/invites` and `/`, and **0** on `/admin/roles`
+itself once those inline styles are stripped. So the number is the marks this
+column paints and not something ambient — the check that an entry in this
+register has needed before, where a plausible number came from the wrong probe.

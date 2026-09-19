@@ -611,6 +611,113 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-19 — one production migration (D-208 step three): the legacy `media_path` back-fill
+
+**No application was deployed and nothing on screen changed.** `letscube-web`
+keeps its baseline. The `media` bucket is still `public = true` — step four is
+the owner's and was not touched — so this migration hands nobody anything they
+could not already fetch anonymously. What it does is finish the database side of
+D-208: after it, every **live** media message reaches its original through the
+pair `_kub_media_read_allowed` actually asks for.
+
+**It was filed as a tidy-up and it is a prerequisite.** The read predicate
+applied earlier today admits a message's own upload through
+`m.media_bucket = 'media' and m.media_path = p_name and m.deleted_at is null` —
+**both** halves. Ten live messages carried a `media_url` and neither column, so
+only the uploader passed. Measured on production before and after: a chat member
+goes from **0 of 9** to **9 of 9** on those originals, a non-member stays **0 of
+9**, and the uploader stays **9 of 9**.
+
+**`20260919130000_media_path_backfill_for_legacy_messages.sql`**, applied as
+**`postgres`**. One transaction, self-check, `COMMIT`. 16,076 bytes, sha256
+`69746b1f…550e5fd026`, hashed on the workstation, on the host and inside the
+container before it ran and identical at all three; rollback
+(`5667f6e1…86da67c8c`) and the rehearsal beside it in
+`.migration-backup/supabase/migrations/`.
+
+- **The owner is a third one, and it was established rather than assumed.** The
+  sibling needed `supabase_admin` because `storage.objects` belongs to
+  `supabase_storage_admin`. This writes `public.messages`, owned by `postgres`,
+  which also owns the `private` schema and holds BYPASSRLS. Meanwhile
+  `private.media_variant_jobs` belongs to `supabase_admin` and `postgres` holds
+  **SELECT and nothing else** on it — which is how the rollback acquired a bug.
+- **Backup, taken and read back first, and deliberately two files**, because a
+  schema dump cannot restore a row:
+  `…/pre-migrations/20260919-142208-before-media-path-backfill-for-legacy-messages.schema.dump`,
+  1,653,522 bytes, sha256 `91cfdde3…71091c0b69`, read back with `pg_restore -l`
+  inside the container — 2,508 TOC entries, `public.messages` with **all 11** of
+  its triggers by name; and `….messages-media-columns.csv`, 161,001 bytes,
+  sha256 `73c3e58a…cbf2fcf56c`, holding `(id, media_bucket, media_path)` for all
+  3,431 rows — exactly what the migration can destroy, and no message body. It
+  was read back by restoring it into a table in a rolled-back transaction: 3,431
+  rows, 294 paths, digest **identical to live**. The first read-back attempt
+  failed on its own method (`pg_restore -l` cannot read a pipe); that is a
+  failed probe, not a failed backup, and the two were told apart before moving
+  on.
+- **Counts re-measured read-only, not carried forward:** 314 media messages, 294
+  with both columns, 20 with a URL only (10 live, 10 on deleted messages), 778
+  objects, 17 avatar URLs (10 profiles, 7 chats, 0 bots). The derivation was
+  re-verified by **string equality, not a pattern**: 294 of 294. Two facts the
+  file did not have — there are **two** URL bases among the 314, and the split
+  is exact (all ten live legacy rows on the current host, the other base is
+  precisely the ten deleted ones); and the variant pipeline is an independent
+  third witness, since all 12 `media_variants` rows for the six image/video
+  candidates already carry a `source_path` equal to the derived path.
+- **Every trigger's effect was predicted before the write and measured after.**
+  Three of eleven fire. The guard admitted because `auth.uid()` is null in a
+  psql session, and it **had to be applied that way**: nine of the ten are
+  forwards whose path begins with the original uploader's id, so impersonating
+  the author would have been refused on three rows. The variant trigger enqueued
+  **6** jobs into an empty queue, predicted to be no-ops and proved so — queue
+  back to **0**, the twelve variant rows untouched, 778 objects with none
+  created or updated. The bot trigger did **not** take its early return and then
+  found **0** active bot members in those four chats.
+- **A NOT VALID CHECK was the near miss.** `messages_media_metadata_shape` ties
+  `media_metadata #>> '{preview,path}'` to `media_path`, and a NOT VALID check is
+  still enforced on UPDATE, so a legacy row carrying a preview path would have
+  aborted this. All ten carry `media_metadata = '{}'`; 0 rows in the table would
+  violate it if it were validated today.
+- **Four defects were fixed in the file before it ran.** Its self-check demanded
+  that *no* live legacy row remain, contradicting its own deliberate exclusion of
+  rows whose object is gone — a correctly skipped row would have aborted the
+  migration that skipped it. Its URL assertion was a `LIKE` with the path
+  interpolated into the pattern, the same wildcard hole the sibling's review
+  caught, with 484 of 778 names carrying an underscore. Nothing asserted that no
+  other row moved; two digests now do. And it had no timeouts and a greedy strip.
+- **A fifth was caught by the rehearsal, in the rollback.** A tidy-up to
+  withdraw the six queue rows was refused with `permission denied for table
+  media_variant_jobs` and was removed rather than escalated to a superuser.
+  Running the rollback inside the rehearsal has now caught a real rollback bug
+  **three times in one day**.
+- **Rehearsed on production inside a rolled-back transaction**, both files
+  spliced in verbatim by a script that removes only `begin;`/`commit;` and then
+  proves every other line survived, with impersonation calibrated against a
+  known answer first (a member reads a row that already had a path, 3 of 3; a
+  non-member does not, 0 of 3 — in all three phases). Both directions on values:
+  the ten go 0 → **10 of 10** → 0, and the digest of every column not written is
+  the same in all three phases and equal to the pre-apply reading.
+- **Three mutations, all red**, each naming the check it targets: a half-applied
+  UPDATE, a stray write to a row outside the back-fill, and a corrupted URL on a
+  back-filled row — the last being the check that had been a `LIKE`.
+- **Verified after the apply.** Rows with a path 294 → **304**, live legacy rows
+  **0**, `edited_at` still null on all ten, bucket still `public = true`, `anon`
+  still unable to execute the read predicate, ten `storage.objects` policies
+  unchanged. The pre-apply CSV diffed against live shows **exactly 10 rows
+  differ and all 10 are the recorded ten**.
+
+**Rollback** is `20260919130000_media_path_backfill_for_legacy_messages.rollback.sql`,
+which restores each row from `private.d208_media_path_backfill` — the record
+table the forward migration leaves behind on purpose — and drops it. It restores
+nothing it did not itself write, and it was run in the rehearsal, where every
+value returned to its pre-migration reading.
+
+**What remains before step four.** The database side of D-208 is finished. What
+is left is client-side and outward-facing: a signed URL succeeding end to end for
+a real member, which needs a session and has still not been attempted; the
+demand-driven renewal re-read with a private bucket in view; and the sidecar
+`.preview.` branch, which matches nothing on production and is still evidenced
+only by a synthetic object.
+
 ### 2026-09-19 — one production migration (D-208 step nought): the media read policy admits a chat member
 
 **No application was deployed and nothing on screen changed.** `letscube-web`
