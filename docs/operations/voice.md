@@ -425,6 +425,97 @@ reconciler is safe across this too — it takes the **union** of the channels th
 database believes are live and the rooms the SFU reports, so an empty room list
 never by itself deletes anything.
 
+## TURN over TLS on 443, 2026-09-19
+
+**Why.** A participant could not join a voice channel at all. Their sessions
+lasted **15.2 s, 14.6 s, 15.0 s** — three within 0.6 s of each other, which is
+livekit-client's `peerConnectionTimeout: 15000` and not a flaky link. They never
+reached `participant active` and never published. Their network carried neither
+`7882/udp` nor `7881/tcp`. 443 is the one port such a network reliably passes,
+because blocking it breaks the web.
+
+The `turn.enabled: false` comment that used to stand in `livekit.yaml` said the
+no-UDP case «was measured connecting over ICE/TCP on 7881 instead». That
+measurement was one network. This was another, and the comment is the shape of
+mistake worth naming: a measurement recorded as a general fact.
+
+### The shape
+
+`turn.letscube.ru` → `157.22.206.43`. Traefik owns 443 already, so the relay has
+**no public port of its own**: a TCP router matches the SNI, terminates TLS with
+the same `letsencrypt` resolver every other host here uses, and hands plain TCP
+to `letscube-voice:5349`, which runs `external_tls: true` and expects exactly
+that. The router lives in the file provider at
+`/data/coolify/proxy/dynamic/zz-letscube-turn.yaml`.
+
+`relay_range` is **30000–30019**, not the default 30000–40000: Docker publishes a
+port range as one userland proxy per port, and 43 already run on this host.
+
+### The order, and the incident that fixed it in place
+
+**The first attempt broke a working call.** TURN was switched on while the only
+certificate for `turn.letscube.ru` was Traefik's self-signed default — the DNS
+record was minutes old and ACME had failed on `NXDOMAIN`. The server then began
+advertising a relay address whose TLS a client could not complete. The owner's
+own session, which had held **8 m 43 s** unbroken an hour earlier, started
+failing at exactly 15 s with no candidate pair selected — the same signature as
+the participant this was meant to help. Reverted in four minutes; `livekit.yaml`
+and `docker-compose.yml` restored from `.backup/*.20260919-192215` and verified
+byte-identical by `sha256sum -c`.
+
+Two mistakes, and the second is the one worth carrying:
+
+1. The certificate was not in place before the thing that depends on it.
+2. **The check was that the server starts.** It did start, cleanly, logging its
+   TURN line. A server that starts and a call that connects are different
+   claims, and `docs/operations/voice.md` had recorded that very lesson earlier
+   the same day — a checklist must contain the sentence a user would say.
+
+So the order is now two separate steps, and they must stay separate:
+
+1. **Obtain the certificate with a plain HTTP router that touches nothing
+   else**, and verify it **from outside the host**:
+   `openssl s_client -connect turn.letscube.ru:443 -servername turn.letscube.ru`
+   must show a real issuer, not `CN=TRAEFIK DEFAULT CERT`.
+2. **Only then** swap in the TCP router and set `turn.enabled: true`.
+
+If ACME has already failed for the name, Traefik backs off and touching the file
+does not retry. **Renaming the router** makes Traefik treat it as new and try
+again immediately — cheaper than restarting the proxy, which would interrupt
+every other host on 443.
+
+### The check that counts
+
+Not "the server started". `scripts/` has no home for this, so it lives here:
+open TLS to `turn.letscube.ru:443` exactly as a browser would and send a STUN
+Binding request; a TURN server answers one, a proxy with nothing behind it does
+not. Run from a workstation, outside the host, on 2026-09-19:
+
+```
+tls        : authorised
+subject    : turn.letscube.ru
+issuer     : Let's Encrypt
+stun reply : type 0x0101, 40 bytes
+cookie     : correct
+txn id     : matches the request
+```
+
+A `0x0101` with the magic cookie intact and the transaction id echoed back is a
+Binding Success Response. That is the relay answering over the path a blocked
+client would use.
+
+**And one more check before anybody is told it works:** a real join must still
+show `[selected:1]` in the server's `publisherCandidates`. TURN is supposed to
+*add* a path, never take one away, and the first attempt failed exactly there.
+
+### Rollback
+
+Restore `livekit.yaml` and `docker-compose.yml` from `/srv/letscube/voice/.backup/`
+— each apply writes a timestamped pair plus a `sha256` file — then
+`docker compose up -d`, and move
+`/data/coolify/proxy/dynamic/zz-letscube-turn.yaml` aside. Nothing else on 443
+is affected either way: the router matches one SNI and no other.
+
 ## Not done
 
 **Nothing outside the conversation watches the rooms.** Removing a room
