@@ -69,13 +69,17 @@ test("somebody who joins while you are deafened arrives silent", () => {
     "the volume state is no longer re-applied, so it is set once and forgotten",
   );
 
+  // Read as the handler rather than as the line it used to fit on:
+  // `TrackSubscribed` grew a body on 2026-09-19 when it started attaching the
+  // element that makes a room audible at all. What is asserted is unchanged —
+  // that this event reaches the **applier** and not merely the reporter.
   for (const event of ["ParticipantConnected", "TrackSubscribed"]) {
-    const line = code
-      .split("\n")
-      .find((entry) => entry.includes(`RoomEvent.${event}`));
-    assert.ok(line, `nothing handles RoomEvent.${event}`);
+    const at = code.indexOf(`RoomEvent.${event}`);
+    assert.ok(at > 0, `nothing handles RoomEvent.${event}`);
+    const next = code.indexOf(".on(RoomEvent.", at);
+    const handler = code.slice(at, next > at ? next : at + 400);
     assert.match(
-      line,
+      handler,
       /reportAndApply/,
       `RoomEvent.${event} does not re-apply the deafen state, so somebody who ` +
         `arrives after it was pressed is audible`,
@@ -659,5 +663,121 @@ test("the SDK does not stop this client's capture when the room unpublishes it",
     code.includes("new Room({ stopLocalTrackOnUnpublish: false })"),
     "the room takes the SDK's default again, so a force-mute stops the capture " +
       "the hook owns and a restored permission has no track to republish",
+  );
+});
+
+
+/* ── The room is heard, which it was not until 2026-09-19 ─────────────────── */
+
+/**
+ * The rules about the elements are `lib/voiceAudioSink.ts` and are driven with
+ * fakes in `tests/unit/voice-audio-sink.test.mjs`. What cannot be driven from
+ * `node --test` is the wiring: whether this file ever calls the sink, and on
+ * which of the SDK's events. So these are source reads, with the weakness that
+ * implies — they prove a call site exists, not that LiveKit does what it asks.
+ *
+ * Read the whole file's header for why the weaker instrument is used at all:
+ * `tests/e2e/voice-call.spec.ts` replaces this function with a stand-in, so an
+ * e2e green proves nothing below the seam. Six days of voice channels nobody
+ * could hear is what that costs when nothing reads the source either.
+ */
+
+test("a subscribed audio track is handed to the sink, and before the volumes", () => {
+  // The ordering is not cosmetic. `reportAndApply` ends in `applyVolumes`, and
+  // a volume applied before an element exists is a no-op — which is what every
+  // volume and every deafen in this product was until today.
+  const at = code.indexOf("RoomEvent.TrackSubscribed");
+  assert.ok(at > 0, "TrackSubscribed is no longer handled");
+  const handler = code.slice(at, at + 400);
+  const hears = handler.indexOf("sink.hear(");
+  const reports = handler.indexOf("reportAndApply()");
+  assert.ok(hears > 0, "a subscribed track is never attached, so nobody hears anybody");
+  assert.ok(reports > 0, "TrackSubscribed no longer re-applies the volumes");
+  assert.ok(hears < reports, "the volumes are applied before the element exists, which does nothing");
+});
+
+test("an unsubscribed track gives its element back, or the reconnect cycle leaks", () => {
+  // `TrackUnsubscribed` was bound to nothing at all before there was anything
+  // to release. It is the path a full reconnect takes — `Room.handleRestarting`
+  // disconnects every remote participant — and production is taking it roughly
+  // every fifteen seconds.
+  const at = code.indexOf("RoomEvent.TrackUnsubscribed");
+  assert.ok(at > 0, "TrackUnsubscribed is not bound, so every reconnect strands an element");
+  assert.match(
+    code.slice(at, at + 200),
+    /sink\.forget\(/,
+    "TrackUnsubscribed is bound but releases nothing",
+  );
+});
+
+test("both ways a call can end release every element", () => {
+  for (const [path, why] of [
+    ["async leave() {", "a leave that keeps its elements leaks one per track, every call"],
+    ["RoomEvent.Disconnected", "a call that ended without being asked to keeps its elements"],
+  ]) {
+    const at = code.indexOf(path);
+    assert.ok(at > 0, `${path} is gone`);
+    assert.match(code.slice(at, at + 400), /sink\.forgetAll\(\)/, why);
+  }
+});
+
+test("the disconnect releases before the early return, not after it", () => {
+  // `if (left) return` sits in that handler for a call this client asked to
+  // end. Releasing after it would mean the ordinary leave path — the common
+  // one — kept its elements.
+  const at = code.indexOf("RoomEvent.Disconnected");
+  const body = code.slice(at, at + 400);
+  const releases = body.indexOf("sink.forgetAll()");
+  const returns = body.indexOf("if (left) return");
+  assert.ok(releases > 0 && returns > 0);
+  assert.ok(releases < returns, "the release is behind the early return and never runs on a leave");
+});
+
+test("the join asks the browser to sound the call, on the gesture it already has", () => {
+  // A browser sounds nothing until the document has been touched, and the join
+  // press is such a touch — so this is where it costs nothing and works. The
+  // pattern is `useCallSoundPriming`'s, not a second one.
+  const at = code.indexOf("async join(url, token, microphone)");
+  assert.ok(at > 0, "join is gone");
+  const body = code.slice(at, at + 500);
+  assert.match(body, /primeAudio\(\)/, "nothing ever asks the browser to start playback");
+  const connects = body.indexOf("room.connect(");
+  const primes = body.indexOf("primeAudio()");
+  assert.ok(connects < primes, "playback is asked for before there is a connection to play");
+});
+
+test("a browser that refuses playback is reported, never swallowed", () => {
+  // The whole defect was silence that said nothing. Replacing it with a
+  // quieter silence — a caught error and no announcement — would be the same
+  // failure one layer up.
+  assert.match(
+    code,
+    /RoomEvent\.AudioPlaybackStatusChanged/,
+    "nothing watches whether the browser is letting the call be heard",
+  );
+  const at = code.indexOf("RoomEvent.AudioPlaybackStatusChanged");
+  assert.match(
+    code.slice(at, at + 220),
+    /events\.onAudioBlocked\(!room\.canPlaybackAudio\)/,
+    "the playback status is observed and then not told to anybody",
+  );
+  // And the answer is read off the room rather than inferred from the throw:
+  // `startAudio` rejects, and `canPlaybackAudio` is the fact.
+  const prime = code.indexOf("const primeAudio");
+  assert.ok(prime > 0, "primeAudio is gone");
+  assert.match(
+    code.slice(prime, prime + 400),
+    /events\.onAudioBlocked\(!room\.canPlaybackAudio\)/,
+    "priming reports nothing, so a refusal at join time is invisible",
+  );
+});
+
+test("the press that asks again actually asks again", () => {
+  const at = code.indexOf("async resumeAudio()");
+  assert.ok(at > 0, "resumeAudio is gone from the seam");
+  assert.match(
+    code.slice(at, at + 160),
+    /primeAudio\(\)/,
+    "the control offered to somebody who hears nothing does nothing",
   );
 });

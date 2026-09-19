@@ -2,6 +2,7 @@
 
 import type { VoiceParticipant } from "@/lib/voiceChannel";
 import type { VoiceHealthSample } from "@/lib/voiceConnectionHealth";
+import { createVoiceAudioSink } from "@/lib/voiceAudioSink";
 import {
   DEFAULT_VOICE_VOLUME,
   normalizeVoiceVolume,
@@ -149,6 +150,20 @@ export interface VoiceRoom {
    */
   setOutputDevice(deviceId: string): Promise<boolean>;
   /**
+   * Ask the browser to let this call's audio through, after it refused.
+   *
+   * A browser sounds nothing until the document has been touched, and a join
+   * press is such a touch — so the join asks once on its own and this is
+   * almost never needed. The case it exists for is a call this person did not
+   * press for: a ring answered on another device, or a tab restored into a
+   * call. Then the elements exist, the packets arrive and nothing is audible,
+   * which is the failure this whole file was silent about.
+   *
+   * Must be called from a gesture. Resolves either way; whether it worked is
+   * announced through `onAudioBlocked`, because the browser can refuse again.
+   */
+  resumeAudio(): Promise<void>;
+  /**
    * Which media server this call landed on, as «region-node», or null.
    *
    * Discord shows it («finland14135» in the owner's screenshot) and it is the
@@ -166,6 +181,19 @@ export interface VoiceRoomEvents {
   /** The transport dropped and the SDK is putting it back, or has. */
   onReconnecting(): void;
   onReconnected(): void;
+  /**
+   * Whether the browser is refusing to sound this call's audio.
+   *
+   * `true` is autoplay policy, not a network fault: the elements are attached,
+   * the packets are arriving, and the browser will not start playback because
+   * the document has not been touched. It is reported rather than logged
+   * because the symptom it produces — hearing nothing while every number says
+   * the connection is fine — is indistinguishable by ear from a broken call,
+   * and this product has already paid for that once.
+   *
+   * Sent on every change, with `false` the moment playback starts.
+   */
+  onAudioBlocked(blocked: boolean): void;
   /** The call ended for a reason other than this client asking it to. */
   onClosed(reason: string | null): void;
   /**
@@ -320,6 +348,47 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
   };
 
   /**
+   * Where the room becomes audible. Every rule about the elements is
+   * `lib/voiceAudioSink.ts`, where `node --test` reaches it; what is here is
+   * the three LiveKit facts it needs.
+   *
+   * `onMounted: applyVolumes` is the ordering that matters, and it is not
+   * belt-and-braces. `RemoteAudioTrack.attach` re-applies a chosen loudness to
+   * a new element behind `if (this.elementVolume)`, and **zero is falsy**
+   * (livekit-client 2.22.3) — so the single value that would not survive is
+   * silence, and somebody who deafened before a track arrived would hear that
+   * person at full volume. Re-applying after the mount is what makes the rule
+   * three tests above this one true of a room that is actually audible.
+   */
+  const sink = createVoiceAudioSink({
+    audioKind: Track.Kind.Audio,
+    mount: (element) => {
+      // The one cast in this file. The sink is written against a narrowed
+      // element so a test can build one; this is where the real
+      // `HTMLMediaElement` goes back into the document it came from.
+      document.body.append(element as unknown as Node);
+    },
+    onMounted: applyVolumes,
+  });
+
+  /**
+   * Ask the browser to sound the call, and say whether it agreed.
+   *
+   * `startAudio` throws when the autoplay policy refuses, and the SDK has
+   * already emitted `AudioPlaybackStatusChanged` by then — so the throw is
+   * swallowed and the answer is read off the room rather than inferred from
+   * whether this resolved.
+   */
+  const primeAudio = async () => {
+    try {
+      await room.startAudio();
+    } catch {
+      // Refused. The line below is what tells anybody.
+    }
+    events.onAudioBlocked(!room.canPlaybackAudio);
+  };
+
+  /**
    * The gate, reaching the track — and never reaching past a mute.
    *
    * `&& !published.isMuted` is the whole of the interaction between the two
@@ -454,7 +523,25 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
   room
     .on(RoomEvent.ParticipantConnected, reportAndApply)
     .on(RoomEvent.ParticipantDisconnected, report)
-    .on(RoomEvent.TrackSubscribed, reportAndApply)
+    // Attach **then** report, and in that order for a reason: `reportAndApply`
+    // ends in `applyVolumes`, and a volume applied before an element exists is
+    // the no-op this whole product has been shipping.
+    .on(RoomEvent.TrackSubscribed, (track, publication) => {
+      sink.hear(track, publication.trackSid);
+      reportAndApply();
+    })
+    // Not bound at all until 2026-09-19, which was harmless while nothing was
+    // attached and is a leak now. A full reconnect — one every fifteen seconds
+    // on production today — unsubscribes every track through
+    // `Room.handleRestarting`, so this is the path that actually runs.
+    .on(RoomEvent.TrackUnsubscribed, (_track, publication) => {
+      sink.forget(publication.trackSid);
+    })
+    // Whether the browser is letting the call be heard. `canPlaybackAudio`
+    // starts true and goes false the first time a `play()` is refused.
+    .on(RoomEvent.AudioPlaybackStatusChanged, () => {
+      events.onAudioBlocked(!room.canPlaybackAudio);
+    })
     .on(RoomEvent.TrackMuted, report)
     .on(RoomEvent.TrackUnmuted, report)
     .on(RoomEvent.LocalTrackPublished, report)
@@ -493,6 +580,9 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
       reportAndAnnounce();
     })
     .on(RoomEvent.Disconnected, (reason) => {
+      // Before the early return, because a call that ended without being asked
+      // to must not leave its elements in the document either.
+      sink.forgetAll();
       // A disconnect this client asked for is not news; one it did not is.
       if (left) return;
       events.onClosed(reason === undefined ? null : String(reason));
@@ -501,6 +591,11 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
   return {
     async join(url, token, microphone) {
       await room.connect(url, token);
+      // On the gesture the join press already is, which is the pattern
+      // `useCallSoundPriming` established for the ring. Not awaited: a browser
+      // that refuses must not hold up a call that is otherwise connected, and
+      // the refusal is announced rather than thrown.
+      void primeAudio();
       if (!microphone) {
         reportAndAnnounce();
         return;
@@ -669,6 +764,9 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
         packetsLost,
       };
     },
+    async resumeAudio() {
+      await primeAudio();
+    },
     async setOutputDevice(deviceId) {
       try {
         return await room.switchActiveDevice("audiooutput", deviceId);
@@ -690,6 +788,11 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
     },
     async leave() {
       left = true;
+      // Before the disconnect rather than after it. `disconnect` tears the
+      // tracks down, and `detach` on a track whose media has already gone is
+      // the throw `forget` has to catch — doing it here means the ordinary
+      // path never takes that branch, and the count is zero either way.
+      sink.forgetAll();
       // `stopTracks: false` for the same reason as above: the hook stops the
       // capture, so the track is not stopped twice and a failed leave cannot
       // leave the microphone open.

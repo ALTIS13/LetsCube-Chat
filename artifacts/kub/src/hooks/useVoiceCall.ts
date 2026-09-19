@@ -117,6 +117,22 @@ export interface VoiceCallState {
    * it. `deafened` is held here for the same reason and at the same rate.
    */
   speechRevoked: boolean;
+  /**
+   * True when the browser is refusing to sound this call.
+   *
+   * Not a network fault, and not a refusal of anything the person asked for:
+   * the elements are attached and the packets are arriving, and the autoplay
+   * policy will not start playback because the document has not been touched.
+   * Recorded for one reason — the symptom is hearing nothing while every
+   * number on the connection panel says the call is fine, which is
+   * indistinguishable by ear from a broken call, and is the exact failure this
+   * product shipped for six days.
+   *
+   * Almost always false: the join press is a gesture, and the join asks on it.
+   * The case that survives is a call nobody pressed for — a ring answered on
+   * another device, a tab restored into a call.
+   */
+  audioBlocked: boolean;
   /** A Russian sentence when the last attempt was refused; null otherwise. */
   refusal: string | null;
 }
@@ -136,6 +152,9 @@ const IDLE: VoiceCallState = {
   // `IDLE`, and both failure paths spread it too. So one call's force-mute
   // cannot survive into the next, and there is no separate reset to forget.
   speechRevoked: false,
+  // Cleared with the call at both ends of its life, like `speechRevoked` above
+  // and for the same reason: one call's blocked playback is not the next call's.
+  audioBlocked: false,
   refusal: null,
 };
 
@@ -341,6 +360,34 @@ export function useVoiceSpeechRevoked(channelId: string | null): boolean {
     [channelId],
   );
   return useSyncExternalStore(subscribe, read, read);
+}
+
+/**
+ * Whether the browser is refusing to sound the call in one particular room.
+ *
+ * Scoped by `channelId` and read off the store directly, for the two reasons
+ * `useVoiceSpeechRevoked` above is: only the capsule for the room this is true
+ * of re-renders, and a capsule drawing another chat's channel must not offer a
+ * control for a call it is not in.
+ */
+export function useVoiceAudioBlocked(channelId: string | null): boolean {
+  const read = useCallback(
+    () => state.audioBlocked && state.channelId === channelId,
+    [channelId],
+  );
+  return useSyncExternalStore(subscribe, read, read);
+}
+
+/**
+ * Ask the browser again, from a gesture.
+ *
+ * A plain exported function rather than the component reaching through
+ * `currentVoiceRoom`, so the module that owns the call's lifetime stays the one
+ * that touches it: a press arriving after the call ended finds no room and is a
+ * no-op rather than a throw.
+ */
+export async function resumeVoiceAudio(): Promise<void> {
+  await room?.resumeAudio();
 }
 
 function stopCapture() {
@@ -841,6 +888,13 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
         // track back — pressing the control is what does that, and that press
         // is the one thing that can also be `canPublish`-checked by the SFU.
         patch({ speechRevoked: revoked, micMuted: revoked ? true : state.micMuted });
+      },
+      onAudioBlocked: (blocked) => {
+        if (mine !== generation) return;
+        // Guarded, because the SDK re-announces on every status change and an
+        // unchanged patch would re-render every reader of the call.
+        if (state.audioBlocked === blocked) return;
+        patch({ audioBlocked: blocked });
       },
       onReconnecting: () => {
         if (mine !== generation) return;

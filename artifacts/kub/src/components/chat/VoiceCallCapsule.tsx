@@ -5,7 +5,13 @@ import { TinyUserAvatar } from "./MessageReactions";
 import { VoiceSpeakingAvatar } from "./VoiceSpeakingAvatar";
 import { VoiceConnectionPanel } from "./VoiceConnectionPanel";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
-import { holdVoiceTalk, useVoiceSpeechRevoked, useVoiceTalkHeld } from "@/hooks/useVoiceCall";
+import {
+  holdVoiceTalk,
+  resumeVoiceAudio,
+  useVoiceAudioBlocked,
+  useVoiceSpeechRevoked,
+  useVoiceTalkHeld,
+} from "@/hooks/useVoiceCall";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { CAPSULE_GLASS, CAPSULE_CONTROL_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING } from "@/lib/controlSurface";
@@ -121,6 +127,11 @@ export function VoiceCallCapsule({
   // Above the early return with it, and scoped to this chat's channel so a
   // capsule drawing some other room cannot say this person was silenced in it.
   const speechRevoked = useVoiceSpeechRevoked(channel?.id ?? null);
+  // Read here for the same reason, and scoped the same way. A blocked playback
+  // is one live fact about one client, not a rule `voiceCapsuleState` could
+  // compute — and a capsule drawing another chat's room must not offer a press
+  // that would act on the call this person is actually in.
+  const audioBlocked = useVoiceAudioBlocked(channel?.id ?? null);
   // The mode is a stored setting and the hold is one live fact about this
   // client, so neither arrives in `view` — which is built by a pure function
   // from things a `node --test` process can hold. The same reasoning
@@ -199,15 +210,44 @@ export function VoiceCallCapsule({
           <div className="truncate text-xs font-semibold text-[color:var(--kub-text)]" data-testid="voice-capsule-title">
             {view.title}
           </div>
-          <div
-            className={cn(
-              "truncate text-[11px]",
-              view.tone === "danger" ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-muted)]",
-            )}
-            data-testid="voice-capsule-detail"
-          >
-            {view.detail}
-          </div>
+          {/* The browser is refusing to sound the call, said in words and with
+              the press that fixes it — in the row that already carries this
+              capsule's one sentence, so the room keeps its name.
+
+              A mark would not do here, and `outputRefused` above is the
+              contrast: there the call is audible and only its routing is wrong,
+              so a glyph is proportionate. This one means the person hears
+              **nothing**, which is the failure this product shipped for six
+              days while every number on the connection panel went on saying the
+              link was fine. A silent failure must not be replaced by a quieter
+              one, so it says what happened and pressing it is the gesture the
+              autoplay policy is waiting for. */}
+          {audioBlocked ? (
+            <button
+              type="button"
+              onClick={() => void resumeVoiceAudio()}
+              data-testid="voice-capsule-audio-blocked"
+              title="Браузер не пропустил звук звонка"
+              className={cn(
+                "-mx-1 flex min-w-0 max-w-full items-center gap-1 rounded-full px-1 text-[11px] font-semibold",
+                "text-[color:var(--kub-danger-text)] kub-raise-hover",
+                FOCUS_RING,
+              )}
+            >
+              <KubIcon name="warning" size={12} tone="danger" className="shrink-0" />
+              <span className="truncate">Звук заблокирован — включить</span>
+            </button>
+          ) : (
+            <div
+              className={cn(
+                "truncate text-[11px]",
+                view.tone === "danger" ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-muted)]",
+              )}
+              data-testid="voice-capsule-detail"
+            >
+              {view.detail}
+            </div>
+          )}
           {/* The person who was silenced, told. Without this line their track
               is simply gone: the microphone button stops doing anything and
               nothing anywhere says why, which reads as a broken microphone or a
