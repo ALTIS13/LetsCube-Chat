@@ -632,12 +632,56 @@ and workflow files were removed; do not reintroduce them.
 - Push to GitHub triggers the per-application Coolify webhook.
 - `letscube-web` builds the browser application from `artifacts/kub`. Public-home
   work in this plan deploys through this application and no other.
-- `letscube-worker` builds `artifacts/api-server`; its `watch_paths` are limited
-  to worker/build/runtime paths and shared manifests, so docs-only commits do
-  not redeploy it.
+- `letscube-worker` builds `artifacts/api-server`.
 - `letscube-bot-gateway` (`twezs89u2m6d6ln6c0rpaqxe`) runs the isolated Bot
   Gateway runtime.
 - `letscube-support-mail` runs the non-public support mail bridge.
+
+The five applications' real trigger configuration, read off `coolify-db` on
+2026-09-19 rather than described from memory. `is_auto_deploy_enabled` is `true`
+for all but `letscube-bot-gateway`, which is `false` and must be deployed
+deliberately:
+
+| app | `watch_paths` |
+|---|---|
+| `letscube-web` | **NULL — every push to `main` rebuilds it**, docs-only commits included |
+| `letscube-worker` | `artifacts/api-server/**`, `docs/deploy/Dockerfile`, the three compose files, `package.json`, `pnpm-lock.yaml` |
+| `letscube-releases` | `docs/deploy/release-catalog/**` |
+| `letscube-support-mail` | `artifacts/api-server/**`, `docs/deploy/Dockerfile.support-mail`, `docker-compose.support-mail.yml`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `lib/api-zod/**`, `lib/db/**` |
+| `letscube-bot-gateway` | `artifacts/api-server/**`, `docs/deploy/Dockerfile`, `lib/**`, `pnpm-lock.yaml`, `pnpm-workspace.yaml` |
+
+**A `failed` deployment row is not evidence that the application is stale, and
+`watch_paths` do not stop the row from being created.** Coolify queues a
+deployment for every auto-deploy application on every push and decides whether a
+build is actually needed *inside* the job, in `check_git_if_build_needed` —
+which is the step that clones, and therefore the step the GitHub-address fault
+kills. Measured on 2026-09-19: commit `26cc945d` touched only
+`artifacts/kub/src`, `docs/` and `tests/`, and still produced `failed` rows for
+`letscube-worker` and `letscube-support-mail`, neither of which would have built
+anything had the clone succeeded.
+
+So the running image tag is the only answer to "is this application current":
+
+```bash
+docker ps --filter 'name=<app uuid>' --format '{{.Image}} | {{.Status}}'
+```
+
+and the question it answers is settled against
+`git log <deployed sha>..HEAD -- <that application's watch paths>`. That pair
+found one real staleness the same day — `letscube-worker` was running
+`7325634c` and missing `6c63e132`, the media preview backfill repair — hidden
+behind a `failed` row that looked like the harmless kind.
+
+A retry does not need a push. With a deploy token (abilities `["deploy"]`, kept
+only on the server at `/root/.coolify-deploy-token`, mode 600):
+
+```bash
+T=$(cat /root/.coolify-deploy-token)
+curl -s -H "Authorization: Bearer $T" \
+  "http://localhost:8000/api/v1/deploy?uuid=<app uuid>&force=false"
+```
+
+which keeps `main` free of empty commits made only to poke a webhook.
 
 Ordered rollout for the current track:
 
