@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import sharp from "sharp";
 import {
   chat,
   membership,
@@ -558,4 +559,112 @@ test.describe("what a bot offers reaches the person", () => {
     await page.locator('section[data-search-section="bot"]').getByText("Смены", { exact: true }).click();
     await expect(page.getByRole("dialog").filter({ hasText: "Чат с ботом пока недоступен." })).toBeVisible();
   });
+
+  // -------------------------------------------------------------------------
+  // D-263
+  // -------------------------------------------------------------------------
+
+  /**
+   * A bot's answers are not three more messages from it.
+   *
+   * Until 2026-09-20 the keyboard button took `--kub-message-in` bare — the
+   * identical token the bubble above it takes — so the fill step between the
+   * question and its answers was exactly nothing. Probed at 1440: bubble
+   * rgb(30,38,64) and button rgb(30,38,64) in the dark theme, rgb(255,255,255)
+   * and rgb(255,255,255) in the light one. Photographed, both steps measured
+   * **0.00**, and three answers under a question read as three more bubbles.
+   *
+   * Measured from pixels rather than from tokens, which is rule 7 of
+   * `docs/operations/interface-material.md`: the bubble and the button are both
+   * opaque here today, but either could stop being, and a comparison of two
+   * computed `background-color` strings would go on agreeing while the render
+   * diverged. What the reader sees is the composite.
+   *
+   * The floor is 10 rather than rule 11's 23. 23 is the step by which a *panel*
+   * stands off the *page* — the largest relationship in the product — and a
+   * control inside a message is not that. What the button rests on is one
+   * `--kub-raise-veil`, the same single layer `KubButton`'s `secondary` rests
+   * on against its panel, which composites to a step of 14.67 in the dark theme
+   * and 14.00 in the light one. 10 is under both with room for antialiasing and
+   * above the 0.00 this exists to catch.
+   */
+  for (const theme of ["dark", "light"] as const) {
+    test(`a bot's answers stand off the question it asked — ${theme}`, async ({ page }) => {
+      await seed(page);
+      // `openFixture` seeds the dark theme; a later init script wins.
+      await page.addInitScript((value) => localStorage.setItem("kub-theme", value as string), theme);
+      await openBotChat(page, CHAT_STARTED);
+      await expect(page.locator('[data-bot-keyboard="true"]')).toBeVisible();
+
+      const boxes = await page.evaluate(() => {
+        const bubble = document.querySelector('[data-message-bubble="true"]') as HTMLElement;
+        const button = document.querySelector('[data-bot-keyboard-button="0:0"]') as HTMLElement;
+        return {
+          bubble: bubble.getBoundingClientRect().toJSON(),
+          button: button.getBoundingClientRect().toJSON(),
+          ink: getComputedStyle(button).color,
+          rest: getComputedStyle(button).backgroundImage,
+          hoverable: window.matchMedia("(hover: hover)").matches,
+        };
+      });
+
+      const shot = await page.screenshot();
+      const raw = await sharp(shot).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      const { width, channels } = raw.info;
+      const scale = width / (page.viewportSize()?.width ?? width);
+      /**
+       * The most common pixel inside a box with its own ink thrown out — the
+       * method `profile-badge-colour.spec.ts` established, and for its reason:
+       * on a scaled device a glyph's strokes are several device pixels of one
+       * flat colour, so the words would otherwise win the tally.
+       */
+      const ground = (box: { x: number; y: number; width: number; height: number }) => {
+        const ink = boxes.ink.match(/[\d.]+/g)!.slice(0, 3).map(Number);
+          const left = Math.round((box.x + 3) * scale);
+        const top = Math.round((box.y + 3) * scale);
+        const right = Math.round((box.x + box.width - 3) * scale);
+        const bottom = Math.round((box.y + box.height - 3) * scale);
+        const tally = new Map<string, number>();
+        for (let y = top; y < bottom; y += 1) {
+          for (let x = left; x < right; x += 1) {
+            const at = (y * width + x) * channels;
+            const px = [raw.data[at], raw.data[at + 1], raw.data[at + 2]];
+            if (px.every((v, i) => Math.abs(v - ink[i]) <= 24)) continue;
+            const key = px.join(",");
+            tally.set(key, (tally.get(key) ?? 0) + 1);
+          }
+        }
+        expect(tally.size, "the box has no pixel that is not its own ink").toBeGreaterThan(0);
+        return [...tally.entries()].sort((a, b) => b[1] - a[1])[0][0].split(",").map(Number);
+      };
+
+      const bubbleGround = ground(boxes.bubble);
+      const buttonGround = ground(boxes.button);
+      const step = bubbleGround.reduce((sum, v, i) => sum + Math.abs(v - buttonGround[i]), 0) / 3;
+      expect(
+        step,
+        `a bot's answer is drawn rgb(${buttonGround.join(",")}) on a question drawn `
+          + `rgb(${bubbleGround.join(",")}), a step of ${step.toFixed(2)}. The keyboard has gone flush `
+          + `with the bubble it hangs under, which is what D-263 measured: the answers read as more `
+          + `messages from the bot.`,
+      ).toBeGreaterThanOrEqual(10);
+
+      // And the resting step is not the hover's own layer, which is the trap
+      // `edge-vocabulary.test.mjs` names: `.kub-raise` and `.kub-raise-hover`
+      // set the SAME single-layer background-image, so a control carrying both
+      // wears its hover at rest and the hover stops existing. «Новый канал»
+      // shipped exactly that before it was probed.
+      expect(boxes.rest, "the keyboard button rests flat again").not.toBe("none");
+      if (boxes.hoverable) {
+        await page.locator('[data-bot-keyboard-button="0:0"]').hover();
+        const hovered = await page.evaluate(
+          () => getComputedStyle(document.querySelector('[data-bot-keyboard-button="0:0"]') as HTMLElement).backgroundImage,
+        );
+        expect(
+          hovered.split("linear-gradient").length,
+          `the button rests on ${boxes.rest} and hovers on ${hovered} — the same layer, so the hover has stopped existing`,
+        ).toBeGreaterThan(boxes.rest.split("linear-gradient").length);
+      }
+    });
+  }
 });
