@@ -94,15 +94,31 @@ function mediaMessageSchema(allowedMimeTypes: readonly string[]) {
   return z
     .object({
       chat_id: uuidSchema,
-      media: storageObjectReferenceSchema.refine(
-        (media) => allowedMimeTypes.includes(media.mime_type),
-        "media_mime_type_not_allowed",
-      ),
+      media: storageObjectReferenceSchema
+        .refine(
+          (media) => allowedMimeTypes.includes(media.mime_type),
+          "media_mime_type_not_allowed",
+        )
+        .optional(),
+      // Telegram's shape: re-send a file by the identifier of a message the bot
+      // may already read. On LETSCUBE a `file_id` is that message's id — what
+      // `getFile` returns and what arrives in `attachment.file_id`. The
+      // resolution, and the rule that the message must be in this same chat,
+      // belong to the database; the gateway only forwards the identifier.
+      file_id: uuidSchema.optional(),
       caption: z.string().min(1).max(4096).optional(),
       ...optionalReplyFields,
       idempotency_key: idempotencyKeySchema,
     })
-    .strict();
+    .strict()
+    .superRefine((value, context) => {
+      if ((value.media === undefined) === (value.file_id === undefined)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "media_or_file_id_required",
+        });
+      }
+    });
 }
 
 const sendPhotoSchema = mediaMessageSchema([

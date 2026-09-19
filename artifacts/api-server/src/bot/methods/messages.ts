@@ -54,7 +54,14 @@ async function sendMedia(
   botId: string,
   input: BotMethodInputMap[MediaMethod],
 ): Promise<unknown> {
-  if (!MEDIA_MIME[method].has(input.media.mime_type)) {
+  const media = input.media;
+  const fileId = input.file_id;
+  // The schema admits exactly one of the two; this is the type narrowing, and
+  // the refusal if the schema is ever loosened by accident.
+  if ((media === undefined) === (fileId === undefined)) {
+    throw new BotApiError("validation_failed");
+  }
+  if (media !== undefined && !MEDIA_MIME[method].has(media.mime_type)) {
     throw new BotApiError("validation_failed");
   }
   const kind = MEDIA_KIND[method];
@@ -68,28 +75,37 @@ async function sendMedia(
   });
   if (preflight.duplicate) return preflight.result;
 
-  await repository.authorizeMedia({
-    botId,
-    chatId: input.chat_id,
-    bucket: input.media.bucket,
-    objectPath: input.media.object_path,
-    mimeType: input.media.mime_type,
-    sizeBytes: input.media.size_bytes,
-    expiresInSeconds: 60,
-  });
+  // A re-send introduces no object, so it takes no upload grant. Asking for one
+  // would fail anyway: `bot_upload_authorize_internal` requires a path under
+  // `<chat_id>/bots/<bot_id>/`, and the file being re-sent is somebody else's.
+  if (media !== undefined) {
+    await repository.authorizeMedia({
+      botId,
+      chatId: input.chat_id,
+      bucket: media.bucket,
+      objectPath: media.object_path,
+      mimeType: media.mime_type,
+      sizeBytes: media.size_bytes,
+      expiresInSeconds: 60,
+    });
+  }
   const operation = await repository.executeMessageCommand({
     botId,
     chatId: input.chat_id,
     kind,
     payload: {
       ...(input.caption ? { text: input.caption } : {}),
-      media_bucket: input.media.bucket,
-      media_path: input.media.object_path,
-      media_metadata: {
-        mime_type: input.media.mime_type,
-        size: input.media.size_bytes,
-        kind,
-      },
+      ...(media !== undefined
+        ? {
+            media_bucket: media.bucket,
+            media_path: media.object_path,
+            media_metadata: {
+              mime_type: media.mime_type,
+              size: media.size_bytes,
+              kind,
+            },
+          }
+        : { file_id: fileId }),
       ...optionalReplyPayload(input),
     },
     idempotencyKey: input.idempotency_key,

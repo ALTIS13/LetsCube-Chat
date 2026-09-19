@@ -16711,3 +16711,176 @@ disagree — which is the part that makes this worth an entry rather than a
 comment.
 
 ---
+
+## D-248 `[x]` A bot cannot send a file at all — not even back the one it was just sent
+
+**Severity:** high for the platform. Four of the seventeen public methods —
+`sendPhoto`, `sendVideo`, `sendDocument`, `sendVoice` — could not succeed for
+any input, and never had.
+
+**Recorded as G-1 of `docs/proposals/2026-09-19-pocketflow-reference-bot.md`**,
+then measured again against production before the fix.
+
+**The chain was closed at both ends.** The four methods take
+`media: {bucket, object_path, mime_type, size_bytes}`.
+`bot_upload_authorize_internal` refuses unless the object is **already** in
+`storage.objects` (`bot_upload_object_missing`), and additionally unless the
+path is 80–1024 bytes and begins `<chat_id>/bots/<bot_id>/`.
+`bot_send_message_internal` then refuses unless an unconsumed
+`private.bot_upload_grants` row exists for exactly that object
+(`bot_media_grant_required`). So the methods re-send an object the bot already
+put in storage — and the public API has no route that puts one there.
+
+**Measured on production, read-only, before writing anything:**
+
+```
+storage.objects where bucket_id = 'chat-media'        0          (the only bucket the methods accept)
+storage.objects where bucket_id = 'media'           774
+messages with media, by bucket                      media 294, chat-media 0
+private.bot_upload_grants                             0 rows
+messages with bot_id is not null and media_path       0
+chat-media path length distribution                  n/a; `media` paths are 54–129 bytes,
+                                                      152 of 294 under the grant table's
+                                                      `octet_length(object_path) >= 80`
+```
+
+So the feature had never run once, and the grant table's own constraints would
+have refused every real path even if a route had existed.
+
+### The fix, and why this shape
+
+`20260919040000_a_bot_can_send_back_the_file_it_was_sent.sql` lets the four
+methods take **`file_id`** in place of `media` — the id of a message the bot is
+already allowed to read, which is what `getFile` returns and what already
+arrives in an update's `attachment.file_id`. This is Telegram's own model for
+re-sending a file, so it raises wire compatibility rather than lowering it, and
+no storage path is ever shown to the bot.
+
+**The authorization rule is the whole of the design.** Three conditions:
+
+1. the bot may **read** the source — `private.bot_can_receive_message`,
+   unchanged, which already carries `bots.state = 'active'`,
+   `chat_bot_members.removed_at is null`, the `privacy_mode` gate and the
+   `messages.created_at >= chat_bot_members.joined_at` restriction;
+2. the bot may **send** into the destination chat —
+   `bot_membership_authorize_internal(..., 'send_message')`, unchanged;
+3. **the source message is in the destination chat.**
+
+(3) is a deliberate narrowing of Telegram, where a `file_id` crosses chats.
+A same-chat re-send points at the exact object an already-visible message in
+that chat points at, so its audience is by construction a subset of the audience
+that could already read those bytes — nobody gains a byte. A cross-chat re-send
+has no such property, and would turn «may see in A» into «may publish in B»,
+which is the escalation the `joined_at` rule exists to prevent — with the bot,
+not a person, choosing when. Measured, it is also incoherent with storage:
+`chat-media`'s read policy `_kub_can_access_chat_media_path` takes the chat id
+from the first path segment and requires membership of *that* chat. Narrowing
+is reversible; a leak is not.
+
+**Enforced instead of the mime allowlist:** the source message's `type` must
+equal the type the method produces (`bot_file_kind_mismatch`), the same refusal
+Telegram gives for a photo `file_id` passed to `sendVideo`. The per-method mime
+allowlist is *not* applied to a re-send — it guards what a bot may introduce,
+and the bytes here are already in the chat. It would also make the feature
+useless: `video/webm;codecs=vp8,opus`, `video/quicktime`,
+`application/x-msdownload` and `application/vnd.android.package-archive` are all
+outside it, and 220 of 294 media messages carry no mime type at all.
+
+**Nothing else moved.** No new table, column, grant or trigger. Both function
+signatures are unchanged, so this is two `create or replace` — no drop, no
+window in which the gateway sees a missing function, no ACL to rebuild.
+`private.guard_message_media_path` needed no change: `message_media_path_allowed`
+returns true when `p_bot_id is not null`, verified on the live definition.
+The metadata of the re-sent message is copied from the source through a
+type-guarded whitelist, because one existing row would fail
+`messages_media_metadata_shape` if copied verbatim — that constraint is
+NOT VALID, so old rows were never checked but a new row is.
+
+### Proved by mutation, on production, in rolled-back transactions
+
+The rehearsal builds a bot, two group chats and five media messages, measures
+the before state, applies the two bodies, and asserts ten rules. Removing one
+predicate at a time and re-running it:
+
+| removed | the assertion that went red |
+|---|---|
+| `source_message.chat_id = p_chat_id` | a file from another chat **was sent** (`00000`) |
+| `private.bot_can_receive_message(...)` | a message older than `joined_at` was sent |
+| `source_message.deleted_at is null` | a deleted message was sent |
+| the `type` match | an image was sent as a video |
+
+Before: `22023 bot_send_media_input_invalid`. After: the send succeeds, the new
+row carries the source's bucket and path, and the storage-reference path is
+unchanged at `42501 bot_media_grant_required`.
+
+### What is still open
+
+**Uploading genuinely new bytes** — a rendered QR code, a converted file — is a
+separate and larger gap, deliberately not closed here. It needs a real upload
+route in the public API; `private.bot_upload_grants` cannot serve as one,
+because **no `storage.objects` policy references it**, so the grant opens
+nothing and only records a fact. See also D-249, which the same measurement
+turned up.
+
+---
+
+## D-249 `[ ]` `getFile` finds nothing, because it looks in a bucket the product does not use
+
+**Severity:** high for a bot that handles files; it is the other half of D-248.
+
+**Found on 2026-09-19** while measuring D-248, and left unfixed on purpose:
+fixing it changes an externally visible method from «always fails» to
+«succeeds», which deserves its own review rather than a ride on a send-path
+migration.
+
+`public.bot_file_lookup_internal` selects the source message with
+`message_row.media_bucket = 'chat-media'`. Measured on production: the
+`chat-media` bucket holds **0 objects**, and **all 294** message-media rows
+carry `media_bucket = 'media'`. So `getFile` raises `bot_file_not_found`
+(`P0002` → HTTP 404) for every message that actually has a file, and has done
+since the platform shipped. `artifacts/api-server/src/bot/repository.ts`
+re-asserts the same literal in `fileMetadata` (`bucket !== "chat-media"` →
+`internal_error`), so relaxing the database alone would turn the 404 into a 500.
+
+The update payload is **not** gated this way — `private.bot_message_update_payload`
+builds `attachment` for any media message — so a bot does receive `file_id`,
+`kind` and `file_name`. It simply cannot then download the bytes.
+
+Two things must move together: the bucket predicate in
+`bot_file_lookup_internal`, and the literal in `fileMetadata`. Note that `media`
+is a **public** bucket (`storage.buckets.public = true`), so a signed URL over it
+grants nothing a public URL does not already grant; the read rule
+(`private.bot_can_receive_message`) is what actually limits the bot, and it is
+unchanged by any of this.
+
+---
+
+## D-250 `[ ]` A bot is told every file's size and duration are unknown
+
+**Severity:** low, but it makes the file half of the API look broken to the
+first program that uses it.
+
+**Found on 2026-09-19** alongside D-248/D-249. The bot platform and the
+application use **different names for the same fact**, and nothing translates:
+
+| fact | the app writes | the bot API reads |
+|---|---|---|
+| byte size | `media_metadata.size_bytes` | `media_metadata.size` |
+| duration | `media_metadata.duration_ms` | `media_metadata.duration` |
+
+Measured on production over the 294 media messages: `size_bytes` present 69
+times, `size` **0** times; `duration_ms` present 6 times, `duration` **0**
+times. So `attachment.byte_size` and `attachment.duration` in
+`private.bot_message_update_payload` are null for every file a person ever sent,
+and `bot_file_lookup_internal`'s `size_bytes` likewise (when D-249 is fixed and
+it can return anything at all).
+
+`mime_type` has the same shape of problem from the other side: 220 of 294 rows
+carry none, because the client stores it only when it optimises the file.
+
+The fix is a translation in the two bot-facing readers, not a rename in the
+application — 294 rows and every client writer use the app's vocabulary. D-248's
+re-send path already writes **both** spellings into the message it creates, so a
+re-sent file is the one case that reports its size correctly today.
+
+---

@@ -772,7 +772,7 @@ authorization rule and the mutation table is D-248.
 `chat_bot_members`, and holding BYPASSRLS. One transaction, self-check,
 `COMMIT`. 35,363 bytes, sha256
 `c480bbd4a53bfb4d46c888d7fda1e09cb1506e1de018e2442f5d6eccda53189b`; rehearsal
-(`183bda47…`) and rollback (`6deaafcd…`) recorded beside it in
+(`183bda47…`) and rollback (`28ca0f50…`) recorded beside it in
 `.migration-backup/supabase/migrations/`.
 
 - **Backup, taken and verified first:**
@@ -807,6 +807,14 @@ authorization rule and the mutation table is D-248.
   (`postgres=X/postgres service_role=X/postgres`, owner `postgres`, security
   definer), `service_role` still holds EXECUTE on both, and the live bodies now
   match the migration file exactly.
+- **The rollback was run, not merely written.** Dry-run on production with its
+  final `commit;` replaced by `rollback;`: both bodies restored, both grants
+  re-asserted, its self-check passed, live bodies unchanged afterwards (same
+  `md5(prosrc)` before and after). The first attempt failed at
+  `syntax error at or near "prosrc"` — `position(x in y)` is a special SQL form
+  and cannot take a `pg_catalog.` qualifier; it is now `pg_catalog.strpos`. An
+  untested rollback is not a rollback, and this one would have failed at the
+  moment it was needed.
 
 **The authorization rule, written down because it is the whole design.** A
 `file_id` resolves only when the bot may **read** the source
