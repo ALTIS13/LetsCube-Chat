@@ -53,6 +53,7 @@ import {
   callSoundBursts,
   callSoundCycleMs,
   callSoundEnvelope,
+  callSoundEnvelopeCurve,
   callSoundToneGain,
   callSoundTransition,
   type CallSoundBurst,
@@ -294,25 +295,56 @@ export function primeCallSoundsOnGesture(): () => void {
  * One burst, as oscillators.
  *
  * Everything numeric here is asked of `lib/callSounds.ts` — which tones, what
- * level each of them gets, how the burst is shaped. Since 2026-09-19 the tones
- * come from the **burst** rather than from the spec, which is what lets a sound
- * be two different notes in sequence; nothing else about this function moved.
+ * level each of them gets, how the burst is shaped. The tones come from the
+ * **burst** rather than from the spec, which is what lets a sound be two
+ * different notes in sequence, and each tone's level comes from the tone, which
+ * is what lets a note be an instrument rather than a test tone.
+ *
+ * ## Two ways to schedule one envelope, and why they are not the same way
+ *
+ * A **linear** decay is four automation calls, exactly as they were written on
+ * 2026-09-18. They are left alone rather than folded into the curve below for a
+ * reason that has nothing to do with sound: `silence` cancels a ring in flight,
+ * and cancelling a value **curve** is the one case browsers disagree about.
+ * The ring and the ringback are the only sounds that ever have to be stopped
+ * mid-flight, they are the only ones that loop, and they are linear — so the
+ * path that must never fail is the path that never changed.
+ *
+ * An **exponential** decay is one `setValueCurveAtTime` sampled from
+ * `callSoundEnvelopeCurve`, so the shape exists once and the same function
+ * renders the `.wav` files the owner judges. The trade is stated rather than
+ * hidden: if `stopAllCallSounds` lands inside one of these — a tab being torn
+ * down, a component unmounting — a browser may refuse to schedule over a
+ * running curve and `silence`'s 20 ms fade will throw into its own catch. The
+ * oscillator is still stopped 30 ms later, so the worst case is a click during
+ * teardown on a sound that is at most 290 ms long. That is a better thing to
+ * risk than two descriptions of the same envelope.
  */
 function scheduleBurst(ctx: AudioContext, playing: Playing, atSec: number, burst: CallSoundBurst): void {
   const spec = playing.spec;
   const durationMs = burst.durationMs;
   const { attackMs, releaseMs } = callSoundEnvelope(spec, durationMs);
-  const peak = callSoundToneGain(spec, burst);
   const endSec = atSec + durationMs / 1000;
-  for (const frequency of burst.frequencies) {
+  const shape = spec.decay === "exponential" ? callSoundEnvelopeCurve(spec, durationMs) : null;
+  for (const tone of burst.tones) {
+    const peak = callSoundToneGain(spec, burst, tone);
     const osc = ctx.createOscillator();
     osc.type = "sine";
-    osc.frequency.setValueAtTime(frequency, atSec);
+    osc.frequency.setValueAtTime(tone.hz, atSec);
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0, atSec);
-    gain.gain.linearRampToValueAtTime(peak, atSec + attackMs / 1000);
-    gain.gain.setValueAtTime(peak, endSec - releaseMs / 1000);
-    gain.gain.linearRampToValueAtTime(0, endSec);
+    if (shape) {
+      // A fresh curve per tone: `setValueCurveAtTime` keeps a reference to the
+      // array it is given, so one shared instance scaled in place would be the
+      // same object at three different levels.
+      const curve = new Float32Array(shape.length);
+      for (let index = 0; index < shape.length; index += 1) curve[index] = shape[index] * peak;
+      gain.gain.setValueCurveAtTime(curve, atSec, durationMs / 1000);
+    } else {
+      gain.gain.setValueAtTime(0, atSec);
+      gain.gain.linearRampToValueAtTime(peak, atSec + attackMs / 1000);
+      gain.gain.setValueAtTime(peak, endSec - releaseMs / 1000);
+      gain.gain.linearRampToValueAtTime(0, endSec);
+    }
     osc.connect(gain);
     gain.connect(ctx.destination);
     const voice: Voice = { osc, gain, done: false };

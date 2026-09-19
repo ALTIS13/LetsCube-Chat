@@ -68,6 +68,55 @@
  * burst — time, length, tones, level per oscillator, attack and release.
  * `tests/unit/call-sounds.test.mts` pins the same table.
  *
+ * ## A note is partials, and it falls away rather than stopping
+ *
+ * The owner heard the four and answered: «звуки хорошие, но проверь стиль
+ * дискорда и давай ближе к ним сделаем по глубине звука». Depth is not a
+ * parameter. What it asks for is three absent things, and two of them are here:
+ *
+ *  - **partials.** One sinusoid is a test tone; a fundamental with partials
+ *    under it is an instrument. The step already carried several frequencies —
+ *    but the level divided **equally** among them, which is exactly right for a
+ *    telephone, where 440 and 480 really are equal, and exactly wrong for a
+ *    timbre, where the fundamental has to dominate. So a tone is a pitch **and
+ *    a level**. The telephone says two tones at level 1, which is what it
+ *    always meant; a voice-channel note says a fundamental at 1 with its
+ *    partials well under it. There is no second field for «but sometimes
+ *    unequal» — there is one field, and equal is a value it takes;
+ *  - **a decay that is not a straight line.** A linear ramp to zero reads as a
+ *    switch being turned off; an exponential reads as something struck and
+ *    dying away. `decay` says which, per sound, because a telephone tone is
+ *    *meant* to be plain and a struck ringtone would be a worse ringtone.
+ *
+ * The third — **weight underneath** — was measured and refused, and the
+ * measurement is the argument. A sub-octave under 440 sits at 220 Hz, which a
+ * telephone's loudspeaker (a two-pole roll-off around 500 Hz is the
+ * conservative model) attenuates by about 16 dB. It is inaudible there, and it
+ * is not free: levels share one budget, so a sub-octave at 0.30 takes 1.6 dB
+ * away from the partials a telephone *can* reproduce. That could be paid back
+ * by raising `gain` — except the ceiling is `notification`'s 0.1, the payment
+ * needed is 0.118, and «keep them quiet» is not negotiable. So it is rendered
+ * as a candidate for the owner to overrule by ear, and it is not what ships.
+ *
+ * What **was** paid back is the partials' own cost. Three tones sharing one
+ * budget put 2.6 dB less amplitude on the fundamental than one tone had, so
+ * `join` and `leave` moved from 0.08 to 0.10 and the blips from 0.05 to 0.0625
+ * — the same fraction of an arrival's level as before. An A/B in which one side
+ * is 2 dB louder is not an A/B of timbre at all, so this had to be paid.
+ *
+ * The render script measures the result and the decomposition is worth stating,
+ * because it is not the one that was predicted. Against the sounds the owner
+ * approved, and through the telephone model:
+ *
+ *  - **peak is unchanged**, within 0.1 dB, for all four;
+ *  - the partials cost **nothing** once compensated — a note with them sits
+ *    within 0.3 dB of the same note without them;
+ *  - what is left, about **2 dB of RMS**, is the exponential fall itself, and
+ *    it is not a defect to be corrected. A note that spends most of its length
+ *    near zero *has* less energy than one held flat and switched off. That is
+ *    what «struck and dying away» means, and recovering it would mean not
+ *    having it.
+ *
  * ## The one thing no cadence can fix
  *
  * A browser will not sound anything until the page has been touched. That is
@@ -94,6 +143,22 @@ export type CallSoundName =
   | "unmute";
 
 /**
+ * One tone of a step: a pitch, and how much of the step's level it takes.
+ *
+ * `level` is a **share**, not an amplitude. The shares of a step are added up
+ * and each tone gets its own fraction of `spec.gain`, so the levels of a step
+ * are only ever meaningful against each other — `[1, 1]` and `[4, 4]` are the
+ * same sound — and no set of them can make a burst louder than the sound asked
+ * to be. That is the same invariant `callSoundToneGain` has always kept; what
+ * changed is that the division no longer has to be equal.
+ */
+export interface CallSoundTone {
+  readonly hz: number;
+  /** This tone's share of the step's level, against the step's other tones. */
+  readonly level: number;
+}
+
+/**
  * One step of a cadence: what is sounded, and for how long.
  *
  * **No tones is silence**, and that is the whole of the model's rule. It
@@ -103,9 +168,21 @@ export type CallSoundName =
  */
 export interface CallSoundStep {
   /** The tones sounded together for this step. Empty is a rest. */
-  readonly frequencies: readonly number[];
+  readonly tones: readonly CallSoundTone[];
   readonly durationMs: number;
 }
+
+/**
+ * How a burst falls away.
+ *
+ * Required rather than optional, and every sound answers it, because the
+ * difference is audible and a default would mean «whatever the first sound
+ * needed». `linear` is a level held and then ramped off — a telephone tone,
+ * which is meant to be plain. `exponential` is something struck: most of the
+ * fall happens at once and the rest is a tail, which is the single largest part
+ * of what «глубина» turned out to mean.
+ */
+export type CallSoundDecay = "linear" | "exponential";
 
 export interface CallSoundSpec {
   readonly name: CallSoundName;
@@ -114,6 +191,7 @@ export interface CallSoundSpec {
   /** The envelope of one burst. A square edge on a sine clicks; these remove it. */
   readonly attackMs: number;
   readonly releaseMs: number;
+  readonly decay: CallSoundDecay;
   /** The steps, in order, beginning at the sound's own millisecond zero. */
   readonly cadence: readonly CallSoundStep[];
   /** Whether the cadence repeats until something stops it. */
@@ -132,13 +210,25 @@ export interface CallSoundSpec {
  */
 const TELEPHONE_CADENCE_MS = [500, 200, 500, 2000] as const;
 
+/**
+ * Tones of equal weight, which is what a telephone's two really are.
+ *
+ * 440 and 480 are not a fundamental and a partial; they are two tones a
+ * mechanical bell sounds together, and the 40 Hz beat between them is the
+ * point. `level: 1` each is the honest way to say that in a model where a
+ * level exists — not a special case, just the value equality takes.
+ */
+function equal(...hz: readonly number[]): CallSoundTone[] {
+  return hz.map((value) => ({ hz: value, level: 1 }));
+}
+
 /** A cadence of alternating sound and silence, every burst on the same tones. */
 function alternating(
-  frequencies: readonly number[],
+  tones: readonly CallSoundTone[],
   cadenceMs: readonly number[],
 ): CallSoundStep[] {
   return cadenceMs.map((durationMs, index) => ({
-    frequencies: index % 2 === 0 ? frequencies : [],
+    tones: index % 2 === 0 ? tones : [],
     durationMs,
   }));
 }
@@ -172,6 +262,34 @@ const VOICE_LOW_HZ = 440;
 const VOICE_HIGH_HZ = 659.25;
 
 /**
+ * What one voice-channel note is made of, as ratios of its own pitch.
+ *
+ * The fundamental and two partials, falling steeply. That is the smallest thing
+ * that is not a test tone: the octave gives the note a body, the twelfth gives
+ * it an edge to start on, and a fourth partial was tried and only made the
+ * blips brighter — which is not what was asked for.
+ *
+ * The ratios are exact integers on purpose. Partials that are whole multiples
+ * of the fundamental fuse into one note; anything else is heard as two notes at
+ * once, which is a chord and not a timbre.
+ *
+ * **There is no entry below 1**, and that is the measured decision recorded at
+ * the head of this file rather than an oversight. A sub-octave is 16 dB down on
+ * a telephone's loudspeaker and costs 1.6 dB of everything that is not, and the
+ * budget to pay that back does not exist under a 0.1 ceiling.
+ */
+const VOICE_PARTIALS: readonly { readonly ratio: number; readonly level: number }[] = [
+  { ratio: 1, level: 1 },
+  { ratio: 2, level: 0.32 },
+  { ratio: 3, level: 0.1 },
+];
+
+/** One note of the voice-channel family: a pitch, sounded as an instrument. */
+function note(fundamentalHz: number): CallSoundTone[] {
+  return VOICE_PARTIALS.map(({ ratio, level }) => ({ hz: fundamentalHz * ratio, level }));
+}
+
+/**
  * The timing of a two-note figure: note, gap, note. 290 ms end to end.
  *
  * Shared by `join` and `leave` exactly as the telephone cadence is shared, and
@@ -184,15 +302,15 @@ const VOICE_FIGURE_MS = [110, 30, 150] as const;
 /** A rising or falling two-note figure on the shared timing. */
 function figure(first: number, second: number): CallSoundStep[] {
   return [
-    { frequencies: [first], durationMs: VOICE_FIGURE_MS[0] },
-    { frequencies: [], durationMs: VOICE_FIGURE_MS[1] },
-    { frequencies: [second], durationMs: VOICE_FIGURE_MS[2] },
+    { tones: note(first), durationMs: VOICE_FIGURE_MS[0] },
+    { tones: [], durationMs: VOICE_FIGURE_MS[1] },
+    { tones: note(second), durationMs: VOICE_FIGURE_MS[2] },
   ];
 }
 
 /** One short note, for a control somebody pressed. */
 function blip(frequency: number): CallSoundStep[] {
-  return [{ frequencies: [frequency], durationMs: 100 }];
+  return [{ tones: note(frequency), durationMs: 100 }];
 }
 
 export const CALL_SOUNDS: Record<CallSoundName, CallSoundSpec> = {
@@ -206,7 +324,11 @@ export const CALL_SOUNDS: Record<CallSoundName, CallSoundSpec> = {
     gain: 0.16,
     attackMs: 18,
     releaseMs: 70,
-    cadence: alternating([440, 480], TELEPHONE_CADENCE_MS),
+    // Plain, and deliberately left so. A ringtone that was «struck» would be a
+    // worse ringtone: what makes a telephone recognisable is that it is a
+    // machine, and 2026-09-19's timbre work stops at the edge of these three.
+    decay: "linear",
+    cadence: alternating(equal(440, 480), TELEPHONE_CADENCE_MS),
     loop: true,
   },
   /** 425 is the European ringing tone, used alone. */
@@ -218,7 +340,8 @@ export const CALL_SOUNDS: Record<CallSoundName, CallSoundSpec> = {
     gain: 0.07,
     attackMs: 18,
     releaseMs: 70,
-    cadence: alternating([425], TELEPHONE_CADENCE_MS),
+    decay: "linear",
+    cadence: alternating(equal(425), TELEPHONE_CADENCE_MS),
     loop: true,
   },
   notification: {
@@ -228,7 +351,8 @@ export const CALL_SOUNDS: Record<CallSoundName, CallSoundSpec> = {
     // Most of the burst is the release: a tone that stops dead reads as a
     // beep, and one that falls away reads as a bell.
     releaseMs: 180,
-    cadence: alternating([880], [220]),
+    decay: "linear",
+    cadence: alternating(equal(880), [220]),
     loop: false,
   },
   /**
@@ -242,18 +366,24 @@ export const CALL_SOUNDS: Record<CallSoundName, CallSoundSpec> = {
    */
   join: {
     name: "join",
-    gain: 0.08,
+    // 0.10 rather than the 0.08 the owner first heard, and it is not a change
+    // of loudness: three tones sharing one budget put 2.6 dB less amplitude on
+    // the fundamental, and this pays exactly that back. Measured through a
+    // telephone model the note lands within 0.2 dB of where it was.
+    gain: 0.1,
     attackMs: 6,
     releaseMs: 100,
+    decay: "exponential",
     cadence: figure(VOICE_LOW_HZ, VOICE_HIGH_HZ),
     loop: false,
   },
   /** Somebody left. The same two pitches, the other way round. */
   leave: {
     name: "leave",
-    gain: 0.08,
+    gain: 0.1,
     attackMs: 6,
     releaseMs: 100,
+    decay: "exponential",
     cadence: figure(VOICE_HIGH_HZ, VOICE_LOW_HZ),
     loop: false,
   },
@@ -268,18 +398,23 @@ export const CALL_SOUNDS: Record<CallSoundName, CallSoundSpec> = {
    */
   mute: {
     name: "mute",
-    gain: 0.05,
+    // 0.0625 is 0.05 paid back the same 2.6 dB, and it is still exactly
+    // five-eighths of an arrival's level — the balance inside the family is
+    // the thing being held, not the number.
+    gain: 0.0625,
     attackMs: 4,
     releaseMs: 80,
+    decay: "exponential",
     cadence: blip(VOICE_LOW_HZ),
     loop: false,
   },
   /** Your microphone is open again. The high note, alone. */
   unmute: {
     name: "unmute",
-    gain: 0.05,
+    gain: 0.0625,
     attackMs: 4,
     releaseMs: 80,
+    decay: "exponential",
     cadence: blip(VOICE_HIGH_HZ),
     loop: false,
   },
@@ -290,29 +425,39 @@ export interface CallSoundBurst {
   readonly atMs: number;
   readonly durationMs: number;
   /** The tones sounded together, from the step this burst came from. */
-  readonly frequencies: readonly number[];
+  readonly tones: readonly CallSoundTone[];
 }
 
 /**
- * The level one oscillator is given, so that the burst's sum is `spec.gain`.
+ * The level one oscillator is given, so that the burst's tones sum to
+ * `spec.gain`.
  *
  * Two sines at 0.16 each do not make a 0.16 sound; they make a 0.32 one that
  * clips against everything else the page is playing. The division is here
  * rather than in the player because it is arithmetic about the sound, and a
  * player that forgot it would be a defect nothing could see.
  *
- * It asks the **burst** how many voices there are rather than the spec, because
- * since 2026-09-19 that is where the answer lives and it is no longer the same
- * for every burst of a sound: the day a sound rings on two tones and resolves
- * on one, a level taken from the spec would make the second note twice as loud
- * as the first and nothing would say why.
+ * It asks the **burst** rather than the spec, because that is where the answer
+ * lives and it is not the same for every burst of a sound: a sound that rings
+ * on two tones and resolves on one would otherwise make the second note twice
+ * as loud as the first, with nothing to say why.
+ *
+ * And it asks the **tone** for its share rather than dividing equally, which is
+ * what makes a timbre expressible at all. Equality is not lost by this — it is
+ * every tone carrying the same level, which is what a telephone's two tones
+ * have always been. The invariant survives either way: the shares are summed
+ * and each gets its fraction of one budget, so no arrangement of levels can
+ * make a burst louder than the sound asked to be.
  */
 export function callSoundToneGain(
   spec: CallSoundSpec,
-  burst: { readonly frequencies: readonly number[] },
+  burst: { readonly tones: readonly CallSoundTone[] },
+  tone: CallSoundTone,
 ): number {
-  const voices = burst.frequencies.length;
-  return voices > 0 ? spec.gain / voices : 0;
+  let total = 0;
+  for (const entry of burst.tones) total += Math.max(0, entry.level);
+  if (total <= 0) return 0;
+  return (spec.gain * Math.max(0, tone.level)) / total;
 }
 
 /** How long one pass through the cadence takes, silence included. */
@@ -346,8 +491,8 @@ export function callSoundBursts(
       const length = Math.max(0, step.durationMs);
       // A step says for itself whether it sounds. No parity to get wrong, and
       // no way for an inserted rest to turn every burst after it into silence.
-      if (step.frequencies.length > 0 && length > 0 && at >= window.fromMs && at < window.untilMs) {
-        out.push({ atMs: at, durationMs: length, frequencies: step.frequencies });
+      if (step.tones.length > 0 && length > 0 && at >= window.fromMs && at < window.untilMs) {
+        out.push({ atMs: at, durationMs: length, tones: step.tones });
       }
       at += length;
     }
@@ -379,6 +524,87 @@ export function callSoundEnvelope(
     attackMs: Math.max(0, spec.attackMs) * scale,
     releaseMs: Math.max(0, spec.releaseMs) * scale,
   };
+}
+
+/**
+ * Where an exponential fall is treated as over: 2% of the peak, about -34 dB.
+ *
+ * An exponential never arrives at zero, and Web Audio's own
+ * `exponentialRampToValueAtTime` refuses a target of it. So the fall aims here
+ * and the last few milliseconds are a straight line down to silence — at 2% of
+ * a sound that peaks at 0.1, the step being smoothed is 0.002 of full scale,
+ * which is below anything a loudspeaker will render as a click anyway. The tail
+ * is there because «anyway» is not a measurement.
+ */
+export const CALL_SOUND_DECAY_FLOOR = 0.02;
+
+/** How long that straight line down to silence is. */
+export const CALL_SOUND_DECAY_TAIL_MS = 5;
+
+/**
+ * The level of a burst at a moment inside it, 0..1 of a tone's own peak.
+ *
+ * **This is the one definition of the shape.** `lib/callSoundPlayer.ts` samples
+ * it into the curve it hands Web Audio, and `scripts/render-call-sounds.mjs`
+ * evaluates it per audio frame for the files the owner listens to — so what is
+ * heard in a browser and what is heard in a `.wav` are the same arithmetic, and
+ * not two descriptions of it that can drift.
+ *
+ * The attack is a straight line in both shapes: 6 ms of curve is not a shape
+ * anybody can hear, and a linear attack is what stops a sine starting with a
+ * click. Only the fall differs.
+ */
+export function callSoundEnvelopeLevel(
+  spec: CallSoundSpec,
+  durationMs: number,
+  atMs: number,
+): number {
+  const duration = Math.max(0, durationMs);
+  if (atMs <= 0 || atMs >= duration) return 0;
+  const { attackMs, releaseMs } = callSoundEnvelope(spec, duration);
+  if (attackMs > 0 && atMs < attackMs) return atMs / attackMs;
+  const releaseStart = duration - releaseMs;
+  if (atMs <= releaseStart || releaseMs <= 0) return 1;
+  if (spec.decay === "linear") return 1 - (atMs - releaseStart) / releaseMs;
+  // The tail can never eat more than half the release: a 10 ms release would
+  // otherwise be all tail and the fall would be the straight line this shape
+  // exists to avoid.
+  const tailMs = Math.min(CALL_SOUND_DECAY_TAIL_MS, releaseMs / 2);
+  const tailStart = duration - tailMs;
+  if (atMs >= tailStart) return (CALL_SOUND_DECAY_FLOOR * (duration - atMs)) / tailMs;
+  // Web Audio's own exponential ramp, spelled out: a value moves from V0 at T0
+  // to V1 at T1 as V0 * (V1/V0)^((t-T0)/(T1-T0)). Here V0 is the peak, so the
+  // normalised form is the floor raised to the fraction of the fall elapsed.
+  return CALL_SOUND_DECAY_FLOOR ** ((atMs - releaseStart) / (tailStart - releaseStart));
+}
+
+/**
+ * How many points the player's curve gets. One a millisecond, within bounds.
+ *
+ * Web Audio interpolates linearly between the points of a value curve, so the
+ * question is how far a straight line can stray from the exponential inside one
+ * millisecond. With the fastest fall this module can ask for that is under a
+ * ten-thousandth of the peak, which `tests/unit/call-sounds.test.mts` measures
+ * rather than assumes.
+ */
+export function callSoundEnvelopeCurvePoints(durationMs: number): number {
+  return Math.min(2_048, Math.max(32, Math.round(Math.max(0, durationMs)) + 1));
+}
+
+/**
+ * The envelope as the array Web Audio wants, 0..1.
+ *
+ * Exists so that the player hands the browser a curve rather than a shape of
+ * its own: the player multiplies this by the tone's level and schedules it, and
+ * owns no arithmetic about how a note falls.
+ */
+export function callSoundEnvelopeCurve(spec: CallSoundSpec, durationMs: number): Float32Array {
+  const points = callSoundEnvelopeCurvePoints(durationMs);
+  const curve = new Float32Array(points);
+  for (let index = 0; index < points; index += 1) {
+    curve[index] = callSoundEnvelopeLevel(spec, durationMs, (index / (points - 1)) * durationMs);
+  }
+  return curve;
 }
 
 // ---------------------------------------------------------------------------

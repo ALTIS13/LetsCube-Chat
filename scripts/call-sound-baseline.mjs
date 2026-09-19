@@ -51,28 +51,86 @@ export const BASELINE_CYCLES = 4;
 /** The sounds that existed before the model grew, and must not have moved. */
 export const BASELINE_SOUNDS = ["ring", "ringback", "notification"];
 
+/**
+ * The sounds whose **timbre** was allowed to change on 2026-09-19.
+ *
+ * Their levels moved on purpose and their pitches and lengths did not, so they
+ * are diffed on a skeleton rather than on a plan. Without this the report would
+ * be silent about the four sounds most likely to be broken by a timbre change.
+ */
+export const TIMBRE_SOUNDS = ["join", "leave", "mute", "unmute"];
+
+/**
+ * The voices of one burst, as `{hz, gain}`, whichever model the module uses.
+ *
+ * Three shapes have existed and the arity of `callSoundToneGain` tells them
+ * apart, because that is the function each change had to alter:
+ *
+ *  - **1** — the oldest: frequencies on the spec, one level for the whole sound;
+ *  - **2** — frequencies on the burst, one level for the whole burst;
+ *  - **3** — tones on the burst, each with its own share of the level.
+ */
+function burstVoices(mod, spec, burst) {
+  const arity = mod.callSoundToneGain.length;
+  if (arity >= 3) {
+    return burst.tones.map((tone) => ({
+      hz: tone.hz,
+      gain: mod.callSoundToneGain(spec, burst, tone),
+    }));
+  }
+  const gain = arity === 2 ? mod.callSoundToneGain(spec, burst) : mod.callSoundToneGain(spec);
+  return [...(burst.frequencies ?? spec.frequencies)].map((hz) => ({ hz, gain }));
+}
+
 /** One burst, as everything that decides what it sounds like. */
 export function callSoundPlan(mod, name, cycles = BASELINE_CYCLES) {
   const spec = mod.CALL_SOUNDS[name];
   if (!spec) throw new Error(`no such sound: ${name}`);
+  return callSoundPlanForSpec(mod, spec, cycles);
+}
+
+/**
+ * The same for a spec the table does not hold.
+ *
+ * Exists so that a *candidate* can be planned with the module's own functions.
+ * The «before» side of the owner's A/B is a spec built by projecting a shipped
+ * sound back to one sinusoid, and the only way to know the projection is right
+ * is to plan it and diff it against what really produced that sound.
+ */
+export function callSoundPlanForSpec(mod, spec, cycles = BASELINE_CYCLES) {
   const cycle = mod.callSoundCycleMs(spec);
   const bursts = mod.callSoundBursts(spec, { fromMs: 0, untilMs: cycle * cycles });
   return bursts.map((burst) => {
-    const frequencies = [...(burst.frequencies ?? spec.frequencies)];
-    const toneGain =
-      mod.callSoundToneGain.length >= 2
-        ? mod.callSoundToneGain(spec, burst)
-        : mod.callSoundToneGain(spec);
     const envelope = mod.callSoundEnvelope(spec, burst.durationMs);
     return {
       atMs: burst.atMs,
       durationMs: burst.durationMs,
-      frequencies,
-      toneGain,
+      // A module from before the shape was a field had exactly one shape, and
+      // it was this one. Saying so is what makes «identical» cover how a burst
+      // falls as well as when it sounds — a diff blind to the envelope would
+      // have reported three unchanged sounds while all three had been restruck.
+      decay: spec.decay ?? "linear",
+      voices: burstVoices(mod, spec, burst),
       attackMs: envelope.attackMs,
       releaseMs: envelope.releaseMs,
     };
   });
+}
+
+/**
+ * The same, reduced to what a timbre change may not touch: when each note
+ * starts, how long it runs, and what pitch it is.
+ *
+ * The fundamental is the loudest voice of the burst, which is what a
+ * fundamental is — and for a module whose voices are all equal, it is simply
+ * the first, which is the single tone those sounds had.
+ */
+export function callSoundSkeleton(mod, name, cycles = 1) {
+  return callSoundPlan(mod, name, cycles).map((row) => ({
+    atMs: row.atMs,
+    durationMs: row.durationMs,
+    fundamentalHz: row.voices.reduce((best, voice) => (voice.gain > best.gain ? voice : best)).hz,
+  }));
 }
 
 /** The plan for every sound named, keyed by name. */
@@ -107,14 +165,16 @@ export async function loadRevisionModule(ref) {
 }
 
 function rowText(row) {
-  const tones = row.frequencies.join("+");
+  if (row.fundamentalHz !== undefined) {
+    return `at ${row.atMs}ms  for ${row.durationMs}ms  on ${row.fundamentalHz}Hz`;
+  }
+  const tones = row.voices.map((voice) => `${voice.hz}@${voice.gain.toFixed(5)}`).join(" + ");
   return [
     `at ${row.atMs}ms`,
     `for ${row.durationMs}ms`,
-    `tones ${tones}`,
-    `gain/osc ${row.toneGain}`,
+    `${tones}`,
     `attack ${row.attackMs}ms`,
-    `release ${row.releaseMs}ms`,
+    `${row.decay} release ${row.releaseMs}ms`,
   ].join("  ");
 }
 
@@ -159,14 +219,37 @@ async function main(argv) {
       console.log(`${name}: ${before[name].length} bursts over ${BASELINE_CYCLES} cycles`);
       for (const row of before[name]) console.log(`  ${rowText(row)}`);
     }
-    if (problems.length === 0) {
-      console.log("");
+
+    // The four whose timbre was allowed to move. Only compared where the
+    // revision has them at all, so this still works against a revision from
+    // before they existed — and it says which, rather than passing quietly.
+    const shared = TIMBRE_SOUNDS.filter((name) => mod.CALL_SOUNDS[name] && working.CALL_SOUNDS[name]);
+    const skeletonsBefore = {};
+    const skeletonsAfter = {};
+    for (const name of shared) {
+      skeletonsBefore[name] = callSoundSkeleton(mod, name);
+      skeletonsAfter[name] = callSoundSkeleton(working, name);
+    }
+    const skeletonProblems = compare(skeletonsBefore, skeletonsAfter);
+    console.log("");
+    for (const name of shared) {
+      console.log(`${name}: pitches and lengths`);
+      for (const row of skeletonsBefore[name]) console.log(`  ${rowText(row)}`);
+    }
+    if (shared.length < TIMBRE_SOUNDS.length) {
+      console.log(`  (${TIMBRE_SOUNDS.filter((n) => !shared.includes(n)).join(", ")} absent at ${ref})`);
+    }
+
+    console.log("");
+    if (problems.length === 0 && skeletonProblems.length === 0) {
       console.log(`identical to ${ref} for: ${BASELINE_SOUNDS.join(", ")}`);
+      if (shared.length > 0) {
+        console.log(`same pitches and lengths at ${ref} for: ${shared.join(", ")}`);
+      }
       return 0;
     }
-    console.log("");
     console.log(`DIFFERENT from ${ref}:`);
-    for (const line of problems) console.log(line);
+    for (const line of [...problems, ...skeletonProblems]) console.log(line);
     return 1;
   } finally {
     dispose();
