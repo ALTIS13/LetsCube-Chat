@@ -611,6 +611,51 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-19 — the clone failure is diagnosed: one of GitHub’s two addresses is unreachable from this host
+
+**Closed as a question after four wrong hypotheses across two days.** It is
+not Docker, not the address pools, not conntrack, not NAT, not Horizon, not
+DNS, and not a SNAT port collision. **One of the two addresses GitHub hands
+out for `github.com` does not answer from this machine.**
+
+Measured **from the host itself**, outside any container, eight attempts each:
+
+```
+140.82.121.3   ok  ok  ok  ok  ok  ok  ok  ok      8/8, every one in 0 s
+140.82.121.4   —   —   —   ok  —   ok  —   —       2/8, the rest time out
+```
+
+and inside a fresh container on the `coolify` network, ten attempts each:
+`…3` **10/10**, `…4` **6/10**. The resolver alternates between the two, so a
+deployment whose clone happens to get `…4` at a bad moment hangs for the full
+~133-second connect timeout and fails. That is the number recorded on every
+one of these failures — deployments 438, 439, 445, 457, 472, 473 and 474.
+
+**Why every earlier probe said the network was healthy**, including mine: they
+used the literal `140.82.121.3`, which is precisely the address that always
+works. A probe cannot see a fault in an address it never contacts. The first
+reproduction outside a deployment came from connecting **by name** — one run
+in eight hung for the full timeout while the hard-coded address succeeded in
+the same container seconds later, and that single disagreement is what pointed
+at the two addresses.
+
+**It is upstream, and that is now measurable rather than assumed**: the host
+reproduces it with no Docker in the path at all. Nothing in this repository
+can fix it.
+
+**What is available, and why none of it is obviously right.** Pinning
+`github.com` to the working address in the host’s `/etc/hosts` stops the
+failures today and trades an intermittent fault for a total one the day
+GitHub rotates that address — a stopgap that must be time-boxed and watched,
+not a fix. Lowering `tcp_syn_retries` makes the failure arrive sooner without
+making the deployment succeed, because Coolify does not retry a clone.
+Raising it with the provider is the only thing that ends it, and that is the
+owner’s to do.
+
+**The operational cost meanwhile is one retry**: a push to `main` re-triggers
+the webhook, and deployment 475 of the next commit finished normally after
+472, 473 and 474 had all failed.
+
 ### 2026-09-19 — `56c8f2b8` on every application, and the gateway finally moved
 
 **All five applications now run `56c8f2b8` and all five follow `main`.** Read
