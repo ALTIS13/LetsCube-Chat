@@ -55,6 +55,7 @@ import {
   callSoundEnvelope,
   callSoundToneGain,
   callSoundTransition,
+  type CallSoundBurst,
   type CallSoundName,
   type CallSoundSpec,
 } from "./callSounds.ts";
@@ -289,12 +290,21 @@ export function primeCallSoundsOnGesture(): () => void {
   };
 }
 
-function scheduleBurst(ctx: AudioContext, playing: Playing, atSec: number, durationMs: number): void {
+/**
+ * One burst, as oscillators.
+ *
+ * Everything numeric here is asked of `lib/callSounds.ts` — which tones, what
+ * level each of them gets, how the burst is shaped. Since 2026-09-19 the tones
+ * come from the **burst** rather than from the spec, which is what lets a sound
+ * be two different notes in sequence; nothing else about this function moved.
+ */
+function scheduleBurst(ctx: AudioContext, playing: Playing, atSec: number, burst: CallSoundBurst): void {
   const spec = playing.spec;
+  const durationMs = burst.durationMs;
   const { attackMs, releaseMs } = callSoundEnvelope(spec, durationMs);
-  const peak = callSoundToneGain(spec);
+  const peak = callSoundToneGain(spec, burst);
   const endSec = atSec + durationMs / 1000;
-  for (const frequency of spec.frequencies) {
+  for (const frequency of burst.frequencies) {
     const osc = ctx.createOscillator();
     osc.type = "sine";
     osc.frequency.setValueAtTime(frequency, atSec);
@@ -333,7 +343,7 @@ function pump(ctx: AudioContext, playing: Playing): number {
   const untilMs = elapsedMs + cycle * LOOKAHEAD_CYCLES;
   const bursts = callSoundBursts(playing.spec, { fromMs: playing.cursorMs, untilMs });
   for (const burst of bursts) {
-    scheduleBurst(ctx, playing, playing.originSec + burst.atMs / 1000, burst.durationMs);
+    scheduleBurst(ctx, playing, playing.originSec + burst.atMs / 1000, burst);
   }
   playing.cursorMs = Math.max(playing.cursorMs, untilMs);
   if (playing.spec.loop && typeof setTimeout === "function") {
@@ -455,10 +465,27 @@ async function resumeWantedRing(): Promise<void> {
   await startRing(next);
 }
 
+/**
+ * One short sound, for something that has just happened. Never loops.
+ *
+ * A looping name is **refused** rather than special-cased: `begin` puts a
+ * looping spec into `loop`, where the ring's state machine is the only thing
+ * that ever takes it out again, so a `ring` started through this door would
+ * sound until something unrelated stopped it. That is the single way a tone can
+ * be left running in this module, and this is the door it would come through.
+ */
+export async function playCallSoundOnce(name: CallSoundName): Promise<void> {
+  if (CALL_SOUNDS[name].loop) {
+    record("once", name, "same", 0);
+    return;
+  }
+  const outcome = await begin(name);
+  record("once", name, outcome.readiness, outcome.bursts);
+}
+
 /** One short tone, for a notification. Never loops, whatever else is happening. */
 export async function playNotificationSound(): Promise<void> {
-  const outcome = await begin("notification");
-  record("once", "notification", outcome.readiness, outcome.bursts);
+  await playCallSoundOnce("notification");
 }
 
 /**
