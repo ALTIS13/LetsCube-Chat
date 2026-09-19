@@ -3,7 +3,7 @@ import type { CallbackContext, Feature, MessageContext } from "#pf/app/router";
 import type { Classification } from "#pf/lib/classify";
 import { asCode, clampMessage } from "#pf/lib/render";
 import { LETSCUBE_GAPS } from "#pf/transport/letscube";
-import { clearPendingPrompt, readPendingPrompt, setPendingPrompt } from "#pf/store/prompts";
+import { setPendingPrompt, takePendingPrompt } from "#pf/store/prompts";
 import { setDeveloperMode, setTimeZone } from "#pf/store/users";
 import type { Update } from "#pf/transport/types";
 
@@ -350,18 +350,18 @@ export function createSettingsFeature(): Feature {
 
     async onMessage(input: MessageContext, classification: Classification): Promise<boolean> {
       if (classification.kind !== "text") return false;
-      // Read, then clear only if it is ours. A blind delete would swallow
-      // another feature's prompt — the row is one per (chat, user), so
-      // whoever deletes first wins and the other flow is left waiting for an
-      // answer that already went somewhere else.
-      const pending = await readPendingPrompt(
+      // Taken atomically, and only if it is ours. Read-then-clear lets two
+      // messages arriving together both be read as the answer, and a blind
+      // delete would swallow another feature's half-finished question — the
+      // row is one per (chat, user).
+      const pending = await takePendingPrompt(
         input.ctx.db,
         input.message.chat.id,
         input.user.userId,
+        [PROMPT_TIMEZONE],
         input.ctx.now(),
       );
-      if (pending?.kind !== PROMPT_TIMEZONE) return false;
-      await clearPendingPrompt(input.ctx.db, input.message.chat.id, input.user.userId);
+      if (!pending) return false;
       try {
         await setTimeZone(input.ctx.db, input.user.userId, classification.text.trim());
       } catch {

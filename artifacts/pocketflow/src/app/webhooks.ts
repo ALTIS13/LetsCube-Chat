@@ -4,6 +4,12 @@ import { hookUrl } from "#pf/http/hookRoute";
 import { buildEventCard } from "#pf/lib/eventCard";
 import { asCode, untrusted } from "#pf/lib/render";
 import {
+  clearPendingPromptOfKind,
+  takePendingPrompt,
+  setPendingPrompt,
+  PROMPT_TTL_MINUTES,
+} from "#pf/store/prompts";
+import {
   asWebhookId,
   createWebhook,
   deleteWebhook,
@@ -42,58 +48,51 @@ import {
  * question the schema cannot answer.
  */
 
-const PROMPT_KINDS = ["webhook_create", "webhook_rename"] as const;
-type PromptKind = (typeof PROMPT_KINDS)[number];
-
-/** How long a «пришлите название» stays open. Long enough to think, short enough to forget. */
-const PROMPT_TTL_SECONDS = 600;
+const PROMPT_KINDS: readonly string[] = ["webhook_create", "webhook_rename"];
+type PromptKind = "webhook_create" | "webhook_rename";
 
 type PromptRow = { kind: string; context: Record<string, unknown> };
 
+/**
+ * «What is this chat in the middle of» goes through `store/prompts.ts`.
+ *
+ * That module owns the table, reminders and settings already use it, and a
+ * second copy of a shared table's access rules is how two features end up
+ * disagreeing about whose prompt is whose. The three wrappers below add the
+ * only thing this feature needs on top: a `kind` check, so that «пришлите
+ * дату» belonging to reminders is neither read as a webhook name nor deleted
+ * by `/webhooks`.
+ */
 async function setPrompt(
   ctx: AppContext,
   input: { chatId: string; userId: string; kind: PromptKind; context: Record<string, unknown> },
 ): Promise<void> {
-  await ctx.db.query(
-    `insert into pf_pending_prompts (chat_id, user_id, kind, context, expires_at)
-     values ($1, $2, $3, $4::jsonb, now() + ($5 || ' seconds')::interval)
-     on conflict (chat_id, user_id) do update
-       set kind = excluded.kind,
-           context = excluded.context,
-           expires_at = excluded.expires_at,
-           created_at = now()`,
-    [input.chatId, input.userId, input.kind, JSON.stringify(input.context), String(PROMPT_TTL_SECONDS)],
-  );
+  await setPendingPrompt(ctx.db, {
+    chatId: input.chatId,
+    userId: input.userId,
+    kind: input.kind,
+    context: input.context,
+    expiresAt: new Date(ctx.now().getTime() + PROMPT_TTL_MINUTES * 60_000),
+  });
 }
 
-/**
- * Takes this feature's pending prompt, if the next message is answering one.
- *
- * A DELETE ... RETURNING rather than a SELECT and then a DELETE, so two
- * messages arriving together cannot both be treated as the answer. The `kind`
- * filter matters just as much: the table holds one row per (chat, user) for
- * *every* feature, and consuming another feature's prompt would silently eat
- * somebody's answer to a different question.
- */
+/** This feature's pending prompt, consumed, or null if the answer is not ours. */
 async function takePrompt(
   ctx: AppContext,
   chatId: string,
   userId: string,
 ): Promise<PromptRow | null> {
-  const result = await ctx.db.query<PromptRow>(
-    `delete from pf_pending_prompts
-     where chat_id = $1 and user_id = $2 and kind = any($3::text[]) and expires_at > now()
-     returning kind, context`,
-    [chatId, userId, [...PROMPT_KINDS]],
-  );
-  return result.rows[0] ?? null;
+  // One statement, and filtered by kind. Read-then-clear let two messages
+  // arriving together both be read as the answer, and an unfiltered clear
+  // would cancel a reminder's half-finished question — the row is one per
+  // (chat, user).
+  const prompt = await takePendingPrompt(ctx.db, chatId, userId, PROMPT_KINDS, ctx.now());
+  if (prompt === null) return null;
+  return { kind: prompt.kind, context: prompt.context };
 }
 
 async function clearPrompt(ctx: AppContext, chatId: string, userId: string): Promise<void> {
-  await ctx.db.query(
-    `delete from pf_pending_prompts where chat_id = $1 and user_id = $2 and kind = any($3::text[])`,
-    [chatId, userId, [...PROMPT_KINDS]],
-  );
+  await clearPendingPromptOfKind(ctx.db, chatId, userId, PROMPT_KINDS);
 }
 
 function formatWhen(date: Date | null, timeZone: string): string {
@@ -132,7 +131,9 @@ function listText(webhooks: Webhook[]): string {
 }
 
 function listKeyboard(webhooks: Webhook[]) {
-  const rows = webhooks.map((webhook) => [button(webhook.displayName.slice(0, 48), "whshow", webhook.id)]);
+  const rows = webhooks.map((webhook) => [
+    button(webhook.displayName.slice(0, 48), "whshow", webhook.id),
+  ]);
   if (webhooks.length < MAX_WEBHOOKS_PER_OWNER) rows.push([button("Создать", "whnew")]);
   return keyboard(...rows);
 }
@@ -176,10 +177,13 @@ function detailKeyboard(webhook: Webhook) {
  */
 function secretText(ctx: AppContext, webhook: Webhook, secret: string, headline: string): string {
   const lines = [headline, ""];
-  lines.push("Секрет показывается один раз. Сохраните его сейчас — прочитать его снова нельзя, только перевыпустить.");
+  lines.push(
+    "Секрет показывается один раз. Сохраните его сейчас — прочитать его снова нельзя, только перевыпустить.",
+  );
   lines.push("");
   const base = ctx.config.publicBaseUrl;
-  const url = base === null ? "https://<PUBLIC_BASE_URL>/hook/" + webhook.id : hookUrl(base, webhook.id);
+  const url =
+    base === null ? `https://<PUBLIC_BASE_URL>/hook/${webhook.id}` : hookUrl(base, webhook.id);
   lines.push(
     asCode(
       [
@@ -261,24 +265,43 @@ async function createFromName(
   ctx.log.info("webhooks.created", { webhook_id: created.webhook.id });
   await ctx.bot.sendText({
     chatId: input.chatId,
-    text: secretText(ctx, created.webhook, created.secret, `«${created.webhook.displayName}» создан.`),
+    text: secretText(
+      ctx,
+      created.webhook,
+      created.secret,
+      `«${created.webhook.displayName}» создан.`,
+    ),
     keyboard: keyboard([button("К webhook", "whshow", created.webhook.id)]),
   });
+}
+
+/**
+ * The list screen, reached by either spelling of the command.
+ *
+ * Typing it is also how a person gets out of a half-finished «пришлите
+ * название»: the command clears this feature's prompt first, so an abandoned
+ * flow cannot quietly eat their next message.
+ */
+async function openWebhooks(input: CommandContext): Promise<void> {
+  await clearPrompt(input.ctx, input.message.chat.id, input.user.userId);
+  await showList(input.ctx, input.message.chat.id, input.user.userId);
 }
 
 export function webhooksFeature(): Feature {
   return {
     name: "webhooks",
-    commandList: [{ command: "webhooks", description: "Входящие webhooks: события из CI, мониторинга, скриптов" }],
+    // `/hook` is deliberately absent from the menu: one name belongs in the
+    // client's command list, and `/webhooks` is the one that says what it
+    // opens. The alias below exists because the owner's brief spells it
+    // «/hook», and a command somebody was told to type answering «не знаю
+    // такой команды» is a worse first impression than a duplicate entry.
+    commandList: [
+      { command: "webhooks", description: "Входящие webhooks: события из CI, мониторинга, скриптов" },
+    ],
 
     commands: {
-      async webhooks(input: CommandContext): Promise<void> {
-        // Typing `/webhooks` is also how a person gets out of a half-finished
-        // «пришлите название»: the command clears this feature's prompt, so an
-        // abandoned flow cannot quietly eat their next message.
-        await clearPrompt(input.ctx, input.message.chat.id, input.user.userId);
-        await showList(input.ctx, input.message.chat.id, input.user.userId);
-      },
+      webhooks: openWebhooks,
+      hook: openWebhooks,
     },
 
     callbacks: {
@@ -315,7 +338,9 @@ export function webhooksFeature(): Feature {
       async whtest(input: CallbackContext): Promise<void> {
         const webhook = await ownedWebhook(input);
         if (webhook === null) return;
-        await input.ctx.bot.answerCallbackQuery(input.query.id, { text: "Отправил тестовое событие" });
+        await input.ctx.bot.answerCallbackQuery(input.query.id, {
+          text: "Отправил тестовое событие",
+        });
         // Built by the same function the real deliveries use, so what a person
         // sees here is what they will see at three in the morning.
         const card = buildEventCard({
@@ -463,7 +488,8 @@ export function webhooksFeature(): Feature {
             renamed === null
               ? "Этот webhook больше не ваш или уже удалён."
               : `Теперь это «${untrusted(renamed.displayName)}».`,
-          keyboard: renamed === null ? undefined : keyboard([button("К webhook", "whshow", renamed.id)]),
+          keyboard:
+            renamed === null ? undefined : keyboard([button("К webhook", "whshow", renamed.id)]),
         });
         return true;
       }
