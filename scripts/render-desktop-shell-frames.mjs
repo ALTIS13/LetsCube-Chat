@@ -668,8 +668,13 @@ async function readGeometry(page) {
       resizer: box(document.querySelector('[data-testid="chat-list-resizer"]')),
       sideMenu: box(document.querySelector('[data-testid="side-menu-layer"]')),
       sideMenuRows: document.querySelectorAll('[data-testid="side-menu-row"]').length,
+      // The region, not the document: both chat-list properties are written
+      // there since D-268, and the root still carries index.css's first-paint
+      // default, so reading the root answers 0 forever.
       narrowRatio: Number(
-        getComputedStyle(document.documentElement).getPropertyValue("--kub-chat-list-narrow").trim() || "0",
+        getComputedStyle(
+          document.querySelector("[data-kub-left-region]") ?? document.documentElement,
+        ).getPropertyValue("--kub-chat-list-narrow").trim() || "0",
       ),
       // Where each row's avatar starts, deduplicated. The pinned drag handle
       // stood before the avatar and only on pinned rows, so more than one value

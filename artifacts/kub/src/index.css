@@ -2450,7 +2450,7 @@ textarea::placeholder, input::placeholder {
    output/audits/2026-09-12-telegram-windows-ios/assessment.md and held by
    tests/unit/desktop-chat-list.test.mts.
 
-   Two custom properties carry it, both written straight onto the document by
+   Two custom properties carry it, written straight onto the DOM by
    `ChatListResizer` and never held in React state: a width in the store would
    re-render every row on every frame of a drag, and those render counts are a
    contract (tests/e2e/chat-list-event-cost.spec.ts).
@@ -2458,6 +2458,16 @@ textarea::placeholder, input::placeholder {
      --kub-chat-list-width   the column's width
      --kub-chat-list-narrow  Telegram's setNarrowRatio(float64): 0 at 260px,
                              1 at the strip, interpolated between
+
+   They are written on `[data-kub-left-region]` and on the two boxes that stand
+   on the seam, NEVER on `document.documentElement`. The `:root` block above
+   declares them once, for the frame before the script runs, and that is the
+   whole of the root's part in this. Measured on 2026-09-20, 3405 nodes: a
+   custom property written on the root costs 12.2ms of style recalc per write
+   even when NOTHING reads it, because every element inherits the root's custom
+   properties and the whole document is re-resolved; the same property on the
+   region costs 1.7ms. At 60Hz the drag had been spending its entire frame
+   budget re-resolving message bubbles that cannot change (D-268).
 
    From `md` only. A phone has one pane, the bottom capsule and the horizontal
    folder strip, and none of that is this stage's to change. */
@@ -2585,6 +2595,35 @@ textarea::placeholder, input::placeholder {
          66 — measured, on the first run of the drag. The rail's 72 already
          contains its own hairline the same way. */
       width: calc(72px + var(--kub-chat-list-width) + 1px);
+    }
+
+    /* The fold on the seam, and when it is seen.
+
+       Every one of these is here rather than in the markup because one of them
+       is a sibling combinator — the handle is the first of the two boxes on the
+       seam — and because an `opacity-0` utility in the class list would beat
+       all five of them (rule 10), which is the trap this stylesheet has already
+       been caught by twice.
+
+       Transparent at rest and NOT `visibility: hidden`: it keeps taking its
+       clicks, so the disc is under the pointer the moment somebody reaches for
+       the line. Folded, it stays: it is then the only thing on the screen that
+       says the list can come back. */
+    [data-kub-chat-list-fold] {
+      opacity: 0;
+      transition: opacity 120ms ease;
+    }
+
+    [data-kub-chat-list-fold][data-collapsed="true"],
+    [data-kub-chat-list-fold]:hover,
+    [data-kub-chat-list-fold]:focus-visible,
+    [role="separator"][data-kub-chat-list-seam]:hover ~ [data-kub-chat-list-fold],
+    [role="separator"][data-kub-chat-list-seam]:focus-visible ~ [data-kub-chat-list-fold] {
+      opacity: 1;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      [data-kub-chat-list-fold] { transition: none; }
     }
 
     /* At 66px a search field and a row of folder tabs have nowhere to be, and

@@ -19943,3 +19943,256 @@ flight.
    chat-list column.
 
 ---
+## D-268 `[x]` The chat-list drag re-resolved every element's style on every frame
+
+**Severity:** high on a computer, and it is the owner's first complaint of
+2026-09-20: «криво работают линии за которые двигаю интерфейс влево вправо (не
+так удобно и плавно как в том же discord)».
+
+**Surface:** `artifacts/kub/src/components/sidebar/ChatListResizer.tsx:71`
+(`applyWidth`), which wrote `--kub-chat-list-width` and `--kub-chat-list-narrow`
+on `document.documentElement` on every `pointermove`.
+
+**Defect:** the module's header said a drag costs zero React renders. That was
+true and it was never where the time went. A custom property written on the root
+invalidates style for **every element that inherits it**, which is every element
+in the document.
+
+**Evidence.** Measured at 1440 with a conversation of 140 messages and a list of
+25 chats — 3405 nodes — writing a width 60 times and forcing style and layout
+between each:
+
+| written on | style recalc per write |
+| --- | --- |
+| `:root`, the property the product reads | 13.1 ms |
+| `:root`, a property **nothing reads** | 12.2 ms |
+| `[data-kub-left-region]`, the same property | 1.7 ms |
+| the region's `width` directly, no property | 0.02 ms |
+
+The second row is the finding: the cost is the root write itself, not the
+reference. A property nobody reads is within 7% of the one the whole column is
+built on.
+
+And the drag itself, 40 pointer moves, before and after:
+
+| | style recalc | layout | per frame |
+| --- | --- | --- | --- |
+| on the root | 489 ms | 49 ms | **13.1 ms** |
+| on the region | 125 ms | 60 ms | **4.5 ms** |
+
+**Consequence:** 13.1 ms a frame is the whole 60 Hz budget, spent before a pixel
+is painted, re-resolving message bubbles that cannot change. On a slower machine
+or a longer conversation the drag drops frames. That is «не так плавно», in
+milliseconds.
+
+**Fixed** 2026-09-20. The region carries both properties for itself and its
+rows; the handle and its fold carry their own copy of the width, because they
+stand beside the region and inherit nothing from it. Three leaf writes.
+`index.css` keeps the `:root` declarations as the first-paint default and
+nothing else.
+
+Held by `tests/e2e/desktop-shell.spec.ts` → «a drag writes the width on the
+region, never on the document», which asserts the mechanism because the
+milliseconds are the machine's. Proved by two mutations: putting either write
+back on `document.documentElement`, and dropping the seam boxes' own copy — each
+turns it red. `narrowRatio` in that file now reads `.kub-chat-list-column`
+rather than the root: every rule the ratio drives is scoped to that column, so
+asking it is asking whether the value reaches the elements the rules apply to.
+Read from the root it would have answered the stale `:root` default forever
+while the thing it checks never moved again.
+
+**Note for D-267.** The narrowing behaviour is unchanged: every consumer of
+`--kub-chat-list-narrow` is scoped `.kub-chat-list-column …`, which is inside the
+region, so `.kub-voice-call-bar__extra` still fades exactly as it did. The rule
+that hides deafen on a narrowed column is untouched and still open — but the fold
+below gives a one-click way back to a full-width list, where before the only way
+out of a folded column was a double click on an invisible seam.
+
+---
+
+## D-269 `[x]` The chat list could be folded, and there was no way to find that out
+
+**Severity:** medium, and it is the owner's third complaint of 2026-09-20: «нет
+возможности быстро свернуть часть с чатами чтобы акцент был на
+голосовых/текстовых каналах и содержимом в них».
+
+**Surface:** `artifacts/kub/src/components/sidebar/ChatListResizer.tsx`.
+
+**Defect:** the fold already existed and shipped. Its two entrances were a
+**double click on a 9px seam that draws nothing at rest** — the grip is
+`opacity-0` until hover — and **dragging 134px past the narrowest resting
+width**. Neither is announced anywhere, and the separator's `aria-label` says
+«Ширина списка чатов», which describes the drag and not the fold.
+
+**Consequence:** the owner asked for a feature he already had. That is what an
+undiscoverable feature looks like from outside, and the cost is exactly the room
+D-270 is about: folding gives the conversation 294px back at 1440.
+
+**Discord is not the reference here, and it is worth recording why.** Its channel
+sidebar does not collapse at all. The collapse ships in its stable build and is
+switched off — the open/closed state is computed and then `&& !1`-ed, so
+`data-collapsed` is always `"false"`, the 76px path never runs, and the handle's
+`onClick` and its `Enter` key flip a store value that changes nothing. Collapsing
+is a BetterDiscord/Vencord plugin (`CollapsibleUI`), and «collapse the channel
+list» is one of the oldest standing requests on Discord's own support forum.
+Telegram Desktop's strip of avatars is the reference, as it is for every number
+in `lib/desktopChatList.ts`. Read off the shipped client, build 615980, on
+2026-09-20 — SEMI-OFFICIAL evidence; Discord publishes no layout contract.
+
+**Fixed** 2026-09-20. A chevron on the seam, level with the middle of the header
+row, `data-testid="chat-list-fold"`. It folds to Telegram's 66px strip and
+unfolds to the width the person had, not to the default.
+
+Two decisions worth keeping:
+
+- **Transparent at rest, opaque when folded.** Centred on the seam, a 20px disc
+  stands half over whatever is on the right, and in a group with channels that is
+  the rail's first row: photographed at 1440, the first version covered the
+  accent bar of the channel being read. `opacity: 0` hides the box without
+  lifting it out of hit testing, so it is still under the pointer the moment
+  somebody reaches for the line they meant to drag — and a sibling rule brings it
+  up when the **handle** is hovered, which is where the hand actually goes.
+  Folded it stays opaque, because it is then the only thing on the screen saying
+  the list can come back.
+- **Its whole visibility is in `index.css`, not in the class list.** One of the
+  five selectors is a sibling combinator, and an `opacity-0` utility would beat
+  every rule in `@layer components` (rule 10 of `interface-material.md`).
+
+Held by `tests/e2e/desktop-shell.spec.ts` → «the fold has a control, and the
+control is reversible» and «the fold is out of the way until the seam is reached
+for». Proved by four mutations: dropping the `[data-collapsed="true"]` selector,
+painting the disc at rest, replacing the sibling `:hover` with `:active`, and
+making `toggleChatListCollapsed` forget the width it folded from — each turns one
+of them red. The opacity is asserted as a **number**: Playwright reports an
+`opacity: 0` box as visible, so `toBeVisible()` cannot ask this question at all.
+
+**A guard narrowed on the way.** `tests/unit/chat-chrome.test.mts` → «nothing of
+the retired DEV switch is left in the application» matched the prefix
+`data-kub-chat-`, while the switch it is named for used exactly two attributes,
+`data-kub-chat-capsules` and `data-kub-chat-depth` (`524179ee`). A rule stated
+wider than the thing it forbids, handed a subject its author could not have had
+in mind: `data-kub-` is the product's own namespace, and reserving a slice of it
+to one retired experiment reserves it against the product. The two names are now
+named explicitly, and the guard still goes red when either is put back — checked
+both ways.
+
+---
+
+## D-270 `[ ]` At the list's widest the conversation keeps 42% of the window, and the backdrop painted on it compresses with it
+
+**Severity:** medium. The owner's second complaint of 2026-09-20: «панель с
+голосовыми каналами и текстовыми … двигает дальше интерфейс из-за чего красивый
+задник в итоге задвигается».
+
+**Surface:** `artifacts/kub/src/components/layout/MainLayout.tsx` (the left
+region, `flex-shrink-0`), `artifacts/kub/src/components/chat/ChatWindow.tsx:1505`
+(the rail, in flow before the conversation), `artifacts/kub/src/index.css`
+(`.chat-bg`, `--kub-chat-wallpaper`).
+
+**What is NOT wrong.** Nothing grows past the window. Measured at 1440 in every
+state — list at 260, 360, 540 and folded — `document.documentElement.scrollWidth`
+equals `clientWidth`, always 1440. The panels take their room from the content,
+which is exactly Discord's contract: its shell is
+`grid-template-columns: [start] min-content [guildsEnd] min-content [channelsEnd] 1fr [end]`
+with `overflow: hidden` and `min-width: 0` throughout, and the members list is a
+second fixed track against a `1fr` message column one level down. Ours is the flex
+spelling of the same thing.
+
+**What is wrong is the arithmetic.** Two columns take their width out of the
+conversation, and the chat list's ceiling is generous. At 1440 with the rail
+present:
+
+| chat list | left region | rail | conversation |
+| --- | --- | --- | --- |
+| folded (66) | 139 | 224 | **1077** |
+| 260 | 333 | 224 | 883 |
+| 360 (default) | 433 | 224 | 783 |
+| 540 (maximum) | 613 | 224 | **603 — 42% of the window** |
+
+The wallpaper is painted on the conversation's scroller, and its three pools and
+vertical gradient are sized `100% 100%` of that box, so they compress with it.
+The violet pool's peak, sampled from the rendered pixels at y=620:
+
+| state | pool peak, viewport x |
+| --- | --- |
+| folded | 452 |
+| 260 | 648 |
+| 360 | 748 |
+| 540 | 900 |
+
+448px of travel, and the composition loses 44% of its width between the two ends.
+
+**Three fixes were tried and photographed, and all three are worse.** Recorded so
+nobody spends the afternoon again:
+
+- **`background-attachment: fixed` on the pools and the gradient.** Anchors them
+  to the viewport. The violet pool's `at 0%` and the pink's `at 12%` then sit
+  behind the panels and the conversation goes nearly flat navy.
+  `output/shots/exp-d1440-B-fixed-list-540.png`.
+- **Sizing and offsetting the layers to the panes box.** Same result for the same
+  reason. `output/shots/exp-d1440-C-canvas-list-540.png`.
+- **Keeping each pool's `at X%` as that layer's `background-position` and moving
+  only the SCALE to `100vw`,** so the art crops instead of compressing. Better
+  than the other two and still a loss: at a narrow column the pools are so large
+  they read as one wash and the pink disappears.
+  `output/shots/exp-d1440-D-crop-list-540.png`.
+
+**So the anchoring is correct and deliberate.** The wallpaper is the coloured
+ground the conversation's glass capsules sample (rule 2 of
+`interface-material.md`), and it is composed for the reading column. Discord does
+the same thing with its own art: the guild banner lives inside the channel-list
+panel and re-lays out with it, and Custom Themes paint a per-panel gradient token
+rather than one window-spanning image. There is no window-anchored backdrop to
+copy.
+
+**What is left, and not done here.** The conversation has too little room at the
+extreme, and there are two honest levers:
+
+1. **Give the room back on demand** — D-269's fold, shipped. Folding returns the
+   conversation to 1077px, and the photographs show the composition reading
+   properly again (`output/shots/d1440-dark-04-list-collapsed.png`).
+2. **Lower the ceiling.** `CHAT_LIST_MAX_WIDTH` is 540, making the left region
+   613px. Discord's whole left region — guild rail plus channel list — stops at
+   **432px**, which is its channel list at 355px beside a 76px rail; its default
+   is 375px total. Ours is 42% wider than Discord's maximum. Bringing it nearer
+   would answer the complaint at its source rather than by offering an escape.
+
+That second one changes `aria-valuemax`, the drag's clamp and a shipped e2e
+expectation, and it is a product decision about how wide a person may make their
+own chat list. **Not taken without the owner.**
+
+---
+## D-271 `[ ]` «Усиление микрофона» does not reach a call
+
+**Found while repairing D-261**, by the agent that was told to stay out of the
+file where it lives — so it is filed rather than fixed, and the screen says so
+in one line meanwhile.
+
+**Measured twice, independently.** `buildAudioTrackConstraints`
+(`hooks/useAudioSettings.ts:268`) returns exactly three fields —
+`echoCancellation`, `noiseSuppression`, `autoGainControl` — and **nothing about
+gain**. `hooks/voiceRoom.ts` contains **zero** occurrences of `GainNode`,
+`createGain` or `micInputGain`. `captureMicrophone()` publishes what that
+constraint object asked for, so the slider's value is never applied to anything
+a call carries.
+
+**Where it does work, which is why it looks alive:** voice messages
+(`useVoiceRecorder.ts:206`) and self-monitoring. Somebody who tests their
+microphone on this screen hears the gain working and reasonably concludes it
+applies to calls.
+
+**This is the register's most-repeated shape** — a control that cannot change
+its own outcome — and it is worth noting that the surrounding controls are not
+like it: the three processing switches **do** reach a call, through the same
+constraint object, which is exactly what makes the gain's absence invisible.
+
+**What a fix has to decide first.** `autoGainControl` is one of the three
+constraints and it is on by default: a manual gain applied on top of automatic
+gain is two controls fighting over one number. So the honest options are a gain
+node in the publish path that the call actually uses, **with** a stated
+relationship to `autoGainControl` — or removing the slider from the call's
+vocabulary and saying plainly that it governs recordings and monitoring.
+Wiring it up without settling that would produce a control that changes
+something, unpredictably, which is worse than one that changes nothing.
+
+---

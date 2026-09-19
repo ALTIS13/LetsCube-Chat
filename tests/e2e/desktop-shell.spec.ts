@@ -243,10 +243,46 @@ async function listColumnWidth(page: Page) {
   });
 }
 
+/**
+ * The fold's computed opacity.
+ *
+ * Not `toBeVisible()`: Playwright calls an `opacity: 0` box visible, so the
+ * check that matters here — «is the way back on the screen» — cannot be asked
+ * that way at all.
+ */
+async function foldOpacity(page: Page) {
+  return page.evaluate(() => {
+    const fold = document.querySelector("[data-kub-chat-list-fold]");
+    return fold ? Number(getComputedStyle(fold).opacity) : null;
+  });
+}
+
+/**
+ * The narrow ratio, read off `.kub-chat-list-column` — not the document, and
+ * not the region either.
+ *
+ * Both properties moved off the root on 2026-09-20 (D-268): written on
+ * `document.documentElement` they cost a whole-document style resolution on
+ * every frame of a drag — 12.2ms on a 3405-node page, and the same 12.2ms for a
+ * property **nothing reads**, because every element inherits the root's.
+ * Reading them from the root still answers, with the stale `:root` default
+ * `index.css` declares for the first paint, so this helper would have passed
+ * forever while the ratio it checks never moved again.
+ *
+ * The column rather than the region that holds it, and that is the point of the
+ * choice: every rule the ratio drives is scoped `.kub-chat-list-column …` — the
+ * list's chrome, the row's gap and padding, the row's body, and the four the
+ * voice bars carry, `.kub-voice-call-bar__extra` among them, which is the
+ * deafen control D-267 is about. Asking the column asks whether the value
+ * actually reaches the elements the rules apply to; asking the region would
+ * report a broken inheritance chain between the two as fine.
+ */
 async function narrowRatio(page: Page) {
-  return page.evaluate(() =>
-    Number(getComputedStyle(document.documentElement).getPropertyValue("--kub-chat-list-narrow").trim() || "0"),
-  );
+  return page.evaluate(() => {
+    const column = document.querySelector<HTMLElement>(".kub-chat-list-column");
+    if (!column) return null;
+    return Number(getComputedStyle(column).getPropertyValue("--kub-chat-list-narrow").trim() || "0");
+  });
 }
 
 /**
@@ -579,6 +615,125 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     await page.getByTestId("chat-list-resizer").dblclick();
     await page.waitForTimeout(150);
     expect(await listColumnWidth(page)).toBe(460);
+  });
+
+  /**
+   * D-269. The fold existed and could not be found.
+   *
+   * Until 2026-09-20 the only two ways into it were a double click on a 9px
+   * seam that draws nothing at rest, and dragging 134px past the narrowest
+   * resting width. The owner asked for the feature he already had — «нет
+   * возможности быстро свернуть часть с чатами» — which is what an
+   * undiscoverable feature looks like from outside.
+   *
+   * Discord is not the reference. Its channel sidebar does not collapse at all:
+   * the collapse ships in its stable build and is switched off (the state is
+   * computed and then `&& false`d, so `data-collapsed` is always "false" and the
+   * 76px path never runs), and collapsing is a BetterDiscord/Vencord plugin.
+   * Telegram Desktop's strip of avatars is the reference, as it is for every
+   * number in `lib/desktopChatList.ts`.
+   */
+  test("the fold has a control, and the control is reversible", async ({ page }) => {
+    test.skip(!isDesktop(page), "there is no seam on a phone");
+    await boot(page);
+
+    const fold = page.getByTestId("chat-list-fold");
+    await dragListTo(page, 440);
+    expect(await listColumnWidth(page)).toBe(440);
+
+    // Folded by the control, not by a gesture nobody was told about.
+    await fold.click();
+    await page.waitForTimeout(200);
+    expect(await listColumnWidth(page), "the control did not fold the list").toBe(COLLAPSED_WIDTH);
+
+    // And the way back is on the screen. `opacity`, not `visible`: the disc is
+    // transparent at rest so it cannot cover the channel rail's first row, and
+    // a Playwright visibility check cannot tell those two apart — it reports an
+    // `opacity: 0` box as visible. The number is the contract.
+    expect(await foldOpacity(page), "the folded list offers no visible way back").toBe(1);
+    await expect(fold).toHaveAttribute("aria-expanded", "false");
+    await expect(fold).toHaveAttribute("aria-label", "Развернуть список чатов");
+
+    // Unfolded, to the width it had, not to the default.
+    await fold.click();
+    await page.waitForTimeout(200);
+    expect(await listColumnWidth(page), "the fold did not give the width back").toBe(440);
+    await expect(fold).toHaveAttribute("aria-expanded", "true");
+    await expect(fold).toHaveAttribute("aria-label", "Свернуть список чатов");
+  });
+
+  test("the fold is out of the way until the seam is reached for", async ({ page }) => {
+    test.skip(!isDesktop(page), "there is no seam on a phone");
+    await boot(page);
+
+    // At rest it draws nothing. Centred on the seam, a 20px disc stands half
+    // over whatever is on the right, and in a group with channels that is the
+    // rail's first row: photographed at 1440, it covered the accent bar of the
+    // channel being read.
+    expect(await foldOpacity(page), "the fold is painted over the pane beside it").toBe(0);
+
+    // Reaching for the HANDLE brings it up — the sibling rule, which is the
+    // half a hover on the disc itself cannot give: somebody who goes for the
+    // line goes for the line, not for a 20px target they have not seen yet.
+    const handle = await page.getByTestId("chat-list-resizer").boundingBox();
+    if (!handle) throw new Error("the handle has no box");
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + 400);
+    await page.waitForTimeout(250);
+    expect(await foldOpacity(page), "the seam was reached for and the fold stayed hidden").toBe(1);
+
+    // And it is still a target while it is transparent: opacity hides a box, it
+    // does not lift it out of hit testing.
+    await page.mouse.move(handle.x + handle.width / 2, 0);
+    await page.waitForTimeout(250);
+    await page.getByTestId("chat-list-fold").click();
+    await page.waitForTimeout(200);
+    expect(await listColumnWidth(page)).toBe(COLLAPSED_WIDTH);
+  });
+
+  /**
+   * D-268. Where the drag's style recalc went.
+   *
+   * Both properties were written on `document.documentElement`, and the module
+   * said a drag costs zero React renders — true, and never where the time was.
+   * Measured on 2026-09-20 with 140 messages and 25 chats on the page, 3405
+   * nodes, 60 writes each: a custom property on the root costs 12.2ms of style
+   * recalc per write **even when nothing reads it**, because every element
+   * inherits the root's; the same property on the region costs 1.7ms. Recalc
+   * plus layout came to 14.6ms a frame, which is the whole 60Hz budget spent
+   * re-resolving message bubbles that cannot change.
+   *
+   * The mechanism is the contract because the milliseconds are the machine's.
+   * Move either write back to the root and this goes red.
+   */
+  test("a drag writes the width on the region, never on the document", async ({ page }) => {
+    test.skip(!isDesktop(page), "there is nothing to drag on a phone");
+    await boot(page);
+    await dragListTo(page, 420);
+
+    const where = await page.evaluate(() => {
+      const read = (el: HTMLElement | null) =>
+        el ? { width: el.style.getPropertyValue("--kub-chat-list-width"), narrow: el.style.getPropertyValue("--kub-chat-list-narrow") } : null;
+      return {
+        root: read(document.documentElement),
+        region: read(document.querySelector<HTMLElement>("[data-kub-left-region]")),
+        seams: [...document.querySelectorAll<HTMLElement>("[data-kub-chat-list-seam]")].map(
+          (box) => box.style.getPropertyValue("--kub-chat-list-width"),
+        ),
+      };
+    });
+
+    expect(where.region?.width, "the region does not carry the dragged width").toBe("420px");
+    expect(where.region?.narrow, "the region does not carry the narrow ratio").toBe("0.0000");
+    expect(where.root?.width, "the width is back on the document, and the drag pays for the whole tree").toBe("");
+    expect(where.root?.narrow, "the ratio is back on the document").toBe("");
+
+    // The handle and its fold stand beside the region and inherit nothing from
+    // it, so each carries its own copy — that is what places them on the seam.
+    expect(where.seams, "a box on the seam has no width to place itself by").toEqual(["420px", "420px"]);
+
+    // And the region is actually that wide, so the property is not merely being
+    // written somewhere harmless.
+    expect(await listColumnWidth(page)).toBe(420);
   });
 
   test("the LETSCUBE mark is in the list's top row, and nowhere else", async ({ page }) => {

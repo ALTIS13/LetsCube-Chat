@@ -183,9 +183,32 @@ test("the chat pane, and the empty pane in its place, read the chat screen's wor
   }
 });
 
+/**
+ * The switch marked the pane with exactly two attributes —
+ * `data-kub-chat-capsules` and `data-kub-chat-depth` (`524179ee`) — and this
+ * used to look for the prefix `data-kub-chat-` instead of for those two names.
+ *
+ * That was a rule stated wider than the thing it forbids, and on 2026-09-20 it
+ * was handed a subject its author could not have had in mind: the chat list's
+ * seam carries `data-kub-chat-list-seam` and `data-kub-chat-list-fold`
+ * (D-268, D-269), which have nothing to do with any option the owner chose
+ * between. `data-kub-` is the product's own namespace — `data-kub-panes`,
+ * `data-kub-left-region`, `data-kub-list-chrome`, `data-kub-menu` are all in
+ * it — and reserving a slice of it to one retired experiment reserves it
+ * against the product.
+ *
+ * So the two names are named. The guard is not weaker for it: the switch
+ * cannot come back without one of them, and its module and tokens are still
+ * matched beside them. `tests/unit/chat-chrome.test.mts` is proved by putting
+ * `data-kub-chat-capsules` back into a source file, which turns this red.
+ */
 test("nothing of the retired DEV switch is left in the application", () => {
   const offenders = sourceFiles("artifacts/kub/src")
-    .filter((file) => /kub-dev-chat-chrome|data-kub-chat-|chatChromeOptions|useChatChromeOptions|--chat-option-/.test(readFileSync(file, "utf8")))
+    .filter((file) =>
+      /kub-dev-chat-chrome|data-kub-chat-capsules|data-kub-chat-depth|chatChromeOptions|useChatChromeOptions|--chat-option-/.test(
+        readFileSync(file, "utf8"),
+      ),
+    )
     .map((file) => file.split(path.sep).join("/"));
   assert.deepEqual(offenders, [], "the options the owner chose between are back in the product");
 });
