@@ -9,6 +9,7 @@ import {
   holdVoiceTalk,
   resumeVoiceAudio,
   useVoiceAudioBlocked,
+  useVoiceJoinProgress,
   useVoiceSpeechRevoked,
   useVoiceTalkHeld,
 } from "@/hooks/useVoiceCall";
@@ -139,6 +140,17 @@ export function VoiceCallCapsule({
   // controls then *say* is a rule, and it is `micControlWords`.
   const { settings } = useAudioSettings();
   const talkHeld = useVoiceTalkHeld();
+  /**
+   * Which step of the join is running, for the one line this capsule has.
+   *
+   * Read here rather than arriving in `view`, on the same terms as
+   * `speechRevoked` and `audioBlocked` two lines up: `voiceCapsuleState` is a
+   * pure rule a `node --test` process loads, and this is a clock — it changes
+   * with nothing happening, so a rule computed from a snapshot cannot express
+   * it. The **words** are still a rule, in `lib/voiceJoinProgress.ts`, which is
+   * where the six sentences and the six budgets live.
+   */
+  const joinProgress = useVoiceJoinProgress();
   const words = micControlWords({
     activation: settings.micActivation,
     muted: view.muted,
@@ -147,6 +159,17 @@ export function VoiceCallCapsule({
   });
 
   if (!view.visible || !channel) return null;
+
+  /**
+   * Whether the capsule’s one line is saying something is wrong.
+   *
+   * Two sources and they cannot be folded into one: `view.tone` is the rule’s
+   * answer, computed from a snapshot, and a stage that has outrun its budget is
+   * a clock — `voiceCapsuleState` has no way to know it and should not be given
+   * one. What they share is the consequence, so they are combined here and
+   * nowhere else.
+   */
+  const alarming = Boolean(view.action === "cancel" && joinProgress?.slow) || view.tone === "danger";
 
   const ordered = orderVoiceParticipants(participants, selfId);
   const shown = ordered.slice(0, FACES);
@@ -238,14 +261,44 @@ export function VoiceCallCapsule({
               <span className="truncate">Звук заблокирован — включить</span>
             </button>
           ) : (
+            /* The one line, and while a join is in flight it says **which step**.
+               `Подключаемся…` is what the person whose evening this was had
+               for fifteen seconds three times in a row, and it is true of a
+               microphone prompt, a gateway that is down, a chunk that will not
+               download and a peer connection that never establishes — four
+               faults that send somebody to four different places.
+
+               `view.action === "cancel"` is the joining branch and nothing else
+               sets it, so this cannot leak into a connected call; and
+               `joinProgress` is null unless a join is actually running, so the
+               two agree or nothing is drawn. Slow reads in `--kub-danger-text`
+               — the token tuned for words — because at that point something is
+               wrong, and `data-voice-slow` is what a test reads rather than the
+               colour. */
             <div
               className={cn(
-                "truncate text-[11px]",
-                view.tone === "danger" ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-muted)]",
+                "text-[11px]",
+                // **A sentence about a problem is read to the end; a list of
+                // names is not.** Everything this line says in its ordinary
+                // states is a name, a participant list or a seat count, where
+                // an ellipsis loses nothing — and at 390 the failure sentence
+                // came out «Сигнал есть, медиасоединение не устанав…», which is
+                // the one line in this capsule somebody has to finish reading.
+                // The same reasoning the forced-mute line below already
+                // carries, and the chrome stack is measured with a border-box
+                // `ResizeObserver`, so the conversation’s top inset follows a
+                // wrapped line on its own.
+                alarming
+                  ? "leading-snug text-[color:var(--kub-danger-text)]"
+                  : "truncate text-[color:var(--kub-muted)]",
               )}
               data-testid="voice-capsule-detail"
+              data-voice-stage={view.action === "cancel" ? joinProgress?.stage : undefined}
+              data-voice-slow={
+                view.action === "cancel" ? (joinProgress?.slow ? "true" : "false") : undefined
+              }
             >
-              {view.detail}
+              {view.action === "cancel" && joinProgress ? joinProgress.text : view.detail}
             </div>
           )}
           {/* The person who was silenced, told. Without this line their track

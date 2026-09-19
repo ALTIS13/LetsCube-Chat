@@ -35,6 +35,18 @@ import {
 export interface VoiceHealthView {
   /** The numbers, from every reading held. */
   readonly health: VoiceHealth;
+  /**
+   * The readings themselves, oldest first.
+   *
+   * Handed out so the exported connection report can be made of the ring this
+   * hook is **already** filling. The alternative — the report taking a reading
+   * of its own on the press — would be a second metrics path, which is the
+   * shape of the defect the whole of D-259 is about, and it would land at an
+   * irregular distance from the scheduled reading before it: every rate in
+   * `lib/voiceConnectionHealth.ts` is a movement divided by that window, and a
+   * near-zero window is what the overlap guard below exists to prevent.
+   */
+  readonly samples: readonly VoiceHealthSample[];
   /** The series and its ceiling, for the graph. */
   readonly scale: VoiceHealthScale;
   /** Which media server this call landed on, or null. */
@@ -104,6 +116,7 @@ export function useVoiceHealth(enabled: boolean): VoiceHealthView {
     () => ({
       health: voiceHealthOf(samples, now),
       scale: voiceHealthScale(samples, now),
+      samples,
       serverName,
       connected,
     }),

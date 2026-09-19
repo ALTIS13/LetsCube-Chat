@@ -19122,3 +19122,110 @@ being worked, and are filed rather than started, at the owner's instruction.
 
 ---
 
+## D-259 `[x]` A join was one opaque await, so a fifteen-second failure could only be reported as «не подключается»
+
+**Severity:** high for support; no product defect underneath it. The call
+behaved exactly as written — what was missing was any way to say what it was
+doing or what it had done.
+
+**Surface:** the voice capsule under the chat header, the call bar, and the
+connection panel behind the headset button.
+
+**Reported by the owner on 2026-09-19**, after their companion could not join a
+voice channel: «обдумай все мелочи типа звуков и показа статуса соединения во
+время подключения к голосовому каналу, т.е надо больше метрик сверять от
+клиента к серверу и обратно чтобы пользователь не был в недоумении что
+происходит и мог предоставить условный debug log своего соединения». The sounds
+half shipped the same evening; this is the other two.
+
+**The incident, measured rather than described.** Three attempts lasted 15.2 s,
+14.6 s and 15.0 s — within 0.6 s of each other, which is a timeout and not a
+network. From the media server’s log the cause was one line: the signalling
+socket connected, the token was accepted, and the `RTCPeerConnection` never
+established, so livekit-client’s `peerConnectionTimeout` (15 000 ms, read off
+`roomConnectOptionDefaults` in 2.22.3) fired and tore the socket down. From the
+person’s side it was fifteen seconds of «Подключаемся…» and then «Не удалось
+подключиться к голосовому серверу.»
+
+**Every fact in that sentence was already in the client.** `room.connect()`
+raises `RoomEvent.SignalConnected` when the socket is up and the join response
+has arrived, and does not resolve until the peer connection is established. The
+client had both and reported neither, because the join was one `await` with one
+sentence at the end of it — a sentence equally true of a microphone prompt
+nobody answered, a gateway that was down, a 12 MB chunk that would not download,
+and a peer connection that never came up. Four faults, four different places to
+look, one sentence.
+
+**The fix, in three parts.**
+
+1. **Six named stages**, read off `joinVoiceChannel` and the seam’s `join`
+   rather than invented: `microphone` (`getUserMedia`), `token` (the gateway),
+   `runtime` (`await import("livekit-client")`), `signal` (the socket),
+   `media` (ICE and the peer connection — the fifteen seconds), `publish` (the
+   local track reaching the room). The first three the hook announces itself;
+   the last three are inside one await, so the transport announces them through
+   a new `VoiceRoomEvents.onJoinStage`.
+
+2. **The capsule and the bar say which stage is running, and say when one has
+   outrun its budget.** The budgets are per stage because the stages fail on
+   different clocks; `media`’s is 6 000 ms, deliberately under half of
+   livekit’s own 15 000 ms, so the failure is legible **while it is happening**
+   with nine seconds still to run rather than explained afterwards. Past the
+   budget the line names the thing that is stuck and a seconds counter appears.
+
+3. **A failure names its stage.** «Сигнал есть, медиасоединение не
+   устанавливается.» is the owner’s own wording of the same event the old
+   sentence was reporting, and it is a different sentence from «Нет связи с
+   голосовым сервером.»
+
+**And a report that can be pasted into a message.** «Скопировать отчёт о
+соединении», in the connection panel, which now also renders for a call that is
+not running — the failure is the case it exists for, and until this change the
+headset button opened an empty box exactly then. The report carries the client
+and server versions, the SFU region and node, the room, the stage timeline with
+durations, the ICE candidate-pair type and whether a pair was ever selected, RTP
+counters in both directions, `totalSamplesReceived` and `totalAudioEnergy`,
+whether any remote element is attached and playing, the chosen devices, and
+whether autoplay was ever blocked.
+
+**Privacy is structural rather than filtered.** `VoiceReportInput` has no field
+that can carry a name, a message, a number or an address, so there is nothing to
+strip. Account and device identifiers are hashed with a salt generated per
+report and **never printed**, so they are stable within one report and cannot be
+recomputed against a user list or lined up across two reports. The **room** is
+the one identifier kept verbatim, because it is what makes the report and the
+media server’s own log the same incident; the channel’s **name** is not, because
+a room named by a person is a person’s name in a string that looks like a
+room’s.
+
+**The clipboard rather than a file.** This product already has `saveMediaAs`,
+and it is deliberately not reused: the report’s destination is a chat message,
+so a file is one more step before it can be sent. `copyWithFeedback` is the
+mechanism five other call sites already use for «hand the person a string», and
+it says whether it worked — which matters, because a clipboard write can be
+refused and silence then reads as success.
+
+**Two defects found in this change’s own work, both by looking at output rather
+than by reasoning.**
+
+- `fail()` closes the journal before it publishes, so a failed join has no open
+  step — and the first timeline therefore drew every row as «готово», including
+  the fifteen-second one that had just timed out, on the exact journal it was
+  written for. The step that broke is the **last** step of an attempt that
+  failed, which only the caller knows; `voiceJoinStepOutcome` now takes it.
+- `voiceCandidatePairEverSelected` used `!== null`, and a transport that does
+  not report the field gives `undefined`. A real report printed «ICE-пара
+  выбиралась хоть раз: да» two lines under «ICE-пара сейчас: —». That is this
+  module’s own rule — a reading nobody took is not a reading that answered —
+  broken inside its own file.
+
+**What the tests cannot reach.** `tests/e2e/voice-call.spec.ts` replaces the
+transport with a DEV-only stand-in, so *that* `RoomEvent.SignalConnected` fires
+when the socket really comes up, and that `connect()` really does not resolve
+until the peer connection is up, are facts about livekit-client no test here
+sees. `tests/unit/voice-room-seam.test.mjs` reads them as source, which is the
+weaker instrument and is said to be. The danger tone on the **bar**’s slow line
+is proved by a photograph and by nothing else: a mutation removing only that
+colour leaves the suite green, measured.
+
+---

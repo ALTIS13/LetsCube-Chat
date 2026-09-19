@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { createClient, getSupabasePublicUrl, getSupabasePublishableKey } from "@/lib/supabase/client";
 import {
   AUDIO_SETTINGS_EVENT,
@@ -34,6 +34,19 @@ import {
   voiceTokenRequestBody,
   type VoiceTokenOutcome,
 } from "@/lib/voiceGateway";
+import {
+  voiceJoinCurrentStage,
+  voiceJoinOpenStep,
+  voiceJoinProgressText,
+  voiceJoinFailureText,
+  voiceJoinSettled,
+  voiceJoinStageBegan,
+  voiceJoinStageIsSlow,
+  VOICE_JOIN_JOURNAL_EMPTY,
+  VOICE_JOIN_SLOW_MS,
+  type VoiceJoinJournal,
+  type VoiceJoinStage,
+} from "@/lib/voiceJoinProgress";
 import { loadVoiceRoom, type VoiceRoom } from "@/hooks/voiceRoom";
 
 /**
@@ -207,6 +220,83 @@ let speakers: readonly string[] = [];
  */
 let generation = 0;
 let room: VoiceRoom | null = null;
+
+/* ── Which step of the join is running, and how long each one took ────────
+ *
+ * The owner asked for this on 2026-09-19, after somebody’s join failed three
+ * times at 15.2 s, 14.6 s and 15.0 s and the whole of what they could report was
+ * «не подключается». Finding out that the signalling socket had connected and
+ * the peer connection had not took an evening and a read of the media server’s
+ * logs; every fact in that sentence was in this module at the time.
+ *
+ * **Beside `VoiceCallState` rather than inside it**, which is the same place
+ * `speakers` and `talkHeld` sit, for two reasons that are not the render-cost
+ * one they were moved out for:
+ *
+ *   1. **It has to outlive the phase.** `fail()` publishes `{ ...IDLE, phase:
+ *      "failed" }` and so does every other ending; a field of the state would be
+ *      wiped by the very transition whose cause it exists to name, and every
+ *      future `{ ...IDLE }` spread would be one more chance to drop it silently.
+ *      Here there is exactly one place that clears it — the next join.
+ *   2. **What a surface draws from it is a moving clock, not a value.** «this
+ *      stage has been running eight seconds» changes without anything happening,
+ *      so the reader has to tick; a field of the state would mean re-publishing
+ *      the call once a second for the length of every join, rendering
+ *      `ChatWindow`’s whole subtree each time. `useVoiceJoinProgress` owns its own
+ *      timer, starts it only once the running stage is over its budget, and
+ *      re-renders the two surfaces that draw the line.
+ *
+ * Every rule about it — the order of the stages, the budgets, the words, and the
+ * refusal to let a stage move backwards — is `lib/voiceJoinProgress.ts`’s, where
+ * `node --test` can drive it. What is here is the wiring.
+ */
+let journal: VoiceJoinJournal = VOICE_JOIN_JOURNAL_EMPTY;
+
+/**
+ * Whether the browser refused to sound this call **at any point**, as opposed
+ * to right now.
+ *
+ * `VoiceCallState.audioBlocked` is the live fact and is cleared the moment
+ * playback starts, which is correct for a capsule and useless for a report: by
+ * the time somebody presses a button the refusal they are reporting has already
+ * been resolved by that very press. Kept beside the state and cleared with the
+ * call, like `mutedBeforeDeafened` above and for the same reason — nothing draws
+ * it, and a field of the view would re-render every reader when it moved.
+ */
+let audioEverBlocked = false;
+
+/** The stage history of the join that ran, or is running. Read once, outside React. */
+export function voiceJoinJournalSnapshot(): VoiceJoinJournal {
+  return journal;
+}
+
+/** Whether this call’s audio was ever refused by the autoplay policy. */
+export function voiceAudioEverBlockedSnapshot(): boolean {
+  return audioEverBlocked;
+}
+
+/**
+ * Record that a stage of the join has begun, and tell the surfaces drawing it.
+ *
+ * The listener set is `publish`’s, deliberately: a reader of `VoiceCallState`
+ * runs its `getSnapshot`, finds the object it already had, and renders nothing.
+ * Only `useVoiceJoinProgress`, whose snapshots are a string and a number, sees a
+ * change.
+ */
+function enterStage(stage: VoiceJoinStage): void {
+  const next = voiceJoinStageBegan(journal, stage, Date.now());
+  if (next === journal) return;
+  journal = next;
+  for (const listener of listeners) listener();
+}
+
+/** Close the journal: connected, failed, or cancelled. Safe to call twice. */
+function settleJournal(): void {
+  const next = voiceJoinSettled(journal, Date.now());
+  if (next === journal) return;
+  journal = next;
+  for (const listener of listeners) listener();
+}
 /**
  * Whether the microphone was already muted when this person deafened.
  *
@@ -283,6 +373,19 @@ const roomSound = createVoiceRoomSoundDriver({
  * comes from the one place a join cannot proceed without.
  */
 let selfUserId: string | null = null;
+
+/**
+ * Who the roster calls us, read once outside React.
+ *
+ * The same value `observeCallSound` uses, exported for the connection report
+ * so that its «you» line names this client from the session the token was
+ * minted with rather than from `participants[0]` — which is the local
+ * participant only as a property of `report()`'s ordering, and would be wrong
+ * silently on the day that ordering changed.
+ */
+export function voiceSelfIdSnapshot(): string | null {
+  return selfUserId;
+}
 
 /** One reading of the call, taken wherever the call's state is published. */
 function observeCallSound() {
@@ -381,6 +484,83 @@ export function useVoiceSpeaking(userId: string | null, channelId: string | null
 /** Read once, outside React. The whole set, as the SDK last sent it. */
 export function voiceSpeakersSnapshot(): readonly string[] {
   return speakers;
+}
+
+/**
+ * The whole stage history, for the surface that draws it as a list.
+ *
+ * A reference rather than a primitive, which is the one place in this module
+ * that is deliberate rather than reluctant: the journal is replaced by a new
+ * array only when a stage actually moves — six times in a join and never
+ * again — so `Object.is` does exactly the right thing and a subscriber renders
+ * once per step.
+ */
+export function useVoiceJoinJournal(): VoiceJoinJournal {
+  return useSyncExternalStore(subscribe, voiceJoinJournalSnapshot, voiceJoinJournalSnapshot);
+}
+
+/** The running stage, or null when no join is in flight. A primitive, on purpose. */
+const currentStage = (): VoiceJoinStage | null => voiceJoinCurrentStage(journal);
+/** When that stage began. `0` when none is running, which nothing reads. */
+const currentStageSince = (): number => voiceJoinOpenStep(journal)?.at ?? 0;
+
+/** What a surface draws about a join in flight. */
+export interface VoiceJoinProgress {
+  readonly stage: VoiceJoinStage;
+  readonly elapsedMs: number;
+  /** Past this stage’s budget — `lib/voiceJoinProgress.ts` holds the numbers. */
+  readonly slow: boolean;
+  /** The one line to draw, already in Russian. */
+  readonly text: string;
+}
+
+/**
+ * Which step of the join is running, and how long it has been running.
+ *
+ * Two `useSyncExternalStore` reads of **primitives** rather than one of the
+ * journal, for the reason `useVoiceSpeaking` gives: the journal is a new array
+ * on every stage change, so a component subscribed to it would render on every
+ * change of any kind, while a component subscribed to a string renders when its
+ * own answer moves.
+ *
+ * **The timer does not run for an ordinary join, and that is the point of the
+ * two-step schedule.** A join that connects in under a second has nothing to
+ * say beyond its sentence, so the only thing scheduled is one `setTimeout` to
+ * the moment the running stage would become slow — which for almost every join
+ * is cancelled before it fires. The once-a-second tick starts only then, and
+ * only then does anything re-render, because only then is there a number on
+ * screen that moves.
+ */
+export function useVoiceJoinProgress(): VoiceJoinProgress | null {
+  const stage = useSyncExternalStore(subscribe, currentStage, currentStage);
+  const since = useSyncExternalStore(subscribe, currentStageSince, currentStageSince);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (stage === null) return;
+    let ticking = 0;
+    const start = () => {
+      setNow(Date.now());
+      ticking = window.setInterval(() => setNow(Date.now()), 1000);
+    };
+    // `Math.max(0, …)` so a stage that is **already** over its budget when
+    // something mounts — a conversation opened while a join is hanging — starts
+    // ticking immediately rather than waiting out a negative delay.
+    const waiting = window.setTimeout(start, Math.max(0, since + VOICE_JOIN_SLOW_MS[stage] - Date.now()));
+    return () => {
+      window.clearTimeout(waiting);
+      if (ticking) window.clearInterval(ticking);
+    };
+  }, [since, stage]);
+
+  if (stage === null) return null;
+  const elapsedMs = Math.max(0, now - since);
+  return {
+    stage,
+    elapsedMs,
+    slow: voiceJoinStageIsSlow(stage, elapsedMs),
+    text: voiceJoinProgressText(stage, elapsedMs),
+  };
 }
 
 /**
@@ -863,6 +1043,9 @@ async function requestVoiceToken(channelId: string): Promise<{
 }
 
 function fail(refusal: string) {
+  // Before anything else, so the last stage’s duration is the length of the
+  // attempt rather than the length of the tidying that follows it.
+  settleJournal();
   stopCapture();
   forgetOutputDevice();
   forgetMicrophoneGate();
@@ -894,6 +1077,12 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
 
   const mine = ++generation;
   forgetSpeakers();
+  // The journal is emptied here and nowhere else. A failure’s history has to
+  // survive the failure — it is the evidence for the sentence the person was
+  // shown — so the only thing that discards it is the next attempt.
+  journal = VOICE_JOIN_JOURNAL_EMPTY;
+  audioEverBlocked = false;
+  enterStage("microphone");
   publish({
     ...IDLE,
     phase: "joining",
@@ -927,6 +1116,7 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
   }
   capture = stream;
 
+  enterStage("token");
   const { outcome, selfUserId: identity } = await requestVoiceToken(request.channelId);
   if (mine !== generation) {
     stopCapture();
@@ -942,6 +1132,7 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
     return;
   }
 
+  enterStage("runtime");
   let opened: VoiceRoom;
   try {
     opened = await loadVoiceRoom({
@@ -976,10 +1167,23 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
       },
       onAudioBlocked: (blocked) => {
         if (mine !== generation) return;
+        // Recorded before the guard below, because the sticky fact is the one a
+        // report needs and the guard exists to suppress a **re-render**, not a
+        // measurement: a refusal followed by a success is exactly the sequence
+        // a press produces, and only the live flag should come back down.
+        if (blocked) audioEverBlocked = true;
         // Guarded, because the SDK re-announces on every status change and an
         // unchanged patch would re-render every reader of the call.
         if (state.audioBlocked === blocked) return;
         patch({ audioBlocked: blocked });
+      },
+      // The two steps inside `room.connect()` that nothing above the transport
+      // can tell apart. The journal refuses a stage that is not later than the
+      // one running, which is what makes `SignalConnected` firing again after
+      // every reconnect cost nothing here.
+      onJoinStage: (stage) => {
+        if (mine !== generation) return;
+        enterStage(stage);
       },
       onReconnecting: () => {
         if (mine !== generation) return;
@@ -991,6 +1195,7 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
       },
       onClosed: () => {
         if (mine !== generation) return;
+        settleJournal();
         stopCapture();
         forgetOutputDevice();
         forgetMicrophoneGate();
@@ -1002,8 +1207,9 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
     });
   } catch {
     // The SDK's chunk failed to load — an offline reload, or a deploy that
-    // removed the hashed file while the tab stayed open.
-    fail("Не удалось загрузить голосовой модуль.");
+    // removed the hashed file while the tab stayed open. The sentence is the
+    // stage’s own, from the one place every stage’s sentence lives.
+    fail(voiceJoinFailureText("runtime"));
     return;
   }
 
@@ -1019,6 +1225,10 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
     return;
   }
 
+  // The socket, and everything the transport itself announces after it. The
+  // hook can see only the entry to this stage; `media` and `publish` arrive
+  // through `onJoinStage` because they happen inside one await.
+  enterStage("signal");
   try {
     // A token that may not publish still joins and still hears. What it must
     // not do is hand the SFU a track it would refuse, so the capture is
@@ -1047,7 +1257,22 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
   } catch {
     void opened.leave().catch(() => undefined);
     if (mine !== generation) return;
-    fail("Не удалось подключиться к голосовому серверу.");
+    /**
+     * The sentence that started all of this.
+     *
+     * It used to be «Не удалось подключиться к голосовому серверу» for every
+     * way this await can reject, which is three different faults wearing one
+     * coat: no socket, a socket with no peer connection behind it, and a peer
+     * connection that would not take the microphone. The first sends a person
+     * to their network, the second to a firewall or a media server, the third
+     * nowhere at all — and the second is the one that actually happened.
+     *
+     * The stage the journal is holding is what tells them apart, because the
+     * transport announced each boundary as it crossed it. A rejection before
+     * any boundary was crossed is still `signal`, which is the honest answer:
+     * the socket never came up.
+     */
+    fail(voiceJoinFailureText(voiceJoinCurrentStage(journal) ?? "signal"));
     return;
   }
 
@@ -1058,6 +1283,9 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
   }
 
   room = opened;
+  // The journal stops here, so the report of a call that connected carries the
+  // length of each step rather than the age of the call.
+  settleJournal();
   patch({ phase: "connected", canPublish: outcome.grant.canPublish, refusal: null });
   // The stored choice, reaching a call for the first time. After the patch, so
   // that a refusal lands on a capsule which already exists: a sentence about a
@@ -1073,6 +1301,10 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
 
 /** Leave. Safe during a join, after a failure, and when there is no call at all. */
 export async function leaveVoiceCall(): Promise<void> {
+  // A cancel during a join is the one case where this does anything: it stops
+  // the stage that was running at the moment «Отмена» was pressed, so the report
+  // says how long it had been running rather than how long ago the call was.
+  settleJournal();
   generation += 1;
   const open = room;
   room = null;

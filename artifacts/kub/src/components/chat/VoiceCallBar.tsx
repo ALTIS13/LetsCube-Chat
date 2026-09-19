@@ -7,6 +7,7 @@ import {
   setVoiceDeafened,
   setVoiceMuted,
   useVoiceCall,
+  useVoiceJoinProgress,
   useVoiceSpeechRevoked,
   useVoiceTalkHeld,
 } from "@/hooks/useVoiceCall";
@@ -102,6 +103,18 @@ export function VoiceCallBar({ placement }: { placement: "column" | "top" }) {
     held: talkHeld,
     talkKey: settings.micTalkKey,
   });
+
+  /**
+   * The step the join is on, for the same reason the capsule reads it.
+   *
+   * The bar is the **only** surface a phone has for a call in a conversation
+   * that is not on screen, and a conversation with no channel of its own has no
+   * capsule at all — that is the defect this file was built for. So the bar
+   * saying «Подключаемся…» for fifteen seconds while the capsule said
+   * which step it was on would leave exactly the people with the smallest
+   * screens with the least to report.
+   */
+  const joinProgress = useVoiceJoinProgress();
 
   const view = voiceCallBarState({
     phase: call.phase,
@@ -206,8 +219,29 @@ export function VoiceCallBar({ placement }: { placement: "column" | "top" }) {
                   </span>
                 </>
               )}
-              <span className="shrink-0" data-testid="voice-call-bar-state">
-                {view.detail}
+              {/* `phase === "joining"` rather than a field of the view: the bar's
+                  own rule already answers `detail: "Подключаемся…"` for exactly
+                  that phase, so this replaces one sentence with a finer one
+                  from the same state and cannot disagree with it. Not
+                  `truncate`: the paragraph above this block decides that the
+                  state is the fact which survives being cut short, and a stage
+                  name cut in half is worse than a group name cut in half. */}
+              <span
+                className={cn(
+                  "shrink-0",
+                  // A slow stage is the one thing this bar draws that the rule
+                  // cannot tone, because the rule answers from a snapshot and
+                  // this is a clock. `--kub-danger-text` is the token tuned for
+                  // words; there is no `--kub-warn-text` in this product.
+                  call.phase === "joining" && joinProgress?.slow && "text-[color:var(--kub-danger-text)]",
+                )}
+                data-testid="voice-call-bar-state"
+                data-voice-stage={call.phase === "joining" ? joinProgress?.stage : undefined}
+                data-voice-slow={
+                  call.phase === "joining" ? (joinProgress?.slow ? "true" : "false") : undefined
+                }
+              >
+                {call.phase === "joining" && joinProgress ? joinProgress.text : view.detail}
               </span>
             </span>
           </span>

@@ -1,7 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import { KubIcon } from "@/components/kub";
+import { useVoiceCall, useVoiceJoinJournal, useVoiceJoinProgress } from "@/hooks/useVoiceCall";
 import { useVoiceHealth } from "@/hooks/useVoiceHealth";
+import { copyWithFeedback } from "@/lib/actionFeedback";
+import { FOCUS_RING } from "@/lib/controlSurface";
+import { makeVoiceReport } from "@/lib/voiceReportSource";
+import {
+  voiceJoinStageLabel,
+  voiceJoinStepMs,
+  voiceJoinStepOutcome,
+  type VoiceJoinJournal,
+} from "@/lib/voiceJoinProgress";
+import type { VoiceHealth, VoiceHealthSample } from "@/lib/voiceConnectionHealth";
 import {
   voiceHealthAdvice,
   voiceInboundIsFault,
@@ -70,19 +82,37 @@ export function VoiceConnectionPanel({
   open: boolean;
   className?: string;
 }) {
-  const { health, scale, serverName, connected } = useVoiceHealth(open);
+  const { health, scale, samples, serverName, connected } = useVoiceHealth(open);
+  const journal = useVoiceJoinJournal();
+  const progress = useVoiceJoinProgress();
+  const call = useVoiceCall();
 
-  if (!connected) return null;
+  /**
+   * **The panel outlives the connection, and that is the change of 2026-09-19.**
+   *
+   * It used to answer `null` for anything but a running call, which read as
+   * correct — there are no numbers to draw — and left the one case somebody
+   * actually needs it for with nothing at all: a join that failed. The person
+   * whose evening this was had three attempts of fifteen seconds and a single
+   * sentence, and the headset button beside that sentence opened an empty box.
+   *
+   * So when there is no call but there **is** a journal, the panel draws the
+   * steps and the button that hands them over. That is not a lesser version of
+   * the connected panel; for a failure it is the whole diagnosis, because the
+   * step that did not finish is the answer.
+   */
+  if (!connected && journal.length === 0) return null;
 
   return (
     <div
       className={cn("flex w-full min-w-0 flex-col gap-2", className)}
       data-testid="voice-connection-panel"
-      data-voice-verdict={health.verdict}
+      data-voice-verdict={connected ? health.verdict : "offline"}
+      data-voice-connected={connected ? "true" : "false"}
     >
-      <VoiceLatencyGraph scale={scale} />
+      {connected && <VoiceLatencyGraph scale={scale} />}
 
-      {serverName && (
+      {connected && serverName && (
         <p
           className="truncate text-sm font-semibold text-[color:var(--kub-text)]"
           data-testid="voice-connection-server"
@@ -95,6 +125,7 @@ export function VoiceConnectionPanel({
         </p>
       )}
 
+      {connected && (
       <dl className="flex flex-col gap-0.5 text-sm" data-testid="voice-connection-numbers">
         {/* The round trip belongs to neither direction on its own — it is the
             path to the server and back — so it stays above both headings
@@ -121,7 +152,9 @@ export function VoiceConnectionPanel({
         <Caption>{VOICE_HEALTH_INCOMING_CAPTION}</Caption>
         <IncomingRows inbound={health.inbound} />
       </dl>
+      )}
 
+      {connected && (
       <p
         className={cn(
           "text-xs leading-relaxed",
@@ -140,9 +173,160 @@ export function VoiceConnectionPanel({
       >
         {voiceHealthAdvice(health.verdict)}
       </p>
+      )}
 
-      <VerdictMark verdict={health.verdict} />
+      {connected && <VerdictMark verdict={health.verdict} />}
+
+      {/* The steps, under the numbers rather than over them. On a running call
+          they are history and the numbers are the news; on a failed one there
+          are no numbers and this is the only thing here. */}
+      {/* Named, because five durations with no heading are five numbers. The
+          same `Caption` the two directions use above, so the panel has one
+          vocabulary for «what the rows under this are about». */}
+      {journal.length > 0 && (
+        <Caption testId="voice-connection-stages-caption">Шаги подключения</Caption>
+      )}
+      <JoinTimeline
+        journal={journal}
+        openElapsedMs={progress?.elapsedMs ?? 0}
+        failed={call.phase === "failed"}
+      />
+
+
+      <VoiceReportButton samples={samples} health={connected ? health : null} />
     </div>
+  );
+}
+
+/**
+ * What each step of the join took.
+ *
+ * **In a failure this is the diagnosis, not an illustration of it.** The
+ * 2026-09-19 case reads «Связь с сервером 0.18 с готово» directly above
+ * «Медиасоединение 15.01 с ← оборвалось», which is the entire content of an
+ * evening, an SSH session and a read of the media server's logs.
+ *
+ * `tabular-nums` and a right-aligned column, so the durations can be compared
+ * down the page rather than read one at a time — the whole reason a fifteen
+ * beside four tenths is legible at a glance.
+ */
+function JoinTimeline({
+  journal,
+  openElapsedMs,
+  failed,
+}: {
+  journal: VoiceJoinJournal;
+  /** The running step's age, ticking. Ignored for a step that has finished. */
+  openElapsedMs: number;
+  /**
+   * Whether the attempt ended in a refusal.
+   *
+   * Passed in rather than read off `endedAt`, and this was a real defect before
+   * it was: `fail()` closes the journal before it publishes, so a failed join
+   * has **no** open step and the first version of this list drew every row as
+   * «finished» — including the fifteen-second one that had just timed out, on
+   * the exact journal it was written for. `voiceJoinStepOutcome` owns the rule
+   * and the report uses the same one, so the two cannot disagree.
+   */
+  failed: boolean;
+}) {
+  if (journal.length === 0) return null;
+  return (
+    <ol className="flex flex-col gap-0.5 text-xs" data-testid="voice-connection-stages">
+      {journal.map((step, index) => {
+        const outcome = voiceJoinStepOutcome(journal, index, failed);
+        const ms = outcome === "running" ? openElapsedMs : voiceJoinStepMs(step, step.at);
+        const marked = outcome !== "done";
+        return (
+          <li
+            key={step.stage}
+            className="flex min-w-0 items-baseline justify-between gap-2"
+            data-voice-stage={step.stage}
+            data-voice-stage-outcome={outcome}
+          >
+            <span
+              className={cn(
+                "min-w-0 truncate",
+                marked ? "font-semibold text-[color:var(--kub-text)]" : "text-[color:var(--kub-muted)]",
+              )}
+            >
+              {voiceJoinStageLabel(step.stage)}
+            </span>
+            <span
+              className={cn(
+                "shrink-0 tabular-nums",
+                marked
+                  ? "font-semibold text-[color:var(--kub-danger-text)]"
+                  : "text-[color:var(--kub-muted)]",
+              )}
+            >
+              {(ms / 1000).toFixed(2)} с
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/**
+ * The button that hands the whole thing over.
+ *
+ * ## Why the clipboard and not a file
+ *
+ * This product already has a «save as» — `saveMediaAs` in
+ * `lib/messageMediaActions.ts` — and it is deliberately not reused. It fetches
+ * a blob, makes an object URL and clicks an anchor with `download`, which is
+ * right for a photograph somebody wants on their disk and wrong for this: the
+ * report's destination is a chat message, so a file would be one more step
+ * before it could be sent and one more thing to attach. `copyWithFeedback` is
+ * the mechanism this application already uses for «hand the person a string»
+ * in five places, and it says whether it worked — which matters here, because a
+ * clipboard write can be refused outright and silence then reads as success.
+ *
+ * ## Built on the press, which is why `KubCopyButton` does not fit
+ *
+ * That component takes the text as a **prop**, so the report would have to be
+ * composed on every render of the panel — once a second while it is open, each
+ * one reaching into the transport for the server's facts and walking the
+ * document for its audio elements. This builds it once, when somebody asks.
+ */
+function VoiceReportButton({
+  samples,
+  health,
+}: {
+  samples: readonly VoiceHealthSample[];
+  /** `null` when there is no call, so the report says so rather than printing zeroes. */
+  health: VoiceHealth | null;
+}) {
+  const [busy, setBusy] = useState(false);
+  const copy = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await copyWithFeedback(makeVoiceReport({ samples, health }), {
+        success: "Отчёт о соединении скопирован",
+        error: "Не удалось скопировать отчёт",
+        key: "voice-connection-report",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => void copy()}
+      data-testid="voice-connection-report"
+      className={cn(
+        "flex w-full items-center justify-center gap-1.5 rounded-lg border border-[color:var(--glass-line)]",
+        "px-2 py-1.5 text-xs font-semibold text-[color:var(--kub-text)] kub-raise-hover",
+        FOCUS_RING,
+      )}
+    >
+      <KubIcon name="copy" size={13} className="shrink-0" />
+      Скопировать отчёт о соединении
+    </button>
   );
 }
 
@@ -159,11 +343,22 @@ function ms(value: number | null): string {
  * ends, and splitting them into two `dl`s would put a semantic boundary where
  * there is only a visual one.
  */
-function Caption({ children }: { children: string }) {
+function Caption({
+  children,
+  // `voice-connection-caption` is the **two directions** and nothing else:
+  // `voice-call.spec.ts` reads `.first()` and `.last()` of it to prove that
+  // neither half of the call can be mistaken for «the connection». Adding a
+  // third caption under that id made `.last()` answer «Шаги подключения», which
+  // is how this default came to be overridable rather than fixed.
+  testId = "voice-connection-caption",
+}: {
+  children: string;
+  testId?: string;
+}) {
   return (
     <p
       className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]"
-      data-testid="voice-connection-caption"
+      data-testid={testId}
     >
       {children}
     </p>

@@ -2,7 +2,9 @@
 
 import type { VoiceParticipant } from "@/lib/voiceChannel";
 import type { VoiceHealthSample } from "@/lib/voiceConnectionHealth";
-import { createVoiceAudioSink } from "@/lib/voiceAudioSink";
+import type { VoiceTransportFacts } from "@/lib/voiceConnectionReport";
+import type { VoiceTransportStage } from "@/lib/voiceJoinProgress";
+import { createVoiceAudioSink, VOICE_AUDIO_ELEMENT_MARK } from "@/lib/voiceAudioSink";
 import {
   DEFAULT_VOICE_VOLUME,
   normalizeVoiceVolume,
@@ -172,6 +174,24 @@ export interface VoiceRoom {
    * two people on different continents.
    */
   serverName(): string | null;
+  /**
+   * Everything about the connection that is a **state** rather than a
+   * measurement, for the exported report.
+   *
+   * Beside `sampleHealth` rather than folded into it, and the split is by
+   * lifetime rather than by taste: a `VoiceHealthSample` is one point of a
+   * series that is kept 240 deep and fed to pure arithmetic, so putting the
+   * server's version string and the room's sid into every one of them would be
+   * carrying a constant 240 times and would make the ring buffer's type about
+   * something other than measurement. These are read once, when somebody
+   * presses the button.
+   *
+   * Synchronous, and that is why `roomSid` is captured on the join rather than
+   * awaited here: `Room.getSid()` resolves only once the server has issued one,
+   * so awaiting it in a room that never connected would hang the very report
+   * that exists to explain why it never connected.
+   */
+  describeConnection(): VoiceTransportFacts;
 }
 
 /** What the room tells the interface. Everything else the SDK emits is slice 3 or 4. */
@@ -221,6 +241,28 @@ export interface VoiceRoomEvents {
    * that is missing answers `null` rather than a confident zero.
    */
   onSpeechAllowed(allowed: boolean | null): void;
+  /**
+   * A step of the join that has just begun, and which only the transport can
+   * see.
+   *
+   * `room.connect()` is **one await** covering two failures that need different
+   * sentences and send a person to different places: the signalling socket not
+   * coming up, and the peer connection not establishing after it did. On
+   * 2026-09-19 it was the second — signal connected, token accepted, ICE never
+   * completed, and livekit-client's fifteen-second `peerConnectionTimeout` tore
+   * the socket down. Above this seam the two are indistinguishable, because
+   * both are the same rejected promise.
+   *
+   * So the transport announces the boundary: `media` on
+   * `RoomEvent.SignalConnected`, and `publish` when `connect()` has resolved and
+   * the local track is about to go on the air. The three stages before these are
+   * the hook's own and it records them itself.
+   *
+   * `RoomEvent.SignalConnected` fires again after every full reconnect for the
+   * rest of the call, which is why the journal — not this event — owns the rule
+   * that a stage cannot move backwards. See `voiceJoinStageBegan`.
+   */
+  onJoinStage(stage: VoiceTransportStage): void;
 }
 
 /**
@@ -312,6 +354,17 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
    * unmuted would be transmitting with nothing held.
    */
   let microphoneOpen = true;
+
+  /**
+   * The server's own id for this room, once it has issued one.
+   *
+   * Captured on `SignalConnected` rather than read where it is wanted, because
+   * `Room.getSid()` resolves only **after** the server has issued one — so a
+   * report about a room that never connected would await a promise that never
+   * settles, which is the one call in this file where the diagnosis and the
+   * thing being diagnosed are the same object.
+   */
+  let roomSid: string | null = null;
 
   /**
    * How loud each person has been set to, by user id. Absent is the default.
@@ -521,6 +574,29 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
   };
 
   room
+    /**
+     * The socket is up and the server took the token. Everything left in
+     * `connect()` is the peer connection.
+     *
+     * Two things happen here and only one of them is about this join. The stage
+     * is announced, and `voiceJoinStageBegan` is what makes the second and
+     * every later firing — this event repeats after each full reconnect for the
+     * rest of the call — a no-op rather than a call that claims to be
+     * connecting again. The sid is taken on every firing on purpose: a
+     * reconnect can land on a different room instance, and a stale sid in a
+     * report is worse than none.
+     */
+    .on(RoomEvent.SignalConnected, () => {
+      events.onJoinStage("media");
+      void room
+        .getSid()
+        .then((sid) => {
+          roomSid = sid;
+        })
+        // A room that goes away before the server issues a sid rejects this,
+        // and a report that says «—» is the correct answer to it.
+        .catch(() => undefined);
+    })
     .on(RoomEvent.ParticipantConnected, reportAndApply)
     .on(RoomEvent.ParticipantDisconnected, report)
     // Attach **then** report, and in that order for a reason: `reportAndApply`
@@ -600,6 +676,11 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
         reportAndAnnounce();
         return;
       }
+      // The peer connection is up — `connect()` does not resolve until it is —
+      // and what remains is the local track reaching the room. Announced before
+      // the work rather than after it, so a join that hangs **here** says so
+      // while it is hanging, which is the whole point of the journal.
+      events.onJoinStage("publish");
       // `userProvidedTrack` is true: this track came from our own capture, and
       // the SDK must not stop it behind our back — the hook owns its lifetime
       // and ends it on leave, which is what turns the microphone light off.
@@ -721,6 +802,8 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
         samplesPlayed: null,
         audioEnergy: null,
         remoteAudioTracks: publications.length,
+        candidatePair: null,
+        candidatePairState: null,
       };
 
       const reportOf = async (source: { getRTCStatsReport(): Promise<RTCStatsReport | undefined> }) => {
@@ -742,31 +825,64 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
       let inboundJitterMs: number | null = null;
       let samplesPlayed: number | null = null;
       let audioEnergy: number | null = null;
+      let candidatePair: string | null = null;
+      let candidatePairState: string | null = null;
 
       const add = (held: number | null, value: unknown): number | null =>
         typeof value === "number" && Number.isFinite(value) ? (held ?? 0) + value : held;
 
+      /** One candidate's type — `host`, `srflx`, `prflx`, `relay` — by its id. */
+      const candidateTypeOf = (all: { get(id: string): unknown }, id: unknown): string | null => {
+        if (typeof id !== "string") return null;
+        const entry = all.get(id) as Record<string, unknown> | undefined;
+        const type = entry?.candidateType;
+        return typeof type === "string" && type ? type : null;
+      };
+
       /**
        * The transport's own round trip, used when a media report carries none
        * — which is every reading before the first RTCP arrives, roughly the
-       * first second of every call.
+       * first second of every call — **and** which path the call is taking.
+       *
+       * The second half is for the exported report rather than for the panel,
+       * and it is read here rather than in a sampler of its own because this
+       * loop already visits every `candidate-pair` entry. A second metrics path
+       * is the shape of the defect this whole change is about.
+       *
+       * **The state is taken from any pair; the pair itself only from a
+       * succeeded one.** A browser keeps every pair it has ever considered in
+       * the report — most of them `frozen`, `waiting` or `failed` — so naming
+       * the first would name a path carrying nothing. But holding out for a
+       * succeeded pair before saying anything would print «—» for exactly the
+       * connection somebody is reporting, where no pair ever succeeds; so the
+       * state is recorded from whatever there is, and a later success overwrites
+       * it.
        */
-      const readCandidatePair = (entry: Record<string, unknown>) => {
-        if (
-          entry.type === "candidate-pair" &&
-          rttMs === null &&
-          entry.state === "succeeded" &&
-          typeof entry.currentRoundTripTime === "number"
-        ) {
+      const readCandidatePair = (
+        all: { get(id: string): unknown },
+        entry: Record<string, unknown>,
+      ) => {
+        if (entry.type !== "candidate-pair") return;
+        const succeeded = entry.state === "succeeded";
+        if (rttMs === null && succeeded && typeof entry.currentRoundTripTime === "number") {
           rttMs = entry.currentRoundTripTime * 1000;
         }
+        if (typeof entry.state === "string" && (candidatePairState === null || succeeded)) {
+          candidatePairState = entry.state;
+        }
+        if (!succeeded || candidatePair !== null) return;
+        const local = candidateTypeOf(all, entry.localCandidateId);
+        const remote = candidateTypeOf(all, entry.remoteCandidateId);
+        // Only when at least one end could be resolved. `?/?` would be a line
+        // in a report that looks like a measurement and is not one.
+        if (local || remote) candidatePair = `${local ?? "?"}/${remote ?? "?"}`;
       };
 
       // ── What we send. Only the published track knows, and a listen-only
       // token has no answer to give — which is `null`, not zero.
       if (published) {
         const report = await reportOf(published);
-        report?.forEach((entry: Record<string, unknown>) => {
+        report?.forEach((entry: Record<string, unknown>, _id: string, all: { get(id: string): unknown }) => {
           if (entry.type === "outbound-rtp" && typeof entry.packetsSent === "number") {
             packetsSent = entry.packetsSent;
           }
@@ -777,7 +893,7 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
             if (typeof entry.jitter === "number") jitterMs = entry.jitter * 1000;
             if (typeof entry.packetsLost === "number") packetsLost = entry.packetsLost;
           }
-          readCandidatePair(entry);
+          readCandidatePair(all, entry);
         });
       }
 
@@ -787,7 +903,7 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
       // participant cap, and only while the panel is open.
       for (const track of subscribed) {
         const report = await reportOf(track);
-        report?.forEach((entry: Record<string, unknown>) => {
+        report?.forEach((entry: Record<string, unknown>, _id: string, all: { get(id: string): unknown }) => {
           if (entry.type === "inbound-rtp" && entry.kind === "audio") {
             packetsReceived = add(packetsReceived, entry.packetsReceived);
             inboundLost = add(inboundLost, entry.packetsLost);
@@ -800,7 +916,7 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
               inboundJitterMs = inboundJitterMs === null ? ms : Math.max(inboundJitterMs, ms);
             }
           }
-          readCandidatePair(entry);
+          readCandidatePair(all, entry);
         });
       }
 
@@ -819,7 +935,11 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
         packetsSent === null &&
         packetsReceived === null
       ) {
-        return blank;
+        // The ICE reading survives the blank, and it is the one case where that
+        // matters: a call whose peer connection never completed measures no RTP
+        // at all, so a `blank` that also dropped the pair state would answer
+        // «—» to the one question being asked of it.
+        return { ...blank, candidatePair, candidatePairState };
       }
 
       return {
@@ -834,6 +954,8 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
         samplesPlayed,
         audioEnergy,
         remoteAudioTracks: publications.length,
+        candidatePair,
+        candidatePairState,
       };
     },
     async resumeAudio() {
@@ -857,6 +979,54 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
       if (!region && !node) return null;
       // Discord's own shape: the region and the node run together, «finland14135».
       return region && node ? `${region}${node}` : region || node;
+    },
+    describeConnection() {
+      const info = room.serverInfo;
+      const text = (value: unknown): string | null => {
+        const held = typeof value === "string" ? value.trim() : "";
+        return held ? held : null;
+      };
+
+      /**
+       * The elements the room is heard through, counted **from the document**.
+       *
+       * Not from the sink's own map, and the difference is the reason
+       * `VOICE_AUDIO_ELEMENT_MARK` exists at all: the map is the bookkeeping
+       * that was wrong for six days while every number said the call was fine,
+       * so a report that asked the bookkeeping whether the bookkeeping worked
+       * would be evidence about nothing. `lib/voiceAudioSink.ts` records that
+       * episode at its own head.
+       *
+       * `paused` is the discriminator between «attached» and «playing», and
+       * the pair of them is the whole autoplay failure: elements present,
+       * none of them playing.
+       */
+      const elements =
+        typeof document === "undefined"
+          ? []
+          : [...document.querySelectorAll(`[${VOICE_AUDIO_ELEMENT_MARK}]`)];
+      const playing = elements.filter((element) => {
+        const media = element as unknown as { paused?: boolean };
+        return media.paused === false;
+      }).length;
+
+      return {
+        // The room's name as the token minted it — `vc_<channel uuid>`. The one
+        // identifier the report keeps verbatim, because it is the join key with
+        // the media server's own log; `lib/voiceConnectionReport.ts` argues it.
+        roomName: text(room.name),
+        roomSid,
+        serverRegion: text(info?.region),
+        serverNodeId: text(info?.nodeId),
+        serverVersion: text(info?.version),
+        serverProtocol: typeof info?.protocol === "number" ? info.protocol : null,
+        // The SDK's own word for it, carried rather than translated: it goes
+        // into a report somebody forwards, and a state renamed by us is one
+        // more thing between the reader and the library's own answer.
+        connectionState: text(room.state),
+        audioElements: elements.length,
+        audioElementsPlaying: playing,
+      };
     },
     async leave() {
       left = true;

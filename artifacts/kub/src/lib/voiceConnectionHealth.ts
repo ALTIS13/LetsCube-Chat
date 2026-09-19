@@ -107,6 +107,35 @@ export interface VoiceHealthSample {
    * publishing, which is a room state and not a failure.
    */
   readonly remoteAudioTracks: number | null;
+
+  /* ── How the packets are getting there ──────────────────────────────────── */
+
+  /**
+   * The selected ICE candidate pair, as «local/remote» candidate types —
+   * `host/host`, `srflx/srflx`, `srflx/relay` — or `null` when no pair has been
+   * selected.
+   *
+   * Read here rather than in a second sampler, because `sampleHealth` already
+   * walks every `candidate-pair` entry for its round trip: adding a second
+   * metrics path is the defect the 2026-09-19 evening was about, one layer up.
+   *
+   * It is not drawn on the panel and it is not meant to be. It is for the
+   * exported report, where it separates the two faults that look identical from
+   * a capsule — a connection that never selected a pair at all (the peer
+   * connection timing out) from one that selected a relayed pair and is merely
+   * slow. `null` is «no pair», which for a call that is running is itself the
+   * finding.
+   */
+  readonly candidatePair: string | null;
+  /**
+   * The state of that pair as the browser words it — `succeeded`, `in-progress`,
+   * `failed` — or `null` when there is no pair to have a state.
+   *
+   * Carried verbatim rather than mapped onto our own vocabulary: it goes into a
+   * report a person forwards, and a translated state is one more thing standing
+   * between the reader and the browser's own answer.
+   */
+  readonly candidatePairState: string | null;
 }
 
 /** How the connection is doing, in the terms the panel explains. */

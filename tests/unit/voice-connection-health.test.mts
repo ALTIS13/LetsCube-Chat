@@ -56,6 +56,15 @@ function sample(over: Partial<VoiceHealthSample> & { at: number }): VoiceHealthS
     samplesPlayed: "samplesPlayed" in over ? (over.samplesPlayed ?? null) : 100_000_000 + tick(over.at) * 48_000,
     audioEnergy: "audioEnergy" in over ? (over.audioEnergy ?? null) : 1000 + tick(over.at),
     remoteAudioTracks: "remoteAudioTracks" in over ? (over.remoteAudioTracks ?? null) : 1,
+    // The ICE reading, added 2026-09-19 with the exported report. It defaults
+    // to a connection that selected a pair, so every case written before this
+    // axis existed goes on measuring what it was written to measure — the same
+    // reason the inbound counters above carry defaults rather than nulls.
+    // Nothing in this module reads them; they are here so the fixture stays a
+    // complete `VoiceHealthSample` rather than one with two holes in it.
+    candidatePair: "candidatePair" in over ? (over.candidatePair ?? null) : "srflx/srflx",
+    candidatePairState:
+      "candidatePairState" in over ? (over.candidatePairState ?? null) : "succeeded",
   };
 }
 

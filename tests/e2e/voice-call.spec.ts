@@ -384,6 +384,29 @@ declare global {
        */
       setRoster: ((userIds: string[]) => void) | null;
       /**
+       * Where the stand-in should stop inside `join`, and whether stopping
+       * means throwing.
+       *
+       * `room.connect()` is one await in the real seam and the transport
+       * announces its own boundaries inside it. A join that hangs at the peer
+       * connection — the 2026-09-19 failure, and the only reason the journal
+       * exists — is therefore not something a test can produce by mocking a
+       * route: it has to be produced here, by an implementation of `join` that
+       * announces `media` and then never resolves.
+       *
+       * Settable from a test rather than seeded at boot, so one page can hold a
+       * join, cancel it and then fail one, without three reloads between them.
+       */
+      joinPlan: {
+        stopAt: null | "signal" | "media" | "publish";
+        fail: boolean;
+        /** How long the stage runs before it fails. Real elapsed time, measured by
+         *  the product’s own clock — so a screenshot of the timeline shows durations
+         *  rather than five rows of «0.00 с», which is what an instant stand-in
+         *  produces and which reads as a broken panel. */
+        failAfterMs: number;
+      };
+      /**
        * One cycle of a transport re-establishing itself, as
        * `RoomEvent.Reconnecting` and `RoomEvent.Reconnected` raise it —
        * including the re-report that the real handler makes immediately after
@@ -478,7 +501,7 @@ async function installVoiceSeam(
   } = {},
 ) {
   await page.addInitScript(
-    ({ me, anna, refuseOutput, others, health, serverName }) => {
+    ({ me, anna, channelId: CHANNEL_ID, refuseOutput, others, health, serverName }) => {
       const held: NonNullable<Window["__voiceProbe"]> = {
         joins: [],
         muted: [],
@@ -496,6 +519,7 @@ async function installVoiceSeam(
         levelClosed: 0,
         setRoster: null,
         reconnect: null,
+        joinPlan: { stopAt: null, fail: false, failAfterMs: 0 },
       };
       window.__voiceProbe = held;
       // The microphone's level, stood in for on the same terms as the SFU. A
@@ -573,6 +597,29 @@ async function installVoiceSeam(
           async join(url: string, token: string, microphone: MediaStreamTrack | null) {
             held.joins.push({ url, token, hasTrack: Boolean(microphone) });
             held.track = microphone;
+            // The two boundaries the real seam announces from inside
+            // `room.connect()`: `media` when `RoomEvent.SignalConnected`
+            // arrives, and `publish` once the peer connection is up and the
+            // local track is about to go on the air. Announced here in the same
+            // order, because the journal above the seam is built from them.
+            const plan = held.joinPlan;
+            // Hanging for ever is what a peer connection that never establishes
+            // looks like from here — livekit-client's own `peerConnectionTimeout`
+            // is what ends it in production, fifteen seconds later.
+            const halt = async (): Promise<void> => {
+              if (!plan.fail) return new Promise<void>(() => undefined);
+              if (plan.failAfterMs > 0) {
+                await new Promise((resolve) => setTimeout(resolve, plan.failAfterMs));
+              }
+              throw new Error("the stand-in was told to fail at this stage");
+            };
+            if (plan.stopAt === "signal") return halt();
+            events.onJoinStage("media");
+            if (plan.stopAt === "media") return halt();
+            // A listen-only token never reaches the publish stage, in the real
+            // seam and here: there is nothing to publish.
+            if (microphone) events.onJoinStage("publish");
+            if (plan.stopAt === "publish") return halt();
             // The gate reaches the track when the track arrives, which is what
             // the real seam does at the end of its own `join`: the call sets the
             // opening state **before** joining, so a «Рация» call is never
@@ -635,6 +682,13 @@ async function installVoiceSeam(
               samplesPlayed: arriving ? 48_000 * step : 48_000,
               audioEnergy: arriving ? step : 0,
               remoteAudioTracks: 1,
+              // The ICE pair, which this stand-in omitted until a real report
+              // was read: the two fields arrived as `undefined`, and
+              // `voiceCandidatePairEverSelected` answered «да» for a reading
+              // nobody had taken. A stand-in that leaves a field out is a
+              // stand-in that reports a state the product cannot produce.
+              candidatePair: "srflx/srflx",
+              candidatePairState: "succeeded",
             });
             if (health === "none") {
               return {
@@ -649,6 +703,8 @@ async function installVoiceSeam(
                 samplesPlayed: null,
                 audioEnergy: null,
                 remoteAudioTracks: null,
+                candidatePair: null,
+                candidatePairState: null,
               };
             }
             const step = held.healthSamples;
@@ -713,12 +769,30 @@ async function installVoiceSeam(
             // `createLiveKitRoom` composes from `room.serverInfo`.
             return serverName;
           },
+          describeConnection() {
+            // The shape, with the room named the way the gateway names it —
+            // `vc_<channel uuid>` — because that string is the one thing the
+            // report keeps verbatim and a test that asserted about a made-up
+            // room would be asserting about its own fixture's spelling.
+            return {
+              roomName: `vc_${CHANNEL_ID}`,
+              roomSid: "RM_fixture",
+              serverRegion: "finland",
+              serverNodeId: "14135",
+              serverVersion: "1.9.2",
+              serverProtocol: 16,
+              connectionState: "connected",
+              audioElements: 1,
+              audioElementsPlaying: 1,
+            };
+          },
         };
       };
     },
     {
       me: ME.id,
       anna: ANNA.id,
+      channelId: CHANNEL_ID,
       refuseOutput: Boolean(options.refuseOutput),
       others: options.others ?? [],
       health: options.health ?? "none",
@@ -1149,6 +1223,312 @@ function needsWebRtc(browserName: string): void {
     "Playwright's WebKit has neither navigator.mediaDevices nor RTCPeerConnection",
   );
 }
+
+/**
+ * Stop the stand-in's `join` at a stage, or make it fail there.
+ *
+ * The one thing no route mock can produce. `room.connect()` is a single await
+ * in the real seam, so «the socket came up and the peer connection never did» —
+ * the 2026-09-19 failure — exists only as a transport that announces `media`
+ * and then does not return. Set before the press; cleared by passing nothing.
+ */
+async function planJoin(
+  page: Page,
+  plan: {
+    stopAt?: "signal" | "media" | "publish" | null;
+    fail?: boolean;
+    failAfterMs?: number;
+  } = {},
+): Promise<void> {
+  await page.evaluate((next) => {
+    const held = window.__voiceProbe;
+    if (!held) throw new Error("the seam was never installed, so no join can be planned");
+    held.joinPlan = {
+      stopAt: next.stopAt ?? null,
+      fail: Boolean(next.fail),
+      failAfterMs: next.failAfterMs ?? 0,
+    };
+  }, plan);
+}
+
+/* ── Which step of the join is running, and the log that hands it over ────────
+ *
+ * The owner asked for both on 2026-09-19 after somebody's join failed three
+ * times at 15.2 s, 14.6 s and 15.0 s with «Не удалось подключиться» as the whole
+ * of what could be reported.
+ *
+ * **What these tests can and cannot reach.** They drive the real store, the real
+ * capsule, the real panel and the real report builder, and the stage boundaries
+ * arrive through the same `onJoinStage` the seam uses. What is a stand-in is the
+ * transport: that `RoomEvent.SignalConnected` is the event which really fires
+ * when the socket comes up, and that `connect()` really does not resolve until
+ * the peer connection is established, are facts about livekit-client that this
+ * suite cannot see at all. `tests/unit/voice-room-seam.test.mjs` reads them as
+ * source, which is weaker and is said to be.
+ */
+
+test("the joining capsule names the step, and says so when a step is slow", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
+
+  // Held at the peer connection: the socket is up, and nothing else will
+  // happen. Exactly the state the owner's companion sat in for fifteen seconds.
+  await planJoin(page, { stopAt: "media" });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Отмена");
+
+  // Not «Подключаемся…», which is true of four different faults at once.
+  await expect(detail(page)).toHaveAttribute("data-voice-stage", "media");
+  await expect(detail(page)).toHaveText("Устанавливаем медиасоединение…");
+  await expect(detail(page)).toHaveAttribute("data-voice-slow", "false");
+
+  // And it has to become legible **while it is happening**, with most of
+  // livekit's fifteen-second timeout still to run — not explained afterwards.
+  await expect(detail(page)).toHaveAttribute("data-voice-slow", "true", { timeout: 12_000 });
+  await expect(detail(page)).toHaveText(/^Медиасоединение не устанавливается · \d+ с$/);
+
+  // The counter climbs, which is the difference between «this is taking a
+  // while» and «this has hung» — and it is the number a person quotes.
+  const read = async () =>
+    Number((await detail(page).innerText()).replace(/[^0-9]/g, ""));
+  const first = await read();
+  await expect.poll(read, { timeout: 5_000 }).toBeGreaterThan(first);
+
+  // **And the bar says the same thing**, which is not decoration: a phone has
+  // no second pane, and a conversation with no channel of its own has no
+  // capsule at all — the defect `lib/voiceCallBar.ts` was built for. A bar
+  // still saying «Подключаемся…» would leave exactly the people with the
+  // smallest screens with the least to report.
+  //
+  // The **text**, not the attribute. `data-voice-slow` is computed from the
+  // same `joinProgress` the line is, so it survives a version that draws
+  // `view.detail` — measured on 2026-09-19, where that mutation left the whole
+  // suite green.
+  await switchChat(page, "Смета и склад", OTHER_LINE);
+  const barState = bar(page).getByTestId("voice-call-bar-state");
+  await expect(barState).toHaveText(/^Медиасоединение не устанавливается · [0-9]+ с$/);
+  await expect(barState).toHaveAttribute("data-voice-stage", "media");
+  await switchChat(page, "Команда проекта", LINE);
+
+  // The join is still escapable, which is the one control this state offers.
+  await action(page).click();
+  await expect(action(page)).toHaveText("Присоединиться");
+});
+
+test("a failure names the step it failed at, and the panel holds the evidence", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
+
+  await planJoin(page, { stopAt: "media", fail: true });
+  await action(page).click();
+
+  // The sentence the whole change is about. «Не удалось подключиться к
+  // голосовому серверу» was true of this and of a socket that never opened, and
+  // the two send a person to different places.
+  await expect(detail(page)).toHaveText("Сигнал есть, медиасоединение не устанавливается.");
+  await expect(action(page)).toHaveText("Повторить");
+
+  // And the evidence survives the failure, which is the reason the journal is
+  // not a sub-state of the phase: `fail()` publishes `{ ...IDLE }`.
+  await page.getByTestId("voice-capsule-health").click();
+  const panel = page.getByTestId("voice-connection-panel");
+  await expect(panel).toBeVisible();
+  await expect(panel).toHaveAttribute("data-voice-connected", "false");
+
+  const stages = page.getByTestId("voice-connection-stages").locator("li");
+  await expect(stages).toHaveCount(5);
+  await expect(stages.nth(3)).toHaveAttribute("data-voice-stage", "signal");
+  await expect(stages.nth(3)).toHaveAttribute("data-voice-stage-outcome", "done");
+  // The step that did not finish, marked — and it is marked from the phase
+  // rather than from `endedAt`, because a failed journal has no open step.
+  await expect(stages.nth(4)).toHaveAttribute("data-voice-stage", "media");
+  await expect(stages.nth(4)).toHaveAttribute("data-voice-stage-outcome", "broke");
+  // «Микрофон в эфир» was never reached, and its absence is a fact about the
+  // failure rather than a gap to be filled with a zero.
+  await expect(page.getByTestId("voice-connection-stages")).not.toContainText("Микрофон в эфир");
+
+  // The numbers are absent because there is no connection to measure, and the
+  // panel does not draw a graph of nothing.
+  await expect(page.getByTestId("voice-connection-graph")).toHaveCount(0);
+  await expect(page.getByTestId("voice-connection-report")).toBeVisible();
+});
+
+test("a socket that never opens is a different sentence from a peer connection that does not", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
+
+  await planJoin(page, { stopAt: "signal", fail: true });
+  await action(page).click();
+  await expect(detail(page)).toHaveText("Нет связи с голосовым сервером.");
+
+  // The same press, one boundary later, is the other sentence. Two faults, two
+  // answers — which is the whole of what splitting `connect()` bought.
+  await planJoin(page, { stopAt: "media", fail: true });
+  await action(page).click();
+  await expect(detail(page)).toHaveText("Сигнал есть, медиасоединение не устанавливается.");
+});
+
+test("the copied report carries the steps, the room, and no account identifier", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  await open(page, {
+    channel: { participantCount: 1 },
+    present: [ANNA.id],
+    health: "good",
+    serverName: "finland14135",
+  });
+
+  // The clipboard, read back. `navigator.clipboard.readText` needs a permission
+  // Chromium will grant headlessly; `writeText` is what the product calls.
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+  await page.getByTestId("voice-capsule-health").click();
+  await expect(page.getByTestId("voice-connection-panel")).toBeVisible();
+  // Let the sampler fill a little, so the report is made of readings rather
+  // than of one cumulative counter. It prints how many it holds either way.
+  await expect
+    .poll(async () => (await probe(page)).healthSamples, { timeout: 8_000 })
+    .toBeGreaterThan(2);
+
+  await page.getByTestId("voice-connection-report").click();
+  const report = await page.evaluate(() => navigator.clipboard.readText());
+
+  // It answers the question in one read, from the top.
+  expect(report).toContain("Отчёт о голосовом соединении LETSCUBE");
+  expect(report).toMatch(/Соединение установлено/);
+  expect(report).toContain("Медиасоединение");
+  expect(report).toContain("Микрофон в эфир");
+  // The server this call landed on, which is the first thing worth knowing.
+  expect(report).toContain("Регион: finland");
+  expect(report).toContain("Узел: 14135");
+  // Both directions, and the counter that separates «packets arrive» from «a
+  // person hears».
+  expect(report).toMatch(/Исходящие пакеты: \d+/);
+  expect(report).toMatch(/Входящие пакеты: \d+/);
+  expect(report).toMatch(/totalSamplesReceived: \d+/);
+  // Which path the packets are taking, and the two lines that have to agree.
+  // They did not, the first time a real report was read: the stand-in omitted
+  // the ICE fields, so «сейчас» printed a dash and «выбиралась хоть
+  // раз» printed «да», two lines apart.
+  expect(report).toContain("ICE-пара сейчас: srflx/srflx");
+  expect(report).toContain("ICE-пара выбиралась хоть раз: да");
+
+  // The room, verbatim — the one identifier kept, because it is what makes this
+  // report and the media server's own log the same incident.
+  expect(report).toContain(`vc_${CHANNEL_ID}`);
+
+  // And nothing that identifies a person. These are the ids the fixture put in
+  // the room and the names it gave them.
+  for (const secret of [ME.id, ANNA.id, ME.full_name, ANNA.full_name]) {
+    expect(report, `the report carries ${secret}`).not.toContain(secret);
+  }
+  expect(report).toContain("Идентификаторы участников и устройств заменены хешами");
+});
+
+test("connecting, slow and failed, photographed in both themes", async ({
+  page,
+  browserName,
+}, info: TestInfo) => {
+  needsWebRtc(browserName);
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
+  const shot = (name: string) => `output/voice-call/${name}-${info.project.name}.png`;
+
+  for (const theme of ["dark", "light"] as const) {
+    await stampTheme(page, theme);
+    await page.evaluate(() => document.fonts.ready);
+
+    // 1. Connecting. The line names the step, and nothing about it is alarming
+    //    yet — this is the ordinary first second of every join.
+    await planJoin(page, { stopAt: "media" });
+    await action(page).click();
+    // The **stage** first and the budget second, in that order. Waiting only
+    // for `data-voice-slow="false"` is satisfied by the microphone stage that
+    // runs for the first few milliseconds of every join, so the photograph
+    // came out «Запрашиваем микрофон…» — a true picture of a different moment,
+    // and one that would have moved between runs.
+    await expect(detail(page)).toHaveAttribute("data-voice-stage", "media");
+    await expect(detail(page)).toHaveAttribute("data-voice-slow", "false");
+    await page.screenshot({ path: shot(`stage-connecting-${theme}`) });
+
+    // 2. The same join, past its budget. The sentence changes, a counter
+    //    appears, and the line goes to the tone tuned for words.
+    await expect(detail(page)).toHaveAttribute("data-voice-slow", "true", { timeout: 12_000 });
+    await page.screenshot({ path: shot(`stage-slow-${theme}`) });
+    await action(page).click();
+    await expect(action(page)).toHaveText("Присоединиться");
+
+    // 3. Failed at the media stage, with the panel open under it: the sentence
+    //    that names the step, and the timeline that is the evidence for it.
+    // Two seconds of real elapsed time at the media stage, so the timeline in
+    // the photograph carries durations the product measured rather than the
+    // five zeroes an instant stand-in produces.
+    await planJoin(page, { stopAt: "media", fail: true, failAfterMs: 2_000 });
+    await action(page).click();
+    await expect(action(page)).toHaveText("Повторить", { timeout: 10_000 });
+    await page.screenshot({ path: shot(`stage-failed-${theme}`) });
+    await page.getByTestId("voice-capsule-health").click();
+    await expect(page.getByTestId("voice-connection-stages")).toBeVisible();
+    await page.screenshot({ path: shot(`stage-failed-panel-${theme}`) });
+    await page.getByTestId("voice-capsule-health").click();
+  }
+
+  // 4. The bar, which on a phone is the only surface a call in another
+  //    conversation has — so a stage sentence that overflowed it would leave
+  //    exactly the smallest screens with the least to report. Photographed
+  //    while the join is held past its budget, which is the longest this line
+  //    ever gets.
+  await planJoin(page, { stopAt: "media" });
+  await action(page).click();
+  await expect(detail(page)).toHaveAttribute("data-voice-slow", "true", { timeout: 12_000 });
+  await switchChat(page, "Смета и склад", OTHER_LINE);
+  const state = bar(page).getByTestId("voice-call-bar-state");
+  await expect(state).toHaveAttribute("data-voice-slow", "true");
+  for (const theme of ["dark", "light"] as const) {
+    await stampTheme(page, theme);
+    await page.evaluate(() => document.fonts.ready);
+    // Two frames after the fonts, and not decoration: this block follows a
+    // `switchChat`, so the icons of the conversation being switched **to** are
+    // still mounting when `document.fonts.ready` resolves. The first light
+    // photograph taken here came out with the avatar and the composer’s
+    // microphone as empty circles — a true picture of a frame nobody sees, and
+    // the owner reads a photograph literally.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await page.screenshot({ path: shot(`stage-bar-slow-${theme}`) });
+  }
+  // Measured rather than eyeballed: the line has to sit inside the bar it is
+  // drawn in. `bar` is `:visible`, so this compares the two boxes the reader
+  // actually sees.
+  const inner = (await state.boundingBox())!;
+  const outer = (await bar(page).boundingBox())!;
+  expect(inner.x + inner.width, "the stage line runs past the call bar").toBeLessThanOrEqual(
+    outer.x + outer.width + 1,
+  );
+
+  info.annotations.push({
+    type: "capture",
+    description:
+      `output/voice-call/stage-{connecting,slow,failed,failed-panel,bar-slow}-{dark,light}-` +
+      `${info.project.name}.png`,
+  });
+});
 
 test("joining asks the gateway for exactly this channel, and the capsule follows", async ({
   page,

@@ -253,10 +253,22 @@ test("a reading that failed is a reading, not a thrown call", () => {
   assert.ok(end > start, "setOutputDevice no longer follows sampleHealth — check this slice");
   const body = code.slice(start, end);
   assert.match(body, /try \{/, "sampleHealth no longer guards the stats read");
+  // The blank return grew the ICE fields on 2026-09-19 and this guard was
+  // written against `return blank;` — which is exactly the kind of literal
+  // that turns a source guard red for a change it should not care about. What
+  // it is checking is that there IS a blank answer for a reading that measured
+  // nothing, so it now matches the spread as well as the bare form.
   assert.match(
     body,
-    /return blank;/,
+    /return \{ \.\.\.blank,|return blank;/,
     "sampleHealth no longer answers «unknown» for a reading it could not take",
+  );
+  // And that blank keeps the ICE state, which is the whole of what a peer
+  // connection that never completed has to report.
+  assert.match(
+    body,
+    /\.\.\.blank, candidatePair, candidatePairState/,
+    "the blank reading throws the ICE state away, which is the failing case",
   );
 });
 
@@ -1004,4 +1016,155 @@ test("the roster is rebuilt on every event, which is what tells one reading from
     "the participant list is no longer built fresh for each report",
   );
   assert.match(body, /events\.onParticipants\(list\);/, "the fresh list is not what is sent");
+});
+
+/* ── The join stages, which live entirely below the seam ──────────────────────
+ *
+ * `room.connect()` is one await covering the socket and the peer connection.
+ * Which of the two a join died at is the whole of the 2026-09-19 diagnosis —
+ * signal up, media never, and livekit's 15 s `peerConnectionTimeout` tearing the
+ * socket down — and it is a fact only this file can see: above the seam both are
+ * the same rejected promise, and `tests/e2e/voice-call.spec.ts` replaces this
+ * whole function with a stand-in that decides for itself when to announce.
+ *
+ * So these are source reads, and the weakness is the one this file's header
+ * already states: they prove the call site exists, not that the SDK fires the
+ * event. What they catch is the change that actually happens — somebody tidying
+ * an event handler and taking the announcement with it, leaving every stage test
+ * above the seam green because the stand-in still announces.
+ */
+
+test("the socket coming up is what opens the media stage, and nothing else is", () => {
+  const at = code.indexOf("RoomEvent.SignalConnected");
+  assert.ok(at > 0, "nothing handles RoomEvent.SignalConnected, so `media` is never entered");
+  const next = code.indexOf(".on(RoomEvent.", at);
+  const handler = code.slice(at, next > at ? next : at + 600);
+  assert.match(
+    handler,
+    /events\.onJoinStage\("media"\)/,
+    "SignalConnected no longer announces the media stage, so every failure inside " +
+      "`connect()` reads as the socket never coming up",
+  );
+  // And the boundary is announced from **this** event rather than from a timer
+  // or from the connect resolving: `media` has to begin at the moment the socket
+  // is up, or its duration is the whole of `connect()` and the split buys
+  // nothing.
+  assert.equal(
+    (code.match(/onJoinStage\("media"\)/g) || []).length,
+    1,
+    "the media stage is announced from more than one place",
+  );
+});
+
+test("the publish stage is announced before the track is built, not after", () => {
+  const announce = code.indexOf('events.onJoinStage("publish")');
+  assert.ok(announce > 0, "the publish stage is never entered");
+  const publishing = code.indexOf("publishTrack(published", announce);
+  assert.ok(
+    publishing > announce,
+    "the publish stage is announced after the work it names, so a join that hangs " +
+      "there says nothing while it is hanging",
+  );
+  // `new LocalAudioTrack` sits between the two, which is the point: everything
+  // that can hang after the peer connection is inside the stage that names it.
+  const built = code.indexOf("new LocalAudioTrack", announce);
+  assert.ok(built > announce && built < publishing);
+});
+
+test("the room sid is captured rather than awaited where it is wanted", () => {
+  // `Room.getSid()` resolves only once the server has issued one. Awaiting it
+  // inside `describeConnection` would hang the report of a room that never
+  // connected — which is the only report anybody urgently needs.
+  assert.match(code, /let roomSid: string \| null = null;/, "the sid is no longer held");
+  assert.match(
+    code,
+    /void room[\s\S]{0,40}\.getSid\(\)/,
+    "the sid is awaited rather than captured, so a failed join can hang its own report",
+  );
+  // The **implementation**, not the interface line 250 lines above it: a
+  // declaration is not a surface, and the first version of this guard read
+  // `describeConnection(): VoiceTransportFacts;` and then asserted about the
+  // event list that follows it.
+  const describe = code.indexOf("describeConnection() {");
+  assert.ok(describe > 0, "the transport can no longer describe itself");
+  // Bounded by the method that really follows it, not by a character count:
+  // the first version sliced 1800 characters and ran into `leave()`, whose
+  // `await room.disconnect(false)` made the no-await assertion fail for a
+  // reason that has nothing to do with what it checks.
+  const end = code.indexOf("async leave()", describe);
+  assert.ok(end > describe, "leave no longer follows describeConnection — check this slice");
+  const body = code.slice(describe, end);
+  assert.ok(
+    !/await/.test(body),
+    "describeConnection awaits something, which a room that never connected cannot settle",
+  );
+});
+
+test("the audio elements are counted from the document, not from the sink", () => {
+  // The sink's own map is the bookkeeping that was wrong for six days while
+  // every number said the call was fine (`lib/voiceAudioSink.ts` records it), so
+  // a report that asked the bookkeeping whether the bookkeeping worked would be
+  // evidence about nothing. `VOICE_AUDIO_ELEMENT_MARK` exists for exactly this.
+  // The **implementation**, not the interface line 250 lines above it: a
+  // declaration is not a surface, and the first version of this guard read
+  // `describeConnection(): VoiceTransportFacts;` and then asserted about the
+  // event list that follows it.
+  const describe = code.indexOf("describeConnection() {");
+  // Bounded by the method that really follows it, not by a character count:
+  // the first version sliced 1800 characters and ran into `leave()`, whose
+  // `await room.disconnect(false)` made the no-await assertion fail for a
+  // reason that has nothing to do with what it checks.
+  const end = code.indexOf("async leave()", describe);
+  assert.ok(end > describe, "leave no longer follows describeConnection — check this slice");
+  const body = code.slice(describe, end);
+  assert.match(
+    body,
+    /document\.querySelectorAll\(`\[\$\{VOICE_AUDIO_ELEMENT_MARK\}\]`\)/,
+    "the element count no longer comes from the document",
+  );
+  assert.ok(
+    !body.includes("sink.count()"),
+    "the element count comes from the sink's own map, which cannot testify about itself",
+  );
+  // `paused` is what separates «attached» from «playing», and the pair of them
+  // is the whole autoplay failure: elements present, none of them playing.
+  assert.match(body, /paused === false/, "nothing distinguishes an element that is playing");
+});
+
+test("the ICE pair is read in the loop that already walks the candidate pairs", () => {
+  // A second metrics path is the shape of the defect this whole change is about.
+  // `readCandidatePair` is called from both stats walks and from nowhere else,
+  // and `getRTCStatsReport` is reached only through `reportOf`.
+  assert.equal(
+    (code.match(/readCandidatePair\(all, entry\)/g) || []).length,
+    2,
+    "the candidate pairs are read from somewhere other than the two stats walks",
+  );
+  assert.equal(
+    (code.match(/getRTCStatsReport\(\)/g) || []).length,
+    2,
+    "something outside `reportOf` fetches statistics, which is a second sampler",
+  );
+  // The blank reading keeps the pair, and that is the case it exists for: a peer
+  // connection that never completed measures no RTP at all, so a blank that
+  // dropped the ICE state would answer «—» to the one question being asked.
+  assert.match(
+    code,
+    /return \{ \.\.\.blank, candidatePair, candidatePairState \};/,
+    "a reading with no RTP throws the ICE state away, which is the failing case",
+  );
+});
+
+test("the join stage the transport announces is the one the hook records", () => {
+  // The two halves have to name the same stages or the journal silently never
+  // advances: the seam's `VoiceTransportStage` is `"media" | "publish"`, and the
+  // hook feeds whatever arrives straight into `voiceJoinStageBegan`, which
+  // **ignores** a stage it cannot place after the running one. A typo here is
+  // therefore not a crash; it is a join that stays on «Соединяемся с сервером…»
+  // for ever while connecting perfectly.
+  assert.match(callCode, /onJoinStage: \(stage\) => \{/, "the hook no longer takes the event");
+  assert.match(callCode, /enterStage\(stage\)/, "the announced stage is not recorded");
+  for (const stage of ['"media"', '"publish"']) {
+    assert.ok(code.includes(`onJoinStage(${stage})`), `the transport never announces ${stage}`);
+  }
 });
