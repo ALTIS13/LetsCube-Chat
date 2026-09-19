@@ -611,6 +611,50 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-19 — the voice evening: a media server, two client fixes, and the sounds
+
+**`letscube-voice`: `livekit/livekit-server:v1.8.4` → `v1.13.7`** (D-256), on the
+owner's explicit instruction to move the server rather than pin the client down.
+Not a Coolify application — a plain compose file at `/srv/letscube/voice/`.
+Rehearsed on the **real** `livekit.yaml` in a throwaway container in its own
+network namespace before anything changed; it parsed the config with no edit and
+started on the same ports. Both files backed up to
+`.backup/*.20260919-171358` with a `sha256` beside them and diffed against the
+originals. Then one line. Healthy, same `nodeIP`, same ports.
+
+**It worked, and that is measured rather than hoped.** Before: ~8 new RTC
+sessions a minute, median 15–16 seconds between one participant's own
+successive sessions, `unsupported datachannel added` 69 times an hour. After:
+**2 sessions in 27 minutes, one of them held 8 minutes 43 seconds unbroken, and
+zero datachannel warnings** — same client, `JS 2.22.3, protocol 17`. Caveat kept:
+one identity in those logs, so it is one client holding a session, not a
+re-measured two-party call.
+
+Rollback is the old tag; its image is still in the local cache, so it needs no
+network.
+
+**`letscube-web` 488 at `16ff4c98`** — D-254, the remote audio a voice channel
+had never attached. **490 at `8c083ee9`** — D-255, the panel that measures both
+directions, plus the four channel sounds, which are **committed but not wired**
+and therefore make no sound until the owner has approved them by ear.
+
+**489 failed** at `check_git_if_build_needed` — the GitHub-address fault again,
+the ninth this week — and was retried through the deploy token rather than by a
+second push. Re-measured from the server afterwards: `github.com` now resolves
+to **only** `140.82.121.3`, which answers 4/4, so the fault is latent rather
+than gone. **No `/etc/hosts` pin was added and none is recommended**: GitHub
+rotates those addresses, and a stale pin breaks every clone, which is worse than
+an intermittent failure costing one retry.
+
+Markers proved in both directions each time — «Звук заблокирован» absent at
+`34500bca` and present live for 488; «Ничего не приходит», «Входящий поток» and
+«Исходящий поток» absent at `16ff4c98` and present live for 490, with «Связь
+стабильна» as the control. The two headings are **sentence case in the source**
+and uppercased by CSS, which is why the source spelling is the one to grep.
+
+Gates at `8c083ee9`: typecheck clean, unit **3432/3432** with 0 skipped,
+production build proved by its own `sw.js build 9beb1cb24b86e132` line.
+
 ### 2026-09-19 — `letscube-web` at `34500bca` (D-253, the panel that did not hold its readings)
 
 **Deployment 487, `finished`.** One healthy replica, image tag
