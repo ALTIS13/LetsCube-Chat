@@ -58,6 +58,25 @@ these appears again, it is this list that is stale, not the database.
 | `20260531_notification_center_read_sync_native_push` | the four «user_push_devices own …» policies | **the table is closed to clients on purpose.** RLS is on, it has no policies and no grant to `anon` or `authenticated`; registration goes through `public.register_push_device`, which is SECURITY DEFINER and which the client calls |
 | `20260623_avatar_variants_read_policy` | «media variants chat peers can read avatar variants» | «media variants avatars are readable» and the three beside it |
 
+## Removed on purpose, not superseded, 2026-09-19
+
+The list above is about objects that have a successor. This one has none, and
+that is why it needs its own heading: the script reports an absence, and the
+obvious repair — re-apply the migration that created them — is the **wrong**
+thing to do here.
+
+| Migration | Absent | Why |
+| --- | --- | --- |
+| `20260918200000_a_call_says_so_in_the_conversation` | `public.voice_call_transition`, `public.voice_call_service_line`, `public.write_voice_call_service_message`, `trg_voice_call_service_message` | **Dropped deliberately** by `20260919180000_the_rail_already_says_who_is_in_the_channel.sql`, applied 2026-09-19 at the owner's instruction: a group already shows who is in a channel, so the conversation stopped saying it too. `voice_channels.call_announced_at` went with them. |
+
+Re-applying `20260918200000` would put the trigger back and start writing the
+two sentences into every group again, which is the thing that was removed. If
+the feature is ever wanted back, the file to run is
+`20260919180000_the_rail_already_says_who_is_in_the_channel.rollback.sql`, which
+restores `20260918280000`'s writer rather than `20260918200000`'s — the
+difference being whether a private chat is told about a «канал» it does not
+have.
+
 ## The batch this found, 2026-09-14
 
 Six migrations of 2026-09-11, written and committed in `6e2f5ed` and its

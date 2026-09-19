@@ -1,20 +1,44 @@
 /**
- * The shape of the call-service-message migration and its rollback, read as
- * text, because the unit suite has no database.
+ * The removal of the call service message, and its restore, read as text.
  *
- * `tests/server/voice-call-service-message-db.test.mjs` runs the same file in
- * PGlite and proves the behaviour, the self-check's teeth and the rollback.
- * What this file pins is what this project's migration rules require of the
- * file itself, so a later edit cannot quietly turn it into something that
- * commits half of itself, guesses its owner, takes a lock it does not need or
- * says a status code out loud.
+ * This file used to pin the *shape* of
+ * `20260918200000_a_call_says_so_in_the_conversation.sql` -- its sentences, its
+ * trigger, its grants. That feature was removed on 2026-09-19 at the owner's
+ * instruction («по сути и так видно если люди сидят»), so those assertions
+ * described an object production no longer has, and a green suite saying «the
+ * two sentences are the approved ones» read as though the product still said
+ * them. They are gone.
  *
- * **Comments are stripped before every scan.** Guards in this repository have
- * matched prose in a doc comment five times in one session, and this file's
- * header talks at length about the very words the assertions look for -- it
- * names `room_started`, `room_finished` and `participant_count` in almost every
- * paragraph. Without `strip()` the «the copy names no status code» case would
- * pass on the commentary while the SQL said anything at all.
+ * What is here instead are the three text-level facts about the removal that a
+ * database cannot check and that would each be an expensive mistake:
+ *
+ *  1. **The recorded migration is what was applied.** The removal reached
+ *     production before this file was written: what ran was 200000's own
+ *     rollback, so `20260919180000_…sql` carries that file's body byte for byte
+ *     and only its header is new. A record that has drifted from what the
+ *     database ran is worse than no record, which is the whole of
+ *     `scripts/migration-inventory.mjs`.
+ *
+ *  2. **The restore restores what was there, not what 200000 wrote.** 280000
+ *     replaced the writer so a private chat would stop being told about a
+ *     «канал»; a rollback that replays 200000 would reinstate that defect and
+ *     look like it worked. The three function bodies are compared character for
+ *     character against the recorded files they come from -- which is not
+ *     pedantry: the first draft of the restore dropped the inline comments from
+ *     `voice_call_transition` and PGlite's `md5(pg_get_functiondef())` caught it
+ *     immediately, because a function body includes its comments.
+ *
+ *  3. **Neither file deletes anybody's messages.** The rows the feature wrote
+ *     were removed separately, under the owner's own instruction and from a
+ *     verified export. A migration that quietly carried a `delete` would do it
+ *     again on every database it is replayed against.
+ *
+ * `tests/server/voice-call-service-message-db.test.mjs` runs both files in
+ * PGlite and proves the behaviour, the self-checks' teeth and the round trip.
+ *
+ * **Comments are stripped before every scan**, because this repository's
+ * migrations open with long headers that quote the SQL they discuss, and a
+ * guard has matched prose in a doc comment more than once in a single session.
  */
 
 import assert from "node:assert/strict";
@@ -22,7 +46,14 @@ import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 const DIR = ".migration-backup/supabase/migrations";
-const NAME = "20260918200000_a_call_says_so_in_the_conversation";
+
+const REMOVAL = "20260919180000_the_rail_already_says_who_is_in_the_channel";
+/** The file that was actually applied, and the source of the removal's body. */
+const APPLIED = "20260918200000_a_call_says_so_in_the_conversation";
+/** The migration whose writer the restore must bring back -- not 200000's. */
+const PRIVATE_FIX = "20260918280000_a_private_chat_has_no_channel_to_announce";
+
+const read = (name) => readFileSync(`${DIR}/${name}`, "utf8");
 
 /** Comments stripped. `strip()` is `tests/unit/voice-room-seam.test.mjs`'s. */
 const strip = (text) =>
@@ -32,25 +63,64 @@ const strip = (text) =>
     .map((line) => line.replace(/--.*$/, ""))
     .join("\n");
 
-const migration = readFileSync(`${DIR}/${NAME}.sql`, "utf8");
-const rollback = readFileSync(`${DIR}/${NAME}.rollback.sql`, "utf8");
-const sql = strip(migration);
-const rollbackSql = strip(rollback);
+const removal = read(`${REMOVAL}.sql`);
+const restore = read(`${REMOVAL}.rollback.sql`);
+const applied = read(`${APPLIED}.rollback.sql`);
+const removalSql = strip(removal);
+const restoreSql = strip(restore);
 
-test("the migration has a rollback beside it", () => {
-  assert.ok(existsSync(`${DIR}/${NAME}.rollback.sql`), "no rollback file");
+/** Everything from `begin;` on: a migration minus its header. */
+const body = (text) => text.slice(text.indexOf("\nbegin;\n") + 1);
+
+/**
+ * One `create or replace function` statement, verbatim and including its
+ * inline comments, because `pg_get_functiondef` returns the body as written and
+ * a restore that reformats one is restoring a different function.
+ */
+function functionBlock(text, name) {
+  const open = text.indexOf(`create or replace function public.${name}(`);
+  assert.notEqual(open, -1, `no definition of ${name} to read`);
+  const close = text.indexOf("\n$function$;\n", open);
+  assert.notEqual(close, -1, `the definition of ${name} has no terminator`);
+  return text.slice(open, close + "\n$function$;\n".length);
+}
+
+test("the removal beside its rollback, both present", () => {
+  assert.ok(existsSync(`${DIR}/${REMOVAL}.sql`), "no removal migration");
+  assert.ok(existsSync(`${DIR}/${REMOVAL}.rollback.sql`), "no rollback file");
+});
+
+test("the recorded removal is the file that was applied, byte for byte", () => {
+  // The removal reached production as 200000's rollback before it was recorded
+  // as a migration of its own. Only the header may differ; an edit to the body
+  // makes the record describe something the database never ran.
+  assert.equal(
+    body(removal),
+    body(applied),
+    "the removal migration's body has diverged from `20260918200000_…rollback.sql`, which is the file production actually ran",
+  );
+  assert.notEqual(
+    removal.slice(0, removal.indexOf("\nbegin;\n")),
+    applied.slice(0, applied.indexOf("\nbegin;\n")),
+    "the removal carries the rollback's header, so it does not say what it is or when it ran",
+  );
+  assert.match(
+    removal,
+    /Applied to production on 2026-09-19/,
+    "the header does not record that this had already run when it was written",
+  );
 });
 
 test("both files are one transaction and bound the lock they wait for", () => {
-  for (const [label, body] of [
-    ["the migration", sql],
-    ["the rollback", rollbackSql],
+  for (const [label, text] of [
+    ["the removal", removalSql],
+    ["the restore", restoreSql],
   ]) {
-    assert.match(body, /^\s*begin;/m, `${label} does not open a transaction`);
-    assert.match(body, /\bcommit;/, `${label} does not commit`);
-    assert.doesNotMatch(body, /\brollback;/, `${label} rolls itself back`);
+    assert.match(text, /^\s*begin;/m, `${label} does not open a transaction`);
+    assert.match(text, /\bcommit;/, `${label} does not commit`);
+    assert.doesNotMatch(text, /\brollback;/, `${label} rolls itself back`);
     assert.match(
-      body,
+      text,
       /set local lock_timeout = '5s';/,
       `${label} would queue the product behind a blocked lock`,
     );
@@ -59,212 +129,138 @@ test("both files are one transaction and bound the lock they wait for", () => {
 
 test("both files raise rather than report success on a half-applied state", () => {
   // A `do` block that only ever notices is worse than none: it reads like a
-  // check and commits anything.
-  for (const [label, body] of [
-    ["the migration", sql],
-    ["the rollback", rollbackSql],
+  // check and commits anything. `tests/server/…-db.test.mjs` mutates both files
+  // and shows each raise being reached.
+  for (const [label, text] of [
+    ["the removal", removalSql],
+    ["the restore", restoreSql],
   ]) {
-    const raises = body.match(/raise exception/g) ?? [];
+    const raises = text.match(/raise exception/g) ?? [];
     assert.ok(raises.length >= 3, `${label} has only ${raises.length} raising assertions`);
   }
 });
 
 test("the role is enforced rather than described", () => {
-  // Three migrations in a row guessed an owner from the schema and two of them
-  // failed on «must be owner of …». This one asks.
-  assert.match(
-    sql,
-    /pg_has_role\(\s*current_user/,
-    "the migration does not check that the running role can own what it alters",
-  );
-  assert.match(
-    sql,
-    /run it as supabase_admin/,
-    "the migration does not name the role it needs when it refuses",
-  );
-  assert.match(rollbackSql, /pg_has_role\(\s*current_user/, "the rollback does not check its role");
-});
-
-test("the writer's owner is derived from public.messages rather than named", () => {
-  // Its whole ability to write past the INSERT policy is that it owns the
-  // table. A hard-coded `owner to postgres` would be a second place for that to
-  // be wrong.
-  assert.match(
-    sql,
-    /pg_get_userbyid\(relowner\)[\s\S]{0,200}'public\.messages'::regclass/,
-    "the owner is not read off public.messages",
-  );
-  assert.match(sql, /alter function %s owner to %I/, "the functions are not re-owned");
-  assert.doesNotMatch(
-    sql,
-    /alter function [\w.()," ]+ owner to postgres/,
-    "an owner is hard-coded, so it can drift from the table it writes to",
-  );
-});
-
-test("both DDL statements are guarded, so a second application takes no lock", () => {
-  // `add column if not exists` would do for the column, but the no-rewrite
-  // proof has to read the filenode before the statement, so the guard is
-  // explicit and the same block carries both.
-  assert.match(
-    sql,
-    /attname = 'call_announced_at'[\s\S]{0,400}alter table public\.voice_channels add column call_announced_at/,
-    "the column is added without first checking whether it is there",
-  );
-  // The filenode is compared, not merely read. A guard on the presence of the
-  // words passes for `if false then` -- measured.
-  assert.match(
-    sql,
-    /if v_filenode_after <> v_filenode_before then[\s\S]{0,300}raise exception/,
-    "the migration reads the filenode without acting on a change, so its catalog-only claim is unproven",
-  );
-  assert.equal(
-    (sql.match(/pg_relation_filenode\('public\.voice_channels'::regclass\)/g) ?? []).length,
-    2,
-    "the filenode is not read on both sides of the ALTER",
-  );
-  assert.match(
-    sql,
-    /drop trigger if exists trg_voice_call_service_message on public\.voice_channels;/,
-    "the trigger is created without dropping a previous one",
-  );
-});
-
-test("the trigger is narrow: one column, one crossing of zero, and before the write", () => {
-  assert.match(
-    sql,
-    /before update of participant_count on public\.voice_channels/,
-    "the trigger no longer watches one column before the write, so the latch needs a second UPDATE",
-  );
-  assert.match(
-    sql,
-    /\(coalesce\(old\.participant_count, 0\) = 0\) is distinct from \(coalesce\(new\.participant_count, 0\) = 0\)/,
-    "the WHEN clause no longer admits only a crossing of zero",
-  );
-});
-
-test("the rule is a pure function of its arguments, so it can be asserted without an SFU", () => {
-  assert.match(
-    sql,
-    /create or replace function public\.voice_call_transition\([\s\S]{0,400}immutable/,
-    "voice_call_transition is no longer immutable, so it can read the world",
-  );
-  assert.match(
-    sql,
-    /create or replace function public\.voice_call_service_line\([\s\S]{0,400}immutable/,
-    "voice_call_service_line is no longer immutable",
-  );
-  // The gate of slice 3, as the self-check states it.
-  assert.match(
-    sql,
-    /once per join rather than once per call/,
-    "the self-check no longer asserts that a second joiner writes nothing",
-  );
-});
-
-test("every function pins an empty search_path and none is reachable by a client", () => {
-  const functions = [
-    "voice_call_transition",
-    "voice_call_service_line",
-    "write_voice_call_service_message",
-  ];
-  for (const name of functions) {
-    const body = sql.slice(sql.indexOf(`create or replace function public.${name}(`));
-    assert.match(
-      body.slice(0, 600),
-      /set search_path to ''/,
-      `${name} does not pin an empty search_path`,
-    );
-  }
-  assert.match(
-    sql,
-    /revoke all on function public\.write_voice_call_service_message\(\)\s*\n?\s*from public, anon, authenticated;/,
-    "the writer is reachable as a function",
-  );
-  assert.match(
-    sql,
-    /revoke update \(call_announced_at\) on public\.voice_channels from authenticated;/,
-    "a member can latch a call as announced",
-  );
-});
-
-test("the migration weakens no policy and disables no row level security", () => {
-  assert.doesNotMatch(sql, /disable row level security/i, "row level security is turned off");
-  assert.doesNotMatch(sql, /create policy/i, "a policy is created, so the audience is not the chat's");
-  assert.doesNotMatch(sql, /drop policy/i, "a policy is dropped");
-  // The only grant-shaped statement is a revoke.
-  const grants = (sql.match(/^\s*grant\b/gim) ?? []).filter((line) => !line.includes("revoke"));
-  assert.deepEqual(grants, [], "the migration grants something");
-});
-
-test("the two sentences are the approved ones, and neither reads like a log entry", () => {
-  assert.match(
-    sql,
-    /return 'Начался разговор в канале «' \|\| v_name \|\| '»';/,
-    "the start sentence changed",
-  );
-  assert.match(
-    sql,
-    /return 'Разговор в канале «' \|\| v_name \|\| '» закончился';/,
-    "the end sentence changed",
-  );
-
-  // Every string literal the file can put in front of a person, checked for the
-  // vocabulary of a log. Scoped to the two copy functions so that the rest of
-  // the file -- whose exception messages are for whoever applies it -- is left
-  // alone.
-  const copy = sql.slice(
-    sql.indexOf("create or replace function public.voice_call_service_line("),
-    sql.indexOf("comment on function public.voice_call_service_line("),
-  );
-  const literals = [...copy.matchAll(/'([^']*)'/g)].map((match) => match[1]).filter(Boolean);
-  assert.ok(literals.length >= 4, "the copy function has no sentences in it any more");
-  for (const line of literals) {
-    if (line === "start" || line === "end") continue;
-    assert.doesNotMatch(
-      line,
-      /room_started|room_finished|participant|webhook|livekit|sfu|[0-9]/i,
-      `a sentence names a status code, a room id or a webhook: ${line}`,
-    );
-  }
-});
-
-test("the copy names the room, and stores the name rather than referring to it", () => {
-  // A message is permanent and a room is not. `new.name` is a snapshot; a join
-  // to voice_channels at read time would rewrite history on a rename and say
-  // nothing once the room was deleted.
-  assert.match(
-    sql,
-    /public\.voice_call_service_line\(v_transition, new\.name\)/,
-    "the sentence no longer takes the room's name from the row being written",
-  );
-  assert.doesNotMatch(
-    sql,
-    /references public\.voice_channels/,
-    "something now points at the channel, so the line cannot outlive the room",
-  );
-});
-
-test("the rollback removes the four objects and keeps the lines already written", () => {
-  for (const fragment of [
-    "drop trigger if exists trg_voice_call_service_message on public.voice_channels;",
-    "drop function if exists public.write_voice_call_service_message();",
-    "drop function if exists public.voice_call_service_line(text, text);",
-    "drop function if exists public.voice_call_transition(integer, integer, boolean);",
-    "alter table public.voice_channels drop column if exists call_announced_at;",
+  // `public.voice_channels` is owned by `supabase_admin` rather than by
+  // `postgres` -- read off production, not guessed -- and three migrations in a
+  // row once failed on «must be owner of …» for guessing it.
+  for (const [label, text] of [
+    ["the removal", removalSql],
+    ["the restore", restoreSql],
   ]) {
-    assert.ok(rollbackSql.includes(fragment), `the rollback does not ${fragment}`);
+    assert.match(text, /pg_has_role\(\s*current_user/, `${label} does not check its role`);
+    assert.match(text, /run it as supabase_admin/, `${label} does not name the role it needs`);
   }
-  // Stripped, because the reasoned-out `delete` lives in a comment on purpose
-  // and a scan of the raw text would read it as a statement.
-  assert.doesNotMatch(
-    rollbackSql,
+});
+
+test("neither file deletes anybody's messages, and the removal writes out the one that would", () => {
+  for (const [label, text] of [
+    ["the removal", removalSql],
+    ["the restore", restoreSql],
+  ]) {
+    assert.doesNotMatch(
+      text,
+      /delete\s+from\s+public\.messages/i,
+      `${label} deletes people's conversation history`,
+    );
+  }
+  // Stripped above, because the reasoned-out `delete` lives in a comment on
+  // purpose; unstripped it must still be written down, so that whoever has to
+  // run it is not composing the predicate themselves.
+  assert.match(
+    removal,
     /delete from public\.messages/,
-    "the rollback deletes people's conversation history",
+    "the removal no longer writes out what to run if the rows must go too",
   );
   assert.match(
-    rollback,
-    /delete from public\.messages/,
-    "the rollback no longer writes out what to run if the rows must go too",
+    removal,
+    /system_payload is null/,
+    "the written-out delete does not exclude a private chat's call record, which is the only thing telling the two apart",
   );
+});
+
+test("the restore brings back 20260918280000's writer, not 20260918200000's", () => {
+  // The single thing this rollback can get wrong in a way that looks like
+  // success. 200000's writer announced a call in any chat with a room; 280000
+  // made it return early for a private chat after the owner read five lines
+  // about a call they had cancelled.
+  const restored = functionBlock(restore, "write_voice_call_service_message");
+  assert.equal(
+    restored,
+    functionBlock(read(`${PRIVATE_FIX}.sql`), "write_voice_call_service_message"),
+    "the restored writer is not the one 20260918280000 left, so a private chat would be told about a «канал» again",
+  );
+  assert.notEqual(
+    restored,
+    functionBlock(read(`${APPLIED}.sql`), "write_voice_call_service_message"),
+    "the restored writer is 20260918200000's, which is the defect 20260918280000 repaired",
+  );
+  // And the self-check looks for it on the catalogue's own copy of the source,
+  // rather than trusting the file it has just run.
+  assert.match(
+    restoreSql,
+    /pg_get_functiondef[\s\S]{0,600}write_voice_call_service_message/,
+    "the restore's self-check does not read the writer back off the catalogue",
+  );
+});
+
+test("the restore's pure functions are the recorded ones, comments included", () => {
+  // `pg_get_functiondef` returns a body as written, so a reformatted or
+  // de-commented copy is a different function. The first draft of the restore
+  // dropped the inline comments from `voice_call_transition` and the round-trip
+  // md5 in the server suite went red on exactly that.
+  const source = read(`${APPLIED}.sql`);
+  for (const name of ["voice_call_transition", "voice_call_service_line"]) {
+    assert.equal(
+      functionBlock(restore, name),
+      functionBlock(source, name),
+      `the restored ${name} is not character for character the one 20260918200000 defined`,
+    );
+  }
+});
+
+test("the restore puts back the grants the column actually had, not the ones 200000 left", () => {
+  // 200000 revoked UPDATE and granted nothing; 20260918230000 later rewrote a
+  // table-wide INSERT grant into a column list that named `call_announced_at`.
+  // The live state at the moment of removal was «INSERT yes, UPDATE no», and a
+  // rollback that quietly improves that is a rollback whose result nobody can
+  // predict.
+  assert.match(
+    restoreSql,
+    /revoke update \(call_announced_at\) on public\.voice_channels from authenticated;/,
+    "a member could latch a call as announced after a restore",
+  );
+  assert.match(
+    restoreSql,
+    /grant insert \(call_announced_at\) on public\.voice_channels to authenticated;/,
+    "the restore does not put back the INSERT grant 20260918230000's column list carries",
+  );
+});
+
+test("the removal weakens no policy and disables no row level security", () => {
+  for (const [label, text] of [
+    ["the removal", removalSql],
+    ["the restore", restoreSql],
+  ]) {
+    assert.doesNotMatch(text, /disable row level security/i, `${label} turns row level security off`);
+    assert.doesNotMatch(text, /create policy/i, `${label} creates a policy`);
+    assert.doesNotMatch(text, /drop policy/i, `${label} drops a policy`);
+  }
+  const grants = (removalSql.match(/^\s*grant\b/gim) ?? []).filter((line) => !line.includes("revoke"));
+  assert.deepEqual(grants, [], "the removal grants something");
+});
+
+test("the removal leaves the private chat's call record alone", () => {
+  // A different mechanism entirely -- `voice_call_stop` writes the outcome, the
+  // direction and the length into `messages.system_payload` -- and the owner
+  // asked about channels in groups. The server suite drives one after the
+  // removal and finds it still writing; this only pins that the file names
+  // neither of its functions.
+  for (const name of ["voice_call_stop", "voice_call_record_line"]) {
+    assert.doesNotMatch(
+      removalSql,
+      new RegExp(`drop\\s+function[^;]*${name}`, "i"),
+      `the removal drops public.${name}, which belongs to the private-chat call record`,
+    );
+  }
 });

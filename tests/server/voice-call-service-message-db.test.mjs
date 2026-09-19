@@ -1,49 +1,73 @@
 /**
- * «Once per call, not once per join», run in a real PostgreSQL.
+ * The removal of the call service message, and its restore, run in a real
+ * PostgreSQL.
  *
- * Slice 3 of `docs/proposals/2026-09-13-voice-channels.md:1141-1150` states its
- * gate in one sentence and that sentence is the only thing this file is about.
- * A test that passes for a path writing one row per *arrival* would be
- * worthless, so the first case below joins four people and leaves three, and
- * the mutation that turns a transition into an arrival is listed in the header
- * of every assertion it must break.
+ * This file used to prove «once per call, not once per join» — the gate of
+ * slice 3 of `docs/proposals/2026-09-13-voice-channels.md:1141-1150`. That
+ * feature was removed from production on 2026-09-19 at the owner's instruction:
+ * «по сути и так видно если люди сидят, можно просто оставить отметку на группе
+ * о том сколько людей в войсе как уже есть чтобы не мусорить инфой». A group
+ * shows who is in a channel on the channel itself, continuously, and two rows
+ * appended to a conversation for ever said the same thing worse.
+ *
+ * So the twenty-odd cases that measured the feature are gone: a suite that is
+ * green about sentences the product no longer writes is not coverage, it is a
+ * false statement with a tick beside it. **The harness is not gone**, because
+ * it is the only place in this repository where a migration can be run, mutated
+ * and rolled back against the schema as the record holds it, and that is
+ * exactly what the removal needs.
+ *
+ * What is proved here now:
+ *
+ *  - a group's room fills and empties and the conversation stays silent;
+ *  - the lines the feature already wrote are **still there** afterwards — the
+ *    removal takes out a mechanism, and the twenty-five rows it had written
+ *    were deleted separately, from a verified export, on the owner's own
+ *    instruction;
+ *  - **a private chat's call record still works**, which is the thing that
+ *    could most easily have been cut by mistake. `voice_call_stop` and
+ *    `voice_call_record_line` are a different mechanism with a different
+ *    wording, carried in `messages.system_payload`, and the owner asked about
+ *    channels in groups;
+ *  - both self-checks refuse a half-applied state, each by a mutation that has
+ *    to be shown to have matched;
+ *  - the rollback restores the feature **exactly** — `pg_get_functiondef` and
+ *    `pg_get_triggerdef` compared by md5 against the state before the removal,
+ *    which is how a transcription that had dropped the inline comments from
+ *    `voice_call_transition` was caught;
+ *  - and the writer it restores is `20260918280000`'s, not `20260918200000`'s,
+ *    so a private chat is not told about a «канал» again.
  *
  * PGlite is PostgreSQL in process, no Docker. The stub is a copy of the
- * production objects this migration touches, transcribed from the recorded
- * migrations -- **except** for the voice tables, the four RPCs and
+ * production objects these migrations touch, transcribed from the recorded
+ * migrations -- **except** for the voice tables, the RPCs and
  * `private.voice_channel_recount`, which are applied from
- * `.migration-backup/supabase/migrations/` verbatim. Those are the objects the
- * new trigger hangs off, and transcribing them would have meant measuring the
- * transcription rather than the thing. What this proves is that the SQL parses,
- * that the self-check passes and refuses what it should, that the rollback
- * removes what the migration adds, and that the behaviour holds against the
- * schema as the migrations record it. It proves nothing about an object
- * production has and the migrations do not show; that is what a rehearsal on a
- * schema copy is for.
+ * `.migration-backup/supabase/migrations/` verbatim. What this proves is that
+ * the SQL parses, that the self-checks pass and refuse what they should, that
+ * the round trip is exact, and that the behaviour holds against the schema as
+ * the migrations record it. It proves nothing about an object production has
+ * and the migrations do not show; that is what a rehearsal on a schema copy is
+ * for, and the removal had one before it was applied.
  *
  * ── Two bases, and why (D-252) ─────────────────────────────────────────────
  *
  * «The schema as the migrations record it» was a claim this file made and did
- * not keep. It used to apply four recorded migrations and then the subject, and
- * two of the objects it measures had been redefined **later the same day** --
- * so every case here was green about a `private.voice_channel_recount` and a
- * `write_voice_call_service_message` that production had already replaced. The
- * record was honest; the fixed subset was not.
+ * not keep. It used to apply a fixed subset and then the subject, and two of
+ * the objects it measures had been redefined **later the same day** -- so every
+ * case here was green about a `private.voice_channel_recount` and a
+ * `write_voice_call_service_message` that production had already replaced.
  *
- * So there are two bases now, and a case declares which it is for:
+ * So there are two bases, and a case declares which it is for:
  *
  *   `databaseAsRecorded()`     the whole of `CHAIN` -- what production runs.
  *                              Every behavioural case uses it, because a
  *                              behavioural case is a claim about the product.
- *   `databaseBeforeSubject()`  `CHAIN` truncated immediately before `SUBJECT`.
- *                              Only the cases about the subject *file* use it:
- *                              the four self-check mutations, idempotence, the
- *                              rollback, and the deploy-moment case. All of
- *                              them apply `SUBJECT` last, and applying it last
- *                              on a database that has already run
- *                              `20260918280000` would silently reinstate the
- *                              writer that migration replaced -- a widening
- *                              that looks like it worked and did not.
+ *   `databaseBeforeSubject()`  `CHAIN` truncated immediately before `SUBJECT`,
+ *                              which is the feature still in place. The cases
+ *                              about the subject *file* use it: its self-check
+ *                              mutations, its idempotence, and the round trip,
+ *                              all of which need the thing being removed to
+ *                              still be there.
  */
 
 import assert from "node:assert/strict";
@@ -65,8 +89,16 @@ const rollbackSql = (name) =>
 
 /**
  * Everything below depends on the definition of one of these, so a recorded
- * migration that replaces any of them belongs in `CHAIN`. The nine
- * `20260913150000` created, the three `20260918200000` added, and the trigger.
+ * migration that defines **or drops** any of them belongs in `CHAIN`.
+ *
+ * The «or drops» is new and it is the whole reason the scan below was widened.
+ * The subject of this file creates nothing: a scan that only looked for
+ * `create` would have reported the removal as touching nothing and let a
+ * second, later removal of one of these objects sit outside `CHAIN` unnoticed
+ * -- D-252's failure again, from the other side.
+ *
+ * The last two are the mechanism this file's subject deliberately does **not**
+ * remove, and they are measured for exactly that reason.
  */
 const OBJECTS_UNDER_TEST = [
   "public.voice_channel_chat",
@@ -81,6 +113,8 @@ const OBJECTS_UNDER_TEST = [
   "public.voice_call_transition",
   "public.voice_call_service_line",
   "public.write_voice_call_service_message",
+  "public.voice_call_record_line",
+  "public.voice_call_stop",
 ];
 const TRIGGER_UNDER_TEST = "trg_voice_call_service_message";
 
@@ -89,59 +123,65 @@ const TRIGGER_UNDER_TEST = "trg_voice_call_service_message";
  * applies them, ending where the record ends rather than where this file was
  * written.
  *
- * "every recorded migration that defines one of these objects is in the chain"
- * below asserts exactly that, so the list cannot go stale again in silence --
- * which is the whole of D-252. An entry that owns nothing is here because the
- * record needs it, and the need was measured rather than assumed: dropping it
- * makes the next file fail to apply, with the error quoted beside it.
+ * "every recorded migration that defines or drops one of these objects is in
+ * the chain" below asserts exactly that, so the list cannot go stale again in
+ * silence -- which is the whole of D-252. An entry that owns nothing is here
+ * because the record needs it, and the need was measured rather than assumed:
+ * dropping it makes the next file fail to apply.
  *
  * Two recorded files inside this span are absent and neither owns an object
  * under test: `20260918180000` wants the `realtime` schema and `20260918260000`
  * wants `pg_cron`, and a stub of either would be a self-check asserting against
- * the stub. Their absence is not taken on faith. With the chain exactly as
- * written, `md5(pg_get_functiondef())` for all twelve functions and
- * `md5(pg_get_triggerdef())` for the trigger are identical to production, read
- * off `supabase-db` read-only on 2026-09-19; the two the old list got wrong
- * were `private.voice_channel_recount` and
- * `public.write_voice_call_service_message`.
+ * the stub.
  */
 const CHAIN = [
   // owns the voice tables, the webhook RPCs and private.voice_channel_recount
   "20260913150000_voice_channels",
   // needed: voice_channels.category_id, or 20260918160000 will not apply
   "20260914140000_channel_categories",
-  // many rooms per chat, and the stuck-flag repair the hand-zeroed case cites
+  // many rooms per chat, and the stuck-flag repair
   "20260918160000_voice_rooms_many_and_the_stuck_flag",
   // owns private.voice_channel_recount: the write-only-when-changed rewrite
   "20260918170000_voice_recount_writes_only_when_something_changed",
   // owns voice_call_transition, voice_call_service_line, the writer and the
-  // trigger -- the SUBJECT below, and deliberately not the end of the chain
+  // trigger -- the feature the SUBJECT below removes
   "20260918200000_a_call_says_so_in_the_conversation",
-  // needed: voice_channels.ring_*, or 20260918230000's self-check will not pass
+  // needed: voice_channels.ring_*, or 20260918230000's self-check will not pass;
+  // owns voice_call_stop
   "20260918220000_a_private_chat_can_ring",
   "20260918230000_a_ring_cannot_be_forged",
   // owns private.voice_channel_recount: the ring-residue arms beside active_since
   "20260918240000_a_call_that_died_does_not_lock_the_pair_out",
-  // needed: messages.system_payload, or 20260918280000 will not apply
+  // needed: messages.system_payload; owns voice_call_record_line and rewrites
+  // voice_call_stop
   "20260918250000_a_call_says_so_in_the_private_chat",
+  // owns voice_call_record_line: the hours arm
   "20260918270000_a_call_over_an_hour_says_hours",
   // owns write_voice_call_service_message: the private-chat early return
   "20260918280000_a_private_chat_has_no_channel_to_announce",
+  // the SUBJECT: drops the trigger, the three functions and the column
+  "20260919180000_the_rail_already_says_who_is_in_the_channel",
 ];
 
 /**
- * The file whose self-check, idempotence and rollback are measured below. It is
- * a member of `CHAIN`, and deliberately not its last member.
+ * The file whose self-check, idempotence and round trip are measured below.
+ *
+ * Unlike every earlier subject of this file it **is** the last entry of
+ * `CHAIN`, and that is not the state D-252 described: D-252 was a chain that
+ * stopped before the record did, so the cases measured definitions production
+ * had replaced. Here the record itself stops at the removal, and the case below
+ * asserts that rather than asserting a position.
  */
-const SUBJECT = "20260918200000_a_call_says_so_in_the_conversation";
+const SUBJECT = "20260919180000_the_rail_already_says_who_is_in_the_channel";
 const BEFORE_SUBJECT = CHAIN.slice(0, CHAIN.indexOf(SUBJECT));
 
 /**
- * Everything the four voice migrations and the new one reference, and nothing
- * else. `messages` carries the real `messages_sender_shape_check` and the real
- * policies, permissive and restrictive as written, because who may read and
- * write such a row is half of what is asserted below.
+ * Everything the voice migrations reference, and nothing else. `messages`
+ * carries the real `messages_sender_shape_check` and the real policies,
+ * permissive and restrictive as written, because who may read and write such a
+ * row is half of what is asserted below.
  */
+
 const STUB = String.raw`
 create role anon nologin;
 create role authenticated nologin;
@@ -423,579 +463,22 @@ const lines = async (chat) =>
 
 const contents = async (chat) => (await lines(chat)).map((row) => row.content);
 
-const latch = async (channel) =>
-  (await db.query(`select call_announced_at from public.voice_channels where id = $1`, [channel]))
-    .rows[0].call_announced_at;
-
-const activeSince = async (channel) =>
-  (await db.query(`select active_since from public.voice_channels where id = $1`, [channel]))
-    .rows[0].active_since;
-
-/** The webhook path's own RPC, called the way `receiveWebhook` calls it. */
+/**
+ * The webhook path's own RPCs, called the way `receiveWebhook` calls them.
+ *
+ * `latch`, `activeSince`, `setActive` and `setActiveAgo` stood here too, and
+ * went with the cases that used them: `call_announced_at` no longer exists to
+ * read, and the `active_since` grace window is
+ * `tests/server/voice-participant-reconciler.test.mjs`'s subject rather than
+ * this file's. A helper kept for a case that no longer exists is a helper
+ * somebody will reintroduce the case for.
+ */
 const joined = (channel, user, at) =>
   db.query(`select public.voice_participant_joined($1, $2, $3)`, [channel, user, at]);
 const left = (channel, user, at) =>
   db.query(`select public.voice_participant_left($1, $2, $3)`, [channel, user, at]);
-const setActive = (channel, at) =>
-  db.query(`select public.voice_channel_set_active($1, $2)`, [channel, at]);
-
-/**
- * The same `room_started`, dated against the database's own clock.
- *
- * `private.voice_channel_recount` clears `active_since` on an empty room once
- * the flag is more than two minutes old, so whether a flag survives is a fact
- * about its distance from `now()` and has to be written as one. A fixed
- * timestamp here is a case that passes until the afternoon it was written.
- */
-const setActiveAgo = (channel, ago) =>
-  db.query(`select public.voice_channel_set_active($1, pg_catalog.now() - $2::interval)`, [
-    channel,
-    ago,
-  ]);
 
 const T = (minute) => `2026-09-18T12:${String(minute).padStart(2, "0")}:00.000Z`;
-
-// ── the gate ─────────────────────────────────────────────────────────────────
-
-test("a call with two people writes one start line and one end line, not one per join", async () => {
-  const { chat, channel, anna, boris } = await group("Общая");
-
-  // `room_started` first, because that is the real order: asking for a token
-  // creates the room before anybody is counted.
-  await setActive(channel, T(0));
-  await joined(channel, anna, T(1));
-  assert.deepEqual(await contents(chat), ["Начался разговор в канале «Общая»"]);
-
-  // The second arrival is the whole gate. A path that wrote per join would put
-  // a second line here.
-  await joined(channel, boris, T(2));
-  assert.deepEqual(
-    await contents(chat),
-    ["Начался разговор в канале «Общая»"],
-    "a second joiner wrote a line, so the message lands once per join",
-  );
-
-  await left(channel, anna, T(3));
-  assert.deepEqual(
-    await contents(chat),
-    ["Начался разговор в канале «Общая»"],
-    "somebody leaving a call that is still running ended it",
-  );
-
-  await left(channel, boris, T(4));
-  assert.deepEqual(await contents(chat), [
-    "Начался разговор в канале «Общая»",
-    "Разговор в канале «Общая» закончился",
-  ]);
-
-  // A `room_finished` after the fact adds nothing: it writes `active_since`
-  // alone and never reaches `participant_count`.
-  await setActive(channel, null);
-  assert.equal((await contents(chat)).length, 2);
-});
-
-test("ten people join and leave in every order, and the conversation still shows one pair", async () => {
-  const { chat, channel } = await group("Планёрка");
-  const people = [];
-  for (let index = 0; index < 10; index += 1) {
-    const id = `dddddddd-dddd-4ddd-8ddd-${String(serial).padStart(4, "0")}0000000${index}`;
-    await db.exec(`insert into auth.users (id) values ('${id}');
-      insert into public.profiles (id, full_name) values ('${id}', 'Участник ${index}');`);
-    people.push(id);
-  }
-  for (const [index, id] of people.entries()) await joined(channel, id, T(index));
-  // Leaving from the middle outwards, so the last departure is not the first
-  // arrival and the count crosses every value twice.
-  for (const id of [...people.slice(5), ...people.slice(0, 5).reverse()]) {
-    await left(channel, id, T(30));
-  }
-  assert.deepEqual(await contents(chat), [
-    "Начался разговор в канале «Планёрка»",
-    "Разговор в канале «Планёрка» закончился",
-  ]);
-});
-
-// ── the three measured facts ─────────────────────────────────────────────────
-
-test("a press that creates the room and connects nobody says nothing at all", async () => {
-  // `docs/operations/voice.md:163-167`: asking for a token creates the room, so
-  // `room_started` fires for a press that produced no call, and `active_since`
-  // is set for a minute afterwards.
-  const { chat, channel } = await group("Общая");
-  await setActive(channel, T(0));
-  assert.deepEqual(await contents(chat), []);
-  assert.equal(await latch(channel), null);
-
-  // And again, three times, which is what a retried join on a slow network
-  // looks like from here.
-  await setActive(channel, T(1));
-  await setActive(channel, T(2));
-  await setActive(channel, T(3));
-  assert.deepEqual(await contents(chat), []);
-
-  // The recount's own stale-flag clear runs over such a channel and is also
-  // silent: it writes `active_since` without moving the count.
-  await db.query(`update public.voice_channels set active_since = now() - interval '10 minutes'
-                    where id = $1`, [channel]);
-  await db.query(`select private.voice_channel_recount($1)`, [channel]);
-  assert.equal(
-    (await db.query(`select active_since from public.voice_channels where id = $1`, [channel]))
-      .rows[0].active_since,
-    null,
-    "the stale flag was not cleared, so this case is no longer measuring what it says",
-  );
-  assert.deepEqual(await contents(chat), []);
-});
-
-test("the end line lands with no room_finished webhook at all", async () => {
-  // The reconciler's own write, which is how a `room_finished` lost to a restart
-  // is survived: nothing here sends one, and the end line must not wait for it
-  // nor for the `active_since` such a webhook would clear.
-  //
-  // `active_since` is dated **relative to `now()`**, and that is the whole
-  // repair to this case. It used to be set to `T(0)` -- a fixed
-  // 2026-09-18T12:00:00Z -- and asserted afterwards to be non-null. That held
-  // for the five hours between the file being written and the constant falling
-  // two minutes into the past. From 12:02Z onwards
-  // `private.voice_channel_recount` saw a flag older than its two-minute grace,
-  // cleared it in the same UPDATE that dropped the count to zero, and the guard
-  // failed -- for a day and a half, reported twice as pre-existing. Nothing in
-  // the product had moved: measured on 2026-09-19, this case passes verbatim
-  // with the fixture clock wound back inside the window and fails outside it,
-  // and the boundary is the grace window to the second.
-  //
-  // The participant timestamps below stay on `T()`. A fixed constant is only a
-  // time bomb once something compares it with `now()`, and nothing compares
-  // `joined_at` with anything here.
-
-  // -- the flag is alive, so the end line is measurably not waiting for it ----
-  const live = await group("Общая");
-  await setActiveAgo(live.channel, "0 seconds");
-  const flagBefore = await activeSince(live.channel);
-  assert.notEqual(
-    flagBefore,
-    null,
-    "voice_channel_set_active left no flag, so there is nothing for the end line to be independent of",
-  );
-  await joined(live.channel, live.anna, T(1));
-  await db.query(`select public.voice_participants_replace($1, $2::uuid[], $3)`, [
-    live.channel,
-    [],
-    T(5),
-  ]);
-  assert.deepEqual(await contents(live.chat), [
-    "Начался разговор в канале «Общая»",
-    "Разговор в канале «Общая» закончился",
-  ]);
-  assert.deepEqual(
-    await activeSince(live.channel),
-    flagBefore,
-    "the recount cleared a flag younger than its own two-minute grace, so either that grace " +
-      "is gone or this case has aged again -- read voice_channel_recount before the trigger",
-  );
-
-  // -- and once the grace has passed, one statement does both ----------------
-  // Which is what production does for every call that outlives two minutes: the
-  // recount drops the count to zero and clears the stale flag in the same
-  // UPDATE, and the end line still has to land. This half is what the case
-  // above silently turned into while it was red, so it is named here on purpose
-  // rather than arrived at by the calendar.
-  const stale = await group("Общая");
-  await setActiveAgo(stale.channel, "3 minutes");
-  await joined(stale.channel, stale.anna, T(1));
-  await db.query(`select public.voice_participants_replace($1, $2::uuid[], $3)`, [
-    stale.channel,
-    [],
-    T(5),
-  ]);
-  assert.deepEqual(await contents(stale.chat), [
-    "Начался разговор в канале «Общая»",
-    "Разговор в канале «Общая» закончился",
-  ]);
-  assert.equal(
-    await activeSince(stale.channel),
-    null,
-    "a flag three minutes past its grace survived an empty recount, so both halves of this " +
-      "case are now the same case and the first one proves nothing",
-  );
-});
-
-test("the reaper ends a call whose every webhook was lost", async () => {
-  // Layer 4: the residue sweep. No leave webhook, no reconciler observation,
-  // no `room_finished` -- only a row nobody has confirmed lately.
-  const { chat, channel, anna } = await group("Общая");
-  await joined(channel, anna, T(1));
-  const reaped = (
-    await db.query(`select public.voice_participants_reap(now() + interval '1 hour') as n`)
-  ).rows[0].n;
-  assert.equal(reaped, 1, "the reaper removed nothing, so this case proves nothing");
-  assert.deepEqual(await contents(chat), [
-    "Начался разговор в канале «Общая»",
-    "Разговор в канале «Общая» закончился",
-  ]);
-});
-
-test("a webhook delivered twice, and delivered out of order, writes nothing extra", async () => {
-  const { chat, channel, anna, boris } = await group("Общая");
-
-  // The same `participant_joined` twice. `voice_webhook_event_seen` would stop
-  // a redelivery carrying the same event id before this point; what is measured
-  // here is the case it cannot stop -- the same fact arriving under a new id.
-  await joined(channel, anna, T(1));
-  await joined(channel, anna, T(1));
-  await joined(channel, anna, T(1));
-  assert.deepEqual(await contents(chat), ["Начался разговор в канале «Общая»"]);
-
-  // The duplicate-identity ordering of slice 2's gate: a late `left` for a
-  // session the new one replaced must lose the `joined_at` comparison, so the
-  // count never dips and the conversation never says the call ended.
-  await joined(channel, anna, T(4));
-  await left(channel, anna, T(1));
-  assert.deepEqual(await contents(chat), ["Начался разговор в канале «Общая»"]);
-
-  await joined(channel, boris, T(5));
-  await left(channel, boris, T(6));
-  await left(channel, boris, T(6));
-  await left(channel, anna, T(7));
-  await left(channel, anna, T(7));
-  assert.deepEqual(await contents(chat), [
-    "Начался разговор в канале «Общая»",
-    "Разговор в канале «Общая» закончился",
-  ]);
-});
-
-// ── the latch ────────────────────────────────────────────────────────────────
-
-test("a call already in progress when this is applied does not announce an ending", async () => {
-  // The real deploy moment, and it has to be staged as such: the people are in
-  // the room **before** the trigger exists, so the conversation was never told
-  // a call began. Raising the count after the migration would be a 0 -> N
-  // transition like any other and would measure nothing.
-  //
-  // Base: `databaseBeforeSubject()`. This case is about the moment `SUBJECT`
-  // was applied, so the schema it is applied to has to be the one that existed
-  // then -- the chain's later entries had not been written.
-  const fresh = await databaseBeforeSubject();
-  try {
-    const chat = (
-      await fresh.query(
-        `insert into public.chats (type, name) values ('group', 'Команда') returning id`,
-      )
-    ).rows[0].id;
-    const channel = (
-      await fresh.query(
-        `insert into public.voice_channels (chat_id, name) values ($1, 'Общая') returning id`,
-        [chat],
-      )
-    ).rows[0].id;
-    const user = "eeeeeeee-eeee-4eee-8eee-000000000001";
-    await fresh.exec(`insert into auth.users (id) values ('${user}');
-      insert into public.profiles (id, full_name) values ('${user}', 'Анна Ковалёва');`);
-    await fresh.query(`select public.voice_participant_joined($1, $2, $3)`, [channel, user, T(1)]);
-    assert.equal(
-      (await fresh.query(`select participant_count from public.voice_channels where id = $1`, [
-        channel,
-      ])).rows[0].participant_count,
-      1,
-      "nobody was in the room before the migration, so this case measures nothing",
-    );
-
-    await execOrRollback(fresh, migrationSql(SUBJECT));
-
-    // The call finishes. The conversation must stay silent rather than announce
-    // an ending for a beginning nobody wrote.
-    await fresh.query(`select public.voice_participant_left($1, $2, $3)`, [channel, user, T(2)]);
-    const after = (
-      await fresh.query(`select content from public.messages where chat_id = $1`, [chat])
-    ).rows.map((row) => row.content);
-    assert.deepEqual(after, [], "a call in progress at deploy time announced an ending");
-
-    // And the next real call announces itself normally.
-    //
-    // `ctid`, for the reason the `lines()` helper above gives: PGlite's clock
-    // ties the two `created_at` values and the fallback to a random `id` then
-    // shuffles the pair. This query was the one place in the file still
-    // ordering by `created_at, id`, and it flaked -- measured on 2026-09-19 at
-    // roughly one run in six, on a database no change of mine touches.
-    await fresh.query(`select public.voice_participant_joined($1, $2, $3)`, [channel, user, T(5)]);
-    await fresh.query(`select public.voice_participant_left($1, $2, $3)`, [channel, user, T(6)]);
-    assert.deepEqual(
-      (
-        await fresh.query(`select content from public.messages where chat_id = $1 order by ctid`, [
-          chat,
-        ])
-      ).rows.map((row) => row.content),
-      ["Начался разговор в канале «Общая»", "Разговор в канале «Общая» закончился"],
-    );
-  } finally {
-    await fresh.close();
-  }
-});
-
-test("a repair that zeroes a count by hand is silent when no call was announced", async () => {
-  // `20260918160000` had to make exactly such a repair. With no announced call
-  // the latch keeps it quiet; the case above covers the drop that follows a
-  // call the conversation does know about.
-  const { chat, channel } = await group("Общая");
-  await db.query(
-    `update public.voice_channels set participant_count = 3, call_announced_at = null where id = $1`,
-    [channel],
-  );
-  await db.query(`update public.voice_channels set call_announced_at = null where id = $1`, [
-    channel,
-  ]);
-  await db.query(`update public.voice_channels set participant_count = 0 where id = $1`, [channel]);
-  assert.equal(
-    (await contents(chat)).filter((line) => line.includes("закончился")).length,
-    0,
-    "a hand-zeroed count with no announced call wrote an end line",
-  );
-});
-
-test("a latch left set by hand on an empty room costs one line and then heals", async () => {
-  // The start arm's `not p_announced` half only differs from nothing at all in
-  // this state, and nothing in the product can reach it: the latch is released
-  // in the same statement that writes the end line. A hand-written repair can,
-  // so the cost is measured rather than assumed -- one «закончился» with no
-  // beginning above it, once, after which the channel behaves normally.
-  //
-  // Without this case, removing that half of the rule turns no test red, which
-  // is how it was found.
-  const { chat, channel, anna } = await group("Общая");
-  await db.query(`update public.voice_channels set call_announced_at = now() where id = $1`, [
-    channel,
-  ]);
-
-  await joined(channel, anna, T(1));
-  assert.deepEqual(
-    await contents(chat),
-    [],
-    "a second start line was written for a call the conversation already believes is running",
-  );
-
-  await left(channel, anna, T(2));
-  assert.deepEqual(await contents(chat), ["Разговор в канале «Общая» закончился"]);
-  assert.equal(await latch(channel), null, "the orphan end line did not release the latch");
-
-  await joined(channel, anna, T(5));
-  await left(channel, anna, T(6));
-  assert.deepEqual(await contents(chat), [
-    "Разговор в канале «Общая» закончился",
-    "Начался разговор в канале «Общая»",
-    "Разговор в канале «Общая» закончился",
-  ]);
-});
-
-test("a second call is a second pair of lines", async () => {
-  const { chat, channel, anna } = await group("Общая");
-  await joined(channel, anna, T(1));
-  await left(channel, anna, T(2));
-  await joined(channel, anna, T(10));
-  await left(channel, anna, T(11));
-  assert.deepEqual(await contents(chat), [
-    "Начался разговор в канале «Общая»",
-    "Разговор в канале «Общая» закончился",
-    "Начался разговор в канале «Общая»",
-    "Разговор в канале «Общая» закончился",
-  ]);
-});
-
-// ── the room that is not a channel ───────────────────────────────────────────
-
-test("a private chat's room fills and empties and the conversation stays silent", async () => {
-  // `20260918280000`, and the only case in this file that can tell the current
-  // writer from the one it replaced. Everything above seeds a group, for which
-  // the two are identical -- which is why the stale chain cost nothing visible
-  // and could have gone on costing nothing visible indefinitely.
-  //
-  // The owner found the defect on their first real call: five lines about one
-  // cancelled call, four of them from this trigger, naming a «канал» that
-  // exists only as `voice_private_room`'s internal name for the row. A private
-  // chat has no channel, and slice B already writes the call down from
-  // `voice_call_stop` with the outcome, the direction and the length.
-  //
-  // This is the case that makes `CHAIN` load-bearing rather than decorative.
-  // Measured on 2026-09-19: drop `20260918280000` from `CHAIN` and it fails on
-  // the first assertion with the two lines the migration exists to forbid,
-  // while every other case in the file stays green.
-  const { chat, channel, anna, boris } = await privatePair();
-
-  await setActive(channel, T(0));
-  await joined(channel, anna, T(1));
-  await joined(channel, boris, T(2));
-  assert.deepEqual(
-    await contents(chat),
-    [],
-    "a private chat was told a conversation began in a channel it has not got",
-  );
-
-  await left(channel, anna, T(3));
-  await left(channel, boris, T(4));
-  assert.deepEqual(
-    await contents(chat),
-    [],
-    "a private chat was told a conversation in a channel ended",
-  );
-
-  // The early return comes before the latch, so the row is left alone rather
-  // than half-written: a later change that moved the check below the transition
-  // arithmetic would leave this set.
-  assert.equal(await latch(channel), null, "the private room latched a call as announced");
-
-  // And the group beside it is unaffected -- the fix is a private-chat early
-  // return, not a trigger that has stopped working.
-  const heard = await group("Общая");
-  await joined(heard.channel, heard.anna, T(1));
-  await left(heard.channel, heard.anna, T(2));
-  assert.deepEqual(await contents(heard.chat), [
-    "Начался разговор в канале «Общая»",
-    "Разговор в канале «Общая» закончился",
-  ]);
-});
-
-// ── the sentence, and a room that outlives its name ──────────────────────────
-
-test("the line names the room, and keeps that name when the room is renamed or deleted", async () => {
-  const { chat, channel, anna } = await group("Общая");
-  await joined(channel, anna, T(1));
-  await left(channel, anna, T(2));
-
-  // Renaming the room afterwards changes nothing: the sentence is a snapshot,
-  // so last week's history is not rewritten by an administrator tidying up.
-  await db.query(`update public.voice_channels set name = 'Переговорная' where id = $1`, [channel]);
-  assert.deepEqual(await contents(chat), [
-    "Начался разговор в канале «Общая»",
-    "Разговор в канале «Общая» закончился",
-  ]);
-
-  // And deleting the room leaves both lines standing. There is no foreign key
-  // from the message to the channel, which is the whole reason.
-  await db.query(`delete from public.voice_channels where id = $1`, [channel]);
-  assert.deepEqual(await contents(chat), [
-    "Начался разговор в канале «Общая»",
-    "Разговор в канале «Общая» закончился",
-  ]);
-});
-
-test("a rename during a call is reflected from the moment it happens, not retroactively", async () => {
-  // Each line records the name the room had when that line was written. Stated
-  // as a test rather than left to be discovered.
-  const { chat, channel, anna } = await group("Общая");
-  await joined(channel, anna, T(1));
-  await db.query(`update public.voice_channels set name = 'Переговорная' where id = $1`, [channel]);
-  await left(channel, anna, T(2));
-  assert.deepEqual(await contents(chat), [
-    "Начался разговор в канале «Общая»",
-    "Разговор в канале «Переговорная» закончился",
-  ]);
-});
-
-test("the sentence names no room id, no status code and no webhook", async () => {
-  const { chat, channel, anna } = await group("Общая");
-  await joined(channel, anna, T(1));
-  await left(channel, anna, T(2));
-  for (const line of await contents(chat)) {
-    assert.ok(!line.includes(channel), `the line names the room id: ${line}`);
-    assert.ok(!line.includes(chat), `the line names the chat id: ${line}`);
-    assert.doesNotMatch(
-      line,
-      /room_started|room_finished|participant_|webhook|livekit|[0-9]{3}/i,
-      `the line reads like a log entry: ${line}`,
-    );
-  }
-});
-
-test("both rows are the shape the client draws as a service line", async () => {
-  const { chat, channel, anna } = await group("Общая");
-  await joined(channel, anna, T(1));
-  await left(channel, anna, T(2));
-  const rows = await lines(chat);
-  assert.equal(rows.length, 2);
-  for (const row of rows) {
-    // `resolveMessageActor` answers `{ kind: "system" }` only when both are
-    // absent, and `MessageList` routes on `type === "system"` before it touches
-    // a sender. A row with a sender would be drawn as a bubble.
-    assert.equal(row.type, "system");
-    assert.equal(row.user_id, null);
-    assert.equal(row.bot_id, null);
-  }
-});
-
-// ── who may read it, and who may write one ───────────────────────────────────
-
-/** One statement as `authenticated`, with a `sub` claim, rolled back. */
-async function asUser(userId, sql, params = []) {
-  await db.exec("begin");
-  try {
-    await db.query(`select set_config('request.jwt.claim.sub', $1, true)`, [userId]);
-    await db.exec("set local role authenticated");
-    return await db.query(sql, params);
-  } finally {
-    await db.exec("rollback").catch(() => {});
-  }
-}
-
-test("everybody in the chat reads the line and nobody outside it does", async () => {
-  const { chat, channel, anna, boris, outsider } = await group("Общая");
-  await joined(channel, anna, T(1));
-  await left(channel, anna, T(2));
-
-  const read = async (userId) =>
-    (
-      await asUser(userId, `select count(*)::int as n from public.messages where chat_id = $1`, [
-        chat,
-      ])
-    ).rows[0].n;
-
-  // `Chat members can view messages` -- the same predicate as
-  // `members read voice channels`, so the line's audience is the room's.
-  assert.equal(await read(anna), 2, "the owner cannot read the lines");
-  assert.equal(await read(boris), 2, "an ordinary member cannot read the lines");
-  assert.equal(await read(outsider), 0, "somebody outside the chat can read the lines");
-
-  // And the restrictive `block banned reads` still applies to them.
-  await db.exec(`insert into public.bans (user_id) values ('${boris}')`);
-  assert.equal(await read(boris), 0, "a banned member still reads the lines");
-  await db.exec(`delete from public.bans where user_id = '${boris}'`);
-});
-
-test("no client can write a line like this, whatever it claims to be", async () => {
-  const { chat, anna } = await group("Общая");
-  await assert.rejects(
-    () =>
-      asUser(
-        anna,
-        `insert into public.messages (chat_id, type, content)
-           values ($1, 'system', 'Начался разговор в канале «Общая»')`,
-        [chat],
-      ),
-    // Either gate refuses it and both are structural: the INSERT policy wants
-    // `auth.uid() = user_id`, and `messages_sender_shape_check` wants
-    // `user_id is null`. The two cannot both hold.
-    /row-level security|violates check constraint/i,
-    "a member could forge a service line",
-  );
-  assert.deepEqual(await contents(chat), []);
-});
-
-test("nobody may call the writer, and nobody may set the latch", async () => {
-  const { anna, channel } = await group("Общая");
-  await assert.rejects(
-    () => asUser(anna, `select public.write_voice_call_service_message()`),
-    /permission denied|does not exist|can only be called/i,
-    "the writer is reachable as a function",
-  );
-  await assert.rejects(
-    () =>
-      asUser(anna, `update public.voice_channels set call_announced_at = now() where id = $1`, [
-        channel,
-      ]),
-    /permission denied/i,
-    "a member can latch a call as announced",
-  );
-});
-
-// ── the chain itself ─────────────────────────────────────────────────────────
 
 /**
  * Comments stripped, whitespace collapsed, lowercased.
@@ -1044,215 +527,59 @@ const recordedMigrations = () =>
     .map((name) => name.slice(0, -4))
     .sort();
 
-test("every recorded migration that defines one of these objects is in the chain", async () => {
-  // The repair for D-252, and the only part of it that keeps working after
-  // today. The old list was correct when it was written and wrong eight hours
-  // later, because nothing connected it to the record. This does.
-  //
-  // What it cannot see is named rather than implied: a migration that changes
-  // what these objects *do* without redefining them -- a column one of them
-  // reads, a constraint on a table one of them writes -- passes this case.
-  // That is the shape `20260918280000` itself describes, and the answer to it
-  // is a behavioural case, not a scan.
-  const owners = new Map();
-  const note = (object, file) => {
-    if (!owners.has(object)) owners.set(object, []);
-    owners.get(object).push(file);
-  };
-  for (const name of recordedMigrations()) {
-    const sql = sqlOnly(migrationSql(name));
-    for (const qualified of OBJECTS_UNDER_TEST) {
-      const bare = qualified.slice(qualified.indexOf(".") + 1);
-      const defines = [qualified, bare].some(
-        (spelling) =>
-          sql.includes(`create function ${spelling}(`) ||
-          sql.includes(`create or replace function ${spelling}(`),
-      );
-      if (defines) note(qualified, name);
-    }
-    if (
-      sql.includes(`create trigger ${TRIGGER_UNDER_TEST}`) ||
-      sql.includes(`create or replace trigger ${TRIGGER_UNDER_TEST}`)
-    ) {
-      note(TRIGGER_UNDER_TEST, name);
-    }
-  }
+// ── the conversation is silent ───────────────────────────────────────────────
 
-  // A scanner that has stopped matching would otherwise pass this case by
-  // finding nothing to complain about.
-  for (const object of [...OBJECTS_UNDER_TEST, TRIGGER_UNDER_TEST]) {
-    assert.ok(
-      (owners.get(object) ?? []).length > 0,
-      `no recorded migration appears to define ${object}, so this scan is broken`,
-    );
-  }
+test("a group's room fills and empties and the conversation says nothing", async () => {
+  // Driven through the webhook path's own RPCs rather than by writing
+  // `participant_count` by hand, because the trigger that used to fire hung off
+  // exactly that column and a fixture that moves it a different way would be
+  // measuring its own shortcut.
+  const { chat, channel, anna, boris } = await group("Общая");
+  await joined(channel, anna, T(1));
+  await joined(channel, boris, T(2));
+  await left(channel, boris, T(3));
+  await left(channel, anna, T(4));
 
-  const strays = [];
-  for (const [object, files] of owners) {
-    for (const file of files) {
-      if (!CHAIN.includes(file)) strays.push(`${file} redefines ${object}`);
-    }
-  }
-  assert.deepEqual(
-    strays,
-    [],
-    "a recorded migration redefines an object this file measures and is not in CHAIN, so " +
-      "every case here is asserting something about a definition production has replaced",
-  );
+  assert.deepEqual(await contents(chat), [], "a whole call still wrote into the conversation");
+
+  // And the silence is the removal's, not the fixture's: the latch the writer
+  // used is gone from the table entirely.
+  const column = (
+    await db.query(
+      `select count(*)::int as n from pg_attribute
+        where attrelid = 'public.voice_channels'::regclass
+          and attname = 'call_announced_at' and not attisdropped`,
+    )
+  ).rows[0].n;
+  assert.equal(column, 0, "call_announced_at is still on voice_channels");
 });
 
-test("the chain is in the record's own order, and the subject is not its last entry", async () => {
-  const recorded = new Set(recordedMigrations());
-  for (const name of CHAIN) {
-    assert.ok(recorded.has(name), `CHAIN names ${name}, which is not a recorded migration`);
-  }
-  assert.deepEqual(CHAIN, [...CHAIN].sort(), "CHAIN is not in the order the record applies it");
-  assert.ok(CHAIN.includes(SUBJECT), "SUBJECT is not in CHAIN");
-  assert.ok(
-    BEFORE_SUBJECT.length > 0 && BEFORE_SUBJECT.length < CHAIN.length,
-    "BEFORE_SUBJECT is the whole chain or none of it, so one of the two bases is not a base",
-  );
-  assert.ok(
-    CHAIN.indexOf(SUBJECT) < CHAIN.length - 1,
-    "SUBJECT is the last entry of CHAIN again, which is the state D-252 described",
-  );
+test("a second call, a rename and a reaped room are all equally silent", async () => {
+  // The three paths that each used to write a line by a different route: a
+  // fresh crossing of zero, the reconciler's wholesale replace, and the reaper.
+  const { chat, channel, anna, boris } = await group("Общая");
+  await joined(channel, anna, T(1));
+  await left(channel, anna, T(2));
+  await joined(channel, anna, T(3));
+  await db.query(`update public.voice_channels set name = 'Переговорная' where id = $1`, [channel]);
+  await db.query(`select public.voice_participants_replace($1, $2::uuid[], $3)`, [
+    channel,
+    [boris],
+    T(4),
+  ]);
+  await db.query(`select public.voice_participants_replace($1, $2::uuid[], $3)`, [channel, [], T(5)]);
+  assert.deepEqual(await contents(chat), []);
 });
 
-// ── the file itself ──────────────────────────────────────────────────────────
-
-test("the migration applies again over itself and takes no second effect", async () => {
-  // Base: `databaseBeforeSubject()`, and it used to be the shared one. Applying
-  // `SUBJECT` a second time to the shared database was harmless while the
-  // shared database ended on `SUBJECT`; now that it ends on `20260918280000`
-  // the same two lines would have quietly downgraded the writer for every case
-  // ordered after this one. Idempotence is a property of the file, so it is
-  // measured where the file is the last word.
+test("the lines the feature already wrote are still in the conversation", async () => {
+  // Base: `databaseBeforeSubject()`, because the rows can only be written by
+  // the feature this file's subject removes. The removal takes out a mechanism;
+  // the twenty-five rows it had written on production were deleted afterwards,
+  // separately, from a verified export and on the owner's own instruction. A
+  // migration that deleted them itself would do it again on every database it
+  // was replayed against.
   const fresh = await databaseBeforeSubject();
   try {
-    await execOrRollback(fresh, migrationSql(SUBJECT));
-    const chat = (
-      await fresh.query(
-        `insert into public.chats (type, name) values ('group', 'Команда') returning id`,
-      )
-    ).rows[0].id;
-    const channel = (
-      await fresh.query(
-        `insert into public.voice_channels (chat_id, name) values ($1, 'Общая') returning id`,
-        [chat],
-      )
-    ).rows[0].id;
-    const user = "ffffffff-ffff-4fff-8fff-000000000001";
-    await fresh.exec(`insert into auth.users (id) values ('${user}');
-      insert into public.profiles (id, full_name) values ('${user}', 'Анна Ковалёва');`);
-
-    await fresh.query(`select public.voice_participant_joined($1, $2, $3)`, [channel, user, T(1)]);
-    await execOrRollback(fresh, migrationSql(SUBJECT));
-    await fresh.query(`select public.voice_participant_left($1, $2, $3)`, [channel, user, T(2)]);
-
-    assert.deepEqual(
-      (
-        await fresh.query(`select content from public.messages where chat_id = $1 order by ctid`, [
-          chat,
-        ])
-      ).rows.map((row) => row.content),
-      ["Начался разговор в канале «Общая»", "Разговор в канале «Общая» закончился"],
-    );
-  } finally {
-    await fresh.close();
-  }
-});
-
-/**
- * The self-check is only worth having if it fails, and the mutation has to be
- * made in the **file** rather than in the database: the migration is
- * idempotent, so a `create or replace` applied to a live database is undone by
- * the file's own statements before the check block is ever reached. Measured
- * the hard way -- the first version of this case mutated the function and
- * passed, which is a test that proves nothing.
- *
- * Each substitution is asserted to have applied. A replacement that silently
- * matched nothing would leave the file intact and the case green.
- */
-const SELF_CHECK_MUTATIONS = [
-  {
-    what: "the rule fires per arrival rather than per call",
-    from: `    when coalesce(p_before, 0) = 0
-     and coalesce(p_after, 0) > 0
-     and not coalesce(p_announced, false)
-    then 'start'`,
-    to: `    when coalesce(p_after, 0) > coalesce(p_before, 0)
-    then 'start'`,
-    raises: /once per join|slice 3/i,
-  },
-  {
-    what: "the end arm no longer requires an announced call",
-    from: `    when coalesce(p_before, 0) > 0
-     and coalesce(p_after, 0) = 0
-     and coalesce(p_announced, false)
-    then 'end'`,
-    to: `    when coalesce(p_before, 0) > 0
-     and coalesce(p_after, 0) = 0
-    then 'end'`,
-    raises: /announce an ending nobody saw begin/i,
-  },
-  {
-    what: "the start sentence is reworded",
-    from: `    return 'Начался разговор в канале «' || v_name || '»';`,
-    to: `    return 'Голосовой канал «' || v_name || '»: room_started';`,
-    raises: /the start line is not the approved sentence/i,
-  },
-  {
-    what: "the writer stops latching the call as announced",
-    from: `  new.call_announced_at := case when v_transition = 'start' then pg_catalog.now() else null end;`,
-    to: `  new.call_announced_at := old.call_announced_at;`,
-    raises: /without latching the call as announced/i,
-  },
-];
-
-for (const mutation of SELF_CHECK_MUTATIONS) {
-  test(`the self-check raises when ${mutation.what}`, async () => {
-    const source = migrationSql(SUBJECT);
-    const occurrences = source.split(mutation.from).length - 1;
-    assert.equal(
-      occurrences,
-      1,
-      "the mutation matched nothing in the migration, so this case proves nothing",
-    );
-    const mutated = source.replace(mutation.from, mutation.to);
-    // Base: `databaseBeforeSubject()`, so the mutated file is the last word on
-    // the objects it owns. On the full chain, `20260918280000` would replace
-    // the writer immediately afterwards and the mutation would be measuring
-    // nothing -- which is exactly the trap D-252 named.
-    const broken = await databaseBeforeSubject();
-    try {
-      await assert.rejects(
-        () => execOrRollback(broken, mutated),
-        mutation.raises,
-        "the self-check committed a migration whose rule had been broken",
-      );
-      // And nothing was committed: the raise has to roll the whole file back.
-      const column = (
-        await broken.query(
-          `select count(*)::int as n from pg_attribute
-            where attrelid = 'public.voice_channels'::regclass
-              and attname = 'call_announced_at' and not attisdropped`,
-        )
-      ).rows[0].n;
-      assert.equal(column, 0, "the refused migration left its column behind");
-    } finally {
-      await broken.close();
-    }
-  });
-}
-
-test("the rollback removes the trigger, the functions and the column, and keeps the lines", async () => {
-  // Base: `databaseBeforeSubject()`. A rollback of `SUBJECT` is only meaningful
-  // over the schema `SUBJECT` was applied to; run over the full chain it would
-  // drop objects `20260918280000` had since replaced and leave a shape nothing
-  // ever had.
-  const fresh = await databaseBeforeSubject();
-  try {
-    await execOrRollback(fresh, migrationSql(SUBJECT));
     const chat = (
       await fresh.query(
         `insert into public.chats (type, name) values ('group', 'Команда') returning id`,
@@ -1270,39 +597,567 @@ test("the rollback removes the trigger, the functions and the column, and keeps 
     await fresh.query(`update public.voice_channels set participant_count = 0 where id = $1`, [
       channel,
     ]);
-    const before = (
-      await fresh.query(`select count(*)::int as n from public.messages where chat_id = $1`, [chat])
-    ).rows[0].n;
-    assert.equal(before, 2);
-
-    await execOrRollback(fresh, rollbackSql(SUBJECT));
-
-    const left = (
-      await fresh.query(`select count(*)::int as n from public.messages where chat_id = $1`, [chat])
-    ).rows[0].n;
-    assert.equal(left, 2, "the rollback deleted people's conversation history");
-    const column = (
-      await fresh.query(
-        `select count(*)::int as n from pg_attribute
-          where attrelid = 'public.voice_channels'::regclass
-            and attname = 'call_announced_at' and not attisdropped`,
-      )
-    ).rows[0].n;
-    assert.equal(column, 0);
-
-    // And the room still works afterwards: a call writes nothing and nothing
-    // errors, which is what a rollback has to leave behind.
-    await fresh.query(`update public.voice_channels set participant_count = 1 where id = $1`, [
-      channel,
+    const written = (
+      await fresh.query(`select content from public.messages where chat_id = $1 order by ctid`, [
+        chat,
+      ])
+    ).rows.map((row) => row.content);
+    assert.deepEqual(written, [
+      "Начался разговор в канале «Общая»",
+      "Разговор в канале «Общая» закончился",
     ]);
-    const after = (
-      await fresh.query(`select count(*)::int as n from public.messages where chat_id = $1`, [chat])
-    ).rows[0].n;
-    assert.equal(after, 2);
 
-    // The migration applies again on a rolled-back database.
     await execOrRollback(fresh, migrationSql(SUBJECT));
+
+    assert.deepEqual(
+      (
+        await fresh.query(`select content from public.messages where chat_id = $1 order by ctid`, [
+          chat,
+        ])
+      ).rows.map((row) => row.content),
+      written,
+      "the removal deleted people's conversation history",
+    );
   } finally {
     await fresh.close();
   }
 });
+
+// ── the mechanism that deliberately stays ────────────────────────────────────
+
+/** One statement as `authenticated`, with a `sub` claim. */
+async function asUser(userId, sql, params = [], { keep = false } = {}) {
+  await db.exec("begin");
+  try {
+    await db.query(`select set_config('request.jwt.claim.sub', $1, true)`, [userId]);
+    await db.exec("set local role authenticated");
+    const result = await db.query(sql, params);
+    if (keep) await db.exec("commit");
+    return result;
+  } finally {
+    if (!keep) await db.exec("rollback").catch(() => {});
+  }
+}
+
+test("a private chat's call record still says what happened", async () => {
+  // The thing most easily cut by mistake. `voice_call_stop` and
+  // `voice_call_record_line` are a different mechanism from the one removed --
+  // a record with an outcome, a direction and a length, carried in
+  // `messages.system_payload` -- and the owner asked about channels in groups,
+  // not about the call log in a private conversation.
+  //
+  // Driven through `voice_call_stop` as the product calls it, rather than by
+  // asserting the two functions exist: a declaration is not a surface, and what
+  // matters is that a call in a private chat still leaves its record on a
+  // database the removal has been applied to.
+  const { chat, channel, anna } = await privatePair();
+  await db.query(
+    `update public.voice_channels set ring_started_at = now(), ring_caller = $2 where id = $1`,
+    [channel, anna],
+  );
+
+  const state = (
+    await asUser(anna, `select public.voice_call_stop($1, 'cancelled') as state`, [channel], {
+      keep: true,
+    })
+  ).rows[0].state;
+  assert.equal(state, "ringing");
+
+  const rows = await lines(chat);
+  assert.equal(rows.length, 1, "the call left no record, or left more than one");
+  assert.equal(rows[0].type, "system");
+  assert.equal(rows[0].content, "Отменённый звонок");
+  const payload = (
+    await db.query(`select system_payload from public.messages where chat_id = $1`, [chat])
+  ).rows[0].system_payload;
+  assert.equal(payload.kind, "call");
+  assert.equal(payload.outcome, "cancelled");
+  assert.equal(payload.caller, anna);
+
+  // And nothing announced a «канал» beside it, which is what
+  // `20260918280000` was written for and what the removal must not undo from
+  // the other direction.
+  assert.equal(
+    rows.filter((row) => (row.content ?? "").includes("канале")).length,
+    0,
+    "a private chat was told about a channel",
+  );
+});
+
+test("nothing left in the database names an object the removal dropped", async () => {
+  // The catalogue's own answer, and the same question that was put to
+  // production read-only before and after the removal. A function whose body
+  // still called `voice_call_transition` would parse, deploy and then fail at
+  // run time on the first call, which is the failure shape this repository has
+  // met before.
+  const stale = (
+    await db.query(
+      `select n.nspname || '.' || p.proname as name
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where p.prokind = 'f' and n.nspname in ('public', 'private')
+          and (pg_get_functiondef(p.oid) like '%voice_call_transition%'
+            or pg_get_functiondef(p.oid) like '%voice_call_service_line%'
+            or pg_get_functiondef(p.oid) like '%write_voice_call_service_message%'
+            or pg_get_functiondef(p.oid) like '%call_announced_at%')
+        order by 1`,
+    )
+  ).rows.map((row) => row.name);
+  assert.deepEqual(stale, [], "a function still names something the removal dropped");
+});
+
+// ── the chain itself ─────────────────────────────────────────────────────────
+
+/** Which recorded migrations define or drop one of the objects measured here. */
+function ownersOf(names) {
+  const owners = new Map();
+  const note = (object, file) => {
+    if (!owners.has(object)) owners.set(object, []);
+    owners.get(object).push(file);
+  };
+  for (const name of names) {
+    const sql = sqlOnly(migrationSql(name));
+    for (const qualified of OBJECTS_UNDER_TEST) {
+      const bare = qualified.slice(qualified.indexOf(".") + 1);
+      const touches = [qualified, bare].some(
+        (spelling) =>
+          sql.includes(`create function ${spelling}(`) ||
+          sql.includes(`create or replace function ${spelling}(`) ||
+          sql.includes(`drop function ${spelling}(`) ||
+          sql.includes(`drop function if exists ${spelling}(`),
+      );
+      if (touches) note(qualified, name);
+    }
+    if (
+      sql.includes(`create trigger ${TRIGGER_UNDER_TEST}`) ||
+      sql.includes(`create or replace trigger ${TRIGGER_UNDER_TEST}`) ||
+      sql.includes(`drop trigger ${TRIGGER_UNDER_TEST}`) ||
+      sql.includes(`drop trigger if exists ${TRIGGER_UNDER_TEST}`)
+    ) {
+      note(TRIGGER_UNDER_TEST, name);
+    }
+  }
+  return owners;
+}
+
+test("every recorded migration that defines or drops one of these objects is in the chain", async () => {
+  // The repair for D-252, widened. The old scan looked only for `create`, so
+  // the subject of this file -- which creates nothing at all -- would have been
+  // invisible to it, and a second removal of one of these objects could have
+  // sat outside CHAIN with every case here still green.
+  const owners = ownersOf(recordedMigrations());
+
+  // A scanner that has stopped matching would otherwise pass this case by
+  // finding nothing to complain about.
+  for (const object of [...OBJECTS_UNDER_TEST, TRIGGER_UNDER_TEST]) {
+    assert.ok(
+      (owners.get(object) ?? []).length > 0,
+      `no recorded migration appears to define or drop ${object}, so this scan is broken`,
+    );
+  }
+  // And it can see a drop specifically, not only a create: the subject must
+  // appear as an owner of the four objects it removes.
+  for (const object of [
+    "public.voice_call_transition",
+    "public.voice_call_service_line",
+    "public.write_voice_call_service_message",
+    TRIGGER_UNDER_TEST,
+  ]) {
+    assert.ok(
+      (owners.get(object) ?? []).includes(SUBJECT),
+      `the scan does not see ${SUBJECT} dropping ${object}, so its «or drops» half is not working`,
+    );
+  }
+
+  const strays = [];
+  for (const [object, files] of owners) {
+    for (const file of files) {
+      if (!CHAIN.includes(file)) strays.push(`${file} touches ${object}`);
+    }
+  }
+  assert.deepEqual(
+    strays,
+    [],
+    "a recorded migration defines or drops an object this file measures and is not in CHAIN, so " +
+      "every case here is asserting something about a state production has moved past",
+  );
+});
+
+test("the chain is in the record's own order, and ends where the record ends", async () => {
+  const recorded = recordedMigrations();
+  for (const name of CHAIN) {
+    assert.ok(recorded.includes(name), `CHAIN names ${name}, which is not a recorded migration`);
+  }
+  assert.deepEqual(CHAIN, [...CHAIN].sort(), "CHAIN is not in the order the record applies it");
+  assert.ok(CHAIN.includes(SUBJECT), "SUBJECT is not in CHAIN");
+  assert.ok(
+    BEFORE_SUBJECT.length > 0 && BEFORE_SUBJECT.length < CHAIN.length,
+    "BEFORE_SUBJECT is the whole chain or none of it, so one of the two bases is not a base",
+  );
+
+  // The invariant D-252 actually named, stated directly instead of through the
+  // proxy «SUBJECT is not the last entry». The subject here *is* last, and that
+  // is only safe while nothing recorded after it touches one of these objects.
+  const later = recorded.filter((name) => name > CHAIN[CHAIN.length - 1]);
+  const afterwards = [...ownersOf(later).values()].flat();
+  assert.deepEqual(
+    [...new Set(afterwards)],
+    [],
+    "a migration recorded after the end of CHAIN touches an object this file measures, so CHAIN stops before the record does -- which is D-252",
+  );
+});
+
+// ── the file itself ──────────────────────────────────────────────────────────
+
+test("the removal applies again over itself and takes no second effect", async () => {
+  // Base: `databaseBeforeSubject()`, so the subject is the last word on the
+  // objects it owns. Every statement in it is guarded, so the second run does
+  // no DDL and the self-check still has to pass.
+  const fresh = await databaseBeforeSubject();
+  try {
+    await execOrRollback(fresh, migrationSql(SUBJECT));
+    await execOrRollback(fresh, migrationSql(SUBJECT));
+
+    const survivors = (
+      await fresh.query(
+        `select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.proname in
+            ('voice_call_transition', 'voice_call_service_line', 'write_voice_call_service_message')`,
+      )
+    ).rows;
+    assert.deepEqual(survivors, []);
+
+    const chat = (
+      await fresh.query(
+        `insert into public.chats (type, name) values ('group', 'Команда') returning id`,
+      )
+    ).rows[0].id;
+    const channel = (
+      await fresh.query(
+        `insert into public.voice_channels (chat_id, name) values ($1, 'Общая') returning id`,
+        [chat],
+      )
+    ).rows[0].id;
+    await fresh.query(`update public.voice_channels set participant_count = 1 where id = $1`, [
+      channel,
+    ]);
+    await fresh.query(`update public.voice_channels set participant_count = 0 where id = $1`, [
+      channel,
+    ]);
+    assert.equal(
+      (await fresh.query(`select count(*)::int as n from public.messages where chat_id = $1`, [chat]))
+        .rows[0].n,
+      0,
+    );
+  } finally {
+    await fresh.close();
+  }
+});
+
+/**
+ * The self-check is only worth having if it fails, and the mutation has to be
+ * made in the **file** rather than in the database: every statement is guarded,
+ * so a change applied to a live database is undone by the file's own statements
+ * before the check block is ever reached.
+ *
+ * Each substitution is asserted to have applied. A replacement that silently
+ * matched nothing would leave the file intact and the case green.
+ *
+ * All three mutations here are the same real mistake in different clothes: a
+ * `drop … if exists` whose name or signature is wrong drops nothing, says
+ * nothing and returns success.
+ */
+const REMOVAL_MUTATIONS = [
+  {
+    what: "a function is dropped at the wrong arity, so nothing is dropped",
+    from: "drop function if exists public.voice_call_transition(integer, integer, boolean);",
+    to: "drop function if exists public.voice_call_transition(integer, integer);",
+    raises: /a service-message function survived/i,
+  },
+  {
+    what: "a function is dropped under the wrong name",
+    from: "drop function if exists public.voice_call_service_line(text, text);",
+    to: "drop function if exists public.voice_call_service_lines(text, text);",
+    raises: /a service-message function survived/i,
+  },
+  {
+    what: "the column is dropped under the wrong name",
+    from: "alter table public.voice_channels drop column if exists call_announced_at;",
+    to: "alter table public.voice_channels drop column if exists call_announced;",
+    raises: /call_announced_at survived/i,
+  },
+];
+
+for (const mutation of REMOVAL_MUTATIONS) {
+  test(`the removal's self-check raises when ${mutation.what}`, async () => {
+    const source = migrationSql(SUBJECT);
+    assert.equal(
+      source.split(mutation.from).length - 1,
+      1,
+      "the mutation matched nothing in the migration, so this case proves nothing",
+    );
+    const broken = await databaseBeforeSubject();
+    try {
+      await assert.rejects(
+        () => execOrRollback(broken, source.replace(mutation.from, mutation.to)),
+        mutation.raises,
+        "the self-check committed a removal that had left half of the feature behind",
+      );
+      // And nothing was committed: the raise has to roll the whole file back,
+      // so the trigger and the column are still there.
+      assert.equal(
+        (
+          await broken.query(
+            `select count(*)::int as n from pg_trigger where not tgisinternal
+              and tgrelid = 'public.voice_channels'::regclass
+              and tgname = 'trg_voice_call_service_message'`,
+          )
+        ).rows[0].n,
+        1,
+        "the refused removal dropped the trigger anyway",
+      );
+    } finally {
+      await broken.close();
+    }
+  });
+}
+
+test("the trigger cannot be left behind at all: PostgreSQL refuses before the self-check", async () => {
+  // The self-check's first arm looks for a surviving trigger, and no plausible
+  // mutation reaches it -- which is worth writing down rather than leaving as a
+  // green assertion nobody can break. Dropping the writer while its trigger
+  // still references it is refused by the database's own dependency tracking,
+  // one statement earlier and with a better error. The arm is a belt for a
+  // trigger recreated by something outside this file, not for this file.
+  const source = migrationSql(SUBJECT);
+  const line = "drop trigger if exists trg_voice_call_service_message on public.voice_channels;\n";
+  assert.equal(source.split(line).length - 1, 1, "the mutation matched nothing");
+  const broken = await databaseBeforeSubject();
+  try {
+    await assert.rejects(
+      () => execOrRollback(broken, source.replace(line, "")),
+      /depends on|cannot drop/i,
+      "the writer was dropped while its trigger still pointed at it",
+    );
+    assert.equal(
+      (
+        await broken.query(
+          `select count(*)::int as n from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = 'public' and p.proname = 'write_voice_call_service_message'`,
+        )
+      ).rows[0].n,
+      1,
+      "nothing should have been dropped",
+    );
+  } finally {
+    await broken.close();
+  }
+});
+
+// ── the round trip ───────────────────────────────────────────────────────────
+
+/** The definitions, hashed, so «restored» means «the same» and not «similar». */
+async function shapeOf(instance) {
+  const functions = (
+    await instance.query(
+      `select p.proname, md5(pg_get_functiondef(p.oid)) as definition
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname in
+          ('voice_call_transition', 'voice_call_service_line', 'write_voice_call_service_message')
+        order by 1`,
+    )
+  ).rows;
+  const triggers = (
+    await instance.query(
+      `select t.tgname, md5(pg_get_triggerdef(t.oid)) as definition
+         from pg_trigger t where not t.tgisinternal
+           and t.tgrelid = 'public.voice_channels'::regclass order by 1`,
+    )
+  ).rows;
+  const column = (
+    await instance.query(
+      `select a.atttypid::regtype::text as type, a.attnotnull as notnull
+         from pg_attribute a where a.attrelid = 'public.voice_channels'::regclass
+           and a.attname = 'call_announced_at' and not a.attisdropped`,
+    )
+  ).rows;
+  const grants = (
+    await instance.query(
+      `select privilege_type from information_schema.column_privileges
+        where table_schema = 'public' and table_name = 'voice_channels'
+          and column_name = 'call_announced_at' and grantee = 'authenticated'
+        order by 1`,
+    )
+  ).rows.map((row) => row.privilege_type);
+  return { functions, triggers, column, grants };
+}
+
+test("the rollback restores the feature exactly, definitions and grants included", async () => {
+  // Comparing `md5(pg_get_functiondef())` rather than reading the restored SQL,
+  // because a function body includes its comments and a restore transcribed by
+  // hand will not. That is not hypothetical: the first draft of this rollback
+  // tidied the inline comments out of `voice_call_transition` and this case is
+  // what found it, in the one place a text scan would have said yes.
+  const fresh = await databaseBeforeSubject();
+  try {
+    const before = await shapeOf(fresh);
+    assert.equal(before.functions.length, 3, "the feature is not in place to begin with");
+    assert.equal(before.triggers.length, 1);
+    assert.equal(before.column.length, 1);
+
+    await execOrRollback(fresh, migrationSql(SUBJECT));
+    assert.deepEqual(await shapeOf(fresh), {
+      functions: [],
+      triggers: [],
+      column: [],
+      grants: [],
+    });
+
+    await execOrRollback(fresh, rollbackSql(SUBJECT));
+    assert.deepEqual(
+      await shapeOf(fresh),
+      before,
+      "what came back is not what was there: a restore that is only similar is a restore nobody can predict",
+    );
+
+    // Behaviour, not only shape. A group is told once per call again…
+    const chat = (
+      await fresh.query(
+        `insert into public.chats (type, name) values ('group', 'Команда') returning id`,
+      )
+    ).rows[0].id;
+    const channel = (
+      await fresh.query(
+        `insert into public.voice_channels (chat_id, name) values ($1, 'Общая') returning id`,
+        [chat],
+      )
+    ).rows[0].id;
+    for (const count of [1, 3, 2, 0]) {
+      await fresh.query(`update public.voice_channels set participant_count = $2 where id = $1`, [
+        channel,
+        count,
+      ]);
+    }
+    assert.deepEqual(
+      (
+        await fresh.query(`select content from public.messages where chat_id = $1 order by ctid`, [
+          chat,
+        ])
+      ).rows.map((row) => row.content),
+      ["Начался разговор в канале «Общая»", "Разговор в канале «Общая» закончился"],
+    );
+
+    // …and a private chat still is not, which is `20260918280000`'s repair
+    // surviving the round trip. Replaying `20260918200000` here instead would
+    // pass every structural assertion above and fail this one.
+    const privateChat = (
+      await fresh.query(`insert into public.chats (type) values ('private') returning id`)
+    ).rows[0].id;
+    const privateRoom = (
+      await fresh.query(
+        `insert into public.voice_channels (chat_id, name, max_participants)
+           values ($1, 'Звонок', 2) returning id`,
+        [privateChat],
+      )
+    ).rows[0].id;
+    for (const count of [2, 0]) {
+      await fresh.query(`update public.voice_channels set participant_count = $2 where id = $1`, [
+        privateRoom,
+        count,
+      ]);
+    }
+    assert.equal(
+      (
+        await fresh.query(`select count(*)::int as n from public.messages where chat_id = $1`, [
+          privateChat,
+        ])
+      ).rows[0].n,
+      0,
+      "a private chat was told about a «канал», so 20260918200000's writer came back instead of 20260918280000's",
+    );
+
+    // And the round trip closes: the removal applies again on a restored
+    // database, and the rollback again on top of that.
+    await execOrRollback(fresh, rollbackSql(SUBJECT));
+    await execOrRollback(fresh, migrationSql(SUBJECT));
+    assert.deepEqual((await shapeOf(fresh)).functions, []);
+  } finally {
+    await fresh.close();
+  }
+});
+
+/**
+ * The restore's self-check, mutated. The first of these is the whole reason
+ * this rollback is not «run `20260918200000` again»: it is the mistake that
+ * would look like success.
+ */
+const RESTORE_MUTATIONS = [
+  {
+    what: "20260918200000's writer is restored instead of 20260918280000's",
+    from: `  select c.type into v_type from public.chats as c where c.id = new.chat_id;
+  if v_type = 'private' then
+    return new;
+  end if;
+`,
+    to: "",
+    raises: /private chat|«канал»/i,
+  },
+  {
+    what: "the start sentence is reworded",
+    from: `    return 'Начался разговор в канале «' || v_name || '»';`,
+    to: `    return 'Голосовой канал «' || v_name || '»: room_started';`,
+    raises: /the start line is not the approved sentence/i,
+  },
+  {
+    what: "the trigger is created under another name, so nothing fires",
+    from: `create trigger trg_voice_call_service_message
+  before update of participant_count on public.voice_channels`,
+    to: `create trigger trg_voice_call_service_message_unused
+  before update of participant_count on public.voice_channels`,
+    raises: /expected one service-message trigger/i,
+  },
+  {
+    what: "the end arm stops requiring an announced call",
+    from: `    when coalesce(p_before, 0) > 0
+     and coalesce(p_after, 0) = 0
+     and coalesce(p_announced, false)
+    then 'end'`,
+    to: `    when coalesce(p_before, 0) > 0
+     and coalesce(p_after, 0) = 0
+    then 'end'`,
+    raises: /announce an ending nobody saw begin/i,
+  },
+  {
+    what: "the writer stops latching the call as announced",
+    from: `  new.call_announced_at := case when v_transition = 'start' then pg_catalog.now() else null end;`,
+    to: `  new.call_announced_at := old.call_announced_at;`,
+    raises: /without latching the call as announced/i,
+  },
+];
+
+for (const mutation of RESTORE_MUTATIONS) {
+  test(`the rollback's self-check raises when ${mutation.what}`, async () => {
+    const source = rollbackSql(SUBJECT);
+    assert.equal(
+      source.split(mutation.from).length - 1,
+      1,
+      "the mutation matched nothing in the rollback, so this case proves nothing",
+    );
+    const broken = await databaseThrough([...CHAIN]);
+    try {
+      await assert.rejects(
+        () => execOrRollback(broken, source.replace(mutation.from, mutation.to)),
+        mutation.raises,
+        "the self-check committed a restore that had brought back the wrong thing",
+      );
+      // Nothing committed: the database is still the one the removal left.
+      assert.deepEqual(await shapeOf(broken), {
+        functions: [],
+        triggers: [],
+        column: [],
+        grants: [],
+      });
+    } finally {
+      await broken.close();
+    }
+  });
+}

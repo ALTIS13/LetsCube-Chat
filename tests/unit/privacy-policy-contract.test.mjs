@@ -9,6 +9,27 @@ import {
 
 const policyText = JSON.stringify(PRIVACY_POLICY);
 
+test("the version the document prints is the version it declares", () => {
+  // These two facts were typed out twice — once as the constants above and once
+  // as a sentence in the closing section — and on 2026-09-19 the constants were
+  // bumped while the sentence went on saying 2026-09-18. The document is now
+  // interpolated from the constants; this is what keeps it that way.
+  const closing = PRIVACY_POLICY.sections
+    .flatMap((section) => section.blocks)
+    .filter((block) => block.kind === "paragraph")
+    .map((block) => block.text)
+    .find((text) => text.includes("Версия Политики"));
+  assert.ok(closing, "the document no longer prints its own version");
+  assert.ok(
+    closing.includes(PRIVACY_POLICY_VERSION),
+    `the printed version «${closing}» is not ${PRIVACY_POLICY_VERSION}`,
+  );
+  assert.ok(
+    closing.includes(PRIVACY_POLICY_EFFECTIVE_DATE),
+    `the printed effective date «${closing}» is not ${PRIVACY_POLICY_EFFECTIVE_DATE}`,
+  );
+});
+
 test("privacy policy publishes a stable version and operator identity", () => {
   assert.match(PRIVACY_POLICY_VERSION, /^\d{4}-\d{2}-\d{2}$/);
   assert.ok(PRIVACY_POLICY_EFFECTIVE_DATE.length > 0);

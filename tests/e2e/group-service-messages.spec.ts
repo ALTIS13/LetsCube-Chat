@@ -173,6 +173,94 @@ test("a service line is centred, not ranged to either side", async ({ page }) =>
   expect(Math.abs(leftGap - rightGap)).toBeLessThanOrEqual(2);
 });
 
+/**
+ * The widest line this renderer can ever be given.
+ *
+ * `profiles_full_name_length_check` (`20260506_profile_name_constraints.sql:41`)
+ * allows 1 to 64 characters, and «АКТЁР добавил(а) в группу: УЧАСТНИК» is the
+ * only sentence that carries two names, so 64 + 64 is the ceiling — about 147
+ * characters, far past the pill's `min(82vw, 32rem)`.
+ *
+ * This case is here because it used to live in
+ * `tests/e2e/voice-call-service-messages.spec.ts`, against a 64-character voice
+ * room name. That feature was removed on 2026-09-19 and its spec went with it,
+ * and this was the only assertion in it that was really about the renderer
+ * rather than about the removed sentences. Deleting it with the rest would have
+ * left the pill's cap, its wrapping and the page's horizontal overflow with no
+ * coverage at all — so it moved, and it got a wider input on the way.
+ */
+const LONG_ACTOR = "Зоя Александровна Яблокова-Виноградова из отдела планирования";
+const LONG_SUBJECT = "Борис Константинович Ильин-Преображенский, старший инженер";
+const LONG_LINE = `${LONG_ACTOR} добавил(а) в группу: ${LONG_SUBJECT}`;
+
+test("the longest line a name can make wraps inside the pill rather than overflowing", async ({
+  page,
+}) => {
+  // Both names are inside the 64-character limit the database enforces, so this
+  // is a line the product can actually produce and not a synthetic one.
+  expect(LONG_ACTOR.length, "the actor's name is longer than the column allows").toBeLessThanOrEqual(64);
+  expect(LONG_SUBJECT.length, "the subject's name is longer than the column allows").toBeLessThanOrEqual(64);
+
+  await openFixture(page, {
+    me: ZOYA,
+    chats: [chat(CHAT_TEAM, "group", "Команда проекта", AT)],
+    memberships: [
+      membership(CHAT_TEAM, ZOYA, "owner", AT),
+      membership(CHAT_TEAM, BORIS, "member", AT),
+    ] as Row[],
+    messages: [
+      message(
+        "57777777-7777-4777-8777-000000000000",
+        CHAT_TEAM,
+        ZOYA,
+        ANCHOR,
+        new Date(Date.UTC(2026, 8, 14, 9, 30)).toISOString(),
+      ),
+      systemRow(0, LINES[1]),
+      systemRow(1, LONG_LINE),
+    ],
+    rpc: (name) => {
+      if (name === "profile_badges") return { body: [] };
+      if (name === "search_chat_messages") return missingFunction(name);
+      return undefined;
+    },
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  const row = page.getByTestId("chat-list-item").filter({ hasText: "Команда проекта" });
+  await expect(row).toBeVisible();
+  await row.click();
+  const notices = page.locator("[data-system-message]");
+  await expect(notices).toHaveCount(2);
+
+  const around = await page.getByTestId("message-scroll-container").boundingBox();
+  const short = await notices.nth(0).boundingBox();
+  const long = await notices.nth(1).boundingBox();
+  expect(around, "the lines have nothing to be measured in").not.toBeNull();
+  if (!around || !short || !long) return;
+
+  // Nothing reaches past the track, in either direction.
+  for (const [label, box] of [
+    ["the short line", short],
+    ["the long line", long],
+  ] as const) {
+    expect(box.x, `${label} starts left of the track`).toBeGreaterThanOrEqual(around.x - 1);
+    expect(
+      box.x + box.width,
+      `${label} runs past the right of the track`,
+    ).toBeLessThanOrEqual(around.x + around.width + 1);
+  }
+
+  // Taller than the one-line pill beside it, which is what wrapping means. A
+  // pill that had overflowed instead would be the same height and wider.
+  expect(long.height, "the longest line a name can make did not wrap").toBeGreaterThan(short.height);
+
+  // And the page itself must not scroll sideways because of it.
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow, "the page scrolls horizontally").toBeLessThanOrEqual(1);
+});
+
 for (const theme of ["light", "dark"] as const) {
   test(`the service lines hold in the ${theme} theme`, async ({ page }, info) => {
     await openGroup(page);
