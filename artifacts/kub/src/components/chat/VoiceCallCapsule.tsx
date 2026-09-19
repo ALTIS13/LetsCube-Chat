@@ -459,7 +459,18 @@ export function VoiceCallCapsule({
           hints at 50, which is the layer `ChannelRailSheet` had to measure. */}
       {healthOpen && (
         <div className="absolute inset-x-0 top-full z-30 mt-1 rounded-xl p-3" data-testid="voice-capsule-health-panel">
-          <KubGlassLayer className={CAPSULE_GLASS} />
+          {/* `rounded-[inherit]`, and NOT `CAPSULE_GLASS`, which is the mistake
+              this line used to make. That constant carries `rounded-full`,
+              which is right for the six other things that use it — every one
+              of them is a pill whose own container is `rounded-full` too. This
+              panel is not: it is `rounded-xl` and, on a wide conversation,
+              about 751×277. CSS does not draw a 9999px radius on such a box,
+              it clamps each corner to half the shorter side — 138px here — so
+              the glass came out a stadium while the readings inside it stayed
+              a rectangle, and every corner of the content sat outside its own
+              panel. Inheriting the radius cannot drift: there is no second
+              number to keep in step. */}
+          <KubGlassLayer className="rounded-[inherit] border border-[color:var(--glass-line)]" />
           <div className="relative">
             <VoiceConnectionPanel open />
           </div>

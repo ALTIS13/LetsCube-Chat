@@ -3048,3 +3048,90 @@ for (const theme of ["dark", "light"] as const) {
     },
   );
 }
+
+/**
+ * The panel's glass is the panel's shape, not the capsule's (2026-09-19).
+ *
+ * Reported from a live call with a screenshot: every corner of the readings sat
+ * outside the panel they belong to. The cause was one word — the glass layer
+ * carried `CAPSULE_GLASS`, which is `rounded-full`, because the panel was
+ * written next to the capsule and copied its line. Six other places use that
+ * constant and all six are right: each is a pill whose own container is
+ * `rounded-full` too. This one is `rounded-xl` and, on a wide conversation,
+ * 751 by 277 — and CSS does not draw a 9999px corner on such a box, it clamps
+ * each one to half the shorter side, so the glass came out a stadium with 138px
+ * corners while the readings inside stayed a rectangle.
+ *
+ * What is asserted is therefore the geometry and not the class: every corner of
+ * the content lies inside the shape the glass paints. Asserting the two radii
+ * are equal would pass just as happily on a panel that was itself a stadium,
+ * and a computed style cannot be compared with 14px directly either — it
+ * reports the value as written, never the clamp the browser applied, which is
+ * why the defect measured 3.35544e+07px and looked like nothing was wrong.
+ */
+test("the health panel's own shape holds its readings", async ({ page, browserName }) => {
+  needsWebRtc(browserName);
+  await open(page, {
+    channel: { participantCount: 2 },
+    present: [ANNA.id],
+    health: "good",
+    serverName: "\u0424\u0438\u043d\u043b\u044f\u043d\u0434\u0438\u044f-14",
+  });
+  await action(page).click();
+  await expect(action(page)).toHaveText("\u0412\u044b\u0439\u0442\u0438");
+  await page.getByRole("button", { name: "\u0421\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435 \u0441\u0432\u044f\u0437\u0438" }).click();
+
+  const panel = page.getByTestId("voice-capsule-health-panel");
+  await expect(panel).toBeVisible();
+  await expect(page.getByTestId("voice-connection-panel")).toBeVisible();
+
+  const outside = await panel.evaluate((host) => {
+    const glass = host.querySelector("[data-kub-glass-layer]");
+    if (!glass) return ["no glass layer"];
+    const shape = glass.getBoundingClientRect();
+    // The browser's own clamp, applied here because it cannot be read back:
+    // a uniform radius is reduced to half the shorter side when it would make
+    // two corners meet.
+    const written = Number.parseFloat(getComputedStyle(glass).borderTopLeftRadius);
+    const radius = Math.min(written, Math.min(shape.width, shape.height) / 2);
+
+    const inside = (x: number, y: number) => {
+      const dx = Math.min(x - shape.left, shape.right - x);
+      const dy = Math.min(y - shape.top, shape.bottom - y);
+      if (dx < -0.5 || dy < -0.5) return false;
+      if (dx >= radius || dy >= radius) return true;
+      const ox = radius - dx;
+      const oy = radius - dy;
+      return ox * ox + oy * oy <= (radius + 0.5) * (radius + 0.5);
+    };
+
+    const failures: string[] = [];
+    for (const element of host.querySelectorAll("[data-testid], p, span")) {
+      // The glass layer IS the shape: it is `absolute inset-0`, so its own
+      // corners are the panel's corners and it can never be outside itself.
+      if (element === glass) continue;
+      const box = element.getBoundingClientRect();
+      if (box.width === 0 || box.height === 0) continue;
+      const corners: [number, number][] = [
+        [box.left, box.top],
+        [box.right, box.top],
+        [box.left, box.bottom],
+        [box.right, box.bottom],
+      ];
+      for (const [x, y] of corners) {
+        if (!inside(x, y)) {
+          failures.push(
+            `${element.getAttribute("data-testid") ?? element.tagName.toLowerCase()} ` +
+              `corner (${Math.round(x)}, ${Math.round(y)}) is outside the panel ` +
+              `[${Math.round(shape.left)}, ${Math.round(shape.top)}, ` +
+              `${Math.round(shape.width)}x${Math.round(shape.height)}, r=${Math.round(radius)}]`,
+          );
+          break;
+        }
+      }
+    }
+    return failures;
+  });
+
+  expect(outside).toEqual([]);
+});
