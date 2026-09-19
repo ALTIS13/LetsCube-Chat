@@ -456,6 +456,90 @@ export function chooseBotChat(
 }
 
 // ---------------------------------------------------------------------------
+// Which bot a chat holds (D-126, D-244, D-247)
+// ---------------------------------------------------------------------------
+
+/**
+ * The one state in which a bot can be sent anything at all.
+ *
+ * `private.bot_can_receive_message` joins `public.bots` and requires
+ * `receiver_bot.state = 'active'`, read off
+ * `.migration-backup/supabase/migrations/20260831100000_bot_platform_foundation.sql`
+ * line 2630 rather than assumed. Every other state — `paused`, `suspended`,
+ * `pending_delete`, `deleted` — is a bot whose messages the authoriser drops
+ * without a word to the sender.
+ */
+const BOT_STATE_REACHABLE = "active";
+
+export interface ChatBotMembership {
+  readonly botId: string;
+  /** `bots.username` of that same bot, for addressing it (D-244). */
+  readonly username: string;
+  /** `chat_bot_members.joined_at`; "" when the row did not carry one. */
+  readonly joinedAt: string;
+}
+
+/**
+ * A row of `chat_bot_members` with its bot embedded, or null.
+ *
+ * PostgREST answers a to-one embed as an object; some versions answer an array
+ * of one. Both are read, the way `fetchChatBots` reads them, because guessing
+ * wrong turns every bot chat into a chat without a bot.
+ *
+ * **The state is filtered here rather than on the wire, and that is the whole
+ * of D-247.** The `bots` SELECT policy admits a row to anyone sharing a live
+ * chat with the bot **whatever its state** — that is its third branch, and it
+ * is what makes a disabled bot's name readable to the people it was talking to.
+ * So the server will go on handing this row back, and the client is the only
+ * place the filter can be. `fetchChatBots` had it and this reader did not, and
+ * two readers of one fact disagreeing is how a paused bot kept a command menu
+ * whose commands the authoriser refused in silence.
+ */
+export function readChatBotMembership(value: unknown): ChatBotMembership | null {
+  if (typeof value !== "object" || value === null) return null;
+  const row = value as Record<string, unknown>;
+  const embedded = Array.isArray(row.bot) ? row.bot[0] : row.bot;
+  const bot = typeof embedded === "object" && embedded !== null ? (embedded as Record<string, unknown>) : null;
+  const botId = typeof row.bot_id === "string" ? row.bot_id : null;
+  const username = typeof bot?.username === "string" ? bot.username : null;
+  if (!botId || !username) return null;
+  if (bot?.state !== BOT_STATE_REACHABLE) return null;
+  return {
+    botId,
+    username,
+    joinedAt: typeof row.joined_at === "string" ? row.joined_at : "",
+  };
+}
+
+/**
+ * Which bot the composer speaks to, out of everything the chat holds.
+ *
+ * One of them, and always the same one: the one that joined first, with the
+ * username as a tie-break so that two memberships written in one transaction
+ * still order the same way on every load. The composer has room for a single
+ * bot's menu, so this is a choice the product has to make either way; before
+ * D-244 it was `limit(1)` with no ordering, which is whichever row Postgres
+ * handed back that time. A group with two bots still reaches only one of them
+ * from the menu — recorded rather than fixed, because a per-bot menu is a
+ * different surface.
+ *
+ * A membership whose bot row does not come back is no bot rather than a bot
+ * without a name: the alternative is a command menu that offers what nothing
+ * can deliver, which is the same failure D-247 names from the other end.
+ */
+export function chooseChatBot(rows: unknown): ChatBotMembership | null {
+  const parsed = (Array.isArray(rows) ? rows : [])
+    .map(readChatBotMembership)
+    .filter((row): row is ChatBotMembership => row !== null)
+    .sort((left, right) =>
+      left.joinedAt === right.joinedAt
+        ? left.username.localeCompare(right.username, "en-US")
+        : left.joinedAt.localeCompare(right.joinedAt),
+    );
+  return parsed[0] ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // The words
 // ---------------------------------------------------------------------------
 

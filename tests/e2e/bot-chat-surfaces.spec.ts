@@ -99,10 +99,20 @@ interface Options {
   /** Bots `search_public_bots` finds. */
   searchBots?: boolean;
   commands?: typeof COMMANDS;
+  /**
+   * `bots.state` the membership read answers with. Defaults to `active`.
+   *
+   * The `bots` SELECT policy admits a row to anyone sharing a live chat with
+   * the bot **whatever its state**, so a paused or deleted bot's name goes on
+   * arriving here exactly as it does in production — which is what D-247 is
+   * about.
+   */
+  botState?: string;
 }
 
 async function seed(page: Page, options: Options = {}): Promise<Fixture> {
   const commands = options.commands ?? COMMANDS;
+  const botState = options.botState ?? BOT.state;
   return openFixture(page, {
     me: ME,
     chats: [
@@ -125,12 +135,14 @@ async function seed(page: Page, options: Options = {}): Promise<Fixture> {
       if (resource === "chat_bot_members") {
         // The embed is what `useBotChat` asks for since D-244: the bot's
         // username has to arrive in the same row as the `bot_id` whose
-        // commands are being loaded, or a group addresses the wrong one.
+        // commands are being loaded, or a group addresses the wrong one. Its
+        // `state` travels with it since D-247, because the authoriser reads
+        // that column and the composer has to read the same one.
         return {
           status: 200,
           body: [
-            { chat_id: CHAT_STARTED, bot_id: BOT_ID, joined_at: AT, removed_at: null, bot: { username: BOT.username } },
-            { chat_id: CHAT_FRESH, bot_id: BOT_ID, joined_at: AT, removed_at: null, bot: { username: BOT.username } },
+            { chat_id: CHAT_STARTED, bot_id: BOT_ID, joined_at: AT, removed_at: null, bot: { username: BOT.username, state: botState } },
+            { chat_id: CHAT_FRESH, bot_id: BOT_ID, joined_at: AT, removed_at: null, bot: { username: BOT.username, state: botState } },
           ],
         };
       }
@@ -334,6 +346,66 @@ test.describe("what a bot offers reaches the person", () => {
     await expect(page.getByTestId("bot-command-menu")).toContainText("Нет подходящих команд.");
   });
 
+  /**
+   * D-246. The composer's hints are Radix popovers portalled to the body at
+   * `z-50`; the command menu is an ordinary box inside the composer. At 390 the
+   * two open into the same corner, and the plate painted across the menu — of a
+   * three-command bot, the bottom two rows survived as a ⚡ and a sliver of «/».
+   *
+   * Three assertions, because the fix has to be a suppression and not a
+   * removal: the plate is up before the menu opens, gone while it is open, and
+   * back afterwards. The third is the one that tells `withdraw` from `dismiss`
+   * — `useHint` withdraws an offer that is no longer enabled without spending
+   * or dismissing it, so the hint still has its budget when the menu shuts.
+   *
+   * Phone projects only: the plate is offered on a coarse pointer below `md`
+   * and nowhere else, so on a desktop viewport there is nothing to collide.
+   */
+  test("the recorder hint steps aside while the bot's command menu is open", async ({ page }, testInfo) => {
+    test.skip(
+      !testInfo.project.name.includes("mobile"),
+      "the recorder hint is offered on a coarse pointer below md; a desktop viewport never draws it",
+    );
+    await seed(page);
+    await openBotChat(page, CHAT_STARTED);
+
+    const plate = page.getByTestId("kub-hint");
+    const menuButton = page.getByTestId("bot-commands-button");
+    await expect(menuButton).toBeVisible();
+    await expect(plate, "the hint has to be up first, or this test proves nothing").toBeVisible();
+
+    await menuButton.click();
+    const menu = page.getByTestId("bot-command-menu");
+    await expect(menu).toBeVisible();
+    await expect(menu.locator("[data-bot-command]")).toHaveCount(3);
+    await expect(
+      plate,
+      "the recorder hint is painting over the command menu again",
+    ).toHaveCount(0);
+
+    // Every row readable, which is what the defect took away. `toBeVisible`
+    // alone would pass on a row behind the plate, so the boxes are compared:
+    // nothing portalled may overlap the menu.
+    const clear = await page.evaluate(() => {
+      const box = document.querySelector('[data-testid="bot-command-menu"]')?.getBoundingClientRect();
+      if (!box) return null;
+      return [...document.querySelectorAll("[data-radix-popper-content-wrapper]")]
+        .map((node) => node.getBoundingClientRect())
+        .filter((r) => r.width > 0 && r.height > 0)
+        .filter((r) => r.left < box.right && r.right > box.left && r.top < box.bottom && r.bottom > box.top)
+        .length;
+    });
+    expect(clear, "a portalled layer still overlaps the command menu's box").toBe(0);
+
+    // Closed again, and the hint comes back rather than having been spent.
+    await menuButton.click();
+    await expect(menu).toHaveCount(0);
+    await expect(
+      plate,
+      "the hint did not come back, so it was dismissed or spent rather than withdrawn",
+    ).toBeVisible();
+  });
+
   test("a bot with no commands says so rather than opening an empty menu", async ({ page }) => {
     await seed(page, { commands: [] });
     await openBotChat(page, CHAT_STARTED);
@@ -378,6 +450,64 @@ test.describe("what a bot offers reaches the person", () => {
     const sent = fixture.restCalls("messages", "POST")[0].body as Record<string, unknown>;
     const row = (Array.isArray(sent) ? sent[0] : sent) as { content?: unknown };
     expect(row.content).toBe("/start");
+  });
+
+  // -------------------------------------------------------------------------
+  // D-247
+  // -------------------------------------------------------------------------
+
+  /**
+   * A bot the authoriser will not deliver to offers nothing.
+   *
+   * `private.bot_can_receive_message` requires `bots.state = 'active'`, so a
+   * paused or deleted bot takes a command and drops it — no error, no reply,
+   * nothing. `fetchChatBots` already filtered the state for the sidebar's «Бот»
+   * mark and `useBotChat` did not, and two readers of one fact disagreeing is
+   * the whole of the entry.
+   *
+   * Every state but `active` is checked, because the CHECK on the column lists
+   * five and only one of them is deliverable: pinning `paused` alone would let
+   * a filter written as «not deleted» pass.
+   */
+  for (const state of ["paused", "suspended", "pending_delete", "deleted"] as const) {
+    test(`a ${state} bot offers no commands, because nothing it is sent arrives`, async ({ page }) => {
+      await seed(page, { botState: state });
+      await openBotChat(page, CHAT_STARTED);
+
+      // The composer is there and ordinary — this is a chat, and a chat whose
+      // bot is off is not a broken screen.
+      await expect(page.locator("textarea")).toBeVisible();
+      await expect(page.getByTestId("bot-commands-button")).toHaveCount(0);
+
+      // And «/» opens nothing either. The button and the slash are two doors
+      // onto one list; closing one of them would be half a fix.
+      await page.locator("textarea").fill("/shift");
+      await expect(page.getByTestId("bot-command-menu")).toHaveCount(0);
+    });
+  }
+
+  /**
+   * The same rule on the other composer: `/start` is a message like any other,
+   * and `private.bot_can_receive_message` drops it for the same reason.
+   *
+   * The waits are the whole difficulty. «No start button» is true the instant
+   * the chat opens, because `useBotChat` has not answered yet and a composer
+   * with no bot is an ordinary composer — so asserting it straight away proves
+   * only that the page is fast. The membership read is therefore waited for by
+   * name, and then the frame is given time to become the wrong one: measured
+   * against the state filter removed, the button is up well inside this, and
+   * without the wait that mutation stayed green.
+   */
+  test("a disabled bot is not offered «Запустить» either, since /start would not arrive", async ({ page }) => {
+    const fixture = await seed(page, { botState: "paused" });
+    await openBotChat(page, CHAT_FRESH);
+
+    await expect.poll(() => fixture.restCalls("chat_bot_members", "GET").length).toBeGreaterThan(0);
+    await page.waitForTimeout(1500);
+
+    await expect(page.getByTestId("bot-start-button")).toHaveCount(0);
+    await expect(page.locator("textarea"), "the ordinary composer stands in its place").toBeVisible();
+    await expect(page.getByTestId("bot-commands-button")).toHaveCount(0);
   });
 
   test("a bot found in search opens its chat instead of a modal", async ({ page }) => {

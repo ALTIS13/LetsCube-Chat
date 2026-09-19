@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
 import { loadBotCommands } from "@/lib/botCallback";
-import type { BotCommand } from "@/lib/botChatSurfaces";
+import { chooseChatBot, type BotCommand } from "@/lib/botChatSurfaces";
 
 /**
  * The bot a chat holds, and the commands it registered (D-126).
@@ -48,14 +48,19 @@ import type { BotCommand } from "@/lib/botChatSurfaces";
  * same reader the membership policy admits — and the alternative is a command
  * menu that offers what nothing can deliver.
  *
- * ── Which bot, when a group holds more than one ───────────────────────────
+ * ── Which bot, and whether it is one worth offering (D-247) ───────────────
  *
- * One of them, and always the same one: the one that joined first. The composer
- * has room for a single bot's menu, so this is a choice the product has to make
- * either way; before this change it was `limit(1)` with no ordering, which is
- * whichever row Postgres handed back that time. A group with two bots still
- * only reaches one of them from the menu — recorded rather than fixed here,
- * because a per-bot menu is a different surface.
+ * Neither question is answered here. `chooseChatBot` in `lib/botChatSurfaces.ts`
+ * takes the rows and answers both — which of several bots the composer speaks
+ * to, and whether the bot in a row is in a state that can be sent anything at
+ * all — and it imports nothing, so `node --test` can reach it.
+ *
+ * That move is the fix rather than a tidy-up. The state filter had to live
+ * somewhere a test could see it: this module reads `import.meta.env` through
+ * `createClient` and pulls in supabase-js, so a decision buried in it is a
+ * decision no unit test can mutate. It is the lesson of
+ * `lib/supabase/config.ts`, one file over — a check that cannot be reached from
+ * a test is a gap in the module boundary, not in the suite.
  */
 export interface BotChatState {
   readonly botId: string | null;
@@ -71,34 +76,6 @@ const NO_BOT: BotChatState = { botId: null, botUsername: null, commands: [], rea
 
 /** How many memberships are read before one is chosen. A group holds few. */
 const MEMBERSHIP_READ_LIMIT = 16;
-
-interface BotMembershipRow {
-  readonly botId: string;
-  readonly username: string;
-  readonly joinedAt: string;
-}
-
-/**
- * A row of `chat_bot_members` with its bot embedded, or null.
- *
- * PostgREST answers a to-one embed as an object; some versions answer an array
- * of one. Both are read, the way `fetchChatBots` reads them, because guessing
- * wrong turns every bot chat into a chat without a bot.
- */
-function readMembership(value: unknown): BotMembershipRow | null {
-  if (typeof value !== "object" || value === null) return null;
-  const row = value as Record<string, unknown>;
-  const embedded = Array.isArray(row.bot) ? row.bot[0] : row.bot;
-  const bot = typeof embedded === "object" && embedded !== null ? (embedded as Record<string, unknown>) : null;
-  const botId = typeof row.bot_id === "string" ? row.bot_id : null;
-  const username = typeof bot?.username === "string" ? bot.username : null;
-  if (!botId || !username) return null;
-  return {
-    botId,
-    username,
-    joinedAt: typeof row.joined_at === "string" ? row.joined_at : "",
-  };
-}
 
 export function useBotChat(chatId: string): BotChatState {
   const [state, setState] = useState<BotChatState>(EMPTY);
@@ -122,7 +99,12 @@ export function useBotChat(chatId: string): BotChatState {
       };
       const { data, error } = await supabase
         .from("chat_bot_members")
-        .select("bot_id,joined_at,bot:bots(username)")
+        // `state` travels with the username because `chooseChatBot` refuses a
+        // bot that is not `active` (D-247). It is one more column on a read
+        // that already happens once per chat, and it is the same column
+        // `fetchChatBots` asks for; leaving it out is what made the two
+        // readers disagree.
+        .select("bot_id,joined_at,bot:bots(username,state)")
         .eq("chat_id", chatId)
         .is("removed_at", null)
         .limit(MEMBERSHIP_READ_LIMIT);
@@ -132,18 +114,7 @@ export function useBotChat(chatId: string): BotChatState {
         setState(NO_BOT);
         return;
       }
-      const rows = (Array.isArray(data) ? data : [])
-        .map(readMembership)
-        .filter((row): row is BotMembershipRow => row !== null)
-        // The one that joined first, and its username as a tie-break so that
-        // two memberships written in the same transaction still order the same
-        // way on every load.
-        .sort((left, right) =>
-          left.joinedAt === right.joinedAt
-            ? left.username.localeCompare(right.username, "en-US")
-            : left.joinedAt.localeCompare(right.joinedAt),
-        );
-      const membership = rows[0];
+      const membership = chooseChatBot(data);
       if (!membership) {
         setState(NO_BOT);
         return;

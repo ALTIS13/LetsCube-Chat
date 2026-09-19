@@ -186,6 +186,7 @@ const offering: RecorderModeHintInput = {
   buttonOnScreen: true,
   overlayOpen: false,
   refusalVisible: false,
+  commandMenuOpen: false,
 };
 
 test("the composer hint is offered on a resting phone composer in voice mode", () => {
@@ -204,6 +205,10 @@ test("each condition on the composer hint is load-bearing", () => {
     // refusal banner down to its icon and one letter, so the only sentence
     // saying why the message did not arrive was unreadable.
     ["the refusal banner up, which is the sentence worth reading now", { refusalVisible: true }],
+    // Measured at 390 on 2026-09-19 (D-246): the menu's box was 638–780 and the
+    // plate's 696–776, so 80 points of the plate sat inside the menu and left
+    // the bottom two rows of a three-command bot as a ⚡ and a sliver of «/».
+    ["the bot's command menu open into the same corner", { commandMenuOpen: true }],
     ["video already chosen, which is proof it was found", { mode: "video" }],
   ];
 
@@ -278,6 +283,7 @@ test("the composer hands the predicate every condition it judges", () => {
   assert.deepEqual(composerHintInputs(read(COMPOSER)), [
     "buttonOnScreen",
     "coarsePointer",
+    "commandMenuOpen",
     "feedbackVisible",
     "mode",
     "overlayOpen",
@@ -294,6 +300,30 @@ test("the composer hands the predicate every condition it judges", () => {
     blankComments(read(COMPOSER)),
     /refusalVisible:\s*Boolean\(refusal\)/u,
     "the composer passes refusalVisible without reading the refusal",
+  );
+
+  // The same trap for D-246: `commandMenuOpen: false` would satisfy the list
+  // and paint the plate back across the menu. It is bound to the one value that
+  // says which of the two doors is open, so a menu opened either way — from the
+  // «Команды» button or by typing «/» — withdraws the hint.
+  assert.match(
+    blankComments(read(COMPOSER)),
+    /commandMenuOpen:\s*commandMenuVariant !== null/u,
+    "the composer passes commandMenuOpen without reading whether the menu is open",
+  );
+
+  // And the same again for the two composers that render no recorder button at
+  // all. Nothing is drawn in either, so no screenshot can catch this one: what
+  // it costs is the hint's budget, spent against a plate with no anchor.
+  assert.match(
+    blankComments(read(COMPOSER)),
+    /const composerReplaced = Boolean\(bot\?\.needsStart\) \|\| muteState\.muted;/u,
+    "the composer no longer notices the two states that replace the recorder button outright",
+  );
+  assert.match(
+    blankComments(read(COMPOSER)),
+    /buttonOnScreen:\s*!\(hasText \|\| hasAttachments \|\| hasForwardDraft \|\| composerReplaced\)/u,
+    "buttonOnScreen stopped reading whether the whole composer was replaced",
   );
 });
 
@@ -362,6 +392,28 @@ test("the input guarantee fails when the composer stops passing a condition", ()
     false,
     "the checker did not notice the width gate going missing from the call",
   );
+});
+
+/**
+ * D-246 stated as the mutation that restores it: the key kept, the reading
+ * replaced by a constant. This is the shape that stayed green through every
+ * other check in this file when `refusalVisible` was added, so it is the shape
+ * the new gate is proved against too.
+ */
+test("the command-menu gate fails when the composer stops reading whether the menu is open", () => {
+  const text = read(COMPOSER);
+  const bound = /commandMenuOpen:\s*commandMenuVariant !== null/u;
+  assert.match(blankComments(text), bound);
+  const broken = mutate(
+    text,
+    "commandMenuOpen: commandMenuVariant !== null,",
+    "commandMenuOpen: false,",
+  );
+  assert.ok(
+    composerHintInputs(broken).includes("commandMenuOpen"),
+    "the key is still passed, which is exactly why the list alone cannot catch this",
+  );
+  assert.equal(bound.test(blankComments(broken)), false);
 });
 
 /**

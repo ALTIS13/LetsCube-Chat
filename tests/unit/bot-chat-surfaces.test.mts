@@ -37,6 +37,8 @@ import {
   botCommandSlash,
   botMessageExplainsInternals,
   chooseBotChat,
+  chooseChatBot,
+  readChatBotMembership,
   classifyBotCallbackFailure,
   isBotPartnerChat,
   matchBotCommands,
@@ -492,6 +494,96 @@ test("a bot opens the chat the reader is in, and a private one before a group", 
     "an owner sees every chat their bot is in; opening one they are not in is not on offer",
   );
   assert.equal(chooseBotChat([], new Set(["direct"])), null);
+});
+
+// ---------------------------------------------------------------------------
+// Which bot a chat holds, and whether it is one worth offering (D-247)
+// ---------------------------------------------------------------------------
+
+/**
+ * The decision lives here rather than in `useBotChat` for exactly one reason:
+ * that hook reaches `import.meta.env` through `createClient` and pulls in
+ * supabase-js, so nothing in it can be mutated from a `node --test` process.
+ * Moving the decision was cheaper than building a harness around it — the
+ * lesson `lib/supabase/config.ts` already carries.
+ *
+ * `bots.state` is a five-way CHECK: `active`, `paused`, `suspended`,
+ * `pending_delete`, `deleted`. `private.bot_can_receive_message` joins the row
+ * and requires `= 'active'`, so the other four are bots whose messages are
+ * dropped without a word to the sender.
+ */
+const MEMBER_ROW = {
+  bot_id: "33333333-3333-4333-8333-000000000001",
+  joined_at: "2026-09-01T10:00:00.000Z",
+  removed_at: null,
+  bot: { username: "shiftbot", state: "active" },
+};
+
+test("a membership with an active bot is read, with the username from the same row", () => {
+  const row = readChatBotMembership(MEMBER_ROW);
+  assert.equal(row?.botId, MEMBER_ROW.bot_id);
+  assert.equal(row?.username, "shiftbot");
+  assert.equal(row?.joinedAt, MEMBER_ROW.joined_at);
+});
+
+test("PostgREST answering the embed as an array of one is read the same way", () => {
+  // Some versions do. Guessing wrong turns every bot chat into a chat with no
+  // bot, which is why `fetchChatBots` reads both shapes too.
+  const row = readChatBotMembership({ ...MEMBER_ROW, bot: [MEMBER_ROW.bot] });
+  assert.equal(row?.username, "shiftbot");
+});
+
+test("a bot in any state but active is no bot at all here", () => {
+  // The composer would otherwise offer commands the authoriser refuses in
+  // silence: they send, and nothing arrives.
+  for (const state of ["paused", "suspended", "pending_delete", "deleted"]) {
+    assert.equal(
+      readChatBotMembership({ ...MEMBER_ROW, bot: { username: "shiftbot", state } }),
+      null,
+      `a ${state} bot was still offered`,
+    );
+  }
+  // Fail closed rather than open: a row that did not carry the column is not a
+  // row that proved the bot deliverable, and the same rule is what `readBot` in
+  // `chatBotMembership.ts` applies to the sidebar's «Бот» mark.
+  assert.equal(readChatBotMembership({ ...MEMBER_ROW, bot: { username: "shiftbot" } }), null);
+  assert.equal(readChatBotMembership({ ...MEMBER_ROW, bot: { username: "shiftbot", state: null } }), null);
+  assert.equal(readChatBotMembership({ ...MEMBER_ROW, bot: null }), null, "and a row with no bot embedded");
+  assert.equal(readChatBotMembership({ ...MEMBER_ROW, bot_id: null }), null);
+  assert.equal(readChatBotMembership(null), null);
+});
+
+test("the chat speaks to the bot that joined first, and skips the ones it cannot reach", () => {
+  const first = { ...MEMBER_ROW, joined_at: "2026-09-01T10:00:00.000Z" };
+  const later = {
+    bot_id: "33333333-3333-4333-8333-000000000002",
+    joined_at: "2026-09-02T10:00:00.000Z",
+    removed_at: null,
+    bot: { username: "secondbot", state: "active" },
+  };
+  assert.equal(chooseChatBot([later, first])?.username, "shiftbot");
+
+  // The one that joined first being disabled must not empty the menu of a
+  // group that still holds a live bot — the filter picks, it does not truncate.
+  assert.equal(
+    chooseChatBot([{ ...first, bot: { username: "shiftbot", state: "paused" } }, later])?.username,
+    "secondbot",
+  );
+
+  // Two memberships written in one transaction share a timestamp; the username
+  // breaks the tie so the same bot answers on every load rather than whichever
+  // row Postgres handed back that time.
+  const sameInstant = { ...later, joined_at: first.joined_at };
+  assert.equal(chooseChatBot([sameInstant, first])?.username, "secondbot");
+  assert.equal(chooseChatBot([first, sameInstant])?.username, "secondbot");
+
+  assert.equal(chooseChatBot([]), null);
+  assert.equal(chooseChatBot(null), null, "a failed read is a chat with no bot, not a crash");
+  assert.equal(
+    chooseChatBot([{ ...first, bot: { username: "shiftbot", state: "deleted" } }]),
+    null,
+    "the only bot in the chat being deleted leaves an ordinary composer",
+  );
 });
 
 // ---------------------------------------------------------------------------

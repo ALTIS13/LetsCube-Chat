@@ -88,8 +88,8 @@ async function open(page: Page, theme: "dark" | "light", chatId: string, pressMi
         return {
           status: 200,
           body: [
-            { chat_id: CHAT_STARTED, bot_id: BOT_ID, joined_at: AT, removed_at: null, bot: { username: BOT.username } },
-            { chat_id: CHAT_FRESH, bot_id: BOT_ID, joined_at: AT, removed_at: null, bot: { username: BOT.username } },
+            { chat_id: CHAT_STARTED, bot_id: BOT_ID, joined_at: AT, removed_at: null, bot: { username: BOT.username, state: BOT.state } },
+            { chat_id: CHAT_FRESH, bot_id: BOT_ID, joined_at: AT, removed_at: null, bot: { username: BOT.username, state: BOT.state } },
           ],
         };
       }

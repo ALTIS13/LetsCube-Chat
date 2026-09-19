@@ -365,6 +365,17 @@ export interface RecorderModeHintInput {
    * *visible*, and visibility is the store's answer, not the anchor's — so a
    * hint left offered behind a control that has been swapped out would spend
    * its whole two hours teaching nobody.
+   *
+   * Two more ways the slot empties, found on 2026-09-19 while measuring D-246
+   * and neither of them visible in a screenshot — which is why they lasted:
+   * the composer of a bot nobody has started is one «Запустить» (D-127), and a
+   * muted person gets the mute notice instead of a composer at all. In both,
+   * `MessageInput` returns before the recorder button is ever written, so the
+   * plate paints nothing. It goes on being offered all the same. Measured in a
+   * fixture at 390: on the «Запустить» composer `hintStore().getSnapshot()`
+   * held `recorder-mode` with no `[data-testid="kub-hint"]` anywhere in the
+   * document, so the clock in `useHint` was charging a budget against a
+   * sentence nobody could be shown.
    */
   buttonOnScreen: boolean;
   /** «Режим: …» or the short-press hint is already on screen under the composer. */
@@ -401,6 +412,35 @@ export interface RecorderModeHintInput {
    * `feedbackVisible` one case wider.
    */
   refusalVisible: boolean;
+  /**
+   * The bot's command menu is open above the field (D-246).
+   *
+   * Not folded into `overlayOpen`, because it is not that fact: the menu is not
+   * modal, it is not drawn over the composer, and it takes no tap the plate
+   * could steal. What it is, is the other thing that opens into this corner.
+   *
+   * Measured at 390 on 2026-09-19: the menu's box was 638–780 and the plate's
+   * 696–776 — 80 points of it inside the menu, which for a three-command bot
+   * left the bottom two rows as a ⚡ and a sliver of «/».
+   *
+   * The register named a second direction — give the menu a stacking context
+   * above the hint layer — and it was measured before this one was chosen. It
+   * works: the menu's only stacking ancestor is itself, `isolation: isolate`
+   * with `z-index: auto`, so `relative` + `z-60` does win the paint race. It
+   * was rejected on what it leaves behind. The menu is `kub-glass-strong`, so
+   * the plate still shows through it — 2690 pixels inside the menu's own box
+   * differ from the same frame with the plate removed — and, far worse, the
+   * hint goes on being *offered*. `useHint` charges the budget for as long as
+   * the store says a hint is visible, and the store counts offers, not pixels;
+   * a person who opens the command menu would spend part of a two-hour
+   * lifetime budget on a sentence behind glass. Raising the menu decides which
+   * overlay wins. Only this decides that there is one.
+   *
+   * Suppressing rather than dismissing is the whole point: `useHint` withdraws
+   * an offer that is no longer enabled without spending or dismissing it, so
+   * the plate comes back, with its budget intact, once the menu is shut.
+   */
+  commandMenuOpen: boolean;
 }
 
 /**
@@ -417,12 +457,14 @@ export interface RecorderModeHintInput {
  *
  * The rest is ordinary courtesy: not while something is recording, not under a
  * sheet that has opened over the composer, not on top of the composer's own
- * feedback plate **or its refusal banner**, and not once the person has
- * reached `video`, which is proof they found it.
+ * feedback plate **or its refusal banner**, not while the bot's command menu is
+ * open into the same corner, and not once the person has reached `video`, which
+ * is proof they found it.
  */
 export function shouldOfferRecorderModeHint(input: RecorderModeHintInput): boolean {
   if (!input.coarsePointer || !input.phoneWidth) return false;
   if (!input.buttonOnScreen || input.overlayOpen) return false;
   if (input.recording || input.feedbackVisible || input.refusalVisible) return false;
+  if (input.commandMenuOpen) return false;
   return input.mode === "voice";
 }

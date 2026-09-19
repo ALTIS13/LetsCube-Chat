@@ -1046,6 +1046,12 @@ export function MessageInput({
   // including the two device ones that keep this plate from ever sharing a
   // screen with the sidebar's search hint.
   const isPhoneWidth = useIsMobile();
+  // The other two ways this component renders no recorder button at all: the
+  // «Запустить» composer of a bot nobody has started, and the notice a muted
+  // person gets in place of a composer. Both leave the hint offered and its
+  // budget being spent on a plate with nothing to anchor to; neither shows in
+  // a screenshot, because nothing is drawn. See `buttonOnScreen`.
+  const composerReplaced = Boolean(bot?.needsStart) || muteState.muted;
   const modeHint = useHint(RECORDER_MODE_HINT_ID, {
     enabled: shouldOfferRecorderModeHint({
       mode: recorderMode,
@@ -1053,9 +1059,13 @@ export function MessageInput({
       feedbackVisible: Boolean(modeFeedback || shortHint),
       coarsePointer: coarsePointer(),
       phoneWidth: isPhoneWidth,
-      buttonOnScreen: !(hasText || hasAttachments || hasForwardDraft),
+      buttonOnScreen: !(hasText || hasAttachments || hasForwardDraft || composerReplaced),
       overlayOpen: showAttach || showCamera || showVideoMessage || showVoice || showEmoji,
       refusalVisible: Boolean(refusal),
+      // D-246: the bot's command menu opens into this same corner and the plate
+      // was painting across it. Suppressed rather than out-stacked — the note
+      // on `commandMenuOpen` has the measurement both directions were judged on.
+      commandMenuOpen: commandMenuVariant !== null,
     }),
   });
 
