@@ -17264,3 +17264,89 @@ same `mandatory: false` / `minimumSupportedVersion: null` pair for the
 **download** catalogue, which the Tauri shell never reads. Whether that one
 should be connected is a separate question about a different surface, and the
 test is scoped to the updater writer so the two are not conflated.
+
+---
+
+## D-252 `[ ]` The voice service-line test pins two database objects at versions production stopped running the same day
+
+**Severity:** medium, and of the kind that is only ever noticed by accident —
+nothing is wrong in the product, but a test that says it measures the recorded
+schema measures a schema nothing runs.
+
+**Found on 2026-09-19** while repairing the long-red case below, which is the
+only reason anybody compared the two.
+
+**Surface:** `tests/server/voice-call-service-message-db.test.mjs:43-49` — the
+fixed `VOICE_MIGRATIONS` list and `SUBJECT` — against the file's own claim at
+`:19-22` that it proves behaviour "against the schema as the migrations record
+it".
+
+**Defect:** the list stops at `20260918170000` with `20260918200000` as its
+subject, and two of the nine objects it exercises were redefined **later the
+same day**:
+
+- `private.voice_channel_recount` by
+  `20260918240000_a_call_that_died_does_not_lock_the_pair_out.sql`, which adds
+  the ring-residue arms alongside the existing `active_since` one;
+- `public.write_voice_call_service_message` by
+  `20260918280000_a_private_chat_has_no_channel_to_announce.sql`, which returns
+  early for a private chat.
+
+**Evidence**, read-only against production (`supabase-db`, PostgreSQL 17.6) on
+2026-09-19, comparing `md5(pg_get_functiondef(...))` for the nine voice
+functions and `pg_get_triggerdef` for the trigger, against the same probe run in
+PGlite over (a) the pinned list and (b) the full recorded chain:
+
+| Object | Pinned list | Production | Full chain |
+| --- | --- | --- | --- |
+| `private.voice_channel_recount(uuid)` | `f828fd34…` | `5e2c7a3b…` | `5e2c7a3b…` |
+| `write_voice_call_service_message()` | `7cbc41ea…` | `38554dee…` | `38554dee…` |
+| the other seven functions, and the trigger | identical | identical | identical |
+
+So the recorded migrations reproduce production **exactly** when all of them are
+applied; it is the test's fixed subset that is stale, not the record. Production
+was separately confirmed to carry both: the two-minute grace clause is present
+in `voice_channel_recount`, and the `if v_type = 'private' then` early return in
+the writer.
+
+**Consequence:** every case in the file is green against a writer that no longer
+exists in production. The specific thing that is not covered is the interaction
+`20260918280000` was written to fix — a private chat's room crossing zero — and
+that migration's own header names the shape of it: "A feature that changes what
+an old trigger's rows *mean* is not a change the old trigger's tests can see."
+Nothing is known to be wrong today; what is missing is the ability to notice.
+
+**Not fixed here, on purpose.** Widening `VOICE_MIGRATIONS` is not a one-line
+change: `freshDatabase()` feeds the four self-check mutation cases and the
+rollback case, all of which apply `SUBJECT` on top of it, so adding
+`20260918280000` would have the subject overwrite the newer writer and quietly
+restore the very object the widening was for. `20260918260000` also needs
+`pg_cron`, which the stub has not got. It wants its own change, with the
+mutation cases re-pointed at the writer the chain actually ends on.
+
+### How it was found: the case that had been red for a day and a half
+
+`"the end line lands with no room_finished webhook at all"` set `active_since`
+to a fixed `2026-09-18T12:00:00Z` and then asserted the flag was still set after
+the reconciler emptied the room. `private.voice_channel_recount` clears
+`active_since` on an empty room once the flag is more than two minutes old, so
+the case held for the five hours between being written (`77c1da3`, 2026-09-18
+09:51 +03) and 12:02Z, and failed from then on, for ever. Two agents reported it
+as pre-existing.
+
+The guard was not decoration, and what it stopped covering is the property in
+the case's own title. Measured by mutation: with the writer's end arm made to
+wait for `active_since is null`, **the old case's product assertion still
+passed** — both service lines landed, and the only failure was the same guard
+message it already had, indistinguishable from the red line two agents had
+dismissed. The rewritten case fails that mutation on the product assertion, with
+the end line missing. Fixed on 2026-09-19 in the same file: `active_since` is
+now dated relative to `now()` through the real RPC, so the flag is provably
+alive when the end line lands, and a second half asserts the case the aged
+fixture had silently turned into — the recount dropping the count to zero and
+clearing a stale flag in one statement, with the end line still landing.
+
+**The general shape is worth more than the fix.** A fixed timestamp in a fixture
+is inert until something compares it with `now()`; on the day a migration adds
+such a comparison, every fixture constant already in the suite acquires an
+expiry date, and the test that fails is not the one that was changed.

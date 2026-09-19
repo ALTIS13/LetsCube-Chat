@@ -288,6 +288,10 @@ const latch = async (channel) =>
   (await db.query(`select call_announced_at from public.voice_channels where id = $1`, [channel]))
     .rows[0].call_announced_at;
 
+const activeSince = async (channel) =>
+  (await db.query(`select active_since from public.voice_channels where id = $1`, [channel]))
+    .rows[0].active_since;
+
 /** The webhook path's own RPC, called the way `receiveWebhook` calls it. */
 const joined = (channel, user, at) =>
   db.query(`select public.voice_participant_joined($1, $2, $3)`, [channel, user, at]);
@@ -295,6 +299,20 @@ const left = (channel, user, at) =>
   db.query(`select public.voice_participant_left($1, $2, $3)`, [channel, user, at]);
 const setActive = (channel, at) =>
   db.query(`select public.voice_channel_set_active($1, $2)`, [channel, at]);
+
+/**
+ * The same `room_started`, dated against the database's own clock.
+ *
+ * `private.voice_channel_recount` clears `active_since` on an empty room once
+ * the flag is more than two minutes old, so whether a flag survives is a fact
+ * about its distance from `now()` and has to be written as one. A fixed
+ * timestamp here is a case that passes until the afternoon it was written.
+ */
+const setActiveAgo = (channel, ago) =>
+  db.query(`select public.voice_channel_set_active($1, pg_catalog.now() - $2::interval)`, [
+    channel,
+    ago,
+  ]);
 
 const T = (minute) => `2026-09-18T12:${String(minute).padStart(2, "0")}:00.000Z`;
 
@@ -391,26 +409,75 @@ test("a press that creates the room and connects nobody says nothing at all", as
 });
 
 test("the end line lands with no room_finished webhook at all", async () => {
-  // The reconciler's own write, which is how a `room_finished` lost to a
-  // restart is survived. `active_since` is left set on purpose: nothing here
-  // clears it, and the end line must not wait for that.
-  const { chat, channel, anna } = await group("Общая");
-  await setActive(channel, T(0));
-  await joined(channel, anna, T(1));
+  // The reconciler's own write, which is how a `room_finished` lost to a restart
+  // is survived: nothing here sends one, and the end line must not wait for it
+  // nor for the `active_since` such a webhook would clear.
+  //
+  // `active_since` is dated **relative to `now()`**, and that is the whole
+  // repair to this case. It used to be set to `T(0)` -- a fixed
+  // 2026-09-18T12:00:00Z -- and asserted afterwards to be non-null. That held
+  // for the five hours between the file being written and the constant falling
+  // two minutes into the past. From 12:02Z onwards
+  // `private.voice_channel_recount` saw a flag older than its two-minute grace,
+  // cleared it in the same UPDATE that dropped the count to zero, and the guard
+  // failed -- for a day and a half, reported twice as pre-existing. Nothing in
+  // the product had moved: measured on 2026-09-19, this case passes verbatim
+  // with the fixture clock wound back inside the window and fails outside it,
+  // and the boundary is the grace window to the second.
+  //
+  // The participant timestamps below stay on `T()`. A fixed constant is only a
+  // time bomb once something compares it with `now()`, and nothing compares
+  // `joined_at` with anything here.
+
+  // -- the flag is alive, so the end line is measurably not waiting for it ----
+  const live = await group("Общая");
+  await setActiveAgo(live.channel, "0 seconds");
+  const flagBefore = await activeSince(live.channel);
+  assert.notEqual(
+    flagBefore,
+    null,
+    "voice_channel_set_active left no flag, so there is nothing for the end line to be independent of",
+  );
+  await joined(live.channel, live.anna, T(1));
   await db.query(`select public.voice_participants_replace($1, $2::uuid[], $3)`, [
-    channel,
+    live.channel,
     [],
     T(5),
   ]);
-  assert.deepEqual(await contents(chat), [
+  assert.deepEqual(await contents(live.chat), [
     "Начался разговор в канале «Общая»",
     "Разговор в канале «Общая» закончился",
   ]);
-  assert.notEqual(
-    (await db.query(`select active_since from public.voice_channels where id = $1`, [channel]))
-      .rows[0].active_since,
+  assert.deepEqual(
+    await activeSince(live.channel),
+    flagBefore,
+    "the recount cleared a flag younger than its own two-minute grace, so either that grace " +
+      "is gone or this case has aged again -- read voice_channel_recount before the trigger",
+  );
+
+  // -- and once the grace has passed, one statement does both ----------------
+  // Which is what production does for every call that outlives two minutes: the
+  // recount drops the count to zero and clears the stale flag in the same
+  // UPDATE, and the end line still has to land. This half is what the case
+  // above silently turned into while it was red, so it is named here on purpose
+  // rather than arrived at by the calendar.
+  const stale = await group("Общая");
+  await setActiveAgo(stale.channel, "3 minutes");
+  await joined(stale.channel, stale.anna, T(1));
+  await db.query(`select public.voice_participants_replace($1, $2::uuid[], $3)`, [
+    stale.channel,
+    [],
+    T(5),
+  ]);
+  assert.deepEqual(await contents(stale.chat), [
+    "Начался разговор в канале «Общая»",
+    "Разговор в канале «Общая» закончился",
+  ]);
+  assert.equal(
+    await activeSince(stale.channel),
     null,
-    "active_since was cleared, so this case no longer proves the end line is independent of it",
+    "a flag three minutes past its grace survived an empty recount, so both halves of this " +
+      "case are now the same case and the first one proves nothing",
   );
 });
 

@@ -417,7 +417,20 @@ VITE_SUPABASE_ANON_KEY="$(cat "$CFG/.k")" pnpm.cmd --filter @workspace/kub run d
   source it reads was refactored the day after the guard was written and nobody
   ran the suite again. These tests read `artifacts/api-server/dist`, so build
   first: `pnpm.cmd --filter @workspace/api-server run build`, then
-  `node --test $(find tests/server -name "*.test.mjs")`.
+  `node --test $(find tests/server -name "*.test.mjs")`. That guard is green
+  again; the suite stands at **124/124** on 2026-09-19.
+- **A fixture constant compared with `now()` is a time bomb, and when it goes
+  off the test's title stops matching what it checks.**
+  `voice-call-service-message-db.test.mjs` pinned `active_since` to a fixed
+  `2026-09-18T12:00:00Z` and asserted a two-minute grace had not elapsed. It
+  was committed at 06:51Z that day, when the constant was still in the future,
+  and went red permanently at 12:02:00Z with nothing in the product changed.
+  Worse: once red, the case's product assertion went on passing under the new
+  state, so breaking the rule the test is named after produced **the same red
+  line** — two agents read it, said «pre-existing», and moved on. Pin such a
+  fixture relative (`now() - '3 minutes'::interval`) and assert the intended
+  distance. When a long-red test is reported, ask what it stopped covering
+  before accepting that it is somebody else's.
 - Build before the unit suite: `tests/unit/public-product-assets.test.mjs`
   refuses a `dist/public` older than its sources.
 - `windows:tauri:qa` refuses an unbuilt, unconfigured, loopback or stale
