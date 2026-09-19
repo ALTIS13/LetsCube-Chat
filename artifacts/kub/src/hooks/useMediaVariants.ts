@@ -21,6 +21,13 @@ import {
 import { createAvatarVariantStore, type AvatarVariantUrls } from "@/lib/avatarVariantStore";
 import { withVersionToken } from "@/lib/mediaCacheControl";
 import { readOriginalPreview } from "@/lib/mediaCompression";
+import { variantMediaObjectRef } from "@/lib/media/mediaObjectRef";
+import {
+  mediaObjectUrl,
+  requestMediaObjectUrl,
+  signedMediaUrls,
+  variantMediaUrl,
+} from "@/lib/media/mediaUrl";
 
 type MessageMediaVariantSource = Pick<MessageWithSender, "id" | "chat_id" | "type" | "media_url" | "deleted_at">;
 
@@ -73,15 +80,26 @@ interface MessageVariantCacheEntry {
   lastRowsSignature: string | null;
   /** The pace the running lifecycle was built with, so it is only rebuilt when that changes. */
   pollIntervalMs: number | null;
+  /** The last answer's rows, so the addresses can be re-derived without a poll (D-208). */
+  lastRows: MediaVariant[];
+  /** Ends this entry's interest in signature renewals. */
+  urlRenewalUnsubscribe: (() => void) | null;
 }
 
 const messageVariantCache = new Map<string, MessageVariantCacheEntry>();
 
-function getVariantPublicUrl(
-  storage: ReturnType<typeof createClient>["storage"],
-  row: Pick<MediaVariant, "variant_bucket" | "variant_path">,
-): string | null {
-  return storage.from(row.variant_bucket).getPublicUrl(row.variant_path).data.publicUrl ?? null;
+/**
+ * The address of one variant object.
+ *
+ * D-208: this used to call `getPublicUrl` here, which is how a preview of a
+ * photograph somebody sent became readable by anyone who could guess four leaf
+ * names. The shape of the address is now a decision taken once, in
+ * `lib/media/mediaUrl`; in the shipped `"public"` mode it still resolves to the
+ * same string, byte for byte.
+ */
+function getVariantUrl(row: Pick<MediaVariant, "variant_bucket" | "variant_path">): string | null {
+  requestMediaObjectUrl(variantMediaObjectRef(row));
+  return variantMediaUrl(row);
 }
 
 /**
@@ -100,7 +118,9 @@ export function resolveOriginalPreviewUrl(message: {
 }): { url: string; width: number; height: number } | null {
   const preview = readOriginalPreview(message);
   if (!preview || !message.media_bucket) return null;
-  const url = createClient().storage.from(message.media_bucket).getPublicUrl(preview.path).data.publicUrl;
+  const ref = { bucket: message.media_bucket, path: preview.path };
+  requestMediaObjectUrl(ref);
+  const url = mediaObjectUrl(ref);
   return url ? { url, width: preview.width, height: preview.height } : null;
 }
 
@@ -152,9 +172,12 @@ function getMessageVariantCacheEntry(chatId: string): MessageVariantCacheEntry {
     unchangedPolls: 0,
     lastRowsSignature: null,
     pollIntervalMs: null,
+    lastRows: [],
+    urlRenewalUnsubscribe: null,
   };
   evictUnusedMessageVariantEntries();
   messageVariantCache.set(chatId, entry);
+  subscribeMessageVariantUrlRenewals(entry);
   return entry;
 }
 
@@ -257,6 +280,91 @@ function scheduleMessageVariantLoad(entry: MessageVariantCacheEntry, delay: numb
   }, delay);
 }
 
+/**
+ * The rows a poll returned, as the addresses a conversation draws from.
+ *
+ * Extracted from the poll so it can be run again without one. Under D-208 an
+ * address has a lifetime, and the moment it is replaced is not the moment new
+ * rows arrive — the polling rule deliberately stops asking once everything has
+ * converged (D-176), so by the time a signature needs renewing there is no poll
+ * left to carry it. `subscribeMessageVariantUrlRenewals` below re-runs this
+ * instead.
+ */
+function projectMessageVariantRows(rows: MediaVariant[]): Record<string, MessageMediaVariantUrls> {
+  const next: Record<string, MessageMediaVariantUrls> = {};
+  for (const row of rows) {
+    if (!row.message_id) continue;
+    // A failed row is here for the polling rule and nothing else: its
+    // `variant_path` names an object that was never written, so building a
+    // URL from it would put a broken picture in the conversation.
+    if (row.status !== "ready") continue;
+    // A message variant keeps its path when it is rewritten, and the worker
+    // writes it `max-age=31536000, immutable`. Without the moment it was
+    // written in the URL, a reader who has already seen a picture keeps the
+    // old bytes for a year — which would make the D-116 backfill invisible to
+    // exactly the people who complained. Avatars have carried this token for
+    // the same reason since they were cacheable.
+    const url = withVersionToken(getVariantUrl(row), row.updated_at);
+    if (!url) continue;
+    const current = next[row.message_id] ?? {};
+    if (row.variant_kind === "image_preview") {
+      current.previewUrl = url;
+      current.previewWidth = row.width;
+      current.previewHeight = row.height;
+    } else if (row.variant_kind === "image_thumb") {
+      current.thumbUrl = url;
+      current.thumbWidth = row.width;
+      current.thumbHeight = row.height;
+    } else if (row.variant_kind === "video_poster") {
+      current.videoPosterUrl = url;
+      current.videoPosterWidth = row.width;
+      current.videoPosterHeight = row.height;
+    } else if (row.variant_kind === "video_720p") {
+      current.video720pUrl = url;
+      current.video720pWidth = row.width;
+      current.video720pHeight = row.height;
+    }
+    next[row.message_id] = current;
+  }
+  return next;
+}
+
+/**
+ * A short, exact description of what a projection would put in the `src`s.
+ *
+ * Compared before notifying, so a signature store that emits for somebody
+ * else's object does not re-render every conversation on screen — and so a
+ * renewal that produced the same address (the store hands out one URL per
+ * object, and two signings inside a second are identical) costs nothing.
+ */
+function messageVariantUrlSignature(variants: Record<string, MessageMediaVariantUrls>): string {
+  const parts: string[] = [];
+  for (const id of Object.keys(variants).sort()) {
+    const v = variants[id];
+    parts.push(
+      `${id}|${v.previewUrl ?? ""}|${v.thumbUrl ?? ""}|${v.videoPosterUrl ?? ""}|${v.video720pUrl ?? ""}`,
+    );
+  }
+  return parts.join("\n");
+}
+
+/**
+ * Re-derives this chat's addresses when a signature is replaced.
+ *
+ * The store notifies on every answer it gets, including answers about objects
+ * this chat has never heard of, so the recomputation is guarded by the
+ * signature above rather than by the notification.
+ */
+function subscribeMessageVariantUrlRenewals(entry: MessageVariantCacheEntry): void {
+  entry.urlRenewalUnsubscribe = signedMediaUrls().subscribe(() => {
+    if (entry.disposed || entry.lastRows.length === 0) return;
+    const next = projectMessageVariantRows(entry.lastRows);
+    if (messageVariantUrlSignature(next) === messageVariantUrlSignature(entry.variants)) return;
+    entry.variants = next;
+    notifyMessageVariantListeners(entry);
+  });
+}
+
 async function loadMessageVariants(entry: MessageVariantCacheEntry): Promise<void> {
   if (entry.disposed || entry.refreshState.loading || entry.refreshState.messageIds.length === 0) return;
   entry.refreshState = beginMessageVariantRefresh(entry.refreshState);
@@ -276,41 +384,8 @@ async function loadMessageVariants(entry: MessageVariantCacheEntry): Promise<voi
     if (error) return;
 
     const rows = (data ?? []) as unknown as MediaVariant[];
-    const next: Record<string, MessageMediaVariantUrls> = {};
-    for (const row of rows) {
-      if (!row.message_id) continue;
-      // A failed row is here for the polling rule and nothing else: its
-      // `variant_path` names an object that was never written, so building a
-      // URL from it would put a broken picture in the conversation.
-      if (row.status !== "ready") continue;
-      // A message variant keeps its path when it is rewritten, and the worker
-      // writes it `max-age=31536000, immutable`. Without the moment it was
-      // written in the URL, a reader who has already seen a picture keeps the
-      // old bytes for a year — which would make the D-116 backfill invisible to
-      // exactly the people who complained. Avatars have carried this token for
-      // the same reason since they were cacheable.
-      const publicUrl = withVersionToken(getVariantPublicUrl(supabase.storage, row), row.updated_at);
-      if (!publicUrl) continue;
-      const current = next[row.message_id] ?? {};
-      if (row.variant_kind === "image_preview") {
-        current.previewUrl = publicUrl;
-        current.previewWidth = row.width;
-        current.previewHeight = row.height;
-      } else if (row.variant_kind === "image_thumb") {
-        current.thumbUrl = publicUrl;
-        current.thumbWidth = row.width;
-        current.thumbHeight = row.height;
-      } else if (row.variant_kind === "video_poster") {
-        current.videoPosterUrl = publicUrl;
-        current.videoPosterWidth = row.width;
-        current.videoPosterHeight = row.height;
-      } else if (row.variant_kind === "video_720p") {
-        current.video720pUrl = publicUrl;
-        current.video720pWidth = row.width;
-        current.video720pHeight = row.height;
-      }
-      next[row.message_id] = current;
-    }
+    entry.lastRows = rows;
+    const next = projectMessageVariantRows(rows);
     // What this answer settled, and whether it said anything the last one did
     // not — the two things the polling rule reads (D-176).
     const signature = getMessageVariantRowsSignature(rows);
@@ -360,6 +435,8 @@ function destroyMessageVariantCacheEntry(entry: MessageVariantCacheEntry): void 
   if (entry.debounceTimer !== null) window.clearTimeout(entry.debounceTimer);
   if (entry.evictionTimer !== null) window.clearTimeout(entry.evictionTimer);
   stopMessageVariantPolling(entry);
+  entry.urlRenewalUnsubscribe?.();
+  entry.urlRenewalUnsubscribe = null;
   messageVariantCache.delete(entry.chatId);
 }
 
@@ -406,7 +483,7 @@ export function useAvatarVariantUrls(profileIds: readonly string[]): Record<stri
       const next: Record<string, AvatarVariantUrls> = {};
       for (const row of (data ?? []) as unknown as MediaVariant[]) {
         if (!row.profile_id) continue;
-        const publicUrl = withVersionToken(getVariantPublicUrl(supabase.storage, row), row.updated_at);
+        const publicUrl = withVersionToken(getVariantUrl(row), row.updated_at);
         if (!publicUrl) continue;
 
         const current = next[row.profile_id] ?? {};
@@ -485,7 +562,7 @@ async function fetchAvatarVariantsBy(
     // An avatar variant keeps its path when the picture changes, so the URL
     // carries the moment it was written. Without that token the object could
     // not be cached for longer than it takes someone to change the picture.
-    const publicUrl = withVersionToken(getVariantPublicUrl(supabase.storage, row), row.updated_at);
+    const publicUrl = withVersionToken(getVariantUrl(row), row.updated_at);
     if (!publicUrl) continue;
     const current = next[ownerId] ?? {};
     if (row.variant_kind === "avatar_128") {

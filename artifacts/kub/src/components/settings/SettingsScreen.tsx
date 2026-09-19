@@ -5,6 +5,7 @@ import type { Theme } from "@/hooks/useTheme";
 import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
 import { createClient } from "@/lib/supabase/client";
+import { publicMediaObjectUrl } from "@/lib/media/mediaUrl";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useTheme } from "@/hooks/useTheme";
 import { usePrivacyPreferences } from "@/hooks/usePrivacyPreferences";
@@ -397,7 +398,8 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
         cacheControl: cacheControlFor(path),
       });
     if (upErr) { setError(mapPgError(upErr)); setUploadingAvatar(false); return; }
-    const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(data.path);
+    // D-208: recorded addresses stay public — see the note in `lib/media/mediaUrl`.
+    const publicUrl = publicMediaObjectUrl({ bucket: "media", path: data.path });
     const { error: profileErr } = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", currentUser.id);
     if (profileErr) { setError(mapPgError(profileErr)); setUploadingAvatar(false); return; }
     setCurrentUser({ ...currentUser, avatar_url: publicUrl });

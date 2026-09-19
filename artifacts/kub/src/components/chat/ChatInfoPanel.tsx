@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { publicMediaObjectUrl } from "@/lib/media/mediaUrl";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
 import { KubBadge, KubButton, KubIcon, KubModal, KubNotice, KubStableSkeleton, type KubIconName } from "@/components/kub";
@@ -1172,7 +1173,11 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
       showAppAlert(message, "Ошибка");
       return;
     }
-    const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(data.path);
+    // D-208: a recorded address is deliberately the public one. A signature
+    // expires, and a column is read months later — storing one would put a dead
+    // URL in the database. What makes this safe is that it is now the one
+    // helper, so step four changes the recorded shape here and nowhere else.
+    const publicUrl = publicMediaObjectUrl({ bucket: "media", path: data.path });
     const { error: updateErr } = await supabase.from("chats").update({ avatar_url: publicUrl }).eq("id", chat.id);
     if (updateErr) {
       const message = prefixError("Не удалось сохранить аватар чата", updateErr);

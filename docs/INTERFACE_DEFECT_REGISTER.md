@@ -12835,6 +12835,126 @@ token returns 400.
 things until the first has shipped. The first three steps are safe to build at
 any time.
 
+### 2026-09-19 — steps one to three built, and the order above is wrong
+
+Steps one, two and three are implemented behind a flag that defaults to the
+shipped behaviour. Step four is untouched and remains the owner's call. What
+follows is what the work found, most of which the entry above did not have.
+
+**The order cannot start where the entry says it does.** Signing an object
+requires `select` on `storage.objects`, and the `media` bucket's SELECT policy
+calls `_kub_media_path_allowed`, which admits your own uploads, your own avatar,
+an administrator reaching somebody else's avatar, and a chat *administrator*
+reaching that chat's avatar folder. Nothing else. Measured on production as a
+real chat member looking at a photograph a different member of the same chat had
+sent:
+
+    may_select_the_photo             f
+    may_select_its_preview           f
+    uploader_may_select_own_photo    t
+    uploader_may_select_its_preview  f
+
+and `select count(*) from storage.objects` over those two names, as that member,
+returned **0** where `postgres` sees 2. The whole `variants/` prefix matches no
+branch of that function at all — not even for the person who uploaded the
+original it was made from.
+
+So what puts other people's photographs on screen today is not the policy; it is
+the bucket's `public` flag, which is the defect. A client switched to signed
+URLs on today's policies would lose every photograph, video, voice message and
+file anybody else sent, and every preview, thumbnail, poster and 720p re-encode
+including its own. **There is a step nought**, and it is a migration:
+`.migration-backup/supabase/migrations/20260919120000_media_read_policy_admits_a_chat_member.sql`,
+written and **not applied**, which gives reading its own predicate
+(`_kub_media_read_allowed`) and leaves the write predicate exactly as narrow as
+it is.
+
+**Two measured facts set the lifetime**, and neither was known when the entry
+was written. Signing one generated thumbnail against `core.letscube.ru`:
+
+- a signed response carries **no `cache-control` at all** — only
+  `Expires: <the token's own exp>`. The same object over the public route
+  carries `cache-control: max-age=31536000, immutable`. So the signature's
+  lifetime *is* the browser's cache lifetime: a short TTL does not mean "re-sign
+  often", it means "re-download every picture on screen often", and throws away
+  everything `lib/mediaCacheControl.ts` earned.
+- two signings of the same path with the same `expiresIn` **inside one second
+  return a byte-identical URL**; a second later they differ. A renewal is
+  therefore a new cache key and a new download, which is why one URL is kept per
+  *object* rather than per component.
+
+An expired token answers **400** — the same as a tampered one and as a path that
+does not exist, so a consumer cannot tell them apart. And the token is checked
+once, at request time: a download already in flight finishes past `exp`; what
+fails is the next request, including the `Range:` a `<video>` issues on a seek.
+
+The choice: **one hour**, renewed at **80%** (48 min), never handed to a new
+consumer with under **five minutes** left. An hour is the bound on how long a
+removed member keeps a working address — the entry's real complaint is that
+today that bound is infinite. The twelve-minute margin is for a slow network and
+for clock skew, since `exp` comes from the server's clock.
+
+**Re-measured, read-only, and three of the four numbers move:**
+
+| | entry | 2026-09-19 |
+|---|---|---|
+| media messages | 313 | **314** |
+| with a path | 293 | **294** |
+| `media_url` only | 20 | **20** |
+| avatar URLs | 16 | **16** (10 profiles, 6 chats, 0 bots) |
+
+The twenty hides its shape: exactly **ten are live and their object still
+exists**; the other ten are on deleted messages and name files that were removed
+with them. So the back-fill is ten rows, and the ten it cannot fill are not a
+failure — a path to a deleted object is worse than an honestly dead URL. Also:
+in **all 294** rows that carry both, `media_url` is exactly the public URL of
+`media_path`, with no escaping and no query string. That is what makes the
+derivation safe rather than a guess.
+
+**The 16 avatars need no migration.** Those three tables have no path column, so
+"back-fill the 16" could only mean adding columns or recovering the path at read
+time. All 16 parse cleanly and all 16 name an object that exists, so
+`avatarMediaObjectRef` recovers them and three columns buy nothing. The message
+back-fill is
+`20260919130000_media_path_backfill_for_legacy_messages.sql`, also written and
+not applied — and it is a tidy-up, not a prerequisite, because
+`messageMediaObjectRef` already falls back to parsing.
+
+**Seven call sites, verified rather than trusted**, and they are two different
+jobs wearing one name:
+
+- five *write* a URL into a column — `ChatWindow.tsx` (`messages.media_url`),
+  `SettingsScreen.tsx` and `UsersTab.tsx` (`profiles.avatar_url`),
+  `ChatInfoPanel.tsx` (`chats.avatar_url`), `botAvatar.ts` (`bots.avatar_url`).
+  These must keep recording a **public** URL: a signature expires and a column
+  is read months later.
+- two *read* — both in `useMediaVariants.ts`, the variant factory and
+  `resolveOriginalPreviewUrl`.
+
+All seven now call `lib/media/mediaUrl.ts`, which holds the only `getPublicUrl`
+in the client. A unit case asserts that, with comments and string literals
+stripped first — five files discuss the name in prose.
+
+**What the seven do not cover, and the entry implies they do.** A message's
+own photograph, video, voice and file reach the screen as `message.media_url`
+straight out of the row: `MessageBubble`, `MediaViewer`, `AudioMessage`,
+`ChatMediaPlayback` and the file link never called `getPublicUrl`, so rewiring
+the seven does not touch them. Covered by the resolver today: the four message
+variants, the original's sidecar preview, and both avatar-variant stores.
+Not yet routed through it: the originals in all five shapes above, the two bare
+avatar `<img>`s in `SearchShared.tsx` and `NotificationBell.tsx`, and the info
+panel's grid (which reads variants, so it follows for free). Renewal is wired
+for message variants; the avatar-variant store caches a resolved string and
+would need the same subscription.
+
+Worth knowing before step four: `safeNotificationAvatarUrl` and the WNS toast
+both refuse any URL containing `/storage/v1/`, so a notification avatar is
+already never a stored picture. Nothing there changes either way.
+
+**Nothing moved on screen.** The conversation fixture was captured at 390 and
+1440 in both themes, before and after the patch, and all four PNGs are
+byte-identical. Eleven mutations were run and all eleven go red.
+
 ---
 
 ## D-106 — closed 2026-09-15, and it was closed by somebody else's work

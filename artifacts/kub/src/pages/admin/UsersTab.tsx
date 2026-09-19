@@ -10,6 +10,7 @@ import {
   bulkLocationAssignPrompt,
 } from "@/lib/adminPrompts";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
+import { publicMediaObjectUrl } from "@/lib/media/mediaUrl";
 import { useAppStore } from "@/store/app.store";
 import type { AppRole, DynamicRole, LocationRole, Profile } from "@/types/database";
 
@@ -1139,9 +1140,10 @@ function ProfilePreviewModal({
           cacheControl: cacheControlFor(path),
         });
       if (error || !data) throw error ?? new Error("avatar_upload_failed");
-      const { data: publicData } = supabase.storage.from("media").getPublicUrl(data.path);
+      // D-208: recorded addresses stay public — see the note in `lib/media/mediaUrl`.
+      const publicUrl = publicMediaObjectUrl({ bucket: "media", path: data.path });
       setAvatarSaving(false);
-      await updateAvatarUrl(publicData.publicUrl);
+      await updateAvatarUrl(publicUrl);
     } catch (error) {
       const message = mapAdminProfileAvatarError(error, "upload");
       setAvatarError(message);

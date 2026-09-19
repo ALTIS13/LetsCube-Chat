@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage } from "@/lib/mediaUpload";
+import { publicMediaObjectUrl } from "@/lib/media/mediaUrl";
 import { botManagement } from "@/lib/botManagement";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
 
@@ -17,10 +18,16 @@ import { cacheControlFor } from "@/lib/mediaCacheControl";
 
 const PUBLIC_MEDIA_PREFIX = "/storage/v1/object/public/media/";
 
-/** The public URL for an object path, derived from the client's own base. */
+/**
+ * The public URL for an object path, derived from the client's own base.
+ *
+ * D-208: still the public one, and still on purpose. This address is recorded
+ * in `bots.avatar_url` and read back by the management API and by every client
+ * afterwards, so it must outlive any signature. The `getPublicUrl` call it used
+ * to make itself now lives in `lib/media/mediaUrl`, with the other six.
+ */
 export function publicMediaUrl(objectPath: string): string {
-  const supabase = createClient();
-  const url = supabase.storage.from("media").getPublicUrl(objectPath).data.publicUrl;
+  const url = publicMediaObjectUrl({ bucket: "media", path: objectPath });
   if (!url) throw new Error("bot_avatar_url_unavailable");
   return url;
 }

@@ -33,6 +33,7 @@ import {
   topicIdForChannel,
 } from "@/lib/channelRail";
 import { listReadFailed } from "@/lib/listReadState";
+import { publicMediaObjectUrl } from "@/lib/media/mediaUrl";
 import type { ServerChannel } from "@/lib/serverChannels";
 import {
   joinVoiceChannel,
@@ -1002,11 +1003,15 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       else previewPath = candidate;
     }
 
-    const { data: publicData } = supabase.storage.from(CHAT_MEDIA_BUCKET).getPublicUrl(uploadedPath);
+    // D-208: the row records the bucket and the path beside this, and those two
+    // are what a reader resolves from. The URL is still written because 20 rows
+    // predate the columns and the projection reads it as a fallback; it is the
+    // public one, because a signature would be dead long before the message is.
+    const publicUrl = publicMediaObjectUrl({ bucket: CHAT_MEDIA_BUCKET, path: uploadedPath });
     return {
       bucket: CHAT_MEDIA_BUCKET,
       path: uploadedPath,
-      publicUrl: publicData.publicUrl,
+      publicUrl: publicUrl ?? "",
       previewPath,
     };
   }, [supabase, updateStagedAttachment, uploadRegistry, uploadScope, userId]);
