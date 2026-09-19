@@ -198,6 +198,35 @@ function dispatchUpdateReady(registration: ServiceWorkerRegistration) {
   );
 }
 
+/**
+ * Takes the waiting build now, at a person's own request.
+ *
+ * Only ever called from a press. Nothing in the product reloads a running
+ * session on its own: `selectedChatId` is neither in the URL nor persisted, so
+ * a reload lands on the chat list, and a silent one would trade a visible
+ * interruption for an invisible loss. Discord's web client reloads only on a
+ * click for the same reason. See `lib/pwa/appUpdateNotice.ts`.
+ *
+ * `skipWaiting` first, so the new worker owns the caches before the document is
+ * replaced; the reload follows either on `controllerchange` or on a timer,
+ * because a page whose worker never answers still has to get its new build.
+ */
+export function restartOntoWaitingBuild(registration: ServiceWorkerRegistration | null): void {
+  if (!registration?.waiting) {
+    window.location.reload();
+    return;
+  }
+  let reloaded = false;
+  const reload = () => {
+    if (reloaded) return;
+    reloaded = true;
+    window.location.reload();
+  };
+  navigator.serviceWorker?.addEventListener("controllerchange", reload, { once: true });
+  requestPwaServiceWorkerUpdate(registration);
+  window.setTimeout(reload, 1500);
+}
+
 function isStandaloneDisplay() {
   if (typeof window === "undefined") return false;
   return (

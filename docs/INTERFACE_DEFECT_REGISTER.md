@@ -19348,3 +19348,254 @@ actually renders before designing anything, and report that before proposing.
 
 ---
 
+
+## D-264 `[x]` The update notice asked a question, covered the way out of the conversation, and predated the material
+
+**Severity:** high on reach — at 390 the notice covered every control of the
+chat header, and on a phone that header is the only way out of a conversation.
+Medium on behaviour, low on appearance.
+
+**Surface:** `artifacts/kub/src/components/AppUpdateBanner.tsx`, the browser and
+installed-PWA notice. **Not** the Windows updater, which is a different
+mechanism on a different surface — see «Which surface this is» below.
+
+**Reported by the owner on 2026-09-20**, with a screenshot of «Доступно
+обновление / Обновите приложение, чтобы получить последние исправления. /
+[Обновить] [Позже]»: «добавь в исправления потом вот эту штучку обновления, либо
+сделать это автоматически корректно как это делает discord/telegram (проверь их
+реализацию данного функционала), также визуально выглядит чужеродно из за
+старого интерфейса».
+
+Two questions, and they are independent: **when should an update apply at all**,
+and **what should the notice look like when one is needed**. Answered
+separately below, because the second one quietly settling the first is how a
+notice like this survives.
+
+### Which surface this is
+
+Three shells, and only one of them is this notice.
+
+- **Browser and installed PWA.** `usePwaServiceWorker` registers `public/sw.js`
+  and announces a waiting worker through `kub:sw-update-ready`; a second
+  detector polls the deployed `index.html` every five minutes and on every
+  return to the tab. This notice is that, and nothing else.
+- **Windows (Tauri).** A separate mechanism entirely:
+  `scripts/publish-native-release.sh` writes `mandatory` and a minimum
+  supported version, `lib/platform/desktopUpdates.ts` parses a snapshot with a
+  `critical_update_required` phase, and `DesktopUpdatePill.tsx` renders either
+  a pill or a blocking `CriticalUpdateGate`. Untouched here.
+- **Android (Capacitor).** `capacitor.config.ts` has `webDir` and no
+  `server.url`, so the APK boots its own bundled `index.html`.
+  `tauri.conf.json` has `frontendDist: "../ui"`, the same arrangement. In both,
+  `usePwaServiceWorker` unregisters every worker on sight
+  (`isNativeApp() || isDesktopApp()`), and the poll compares the bundled
+  document with the bundled document — so neither shell can raise this notice.
+  That is by construction, not by luck, but it *is* incidental: the component is
+  mounted unconditionally in `App.tsx`.
+
+### The measurement
+
+Taken with `elementFromPoint` at the centre of each control, at 390x844 against
+the DEV fixture conversation. The notice sat at
+`top: calc(0.75rem + var(--kub-safe-top))` — 12px below the status bar, over the
+chat header — and **three** header controls hit-tested to the notice rather than
+to themselves:
+
+```
+Назад            -> div.flex h-9 w-9 shrink-0 items-center justify-center rounded-xl
+КПКоманда проекта -> div.text-sm font-semibold text-[color:var(--kub-text)]
+Ещё              -> div.text-sm font-semibold text-[color:var(--kub-text)]
+```
+
+The back button's own centre answered the notice's icon tile. This is rule 12 of
+`docs/operations/interface-material.md` arriving by a different road: a box that
+is merely *drawn* over a button takes it away exactly as a box laid out over it
+does.
+
+Three more measurements, each of which decided something:
+
+- **A build is reproducible.** Two `vite build` runs of the same tree gave the
+  same entry filename (`index-itZjtolW.js`) and the same worker build id
+  (`dc3c20fb3a499867`). So the notice fires on a real content change and not on
+  every redeploy — which corrects the memory note
+  `asset-hash-is-not-reproducible`, whose three differing ids were measured on
+  2026-09-14 and do not reproduce today. The 2026-09-11 note
+  (`web-redeploys-on-every-main-push`) is the one that holds.
+- **A reload costs the open conversation.** `selectedChatId` lives only in
+  `store/app.store.ts`: it is initialised to `null`, it is not written to the
+  URL (only `lib/messageLink.ts` ever sets `?chat=`), and it is not persisted.
+  Every reload lands on the chat list.
+- **The update already applies itself.** `lib/pwa/serviceWorkerHandoff.ts` plus
+  `public/sw.js`'s `answerHandoff` take the new worker over at the next launch,
+  with no prompt and no reload, whenever the asking page is that build and the
+  only window of the origin. `tests/e2e/pwa-service-worker.spec.ts` has held
+  that since it was written. Nothing had to be pressed for a deploy to land.
+
+### The research, from primary sources
+
+**Discord.** Read off the live production web bundle
+(`https://discord.com/assets/web.d793fc00a2d44795.js`, module `578152`
+`AutoUpdateManager`), the live endpoints, and a checked-in dump of
+`discord_desktop_core`. Desktop and web share one renderer.
+
+- Downloads in the background with no prompt; checks hourly. Never applies by
+  itself: `hostOnUpdateDownloaded()` emits events and does not call
+  `quitAndInstall`. Pending modules install at the next launch, on the splash.
+- On web it polls `https://discord.com/assets/version.stable.json` — live on
+  2026-09-20 it answered `{"hash":"…","required":false}`, matching the page's
+  own inlined `VERSION_HASH`.
+- **It never reloads silently. The only reload path is a click.**
+- What it shows is one small green download-icon button in the toolbar, with a
+  tooltip — `"Downloading Update"`, then `"Update Ready!"` — and `null` in every
+  other state. No banner, no modal, no toast, **and no dismiss**.
+- **The finding that decided our behaviour:** a build that is not marked
+  `required` surfaces that button **at most once every seven days** on stable
+  (one day on ptb/canary), gated by a `lastNonRequiredUpdateShown` timestamp in
+  `localStorage`. A `required` build skips the throttle.
+- The one confirmation in their whole update path is a voice call: «Briefly
+  leave voice?» / «Updating Discord while in a voice channel will cause you to
+  leave briefly.» / «Cancel» / «Update anyway!».
+- A forced class exists on desktop: the live manifest at
+  `updates.discord.com/distributions/app/manifests/latest` carries
+  `required_update: true` and a `required_modules` list. Whether the compiled
+  `updater.node` blocks launch on it **could not be established**.
+
+**Telegram Desktop** (source at `telegramdesktop/tdesktop`, read at `dev`).
+
+- Auto-update is on by default (`bool gAutoUpdate = true;` in `settings.cpp`);
+  the checker starts on launch and runs every 8–16 h.
+- **Applies silently at the next start if the user simply quits**: `sandbox.cpp`
+  logs «installing update instead of starting app...». Never applies under the
+  running app.
+- While downloading, nothing is shown outside Settings › Advanced. When ready, a
+  persistent button at the bottom of the chat list — `lng_update_telegram` =
+  «Update Telegram» — and the same on the login screen. No dismiss.
+- No forced-update mechanism in the source; what exists is feature-gated
+  blocking prompts («Update Telegram to view this message»). MEDIUM-HIGH, an
+  exhaustive-grep negative rather than a positive finding.
+- Store/snap/flatpak builds ship without the updater and link out instead.
+
+**Telegram Web A** (`Ajaxy/telegram-tt`) polls `version.txt` every 5 minutes,
+shows a full-width `lng_update_telegram` button in the left column, and its
+worker does `skipWaiting` + `clients.claim` immediately. It *does* reload
+silently in one case: a tab on an older version than another tab reloads itself
+unconditionally (`multiaccount.ts`). **Telegram Web K** polls `version` every
+30 minutes, shows a corner «UPDATE» button, and deactivates an outdated tab
+outright with «Another tab is running a newer version of Telegram. / Click
+anywhere to reload this tab.»
+
+Confidence: HIGH for everything read out of source or off a live endpoint,
+which is all of the above except where marked. No official Discord support
+article documents update behaviour; the SEO how-to pages that claim to were not
+cited.
+
+### The decision
+
+**Behaviour.**
+
+1. **The update already applies itself at the next launch, so nothing asks for
+   that.** This is Telegram Desktop's «installing update instead of starting
+   app» and Discord's splash install, and our handoff has done it for months.
+2. **Nothing reloads the running session by itself**, and the reason is
+   measured rather than preferred: the open conversation would not survive it.
+   A silent reload trades a visible interruption for an invisible loss, which is
+   worse. Discord's web client reloads only on a click, for its own reasons.
+   **The prerequisite for a Discord-grade seamless swap is therefore not an
+   update mechanism at all — it is making the open conversation survive a load.**
+   Until that exists there is no safe automatic reload to build.
+3. **«Позже» is gone.** There is nothing to postpone: the build arrives at the
+   next launch either way, so a dismiss turned a statement into a question.
+   Neither Discord nor either Telegram web client offers one.
+4. **A routine build is offered at most once every seven days**, Discord's exact
+   stable interval, counted from the last time anybody saw the notice rather
+   than from the last deploy — so a week of deploys costs one notice. This is
+   the direct answer to «добавь в исправления потом»: most deploys now say
+   nothing at all.
+5. **A `required` build would skip the throttle — and no web build can declare
+   itself required today.** The parameter is wired through and documents the
+   hole rather than hiding it. The signal belongs beside the desktop's, which
+   already has it (`mandatory` → `critical_update_required` → a blocking gate).
+   Adding it for the web is separate work; it needs a field in the build record
+   and a gate to render it.
+6. **A connected call is asked about once**, in the pill rather than in a modal:
+   «Звонок прервётся / Обновление отключит вас от разговора / Всё равно». This
+   is Discord's only interruption, ported.
+
+**Appearance.** The notice was older than the material: `kub-glass-strong` was
+correct, but the buttons were hand-rolled (`h-9 rounded-lg bg-[var(--kub-cyan)]`)
+rather than `KubButton`, the icon was a literal `↻` glyph on a hand-mixed cyan
+wash rather than `KubIcon`, and it carried a whole second set of copy for a
+«Соединение нестабильно» state the component returned `null` before it could
+ever render. It is now `KubButton` + `KubIcon`, one line of title and one of
+text, in the band the product already floats notices in
+(`top: calc(var(--kub-safe-top) + 6.75rem)` — `KubFeedbackViewport` reads the
+same offset), below the chrome and over content.
+
+Two things deliberately **not** changed, each with the rule that says so:
+
+- **`kub-glass-strong` stays a class on the element, not a `KubGlassLayer`.**
+  Rule 3 is conditional — the sheet is for a surface with `fixed` descendants,
+  and this has none; the doc says in as many words that «panels with nothing
+  fixed inside them … keep `kub-glass` on the element itself». Both
+  `tests/unit/entry-glass.test.mjs` and `tests/unit/product-overlay-glass.test.mjs`
+  pin the class form for this file.
+- **`--kub-border-color` stays.** Rule 11 names «a covering surface — a menu, a
+  toast, a floating pill» as one of the four things that keep their perimeter,
+  because it stands on a backdrop nobody chose and cannot be separated by a step
+  relative to it.
+
+### Two defects found while building this, both worth the sentence
+
+- **A derived value that records itself erases itself.** The first version
+  computed «may I show this» per render and wrote the timestamp in an effect —
+  so the very next render read its own record, concluded «too soon», and took
+  the notice off the screen. The decision is latched in state now, taken once.
+- **A mutation harness whose marker exists before the mutation proves nothing.**
+  The first e2e harness reported the self-reload mutation GREEN. The marker it
+  waited for was already in the original file, so it never waited, and Vite
+  served a stale transform to the test — the memory note
+  `vite-watcher-misses-scripted-writes` in another costume. Every marker now has
+  to be absent from the original and present in the mutant (or vice versa for a
+  removal), and two consecutive reads of the dev server must agree before the
+  test runs. Run again, the same mutation went red.
+
+### Evidence
+
+- Pixels, before and after, at 390 and 1440 in both themes, plus a WebKit set:
+  `output/update-notice/before-*.png`, `after-*.png`, `after-webkit-*.png`.
+- `tests/e2e/app-update-notice.spec.ts` — reach (header **and** composer,
+  hit-tested), no self-reload, no dismiss, and the throttle. 8/8 on
+  `chromium-desktop-1440` and 8/8 on `webkit-mobile-390`.
+- `tests/unit/app-update-notice.test.mts` — 8/8. Eight mutations of
+  `lib/pwa/appUpdateNotice.ts`, each verified applied by SHA-256 and each red:
+  `>=`→`>` on the interval boundary; the `required` bypass removed; the
+  backwards-clock guard removed; the interval collapsed to 0; the call question
+  never acknowledged; the call question asked with no call; a zero timestamp
+  accepted; `!pending` short-circuit removed.
+- Four mutations of the component, each verified served by the dev server before
+  the test ran, each red: the old position restored (reach); a self-reload added
+  (silence); «Позже» restored (no question); the throttle bypassed.
+- Gates at this change: typecheck clean; unit suite **3533/3533**, 0 skipped;
+  `tests/server` **144/144**, 0 skipped; production build proved by its own
+  `sw.js build 34f62471857f5dfd` and `built in 8.17s`;
+  `tests/e2e/pwa-service-worker.spec.ts` **6/6 on `chromium-mobile-390` and 6/6
+  on `webkit-mobile-390`** — including «a page on an older build is offered the
+  update, and accepting reloads it exactly once onto the new worker», which is
+  the whole mechanism end to end against two real builds and a real worker.
+
+### Left open
+
+- **`KUB_SW_CONTROLLER_CHANGED_EVENT` is now dispatched and never listened to.**
+  The notice was its only consumer; `restartOntoWaitingBuild` uses the raw
+  `controllerchange` instead. Two dead lines in `usePwa.ts`, left alone to keep
+  this diff to one subject.
+- **The notice shares the toast band.** It takes
+  `calc(var(--kub-safe-top) + 6.75rem)`, which is where `KubFeedbackViewport`
+  starts its stack, and it is persistent where a toast is transient — so a toast
+  raised while the notice is up would be under it. Not observed, and not fixed
+  here; fixing it means giving the toast stack an offset it does not have today.
+- **`AppUpdateBanner` is mounted unconditionally in `App.tsx`** and is named for
+  a banner it no longer is. Neither the mount nor the name was touched.
+- **A required class for the web.** Named in the decision above; not built.
+
+---

@@ -51,7 +51,7 @@ const APP = `http://127.0.0.1:${APP_PORT}`;
 const STORAGE = `http://127.0.0.1:${STORAGE_PORT}`;
 const LEGACY_WORKER_SHA256 = "3e9303db3bfa43427c39fda2cabfc3cf4ca4fd65dd132eafac3ca420d3c48158";
 const LEGACY = "legacy";
-const UPDATE_BANNER_TEXT = "Доступно обновление";
+const UPDATE_BANNER_TEXT = "Готова новая версия";
 
 // Public fixture values, the same ones the routing matrix uses. The page never
 // reaches a backend; these only let the application boot.
