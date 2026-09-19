@@ -164,8 +164,8 @@ CMD ["node", "artifacts/api-server/dist/botGatewayIndex.mjs"]
 # private door into the platform it would prove nothing about whether an
 # outside developer could write the same thing.
 #
-# The bundle carries `pg`, so this stage needs no node_modules — only the
-# bundle and the migration files it reads at boot.
+# The bundle carries `pg`, so this stage installs no dependencies at all — it
+# holds the bundle and the migration files it reads at boot, and nothing else.
 FROM base AS pocketflow-runtime
 
 ENV NODE_ENV=production \
