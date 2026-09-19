@@ -134,6 +134,26 @@ export type InlineButton =
 
 export type InlineKeyboard = { rows: InlineButton[][] };
 
+/**
+ * Which of the four media methods a re-send goes to.
+ *
+ * The platform refuses a mismatch (`bot_file_kind_mismatch`), which is the
+ * same refusal Telegram gives for a photo file_id passed to sendVideo — so
+ * this is not a hint, it is part of the address.
+ */
+export type FileKind = "photo" | "video" | "document" | "voice";
+
+export type SendFileByIdOptions = {
+  chatId: ChatId;
+  /** The handle the platform gave us, unchanged. Never construct one. */
+  fileId: string;
+  kind: FileKind;
+  caption?: string;
+  replyToMessageId?: MessageId;
+  topicId?: string;
+  keyboard?: InlineKeyboard;
+};
+
 export type SendTextOptions = {
   chatId: ChatId;
   text: string;
@@ -261,6 +281,15 @@ export interface BotTransport {
   getMe(): Promise<BotIdentity>;
 
   sendText(options: SendTextOptions): Promise<SentMessage>;
+  /**
+   * Re-send a file the bot may already read, by its identifier.
+   *
+   * Throws `CapabilityUnsupportedError` where the platform has no such
+   * thing — check `supports("sendFileById")` first. It sends no bytes: the
+   * platform resolves the identifier to the object the source message
+   * already points at, so nobody gains access to anything.
+   */
+  sendFileById(options: SendFileByIdOptions): Promise<SentMessage>;
   editText(options: EditTextOptions): Promise<void>;
   deleteMessage(chatId: ChatId, messageId: MessageId): Promise<void>;
   sendChatAction(chatId: ChatId, action: ChatAction, topicId?: string): Promise<void>;

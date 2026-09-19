@@ -8,7 +8,15 @@ import type { Db } from "#pf/store/db";
  * must keep reading as a URL even after somebody teaches the parser a new rule.
  */
 
-export type SavedKind = "text" | "url" | "json" | "photo" | "document" | "voice" | "location";
+export type SavedKind =
+  | "text"
+  | "url"
+  | "json"
+  | "photo"
+  | "video"
+  | "document"
+  | "voice"
+  | "location";
 
 export type SavedItem = {
   id: string;
@@ -39,6 +47,7 @@ const KINDS: ReadonlySet<string> = new Set<SavedKind>([
   "url",
   "json",
   "photo",
+  "video",
   "document",
   "voice",
   "location",

@@ -13,12 +13,14 @@ import {
   type ChatId,
   type ChatKind,
   type EditTextOptions,
+  type FileKind,
   type FileHandle,
   type InlineKeyboard,
   type IncomingCallbackQuery,
   type IncomingMembership,
   type IncomingMessage,
   type MessageId,
+  type SendFileByIdOptions,
   type SendTextOptions,
   type Sender,
   type SentMessage,
@@ -61,6 +63,11 @@ const SUPPORTED: ReadonlySet<TransportCapability> = new Set<TransportCapability>
   "answerCallbackQuery",
   "chatAction",
   "getFile",
+  // Shipped 2026-09-19 (D-248): the four media methods accept a `file_id`
+  // in place of a storage object reference, which is Telegram’s own model.
+  "sendFileById",
+  "sendPhoto",
+  "sendDocument",
   "setMyCommands",
   "getMyCommands",
   "polling",
@@ -72,18 +79,20 @@ const SUPPORTED: ReadonlySet<TransportCapability> = new Set<TransportCapability>
  * Deliberately absent, with the reason, because `/selftest` reports these and a
  * reader deserves to know which are platform gaps and which are ours.
  *
- * `sendPhoto` and friends exist as methods but are unreachable: they take a
- * storage object path, the gateway checks that the object already exists, and
- * no public method gives a bot a way to put one there or to learn the path of
- * one it received (`getFile` returns a signed URL and not the path). So the
- * honest answer for "can this bot send a file" is no. See G-1 in
+ * `sendPhoto` and friends now accept a `file_id` — the identifier of a
+ * message the bot is already allowed to read — in place of a storage object
+ * reference, which is Telegram’s own model and the fix G-1 asked for. So a bot
+ * can send back a file it was sent.
+ *
+ * It still cannot put **new** bytes anywhere: there is no upload method, and
+ * the storage path a media message names is not something a bot can learn or
+ * create. That is the larger half of G-1 and it is open. See
  * `docs/proposals/2026-09-19-pocketflow-reference-bot.md`.
  */
 export const LETSCUBE_GAPS: ReadonlyMap<TransportCapability, string> = new Map([
-  ["sendPhoto", "sendPhoto needs a chat-media object path the bot cannot obtain (G-1)"],
-  ["sendDocument", "sendDocument needs a chat-media object path the bot cannot obtain (G-1)"],
-  ["sendFileById", "no method accepts a file_id in place of a storage reference (G-1)"],
-  ["uploadFile", "no upload method exists in the public Bot API (G-1)"],
+  // G-1 is half closed. A bot can now send back a file it was sent; it still
+  // cannot put new bytes anywhere, which is the larger half.
+  ["uploadFile", "no upload method exists in the public Bot API (G-1, still open)"],
   ["editMessageReplyMarkup", "only editMessageText exists; it carries reply_markup (G-4)"],
   ["inlineMode", "no inline_query / answerInlineQuery / chosen_inline_result (G-2)"],
   ["poll", "no sendPoll and no poll / poll_answer update (G-3)"],
@@ -93,6 +102,19 @@ export const LETSCUBE_GAPS: ReadonlyMap<TransportCapability, string> = new Map([
   ["ephemeral", "not implemented by the platform (G-6)"],
   ["miniApp", "not implemented by the platform (G-6)"],
 ]);
+
+/**
+ * Which method a kind goes to.
+ *
+ * A map rather than a template, so a kind the platform does not have cannot
+ * be spelled into a method name that does not exist.
+ */
+const MEDIA_METHOD: Record<FileKind, string> = {
+  photo: "sendPhoto",
+  video: "sendVideo",
+  document: "sendDocument",
+  voice: "sendVoice",
+};
 
 type Json = Record<string, unknown>;
 
@@ -401,6 +423,34 @@ export class LetscubeTransport implements BotTransport {
     return {
       id: id as MessageId,
       chatId: chatId as ChatId,
+      date: createdAt && !Number.isNaN(Date.parse(createdAt)) ? new Date(createdAt) : null,
+    };
+  }
+
+  async sendFileById(options: SendFileByIdOptions): Promise<SentMessage> {
+    const keyboard = keyboardToWire(options.keyboard);
+    const result = asRecord(
+      await this.#call(MEDIA_METHOD[options.kind], {
+        chat_id: options.chatId,
+        // `file_id` and `media` are mutually exclusive at the wire; sending
+        // both is refused as `media_or_file_id_required`, so only one is ever
+        // written here.
+        file_id: options.fileId,
+        ...(options.caption ? { caption: options.caption } : {}),
+        ...(options.replyToMessageId ? { reply_to_message_id: options.replyToMessageId } : {}),
+        ...(options.topicId ? { topic_id: options.topicId } : {}),
+        ...(keyboard ? { reply_markup: keyboard } : {}),
+        idempotency_key: this.#idempotencyKey(),
+      }),
+    );
+    const id = asString(result?.message_id);
+    if (!id) {
+      throw new TransportError({ code: "internal_error", message: "the send returned no id" });
+    }
+    const createdAt = asString(result?.created_at);
+    return {
+      id: id as MessageId,
+      chatId: (asString(result?.chat_id) ?? options.chatId) as ChatId,
       date: createdAt && !Number.isNaN(Date.parse(createdAt)) ? new Date(createdAt) : null,
     };
   }

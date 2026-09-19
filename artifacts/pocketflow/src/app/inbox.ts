@@ -15,7 +15,7 @@ import {
   searchItems,
   type SavedKind,
 } from "#pf/store/saved";
-import type { ChatId, MessageId } from "#pf/transport/types";
+import type { ChatId, FileKind, MessageId } from "#pf/transport/types";
 
 /**
  * The smart inbox (§3) — the thing a person actually uses PocketFlow for.
@@ -46,6 +46,7 @@ const SHA = "inbox.sha";
 const FORGET = "inbox.forget";
 const PAGE = "inbox.page";
 const STATUS = "inbox.status";
+const SEND_BACK = "inbox.sendback";
 
 /** Owned by the reminders feature; the inbox only offers it. */
 const REMIND_FROM = "remind.from";
@@ -63,6 +64,19 @@ const WATCH_FROM = "watch.from";
 const REMINDERS_LIST = "rem.list";
 const WEBHOOKS_LIST = "whlist";
 const WATCH_LIST = "watch.list";
+
+/**
+ * Which saved kinds can be handed back, and to which method.
+ *
+ * `text`, `url`, `json` and `location` are absent because they are not
+ * files; a missing entry is the answer, not an oversight.
+ */
+const SEND_BACK_KIND: Partial<Record<SavedKind, FileKind>> = {
+  photo: "photo",
+  video: "video",
+  document: "document",
+  voice: "voice",
+};
 
 const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024;
 
@@ -388,6 +402,38 @@ export function createInboxFeature(): Feature {
           });
         }
       },
+      async [SEND_BACK](input: CallbackContext) {
+        const candidate = await readCandidate(input.ctx.db, input.user.userId, input.args[0] ?? "");
+        const sendKind = candidate ? SEND_BACK_KIND[candidate.kind] : undefined;
+        if (!candidate || candidate.fileId === null || sendKind === undefined) {
+          await input.ctx.bot.answerCallbackQuery(input.query.id, {
+            text: "Это предложение больше не действует",
+          });
+          return;
+        }
+        await input.ctx.bot.answerCallbackQuery(input.query.id);
+        try {
+          await input.ctx.bot.sendFileById({
+            chatId: candidate.chatId as ChatId,
+            fileId: candidate.fileId,
+            kind: sendKind,
+            replyToMessageId: candidate.sourceMessageId as MessageId,
+          });
+        } catch (error) {
+          // No bytes move here — the platform resolves the identifier to the
+          // object the source message already points at — so a failure is
+          // about permission or about the message being gone, and neither is
+          // worth a stack trace in somebody's conversation.
+          input.ctx.log.warn("inbox.send_back_failed", {
+            error: error instanceof Error ? error.message : "unknown",
+          });
+          await input.ctx.bot.sendText({
+            chatId: input.query.message.chatId,
+            text: "Не получилось отправить файл обратно.",
+          });
+        }
+      },
+
       async [FORGET](input: CallbackContext) {
         // The id in the button is a lookup, never a permission: `deleteItem`
         // is scoped to the owner, so a forged id naming somebody else's item
@@ -476,6 +522,7 @@ export function createInboxFeature(): Feature {
               lines.push(`Длительность: ${Math.round(classification.durationSeconds)} с`);
             }
           } else if (classification.kind === "video") {
+            kind = "video";
             lines.push("Видео");
           } else {
             lines.push("Файл");
@@ -499,14 +546,21 @@ export function createInboxFeature(): Feature {
               : `${classification.kind} ${input.message.id}`,
             classification.fileId,
           );
+          // «Отправить обратно» appears only where the platform can honour
+          // it. Until 2026-09-19 it could not (G-1), and a button that
+          // answers «не получилось» is the defect this project's register
+          // spends most of its pages on — so it is drawn from `supports`,
+          // not from a constant.
+          const canResend =
+            input.ctx.bot.supports("sendFileById") && SEND_BACK_KIND[kind] !== undefined;
           await input.ctx.bot.sendText({
             chatId,
             text: clampMessage(lines.join("\n")),
             replyToMessageId: replyTo,
-            keyboard: keyboard([
-              button("SHA256", SHA, token),
-              button("Сохранить", SAVE, token),
-            ]),
+            keyboard: keyboard(
+              [button("SHA256", SHA, token), button("Сохранить", SAVE, token)],
+              canResend ? [button("Отправить обратно", SEND_BACK, token)] : [],
+            ),
           });
           return true;
         }
@@ -534,5 +588,15 @@ export function createInboxFeature(): Feature {
   };
 }
 
-export const INBOX_ACTIONS = { SAVE, PRETTY, SHA, STATUS, FORGET, PAGE, REMIND_FROM, WATCH_FROM };
+export const INBOX_ACTIONS = {
+  SAVE,
+  PRETTY,
+  SHA,
+  STATUS,
+  SEND_BACK,
+  FORGET,
+  PAGE,
+  REMIND_FROM,
+  WATCH_FROM,
+};
 export const START_SCREEN_ACTIONS = [PAGE, REMINDERS_LIST, WEBHOOKS_LIST, WATCH_LIST] as const;
