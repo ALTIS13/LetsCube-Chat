@@ -21,6 +21,7 @@ import {
   type MicGateState,
 } from "@/lib/micGate";
 import { openMicLevelSource, type MicLevelSource } from "@/lib/micLevel";
+import { MIC_SILENCE_CLEAR, nextMicSilence, type MicSilenceState } from "@/lib/micSilence";
 import {
   classifyMicrophoneError,
   microphoneRefusalText,
@@ -305,6 +306,19 @@ function settleJournal(): void {
  * when it changed. Reset with the call, because a new call is not the old one.
  */
 let mutedBeforeDeafened = false;
+
+/**
+ * What a moderator's silence is holding, if one is.
+ *
+ * Beside `mutedBeforeDeafened` and for the same reason: nothing draws it, and a
+ * field of the view would re-render every reader of a call when it moved. The
+ * rules it carries are `lib/micSilence.ts`'s, where `node --test` reaches them;
+ * what is here is the holding and the one call to the transport.
+ *
+ * Reset at the head of every join, beside `audioEverBlocked`, so one call's
+ * silence cannot decide what the next call's microphone does.
+ */
+let micSilence: MicSilenceState = MIC_SILENCE_CLEAR;
 
 /**
  * The transport of the call that is running, or null.
@@ -1082,6 +1096,7 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
   // shown — so the only thing that discards it is the next attempt.
   journal = VOICE_JOIN_JOURNAL_EMPTY;
   audioEverBlocked = false;
+  micSilence = MIC_SILENCE_CLEAR;
   enterStage("microphone");
   publish({
     ...IDLE,
@@ -1158,12 +1173,57 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
         // reported as a moderator's doing.
         const revoked = !allowed && outcome.grant.canPublish;
         if (state.speechRevoked === revoked) return;
-        // `micMuted` goes with it on the way in: the person is not being heard,
-        // so a microphone control reading «on» would be the lie. It is left
-        // alone on the way out, because a restored permission does not put the
-        // track back — pressing the control is what does that, and that press
-        // is the one thing that can also be `canPublish`-checked by the SFU.
-        patch({ speechRevoked: revoked, micMuted: revoked ? true : state.micMuted });
+        /**
+         * What this does to the person's own microphone, decided in
+         * `lib/micSilence.ts` where a `node --test` process reaches it.
+         *
+         * This used to be one ternary — `micMuted: revoked ? true : state.micMuted`
+         * — with a comment saying a restored permission does not put the track
+         * back and that pressing the control is what does. That was true of the
+         * code and wrong as a product: the SFU unpublishes on the way in and
+         * restores nothing on the way out, so «Разрешить говорить» gave the
+         * permission back and left the person silent, with a microphone button
+         * that read «выключен» over a mute they had never pressed. Reported by
+         * the owner on 2026-09-20; the whole mechanism is in the header of
+         * `lib/micSilence.ts`.
+         */
+        const step = nextMicSilence(micSilence, {
+          silenced: revoked,
+          muted: state.micMuted,
+          deafened: state.deafened,
+        });
+        micSilence = step.next;
+        patch({ speechRevoked: revoked, micMuted: step.muted });
+        const target = room;
+        // The gate follows the mute here exactly as it does after a press —
+        // `setVoiceMuted` and `setVoiceDeafened` both end in this call — so a
+        // silence closes the capture rather than leaving it live over a
+        // publication the room has already removed.
+        if (!step.tellTransport || !target) {
+          evaluateGate();
+          return;
+        }
+        // The only path that asks the transport for anything: a lift that ends
+        // with this person meant to be heard again. `VoiceRoom.setMuted(false)`
+        // is what republishes — the capture is still live because
+        // `stopLocalTrackOnUnpublish` is off in the seam — and it re-applies
+        // the gate immediately afterwards, so «Рация» hands back a closed
+        // microphone rather than an open one.
+        void target
+          .setMuted(step.muted)
+          .then(() => {
+            if (mine !== generation) return;
+            evaluateGate();
+          })
+          .catch(() => {
+            if (mine !== generation) return;
+            // The permission came back and the republish did not. Saying
+            // «включён» over a track that is not on the air is the lie this
+            // whole change exists to remove, so the control goes back to
+            // «выключен» and their own press is what tries again.
+            patch({ micMuted: true });
+            evaluateGate();
+          });
       },
       onAudioBlocked: (blocked) => {
         if (mine !== generation) return;

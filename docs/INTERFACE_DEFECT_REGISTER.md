@@ -19665,3 +19665,281 @@ Two things deliberately **not** changed, each with the rule that says so:
 - **A required class for the web.** Named in the decision above; not built.
 
 ---
+
+## D-265 `[x]` A moderator's unmute gave the permission back and left the person silent
+
+**Reported by the owner, 2026-09-20:** «дефект, при размьюте человека его
+микрофон не включается обратно сам».
+
+**Severity:** high. Every «Разрешить говорить» in the product, on every shell.
+The person is un-silenced, still silent, and their own microphone button reads
+«выключен» over a mute they never pressed — so the state they are in is
+indistinguishable from one they caused, and the only way out is to press a
+control that looks like it is already doing what they want.
+
+**Surface:** `artifacts/kub/src/hooks/useVoiceCall.ts`, the `onSpeechAllowed`
+callback of the transport, which read
+`micMuted: revoked ? true : state.micMuted` and asked the transport for nothing.
+The event is bound in `artifacts/kub/src/hooks/voiceRoom.ts:643` —
+`RoomEvent.ParticipantPermissionsChanged` to `reportAndAnnounce`, which reports
+state and republishes nothing.
+
+### What the revocation actually does to the local track, measured
+
+Three layers, none of them supposed:
+
+1. **The media server unpublishes, actively.** `SetPermission` in the LiveKit
+   server's `pkg/rtc/participant.go` walks `GetPublishedTracks()` and calls
+   `removePublishedTrack` for every source the new grant no longer allows.
+   Giving the grant back only calls `OnParticipantUpdate`: there is no
+   «republish now» signal, by design, because the client holds the capture.
+2. **The SDK forwards that and stops.** The `trackUnpublished` signal reaches
+   `LocalParticipant.handleLocalTrackUnpublished`, which calls
+   `unpublishTrack(track)` with no `stopOnUnpublish`, so `roomOptions`
+   decides — and `voiceRoom.ts` sets `stopLocalTrackOnUnpublish: false`, which
+   makes it `track.stopMonitor()` rather than `track.stop()`. `stopMonitor`
+   clears a stats interval and a rAF handle and touches neither
+   `MediaStreamTrack.enabled` nor `LocalTrack.isMuted`. The rest of
+   `unpublishTrack` removes the sender, sets the transceiver `inactive`, deletes
+   the publication from `trackPublications` / `audioTrackPublications`, emits
+   `LocalTrackUnpublished` and renegotiates. On the way back,
+   `Room.onLocalParticipantPermissionsChanged` **only emits**. All of it read in
+   livekit-client 2.22.3.
+3. **So the track is unpublished — not stopped, and not refused.** The capture is
+   still `live`, still enabled, still the same `MediaStreamTrack`; the browser's
+   microphone light stays on; and nothing carries it. `isMuted` is a plain field
+   written only by `setTrackMuted`, so a self-mute from before the silence
+   survives it untouched.
+
+That settles the repair: **republish**, not resume. `VoiceRoom.setMuted(false)`
+already republishes — it was written for the neighbouring case, a person
+pressing their own microphone after a silence — and `publish()` re-attaches the
+`TrackEvent.Muted` / `Unmuted` listeners that `unpublishTrack` detached, so mute
+propagation comes back with it.
+
+### The repair, and its two properties
+
+The decision moved out of the callback into
+`artifacts/kub/src/lib/micSilence.ts`, which imports nothing, for the reason
+CLAUDE.md states: a rule inside a `"use client"` module is a rule with no test.
+`nextMicSilence` answers three things — what to remember, what `micMuted`
+becomes, and whether the transport has to be told.
+
+- **A person who muted themselves before the silence stays muted after it.**
+  Restoring a permission is not consent to open somebody's microphone. The
+  silencing edge is the one place the person's own choice is overwritten — it
+  has to be, or the interface would draw a live microphone over audio the room
+  is not carrying — and `mutedBefore` is what makes that reversible. The lift
+  then asks the transport for nothing at all: their next press is what
+  republishes, on the path that already did.
+- **It hands back to the microphone gate rather than forcing the microphone
+  open.** `setMuted(false)` re-applies the held gate immediately after the
+  unmute inside the seam, and `evaluateGate()` runs after it in the hook, so a
+  call in «Рация» gets a closed microphone and a live publication — a control
+  over something, not a room. The silencing edge evaluates the gate too, so the
+  capture stops with the publication instead of running on over a room that has
+  stopped carrying it.
+- Deafening still wins: somebody who cannot hear the room is not put back on the
+  air by a press that was not theirs.
+
+### Evidence
+
+- Pixels, before and after, at 390 and 1440 in both themes, three moments each:
+  `output/d265/before-*.png`, `output/d265/after-*.png`. The «speaking» and
+  «silenced» frames are **byte-identical** in all four viewport/theme
+  combinations and only «lifted» differs — a red slashed microphone before, a
+  live one after. The before set was taken by writing `HEAD`'s
+  `useVoiceCall.ts` over the working copy for the length of the run.
+- `tests/unit/mic-silence.test.mts` — 5/5, 0 skipped. Six mutations of
+  `lib/micSilence.ts`, each red: `mutedBefore: input.muted` → `false`;
+  `input.deafened || prev.mutedBefore` → `prev.mutedBefore`;
+  `tellTransport` → `false`; `tellTransport` → `true`; `muted: true` →
+  `input.muted` on the silencing edge; the unchanged-answer branch dropped.
+- `tests/e2e/voice-call.spec.ts` — three new tests, green at
+  `chromium-desktop-1440` and `chromium-mobile-390`. Four mutations, each red,
+  and each killed **exactly one** of the three (1 failed, 2 passed every time):
+  the lift never reaching the transport; the silence forgetting the person's own
+  mute; the silencing edge no longer closing the capture; the lift forcing the
+  microphone open.
+- Gates: typecheck clean; voice/mic/call unit suites **573/573**, 0 skipped;
+  full unit suite 3553 with the single failure belonging to another agent's
+  in-flight sidebar work (`data-kub-chat-list-seam` tripping the
+  `data-kub-chat-` guard in `tests/unit/chat-chrome.test.mts`, absent from
+  `HEAD`); production build proved by its own `sw.js build 1fec8bb72dcedeab`
+  and `built in 19.57s`; `voice-call.spec.ts` 75/75 at
+  `chromium-desktop-1440`.
+
+### What the tests cannot reach
+
+`tests/e2e/voice-call.spec.ts` replaces the transport wholesale through
+`window.__letscubeVoiceRoom`, so **the republish itself is invisible to it**:
+`room.localParticipant.publishTrack(...)` lives inside `createLiveKitRoom`. The
+stand-in reproduces what the seam does to the capture — `enabled = !muted && open`
+— which is what makes the three tests measure the real `MediaStreamTrack` this
+browser captured, but a green run there is not evidence that a LiveKit
+publication came back. That call site is held only by the source-reading guards
+in `tests/unit/voice-room-seam.test.mjs`, which say so about themselves. The
+first real proof will be a person being heard again on production.
+
+### Left open
+
+- **`mutedBeforeDeafened` is reset in `fail()` and not in `leaveVoiceCall()`.**
+  Harmless today — it is read only on an undeafen, which cannot happen in a call
+  that has not deafened first — but it is an asymmetry beside the new
+  `micSilence`, which is reset at the head of every join. Not touched, to keep
+  this diff to one subject.
+- **Nothing says «микрофон снова включён».** The red line goes and the button
+  comes back to life, which is the whole of the announcement. A person who was
+  looking elsewhere learns by talking.
+
+---
+
+## D-266 `[ ]` Tapping a person in a call offers nothing on two of the three surfaces
+
+**Reported by the owner, 2026-09-20:** «мало функционала при нажатии на
+пользователя», with Discord screenshots as the reference.
+
+**Severity:** medium. It is not a broken control; it is three surfaces drawing
+the same person and only one of them being a door.
+
+### What tapping a participant offers today, surface by surface
+
+| Surface | File | On press |
+| --- | --- | --- |
+| Channel rail occupant row (server channels) | `components/chat/ChannelRail.tsx:920` | Menu: **Громкость** band (slider 0..100%, «Выключен» at 0) + **Заглушить в канале** / **Разрешить говорить** / **Отключить от канала** for owners and administrators. Sheet on a coarse pointer, menu on a fine one. A row that would open an empty menu is not pressable at all. |
+| Call capsule's face stack | `components/chat/VoiceCallCapsule.tsx:335` | **Nothing.** `VoiceSpeakingAvatar` wraps a `TinyUserAvatar` in a `span`; there is no handler. And the stack itself is `hidden ... sm:flex`, so below 640px it is not drawn at all - on a phone the capsule shows no faces to press. |
+| The group's voice room in the information panel | `components/chat/VoiceChannelRow.tsx:184` | **Nothing.** A `div` with an avatar, a name and a muted glyph. |
+| Call bar | `components/chat/VoiceCallBar.tsx` | No participant list at all. |
+| Chat member list (not voice) | `components/chat/ChatInfoPanel.tsx:1462` | Menu: **Сделать администратором** / **Передать владение** / **Снять администратора** / **Удалить из чата**. No voice entry, and no volume. |
+
+So the per-person controls exist, are well built, and are reachable from exactly
+one of the places a person's face is drawn — and that one is the server-channel
+rail, which a group call never opens.
+
+### What Discord offers, and which of it belongs here
+
+Sources: Discord's own «Permissions on Discord» page and Help Centre articles
+for every moderation and social entry; the RPC documentation for the volume
+range; Discord's shipped web client for the local per-user state machine. The
+exact English labels of the **local** entries (volume slider, local mute) are
+not printed on any Discord-owned page — community sources call them «User
+Volume» and «Mute» — so those two labels are COMMUNITY, everything else is
+OFFICIAL.
+
+Discord's voice member menu, grouped:
+
+- **Local, everyone:** per-user volume slider (0–200, default 100 — OFFICIAL,
+  RPC `SET_USER_VOICE_SETTINGS`), per-user local mute, per-user local soundboard
+  mute, per-user local video disable, per-user local pan.
+- **Moderation, per permission:** **Server Mute** (Mute Members), **Server
+  Deafen** (Deafen Members), **Disconnect** and **Move To** (Move Members),
+  plus the member-level **Timeout**, **Kick [user]**, **Ban [user]**, **Roles**,
+  **Change Nickname**.
+- **Social:** **View Profile**, **Add Friend**, **Block**, **Ignore**, **Copy
+  User ID**.
+
+Worth copying outright, because it is the labelling strategy rather than a
+feature: **the moderator actions carry a «Server » prefix and the self actions
+are bare.** And the five-state precedence Discord resolves in its member list —
+server deafen > self deafen > server mute > local mute > self mute, with server
+mute coloured and local mute not, and a different glyph for self versus imposed
+— is the vocabulary a reader needs before any of these entries mean anything.
+
+**The four entries this product should have**, in the order they would be drawn,
+and deliberately fewer than twelve:
+
+1. **Громкость** — already built, already correct, already refuses what it
+   cannot reach. It only has to be offered on the other two surfaces.
+2. **Заглушить для себя** — a per-person local mute as a *toggle*. We have the
+   mechanism (a volume of 0) and none of the affordance; see D-267.
+3. **Профиль** — the member card this product already has
+   (`chat-info-member-card`) and that the voice menu cannot reach. Discord's
+   «View Profile», and the entry that makes the menu about a person rather than
+   about a row.
+4. **The moderation pair already built** — «Заглушить в канале» /
+   «Разрешить говорить» and «Отключить от канала». Keep as they are; do not
+   build a second path to them.
+
+**Refused, with the reason:** Server Deafen (we have no lever for it — the
+gateway's `UpdateParticipant` carries `canSubscribe`, and revoking it would
+leave somebody deaf in a room they can still see, which
+`buildParticipantPermission` exists to prevent); Move To (there is no
+cross-channel move); Timeout / Kick / Ban / Roles / Change Nickname (they live
+in the member list, and one door per action); Priority Speaker, local
+soundboard, local video, local pan (no such features); Copy User ID (a developer
+affordance, not a product one).
+
+### Consequence
+
+A group call — the common case — draws every participant twice, in the capsule
+and in the information panel, and neither drawing can be pressed. The volume
+control the product built on 2026-09-18 is invisible to anybody who is not in a
+server channel.
+
+---
+
+## D-267 `[ ]` Deafen is global, in-call and in two places; a per-person mute has no entry
+
+**Reported by the owner, 2026-09-20:** «нет возможности замьютить именно
+наушники».
+
+**Severity:** medium, and the entry is here mostly to record a distinction
+rather than a defect: the control he is asking for partly exists and partly does
+not, and the two halves need different answers.
+
+### What exists
+
+- **A global deafen.** `setVoiceDeafened` in `hooks/useVoiceCall.ts:1336` →
+  `VoiceRoom.setDeafened` in `hooks/voiceRoom.ts`, which sets every remote
+  participant's volume to 0 and re-applies it on every room event and on every
+  element mount, so somebody who joins while it is on arrives silent. It also
+  mutes the microphone and remembers the pre-deafen mute, which is exactly what
+  Discord does: its own Keybinds article says of Toggle Deafen, «Toggle your
+  output's playback on or off. Also disables your mic.»
+  **Reachable from two places, both in-call:** the capsule's speaker button
+  (`voice-capsule-deafen`) and the call bar's (`voice-call-bar-deafen`), both
+  labelled «Заглушить звук» / «Включить звук».
+- **A per-person volume**, 0..100%, labelled «Выключен» at 0, in the channel
+  rail's occupant menu and nowhere else (D-266). Setting it to 0 *is* a
+  per-person local mute; it is simply not offered as one.
+
+### What does not exist
+
+- **A per-person local mute as an entry.** Discord has both — the slider and a
+  «Mute» toggle whose state its member list draws with its own glyph and its own
+  screen-reader status. Here there is a slider that can be dragged to zero, on
+  one surface, and nothing that says «this person is muted for me».
+- **An output-only mute.** Neither here nor in Discord: deafen takes the
+  microphone with it, by design in both. If «именно наушники» means «silence the
+  room without muting me», nobody ships that, and building it would be a new
+  idea rather than parity. Checked against the Help Centre, the developer
+  documentation and the shipped client; the only output-only lever Discord has
+  is the global **Output Volume** slider in settings.
+- **Deafen outside a call**, and **deafen anywhere but those two controls.**
+  Discord keeps it in the user area at all times.
+
+### The reachability gap most likely behind the report
+
+The call bar's deafen and mute carry `kub-voice-call-bar__extra`, which
+`index.css:2639` fades and narrows to nothing as the chat-list column narrows
+(`opacity: calc(1 - var(--kub-chat-list-narrow) * 2.2)`), leaving only «Выйти».
+So on a narrowed column the deafen control is gone, and the capsule's copy of it
+is only in the conversation that owns the call. A person in a call who has
+walked away from that conversation and narrowed their list has no deafen at all.
+Not touched here: the chat-list column's narrowing is another agent's work in
+flight.
+
+### What to do, in order
+
+1. Offer the occupant menu on the capsule and on the information panel's
+   participant list (D-266). That alone puts the per-person volume in front of
+   everybody in a group call.
+2. Add **«Заглушить для себя»** to that menu as a toggle over the same stored
+   volume — 0 when on, and back to the loudness they had chosen when off, not to
+   100%. The state belongs in the participant row's glyph as well, told apart
+   from a self-mute and from a moderator's silence the way Discord tells its
+   five states apart.
+3. Leave deafen where it is, and settle its reachability with whoever owns the
+   chat-list column.
+
+---

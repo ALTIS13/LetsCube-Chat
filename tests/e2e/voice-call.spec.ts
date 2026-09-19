@@ -3259,6 +3259,136 @@ test("a moderator's silence reaches the bar, and the microphone stops being pres
   await expect(bar(page).getByTestId("voice-call-bar-mute")).toBeEnabled();
 });
 
+/* ── A silence, and what lifting it gives back ────────────────────────────────
+ *
+ * The owner's report of 2026-09-20: «при размьюте человека его микрофон не
+ * включается обратно сам». It was exactly true. The SFU unpublishes the track
+ * when `canPublish` goes away — `SetPermission` walks `GetPublishedTracks()`
+ * and calls `removePublishedTrack` — and restores nothing when it comes back;
+ * livekit-client's `onLocalParticipantPermissionsChanged` only emits. So the
+ * person was un-silenced and silent, over a microphone button that read
+ * «выключен» for a mute they had never pressed.
+ *
+ * **What these three reach, and what they do not.** The stand-in reproduces
+ * what the seam does to the capture — `enabled = !muted && open` — so the state
+ * machine, the two properties and the gate's hand-back are all measured against
+ * the real `MediaStreamTrack` this browser captured. They do **not** reach the
+ * republish itself: `room.localParticipant.publishTrack(...)` lives inside
+ * `createLiveKitRoom`, which this file replaces wholesale. That call site is
+ * held by `tests/unit/voice-room-seam.test.mjs`, which reads the source and
+ * says so about itself. The decision — whether the transport is asked at all,
+ * and with what — is `lib/micSilence.ts` and
+ * `tests/unit/mic-silence.test.mjs`.
+ */
+
+test("a lifted silence puts the microphone back on the air with nobody pressing anything", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+  const mute = page.getByTestId("voice-capsule-mute");
+  await expect(mute).toHaveAttribute("data-muted", "false");
+  expect(await micLive(page)).toBe(true);
+
+  await revokeSpeech(page, false);
+  await expect(page.getByTestId("voice-capsule-forced-mute")).toBeVisible();
+  await expect(mute).toBeDisabled();
+  await expect(mute).toHaveAttribute("data-muted", "true");
+  // The capture stops with the publication rather than running on over a room
+  // that is no longer carrying it — the gate follows the mute here as it does
+  // after a press.
+  await expect.poll(() => micLive(page)).toBe(false);
+
+  await revokeSpeech(page, true);
+  await expect(page.getByTestId("voice-capsule-forced-mute")).toHaveCount(0);
+  await expect(mute).toBeEnabled();
+  await expect(mute).toHaveAttribute("data-muted", "false");
+  // The defect itself: this line was `false` in every build before today.
+  await expect.poll(() => micLive(page)).toBe(true);
+  // And exactly one thing was asked of the transport — the unmute that
+  // republishes. A silence asks for nothing: `VoiceRoom.setMuted` refuses
+  // while the permission is revoked, so a call there would be a press no human
+  // made.
+  expect((await probe(page)).muted).toEqual([false]);
+});
+
+test("a lifted silence does not un-press somebody's own mute", async ({ page, browserName }) => {
+  needsWebRtc(browserName);
+  // The property that makes this more than «call unmute on the way out»:
+  // restoring a permission is not consent to open somebody's microphone.
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+  const mute = page.getByTestId("voice-capsule-mute");
+
+  await mute.click();
+  await expect(mute).toHaveAttribute("data-muted", "true");
+  await expect.poll(() => micLive(page)).toBe(false);
+
+  await revokeSpeech(page, false);
+  await expect(mute).toBeDisabled();
+  await revokeSpeech(page, true);
+  await expect(mute).toBeEnabled();
+  // Still theirs, and still pressed.
+  await expect(mute).toHaveAttribute("data-muted", "true");
+  expect(await micLive(page)).toBe(false);
+  // The transport heard their press and nothing else: no unmute was sent over
+  // a mute they had chosen.
+  expect((await probe(page)).muted).toEqual([true]);
+
+  // And the control still works afterwards, which is what proves the silence
+  // left nothing stuck behind it.
+  await mute.click();
+  await expect(mute).toHaveAttribute("data-muted", "false");
+  await expect.poll(() => micLive(page)).toBe(true);
+});
+
+test("a lifted silence hands the microphone back to «Рация», not to the room", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  // The other property: the repair must not fight the gate. A person in
+  // «Рация» whose silence is lifted gets their *mode* back — a microphone that
+  // opens on a hold — and not a live room.
+  await open(page, {
+    channel: { participantCount: 1 },
+    present: [ANNA.id],
+    audio: { micActivation: "ptt" },
+  });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+  const mute = page.getByTestId("voice-capsule-mute");
+  const talk = page.getByTestId("voice-capsule-talk");
+  expect(await micLive(page)).toBe(false);
+
+  await revokeSpeech(page, false);
+  await expect(mute).toBeDisabled();
+  await revokeSpeech(page, true);
+  await expect(mute).toBeEnabled();
+  // Not muted — the silence is over — and not transmitting either, which is
+  // what «Рация» means. A repair that forced the microphone open would make
+  // this line `true`.
+  await expect(mute).toHaveAttribute("data-muted", "false");
+  expect(await micLive(page)).toBe(false);
+  // The gate was never asked to open: the seam's own re-application is what
+  // held it, and the hook agreed with it.
+  expect((await probe(page)).micOpen).toEqual([false]);
+
+  // And the hold works, which is the proof that what came back is a live
+  // publication rather than a control over nothing.
+  const box = (await talk.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect(talk).toHaveAttribute("data-talking", "true");
+  await expect.poll(() => micLive(page)).toBe(true);
+  await page.mouse.up();
+  await expect.poll(() => micLive(page)).toBe(false);
+});
+
 for (const theme of ["dark", "light"] as const) {
   test(
     "the call bar, photographed in the " + theme + " theme",
