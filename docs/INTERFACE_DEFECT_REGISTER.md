@@ -19229,3 +19229,122 @@ is proved by a photograph and by nothing else: a mutation removing only that
 colour leaves the suite green, measured.
 
 ---
+## D-260 `[ ]` A group's membership does not arrive by itself
+
+**Reported by the owner, 2026-09-19:** «пригласил пользователя и у меня не
+обновило в realtime то что он уже в группе и соответственно то что человек
+больше стало, во всех остальных местах это также требует проверки (в админ
+панели, в настройках и тому подобное)».
+
+**Measured, and the cause is exact.** `chat_members` is subscribed to in
+**exactly one place** in the whole client — `hooks/useFolders.ts:173-174` — for
+`INSERT` and `DELETE`, and it feeds a debounced **folder** refetch. Nothing else
+in `artifacts/kub/src` listens to that table. So the member list, the participant
+count, the administration panel's roster and every settings surface that counts
+people are all read once and never told.
+
+**Why this is not one fix.** The subscription is missing, but adding one is the
+smallest part. The questions that decide the shape:
+
+- **Who is allowed to hear it.** Realtime delivers rows through RLS, so a
+  subscription only sees what the subscriber may select. A count that a
+  non-member may see but whose rows they may not read cannot be maintained from
+  the row stream at all, and must come from a broadcast or a recount.
+- **What else is stale for the same reason.** The owner's instruction is
+  explicit that this is a sweep, not a single screen. Enumerate every surface
+  that shows a count or a list of people — the chat header, the rail, the
+  information panel, the administration panel's users and roles tabs, group
+  settings, invitations — and say for each whether it subscribes, polls, or is
+  read once. **Report the enumeration before proposing any change**; a list of
+  twelve surfaces with two already correct is the useful answer.
+- **Where a refetch is the wrong answer.** `useFolders` debounces a whole
+  refetch on every membership row in the database. That is affordable for
+  folders and would not be for a member list on a busy deployment; see D-262.
+
+---
+
+## D-261 `[ ]` Sound settings are a form, not an instrument
+
+**Asked for by the owner, 2026-09-19**, with a screenshot of Discord's voice
+settings: «требуется потом привести настройку звука в подобный удобный discord
+вид, чтобы была возможность выставить чувствительность с определением в realtime
+уровня, ну и подобный krisp или сам он движок для обработки звука если имеется
+возможность».
+
+Three things, and they are not equally easy — say so rather than shipping the
+first and implying the third:
+
+1. **A live input meter.** A sensitivity threshold a person sets without seeing
+   their own level is a guess. `lib/micLevel.ts` already exists and the
+   voice-activity gate already measures a level, so this is presentation over a
+   measurement that is already taken — check that before building a second
+   meter.
+2. **A threshold they can place against that meter**, with the automatic mode as
+   a toggle beside it rather than a hidden default. Discord's own layout is the
+   reference for the *arrangement*: a profile choice, then the automatic switch,
+   then the slider on the same scale as the meter.
+3. **Noise suppression.** Krisp is a commercial product and is **not** something
+   to imply. What is actually available: the browser's own
+   `noiseSuppression`/`echoCancellation`/`autoGainControl` constraints, which are
+   free and already part of `getUserMedia`; and LiveKit's own Krisp integration,
+   which is a paid add-on. Establish which of the three constraints this product
+   currently sets before designing a control for them — a switch that duplicates
+   a constraint already forced on is the class of defect this register is full
+   of.
+
+---
+
+## D-262 `[ ]` The infrastructure has one of everything
+
+**Asked for by the owner, 2026-09-19:** «учти что инфраструктура должна иметь
+возможность расширения на случай если пользователей будет много (чтобы
+параллелить нагрузку голоса/чата/передачи данных и т.п)».
+
+**What is true today, measured while working on the voice incident:** the media
+server runs `using single-node routing`, one container, capped at 2 cores and
+1 GiB, on the same host as everything else. Chat, storage and realtime are one
+Supabase stack on that host. One host, one of each.
+
+**This is a capacity plan, not a defect, and it should be written as one.** What
+it needs, in order:
+
+1. **A measurement of what breaks first.** Voice is CPU per subscribed track;
+   realtime is connections; storage is bandwidth. Which ceiling arrives first at
+   what number of people is an arithmetic question that can be answered now,
+   before any architecture is chosen.
+2. **LiveKit's own answer** to horizontal scale is multi-node with Redis, which
+   is a documented path from exactly the single-node routing this deployment
+   logs. Read what it requires before promising it.
+3. **What must not move.** The provider gateway conflict recorded in `CLAUDE.md`
+   means Docker's address pools on this host are load-bearing; any second node
+   inherits that constraint.
+
+---
+
+## D-263 `[ ]` The bot platform's remaining nuances, and how a bot looks in a chat
+
+**Asked for by the owner, 2026-09-19:** «с ботами также требуется полностью
+проработать все нюансы и моменты которые обсудили ранее… уже есть работающий бот
+Langame — можешь оценить то как он работает в чате… и улучшить внешний вид этого
+на основе подходов telegram/discord».
+
+Already filed separately and not to be duplicated here: **D-257** (a bot may
+request full access to a group and nothing anywhere can grant it) and **D-258**
+(a bot cannot upload a photo — the gap PocketFlow's transport records as G-1).
+
+What this entry adds is the **presentation** half, which nobody has looked at:
+
+- How a bot's message is distinguishable from a person's, and whether that is
+  the same distinction Telegram and Discord make. Telegram marks the account;
+  Discord marks the message with a badge. We should pick one deliberately.
+- Commands: the menu, the hint under the composer, what happens to an unknown
+  command, and whether a bot's reply markup reads as part of the message or as
+  something bolted under it.
+- What a bot's own profile card says, and whether it says the things a person's
+  card says that make no sense for a bot.
+
+**Evaluate the live bot first.** A working bot exists in production; read what it
+actually renders before designing anything, and report that before proposing.
+
+---
+
