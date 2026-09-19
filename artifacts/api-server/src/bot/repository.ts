@@ -336,6 +336,41 @@ const METHOD_BY_KIND: Record<BotMessageCommand["kind"], string> = {
   delete: "deleteMessage",
 };
 
+// A Supabase bucket id, and nothing that could be spliced into a storage path.
+const BUCKET_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+// `bot_file_lookup_internal` builds its result with `jsonb_strip_nulls`, so a
+// fact it does not know arrives as an ABSENT key rather than a null one. No
+// production message carries `media_metadata.file_name` at all, so reading
+// `undefined` as a type error would have turned D-249's 404 into a 500 for
+// every file the moment the database started answering.
+function optionalText(value: unknown, maxLength: number): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string" || value.length > maxLength) {
+    throw internalError();
+  }
+  return value;
+}
+
+function optionalByteSize(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const size =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && /^[0-9]{1,15}$/.test(value)
+        ? Number(value)
+        : null;
+  // No upper bound of the gateway's own. The number is the object's real
+  // length in `storage.objects`, or a size the client declared, and both are
+  // already bounded by the bucket's `file_size_limit` at upload time. The cap
+  // this replaces was 100 MiB, smaller than the `media` bucket's 250 MB limit,
+  // so a legitimate large file would have been answered with a 500.
+  if (size !== null && (!Number.isSafeInteger(size) || size < 0)) {
+    throw internalError();
+  }
+  return size;
+}
+
 function fileMetadata(value: unknown): BotFileMetadata {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw internalError();
@@ -344,28 +379,23 @@ function fileMetadata(value: unknown): BotFileMetadata {
   const messageId = row.message_id;
   const bucket = row.bucket_id;
   const objectPath = row.object_path;
-  const mimeType = row.mime_type;
-  const fileName = row.file_name;
-  const rawSize = row.size_bytes;
-  const sizeBytes =
-    typeof rawSize === "number"
-      ? rawSize
-      : typeof rawSize === "string" && /^\d{1,12}$/.test(rawSize)
-        ? Number(rawSize)
-        : null;
+  const mimeType = optionalText(row.mime_type, 128);
+  const fileName = optionalText(row.file_name, 255);
+  const sizeBytes = optionalByteSize(row.size_bytes);
   if (
     typeof messageId !== "string" ||
     !UUID_RE.test(messageId) ||
-    bucket !== "chat-media" ||
+    // WHICH bucket a bot may reach is the database's decision, and only the
+    // database's: `bot_file_lookup_internal` admits an object whose bucket is
+    // public, or whose path is scoped to this very chat (D-249). Naming a
+    // bucket here once meant `getFile` answered 404 for every file in the
+    // product; naming the new one would put the same rule in two places and
+    // let them drift apart again. The gateway checks the SHAPE instead.
+    typeof bucket !== "string" ||
+    !BUCKET_ID_RE.test(bucket) ||
     typeof objectPath !== "string" ||
     objectPath.length < 1 ||
-    objectPath.length > 1024 ||
-    (mimeType !== null &&
-      (typeof mimeType !== "string" || mimeType.length > 128)) ||
-    (fileName !== null &&
-      (typeof fileName !== "string" || fileName.length > 255)) ||
-    (sizeBytes !== null &&
-      (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > 104_857_600))
+    objectPath.length > 1024
   ) {
     throw internalError();
   }

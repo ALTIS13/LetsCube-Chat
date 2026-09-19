@@ -16685,7 +16685,7 @@ through to the `api.letscube.ru` catch-all, which is the release-catalogue nginx
 and lists `curl -fsSI https://api.letscube.ru/bots/docs` among its verification
 commands; that step has been red for the whole life of the deployment.
 
-## D-246 `[ ]` At 390 the recorder’s hint paints over the bot command menu
+## D-246 `[x]` At 390 the recorder’s hint paints over the bot command menu
 
 **Severity:** medium. The menu is the only place a person meets a bot’s
 commands, and at 390 it is unreadable the first time they open it — which is
@@ -16718,9 +16718,100 @@ race only decides which of them wins.
 proof of that fix — the command text it was meant to show is hidden. The 1440
 captures show it, and the field capture shows `/shift@shiftbot` at both widths.
 
+### Measured again before choosing, 2026-09-19
+
+Reproduced in a private bot chat on the fixture at 390 in both themes. With a
+three-command bot the menu's box is 638–780 and the plate's is 696–776 — 80
+points of the plate inside the menu, which is the bottom two rows of the list.
+The numbers differ from the ones above only because that bot had two commands
+and this one has three; it is the same defect.
+
+**Both directions were measured, not argued.**
+
+*Direction 1, raise the menu.* Available: walking the menu's ancestors, the only
+stacking context in the chain is the menu itself — `isolation: isolate` from
+`kub-glass-strong`, with `z-index: auto`. Nothing else pins it, so
+`position: relative; z-index: 60` does win against the popper wrapper's
+`position: fixed; z-index: 50`. Applied in the page, the rows come back.
+
+**Rejected on what it leaves.** Two measurements:
+
+- The menu is translucent. Against the same frame with the plate removed from
+  the document, 2690 pixels inside the menu's own box still differ, max channel
+  delta 6 — the sentence is smeared through the glass rather than gone.
+- The hint goes on being **offered**. `useHint` charges the budget for as long
+  as the store says a hint is visible, and the store counts offers, not pixels;
+  a person who opens the command menu would spend part of a two-hour lifetime
+  budget on a plate behind glass. Raising the menu decides which of two overlays
+  wins the corner. It does not stop there being two.
+
+*Direction 2, suppress the hint while the menu is open.* Taken. It is one more
+condition on `shouldOfferRecorderModeHint`, named `commandMenuOpen` and bound in
+`MessageInput` to `commandMenuVariant !== null`, so both doors onto the list —
+the «Команды» button and a typed «/» — close the plate. Deliberately **not**
+folded into the existing `overlayOpen`: that field means a modal sheet drawn
+over the composer whose taps the plate would steal, and the menu is neither
+modal nor a thief. `useHint` withdraws an offer that stops being enabled without
+spending or dismissing it, so the plate returns with its budget intact when the
+menu shuts — which is asserted rather than assumed.
+
+**A second defect found in the same predicate, and fixed with it.** Invisible in
+a screenshot, which is why it lasted: `buttonOnScreen` knew about text, an
+attachment and a forward draft, but not about the two states in which
+`MessageInput` renders **no recorder button at all** — the «Запустить» composer
+of a bot nobody has started (D-127) and the notice a muted person gets in place
+of a composer. Both return before the button is written, so the plate paints
+nothing and is offered anyway. Measured on the fixture at 390: on the
+«Запустить» composer `hintStore().getSnapshot()` held `recorder-mode` while no
+`[data-testid="kub-hint"]` existed in the document at all, so the clock was
+charging a budget against a sentence nobody could ever be shown. `buttonOnScreen`
+now reads `composerReplaced` as well; the same probe answers `[]` afterwards.
+This is exactly the failure the field's own doc comment already described, one
+case wider than the cases it listed.
+
+**Fixed** 2026-09-19.
+
+- `artifacts/kub/src/lib/recordingGesture.ts` — `commandMenuOpen` added to
+  `RecorderModeHintInput` and to `shouldOfferRecorderModeHint`; the
+  `buttonOnScreen` note extended with the two replaced composers.
+- `artifacts/kub/src/components/chat/MessageInput.tsx` — `composerReplaced`, and
+  both new values passed to the predicate.
+
+**Covered, and each cover proved by mutation:**
+
+- `tests/unit/interface-hints.test.mts` — `commandMenuOpen` joins the
+  load-bearing-conditions table and the pinned input list, with binding
+  assertions for it and for `composerReplaced`.
+- `tests/e2e/bot-chat-surfaces.spec.ts`, «the recorder hint steps aside while
+  the bot's command menu is open» — at 390: the plate up before, gone with the
+  menu open, **back afterwards** (the assertion that tells `withdraw` from
+  `dismiss`), and no portalled layer overlapping the menu's box. Skipped by name
+  on desktop projects, where the hint is never offered.
+
+**Mutations run.** Each was applied to the source, served, and the suites
+re-run:
+
+1. `commandMenuOpen: commandMenuVariant !== null` → `commandMenuOpen: false` —
+   the key still passed, which is the shape that stayed green when
+   `refusalVisible` was added. Unit red on the binding assertion, e2e red with
+   «the recorder hint is painting over the command menu again».
+2. `if (input.commandMenuOpen) return false;` deleted from the predicate — unit
+   22/23 with «the hint was still offered with the bot's command menu open into
+   the same corner», e2e red at the same line.
+3. `|| composerReplaced` dropped from `buttonOnScreen` — unit red, and the
+   «Запустить» probe back to `offered: ["recorder-mode"]`.
+
+**Pixels.** `output/d246/` (ignored): `before/menu-390-{dark,light}.png` and
+`after/menu-390-{dark,light}.png` — the whole list readable in both themes
+after; `after/hint-only-390-dark.png` — the plate still teaching when nothing
+competes with it; `before/menu-1440-{dark,light}.png` and
+`after/menu-1440-{dark,light}.png` — **byte-identical**, taken by swapping the
+four changed sources for their `HEAD` versions between runs, which is the proof
+that nothing moved at the width where the hint was never offered.
+
 ---
 
-## D-247 `[ ]` A disabled or deleted bot still has its commands offered
+## D-247 `[x]` A disabled or deleted bot still has its commands offered
 
 **Severity:** low as damage, but it is exactly D-244’s shape: the product
 offers something the platform will refuse.
@@ -16734,6 +16825,79 @@ in the composer, the commands send, and nothing arrives. `fetchChatBots`
 **does** filter state for the sidebar, so the two readers of the same fact
 disagree — which is the part that makes this worth an entry rather than a
 comment.
+
+### Confirmed against the shipped schema, 2026-09-19
+
+Both halves read off
+`.migration-backup/supabase/migrations/20260831100000_bot_platform_foundation.sql`
+rather than assumed:
+
+- `private.bot_can_receive_message` joins `public.bots receiver_bot` and
+  requires `receiver_bot.state = 'active'` (line 2630). `bots.state` is a
+  five-way CHECK — `active`, `paused`, `suspended`, `pending_delete`, `deleted`
+  (line 53) — so four of the five are bots whose messages are dropped in
+  silence.
+- **The filter has to be in the client.** The `bots` SELECT policy
+  «authenticated users read bot identities» (line 408) admits a row on three
+  branches, and the third is «shares a live chat with the bot» **with no state
+  condition at all**. So a paused or deleted bot's name goes on arriving at
+  anyone it was talking to, by design, and no query shape can make the server
+  withhold it. That is why `fetchChatBots` filters `state` in JavaScript, and
+  why this reader has to as well rather than adding an `!inner` embed filter.
+
+**Fixed** 2026-09-19, and the shape is the point rather than the line.
+
+The decision moved out of the hook. `readMembership` was private to
+`useBotChat.ts`, which reaches `import.meta.env` through `createClient` and
+pulls in supabase-js, so nothing in it could be mutated from a `node --test`
+process — the state check would have been untestable in exactly the way
+`isSupabaseConfigured()` once was. Moving it was cheaper than building a
+harness around it, which is the lesson `artifacts/kub/src/lib/supabase/config.ts`
+already carries.
+
+- `artifacts/kub/src/lib/botChatSurfaces.ts` — new `readChatBotMembership` and
+  `chooseChatBot`, beside `chooseBotChat`. That module imports only
+  `plainMessages.ts`, which imports nothing. The state filter is one line in it,
+  and it **fails closed**: a row whose embed carried no `state` is not a row that
+  proved the bot deliverable, the same rule `readBot` applies to the sidebar's
+  «Бот» mark.
+- `artifacts/kub/src/hooks/useBotChat.ts` — now the I/O and nothing else; the
+  embed asks for `bot:bots(username,state)`, which is the column
+  `fetchChatBots` already asked for. Leaving it out is what let the two readers
+  disagree.
+
+**What the person gets instead:** an ordinary composer. No menu button, no «/»
+list, and no «Запустить» — `/start` is a message like any other and the same
+authoriser drops it — and no error either. A chat whose bot is switched off is
+not a broken screen.
+
+**Covered:**
+
+- `tests/unit/bot-chat-surfaces.test.mts` — four new tests over
+  `readChatBotMembership` and `chooseChatBot`: the active row read with its
+  username, the array-of-one embed shape, every one of the four non-active
+  states refused (plus absent and null `state`), and the «joined first, username
+  as tie-break» rule — including that a disabled first bot does not empty the
+  menu of a group that still holds a live one. The filter picks; it does not
+  truncate.
+- `tests/e2e/bot-chat-surfaces.spec.ts` — the four states each get a rendered
+  test (both doors: no menu button, and «/» opening nothing), plus «Запустить»
+  refused on the unstarted chat.
+
+**Mutation.** Deleting the one line `if (bot?.state !== BOT_STATE_REACHABLE)
+return null;`: unit 33/35 with «a paused bot was still offered», e2e four of
+four state tests red, and the «Запустить» test red once its wait was fixed —
+which is itself worth recording. That test first passed **under the mutation**,
+because «no start button» is true the instant the chat opens: the composer is
+ordinary until `useBotChat` answers, so the assertion was measuring page speed.
+It now waits for the `chat_bot_members` read by name and then gives the frame
+time to become the wrong one, and the same mutation turns it red.
+
+**Fixture correction that came with it.** `bot-chat-surfaces.spec.ts` and
+`bot-surfaces-capture.spec.ts` answered the membership read with
+`bot: { username }` and no `state`, which is not a row the new `select` would
+produce. Both now carry it, and the spec's `botState` option is what the four
+new tests vary.
 
 ---
 
@@ -16849,7 +17013,7 @@ turned up.
 
 ---
 
-## D-249 `[ ]` `getFile` finds nothing, because it looks in a bucket the product does not use
+## D-249 `[x]` `getFile` finds nothing, because it looks in a bucket the product does not use
 
 **Severity:** high for a bot that handles files; it is the other half of D-248.
 
@@ -16878,9 +17042,66 @@ grants nothing a public URL does not already grant; the read rule
 (`private.bot_can_receive_message`) is what actually limits the bot, and it is
 unchanged by any of this.
 
+### Fixed on 2026-09-19 by a derived rule, not by a second literal
+
+`20260919050000_a_bot_can_fetch_a_file_and_is_told_its_size.sql`, applied to
+production as `supabase_admin`, with D-250 in the same transaction. The obvious
+repair — `media_bucket = 'media'`, or `in ('media','chat-media')` — was refused,
+because a bucket name was the wrong **shape** of rule, and measuring showed why:
+
+- **nothing constrains `messages.media_bucket` at write time.** The
+  `guard_message_media_path` trigger checks the PATH
+  (`private.message_media_path_allowed`: the first segment must be the author's
+  own id) and never the bucket. The old predicate's safety was accidental.
+- it was accidentally **unsafe** in one direction. A forward carries the
+  source's bucket and path, so a `chat-media` object belonging to chat A,
+  forwarded into chat B, satisfied `media_bucket = 'chat-media'`. Proved on
+  production in the rehearsal: before the change that call returned
+  `00000 bucket=chat-media`; after it, `P0002`.
+
+What `getFile` needs is that the bytes it mints a capability for are bytes the
+message's audience can already reach. That is the rule now, in three parts:
+the bot may read the message (`private.bot_can_receive_message`, untouched, and
+the `joined_at` restriction inside it is what matters); the object **exists** in
+`storage.objects` at `(media_bucket, media_path)`; and either the bucket is
+**public** (`storage.buckets.public` — a signed URL over a public bucket grants
+nothing a public URL does not) **or** the path is scoped to **this chat** by the
+platform's own rule, `public._kub_chat_media_chat_id(media_path) = chat_id`.
+
+No bucket name appears in the new body. It admits `media` today, would admit
+`chat-media` the day the product uses it, and fails closed for a bucket nobody
+has created: a private one would need an object whose first path segment is this
+chat's id, and `guard_message_media_path` forces a person's path to start with
+their own user id instead.
+
+`fileMetadata` in `artifacts/api-server/src/bot/repository.ts` now checks the
+**shape** of a bucket id (`/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/`, so it cannot be
+spliced into a path) and decides nothing about which bucket. Two further things
+were found there while making that change, both of which would have shipped a
+500 instead of the 404:
+
+- `bot_file_lookup_internal` builds its result with `jsonb_strip_nulls`, so an
+  unknown fact arrives as an **absent key**, not a null one — and no production
+  message carries `media_metadata.file_name` at all. `fileName !== null &&
+  typeof fileName !== "string"` was therefore true for every real file.
+- the size bound was `1..104_857_600`, while the `media` bucket's own
+  `file_size_limit` is `262144000`. A legitimate 150 MB file would have been an
+  `internal_error`. The gateway no longer carries a limit of its own.
+
+`storageObjectReferenceSchema` in `schemas.ts` still says `chat-media`: that is
+the bot **upload** reference, whose own rule lives in
+`bot_upload_authorize_internal`, and is a separate question from this one.
+
+Proved by mutation on production, each in a rolled-back transaction, each
+turning exactly one rule red: dropping the chat-scoping arm hands the cross-chat
+private object back; dropping the `storage.objects` join signs for an object
+that is not there; weakening `bot_can_receive_message` hands over a message
+older than `joined_at`. Four more source mutations are in
+`tests/unit/bot-file-metadata.test.mts`.
+
 ---
 
-## D-250 `[ ]` A bot is told every file's size and duration are unknown
+## D-250 `[x]` A bot is told every file's size and duration are unknown
 
 **Severity:** low, but it makes the file half of the API look broken to the
 first program that uses it.
@@ -16907,6 +17128,57 @@ The fix is a translation in the two bot-facing readers, not a rename in the
 application — 294 rows and every client writer use the app's vocabulary. D-248's
 re-send path already writes **both** spellings into the message it creates, so a
 re-sent file is the one case that reports its size correctly today.
+
+### Fixed on 2026-09-19, in the same migration as D-249
+
+`private.media_metadata_bigint(jsonb, variadic text[])` is the translation, in
+one place, used by both readers: it takes the first key that yields a plain
+non-negative integer of at most 15 digits, reading either a JSON number or a
+digit string. Read order is the application's spelling first —
+`size_bytes`, then `size`. Not a rename in the application, and not a backfill:
+294 rows and every client writer use `size_bytes`, which the
+`messages_media_metadata_shape` CHECK already pins as a number; and `size` is
+not dead either, because `bot_send_message_internal` writes it, and since D-248
+writes both.
+
+**`duration` is deliberately not read as a fallback.** Nothing writes it, and
+`bot_send_message_internal`'s metadata whitelist lets a bot's own upload carry a
+key of that name with no unit stated. Reading it as milliseconds would invent a
+number rather than find one.
+
+**The 225 rows that carried neither spelling are answered by the storage layer.**
+`storage.objects.metadata` holds `size` and `mimetype` for all 774 objects, and
+where both were known the two sizes agreed in **65 of 65** cases — the same
+fact, not a second one. Measured after the apply, over the 262 live media rows:
+size known for **64 → 262**, mime known for **65 → 262**. Duration has no such
+fallback and stayed at 3 of 262: honest, not filled in.
+
+**Numbers now reach the bot as numbers.** The attachment block stringified
+everything (`left(metadata->>'width', 16)`), so `width` arrived as `"1280"`.
+`byte_size`, `width`, `height` and the duration are JSON numbers now. Safe today
+and not tomorrow: measured on production, **no attachment has ever been
+delivered to any bot** — 2 updates in total, 0 carrying one, 0 enabled webhooks,
+0 delivery attempts — so there was no consumer to break, and the first one being
+written (`artifacts/pocketflow`) reads `asNumber(attachment.byte_size)`.
+
+**The attachment carries both units, each named.** That same consumer reads
+`durationSeconds: asNumber(attachment.duration)` and prints it as seconds, and
+Telegram's `duration` is an integer number of seconds. Filling a unitless
+`duration` with the stored milliseconds would have been wrong by 1000x on its
+first use. So `duration` is seconds (rounded) and `duration_ms` is the stored
+fact.
+
+`mime_type`, which this entry raised as the same problem from the other side,
+is fixed the same way and in the same place: the message's own value first, the
+storage layer's `mimetype` behind it.
+
+Proved by mutation on production: reading only `size_bytes` loses the second
+spelling; removing the storage arm loses the 225 rows; reading `duration`
+instead of `duration_ms` loses the duration; restoring the stringified `width`
+turns it back into `"800"`. Each turned exactly one rehearsal rule red — and two
+of those four passed on the first attempt against an assertion written with
+`<>` rather than `is distinct from`, which cannot see an absent value. The
+rehearsal's assertions were fixed before they were believed.
 
 ---
 

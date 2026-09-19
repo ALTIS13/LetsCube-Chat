@@ -792,6 +792,91 @@ first thing it should not be able to do.
 endpoint and the update webhook have never run against the real platform,
 because a bot token is the owner’s to issue.
 
+### 2026-09-19 — one production migration (D-249, D-250): a bot can fetch the file, and is told how big it is
+
+**No application was deployed.** `letscube-web` keeps its baseline. The gateway
+half is written, typechecked and tested but **undeployed**, and the ordering
+matters: until `letscube-bot-gateway` is redeployed, `getFile` answers **500**
+where it answered 404, because the running `fileMetadata` still asserts
+`bucket === "chat-media"` on a row the database now supplies. That is a method
+which has never once succeeded, with **0 enabled webhooks** and 0 delivery
+attempts on production, so the window costs nothing — but it closes only on a
+deploy. Everything D-250 changes is inside the database and needs no deploy at
+all: the gateway forwards `update.payload` verbatim.
+
+**`20260919050000_a_bot_can_fetch_a_file_and_is_told_its_size.sql`**, applied as
+`supabase_admin` — it owns neither function (both are `postgres`) but may
+replace both and may hand the new helper over, and `CREATE OR REPLACE` keeps an
+existing function's owner and ACL, which the self-check then proves. One
+transaction, self-check, `COMMIT`. 23,793 bytes, sha256
+`3cf30a25…0ab1843f`; rehearsal (`78638b1b…`) and rollback (`5148532e…`) beside
+it in `.migration-backup/supabase/migrations/`.
+
+- **Backup, taken and verified first:**
+  `/srv/letscube/backups/pre-migrations/20260919-065901-before-bot-file-lookup-and-metadata.schema.dump`,
+  1,646,195 bytes, sha256 `40b4aeb8…3ed48e5a`. Read back with `pg_restore -l`
+  inside the container: 2,504 TOC entries, all three target functions among them.
+- **Live vs file, before touching anything:** the deployed
+  `bot_file_lookup_internal`, `bot_message_update_payload` and
+  `bot_can_receive_message` are byte-identical to
+  `20260831100000_bot_platform_foundation.sql` once whitespace is normalised.
+- **Grants, measured rather than assumed.** Both functions are owned by
+  `postgres` and SECURITY DEFINER, so they run as `postgres`: which has SELECT on
+  `storage.objects` and `storage.buckets`, holds BYPASSRLS, and may execute
+  `public._kub_chat_media_chat_id` and `private.bot_can_receive_message` — all
+  four checked. `postgres` may **not** execute
+  `private.message_media_path_allowed`; that pair works only because its caller
+  `private.guard_message_media_path` is owned by `supabase_admin`. The new
+  helper lives in schema `private` (`postgres=UC/postgres`; `service_role` has no
+  USAGE), is handed to `postgres` and closed to PUBLIC.
+- **Rehearsed on production inside a rolled-back transaction**, on values: two
+  bots, two chats, five storage objects across both buckets and ten media
+  messages; BEFORE measured, the migration spliced in verbatim, **13 rules**
+  asserted, then the rollback file run verbatim in the same transaction and the
+  BEFORE state re-measured. The rollback was run because it was written —
+  and the same discipline caught a real bug in a rollback earlier that day.
+- **Verified after the apply, on values:** ownership, definer and ACLs intact
+  and `service_role` still executes the lookup; of the 262 live media messages
+  the size is now known for **262** (was 64) and the mime for **262** (was 65);
+  three real messages through the payload builder return `byte_size` as a
+  number, `mime_type` as a string and `width` as a number. No real bot is a
+  member of a chat that has media, so `getFile` itself cannot be exercised on
+  production data — the rehearsal fixture is where that is proved.
+
+**The rule, written down because it is the whole design.** The bucket literal
+was the wrong shape of rule, not merely the wrong name: nothing constrains
+`messages.media_bucket` at write time, so its safety was accidental — and
+accidentally absent in one direction, since a forward carries the source's
+bucket and path and a `chat-media` object from chat A, forwarded into B,
+satisfied it. Measured in the rehearsal: `00000 bucket=chat-media` before,
+`P0002` after. `getFile` now asks what it actually needs — the bot may read the
+message, the object **exists** in `storage.objects`, and either the bucket is
+**public** or the path is scoped to **this chat** by
+`public._kub_chat_media_chat_id`. No bucket name appears in the body.
+
+**Proved by mutation, seven at the database and four in the source.** Dropping
+the chat-scoping arm, the object-existence join, `bot_can_receive_message`, the
+`size` spelling, the storage-size fallback, the `duration_ms` spelling, or the
+numeric `width` each turned exactly one rehearsal rule red. In the source:
+restoring the bucket literal (6 tests), the 100 MiB cap (1), the absent-key type
+error (1), and letting the recorded SQL name a bucket again (1). **Two of the
+seven database mutations passed on the first attempt** — not because the code
+was redundant but because the assertions used `<>`, which cannot see an absent
+value; they are `is distinct from` now, and all seven go red.
+
+**Two further defects found in `fileMetadata` while fixing it**, either of which
+would have shipped a 500 instead of the 404: `jsonb_strip_nulls` means an
+unknown fact arrives as an **absent key**, and no production message carries
+`media_metadata.file_name` at all; and the gateway's size bound (100 MiB) was
+smaller than the `media` bucket's own `file_size_limit` (250 MB).
+
+**Gates:** `@workspace/api-server` typecheck clean; `tests/unit` **3238/3238**
+(18 new in `tests/unit/bot-file-metadata.test.mts`); `tests/server` **123/124**
+after a fresh build — the one failure,
+`voice-call-service-message-db.test.mjs` «the end line lands with no
+room_finished webhook at all», is the same **pre-existing** voice-track failure
+recorded under D-248 below, and names nothing this change touches.
+
 ### 2026-09-19 — one production migration (D-248): a bot can send back the file it was sent
 
 **No application was deployed.** `letscube-web` keeps its baseline; the gateway
