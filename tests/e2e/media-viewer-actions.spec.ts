@@ -1,5 +1,10 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import {
+  AUDIO_GAIN_LABEL,
+  AUDIO_GROUP_LEVEL,
+  AUDIO_INPUT_LABEL,
+} from "../../artifacts/kub/src/lib/audioSettingsSurface";
+import {
   chat,
   membership,
   message,
@@ -454,15 +459,30 @@ test("the sound settings no longer offer a second playback volume (D-149)", asyn
   await expect(page.getByRole("heading", { name: "Профиль", exact: true })).toBeVisible();
   await page.getByRole("button", { name: /Звук/ }).first().click();
 
-  const volumeSection = page.getByText("Громкость", { exact: true }).first();
-  await expect(volumeSection).toBeVisible();
+  // The contract is two absences, and an absence passes on a blank page as
+  // happily as on the right one. So the screen is proved open first — the
+  // section's own root, and the group the removed control used to sit beside.
+  //
+  // That anchor used to be the literal «Громкость», the heading of the box
+  // D-149 emptied. `e9c2790f` then replaced the box with the captioned groups
+  // this reads now, and the case went red while its two real assertions went
+  // on passing — the exact shape D-210 is about. The words come from the
+  // module the surface prints them from, so the anchor follows a rename
+  // instead of going stale behind one; the two absences stay written out,
+  // because they are the strings that must never come back.
+  const panel = page.getByTestId("audio-settings");
+  await expect(panel).toBeVisible();
+  const levelGroup = panel.locator(`[data-audio-group="${AUDIO_GROUP_LEVEL}"]`);
+  await expect(levelGroup).toBeVisible();
+  await expect(panel.getByText(AUDIO_GAIN_LABEL, { exact: true })).toBeVisible();
+
   await expect(page.getByText("Голосовые сообщения", { exact: true })).toHaveCount(0);
   await expect(page.getByText("применяется только в LETSCUBE")).toHaveCount(0);
 
   // The section has to be on screen for the evidence to show anything: the
   // disclosure opens below the fold of a settings column.
-  await volumeSection.scrollIntoViewIfNeeded();
-  await expect(page.getByText("Микрофон", { exact: true }).first()).toBeVisible();
+  await levelGroup.scrollIntoViewIfNeeded();
+  await expect(panel.getByText(AUDIO_INPUT_LABEL, { exact: true }).first()).toBeVisible();
   await page.screenshot({ path: shotPath(info, "sound-settings-light") });
   await stampTheme(page, "dark");
   await page.screenshot({ path: shotPath(info, "sound-settings-dark") });

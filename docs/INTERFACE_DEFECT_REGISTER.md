@@ -13616,28 +13616,147 @@ the answer is «SD means 1280 on the long side». The product was not touched.
 
 ---
 
-## D-210 `[ ]` Three more specs that cannot run and do not say so
+## D-210 `[x]` Three more specs that cannot run and do not say so
 
 **Severity:** low individually; the pattern is the point. Same class as the two
 sign-in specs D-206 fixed.
 
-- `media-viewer-actions.spec.ts:441` looks for `getByText("Громкость", { exact: true })`
-  and no such exact text exists any more — the audio rework left «Громкость
-  прослушивания» and a `title="Громкость"` on a control. Probably another stale
-  test after that rework, **but it was not run down**, because settling it needs
-  the audio-settings entries.
-- `media-viewer-zoom.spec.ts` needs `VITE_PUBLIC_PREVIEW_FIXTURE=1`
-  (`App.tsx:496`). Without it `/__qa/public-preview` answers `index.html` and the
-  spec fails eight times without ever saying the flag is missing.
-- **`pnpm run format:check` does not pass on HEAD**, on roughly twenty files
-  nobody in this session touched. So biome is not currently a gate, and any
-  report that claims it as one is wrong.
+**Re-measured on 2026-09-19, and the list was one-third wrong.** Of the three
+named, one was a real stale assertion, one had never had the fault attributed
+to it, and the third is not a spec at all and is worse than reported.
 
-**The shape worth fixing once:** a spec whose prerequisite is absent should
-refuse loudly, naming the prerequisite. `tests/e2e/helpers/backend-identity.ts`
-now does that for the backend a spec is pointed at; the same is needed for a
-missing feature flag, and `public-home-routing.spec.ts` already contains a
-working example of failing loudly rather than skipping.
+### 1. `media-viewer-actions.spec.ts:441` — real, and fixed
+
+Confirmed red on a fixture server: 8 passed, 1 failed at
+`getByText("Громкость", { exact: true })`, "element(s) not found".
+
+«Громкость» was a `SectionHeader` title — the heading of the box D-149 emptied
+— and `e9c2790f` («the sound settings stop being a different application»)
+replaced that box with the captioned `AudioGroup`s the screen has now. The
+spec's anchor went with it.
+
+**What it had stopped covering is the interesting half.** The case's two real
+assertions are *absences*:
+
+    await expect(page.getByText("Голосовые сообщения", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("применяется только в LETSCUBE")).toHaveCount(0);
+
+An absence is true of a page that never loaded. «Громкость» was doing the work
+of proving the sound settings were on screen at all, so losing it did not just
+make the case red — it removed the only thing standing between those two lines
+and a vacuous pass. **Measured, not argued:** with the anchor deleted and the
+click on «Звук» removed, so the browser sits on the chat list, the case passes.
+
+The anchor is now the section's own root (`data-testid="audio-settings"`), its
+level group by `data-audio-group`, and the gain row's label — with the words
+taken from `lib/audioSettingsSurface.ts`, the module the surface prints them
+from, so a rename moves the anchor instead of stranding it. The two absences
+stay written out as literals: they are the strings that must never come back.
+
+Four mutations, each run:
+
+| mutation | result |
+| --- | --- |
+| a `SliderRow label="Голосовые сообщения"` put back in the sound settings | red on `toHaveCount(0)`, "resolved to 1 element" |
+| the level group's caption stops coming from `AUDIO_GROUP_LEVEL` | red: `[data-audio-group="Уровень"]` not found |
+| the spec stops opening the sound settings | red: `audio-settings` not found |
+| **the anchors removed as well** — the old shape with only the absences | **green**, which is the defect |
+
+### 2. `media-viewer-zoom.spec.ts` — the entry's claim is wrong
+
+The entry said it "fails eight times without ever saying the flag is missing".
+It says so eight times, in as many words:
+
+    Error: The preview capture route did not report ready. Start the dev server
+    with VITE_PUBLIC_PREVIEW_FIXTURE=1, or set KUB_ALLOW_PREVIEW_FIXTURE_SKIP=1
+    to accept that this contract goes unchecked.
+
+That guard has been in the file since `c1a1d2d3`, the commit that wrote it, and
+it is the shared shape ten specs use. On a server started with the flag the
+spec passes 8/8. Nothing was changed here; what the entry actually recorded is
+that the flag was missing from the runner's recipe, not from the spec.
+
+`KUB_ALLOW_PREVIEW_FIXTURE_SKIP=1` remains the one way to turn those ten into
+silent skips, and it is now reported rather than silent — see the sweep below.
+
+### 3. `pnpm run format:check` — worse than reported, and deliberately left
+
+Not "roughly twenty files". **125 of the 172 it checks**, about 6,500 lines of
+diff: 122 under `tests/e2e`, two under `tests/rls`, one under `tests/security`,
+and none under `scripts/` or `supabase/`. The drift is uniform and mechanical —
+the files are written at roughly Prettier's 80 columns and `biome.json` sets
+`lineWidth: 100`, so biome would join lines almost everywhere.
+
+Left alone on purpose, and this is a recommendation rather than a repair: a
+125-file mechanical rewrite belongs in its own commit, and at the time of
+measuring two other agents held `profile-*.spec.ts` and the admin specs in the
+same tree. **The entry's conclusion stands unchanged: biome is not a gate on
+this branch, and a report that claims it as one is wrong.**
+
+### The sweep the three were worth less than
+
+**Skips are now named with their reason.** Playwright's summary is a bare
+count, and its list reporter prints skipped titles with nothing beside them:
+`auth-yandex-captcha.spec.ts` ends "10 skipped", exit code 0, and the one
+missing `VITE_AUTH_CAPTCHA_PROVIDER` behind all ten is invisible.
+`tests/e2e/helpers/did-not-run-guard.ts` — the mechanism that already exists
+for this — now closes every run with the skipped tests grouped by the reason
+they gave, commonest first, and names a skip that gave no reason as that. It
+never changes a run's status: almost every skip in this suite is a viewport or
+engine condition meant to stand aside, and failing on those would only teach
+people to ignore the reporter.
+
+Writing it found one thing: an interrupted test has the outcome `skipped`, so
+the first version called a Ctrl+C "skipped and checked nothing". It is excluded
+on the same rule `didNotRun` already used. Four mutations turn the new unit
+cases red — suppressing the report, counting interrupted tests as skips,
+dropping the commonest-first order, and folding a reasonless skip in with the
+rest.
+
+**28 env-gated skip sites** were enumerated across `tests/e2e`, on seven
+variables: `KUB_EXPECT_ACCESS_SNAPSHOT`, `KUB_EXPECT_YANDEX_CAPTCHA`,
+`KUB_EXPECT_MEDIA_SIGNED_URLS`, `KUB_QA_ALLOW_MUTATIONS`, `KUB_CAPTURE_RAIL`,
+`LETSCUBE_TAURI_CDP_URL`, `LETSCUBE_TAURI_QA_STARTUP_MODE`. Each already names
+its prerequisite; what was missing was a run that repeated it.
+
+**Guards that scan source were tested by taking the subject away.** A preload
+answers `""` to every `readFileSync` and `[]` to every `readdirSync` outside
+`tests/`, and every one of the 122 test files that read product source was run
+with and without it, the hook's reach counted per run so that "no change" could
+be told from "never touched".
+
+- 116 were reached; 102 of those go red or fail to load outright.
+- **One file noticed nothing at all**: `tests/unit/voice-gateway-token.test.mjs`
+  — "the gateway's own modules log nothing" reads five gateway modules and only
+  asserts `doesNotMatch(source, /console\.[a-z]+\(/)`, which is true of an empty
+  string. It now proves each read reached a module and counts the five.
+- One more was found inside a file that otherwise noticed:
+  `overlay-glass.test.mjs`, "the overlay layer never writes the material by
+  hand", walks the primitive directory and `continue`s past anything without
+  the glass class. With an empty listing it judged nothing and passed. It now
+  asserts both floors — 57 `.tsx` files in the layer and 14 carrying the glass
+  class, measured today.
+
+Both now fail by name: "the primitive layer listed 0 .tsx files; this rule is
+no longer reading the layer it is about", and "index.ts read as 0 characters,
+which is not the gateway module this rule is about".
+
+**The naive comment-strippers are not the same defect and were cleared by
+measurement.** Fourteen test files carry a two-regex `withoutComments`, and the
+worry was that they are the `media-url-mode` defect — the five-regex version
+that turned 104,952 characters of `MessageBubble.tsx` into 3,989 — spread
+around. Both were run over all 539 files under `artifacts/kub/src` against the
+parser-backed reference: **no file loses more than a fraction of a percent**.
+The two-regex form keeps string bodies rather than trying to blank them, and
+blanking them is what went wrong. Left alone.
+
+**60 tests assert only absences** (47 unit, 12 e2e, 1 server) — a screening
+count, not a verdict: a sample showed most take their positive anchor from a
+helper (`openInfo`, `openHeaderMenu`, `openChat`) that asserts before returning.
+The one that did not is item 1 above.
+
+**Baselines taken along the way**: `tests/unit` 3315/3315 with 0 skipped,
+`tests/server` 127/127 after building `@workspace/api-server`.
 
 ---
 

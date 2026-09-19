@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
 
-import DidNotRunGuard, { didNotRun } from "../e2e/helpers/did-not-run-guard.ts";
+import DidNotRunGuard, { describeSkip, didNotRun, reportSkips } from "../e2e/helpers/did-not-run-guard.ts";
 
 /**
  * The reporter that names the tests Playwright dropped instead of running.
@@ -35,12 +35,21 @@ type Status = "passed" | "failed" | "timedOut" | "skipped" | "interrupted";
 
 const ROOT = path.resolve("fixture-root");
 
-function fakeTest(title: string, expectedStatus: Status, statuses: Status[], line = 12) {
+function fakeTest(
+  title: string,
+  expectedStatus: Status,
+  statuses: Status[],
+  line = 12,
+  annotations: { type: string; description?: string }[] = [],
+) {
   const results = statuses.map((status) => ({ status }));
   return {
     title,
     expectedStatus,
     results,
+    // Playwright always hands a reporter this array; a runtime
+    // `test.skip(condition, reason)` appends `{ type: "skip", description }`.
+    annotations,
     retries: Math.max(0, statuses.length - 1),
     location: { file: path.join(ROOT, "tests", "e2e", "sample.spec.ts"), line, column: 3 },
     titlePath: () => ["", "chromium-desktop-1440", "tests/e2e/sample.spec.ts", "two devices", title],
@@ -155,10 +164,12 @@ test("a --list run, where nothing ran, is neither failed nor listed", (t) => {
   assert.equal(output, "");
 });
 
-test("legitimate skips neither fail the run nor print anything", (t) => {
+test("legitimate skips do not fail the run, but they are named with their reason", (t) => {
   const { override, output } = endRun(
     [
-      fakeTest("skipped at runtime", "skipped", ["skipped"]),
+      fakeTest("skipped at runtime", "skipped", ["skipped"], 12, [
+        { type: "skip", description: "VITE_AUTH_CAPTCHA_PROVIDER=yandex is required" },
+      ]),
       fakeTest("interrupted", "passed", ["interrupted"]),
       fakeTest("passed", "passed", ["passed"]),
     ],
@@ -166,6 +177,77 @@ test("legitimate skips neither fail the run nor print anything", (t) => {
     t,
   );
 
-  assert.equal(override, undefined);
+  assert.equal(override, undefined, "a skip is not a failure");
+  assert.match(output, /1 test\(s\) were skipped and checked nothing/);
+  assert.match(output, /1 × VITE_AUTH_CAPTCHA_PROVIDER=yandex is required/);
+  assert.match(output, /sample\.spec\.ts:12 > two devices > skipped at runtime/);
+  assert.doesNotMatch(output, /interrupted/, "an interrupted test is not a skip");
+  assert.doesNotMatch(output, /never executed/, "nothing was dropped here");
+});
+
+test("a run with no skips at all says nothing about skips", (t) => {
+  const { output } = endRun([fakeTest("passed", "passed", ["passed"])], "passed", t);
   assert.equal(output, "");
+});
+
+/*
+ * D-210: the shape this exists for. `auth-yandex-captcha.spec.ts` ends "10
+ * skipped", exit 0, and the list reporter prints the ten titles with no reason
+ * beside any of them — so the one missing environment variable behind all ten
+ * is invisible. Grouping by reason is what makes it visible, and a skip that
+ * never said why has to be named as that rather than folded in with the rest.
+ */
+test("skips are grouped by the reason they gave, commonest first", () => {
+  const lines: string[] = [];
+  reportSkips(
+    [
+      { where: "a.spec.ts:1 > one", reason: "the flag is missing" },
+      { where: "b.spec.ts:2 > two", reason: "the flag is missing" },
+      { where: "c.spec.ts:3 > three", reason: null },
+    ],
+    (message: string) => lines.push(message),
+  );
+  const output = lines.join("\n");
+
+  assert.match(output, /3 test\(s\) were skipped and checked nothing/);
+  assert.ok(
+    output.indexOf("2 × the flag is missing") < output.indexOf("1 × no reason was given"),
+    "the commonest reason is printed first",
+  );
+  assert.match(output, /1 × no reason was given/);
+  assert.match(output, /a\.spec\.ts:1 > one/);
+  assert.match(output, /c\.spec\.ts:3 > three/);
+});
+
+test("a long group is truncated by count rather than printed in full", () => {
+  const lines: string[] = [];
+  reportSkips(
+    Array.from({ length: 9 }, (_, index) => ({ where: `a.spec.ts:${index} > case`, reason: "one reason" })),
+    (message: string) => lines.push(message),
+  );
+  const output = lines.join("\n");
+
+  assert.match(output, /9 × one reason/);
+  assert.match(output, /… and 5 more/);
+});
+
+test("nothing is printed when nothing was skipped", () => {
+  const lines: string[] = [];
+  reportSkips([null, null], (message: string) => lines.push(message));
+  assert.deepEqual(lines, []);
+});
+
+test("describeSkip reads the reason off the skip annotation, and only a skip's", () => {
+  const skipped = fakeTest("skipped", "skipped", ["skipped"], 44, [
+    { type: "fixme", description: "not this one" },
+    { type: "skip", description: "  the fixture server is not running  " },
+  ]);
+  const described = describeSkip(skipped, ROOT);
+  assert.equal(described?.reason, "the fixture server is not running", "trimmed, and from the skip annotation");
+  assert.match(described?.where ?? "", /sample\.spec\.ts:44/);
+
+  const unsaid = fakeTest("skipped", "skipped", ["skipped"], 45, [{ type: "skip" }]);
+  assert.equal(describeSkip(unsaid, ROOT)?.reason, null, "a skip with no description says so");
+
+  assert.equal(describeSkip(fakeTest("passed", "passed", ["passed"]), ROOT), null, "a test that ran is not a skip");
 });

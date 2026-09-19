@@ -379,13 +379,32 @@ test("a path prefix survives the translation, because the SFU is behind one", ()
 });
 
 test("the gateway's own modules log nothing", () => {
-  for (
-    const name of ["index.ts", "livekitToken.mjs", "roomName.mjs", "webhookAuth.mjs", "webhookEvents.mjs"]
-  ) {
+  // The rule is an absence, and an absence is true of a file that was never
+  // looked at. `readFileSync` throws on a path that is gone, but a module that
+  // is renamed away and replaced by a stub, or a directory that keeps the
+  // names and loses the code, both read as "nothing logs here" — the whole of
+  // D-210. So each module proves it is that module before it is judged, and
+  // the count of what was examined is asserted at the end.
+  const modules = ["index.ts", "livekitToken.mjs", "roomName.mjs", "webhookAuth.mjs", "webhookEvents.mjs"];
+  // Measured at the time of writing: 1,971 characters is the smallest of the
+  // five (roomName.mjs). The floor is well under that and still far above any
+  // stub or empty read.
+  const FLOOR = 800;
+  let examined = 0;
+  for (const name of modules) {
     const source = readFileSync(
       new URL(`../../supabase/functions/voice-gateway/${name}`, import.meta.url),
       "utf8",
     );
+    assert.ok(
+      source.length >= FLOOR,
+      `${name} read as ${source.length} characters, which is not the gateway module this rule is about`,
+    );
+    // Not `export`: `index.ts` is the Deno entry point and exports nothing —
+    // measured, after the first version of this line failed on it.
+    assert.match(source, /\b(import|export)\b/u, `${name} is not a module; this guard is reading the wrong thing`);
+    examined += 1;
     assert.doesNotMatch(source, /console\.[a-z]+\s*\(/, `${name} logs`);
   }
+  assert.equal(examined, modules.length, `expected to read all ${modules.length} gateway modules, read ${examined}`);
 });

@@ -86,13 +86,37 @@ const withoutComments = (source) =>
   source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
 
 test("the overlay layer never writes the material by hand", () => {
-  for (const file of readdirSync(uiDir).filter((name) => name.endsWith(".tsx"))) {
+  // Three absences over a directory listing, and all three are true of a
+  // listing that came back empty: a renamed directory, a moved primitive
+  // layer, or the glass class being spelled differently would each leave this
+  // passing while it read nothing (D-210). So what it examined is counted, and
+  // the count has a floor.
+  //
+  // Measured at the time of writing: 57 .tsx files in the layer, 14 of which
+  // carry the glass class. The floor is the number that would have to fall for
+  // this rule to be checking materially less than it does now.
+  const FILES_FLOOR = 40;
+  const GLASS_FLOOR = 10;
+  const tsx = readdirSync(uiDir).filter((name) => name.endsWith(".tsx"));
+  // Before the loop, so a collapsed listing is reported as that rather than as
+  // whatever the one surviving file happens to say.
+  assert.ok(
+    tsx.length >= FILES_FLOOR,
+    `the primitive layer listed ${tsx.length} .tsx files; this rule is no longer reading the layer it is about`,
+  );
+  let examined = 0;
+  for (const file of tsx) {
     const source = withoutComments(read(file));
     if (!/\bkub-glass(-strong)?\b/.test(source)) continue;
+    examined += 1;
     assert.doesNotMatch(source, /backdrop-filter|backdropFilter/i, `${file} writes its own frosting`);
     assert.doesNotMatch(source, /\brgba?\(/, `${file} writes its own fill`);
     assert.doesNotMatch(source, /box-shadow|boxShadow/i, `${file} writes its own shadow`);
   }
+  assert.ok(
+    examined >= GLASS_FLOOR,
+    `only ${examined} of ${tsx.length} primitives carry the glass class; the rule above judged almost nothing`,
+  );
 });
 
 for (const file of scrims) {
