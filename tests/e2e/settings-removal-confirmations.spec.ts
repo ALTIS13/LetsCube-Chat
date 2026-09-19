@@ -110,3 +110,60 @@ for (const theme of ["light", "dark"] as const) {
     await page.screenshot({ path: shotPath(info, `avatar-${theme}`), fullPage: false });
   });
 }
+
+/**
+ * D-133's fourth clause, which the entry proposed and nobody built: «a title,
+ * one line saying what will stop working, a red confirm, and focus on
+ * «Отмена»». The first three shipped on 2026-09-14 and 2026-09-15; the fourth
+ * decides whether the other three can be answered at all.
+ *
+ * Measured here rather than read off the source, because the source has always
+ * looked right: `requestAppConfirm` raises a `role="dialog"` with two buttons
+ * in it, and none of that says where the keyboard is.
+ */
+test("the question takes focus, so Enter answers it instead of the control behind it", async ({ page }) => {
+  await openSettings(page, "dark");
+
+  const remove = page.getByRole("button", { name: "Удалить фото" });
+  await remove.click();
+  await expect(page.getByText("Удалить фото профиля?")).toBeVisible();
+
+  // Before this, focus stayed on the button that raised the question — outside
+  // the dialog, and nineteen Tab presses from its first control, because the
+  // modal is portalled to the end of the body while focus sat mid-page.
+  await expect(page.getByRole("button", { name: "Отмена" })).toBeFocused();
+  const inDialog = await page.evaluate(() =>
+    !!(document.activeElement as HTMLElement | null)?.closest('[role="dialog"]'));
+  expect(inDialog, "focus must be inside the dialog, not on the page behind it").toBe(true);
+
+  // The reflex answer to a box that has just appeared. It used to re-fire
+  // «Удалить фото» and queue the same question again.
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Удалить фото профиля?")).toHaveCount(0);
+
+  // Refused, and the photograph is still there to remove.
+  await expect(remove).toBeVisible();
+  // And focus is handed back to where it came from, so the next Tab carries on
+  // from the control rather than from the top of the document.
+  await expect(remove).toBeFocused();
+});
+
+for (const theme of ["light", "dark"] as const) {
+  test(`«Отмена» shows the keyboard where it is in the ${theme} theme`, async ({ page }, info) => {
+    await openSettings(page, theme);
+    const remove = page.getByRole("button", { name: "Удалить фото" });
+    // Reached by key, so the focus ring is the product's own `:focus-visible`
+    // outline and not the browser's — and so the screenshot shows what a person
+    // navigating by keyboard actually sees.
+    await remove.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("Удалить фото профиля?")).toBeVisible();
+    const cancel = page.getByRole("button", { name: "Отмена" });
+    await expect(cancel).toBeFocused();
+    const outline = await cancel.evaluate((node) => getComputedStyle(node).outlineStyle);
+    expect(outline, "the focused way out must be visible, not only focused").not.toBe("none");
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: shotPath(info, `avatar-focus-${theme}`), fullPage: false });
+  });
+}

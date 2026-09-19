@@ -7965,7 +7965,7 @@ failure the administration also shows, and dropping the field from the profile
 save's answer. Not photographed: the phone row and the push row need a signed-in
 production session, so what is proved for those two is the words and the wiring.
 
-## D-133 `[ ]` Destructive and far-reaching actions run on one tap, with no confirmation
+## D-133 `[x]` Destructive and far-reaching actions run on one tap, with no confirmation
 
 **Severity:** high in administration, where three of these are P1 in the audit; medium
 elsewhere. Found by the work-surfaces and settings audits from the code; a missing
@@ -8092,6 +8092,75 @@ Still open, and in neither this pass nor the administration one:
 `components/sidebar/PhoneSection.tsx` — «Удалить» a verified number
 (settings-profile D4). Both are settings surfaces, owned elsewhere. A-18 in
 `UsersTab.tsx` was closed earlier by D-134.
+
+**Re-measured on 2026-09-19: every action in the list above asks first, and the
+two rows this entry last called open were already closed.** «Удалить фото» and
+«Удалить» on a verified number shipped on 2026-09-15 in `363594c4` — a commit
+whose subject is about creating a group — with the words in
+`artifacts/kub/src/lib/settingsPrompts.ts` and `tests/unit/settings-prompts.test.mts`
+pinning them. That is the fourth entry the register has found fixed under
+another number, and this one stayed open for four days holding its own fix.
+
+One correction to the surface list while re-reading it. C2 names
+`components/sidebar/SettingsModal.tsx`; the control lives in
+`components/settings/SettingsScreen.tsx`, and `SettingsModal` is a 61-line shell
+over `useSettingsScreen`. So unlike D-135 — two sign-out menus, one named, where
+a fix written from the entry would have left every computer unprotected — the
+phone's sheet and the computer's column are one handler here, and one fix
+reaches both.
+
+**What was still missing is the fourth clause of this entry's own proposal**:
+«a title, one line saying what will stop working, a red confirm, and focus on
+«Отмена»». The first three shipped on 2026-09-14 and 2026-09-15. The fourth
+never did, and it is the clause that decides whether the other three can be
+answered at all.
+
+Measured in the browser over «Удалить фото профиля?», because the source has
+always read correctly — `requestAppConfirm` raises a `role="dialog"` with two
+buttons in it, and none of that says where the keyboard is:
+
+- focus stayed on the button that raised the question, outside the dialog;
+- the first control inside the dialog was **nineteen** Tab presses away, past the
+  whole settings column, because `KubModal` portals to the end of
+  `document.body` while focus sat in the middle of the page;
+- and Enter — the reflex answer to a box that has just appeared — re-fired
+  «Удалить фото» and queued the same question a second time.
+
+So fifteen audit rows' worth of confirmations put a question on screen that a
+keyboard could not reply to, which is this register's recurring shape: a control
+that cannot change its own outcome.
+
+`components/AppDialogs.tsx` now moves focus to the button that changes nothing —
+«Отмена» on a question, «Понятно» on a statement — and hands it back to whatever
+raised the dialog when it closes, after checking `isConnected`, because a
+confirmed action often removes the very control it came from. **Nothing new is
+said**: no copy changed and the dialog is the same size and shape. The only
+thing that paints differently is the `:focus-visible` outline on «Отмена», and
+only for somebody who arrived by key. Photographed at 1440 and 390 in both
+themes as
+`output/settings-confirm/avatar-focus-{light,dark}-chromium-{desktop-1440,mobile-390}.png`.
+
+`tests/e2e/settings-removal-confirmations.spec.ts` proves it at both widths;
+three mutations turn it red — deleting the focus call, moving it to the
+destructive button instead, and taking focus without giving it back.
+
+**Two things deliberately left, each for its own entry rather than half-done
+here.**
+
+- *No focus trap.* Tab still leaves the confirmation, and it leaves every other
+  `KubModal` in the product too. A trap belongs to the modal, not to this one
+  caller; building it in `AppDialogs` alone would leave forty dialogs untrapped
+  while implying the class was closed.
+- *The bot panel still carries a second dialog.* This entry asked for «one
+  shared component for tasks, administration, bots and settings», and B-08, B-12
+  and B-15 did go through `requestAppConfirm` — but «Поставить на паузу»,
+  «Выпустить новый токен», «Отозвать токен» and «Запросить удаление» beside them
+  are a Radix `AlertDialog` declared in `BotSettingsPanel.tsx:387`. It is not a
+  defect of this entry's kind: all four ask first, each line names what stops
+  working, and Radix focuses «Отмена» by itself — which is how the *second*
+  dialog came to be better behaved than the shared one until today. Worth
+  folding in, but they are four actions this entry does not name.
+
 
 ## D-134 `[x]` Lifting a ban or a mute deletes the person's whole sanction history
 
