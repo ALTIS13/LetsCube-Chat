@@ -611,6 +611,35 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-19 — `letscube-web` at `164887bb` (D-214, the role colour a reader can see)
+
+**Deployment 484, `finished`.** One healthy replica, image tag
+`l64kyyu1sysev2izzjjbizhe:164887bb6a29f05ff899f8958d6a43be311976ea`, read off the
+running container rather than trusted from the webhook; the previous replica was
+retired during the rollover.
+
+**It took two attempts, and the first failure was not the commit.** Deployment
+483 carried the same commit and failed after 139 seconds inside
+`check_git_if_build_needed` — the GitHub-address fault diagnosed earlier today:
+`github.com` resolves alternately to `140.82.121.3`, which connects 8/8 in 0 s,
+and `140.82.121.4`, which connects 2/8 and otherwise times out at ~133 s. The
+retry was triggered through the deploy token rather than by another push, so
+`main` carries no empty commit for it.
+
+**The change is proved to have reached the reader, in both directions.** The
+class string `grid w-fit grid-cols-4 sm:grid-cols-8` — the swatch grid, which
+exists only in this commit — is **absent** from `artifacts/kub/src` at the
+previously deployed `ae2de203`, **present** at `164887bb`, and **present** in
+`/assets/index-D0bMhhdY.js` as the live site serves it. A marker found only in
+the bundle would prove nothing; a marker found in neither would not distinguish
+"not deployed" from "I cannot see".
+
+Gates at that commit: typecheck clean, unit 3315/3315, production build proved by
+its own `sw.js build 6240c6270d61df0a` line. The migration behind it
+(`20260919170000_a_role_colour_a_reader_can_see.sql`, sha256 `803200f9…`,
+`UPDATE 10`) went in between the two client commits and is recorded under
+Priority 2.
+
 ### 2026-09-19 — one production migration (D-208 step three): the legacy `media_path` back-fill
 
 **No application was deployed and nothing on screen changed.** `letscube-web`
