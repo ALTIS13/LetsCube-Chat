@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { RegisterForm } from "@/components/auth/RegisterForm";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { VoiceCallShell } from "@/components/layout/VoiceCallShell";
 import { useUser } from "@/hooks/useUser";
 import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { usePushForegroundSession } from "@/hooks/usePushForegroundSession";
@@ -464,16 +465,25 @@ function AppRoutes() {
           window chrome for the whole product, which is what D-016 wanted in
           the first place. */}
       <DesktopWindowChrome />
-      <Switch>
-        <Route path="/login" component={LoginForm} />
-        <Route path="/register" component={RegisterForm} />
-        <Route path="/admin/:rest*" component={AdminLayout} />
-        <Route path="/admin" component={AdminLayout} />
-        <Route path="/tasks" component={TasksPage} />
-        <Route path="/bots" component={BotsPage} />
-        <Route path="/" component={MainLayout} />
-        <Route component={NotFound} />
-      </Switch>
+      {/* The running call, on every screen that does not carry it already.
+          `MainLayout` mounts the bar twice for the messenger — the chat list's
+          foot on a computer, a band across the top on a phone — and until
+          2026-09-19 those were the only two mounts in the product, so walking
+          into «Задачи», «Мои боты» or the admin pages during a call left the
+          microphone open with nothing on screen saying so. The rule about
+          which locations need this one is `lib/voiceShellBar.ts`. */}
+      <VoiceCallShell>
+        <Switch>
+          <Route path="/login" component={LoginForm} />
+          <Route path="/register" component={RegisterForm} />
+          <Route path="/admin/:rest*" component={AdminLayout} />
+          <Route path="/admin" component={AdminLayout} />
+          <Route path="/tasks" component={TasksPage} />
+          <Route path="/bots" component={BotsPage} />
+          <Route path="/" component={MainLayout} />
+          <Route component={NotFound} />
+        </Switch>
+      </VoiceCallShell>
     </>
   );
 }

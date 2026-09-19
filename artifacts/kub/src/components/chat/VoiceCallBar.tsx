@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { useAppStore } from "@/store/app.store";
 import {
@@ -19,6 +20,7 @@ import { FOCUS_RING_INSET } from "@/lib/controlSurface";
 import { micControlWords } from "@/lib/micGate";
 import { voiceCallBarState } from "@/lib/voiceCallBar";
 import { cn } from "@/lib/utils";
+import { VoiceConnectionPanel } from "./VoiceConnectionPanel";
 
 /**
  * The call, reachable from anywhere in the application.
@@ -63,7 +65,30 @@ import { cn } from "@/lib/utils";
  * against a live member list, which is why it is the one place that offers it,
  * and pressing this bar is one gesture away from there.
  */
-export function VoiceCallBar({ placement }: { placement: "column" | "top" }) {
+export function VoiceCallBar({
+  placement,
+  /**
+   * Whether a conversation pane — the thing that draws the capsule — is on
+   * screen at all.
+   *
+   * True for both mounts inside `MainLayout`, and **false** for the shell's,
+   * which draws on the pages that are not the messenger. It exists because
+   * `selectedChatId` is remembered state rather than a fact about what is
+   * visible: somebody in a call in «Команда проекта» who opens «Задачи» still
+   * has that chat selected, so the rule's «the capsule is already there» test
+   * went on being true on a screen where there is no capsule and no
+   * conversation — and the bar stood down, leaving the page it was added to
+   * with nothing on it about the call.
+   *
+   * Measured before it shipped rather than after: it is the first thing a
+   * person does, because the call is started in a conversation and «Задачи» is
+   * one tap away in `BottomNav`.
+   */
+  capsuleOnScreen = true,
+}: {
+  placement: "column" | "top";
+  capsuleOnScreen?: boolean;
+}) {
   const call = useVoiceCall();
   const selectedChatId = useAppStore((state) => state.selectedChatId);
   const setSelectedChatId = useAppStore((state) => state.setSelectedChatId);
@@ -78,9 +103,11 @@ export function VoiceCallBar({ placement }: { placement: "column" | "top" }) {
   // Only a group does: `ChatWindow` reads a chat's channels for `type ===
   // "group"` and for nothing else, so a one-to-one call's private conversation
   // has no capsule to hand over to. A scalar selector, like the name above.
-  const capsuleHere = useAppStore(
+  const capsuleInChat = useAppStore(
     (state) => state.chats.find((chat) => chat.id === call.chatId)?.type === "group",
   );
+  // And only where such a pane is actually drawn; see `capsuleOnScreen`.
+  const capsuleHere = capsuleInChat && capsuleOnScreen;
   // A call whose other end is still ringing belongs to `VoiceCallRing`. The
   // caller is connected — they joined the moment they pressed — so without this
   // the bar would announce a conversation nobody has joined yet.
@@ -115,6 +142,27 @@ export function VoiceCallBar({ placement }: { placement: "column" | "top" }) {
    * screens with the least to report.
    */
   const joinProgress = useVoiceJoinProgress();
+
+  /**
+   * Whether the connection reading is open, and the reason it is a disclosure
+   * rather than a line on the bar.
+   *
+   * The owner asked for the connection's state to be reachable without going
+   * into the conversation, which until now it was not: the readings live in
+   * `VoiceConnectionPanel`, and the only thing that opened it was the capsule's
+   * headset — inside the chat that owns the call, which is precisely the place
+   * this bar exists to save a person from having to go back to.
+   *
+   * It is not printed continuously, and that is `useVoiceHealth`'s decision
+   * rather than a layout choice: sampling runs only while the panel is open,
+   * because `getStats()` walks every transport and every track and a call runs
+   * for hours while a reading is looked at for seconds. A permanent figure on
+   * the bar would put that round trip on every second of every call on every
+   * device. So the bar keeps saying what it always said — the phase, in words —
+   * and the numbers are one press away, costing nothing until they are asked
+   * for.
+   */
+  const [healthOpen, setHealthOpen] = useState(false);
 
   const view = voiceCallBarState({
     phase: call.phase,
@@ -249,6 +297,50 @@ export function VoiceCallBar({ placement }: { placement: "column" | "top" }) {
 
         {view.controls && (
           <div className="flex shrink-0 items-center gap-1">
+            {/* «Состояние связи», the same panel the capsule's headset opens,
+                and deliberately not the same glyph.
+
+                Not the headset: this bar already draws one, at its head, and
+                that one is load-bearing rather than decorative — at a chat list
+                dragged down to a 66pt strip of avatars it is the only thing
+                left that goes back to the conversation, which `index.css` says
+                in as many words beside the narrowing rule. Two headsets in one
+                row, one of which navigates and one of which opens a panel,
+                would be the interface using a word twice for two things.
+
+                `kub-voice-call-bar__extra` with the deafen and mute controls,
+                so it closes as the column narrows. That is not only for the
+                room: the panel it opens is 280pt of graph, and offering it on
+                a 66pt strip would open something wider than the column it
+                hangs in. What stays at that width is «Выйти», as before. */}
+            <button
+              type="button"
+              onClick={() => setHealthOpen((open) => !open)}
+              className="kub-voice-call-bar__extra group/capsule relative h-8 w-8 shrink-0 rounded-full"
+              aria-expanded={healthOpen}
+              aria-label={healthOpen ? "Скрыть состояние связи" : "Состояние связи"}
+              title={healthOpen ? "Скрыть состояние связи" : "Состояние связи"}
+              data-testid="voice-call-bar-health"
+              data-open={healthOpen ? "true" : "false"}
+            >
+              <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />
+              <span className="relative flex h-full w-full items-center justify-center">
+                <KubIcon
+                  name="activity"
+                  size={15}
+                  // `call.phase`, not `view.tone`. The view turns `danger` for a
+                  // moderator's mute as well, which is a fact about permission
+                  // and not about the wire; this glyph answers for the
+                  // connection alone, and colouring it for a silenced
+                  // microphone would send somebody to look for a network fault
+                  // that is not there.
+                  tone={
+                    call.phase === "reconnecting" ? "danger" : healthOpen ? "accent" : "default"
+                  }
+                />
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={() => void setVoiceDeafened(!view.deafened)}
@@ -431,6 +523,58 @@ export function VoiceCallBar({ placement }: { placement: "column" | "top" }) {
           </div>
         )}
       </div>
+
+      {/* The readings, hung off the edge the bar is docked to.
+
+          Which edge decides the direction, and it is the one thing here that
+          cannot be shared with the capsule: at the foot of the chat list column
+          this bar's own bottom is the window's, so a panel below it would be
+          off screen — it opens upward into the list. As a band across the top
+          of a phone, or above one of the pages that has no list at all, the
+          only room is below.
+
+          Over the page rather than in the flow, and that is the opposite of
+          the choice the bar itself makes, on purpose: the bar is permanent and
+          a permanent thing that floats leaves a hole in the shape of itself,
+          while this is open for as long as somebody is reading it and shutting
+          it must give the page back exactly. `z-30` is the capsule's panel's
+          layer, for the same panel.
+
+          `rounded-[inherit]` on the glass and NOT a second number — the mistake
+          D-253 was: a radius written twice is a radius that drifts, and on the
+          day it drifted the readings sat outside their own panel. */}
+      {healthOpen && (
+        <div
+          className={cn(
+            "absolute z-30 max-h-[80vh] overflow-y-auto rounded-xl p-3",
+            // The cap is the window and nothing else, arrived at by being
+            // wrong twice. `24rem` cut «Входящий звук не идёт» in half at 390
+            // — the one line in the panel that names the fault — and `32rem`
+            // still cut it, because the readings are 598 points tall once the
+            // advice wraps and the join journal is under it, not the ~380 I
+            // had estimated from a photograph. A figure in `rem` is a guess
+            // about content that another file owns and is still growing; a
+            // share of the window is a promise about the reader's screen,
+            // which is the thing this actually has to fit in.
+            column
+              ? "inset-x-0 bottom-full mb-1"
+              : // Full width on a phone, where the band is the screen; from
+                // `sm` a column of its own, hung under the control that opens
+                // it. Also measured: `inset-x-0` on a 1440 band stretched the
+                // readings across the whole window, putting «Средняя
+                // задержка» and «22 мс» about 1400 points apart, which is a
+                // table nobody can read across.
+                "top-full mt-1 inset-x-0 sm:left-auto sm:right-0 sm:w-[24rem]",
+          )}
+          data-testid="voice-call-bar-health-panel"
+          data-placement={placement}
+        >
+          <KubGlassLayer className="rounded-[inherit] border border-[color:var(--glass-line)]" />
+          <div className="relative">
+            <VoiceConnectionPanel open />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
