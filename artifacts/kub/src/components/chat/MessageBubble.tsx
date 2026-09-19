@@ -766,10 +766,29 @@ function MeasuredTextWithMeta({
     <div
       data-message-text-meta-group="true"
       data-message-meta-placement={placement}
-      className={cn(
-        "relative max-w-full min-w-0",
-        placement === "inline" ? "w-fit self-start" : "w-full"
-      )}
+      // D-234. This box is what `bottom-0 right-0` below means by "the corner",
+      // so it has to be the BUBBLE's corner. It used to be `w-fit self-start`
+      // while the meta was inline, which shrink-wrapped it around the
+      // paragraph — and wherever something ABOVE the text sets the bubble's
+      // width, those are two different edges. Measured at 390 and at 1440, in
+      // both themes, with the time's right edge against the bubble's content
+      // edge: a quoted reply left it 24.1px short on an own message and 73.1px
+      // on a received one, and a «Переслано от …» header — which the report did
+      // not name — left it 134.6px and 183.6px short. The time sat where the
+      // words ended, with a band of empty bubble beside it.
+      //
+      // Full width in both placements instead, which is what the anchored
+      // branch already did. The bubble is still sized by its content: a
+      // percentage width cannot be resolved while the shrink-to-fit parent is
+      // being measured, so it contributes nothing to the intrinsic width and
+      // the paragraph goes on deciding how wide the bubble is. Measured, every
+      // bubble in the sweep kept its width to the pixel.
+      //
+      // The paragraph below keeps its `w-fit`: it is what wraps the text, and
+      // widening it would re-break every inline message. The spacer still
+      // reserves the room, so a last line that reaches this edge stays clear of
+      // the time exactly as before.
+      className="relative w-full max-w-full min-w-0"
     >
       <p
         ref={textFlowRef}

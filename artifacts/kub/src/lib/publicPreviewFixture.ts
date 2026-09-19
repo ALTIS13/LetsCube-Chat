@@ -25,6 +25,15 @@ export type PublicPreviewMessage = {
   reactions?: PublicPreviewReaction[];
   /** The original author of a forwarded message, shown as «Переслано от …». */
   forwardedFrom?: string;
+  /**
+   * The message this one answers, as its index in `messages`.
+   *
+   * An index rather than a quoted pair, so the quote is a message the
+   * conversation really holds: the bubble resolves it through the list's own
+   * map and the jump lands on a row that exists. Only an EARLIER message can
+   * be answered, which is also what stops a cycle.
+   */
+  replyTo?: number;
   /** When the message was edited, as HH:MM on the message's own day. */
   editedAt?: string;
   pinned?: boolean;
@@ -153,6 +162,20 @@ function requireDaysAgo(value: unknown, field: string): number {
   return value;
 }
 
+/**
+ * The index of the message being answered, which has to be an earlier one.
+ *
+ * Refused rather than clamped: a quote pointing at itself or forward would
+ * render a preview of a message the list has not placed yet, which is a state
+ * the product cannot reach.
+ */
+function requireReplyTo(value: unknown, ownIndex: number, field: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value >= ownIndex) {
+    fail(`${field} must be the index of an earlier message (0 to ${ownIndex - 1})`);
+  }
+  return value;
+}
+
 /** An emoji is a short string; anything longer is a sentence smuggled into a chip. */
 function requireEmoji(value: unknown, field: string): string {
   const emoji = requireString(value, field);
@@ -224,6 +247,7 @@ export function parsePublicPreviewFixture(raw: unknown): PublicPreviewFixture {
       message.forwardedFrom === undefined ? undefined : requireString(message.forwardedFrom, `${field}.forwardedFrom`);
     const editedAt = message.editedAt === undefined ? undefined : requireDisplayTime(message.editedAt, `${field}.editedAt`);
     const daysAgo = message.daysAgo === undefined ? undefined : requireDaysAgo(message.daysAgo, `${field}.daysAgo`);
+    const replyTo = message.replyTo === undefined ? undefined : requireReplyTo(message.replyTo, index, `${field}.replyTo`);
     return {
       sender: requireString(message.sender, `${field}.sender`),
       text: requireString(message.text, `${field}.text`),
@@ -233,6 +257,9 @@ export function parsePublicPreviewFixture(raw: unknown): PublicPreviewFixture {
       ...(reactions ? { reactions } : {}),
       ...(forwardedFrom ? { forwardedFrom } : {}),
       ...(editedAt ? { editedAt } : {}),
+      // Zero is a real answer — the first message of the conversation — so this
+      // one is tested against `undefined` rather than for truthiness.
+      ...(replyTo === undefined ? {} : { replyTo }),
       ...(message.pinned ? { pinned: true } : {}),
       // Zero is today, which is what an absent value already means.
       ...(daysAgo ? { daysAgo } : {}),
@@ -517,7 +544,9 @@ export function previewMessages(fixture: PublicPreviewFixture): MessageWithSende
         }
         : null,
       system_payload: null,
-      reply_to_id: null,
+      // The id of the row at that index, spelled the same way this loop spells
+      // its own, so the list's map resolves the quote and the jump has a target.
+      reply_to_id: message.replyTo === undefined ? null : `${PREVIEW_IDS.activeChat}-m${message.replyTo}`,
       forwarded_from_id: message.forwardedFrom ? `${PREVIEW_IDS.activeChat}-f${index}` : null,
       forward_origin: message.forwardedFrom ? { name: message.forwardedFrom } : null,
       edited_at: message.editedAt ? dayAt(message.editedAt, daysAgo) : null,

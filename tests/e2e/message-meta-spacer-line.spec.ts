@@ -73,15 +73,15 @@ const FIXTURE = {
   messages: MESSAGES,
 };
 
-async function openCapture(page: Page) {
+async function openCapture(page: Page, fixture: unknown = FIXTURE, count: number = COUNT) {
   // The fixture refuses a message stamped later than "now", so the clock is
   // pinned exactly as the sibling meta specs pin it.
   await page.clock.setFixedTime(new Date("2026-09-03T18:00:00"));
   await page.addInitScript(
-    ([key, fixture]) => {
-      (window as unknown as Record<string, unknown>)[key as string] = fixture;
+    ([key, injected]) => {
+      (window as unknown as Record<string, unknown>)[key as string] = injected;
     },
-    [WINDOW_KEY, FIXTURE] as const,
+    [WINDOW_KEY, fixture] as const,
   );
   const response = await page.goto(CAPTURE_PATH, { waitUntil: "domcontentloaded" }).catch(() => null);
   const ready = response
@@ -107,8 +107,8 @@ async function openCapture(page: Page) {
   }
 
   await page.waitForFunction(
-    (count) => document.querySelectorAll('[data-message-text-meta-group="true"]').length >= count,
-    COUNT,
+    (wanted) => document.querySelectorAll("[data-message-id]").length >= wanted,
+    count,
   );
 
   // The real face, not a frozen fallback: this is the layout a reader gets.
@@ -135,15 +135,20 @@ async function openCapture(page: Page) {
   await waitForSettledLayout(page);
 }
 
-/** Until placements and paragraph boxes are unchanged for 2.5 seconds. */
+/** Until placements and bubble boxes are unchanged for 2.5 seconds. */
 async function waitForSettledLayout(page: Page) {
+  // Read off the bubble rather than the meta group, so a conversation carrying
+  // shapes that render no group — a picture with a caption, a compact reply —
+  // is watched too. For a conversation of plain text the two are the same
+  // wait, because the group is the only thing in the bubble that moves.
   const signature = () =>
     page.evaluate(() =>
-      Array.from(document.querySelectorAll('[data-message-text-meta-group="true"]'))
-        .map((group) => {
-          const paragraph = group.querySelector("[data-message-text-flow]");
-          const box = paragraph?.getBoundingClientRect();
-          return `${group.getAttribute("data-message-meta-placement")}:${box ? Math.round(box.width) : 0}x${box ? Math.round(box.height) : 0}`;
+      Array.from(document.querySelectorAll("[data-message-id]"))
+        .map((row) => {
+          const bubble = row.querySelector('[data-message-bubble="true"]');
+          const group = bubble?.querySelector('[data-message-text-meta-group="true"]') ?? null;
+          const box = bubble?.getBoundingClientRect();
+          return `${group?.getAttribute("data-message-meta-placement") ?? "-"}:${box ? Math.round(box.width) : 0}x${box ? Math.round(box.height) : 0}`;
         })
         .join("|"),
     );
@@ -294,6 +299,196 @@ test.describe("message meta spacer line", () => {
     expect(
       refused.map(describe),
       "a wrapped message gave its time a row of its own although its last line had room for it",
+    ).toEqual([]);
+  });
+});
+
+/**
+ * D-234: the time sits at the BUBBLE's corner, not where the words end.
+ *
+ * Reported by the owner on 2026-09-18 against a reply: «bubble сообщений (а
+ * именно время), смещается при ответе куда-то влево». Measured before the fix,
+ * as the right edge of the time against the right edge of the bubble's content
+ * box, identical at 390 and at 1440 and in both themes:
+ *
+ *   shape                                       own      received
+ *   a quoted reply                             24.1px     73.1px
+ *   a «Переслано от …» header                 134.6px    183.6px
+ *
+ * and zero for every other shape in the sweep — a caption under a picture, a
+ * link, an edited mark, a reaction row, the author name above a group bubble,
+ * and a plain message. The forwarded header was not in the report and is the
+ * worse of the two.
+ *
+ * The mechanism is one box. While the time is inline it is positioned at the
+ * bottom right of the group that holds the paragraph, and that group used to
+ * shrink-wrap the paragraph — so «the corner» meant the corner of the TEXT.
+ * Wherever something above the text is wider than the text, those are different
+ * edges, and the difference is exactly `bubble content width − group width`.
+ *
+ * So this asks the question in pixels: how far is the time's right edge from
+ * the bubble's own content edge. `getComputedStyle` cannot answer it — it
+ * reports what was declared, not where the box landed.
+ */
+const SHAPES = [
+  // The message the replies quote. It has to come first: the fixture refuses a
+  // reply to a message that is not already in the conversation.
+  { sender: "Никитос", text: "и я не пойму как бот вообще должен был это сделать", time: "09:40", own: false },
+  // A caption under a picture much wider than it.
+  {
+    sender: "Максим",
+    text: "Готово",
+    time: "09:41",
+    own: true,
+    image: {
+      url: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iNDAwIj48cmVjdCB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iIzdhOGJhNiIvPjwvc3ZnPg==",
+      width: 640,
+      height: 400,
+    },
+  },
+  // A link, which is the widest thing the product puts in a text bubble — it
+  // has no preview card, so this is the nearest shape to one.
+  { sender: "Максим", text: "https://app.letscube.ru/downloads/windows/latest Смотри", time: "09:42", own: true },
+  // An edited mark, on a body narrower than the footer that carries it.
+  { sender: "Максим", text: "Да", time: "09:43", own: true, editedAt: "09:44" },
+  // A reaction row wider than the body.
+  {
+    sender: "Максим",
+    text: "Ок",
+    time: "09:45",
+    own: true,
+    reactions: [
+      { emoji: "❤️", users: ["Аня"] },
+      { emoji: "👍", users: ["Никитос"] },
+      { emoji: "🔥", users: ["Борис"] },
+      { emoji: "😂", users: ["Вера"] },
+    ],
+  },
+  // The author name above a received bubble, far longer than the body. It is
+  // outside the bubble, which is the answer this pins rather than assumes.
+  { sender: "Александра Константиновна", text: "Да", time: "09:46", own: false },
+  // Controls: nothing above the text at all, and a reply whose body is the
+  // widest thing in its bubble.
+  { sender: "Максим", text: "Всё готово", time: "09:47", own: true },
+  {
+    sender: "Максим",
+    text: "Проверил, всё на месте: сервис отвечает, очередь пустая, ошибок за сутки нет",
+    time: "09:48",
+    own: true,
+    replyTo: 0,
+  },
+  { sender: "Максим", text: "Сейчас посмотрю логи и напишу", time: "09:49", own: true, replyTo: 0 },
+  // The compact reply path, which is a different renderer from the measured one.
+  { sender: "Максим", text: "Ок", time: "09:50", own: true, replyTo: 0 },
+  // The two shapes that were wrong, on both sides.
+  { sender: "Аня", text: "Ок", time: "09:51", own: false, forwardedFrom: "Екатерина Александровна" },
+  { sender: "Максим", text: "Ок", time: "09:52", own: true, forwardedFrom: "Екатерина Александровна" },
+  { sender: "Аня", text: "Ща проверю", time: "09:53", own: false, replyTo: 0 },
+  { sender: "Максим", text: "Ща проверю", time: "09:54", own: true, replyTo: 0 },
+];
+
+const SHAPES_FIXTURE = {
+  currentUser: { name: "Максим", username: "maksim" },
+  activeChat: { name: "Команда проекта", memberCount: 6 },
+  chats: [{ name: "Команда проекта", preview: "Ща проверю", time: "09:54", unread: 0 }],
+  messages: SHAPES,
+};
+
+type Placed = {
+  index: number;
+  text: string;
+  mode: string | null;
+  placement: string | null;
+  bubble: number;
+  /** The bubble's content edge, less padding and border. */
+  contentWidth: number;
+  /** The widest thing above the text: the quote, or the forwarded header. */
+  aboveWidth: number;
+  /** The widest line box the text itself occupies. */
+  textWidth: number;
+  /** Bubble content edge minus the time's right edge. The defect, in pixels. */
+  offset: number | null;
+};
+
+function readPlacements(page: Page): Promise<Placed[]> {
+  return page.evaluate(() => {
+    const px = (value: string) => {
+      const parsed = Number.parseFloat(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    const widestLine = (node: Element | null) => {
+      if (!node) return 0;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const rects = Array.from(range.getClientRects());
+      range.detach();
+      return rects.reduce((max, rect) => Math.max(max, rect.width), 0);
+    };
+
+    const out: Placed[] = [];
+    const rows = Array.from(document.querySelectorAll("[data-message-id]"));
+    rows.forEach((row, index) => {
+      const bubble = row.querySelector<HTMLElement>('[data-message-bubble="true"]');
+      if (!bubble) return;
+      const style = getComputedStyle(bubble);
+      const box = bubble.getBoundingClientRect();
+      const contentRight = box.right - px(style.paddingRight) - px(style.borderRightWidth);
+      const contentLeft = box.left + px(style.paddingLeft) + px(style.borderLeftWidth);
+      const footer = bubble.querySelector<HTMLElement>('[data-message-footer="true"]');
+      const group = bubble.querySelector<HTMLElement>('[data-message-text-meta-group="true"]');
+      const quote = bubble.querySelector<HTMLElement>('[data-message-reply-preview="true"]');
+      const forwarded = bubble.querySelector<HTMLElement>('[data-message-forwarded="true"]');
+      const content = bubble.querySelector<HTMLElement>('[data-message-text-content="true"]');
+      out.push({
+        index,
+        text: (bubble.textContent ?? "").replace(/\s+/g, " ").slice(0, 44),
+        mode: bubble.getAttribute("data-message-footer-mode"),
+        placement: group ? group.getAttribute("data-message-meta-placement") : null,
+        bubble: box.width,
+        contentWidth: contentRight - contentLeft,
+        aboveWidth: Math.max(
+          quote ? quote.getBoundingClientRect().width : 0,
+          forwarded ? forwarded.getBoundingClientRect().width : 0,
+        ),
+        textWidth: widestLine(content),
+        offset: footer ? contentRight - footer.getBoundingClientRect().right : null,
+      });
+    });
+    return out;
+  });
+}
+
+const placedAs = (row: Placed) =>
+  `#${row.index} "${row.text}…" mode=${row.mode} placement=${row.placement} bubble=${row.bubble.toFixed(1)}px content=${row.contentWidth.toFixed(1)}px above=${row.aboveWidth.toFixed(1)}px text=${row.textWidth.toFixed(1)}px offset=${row.offset?.toFixed(1) ?? "none"}px`;
+
+test.describe("D-234 the time sits at the bubble's corner", () => {
+  test.describe.configure({ timeout: 90_000 });
+
+  test("whatever sets the bubble's width, the time is at its right edge", async ({ page }) => {
+    await openCapture(page, SHAPES_FIXTURE, SHAPES.length);
+    const rows = await readPlacements(page);
+    expect(rows.length, "the conversation did not render").toBe(SHAPES.length);
+
+    // Without this the test could pass on a conversation where nothing sets the
+    // width from above — which is every conversation the old spec renders, and
+    // is why the defect survived a spec that already watched this component.
+    // An inline time is the only placement that can be displaced, so the guard
+    // asks for inline rows whose header is decisively wider than their text.
+    const exercised = rows.filter(
+      (row) => row.placement === "inline" && row.aboveWidth - row.textWidth >= 20,
+    );
+    expect(
+      exercised.map(placedAs),
+      "no bubble in this conversation had its width set by something above the text, so this test checked nothing",
+    ).not.toEqual([]);
+    expect(exercised.length, "too few shapes with a header wider than their body").toBeGreaterThanOrEqual(4);
+
+    // A pixel of tolerance, and no more: the measured values were 24.1, 73.1,
+    // 134.6 and 183.6, so nothing here is a rounding argument.
+    const displaced = rows.filter((row) => row.offset !== null && Math.abs(row.offset) > 1);
+    expect(
+      displaced.map(placedAs),
+      "the time is not at the bubble's right edge — it followed the text instead of the box",
     ).toEqual([]);
   });
 });

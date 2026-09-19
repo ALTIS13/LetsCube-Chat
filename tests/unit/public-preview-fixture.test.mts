@@ -63,6 +63,27 @@ test("a fixture that could not be rendered faithfully is refused", () => {
   );
   assert.throws(broken({ messages: [{ sender: "Аня", text: "x", time: "25:00", own: false }] }), /HH:MM/);
   assert.throws(broken({ pendingForward: { messages: [] } }), /pendingForward\.messages/);
+  // A reply must point **backwards** at a message that exists. Pointing at
+  // itself or forward would render a quote of something not yet said, which
+  // the product can never produce — so the fixture refuses it rather than
+  // photographing it.
+  assert.throws(
+    broken({
+      messages: [
+        ...group.messages,
+        { sender: "Аня", text: "Да", time: "00:00", own: false, replyTo: 99 },
+      ],
+    }),
+    /replyTo/,
+  );
+  assert.throws(
+    broken({
+      messages: [
+        { sender: "Аня", text: "Да", time: "00:00", own: false, replyTo: 0 },
+      ],
+    }),
+    /replyTo/,
+  );
 });
 
 test("one name is one person across messages, reactions and read receipts", () => {

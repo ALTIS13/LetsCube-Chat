@@ -15792,7 +15792,7 @@ the registration triggers disabled inside it, and verified afterwards on values
 rather than on the fact that it ran. Gates at the commit: typecheck clean, unit
 3063/3063, `voice-call` and `voice-ring` 138 passed across both viewports.
 
-## D-234 `[ ]` The time slides left inside a bubble that carries a reply
+## D-234 `[x]` The time slides left inside a bubble that carries a reply
 
 **Severity:** low as damage, medium as an eyesore — it is on every reply anybody
 sends, which is a large share of messages in a busy chat.
@@ -15800,8 +15800,8 @@ sends, which is a large share of messages in a busy chat.
 **Reported by the owner on 2026-09-18**, with a screenshot, while the call work
 was in flight: «bubble сообщений (а именно время), смещается при ответе куда-то
 влево, у остальных сообщений вроде проблем замечено не было — но на всякий
-случай стоит проверить что подобных проблем точно нет». Recorded now and
-deliberately **not** fixed now, at their instruction.
+случай стоит проверить что подобных проблем точно нет». Recorded then and
+deliberately not fixed then, at their instruction. **Fixed on 2026-09-19.**
 
 **What the screenshot shows.** An own (outgoing) bubble containing a quoted
 reply — «Никитос / и я не пойму как бот…» — then the body «Ща проверю», then
@@ -15810,28 +15810,120 @@ than the body. The time does **not** sit at the bubble's bottom-right corner
 where it sits on every other message: it sits immediately after the body text,
 leaving a visible gap of bubble to its right.
 
-**Where it lives.** `artifacts/kub/src/components/chat/MessageBubble.tsx`, the
-reserved-spacer mechanism at roughly `:344-670`. That code already knows this is
-subtle — its own comments record a case where the bubble «was told it had 984px,
-chose inline, and the reserved spacer then wrapped», and another where «trusting
-that guess put the reserved spacer on a line of its own». There is an existing
-contract for it in `tests/e2e/message-meta-spacer-line.spec.ts`.
+### The measurement, which came before the change
 
-**A hypothesis, marked as one.** The fit test asks whether the last line plus
-the spacer fits «the width the bubble can actually get». In a reply the bubble's
-width is decided by the **quote**, not by the body, so a short body leaves the
-row far narrower than the box — and a spacer sized for the row rather than for
-the box would leave the time where the text ends instead of at the edge. That is
-a reading of the comments, **not a measurement**, and this register has had three
-entries in one day whose proposed fix the system refused. Measure the two widths
-before changing anything.
+The entry that recorded this proposed a mechanism and marked it as a reading of
+the component's comments rather than a measurement — that the fit test asks
+about the row rather than the box, and sizes the reserved spacer for the wrong
+one. **That reading was wrong, and the register's own rule is why it was checked
+first.** The fit test is not involved at all. Nothing about the spacer, the
+`inline`/`anchored` decision or `getMaxContentWidth` is different in a reply:
+measured before and after, every bubble in the sweep kept its width to the pixel
+and every placement kept its answer.
 
-**What the sweep must also do, because the owner asked for it explicitly:** check
-that no other bubble shape has the same problem. The candidates share the
-property that something other than the body sets the width — a forwarded header,
-an attachment caption, a link preview, an edited mark, a bubble carrying a
-reaction row. Each needs a look, at both 390 and 1440, in both themes, and the
-existing spec is the place to pin whatever is found.
+Measured on the DEV preview fixture with `getBoundingClientRect` on both boxes —
+the right edge of the time against the right edge of the bubble's **content
+box**, padding and border taken off. `getComputedStyle` cannot answer this
+question; it reports what was declared, not where the box landed.
+
+| shape | 390 light | 390 dark | 1440 light | 1440 dark |
+|---|---|---|---|---|
+| **a quoted reply, own** | **24.1px** | **24.1px** | **24.1px** | **24.1px** |
+| **a quoted reply, received** | **73.1px** | **73.1px** | **73.1px** | **73.1px** |
+| **«Переслано от …», own** | **134.6px** | **134.6px** | **134.6px** | **134.6px** |
+| **«Переслано от …», received** | **183.6px** | **183.6px** | **183.6px** | **183.6px** |
+| a caption under a picture | 0.0 | 0.0 | 0.0 | 0.0 |
+| a link | 0.0 | 0.0 | 0.0 | 0.0 |
+| an edited mark | 0.0 | 0.0 | 0.0 | 0.0 |
+| a reaction row | 0.0 | 0.0 | 0.0 | 0.0 |
+| the author name above a group bubble | 0.0 | 0.0 | 0.0 | 0.0 |
+| a reply whose body is the widest thing (control) | 0.0 | 0.0 | 0.0 | 0.0 |
+| the compact one-line reply (control) | 0.0 | 0.0 | 0.0 | 0.0 |
+| a plain own message (control) | 0.0 | 0.0 | 0.0 | 0.0 |
+
+**The owner's second ask is answered by the two rows they did not report.** A
+forwarded header is the same defect and a much larger one — five to seven times
+the reply's displacement, because the header is not truncated to 170px the way a
+quote is and can be as wide as the bubble may grow. It was there the whole time
+and nobody had named it.
+
+The offset is an identity, not a trend: it is exactly `bubble content width −
+group width` in every one of the sixteen readings. At 390, an own reply is a
+229.2px bubble with 203.2px of content, and the group holding the paragraph is
+179.1px — the 24.1px difference. Its received twin has the same bubble and the
+same quote; its group is 130.1px, because its footer carries no read receipt and
+the spacer reserved for it is 49px narrower. Both numbers fall out of the same
+subtraction.
+
+### The mechanism
+
+One box, and it is the render rather than the measurement. While the time is
+inline it is a `position: absolute` element at `bottom-0 right-0` of the group
+that holds the paragraph, and that group was `w-fit self-start` — it shrink-wrapped
+the paragraph. So «the corner» meant the corner of the **text**. Wherever
+something above the text is wider than the text, those are two different edges.
+
+The measurement code had already assumed the correct answer: in `compound` mode —
+which is exactly «a reply or a forwarded header sets the width» — the fit test
+reads `getBubbleInnerRight(bubbleEl)` and asks whether the last line plus the
+footer fits inside *the bubble*. It was measuring against an edge the footer was
+never pinned to.
+
+**The fix is one class.** The group is `relative w-full max-w-full min-w-0` in
+both placements, which is what the anchored branch already did, so `right-0` now
+means the bubble's content edge. The bubble is still sized by its content: a
+percentage width cannot be resolved while the shrink-to-fit parent is being
+measured, so it contributes nothing to the intrinsic width and the paragraph goes
+on deciding how wide the bubble is — measured, every bubble kept its width to the
+pixel. The paragraph keeps its own `w-fit`, because that is what wraps the text
+and widening it would re-break every inline message; the spacer still reserves
+the room, so a last line that reaches this edge stays clear of the time exactly
+as before.
+
+### Why the existing specs did not catch it
+
+`message-meta-placement.spec.ts` already carries the assertion, almost word for
+word — «the time sits at the bubble's right edge, not against the last word»,
+and it checks `bubbleRight - timeRight <= paddingRight + 6`. It passed
+throughout. Its fixture is three plain text messages, and **no conversation in
+any meta spec contained a bubble whose width was set by anything other than its
+body.** The contract was right and the conversation was too thin, which is the
+same failure as a mutation that comes back green for reach.
+
+So the new contract carries a guard against exactly that: it counts the inline
+bubbles whose header is at least 20px wider than their text and fails if there
+are fewer than four, before it looks at a single offset.
+
+### What was built
+
+- `artifacts/kub/src/lib/publicPreviewFixture.ts` gained `replyTo`, the index of
+  an earlier message in the same conversation. An index and not a quoted pair,
+  so the quote resolves through the list's own map and the jump lands on a row
+  that exists; a value pointing at itself or forward is refused rather than
+  clamped. DEV-only, behind `import.meta.env.DEV` and
+  `VITE_PUBLIC_PREVIEW_FIXTURE=1` as the rest of the fixture is.
+- `tests/e2e/message-meta-spacer-line.spec.ts` gained the D-234 contract over a
+  fourteen-message conversation holding one of each shape, and its
+  `waitForSettledLayout` now watches bubbles rather than meta groups, so a
+  conversation carrying shapes that render no group — a picture with a caption,
+  a compact reply — is watched too.
+
+**Mutation.** Reverting the class to `placement === "inline" ? "w-fit self-start"
+: "w-full"` turns the new test red at both `chromium-mobile-390` and
+`chromium-desktop-1440`, naming the four shapes with the four measured offsets;
+restoring it turns all six green. The two older tests in the file pass in both
+states, which is the point of the paragraph above.
+
+**Gates.** Typecheck clean. `message-meta-spacer-line` 3/3 at 390 and 3/3 at
+1440. The four sibling meta specs — first paint, observer cost, placement
+settles, placement — 16/16 at 390. `public-preview-fixture` and
+`public-preview-gate` 10/10.
+
+**Pixels.** Before and after at 390 and 1440 in both themes, on the same server
+in the same state. Diffed channel by channel, the only regions that changed are
+the four bands holding those four times; three of the four shape captures are
+byte-identical and the fourth differs by 11 antialiased pixels on the header's
+back chevron, 500px from the nearest bubble.
 
 ## D-235 `[x]` A bot cannot be put in a group chat at all, and not because the list hides it
 
