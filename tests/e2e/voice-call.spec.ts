@@ -371,6 +371,26 @@ declare global {
        */
       pushLevel: ((level: number) => void) | null;
       levelClosed: number;
+      /**
+       * Replace who is in the room, which is the only way a spec can move it.
+       *
+       * The whole list every time, never a diff — what `VoiceRoomEvents`
+       * promises and what `report()` actually sends — and **a fresh array every
+       * time**, which is not decoration: `lib/voiceRoomSoundDriver.ts` tells a
+       * roster the transport delivered from a publish about a mute or a refused
+       * device by comparing the array's identity, and a stand-in that handed
+       * the same array back twice would be testing a room the product never
+       * produces.
+       */
+      setRoster: ((userIds: string[]) => void) | null;
+      /**
+       * One cycle of a transport re-establishing itself, as
+       * `RoomEvent.Reconnecting` and `RoomEvent.Reconnected` raise it —
+       * including the re-report that the real handler makes immediately after
+       * the phase, because the order of those two is what the sound rule's
+       * re-baseline depends on.
+       */
+      reconnect: (() => void) | null;
     };
   }
 }
@@ -474,6 +494,8 @@ async function installVoiceSeam(
         micOpen: [],
         pushLevel: null,
         levelClosed: 0,
+        setRoster: null,
+        reconnect: null,
       };
       window.__voiceProbe = held;
       // The microphone's level, stood in for on the same terms as the SFU. A
@@ -520,7 +542,28 @@ async function installVoiceSeam(
           audioSource: "microphone" as const,
         }));
       window.__letscubeVoiceRoom = (events) => {
+        // Who this stand-in last said was here, so a reconnect can re-report
+        // the same room the way `RoomEvent.Reconnected` does.
+        let present = roster(false);
+        const report = () => events.onParticipants(present.map((entry) => ({ ...entry })));
         held.speak = (userIds: string[]) => events.onSpeakers(userIds);
+        held.setRoster = (userIds: string[]) => {
+          present = userIds.map((userId) => ({
+            userId,
+            name: "",
+            muted: false,
+            canSpeak: true as boolean | null,
+            audioSource: "microphone" as const,
+          }));
+          report();
+        };
+        held.reconnect = () => {
+          events.onReconnecting();
+          // The order `createLiveKitRoom` uses, and it is the order the sound
+          // rule's re-baseline depends on: the phase first, the roster after.
+          events.onReconnected();
+          report();
+        };
         // What a force-mute looks like from inside the transport: the SFU
         // revokes `canPublish` and the seam announces the permission. There is
         // no database column to seed and no route to mock — the fact exists
@@ -537,7 +580,8 @@ async function installVoiceSeam(
             if (microphone && held.micOpen.length > 0) {
               microphone.enabled = held.micOpen[held.micOpen.length - 1];
             }
-            events.onParticipants(roster(false));
+            present = roster(false);
+            report();
           },
           async setMuted(muted: boolean) {
             held.muted.push(muted);
@@ -550,7 +594,8 @@ async function installVoiceSeam(
             // reporting a defect the product does not have.
             const open = held.micOpen.length === 0 || held.micOpen[held.micOpen.length - 1];
             if (held.track) held.track.enabled = !muted && open;
-            events.onParticipants(roster(muted));
+            present = roster(muted);
+            report();
           },
           async setMicrophoneOpen(open: boolean) {
             held.micOpen.push(open);
@@ -3254,4 +3299,113 @@ test("flawless outgoing numbers and nothing arriving is not «Связь ста�
   // value came back unchanged. «2 мс» under «Ничего не приходит» tells a
   // reader that something is arriving, smoothly.
   await expect(page.getByTestId("voice-connection-inbound-jitter")).toHaveText("—");
+});
+
+/* ── The four sounds a channel makes, where the wiring actually runs ──────────
+ *
+ * Every rule below the surface is proved without a browser:
+ * `tests/unit/voice-room-sound.test.mjs` holds the rule and
+ * `tests/unit/voice-room-sound-driver.test.mjs` drives the caller through the
+ * reconnect storm that was measured on 2026-09-19. Neither can reach the
+ * feeding — whether `hooks/useVoiceCall.ts` takes a reading at every publish,
+ * and above all whether the identity it hands the rule is the one the roster
+ * uses. That last one is the reason these two tests exist: a wrong answer there
+ * is **silent**. The rule reads every roster that does not list us as a room
+ * this client is not in, so nothing sounds, nothing throws, and every other
+ * test in this file stays green.
+ *
+ * What is read is `window.__letscubeCallSounds`, the DEV-only log
+ * `lib/callSoundPlayer.ts` keeps — the same seam that exists because a sound
+ * cannot be photographed. What is **not** proved: that anything was audible.
+ * The log records what the player was asked for and what the context answered;
+ * whether a human would have heard it is not a question a Playwright run can
+ * put.
+ */
+
+/**
+ * Every one-shot the player has been asked for, in order.
+ *
+ * Reached through a cast rather than through the `declare global` in
+ * `lib/callSoundPlayer.ts`: that declaration belongs to a module this spec does
+ * not import, and a second copy of it here would be a second place for the
+ * shape to drift. The ring's own asks are filtered out — it is a loop, it is
+ * started by `VoiceCallRing` and not by anything in a channel, and no test here
+ * rings anybody.
+ */
+async function soundsAsked(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const held = (window as unknown as {
+      __letscubeCallSounds?: { asks: { ask: string; sound: string | null }[] };
+    }).__letscubeCallSounds;
+    return (held?.asks ?? []).filter((ask) => ask.ask === "once").map((ask) => ask.sound ?? "?");
+  });
+}
+
+test("the arrival, the newcomer and the departure are each sounded once", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
+  expect(await soundsAsked(page)).toEqual([]);
+
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+  // Our own arrival — the cheapest proof that the output path and the browser's
+  // autoplay gate both let this page through, which is the reason the rule
+  // sounds it at all.
+  await expect.poll(() => soundsAsked(page)).toEqual(["join"]);
+
+  // Longer than the rule's 400 ms floor, so the next sound is refused by
+  // nothing but a rule that got the room wrong.
+  await page.waitForTimeout(600);
+  await page.evaluate((ids) => window.__voiceProbe?.setRoster?.(ids), [ME.id, ANNA.id, PETR.id]);
+  await expect.poll(() => soundsAsked(page)).toEqual(["join", "join"]);
+
+  // The same room read again is not an arrival.
+  await page.waitForTimeout(600);
+  await page.evaluate((ids) => window.__voiceProbe?.setRoster?.(ids), [ME.id, ANNA.id, PETR.id]);
+  await page.waitForTimeout(300);
+  expect(await soundsAsked(page)).toEqual(["join", "join"]);
+
+  await action(page).click();
+  await expect(action(page)).toHaveText("Присоединиться");
+  await expect.poll(() => soundsAsked(page)).toEqual(["join", "join", "leave"]);
+});
+
+test("a transport that re-establishes itself over and over sounds nothing", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+  await expect.poll(() => soundsAsked(page)).toEqual(["join"]);
+
+  // The shape production had all of 2026-09-19: the client restarting its own
+  // session with the room unchanged across every cycle.
+  //
+  // **Spaced further apart than the rule's 400 ms floor, and that spacing is
+  // the whole validity of this test.** A first version fired every cycle inside
+  // one `page.evaluate`, which put all of them within 400 ms of the arrival
+  // that had just sounded — so the floor refused everything, and the case
+  // stayed green with `reconnecting` deliberately mis-mapped to «away», which
+  // is the exact defect it exists to catch. Measured rather than supposed: that
+  // mutation left it passing. At this spacing the floor can refuse nothing, so
+  // silence here is the re-baseline's doing or it is nobody's.
+  for (let cycle = 0; cycle < 6; cycle += 1) {
+    await page.waitForTimeout(500);
+    await page.evaluate(() => {
+      const held = window.__voiceProbe;
+      if (!held?.reconnect) throw new Error("the stand-in exposes no reconnect");
+      held.reconnect();
+    });
+  }
+  await page.waitForTimeout(500);
+  expect(await soundsAsked(page)).toEqual(["join"]);
+
+  // And the room is still understood afterwards rather than merely quiet.
+  await page.evaluate((ids) => window.__voiceProbe?.setRoster?.(ids), [ME.id, ANNA.id, PETR.id]);
+  await expect.poll(() => soundsAsked(page)).toEqual(["join", "join"]);
 });

@@ -19040,3 +19040,85 @@ reaches it as a plain new join either way.
 
 ---
 
+## D-257 `[ ]` A bot may request full access to a group and nobody can grant it
+
+**Reported by the bot-platform tester, 2026-09-19:** «кажись бот может запрашивать
+полный доступ на группу, но нет нигде у админа кнопки апрувнуть его».
+
+**Measured, and it is worse than reported.** `full_visibility_approved` exists in
+three places and **every one of them reads it**:
+
+- `artifacts/api-server/src/bot/managementRoutes.ts:201` — in the response schema.
+- `artifacts/kub/src/lib/botManagement.ts:58` — in the client's parse of it.
+- `artifacts/kub/src/components/bots/BotSettingsPanel.tsx:301-302` — in the label,
+  which resolves to «Полный доступ одобрен», «Запрошен полный доступ» or
+  «Ограниченный».
+
+There is **no write**: no approve action anywhere in `artifacts/kub/src`, and no
+route in `artifacts/api-server/src`. The bot's owner can raise a request
+(«Запросить полный доступ» → `setPrivacyRequest`) and withdraw it («Отменить
+запрос»); nobody — group owner, administrator or anyone else — has any way to
+answer it. «Запрошен полный доступ» is therefore a permanent state, and the
+`full` branch of the label is unreachable in practice.
+
+**This is D-200's class, one step further on.** There the control was offered and
+the database refused it; here the control is offered and there is **no authority
+on the other side at all**. A request with no counterpart is not a slow
+approval, it is a dead end that reads like a pending one — and the bot's owner
+is left believing an administrator is about to act.
+
+**What a fix has to decide first, and it is a product question, not a
+mechanical one.** Telegram has no such flow: a bot's privacy mode is the bot
+owner's setting, and the *group's* consent is the act of adding the bot and
+granting it administrator rights — there is nothing to approve afterwards. So
+the honest options are:
+
+1. **Build the missing side** — a group administrator sees pending requests and
+   answers them. Then decide where: the group's own settings, the bot panel, or
+   a notification. And decide what a refusal means — a state, or simply the
+   absence of approval.
+2. **Remove the request** and make full visibility follow from something the
+   group already does deliberately, the way Telegram does. Then
+   `full_visibility_requested_at` and `full_visibility_approved` go with it.
+
+Do not "wire up the button" without settling that. Half of this feature is
+already built on one of the two answers, and which one was never written down.
+
+---
+
+## D-258 `[ ]` A bot cannot upload a photo, or attach one to a message
+
+**Reported by the same tester, 2026-09-19:** «еще бы боту дать возможность
+загружать фото / прикреплять к сообщениям».
+
+**Already recorded, independently, from the other direction.** PocketFlow's
+transport carries the gap list for this platform, and
+`artifacts/pocketflow/src/transport/letscube.ts:95` says:
+
+    ["uploadFile", "no upload method exists in the public Bot API (G-1, still open)"]
+
+So the tester hit, by using the product, the exact gap the reference bot
+recorded by trying to implement against the API. That agreement is worth more
+than either report on its own: the gap list is not a theory.
+
+**What exists today and what does not.** A bot **can** send a file it has
+already been sent — `sendFileById`, added 2026-09-19 — because the platform
+resolves a `file_id` to the object a message already points at, so nobody gains
+access to anything. What it cannot do is introduce **new** bytes: there is no
+method that takes an upload, so a bot cannot send a photo it generated, fetched
+or was given out of band.
+
+**What a fix needs.** An upload path with the questions that go with it, none of
+which are answered yet: who owns the stored object and against whose quota;
+what the size and type limits are and what refusing one says; whether the bucket
+and path rules already written for `media` admit a bot-authored object at all
+(`_kub_media_path_allowed` is the function to read first, and it has been wrong
+about a UUID shape before); and whether an upload is idempotent under the
+platform's mandatory `idempotency_key`, since the same key must not store the
+same bytes twice.
+
+Both of these came from the bot-platform tester while the voice incident was
+being worked, and are filed rather than started, at the owner's instruction.
+
+---
+

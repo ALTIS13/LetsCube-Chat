@@ -8,6 +8,8 @@ import {
   buildAudioTrackConstraints,
   getAudioSettings,
 } from "@/hooks/useAudioSettings";
+import { playCallSoundOnce } from "@/lib/callSoundPlayer";
+import { createVoiceRoomSoundDriver } from "@/lib/voiceRoomSoundDriver";
 import { microphonePermissionHelp } from "@/lib/platform/capabilities";
 import {
   MIC_GATE_CLOSED,
@@ -234,8 +236,74 @@ export function currentVoiceRoom(): VoiceRoom | null {
 }
 let capture: MediaStream | null = null;
 
+/* ── The four sounds a channel makes ───────────────────────────────────────
+ *
+ * Who is here, who just arrived, who just left, and the blip a control answers
+ * with. Every rule is `lib/voiceRoomSound.ts`'s and every browser fact is
+ * `lib/callSoundPlayer.ts`'s; what the two cannot be — remembering the last
+ * reading, noticing a move, and coming back on a clock for a departure that
+ * matures with nothing else happening — is `lib/voiceRoomSoundDriver.ts`'s,
+ * where `node --test` can drive it through a reconnect storm.
+ *
+ * **Nothing here primes the audio context.** A browser sounds nothing until the
+ * page has been touched, the join press is such a touch, and
+ * `useCallSoundPriming` — installed by `VoiceCallRing`, which `MainLayout`
+ * mounts for the whole signed-in session — already resumes the context on every
+ * `pointerdown`, `keydown` and `touchend` the window sees. The join button's own
+ * `pointerdown` runs that listener before its `click` ever reaches this module,
+ * so a second mechanism here would be a second thing to keep in step with the
+ * first for no behaviour at all. `playCallSoundOnce` asks again regardless, and
+ * a refusal is recorded rather than swallowed.
+ */
+const roomSound = createVoiceRoomSoundDriver({
+  now: () => Date.now(),
+  schedule: (delayMs, fire) => {
+    const handle = setTimeout(fire, delayMs);
+    return () => clearTimeout(handle);
+  },
+  // Non-looping by name, and the player refuses a looping one outright — the
+  // ring is the only sound in this product that must be stopped by something
+  // other than its own length, and it is not started from here.
+  play: (sound) => {
+    void playCallSoundOnce(sound).catch(() => undefined);
+  },
+});
+
+/**
+ * Who the roster calls us.
+ *
+ * Read from the session the token request already makes, because that is the
+ * identity the gateway mints the token with — `"identity": "<user id>"` — and
+ * therefore the exact string `VoiceParticipant.userId` carries for this client.
+ * Not taken from the first entry of the participant list, which happens to be
+ * the local one today and is a property of `report()` rather than of the seam's
+ * contract; and not from the profile store, which can be empty for reasons that
+ * have nothing to do with a call. A wrong answer here is silent — the rule
+ * would never see us in the room and would never sound anything at all — so it
+ * comes from the one place a join cannot proceed without.
+ */
+let selfUserId: string | null = null;
+
+/** One reading of the call, taken wherever the call's state is published. */
+function observeCallSound() {
+  roomSound.observe({
+    phase: state.phase,
+    participants: state.participants,
+    selfUserId,
+    micMuted: state.micMuted,
+    deafened: state.deafened,
+    enabled: getAudioSettings().callSoundEnabled,
+  });
+}
+
 function publish(next: VoiceCallState) {
   state = next;
+  // Before the listeners rather than after them: every path that ends a call
+  // publishes, and the sound that answers it should not queue behind React
+  // being told about a component tree that is about to be thrown away. The
+  // driver touches nothing in this module, so the order cannot be observed from
+  // anywhere else.
+  observeCallSound();
   for (const listener of listeners) listener();
 }
 
@@ -761,11 +829,22 @@ async function captureMicrophone(): Promise<MediaStream> {
  * it. A `fetch` that throws is reported as status 0, which is this client's
  * convention for «nothing answered» — see `readVoiceTokenResponse`.
  */
-async function requestVoiceToken(channelId: string): Promise<VoiceTokenOutcome> {
+async function requestVoiceToken(channelId: string): Promise<{
+  outcome: VoiceTokenOutcome;
+  /**
+   * The identity the gateway mints this token with, taken from the session this
+   * request already reads. Carried out with the outcome rather than read again
+   * somewhere else, so there is one answer to «who are we in this room» and it
+   * comes from the same session the token does.
+   */
+  selfUserId: string | null;
+}> {
   const supabase = createClient();
   const { data } = await supabase.auth.getSession();
   const accessToken = data.session?.access_token;
-  if (!accessToken) return { ok: false, code: "unauthenticated" };
+  const userId = data.session?.user?.id ?? null;
+  if (!accessToken) return { outcome: { ok: false, code: "unauthenticated" }, selfUserId: userId };
+  const answer = (outcome: VoiceTokenOutcome) => ({ outcome, selfUserId: userId });
   try {
     const response = await fetch(voiceTokenEndpoint(getSupabasePublicUrl()), {
       method: "POST",
@@ -777,9 +856,9 @@ async function requestVoiceToken(channelId: string): Promise<VoiceTokenOutcome> 
       body: JSON.stringify(voiceTokenRequestBody(channelId)),
     });
     const payload = await response.json().catch(() => null);
-    return readVoiceTokenResponse(response.status, payload);
+    return answer(readVoiceTokenResponse(response.status, payload));
   } catch {
-    return readVoiceTokenResponse(0, null);
+    return answer(readVoiceTokenResponse(0, null));
   }
 }
 
@@ -790,6 +869,7 @@ function fail(refusal: string) {
   forgetSpeakers();
   room = null;
   mutedBeforeDeafened = false;
+  selfUserId = null;
   publish({ ...IDLE, phase: "failed", channelId: state.channelId, chatId: state.chatId, channelName: state.channelName, refusal });
 }
 
@@ -847,11 +927,16 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
   }
   capture = stream;
 
-  const outcome = await requestVoiceToken(request.channelId);
+  const { outcome, selfUserId: identity } = await requestVoiceToken(request.channelId);
   if (mine !== generation) {
     stopCapture();
     return;
   }
+  // Before the first roster can arrive, which is inside `opened.join` below.
+  // The rule reads every roster that does not list us as a room we are not in,
+  // so an identity that landed after the join would make the first reading of
+  // this stay a roster of somebody else's room and lose the arrival.
+  selfUserId = identity;
   if (!outcome.ok) {
     fail(voiceGatewayRefusalText(outcome.code));
     return;
@@ -911,6 +996,7 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
         forgetMicrophoneGate();
         forgetSpeakers();
         room = null;
+        selfUserId = null;
         publish({ ...IDLE, phase: "failed", refusal: "Звонок прерван." });
       },
     });
@@ -994,6 +1080,9 @@ export async function leaveVoiceCall(): Promise<void> {
   forgetOutputDevice();
   forgetMicrophoneGate();
   forgetSpeakers();
+  // After the publish below the driver has already answered the departure; this
+  // only stops a stale identity being read into the next call's first roster.
+  selfUserId = null;
   publish(IDLE);
   if (open) await open.leave().catch(() => undefined);
 }

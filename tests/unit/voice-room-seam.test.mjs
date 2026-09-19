@@ -858,3 +858,150 @@ test("how many people are publishing is counted from publications, not from trac
     "a room publishing while this client subscribed to nobody is not reported as zero packets",
   );
 });
+
+/* ── The four sounds a channel makes, read where nothing else can see them ────
+ *
+ * `lib/voiceRoomSound.ts` decides when a sound may fire and
+ * `lib/voiceRoomSoundDriver.ts` is the caller that remembers, notices and comes
+ * back on a clock; both are pure and both are driven behaviourally in
+ * `tests/unit/voice-room-sound.test.mjs` and
+ * `tests/unit/voice-room-sound-driver.test.mjs`. What neither of those files
+ * can reach is the feeding: whether `hooks/useVoiceCall.ts` takes a reading at
+ * every publish, whether the reading carries the setting that already exists
+ * rather than a second one, and whether `hooks/voiceRoom.ts` raises the phase
+ * in the order the re-baseline depends on. Those are read here, as source, with
+ * the weakness this whole file states at its head.
+ */
+
+test("the phase the rule is given is raised before the roster that follows it", () => {
+  // The re-baseline is armed by the phase and consumed by the first roster
+  // after it. Reversing these two lines would let the fresh roster arrive while
+  // the phase still said `reconnecting` — the rule drops it and arms again —
+  // and the next roster, which may carry a real arrival, would be swallowed
+  // instead. Read by position rather than by eye: a grep sees both lines
+  // whichever way round they are.
+  const at = code.indexOf("RoomEvent.Reconnected");
+  assert.ok(at > 0, "nothing handles RoomEvent.Reconnected");
+  const body = code.slice(at, at + 400);
+  const raises = body.indexOf("events.onReconnected()");
+  const reports = body.indexOf("reportAndAnnounce()");
+  assert.ok(raises > 0, "the reconnect no longer tells the call it is connected again");
+  assert.ok(reports > 0, "the reconnect no longer re-reports who is in the room");
+  assert.ok(
+    raises < reports,
+    "the roster is re-reported before the phase moves, so the re-baseline swallows the wrong reading",
+  );
+});
+
+test("a transport being re-established is announced as such, not as a call that ended", () => {
+  // The mutation this exists for is a simplification that treats a dropped
+  // transport as a disconnect. `voiceRoomPhaseOf` maps `reconnecting` to a
+  // phase of its own precisely so the storm is silent; a seam that never raised
+  // it would leave that mapping correct and unreachable.
+  const at = code.indexOf("RoomEvent.Reconnecting");
+  assert.ok(at > 0, "nothing handles RoomEvent.Reconnecting");
+  assert.match(
+    code.slice(at, at + 200),
+    /events\.onReconnecting\(\)/,
+    "a transport being re-established no longer reaches the call at all",
+  );
+});
+
+test("the call takes a sound reading wherever its state is published", () => {
+  // One call site, in the one function every path goes through: `patch` calls
+  // `publish`, and every way a call ends publishes. A version that hung the
+  // reading on the join and on the leave would miss the six other endings.
+  const at = callCode.indexOf("function publish(next: VoiceCallState)");
+  assert.ok(at > 0, "the publish function is gone");
+  assert.match(
+    callCode.slice(at, at + 400),
+    /observeCallSound\(\)/,
+    "the call no longer takes a sound reading when its state moves",
+  );
+  // And nowhere else, because a second caller would double every sound.
+  assert.equal(
+    callCode.split("observeCallSound()").length - 1,
+    2,
+    "the sound reading is taken from somewhere other than the one publish",
+  );
+});
+
+test("the reading carries the setting that already exists, and no second one", () => {
+  const at = callCode.indexOf("function observeCallSound()");
+  assert.ok(at > 0, "the sound reading is gone");
+  const body = callCode.slice(at, at + 600);
+  assert.match(
+    body,
+    /enabled: getAudioSettings\(\)\.callSoundEnabled/,
+    "the channel sounds no longer obey «Звуки → Звонок»",
+  );
+  for (const invented of ["roomSoundEnabled", "channelSoundEnabled", "voiceSoundEnabled"]) {
+    assert.ok(
+      !callCode.includes(invented),
+      `a second sound switch (${invented}) was invented beside AudioSettings.callSoundEnabled`,
+    );
+  }
+});
+
+test("who the roster calls us is read from the session, not guessed from the list", () => {
+  // A wrong answer here is **silent**: the rule reads every roster that does
+  // not list us as a room this client is not in, so nothing would ever sound
+  // and nothing would ever fail. `participants[0]` happens to be the local
+  // participant today because `report()` pushes it first — a property of that
+  // function rather than of the seam's contract.
+  assert.match(
+    callCode,
+    /const userId = data\.session\?\.user\?\.id \?\? null;/,
+    "the identity is no longer taken from the session the token is minted against",
+  );
+  assert.match(callCode, /selfUserId = identity;/, "the join no longer records who we are");
+  for (const guess of ["participants[0]", "participants.at(0)", "currentUser?.id"]) {
+    assert.ok(
+      !callCode.includes(guess),
+      `the identity is guessed from ${guess}, which is silent when it is wrong`,
+    );
+  }
+});
+
+test("a channel sound is a one-shot, and the priming stays the one that exists", () => {
+  // `playCallSoundOnce` refuses a looping name outright, which is why it is the
+  // door: a `ring` started through `setVoiceRingSound` from here would sound
+  // until the ring's own state machine stopped it, and the ring's state machine
+  // knows nothing about a channel.
+  assert.match(
+    callCode,
+    /playCallSoundOnce\(sound\)/,
+    "the channel sounds no longer go through the player's one-shot door",
+  );
+  assert.ok(
+    !callCode.includes("setVoiceRingSound"),
+    "the call module reaches the looping ring, which nothing here may start or stop",
+  );
+  // A browser sounds nothing until the page has been touched and the join press
+  // is such a touch — but the listener that spends it is `useCallSoundPriming`,
+  // installed once by `VoiceCallRing` for the whole session. A second one here
+  // would be a second thing to keep in step for no behaviour at all.
+  assert.ok(
+    !callCode.includes("primeCallSoundsOnGesture"),
+    "a second gesture-priming mechanism was installed beside useCallSoundPriming",
+  );
+});
+
+test("the roster is rebuilt on every event, which is what tells one reading from the next", () => {
+  // `lib/voiceRoomSoundDriver.ts` tells a roster the transport delivered from a
+  // publish about a mute or a refused output device by comparing the array's
+  // **identity**. That is only sound because this function builds a new list
+  // every time and never patches one — the same property the header of this
+  // file claims for a different reason. A version that cached and mutated a
+  // list would leave every other test green and would freeze the sound rule on
+  // the first room it ever saw.
+  const at = code.indexOf("const report = () => {");
+  assert.ok(at > 0, "the reporter is gone");
+  const body = code.slice(at, code.indexOf("events.onParticipants(list);", at) + 40);
+  assert.match(
+    body,
+    /const list: VoiceParticipant\[\] = \[\];/,
+    "the participant list is no longer built fresh for each report",
+  );
+  assert.match(body, /events\.onParticipants\(list\);/, "the fresh list is not what is sent");
+});

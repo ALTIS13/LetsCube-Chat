@@ -746,7 +746,19 @@ export function readNotificationSoundEnabled(value: unknown): boolean {
 /** The settings group, beside «Микрофон в звонке» and «Обработка голоса». */
 export const SOUND_GROUP_CAPTION = "Звуки";
 export const CALL_SOUND_LABEL = "Звонок";
-export const CALL_SOUND_HINT = "Мелодия входящего и гудки исходящего звонка.";
+/**
+ * What this one switch actually governs, which stopped being two things on
+ * 2026-09-19.
+ *
+ * It said «Мелодия входящего и гудки исходящего звонка.» while a voice channel
+ * gained four sounds of its own — an arrival, a departure and the blip a
+ * microphone control answers with — all of them read from this same value. A
+ * hint that names half of what a switch turns off is worse than none: somebody
+ * who wants the channel quiet has no reason to look here, and somebody who
+ * turns it off is surprised twice.
+ */
+export const CALL_SOUND_HINT =
+  "Мелодия входящего, гудки исходящего и короткие сигналы в голосовом канале.";
 export const NOTIFICATION_SOUND_LABEL = "Уведомления";
 export const NOTIFICATION_SOUND_HINT = "Короткий сигнал о новом сообщении.";
 /**
