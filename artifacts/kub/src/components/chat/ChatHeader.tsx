@@ -7,6 +7,8 @@ import { KubGlassLayer, KubModal, KubIcon, type KubIconName } from "@/components
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { prefixError } from "@/lib/errors";
+import { BotTag } from "@/components/bots/BotTag";
+import { chatBotPartner } from "@/lib/chatBots";
 import { getChatDisplayInfo, memberCountLabel } from "@/lib/chatDisplay";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import { getUserPresenceState } from "@/lib/presence";
@@ -62,7 +64,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
 
   const display = chat
     ? getChatDisplayInfo(chat, currentUser?.id ?? null)
-    : { title: "Чат", subtitle: "", typeLabel: "Чат", isSaved: false };
+    : { title: "Чат", subtitle: "", typeLabel: "Чат", isSaved: false, isBot: false };
   const name = display.title;
   const type = chat?.type ?? "private";
   const isGroup = !display.isSaved && (type === "group" || type === "channel");
@@ -316,11 +318,19 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
     });
   };
 
+  const headerBot = chatBotPartner(chat);
+
   const getSubtitle = () => {
     if (!chat) return "";
     if (display.isSaved) return display.subtitle;
     if (type === "channel") return `${(chat.members?.length ?? 0) || "?"} подписчиков`;
     if (type === "group") return memberCountLabel(chat.members?.length ?? 0);
+    // A bot has no presence to report, and this line used to report one: with
+    // no `other_user` — a bot is not a `chat_members` row — the call below
+    // answers the never-seen state, so the header said «был(а) давно» about
+    // something that is never anywhere. Its никнейм is the useful fact instead:
+    // it is what you need to address it in a group.
+    if (headerBot) return `@${headerBot.username}`;
     return getUserPresenceState(chat.other_user, presenceNow).label;
   };
 
@@ -470,8 +480,11 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
               />
             </span>
             <span className="relative min-w-0 text-left">
-              <span className="block truncate text-[15px] font-semibold leading-tight text-[color:var(--kub-text)]">
-                {name}
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="block truncate text-[15px] font-semibold leading-tight text-[color:var(--kub-text)]">
+                  {name}
+                </span>
+                {display.isBot && <BotTag />}
               </span>
               {subtitle && (
                 <span className={cn(

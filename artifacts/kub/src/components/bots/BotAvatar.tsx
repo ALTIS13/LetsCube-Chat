@@ -1,4 +1,5 @@
 import { MessageActorAvatar } from "@/components/ui/ChatAvatar";
+import type { BotLike } from "@/lib/chatBots";
 import type { BotSummary } from "@/lib/botManagement";
 
 /**
@@ -37,3 +38,49 @@ export function BotAvatar({
     />
   );
 }
+
+/**
+ * The same face, for a bot known only by what a list gave us.
+ *
+ * `chat_bots_available` answers five columns — id, username, display name,
+ * description, picture — and `chat_bot_members` is read for the same five. That
+ * is everything `MessageActorAvatar` looks at: `messageActorDisplayName` reads
+ * the name and the никнейм, `messageActorAvatarUrl` reads the picture, and the
+ * glyph comes from the actor's kind. The timestamps `BotProfile` also declares
+ * are never touched, so they are filled with the epoch rather than fetched — a
+ * second read of `bots` for two columns nothing draws would be a request spent
+ * on satisfying a type.
+ */
+export function BotLikeAvatar({
+  bot,
+  size = "sm",
+  className,
+}: {
+  bot: BotLike;
+  size?: "sm" | "md" | "lg" | "xl";
+  className?: string;
+}) {
+  return (
+    <MessageActorAvatar
+      actor={{
+        kind: "bot",
+        id: bot.id,
+        bot: {
+          id: bot.id,
+          username: bot.username,
+          display_name: bot.display_name,
+          description: bot.description ?? "",
+          avatar_url: bot.avatar_url ?? null,
+          state: "active",
+          created_at: EPOCH,
+          updated_at: EPOCH,
+        },
+      }}
+      size={size}
+      className={className}
+    />
+  );
+}
+
+/** Never read; see `BotLikeAvatar`. */
+const EPOCH = "1970-01-01T00:00:00.000Z";

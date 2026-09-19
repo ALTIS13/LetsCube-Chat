@@ -15874,6 +15874,30 @@ matching `is_chat_admin`); the privacy mode chosen at the moment of adding rathe
 than defaulted silently; the invite surface offering bots alongside people; and
 removal, which has the same absence.
 
+**Fixed on 2026-09-19** by `20260919010000_a_bot_can_be_put_in_a_group.sql` and
+`20260919020000_removing_a_bot_is_a_group_act.sql`, and two things learned doing
+it are worth more than the fix:
+
+**The privacy mode is not a default anybody chose — the schema forbids the
+alternative.** `chat_bot_members_visibility_approval_check` makes a `'full'` row
+impossible without both a request and an approver, so there is no one-step way
+to add a bot that reads everything. This entry asked for the mode to be «chosen
+rather than defaulted silently»; the constraint answers it more firmly than an
+interface could.
+
+**And `bot_membership_authorize_internal` is not the function that decides what a
+bot sees.** `private.bot_can_receive_message` is, and it carries a fourth
+restriction nobody had written down: **`messages.created_at >= chat_bot_members.joined_at`**.
+A bot cannot read the history from before it was added. That belongs in the
+sentence the interface shows, and now is.
+
+One asymmetry was found by the agent and closed rather than filed: `chat_bot_add`
+refused a chat that was not a group and `chat_bot_remove` did not. In a private
+bot chat `open_or_create_bot_chat` makes the opener its **owner**, so
+`is_chat_admin` is true and the check was no check — a direct call could mute the
+bot and leave `open_or_create_bot_chat` creating a *second* private chat with it.
+Counted on production before fixing: zero such pairs exist.
+
 ---
 
 ## D-236 `[ ]` A conversation with a bot looks exactly like a conversation with a person
@@ -15900,6 +15924,23 @@ The same question should be asked of every surface the owner did not happen to
 open: the chat header, the profile sheet behind the avatar, search results, the
 forward picker, a mention. One of them saying «бот» while the rest do not would
 be its own defect.
+
+**Corrected on 2026-09-19, twice, by the agent that fixed it.** «A mention» is
+not a surface: there is no @-mention autocomplete in this product, and
+`lib/formatText.tsx` renders `@name` from a regular expression with no identity
+lookup at all — there is nothing to mark. And the list understates the cause:
+the client had **one** bot mark before this (the author line above a message
+bubble) and could not have had more, because a chat row in the store carried no
+fact answering «is this a bot?» — `chats` has no bot column, a bot is not a
+`chat_members` row, and `last_message.bot` is about the newest message. So the
+fix was a data path plus one shared mark, not six independent ones.
+
+Two things found while doing it, neither of them the reported defect. The chat
+header, with no `other_user`, called `getUserPresenceState(null)` and **reported
+a bot's «last seen»** — an invented fact, now `@никнейм`, which is what somebody
+needs in order to address it. And in search, a bot **with an avatar** rendered a
+row identical to a person's: the robot glyph only appears when there is no
+picture to prefer, so the «Боты» heading was the whole of the signal.
 
 **Not measured yet, and it decides the shape:** whether the mark should be a
 badge beside the name (Telegram's), a line under it, or part of the avatar. The

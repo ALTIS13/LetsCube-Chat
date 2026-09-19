@@ -3,6 +3,7 @@
 import { memo, useRef, type DragEvent } from "react";
 import type { ChatWithLastMessage } from "@/types/database";
 import { formatTime } from "@/lib/format";
+import { BotTag } from "@/components/bots/BotTag";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
 import { KubIcon } from "@/components/kub";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
@@ -297,12 +298,19 @@ export const ChatListItem = memo(function ChatListItem({
               <KubIcon name="channel" size={13} className="flex-shrink-0 text-[color:var(--kub-muted)]" />
             ) : chat.type === "group" ? (
               <KubIcon name="group" size={13} className="flex-shrink-0 text-[color:var(--kub-muted)]" />
+            ) : display.isBot ? (
+              // The type glyph was «user» here, which is not a missing mark but
+              // a wrong one: this row is not a person. The word beside the name
+              // is what actually reads at a glance (D-236); the glyph is the
+              // same correction the rest of the strip already makes.
+              <KubIcon name="bot" size={13} className="flex-shrink-0 text-[color:var(--kub-muted)]" />
             ) : (
               <KubIcon name="user" size={13} className="flex-shrink-0 text-[color:var(--kub-muted)]" />
             )}
             <span className="text-sm font-semibold truncate text-[color:var(--kub-text)]">
               {display.title}
             </span>
+            {display.isBot && <BotTag />}
             {chat.is_verified && (
               <KubIcon name="verified" size={13} className="flex-shrink-0 text-[color:var(--kub-cyan)]" />
             )}

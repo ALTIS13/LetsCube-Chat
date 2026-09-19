@@ -35,6 +35,23 @@ export const MESSAGES_HISTORY = "GET messages:list";
 /** One chat's preview line for the sidebar, on the per-chat compatibility path. */
 export const MESSAGES_PREVIEW = "GET messages:preview";
 
+/**
+ * The same table, two owners — the shape D-173 was, found a second time.
+ *
+ * `public.chat_bot_members` is read by the sidebar for every visible chat at
+ * once (D-236's mark: `chat_id=in.(…)`, embedding `bots`) and by the open
+ * conversation for itself (`useBotChat`: `chat_id=eq.<id>`, `select=bot_id`).
+ * Measured on 2026-09-19: with both in one bucket, opening a chat counted as a
+ * whole-list refetch, because `useBotChat` had always asked and the list's
+ * request had just been added to the refetch set.
+ *
+ * They are told apart by the filter, which is the only thing about them the
+ * server sees differ: a list read asks for many chats, a conversation's read
+ * for one.
+ */
+export const CHAT_BOTS_LIST = "GET chat_bot_members:list";
+export const CHAT_BOTS_ONE = "GET chat_bot_members:one";
+
 /** The part of the projection only the conversation's query asks for. */
 const CONVERSATION_PROJECTION_MARKER = "reactions(";
 
@@ -57,6 +74,9 @@ export function labelPostgrestRequest({ method, url, headers }: PostgrestRequest
     return (url.searchParams.get("select") ?? "").includes(CONVERSATION_PROJECTION_MARKER)
       ? MESSAGES_HISTORY
       : MESSAGES_PREVIEW;
+  }
+  if (resource === "chat_bot_members" && method === "GET") {
+    return (url.searchParams.get("chat_id") ?? "").startsWith("in.") ? CHAT_BOTS_LIST : CHAT_BOTS_ONE;
   }
   return `${method} ${resource}`;
 }

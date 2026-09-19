@@ -330,7 +330,9 @@ const veiled = [
   // 17 until D-215 added «Выдать роль» to the member card — the dashed chip
   // that hands a group's tag to somebody. It is a row control like every
   // other one here, so it wears the veil rather than a fixed hover colour.
-  ["components/chat/ChatInfoPanel.tsx", 18],
+  // 18 before D-235 added the bots of a group under its people: the row and
+  // its «Убрать».
+  ["components/chat/ChatInfoPanel.tsx", 20],
   // Two, down from eleven on 2026-09-11: the hover cluster, the per-message
   // context menu and its reaction pickers left the bubble for
   // `MessageActionLayer` and `MessageReactions`, which are counted below.
@@ -344,7 +346,8 @@ const veiled = [
   // None: its one hover was the bulk selection bar's «Отмена», and that bar
   // is `ChatSelectionBar` now. Kept at zero so the leftover checks still run.
   ["components/chat/MessageList.tsx", 0],
-  ["components/chat/GroupInviteModal.tsx", 1],
+  // 1 before D-235 put a «Боты» section under the people.
+  ["components/chat/GroupInviteModal.tsx", 2],
   ["components/chat/ForwardModal.tsx", 1],
   // Eight since 2026-09-14: «Пожаловаться», the last item of both menu shapes.
   // It is one element drawn in each, not two, because the phone card and the

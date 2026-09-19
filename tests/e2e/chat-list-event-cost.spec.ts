@@ -1,7 +1,7 @@
 import { expect, test, type APIRequestContext, type Page, type Route } from "@playwright/test";
 import { installRenderCounter, readRenderCounts, resetRenderCounts, type RenderCounts } from "./helpers/render-counter";
 import { RealtimeFixture } from "./helpers/realtime-fixture";
-import { labelPostgrestRequest, MESSAGES_HISTORY, MESSAGES_PREVIEW } from "./helpers/request-labels";
+import { CHAT_BOTS_LIST, CHAT_BOTS_ONE, labelPostgrestRequest, MESSAGES_HISTORY, MESSAGES_PREVIEW } from "./helpers/request-labels";
 
 /**
  * Complaints 12 and 13, measured per event: what one message, one receipt, one
@@ -58,7 +58,7 @@ const RENDERED = ["Sidebar", "ChatList", "ChatListItem", "ChatWindow", "MessageL
 const KEYS = { ChatListItem: ["chat", "id"], MessageRow: ["msg", "id"], MessageBubble: ["message", "id"] };
 
 /** The requests a whole-list refetch is made of. None of them may follow a single event. */
-const LIST_REFETCH = ["GET chats", "POST rpc/chat_list_summaries", "GET messages:count", MESSAGES_PREVIEW];
+const LIST_REFETCH = ["GET chats", CHAT_BOTS_LIST, "POST rpc/chat_list_summaries", "GET messages:count", MESSAGES_PREVIEW];
 /** Everything a chat's data is read from. */
 const CHAT_DATA = [
   "GET chat_members",
@@ -70,6 +70,9 @@ const CHAT_DATA = [
   "GET messages:pinned",
   "GET messages:count",
   "GET message_hidden_for_users",
+  // `useBotChat`, which asks once per opened chat and never again until the
+  // chat changes. An event in another chat must not make it ask.
+  CHAT_BOTS_ONE,
 ];
 
 type Row = Record<string, unknown>;

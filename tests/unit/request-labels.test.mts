@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  CHAT_BOTS_LIST,
+  CHAT_BOTS_ONE,
   labelPostgrestRequest,
   MESSAGES_HISTORY,
   MESSAGES_PREVIEW,
@@ -105,6 +107,33 @@ test("a messages request with no projection at all counts as a preview, not as h
 test("writes to messages are not labelled as reads", () => {
   assert.equal(label("/rest/v1/messages", { select: MESSAGE_SELECT_WITH_JOINS }, {}, "POST"), "POST messages");
   assert.equal(label("/rest/v1/messages", { id: "eq.1" }, {}, "PATCH"), "PATCH messages");
+});
+
+test("the sidebar's bot read and the open chat's are different labels", () => {
+  // The same defect as above, found in a second table on 2026-09-19. The
+  // sidebar asks for every visible chat at once so that a bot conversation can
+  // be marked as one (D-236); `useBotChat` asks about the open chat alone, and
+  // always did. In one bucket, opening a chat read as a whole-list refetch.
+  assert.equal(
+    label("/rest/v1/chat_bot_members", {
+      select: "chat_id,bot:bots(id,username,display_name,description,avatar_url,state)",
+      chat_id: "in.(22222222-2222-4222-8222-2222222222a1,22222222-2222-4222-8222-2222222222a2)",
+      removed_at: "is.null",
+    }),
+    CHAT_BOTS_LIST,
+  );
+  assert.equal(
+    label("/rest/v1/chat_bot_members", {
+      select: "bot_id",
+      chat_id: "eq.22222222-2222-4222-8222-2222222222a1",
+      removed_at: "is.null",
+    }),
+    CHAT_BOTS_ONE,
+  );
+  assert.notEqual(CHAT_BOTS_LIST, CHAT_BOTS_ONE);
+  // An unattributed shape belongs in the bucket that is not bounded to zero
+  // after an unrelated event — the same direction D-173's fallback takes.
+  assert.equal(label("/rest/v1/chat_bot_members"), CHAT_BOTS_ONE);
 });
 
 test("other tables, RPCs and auth keep their plain names", () => {

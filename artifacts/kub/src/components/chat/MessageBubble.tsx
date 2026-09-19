@@ -13,6 +13,7 @@ import { NO_SAFE_AREA_INSETS, readSafeAreaInsets, type SafeAreaInsets } from "@/
 import { createPortal } from "react-dom";
 import type { MessageWithSender } from "@/types/database";
 import { formatFullTime } from "@/lib/format";
+import { BotTag } from "@/components/bots/BotTag";
 import { MessageActorAvatar } from "@/components/ui/ChatAvatar";
 import type { AvatarVariantUrls, MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 import { AudioMessage } from "./AudioMessage";
@@ -1303,11 +1304,10 @@ export function MessageBubble({
               >
                 {actorName}
               </span>
-              {actor.kind === "bot" && (
-                <span className="rounded-sm bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] px-1 py-px text-[9px] font-semibold uppercase text-[color:var(--kub-accent-text)]">
-                  Бот
-                </span>
-              )}
+              {/* The mark this file invented, now shared — see BotTag. It was
+                  the only one in the product, and a mark that exists in exactly
+                  one place is how D-236 happened. */}
+              {actor.kind === "bot" && <BotTag />}
             </span>
           )}
 

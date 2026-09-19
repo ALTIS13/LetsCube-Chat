@@ -2039,6 +2039,17 @@ export interface ChatWithLastMessage extends Chat {
   unread_count?: number
   members?: (ChatMember & { profile: Profile })[]
   other_user?: Profile  // for private chats
+  /**
+   * The bots currently in this chat, live memberships only (D-235, D-236).
+   *
+   * A bot is not a `chat_members` row — its membership lives in
+   * `public.chat_bot_members` — so before this existed nothing on a chat row
+   * could answer «is this a conversation with a bot?». `useChats` fills it
+   * with one read for the whole list; `lib/chatBots.ts` is what reads it.
+   * Absent means «not asked», which is why every consumer treats it as no bots
+   * rather than as a fact.
+   */
+  bots?: BotProfile[]
   is_muted?: boolean
   is_pinned?: boolean
   pinned_at?: string | null

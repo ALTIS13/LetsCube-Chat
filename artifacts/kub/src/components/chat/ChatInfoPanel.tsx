@@ -33,6 +33,22 @@ import {
   chatSettingsRows,
   type ChatSettingsRowId,
 } from "@/lib/chatSettings";
+import { BotLikeAvatar } from "@/components/bots/BotAvatar";
+import { BotTag } from "@/components/bots/BotTag";
+import { fetchChatBots, removeChatBot } from "@/lib/chatBotMembership";
+import {
+  BOT_MEMBERS_EMPTY,
+  BOT_MEMBERS_HEADING,
+  BOT_REMOVE_FAILED,
+  BOT_REMOVE_LABEL,
+  BOT_REMOVING_LABEL,
+  BOT_VISIBILITY_NOTE,
+  botDisplayName,
+  botMembershipFailureMessage,
+  botSecondaryLine,
+  chatBotPartner,
+  type BotLike,
+} from "@/lib/chatBots";
 import { GroupInviteModal } from "./GroupInviteModal";
 import { VoiceChannelRow } from "./VoiceChannelRow";
 import {
@@ -405,7 +421,16 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
   }, []);
   const frame = profileWindowFrame(placement, viewport, { x: insets.left, y: insets.top }, columnFits);
   const docked = frame.docked;
-  const rootTitle = isSaved ? "Избранное" : isGroup ? words.infoTitle : "Профиль пользователя";
+  // A bot has no profile — `public.bots` is its row and `chat_bot_members` its
+  // membership — so «Профиль пользователя» over one is the same mistake as the
+  // «Без имени пользователя» that used to sit under its name (D-236).
+  const rootTitle = isSaved
+    ? "Избранное"
+    : isGroup
+      ? words.infoTitle
+      : chatBotPartner(chat)
+        ? "Профиль бота"
+        : "Профиль пользователя";
 
   // A resize or a rotation can strand the card off screen; crossing the dock
   // breakpoint has to put it back into the column it came from.
@@ -510,6 +535,10 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
     writeProfileWindowPlacement(placementRef.current);
   };
   const [members, setMembers] = useState<MemberRow[]>([]);
+  /** The group's bots, which are not members and do not arrive with them (D-235). */
+  const [chatBots, setChatBots] = useState<readonly BotLike[]>([]);
+  const [removingBotId, setRemovingBotId] = useState<string | null>(null);
+  const [botError, setBotError] = useState<string | null>(null);
   /** Set when the member read was refused, so the tab can say so (D-168). */
   const [membersError, setMembersError] = useState<string | null>(null);
   /** Whose card is open, if any (D-168). */
@@ -685,6 +714,25 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
     );
   }, [chat.id, isGroup, supabase]);
 
+  /**
+   * The bots in this group (D-235).
+   *
+   * Read here rather than taken from the chat row the sidebar holds, because
+   * this screen changes the answer: an add or a remove has to show at once, and
+   * nothing about bots streams — no bot table is in the `supabase_realtime`
+   * publication, so the realtime refresh beside this one would never fire for
+   * one. A refusal answers an empty list, which is what a group with no bots
+   * looks like, and the cause goes to the log.
+   */
+  const loadChatBots = useCallback(async () => {
+    if (!isGroup) {
+      setChatBots([]);
+      return;
+    }
+    const byChat = await fetchChatBots([chat.id]);
+    setChatBots(byChat.get(chat.id) ?? []);
+  }, [chat.id, isGroup]);
+
   const loadInvites = useCallback(async () => {
     if (!isGroup || !isOwnerOrAdmin) {
       setInvites([]);
@@ -745,9 +793,10 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
 
   useEffect(() => {
     void loadMembers();
+    void loadChatBots();
     void loadInvites();
     void loadInvitePolicy();
-  }, [loadInvitePolicy, loadInvites, loadMembers]);
+  }, [loadChatBots, loadInvitePolicy, loadInvites, loadMembers]);
 
   useEffect(() => {
     if (!isGroup) return;
@@ -1585,6 +1634,9 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
     [media],
   );
   const mediaVariantUrls = useMessageMediaVariantUrls(mediaGridItems);
+  const panelBot = chatBotPartner(chat);
+  /** The никнейм this card shows, whoever the counterpart turns out to be. */
+  const identityHandle = otherUser?.username ?? panelBot?.username ?? null;
   const memberIdSet = useMemo(() => new Set(members.map((member) => member.id)), [members]);
   /**
    * Who everybody in this list is, in one request (D-180).
@@ -2040,12 +2092,35 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
   };
 
   const copyUsername = async () => {
-    if (!otherUser?.username) return;
-    await copyWithFeedback(`@${otherUser.username}`, {
+    const handle = otherUser?.username ?? panelBot?.username ?? null;
+    if (!handle) return;
+    await copyWithFeedback(`@${handle}`, {
       success: "Никнейм скопирован",
       error: "Не удалось скопировать никнейм",
       key: "username",
     });
+  };
+
+  /**
+   * Taking a bot out of the group.
+   *
+   * Soft on the server — `chat_bot_remove` sets `removed_at`, which is what
+   * `bot_membership_authorize_internal` joins on — and the row goes from this
+   * list at once rather than after a refetch, because there is no event to wait
+   * for.
+   */
+  const handleRemoveBot = async (bot: BotLike) => {
+    if (removingBotId) return;
+    setBotError(null);
+    setRemovingBotId(bot.id);
+    const result = await removeChatBot(chat.id, bot.id);
+    setRemovingBotId(null);
+    if (!result.ok) {
+      setBotError(botMembershipFailureMessage(result.error, BOT_REMOVE_FAILED));
+      return;
+    }
+    setChatBots((current) => current.filter((held) => held.id !== bot.id));
+    dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
   };
 
   const tabLabels: Record<Tab, string> = { info: "Сведения", members: words.membersTitle };
@@ -2209,6 +2284,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
               title={display.title}
             >
               {display.title}
+              {display.isBot && <BotTag className="ml-1.5 align-middle" />}
             </div>
             {isSaved ? (
               <div className="col-start-2 row-start-2 text-left text-xs text-[color:var(--kub-muted)]">
@@ -2218,12 +2294,13 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
               <div className="col-start-2 row-start-2 text-left text-xs text-[color:var(--kub-muted)]">
                 {countedMemberLabel(members.length || chat.members?.length || 0, chat.type)}
               </div>
-            ) : otherUser?.username ? (
+            ) : identityHandle ? (
               // Carried over from the chat-list mini-profile this card replaced:
               // copying the nickname was the one affordance that surface had and
-              // this one did not.
+              // this one did not. A bot's никнейм goes here too, and it is worth
+              // more than a person's: it is how you address one in a group.
               <div className="col-start-2 row-start-2 inline-flex min-w-0 items-center gap-1 text-left text-xs text-[color:var(--kub-muted)]">
-                <span className="truncate">@{otherUser.username}</span>
+                <span className="truncate">@{identityHandle}</span>
                 <button
                   type="button"
                   data-testid="chat-info-copy-username"
@@ -2616,6 +2693,84 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
                 />
               );
             })}
+
+            {/* A bot is not a member, and this list does not pretend otherwise:
+                it has no `chat_members` row, no role and no standing, so it
+                gets its own short list under the people rather than a row among
+                them (D-235). Everybody in the group sees which bots are here —
+                that is a fact about the room — and only the removal is the
+                administrator's, which `chat_bot_remove` decides for itself.
+
+                An empty list is drawn for an administrator and for nobody else:
+                it is how they learn a bot can be added at all, and it would be
+                noise on every group for everybody who cannot. */}
+            {(chatBots.length > 0 || isOwnerOrAdmin) && (
+              <div
+                // A rule between two blocks that scroll together, not an edge:
+                // --kub-rule is a third of the weight, and the edge colour here
+                // read as a second sheet boundary inside the panel (rule 11).
+                className="mt-4 border-t border-[color:var(--kub-rule)] pt-3"
+                data-testid="chat-info-bots"
+              >
+                <div className="px-4 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
+                  {BOT_MEMBERS_HEADING}
+                </div>
+                {chatBots.length === 0 ? (
+                  <div className="px-4 pb-2 text-xs text-[color:var(--kub-muted)]" data-testid="chat-info-bots-empty">
+                    {BOT_MEMBERS_EMPTY}
+                  </div>
+                ) : (
+                  <>
+                    <p
+                      className="px-4 pb-2 text-[11px] leading-4 text-[color:var(--kub-muted)]"
+                      data-testid="chat-info-bot-visibility"
+                    >
+                      {BOT_VISIBILITY_NOTE}
+                    </p>
+                    {chatBots.map((bot) => (
+                      <div
+                        key={bot.id}
+                        data-testid="chat-info-bot"
+                        data-bot-id={bot.id}
+                        className="flex items-center gap-3 px-4 py-2 kub-raise-hover"
+                      >
+                        <BotLikeAvatar bot={bot} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <span className="truncate text-sm font-medium text-[color:var(--kub-text)]">
+                              {botDisplayName(bot)}
+                            </span>
+                            <BotTag />
+                          </div>
+                          <div className="truncate text-xs text-[color:var(--kub-muted)]">
+                            {botSecondaryLine(bot)}
+                          </div>
+                        </div>
+                        {isOwnerOrAdmin && (
+                          <button
+                            type="button"
+                            data-testid="chat-info-bot-remove"
+                            onClick={() => void handleRemoveBot(bot)}
+                            disabled={removingBotId !== null}
+                            className="inline-flex h-8 shrink-0 items-center justify-center rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-text)] transition-colors kub-raise-hover disabled:cursor-not-allowed disabled:text-[color:var(--kub-muted)]"
+                          >
+                            {removingBotId === bot.id ? BOT_REMOVING_LABEL : BOT_REMOVE_LABEL}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </>
+                )}
+                {botError && (
+                  <div
+                    className="px-4 pt-1 text-xs text-[color:var(--kub-danger-text)]"
+                    data-testid="chat-info-bot-error"
+                  >
+                    {botError}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Portalled, and above the panel. Both are measured requirements,
                 not preferences: the panel carries `backdrop-filter`, which makes
@@ -3268,9 +3423,11 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
           chatName={display.title}
           currentUserId={currentUser?.id ?? null}
           memberIds={Array.from(memberIdSet)}
+          onBotAdded={() => void loadChatBots()}
           onClose={() => {
             setInviteOpen(false);
             void loadMembers();
+            void loadChatBots();
             void loadInvites();
             void loadInvitePolicy();
           }}

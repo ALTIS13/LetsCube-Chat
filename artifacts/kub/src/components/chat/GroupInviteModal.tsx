@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { usePermissionAccess } from "@/hooks/useRole";
 import { KubButton, KubIcon, KubModal } from "@/components/kub";
+import { BotLikeAvatar } from "@/components/bots/BotAvatar";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { cn } from "@/lib/utils";
 import { adminUserQuery, adminUserSearchFilters } from "@/lib/adminUserSearch";
@@ -25,6 +26,20 @@ import {
   orderInviteCandidates,
   peopleAlreadyInYourChats,
 } from "@/lib/inviteCandidates";
+import { addChatBot, fetchAvailableChatBots } from "@/lib/chatBotMembership";
+import {
+  BOT_ADD_FAILED,
+  BOT_ADD_LABEL,
+  BOT_ADDED_LABEL,
+  BOT_ADDING_LABEL,
+  BOT_SECTION_HEADING,
+  BOT_VISIBILITY_NOTE,
+  botAddedMessage,
+  botDisplayName,
+  botMembershipFailureMessage,
+  botSecondaryLine,
+  type BotLike,
+} from "@/lib/chatBots";
 import { createGroupInvite, formatGroupInviteError, GROUP_INVITES_MIGRATION_REQUIRED, isGroupInviteUnavailableError } from "@/lib/groupInvites";
 import type { GroupInviteStatus } from "@/lib/groupInvites";
 import type { GroupInvite, Profile } from "@/types/database";
@@ -56,6 +71,14 @@ interface GroupInviteModalProps {
   currentUserId: string | null;
   memberIds: string[];
   onClose: () => void;
+  /**
+   * A bot joined, so whatever lists this group's bots should look again.
+   *
+   * Nothing about bots streams — no bot table is in the `supabase_realtime`
+   * publication — so the panel behind this modal would otherwise show the bot
+   * only when it was next opened.
+   */
+  onBotAdded?: () => void;
 }
 
 const INVITE_PERMISSION_KEYS = ["chats.invite", "chats.invite_any", "system.manage"] as const;
@@ -76,6 +99,7 @@ export function GroupInviteModal({
   currentUserId,
   memberIds,
   onClose,
+  onBotAdded,
 }: GroupInviteModalProps) {
   const supabase = useMemo(() => createClient(), []);
   const chats = useAppStore((s) => s.chats);
@@ -88,6 +112,9 @@ export function GroupInviteModal({
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [migrationRequired, setMigrationRequired] = useState(false);
   const [chatFacts, setChatFacts] = useState<ChatFacts | null>(null);
+  const [bots, setBots] = useState<readonly BotLike[]>([]);
+  const [addingBotId, setAddingBotId] = useState<string | null>(null);
+  const [addedBotIds, setAddedBotIds] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -202,6 +229,37 @@ export function GroupInviteModal({
     };
   }, [query, currentUserId, supabase]);
 
+  /**
+   * The bots this group could take (D-235).
+   *
+   * `chat_bots_available` decides who may see this, not the interface:
+   * it answers **nothing at all** — not an error — for anybody who is not an
+   * administrator of a group, so an ordinary member is offered no bots and
+   * never learns that any exist. A role test here would be a second copy of a
+   * rule the server already enforces, and the second copy is the one that
+   * drifts.
+   *
+   * A deployment that has not taken the migration has no function to call; that
+   * answers `unavailable` and this screen simply has no bot section, rather
+   * than an error about a feature nobody asked for.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      const result = await fetchAvailableChatBots(chatId, query);
+      if (cancelled) return;
+      if (result.unavailable || result.error) {
+        setBots([]);
+        return;
+      }
+      setBots(result.bots);
+    }, query.trim() ? 260 : 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [chatId, query]);
+
   /** Everybody the chat list already knows about, with their profiles. */
   const knownPeople = useMemo(() => {
     const ids = peopleAlreadyInYourChats(chats, currentUserId);
@@ -270,6 +328,65 @@ export function GroupInviteModal({
     setSentInviteeIds((current) => new Set(current).add(user.id));
     setInviteStatuses((current) => ({ ...current, [user.id]: "pending" }));
     setMessage(`Приглашение отправлено: ${inviteCandidateName(user)}.`);
+  };
+
+  /**
+   * Adding a bot is not inviting a person, and the screen must not blur them.
+   *
+   * An invitation is a request the other side answers; this takes effect at
+   * once, because a bot has nobody to ask. So it is a separate section, with
+   * its own verb and its own sentence about what the bot will see — and that
+   * sentence is on the screen before the button is pressed, not in a tooltip.
+   */
+  const handleAddBot = async (bot: BotLike) => {
+    if (addingBotId || denied) return;
+    setError(null);
+    setMessage(null);
+    setAddingBotId(bot.id);
+    const result = await addChatBot(chatId, bot.id);
+    setAddingBotId(null);
+    if (!result.ok) {
+      setError(botMembershipFailureMessage(result.error, BOT_ADD_FAILED));
+      return;
+    }
+    setAddedBotIds((current) => new Set(current).add(bot.id));
+    setMessage(botAddedMessage(botDisplayName(bot)));
+    onBotAdded?.();
+  };
+
+  const renderBotRow = (bot: BotLike) => {
+    const added = addedBotIds.has(bot.id);
+    return (
+      <div
+        key={bot.id}
+        data-invite-bot={bot.id}
+        data-invite-bot-state={added ? "added" : "addable"}
+        className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors kub-raise-hover"
+      >
+        <BotLikeAvatar bot={bot} size="sm" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-[color:var(--kub-text)]">{botDisplayName(bot)}</div>
+          <div className="truncate text-xs text-[color:var(--kub-muted)]">{botSecondaryLine(bot)}</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => void handleAddBot(bot)}
+          disabled={added || addingBotId !== null}
+          className={cn(
+            "inline-flex h-8 shrink-0 items-center justify-center rounded-lg px-3 text-xs font-semibold transition-colors",
+            // No perimeter on the settled state: a nested box inside a sheet is
+            // separated by a step of material, not by a line (rule 11). The
+            // disabled fill below is that step.
+            added
+              ? "text-[color:var(--kub-muted)]"
+              : "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] hover:bg-[var(--kub-cyan-hover)]",
+            "disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed",
+          )}
+        >
+          {addingBotId === bot.id ? BOT_ADDING_LABEL : added ? BOT_ADDED_LABEL : BOT_ADD_LABEL}
+        </button>
+      </div>
+    );
   };
 
   const known = ordered.filter((person) => knownPeople.ids.has(person.id));
@@ -406,6 +523,25 @@ export function GroupInviteModal({
           </div>
         ) : (
           <div className="space-y-1">{ordered.map(renderRow)}</div>
+        )}
+
+        {bots.length > 0 && !denied && (
+          <div className="mt-3 space-y-1" data-testid="invite-bots">
+            <ListHeading text={BOT_SECTION_HEADING} />
+            {/* The sentence, where the decision is taken. A bot always enters
+                `restricted` — `chat_bot_members_visibility_approval_check`
+                forbids a `full` row without an approver — so there is no
+                one-step way to add one that reads everything, and no control
+                for it is drawn. Raising it is a two-party flow that does not
+                exist yet. */}
+            <p
+              data-testid="invite-bot-visibility"
+              className="px-2 pb-1 text-[11px] leading-4 text-[color:var(--kub-muted)]"
+            >
+              {BOT_VISIBILITY_NOTE}
+            </p>
+            {bots.map(renderBotRow)}
+          </div>
         )}
       </div>
     </KubModal>

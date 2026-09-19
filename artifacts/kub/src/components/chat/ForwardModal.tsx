@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { BotTag } from "@/components/bots/BotTag";
+import { chatBotPartner } from "@/lib/chatBots";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
 import { KubIcon, KubModal } from "@/components/kub";
@@ -95,8 +97,11 @@ export function ForwardModal({ messages, onClose, onForward }: ForwardModalProps
             >
               <ChatAvatar chat={chat} size="sm" />
               <div className="text-left min-w-0 flex-1">
-                <div className="text-sm font-medium truncate text-[color:var(--kub-text)]">
-                  {chat.name ?? "Без названия"}
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="text-sm font-medium truncate text-[color:var(--kub-text)]">
+                    {chat.name ?? "Без названия"}
+                  </span>
+                  {chatBotPartner(chat) && <BotTag />}
                 </div>
               </div>
               {busyId === chat.id && (

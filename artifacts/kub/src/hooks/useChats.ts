@@ -6,6 +6,7 @@ import type { ChatWithLastMessage, Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
+import { fetchChatBots } from "@/lib/chatBotMembership";
 import { isSavedChat } from "@/lib/chatDisplay";
 import { sortChatsForSidebar } from "@/lib/chatSort";
 import { scheduleMarkChatDelivered } from "@/lib/deliveryReceipts";
@@ -215,6 +216,13 @@ export function useChats() {
       }
 
       const batchedSummaries = await fetchBatchedChatSummaries(supabase, chatIds);
+      // Which of these chats hold a bot (D-236). One request for the whole
+      // list, because the SELECT policy on `chat_bot_members` lets a member
+      // read the membership of every chat they are in — and because the
+      // alternative is one request per row on every fetch. It answers an empty
+      // map on a refusal, so a list that cannot read it looks exactly like a
+      // list with no bots in it, which is what it looked like yesterday.
+      const botsByChat = await fetchChatBots(chatIds);
 
       const enriched: ChatWithLastMessage[] = await Promise.all(
         chatsData.map(async (chat) => {
@@ -253,6 +261,7 @@ export function useChats() {
             name: displayName,
             avatar_url: displayAvatarUrl,
             other_user: otherUser,
+            bots: botsByChat.get(chat.id) ?? [],
             last_message: lastMsgData ?? undefined,
             unread_count: unreadCount,
             is_pinned: Boolean(myMembership?.pinned),

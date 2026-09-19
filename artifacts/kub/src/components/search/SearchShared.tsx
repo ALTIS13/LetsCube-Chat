@@ -1,5 +1,6 @@
 "use client";
 
+import { BotTag } from "@/components/bots/BotTag";
 import { useCallback, useState } from "react";
 import { useLocation } from "wouter";
 import { KubButton, KubIcon } from "@/components/kub";
@@ -147,8 +148,11 @@ export function SearchSection({
             >
               <SearchResultIcon result={result} compact={compact} />
               <div className="min-w-0 flex-1">
-                <div className={cn("truncate font-semibold text-[color:var(--kub-text)]", compact ? "text-[13px]" : "text-sm")}>
-                  {result.title}
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className={cn("truncate font-semibold text-[color:var(--kub-text)]", compact ? "text-[13px]" : "text-sm")}>
+                    {result.title}
+                  </span>
+                  {result.resultType === "bot" && <BotTag />}
                 </div>
                 <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-[color:var(--kub-muted)]">
                   {result.subtitle && <span className="truncate">{result.subtitle}</span>}
