@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
+import { subscribeByTable } from "@/lib/realtimeTableChannels";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
   canCreateFolderWithScope,
   canManageFolder as folderPolicyAllows,
@@ -148,10 +150,10 @@ export function useFolders() {
 
   useEffect(() => { fetchFolders(); }, [fetchFolders]);
 
-  // Realtime — we listen to folders, folder_chats AND chat_members because
-  // shared-folder visibility derives from chat membership.  When someone
-  // is added to a chat that belongs to a shared folder, that folder must
-  // immediately appear in their sidebar.
+  // Realtime — folders, folder_chats AND chat_members, because shared-folder
+  // visibility derives from chat membership: when THIS person is added to a
+  // chat that belongs to a shared folder, that folder must appear in their
+  // sidebar straight away.
   //
   // Bursts of events (e.g. "save 20 chats into a folder") are coalesced
   // into a single delayed refetch so we don't slam Postgres with 20
@@ -163,21 +165,38 @@ export function useFolders() {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => { fetchRef.current(); }, 300);
     };
-    const channelName = `folders:${userId}`;
-    const ch = rt.channel(channelName)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "folders" }, debouncedRefetch)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "folders" }, debouncedRefetch)
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "folders" }, debouncedRefetch)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "folder_chats" }, debouncedRefetch)
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "folder_chats" }, debouncedRefetch)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_members" }, debouncedRefetch)
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_members" }, debouncedRefetch)
-      .subscribe();
-    registerChannel(channelName);
+    // One channel per table, through the helper, because a channel is only as
+    // live as its least live binding — measured on production on 2026-09-05 and
+    // written up in `lib/realtimeTableChannels.ts`. This effect used to build a
+    // single channel carrying **seven bindings across three tables**, which is
+    // the exact construction that measurement outlawed. It reported SUBSCRIBED
+    // throughout, so nothing in the client ever said folders were not live.
+    //
+    // The `chat_members` bindings are filtered to this reader's own rows, which
+    // narrows nothing: shared-folder visibility routes through
+    // `can_see_shared_folder`, whose whole predicate is `cm.user_id =
+    // auth.uid()`. A folder becomes visible to this person when THIS person's
+    // membership changes, never when somebody else's does.
+    const channels = subscribeByTable<typeof debouncedRefetch, RealtimeChannel>(
+      rt,
+      `folders:${userId}`,
+      [
+        { event: "INSERT", schema: "public", table: "folders", handler: debouncedRefetch },
+        { event: "UPDATE", schema: "public", table: "folders", handler: debouncedRefetch },
+        { event: "DELETE", schema: "public", table: "folders", handler: debouncedRefetch },
+        { event: "INSERT", schema: "public", table: "folder_chats", handler: debouncedRefetch },
+        { event: "DELETE", schema: "public", table: "folder_chats", handler: debouncedRefetch },
+        { event: "INSERT", schema: "public", table: "chat_members", filter: `user_id=eq.${userId}`, handler: debouncedRefetch },
+        { event: "DELETE", schema: "public", table: "chat_members", filter: `user_id=eq.${userId}`, handler: debouncedRefetch },
+      ],
+    );
+    for (const { name } of channels) registerChannel(name);
     return () => {
       if (timer) clearTimeout(timer);
-      rt.removeChannel(ch);
-      unregisterChannel(channelName);
+      for (const { name, channel } of channels) {
+        rt.removeChannel(channel);
+        unregisterChannel(name);
+      }
     };
   }, [userId, rt]);
 

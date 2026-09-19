@@ -54,7 +54,6 @@ type ChannelSite = {
  * excuses something it no longer describes.
  */
 const KNOWN_MULTI_TABLE_CHANNELS: { file: string; tables: string[] }[] = [
-  { file: "hooks/useFolders.ts", tables: ["chat_members", "folder_chats", "folders"] },
   { file: "hooks/useTask.ts", tables: ["task_events", "tasks"] },
   { file: "hooks/useTaskRouting.ts", tables: ["location_members", "locations"] },
   {
@@ -158,13 +157,18 @@ test("the known multi-table list describes channels that still exist", () => {
   assert.deepEqual(stale, [], "these entries no longer match any channel and must be deleted");
 });
 
-test("the four repaired channels no longer chain more than one table", () => {
+test("the repaired channels no longer chain more than one table", () => {
   const { sites } = channelSites();
   const repaired = [
     "components/chat/ChatInfoPanel.tsx",
     "components/sidebar/PhoneSection.tsx",
     "hooks/useAdminDashboard.ts",
     "hooks/useDynamicRoles.ts",
+    // 2026-09-20. Seven bindings across three tables on one channel — the
+    // largest violation in the list, and the one with the longest reach: the
+    // sidebar's folders, and the only place outside this hook that heard a
+    // membership row at all. It reported SUBSCRIBED throughout.
+    "hooks/useFolders.ts",
   ];
   for (const file of repaired) {
     const chained = sites.filter((site) => site.file === file && site.tables.length > 0);
