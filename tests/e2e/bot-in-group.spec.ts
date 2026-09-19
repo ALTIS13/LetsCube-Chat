@@ -219,7 +219,12 @@ test.describe("a bot in a group", () => {
   test("a group member who has never written keeps the composer the group has always had (D-243)", async ({ page }) => {
     await seed(page);
     await openChat(page, GROUP);
-    await expect(page.getByText("Собираемся в четверг").first()).toBeVisible();
+    // Scoped to the conversation. The chat list carries the same words as a
+    // preview, and at 390 `MainLayout` hides that list behind the open chat —
+    // so `.first()` unscoped finds the invisible one and waits for ever.
+    await expect(
+      page.getByTestId("message-scroll-container").getByText("Собираемся в четверг").first(),
+    ).toBeVisible();
 
     // The bot is loaded — its menu button is the proof — and the composer is
     // still a composer. Before the fix this was one «Запустить» button and
@@ -250,7 +255,9 @@ test.describe("a bot in a group", () => {
   test("the other control: a group with no bot has no bot surfaces at all (D-243)", async ({ page }) => {
     await seed(page);
     await openChat(page, PLAIN_GROUP);
-    await expect(page.getByText("И тут тоже").first()).toBeVisible();
+    await expect(
+      page.getByTestId("message-scroll-container").getByText("И тут тоже").first(),
+    ).toBeVisible();
 
     await expect(page.getByTestId("bot-start-button")).toHaveCount(0);
     await expect(page.getByTestId("bot-commands-button")).toHaveCount(0);
