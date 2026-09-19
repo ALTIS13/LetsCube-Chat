@@ -19319,6 +19319,72 @@ it needs, in order:
    means Docker's address pools on this host are load-bearing; any second node
    inherits that constraint.
 
+### The measurement, taken 2026-09-20
+
+Step one of the plan above was «a measurement of what breaks first». Here it is,
+read off production read-only. Everything below is a fact about the deployment as
+it stands, not a projection.
+
+**The host.** 8 cores, 11,858 MB of RAM with 6,013 MB available, load average
+1.44 — about 18% of the machine. Nothing is under pressure today.
+
+**What is capped and what is not, which is the surprising part.**
+
+| | CPU | memory |
+|---|---|---|
+| `letscube-voice` | **2.0 cores** | **1 GiB** |
+| `realtime-dev.supabase-realtime` | **none** | **none** |
+
+The component whose cost scales predictably with use — an SFU forwards
+`N × (N−1)` audio streams per room and nothing else — is the one wearing a
+limit. The component whose cost scales with **connections**, which is the thing
+a growing product actually accumulates, can take the whole host. If one service
+is going to starve the others, the configuration says it will be Realtime.
+
+**The nearest hard ceiling is Postgres connections, and the number is not
+comfortable:**
+
+```
+connections_in_use   44
+max_connections     100
+profiles             18
+chats                43
+```
+
+**Forty-four of a hundred, at eighteen accounts.** Reading that as «we are at
+44% of capacity» would be wrong, and the distinction is the whole value of the
+measurement: every one of those 44 belongs to **infrastructure**, not to people
+— `realtime_connect`, `realtime_rls`, `realtime_replication_connection`,
+`realtime_subscription_manager` and two siblings, `supavisor_meta`,
+`cluster_node_supavisor`, PostgREST, the Storage API, `pg_cron`, `pg_net`. A
+pooler (`supabase-pooler`) is present, so a browser does not hold a Postgres
+connection of its own.
+
+So 44 is the **intercept**, and what matters is the **slope**: how many
+connections one more concurrent person adds. That is the one number this
+deployment cannot yield at 18 accounts, and it is the number the next step must
+produce.
+
+**How to get it, without guessing.** `pg_stat_activity` grouped by
+`application_name`, sampled while the number of connected clients is varied —
+even between two and six — gives the slope directly. Twenty minutes of somebody
+opening tabs is worth more than any amount of reasoning about it, because the
+answer is almost certainly «realtime's subscription managers grow, PostgREST
+does not», and that is a fact about a configuration rather than about a
+protocol.
+
+**What this changes about the order of the plan.** Voice is the loudest
+component and the one the owner asked about, but on this configuration it is
+capped, cheap, and audio-only. **The first thing to lift is not the SFU — it is
+either Realtime's missing limits or the connection budget it consumes.** Lifting
+the SFU first would be optimising the part that is not the constraint, and
+LiveKit's multi-node path costs a Redis and a second node before it pays
+anything back.
+
+**One product ceiling that is not a resource at all:** `room.max_participants`
+is **10**. Whatever the hardware can carry, no voice channel admits an eleventh
+person until that line changes.
+
 ---
 
 ## D-263 `[ ]` The bot platform's remaining nuances, and how a bot looks in a chat
