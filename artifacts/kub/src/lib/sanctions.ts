@@ -112,3 +112,152 @@ export function sanctionNoticeTarget(
   }
   return null;
 }
+
+/** The three answers a sanction control can have about its own outcome. */
+export type SanctionVerdict = "allowed" | "refused" | "unknown";
+
+/**
+ * The fields this module reads off a `roles` row. `DynamicRole` satisfies it
+ * structurally.
+ */
+export interface GlobalRoleRank {
+  readonly key: string;
+  readonly scope: string;
+  readonly is_active: boolean;
+  readonly priority: number;
+}
+
+/** The keys `has_global_role` will match against the legacy column. */
+const LEGACY_COLUMN_ROLE_KEYS: readonly string[] = ["admin", "manager", "user"];
+
+/**
+ * `public.effective_global_role_priority(uuid)`, mirrored on the client.
+ *
+ * Read off production on 2026-09-19:
+ *
+ *     select coalesce(max(r.priority), 0)
+ *       from public.roles r
+ *      where r.scope = 'global' and r.is_active
+ *        and public.has_global_role(p_user_id, r.key)
+ *
+ * and `has_global_role(u, k)` is «an active global assignment with key `k`, or
+ * the legacy `profiles.role` column spelling `k`» — the column only for the
+ * three values it can hold. Both halves carry weight here: two accounts on this
+ * deployment are `admin` by the column with no assignment at all, and every
+ * account is `user` by the column, which is why the floor a person can measure
+ * is the `user` role's priority and not 0.
+ *
+ * Null when no active global role is supplied: an empty role table means «not
+ * loaded», never «this person holds nothing». A manager reads exactly one row
+ * of `public.roles` (their own) and cannot use this at all — see
+ * `sanctionMatrixVerdict`.
+ */
+export function effectiveGlobalRolePriority(input: {
+  legacyRole: string | null | undefined;
+  assignedRoleKeys: Iterable<string> | null | undefined;
+  globalRoles: readonly GlobalRoleRank[];
+}): number | null {
+  const active = input.globalRoles.filter(
+    (role) => role.scope === "global" && role.is_active,
+  );
+  if (active.length === 0) return null;
+
+  const assigned = new Set(input.assignedRoleKeys ?? []);
+  const legacy = (input.legacyRole ?? "").trim();
+  let best = 0;
+  for (const role of active) {
+    const holds =
+      assigned.has(role.key) ||
+      (legacy === role.key && LEGACY_COLUMN_ROLE_KEYS.includes(legacy));
+    if (holds && role.priority > best) best = role.priority;
+  }
+  return best;
+}
+
+export interface SanctionMatrixInput {
+  /** The target is the caller. The trigger refuses that before ranking anybody. */
+  readonly isSelf: boolean;
+  /**
+   * `public.is_manager_or_admin(auth.uid())`, mirrored on the client — the RLS
+   * gate the write has to pass before the trigger ever runs. Use
+   * `matchesIsManagerOrAdmin` from `lib/serverRoleAccess.ts`: it reads the
+   * caller's own legacy column and own global role keys, both of which a person
+   * may always read about themselves.
+   *
+   * `null` while that check has not finished. Not the same as `false`, which is
+   * a refusal: «we have not asked» and «the database says no» look alike on
+   * screen and must not look alike here (D-198).
+   */
+  readonly callerIsServerStaff: boolean | null;
+  /** `effective_global_role_priority(auth.uid())`, or null while unknown. */
+  readonly callerPriority: number | null;
+  /** `effective_global_role_priority(target)`, or null while unknown. */
+  readonly targetPriority: number | null;
+  /** `roles.priority` of the active global `admin` role, or null while unknown. */
+  readonly adminPriority: number | null;
+  /** `roles.priority` of the active global `manager` role, or null while unknown. */
+  readonly managerPriority: number | null;
+}
+
+/**
+ * Whether the database will accept a sanction, refuse it, or whether the client
+ * cannot yet tell.
+ *
+ * `public.enforce_sanction_matrix()` guards `bans` and `mutes` on BEFORE INSERT
+ * **and** BEFORE DELETE — four triggers, read off production on 2026-09-19.
+ * Since D-197 it ranks both sides through `public.roles.priority` instead of
+ * the legacy `profiles.role` column:
+ *
+ *     target = caller              -> refuse, before any rank is read
+ *     caller_rank >= admin_rank    -> allow, whoever the target is
+ *     caller_rank >= manager_rank  -> refuse iff target_rank >= admin_rank
+ *     otherwise                    -> refuse
+ *
+ * Both comparisons are non-strict, and **neither compares the caller with the
+ * target**: the manager branch asks only whether the target reaches the admin
+ * threshold, so two managers may sanction each other. Live priorities that day:
+ * owner 100, tech_admin 100, admin 80, manager 60, user 10.
+ *
+ * `UsersTab` used to ask `isAdmin || target.role !== "admin"`, which reads the
+ * one column the database stopped ranking by. Three accounts carry
+ * `profiles.role = 'user'` and rank 100, so a manager would have been offered
+ * «Заблокировать…» for each of them and told «Менеджер не может применять
+ * санкции к администратору» only after filling in the form (D-200).
+ *
+ * **Why every input is nullable.** Measured on production the same day from a
+ * signed-in non-staff session: `public.roles` returns one row and
+ * `user_global_roles` returns one row — both policies are scoped to the roles
+ * you hold, and neither `roles.view` nor `users.assign_roles` belongs to
+ * `manager`. So a manager can compute neither rank nor either threshold from
+ * the tables. `public.effective_global_role_priority(uuid)` is SECURITY
+ * DEFINER with EXECUTE granted to `authenticated`, and that same session read
+ * 100 through it for a staff target, so the **ranks** are always obtainable and
+ * the **thresholds** are not. `unknown` is the answer for the gap, and a
+ * control must not be offered on it.
+ */
+export function sanctionMatrixVerdict(input: SanctionMatrixInput): SanctionVerdict {
+  if (input.isSelf) return "refused";
+  // RLS runs first: `managers insert bans` / `managers delete bans` and their
+  // `mutes` twins all ask `is_manager_or_admin(auth.uid())`, and the row never
+  // reaches the trigger without it.
+  if (input.callerIsServerStaff === null) return "unknown";
+  if (!input.callerIsServerStaff) return "refused";
+
+  const { callerPriority, targetPriority, adminPriority, managerPriority } = input;
+  if (callerPriority === null) return "unknown";
+
+  if (adminPriority === null) {
+    // No threshold, so only what the trigger's own branches guarantee whichever
+    // one the caller is in. A target who does not outrank the caller is below
+    // the admin threshold whenever the caller is below it, and irrelevant when
+    // the caller is at or above it. Anybody ranking higher could be on either
+    // side of a threshold this client cannot read.
+    if (targetPriority === null) return "unknown";
+    return targetPriority <= callerPriority ? "allowed" : "unknown";
+  }
+
+  if (callerPriority >= adminPriority) return "allowed";
+  if (managerPriority !== null && callerPriority < managerPriority) return "refused";
+  if (targetPriority === null) return "unknown";
+  return targetPriority >= adminPriority ? "refused" : "allowed";
+}

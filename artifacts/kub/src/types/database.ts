@@ -1699,6 +1699,23 @@ export interface Database {
         Args: { p_user_id: string; p_permission_key: string }
         Returns: boolean
       }
+      /**
+       * The highest `roles.priority` this person reaches among the active
+       * global roles, folding in the legacy `profiles.role` column exactly as
+       * `has_global_role` does. This is the number
+       * `public.enforce_sanction_matrix()` ranks both sides of a ban or a mute
+       * by (D-197), and it is SECURITY DEFINER with EXECUTE granted to
+       * `authenticated` — so a caller who may not read `public.roles` or
+       * anybody else's `user_global_roles` can still ask it about any account.
+       * That is the whole reason it is called rather than copied: measured on
+       * 2026-09-19, a signed-in non-staff session reads one row of `roles` and
+       * one of `user_global_roles`, and reads 100 for a staff target through
+       * this function.
+       */
+      effective_global_role_priority: {
+        Args: { p_user_id: string }
+        Returns: number
+      }
       has_location_role: {
         Args: { p_user_id: string; p_location_id: string; p_role_key: string }
         Returns: boolean

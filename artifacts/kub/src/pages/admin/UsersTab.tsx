@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { adminUserQuery, adminUserSearchFilters } from "@/lib/adminUserSearch";
-import { activeSanctionFilter, sanctionLiftPrompt } from "@/lib/sanctions";
+import {
+  activeSanctionFilter,
+  effectiveGlobalRolePriority,
+  sanctionLiftPrompt,
+  sanctionMatrixVerdict,
+} from "@/lib/sanctions";
 import {
   ADMIN_LOCATIONS_UNAVAILABLE,
   ADMIN_USER_PROFILE_UNAVAILABLE,
@@ -25,7 +30,12 @@ import {
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { BulkSelectControl } from "@/components/ui/BulkSelectControl";
 import { InfoHint } from "@/components/settings/InfoHint";
-import { clearRoleAccessCache, useIsAdmin, usePermissionAccess } from "@/hooks/useRole";
+import {
+  clearRoleAccessCache,
+  useIsAdmin,
+  useMatchesIsManagerOrAdmin,
+  usePermissionAccess,
+} from "@/hooks/useRole";
 import { useTaskRouting } from "@/hooks/useTaskRouting";
 import { KubBadge, KubButton, KubFilterButton, KubFilterSummary, KubIcon, KubModal, KubNoResults, KubNotice, KubPanel, KubSkeletonRows, type ActiveFilter } from "@/components/kub";
 import { BanModal } from "./BanModal";
@@ -44,6 +54,8 @@ import { cacheControlFor } from "@/lib/mediaCacheControl";
 
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
+/** How long the rank lookup waits for the role tables to answer first. */
+const RANK_LOOKUP_SETTLE_MS = 300;
 
 /** The name a question about this person should use, or nothing. */
 function profileName(user: Pick<Profile, "full_name" | "username">): string {
@@ -80,6 +92,10 @@ export function UsersTab() {
   const currentUser = useAppStore((s) => s.currentUser);
   const isAdmin = useIsAdmin();
   const phoneAccess = usePermissionAccess(["system.manage"]);
+  // `public.is_manager_or_admin(auth.uid())` — the policy behind every insert
+  // and delete on `bans` and `mutes`. Narrower than `isAdmin`, which also
+  // admits a permission no RLS policy knows about (lib/serverRoleAccess.ts).
+  const serverStaff = useMatchesIsManagerOrAdmin();
   const [dynamicRolesEnabled] = useDynamicRolesEnabledPreference();
   const dynamicRoles = useDynamicRoles({ enabled: dynamicRolesEnabled && isAdmin, includeAssignments: true });
   const routing = useTaskRouting({ enabled: isAdmin, includeMembers: true });
@@ -111,6 +127,9 @@ export function UsersTab() {
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
+  // `effective_global_role_priority` per account, for the callers who cannot
+  // read `public.roles` and therefore cannot work the number out locally.
+  const [askedPriorities, setAskedPriorities] = useState<Record<string, number>>({});
   const [banTarget, setBanTarget] = useState<Profile | null>(null);
   const [muteTarget, setMuteTarget] = useState<Profile | null>(null);
   const [profileTarget, setProfileTarget] = useState<Profile | null>(null);
@@ -302,6 +321,59 @@ export function UsersTab() {
     return byUser;
   }, [dynamicRoleById, dynamicRoles.available, dynamicRoles.userGlobalRoles]);
 
+  // ---------------------------------------------------------------------------
+  // What the database will actually accept (D-200).
+  //
+  // `public.enforce_sanction_matrix()` ranks both the caller and the target
+  // through `public.roles.priority` (D-197). The rule itself is in
+  // `lib/sanctions.ts`; this section only supplies the four numbers it wants,
+  // and says `null` for each one it cannot get rather than guessing it.
+  // ---------------------------------------------------------------------------
+
+  const activeGlobalRoles = useMemo(
+    () => dynamicRoles.roles.filter((role) => role.scope === "global" && role.is_active),
+    [dynamicRoles.roles],
+  );
+
+  const adminPriority = useMemo(
+    () => activeGlobalRoles.find((role) => role.key === "admin")?.priority ?? null,
+    [activeGlobalRoles],
+  );
+
+  const managerPriority = useMemo(
+    () => activeGlobalRoles.find((role) => role.key === "manager")?.priority ?? null,
+    [activeGlobalRoles],
+  );
+
+  const globalRoleKeysByUser = useMemo(() => {
+    const byUser = new Map<string, Set<string>>();
+    for (const [userId, roles] of dynamicRolesByUser) {
+      byUser.set(userId, new Set(roles.map((role) => role.key)));
+    }
+    return byUser;
+  }, [dynamicRolesByUser]);
+
+  /**
+   * The rank the database would give this account, or null while it is unknown.
+   *
+   * Worked out locally when the role tables are readable, which is the
+   * administrator's case and costs nothing. A manager reads one row of
+   * `public.roles` and one of `user_global_roles` — neither `roles.view` nor
+   * `users.assign_roles` belongs to that role — so for them the number comes
+   * from the database's own function instead, asked below.
+   */
+  const priorityOf = useCallback(
+    (userId: string, legacyRole: string | null | undefined): number | null =>
+      effectiveGlobalRolePriority({
+        legacyRole,
+        assignedRoleKeys: globalRoleKeysByUser.get(userId),
+        globalRoles: activeGlobalRoles,
+      }) ?? askedPriorities[userId] ?? null,
+    [activeGlobalRoles, askedPriorities, globalRoleKeysByUser],
+  );
+
+  const callerPriority = currentUser ? priorityOf(currentUser.id, currentUser.role) : null;
+
   const filteredRows = useMemo(() => {
     const q = queryRaw.trim().toLocaleLowerCase("ru-RU");
     return rows.filter((user) => {
@@ -352,6 +424,66 @@ export function UsersTab() {
     });
   }, [dynamicRoleById, dynamicRolesByUser, emails, globalRoleFilter, locationFilter, locationMembersByUser, locationRoleFilter, primaryAdminFilter, queryRaw, rows, showTestAccounts, statusFilter]);
 
+  /**
+   * The accounts still missing a rank, once the local route has failed.
+   *
+   * A sorted, joined signature rather than an array so the effect below does
+   * not re-run on every render of the same set; an id whose lookup fails stays
+   * missing and is retried once, then left alone rather than hammered.
+   */
+  const missingPriorityIds = useMemo(() => {
+    // `checked`, not `available`: while the role tables are still in flight the
+    // local route is not yet unavailable, it is unanswered. Asking then costs a
+    // request per visible row that the arriving roles immediately make
+    // redundant — measured, before this line said `checked`.
+    if (!dynamicRoles.checked) return "";
+    if (activeGlobalRoles.length > 0) return "";
+    if (serverStaff.checking || !serverStaff.allowed) return "";
+    const ids = new Set<string>();
+    if (currentUser && askedPriorities[currentUser.id] === undefined) ids.add(currentUser.id);
+    for (const user of filteredRows) {
+      if (askedPriorities[user.id] === undefined) ids.add(user.id);
+    }
+    return [...ids].sort().join(",");
+  }, [activeGlobalRoles.length, askedPriorities, currentUser, dynamicRoles.checked, filteredRows, serverStaff.allowed, serverStaff.checking]);
+
+  useEffect(() => {
+    if (!missingPriorityIds) return;
+    let cancelled = false;
+    const ids = missingPriorityIds.split(",");
+    // Waited out rather than asked on the first frame. `isAdmin` resolves a
+    // render or two after the tab mounts, and the role tables an administrator
+    // ranks from arrive with it; asking immediately cost one request per
+    // visible row that the arriving roles made redundant a moment later.
+    // Measured, on the run that first asserted this count.
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const answers = await Promise.all(
+          ids.map(async (id) => {
+            const { data, error } = await supabase.rpc("effective_global_role_priority", { p_user_id: id });
+            if (error || typeof data !== "number") {
+              if (import.meta.env.DEV && error) console.debug("[admin-users:rank]", error);
+              return null;
+            }
+            return [id, data] as const;
+          }),
+        );
+        if (cancelled) return;
+        const known = answers.filter((answer): answer is readonly [string, number] => answer !== null);
+        if (known.length === 0) return;
+        setAskedPriorities((current) => {
+          const next = { ...current };
+          for (const [id, priority] of known) next[id] = priority;
+          return next;
+        });
+      })();
+    }, RANK_LOOKUP_SETTLE_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [missingPriorityIds, supabase]);
+
   // Hidden, not lost: the count says they are there and one click shows them.
   const hiddenTestAccounts = useMemo(
     () => (showTestAccounts ? 0 : rows.filter((user) => user.is_test_account).length),
@@ -365,8 +497,29 @@ export function UsersTab() {
 
   const allVisibleSelected = filteredRows.length > 0 && filteredRows.every((user) => selectedIds.has(user.id));
 
-  const canSanction = (target: Profile) =>
-    target.id !== currentUser?.id && (isAdmin || target.role !== "admin");
+  /**
+   * Whether the database would accept a sanction against this person.
+   *
+   * This used to read `isAdmin || target.role !== "admin"`, which ranks the
+   * target by the legacy column the database stopped ranking by in D-197 — so a
+   * manager was offered the control for an owner and refused after filling in
+   * the form. `unknown` never offers the control: an administrator has every
+   * number locally, and a manager has the two ranks from the database's own
+   * function, so it is the short window before those arrive and the one target
+   * shape nothing on this client can settle (somebody who outranks a caller who
+   * cannot read the thresholds).
+   */
+  const sanctionVerdict = (target: Profile) =>
+    sanctionMatrixVerdict({
+      isSelf: target.id === currentUser?.id,
+      callerIsServerStaff: serverStaff.checking ? null : serverStaff.allowed,
+      callerPriority,
+      targetPriority: priorityOf(target.id, target.role),
+      adminPriority,
+      managerPriority,
+    });
+
+  const canSanction = (target: Profile) => sanctionVerdict(target) === "allowed";
 
   const refreshAdminData = useCallback(async () => {
     await load({ background: true });

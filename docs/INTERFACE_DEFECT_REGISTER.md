@@ -12356,7 +12356,7 @@ is hardcoded in three separate test files is part of why it drifted.
 
 ---
 
-## D-200 `[ ]` The users tab offers a manager a button the database will refuse
+## D-200 `[x]` The users tab offers a manager a button the database will refuse
 
 **Severity:** low while it is unreachable; it becomes real the moment anybody is
 given `manager` without `admin`.
@@ -12376,9 +12376,118 @@ global role only, and gets «Менеджер не может применять
 `effective_global_role_priority = 100` today, so no account takes the manager
 branch. Measured, not assumed.
 
-**What a fix needs:** the tab already loads `dynamicRolesByUser` and has
-`dynamicRoleRank`, so the data is present; the missing piece is ranking the
-target the way the database now does, rather than reading one column.
+### The rule, measured rather than assumed, 2026-09-19
+
+Read off `supabase-db` read-only, inside a transaction that ended in ROLLBACK.
+`enforce_sanction_matrix()` guards `bans` and `mutes` on BEFORE INSERT **and**
+BEFORE DELETE — four triggers, all present:
+
+    subject := new.user_id on INSERT, old.user_id on DELETE
+    auth.uid() is null           -> allow          (service role / SQL session)
+    subject = caller             -> refuse, before either threshold is read
+    admin_rank or manager_rank null -> refuse      («Матрица санкций не настроена»)
+    caller_rank >= admin_rank    -> allow, whoever the target is
+    caller_rank >= manager_rank  -> refuse iff subject_rank >= admin_rank
+    otherwise                    -> refuse
+
+Both comparisons are **non-strict**, and **neither side is compared with the
+other**: the manager branch asks only whether the *target* reaches the admin
+threshold, so two managers may sanction each other and a role seeded between the
+two thresholds is sanctionable by a manager. `admin_rank` is 80 and
+`manager_rank` 60; the ladder is owner 100, tech_admin 100, admin 80, manager
+60, user 10, all active. `effective_global_role_priority` folds the legacy
+column in through `has_global_role`, so a target with no assignment at all still
+ranks 10 rather than 0 — and a legacy `admin` with no assignment still ranks 80.
+RLS gates the write first: all four policies on the two tables ask
+`is_manager_or_admin(auth.uid())`, which tests only the caller.
+
+**Still unreachable, re-measured the same day.** 18 profiles: 5 at priority 100,
+13 at 10, nobody between. The `admin` and `manager` global roles carry 0
+assignments and no account carries `profiles.role = 'manager'`. Evaluating the
+*client's* predicates in SQL over every profile gives 0 accounts in the
+`isStaff && !isAdmin` band, so nothing on this deployment can take the branch.
+3 accounts are the target shape the old line misread: `profiles.role` other than
+`admin` with `effective_global_role_priority >= 80`.
+
+### The entry's premise was wrong, and that is the finding
+
+«the tab already loads `dynamicRolesByUser`» is false in the only case that
+matters, twice over. `useDynamicRoles` is enabled as `dynamicRolesEnabled &&
+isAdmin`, so for a manager it never runs — and RLS would refuse it anyway.
+Measured from a signed-in non-staff session: `public.roles` returns **one** row
+and `user_global_roles` returns **one**, because `roles select scoped` wants
+`roles.view` and `user_global_roles select scoped` wants `users.assign_roles`,
+neither of which belongs to `manager`. A manager can compute neither rank nor
+either threshold from the tables. `dynamicRoleRank` is no help either: it is a
+hand-written display order (owner 0 … user 4, unknown 9) that never reads
+`priority`.
+
+What a manager *can* do is ask. `public.effective_global_role_priority(uuid)` is
+SECURITY DEFINER with EXECUTE granted to `authenticated`, and the same non-staff
+session read **100** through it for a staff target while reading one row of
+`roles`. It is exposed through PostgREST: with the anon key the call answers
+`42501 permission denied for function`, where a name that does not exist answers
+`PGRST202 … not found in the schema cache` — proved in both directions.
+
+**Fix:** `lib/sanctions.ts` gains `sanctionMatrixVerdict`, a copy of the trigger
+that answers `allowed` / `refused` / **`unknown`**, and
+`effectiveGlobalRolePriority`, a copy of the database function. `UsersTab` feeds
+it four numbers and says `null` for each one it cannot get rather than guessing:
+the thresholds and both ranks come from the role tables when they are readable
+(an administrator, and no extra request at all), and from the database's own
+function per account when they are not (a manager). The caller side moved from
+the wide client `isAdmin` to `matchesIsManagerOrAdmin`, which is the RLS policy.
+
+**`unknown` does not offer the control, and that is a decision.** Offering it is
+the defect itself; the objection that hiding it for ever is a second defect is
+answered by making `unknown` transient rather than permanent — the ranks arrive,
+locally or from the RPC, and the control appears. What stays `unknown` is one
+shape only: a target who outranks a caller who cannot read the thresholds, which
+is exactly the shape the database refuses today. Everybody a manager may
+actually sanction gets the control.
+
+**Verified:** `tests/unit/sanction-matrix.test.mts` (21 cases: the rule, the
+rank, and the wiring read off the tab's syntax tree) and `tests/e2e/admin-sanction-control.spec.ts`, which builds the
+caller production has none of on the `adminFixture` host with invented people.
+Eleven mutations turn the unit suite red, among them reverting `canSanction` to
+the legacy column and keeping the matrix while feeding it that column; three
+turn the spec red, including treating `unknown` as permission. The spec's own
+assertion caught a real defect in the first patch: the fallback fired before the
+role tables answered, costing an administrator one request per visible row, and
+an ordering flaw in the spec itself — «Заблокировать… absent» is also what an
+unranked row looks like, so the negative case now runs only after a positive one
+has proved the ranks arrived.
+
+**Noticed in passing, not changed:** `lib/roleHierarchy.ts` and the `priority`
+comment in `types/database.ts` both still tell the reader that the column is
+presentation and that moving a role up the ladder «grants it exactly nothing».
+That was true when it was written and D-197 made it false — priority now decides
+who may sanction whom. Left to the agent holding the role-colour files.
+
+**Residual, named rather than folded in: the client cannot tell an unreadable
+catalogue from an unconfigured one.** `adminPriority` is `null` in two different
+states — the `roles` catalogue was not readable (a manager reads exactly one row,
+their own), and the catalogue was read and carries no active global `admin` role
+at all. The trigger's own second branch refuses everything in the second state
+(«Матрица санкций не настроена»), so an administrator would keep being offered a
+control the database refuses — this entry's defect, in the one corner the fix
+does not cover.
+
+It was left alone deliberately. The obvious signal, "the catalogue is non-empty,
+so it was read", is wrong in exactly the case the fix exists for: a manager's
+catalogue is non-empty and contains only their own row, and treating that as a
+complete read would refuse every sanction a manager may actually apply. Telling
+the two apart needs the caller's `roles.view` permission, and a heuristic inside
+a mirror of an authority is how the next one of these gets written. Reaching the
+state requires deleting or deactivating the global `admin` role, which is a
+deliberate act in the roles panel, and the database answers it with a sentence
+that names the cause.
+
+**Also uncovered, and not this entry's to fix:** `lib/roleHierarchy.ts` and the
+`priority` comment in `types/database.ts` both still tell a reader that the
+column is presentation only and that moving a role up the ladder «grants it
+exactly nothing». That was true when written and D-197 made it false — the
+column is now an authority the database ranks by. See D-214's territory.
 
 ---
 
