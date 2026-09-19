@@ -1,3 +1,4 @@
+import { createDevToolsFeature } from "#pf/app/devtools";
 import { createGroupFeature } from "#pf/app/group";
 import { createInboxFeature } from "#pf/app/inbox";
 import { createRemindersFeature } from "#pf/app/reminders";
@@ -29,6 +30,7 @@ export function createFeatures(): Feature[] {
     webhooksFeature(),
     createSettingsFeature(),
     createGroupFeature(),
+    createDevToolsFeature(),
     createSelftestFeature(),
     createInboxFeature(),
   ];

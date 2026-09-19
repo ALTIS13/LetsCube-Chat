@@ -26,6 +26,14 @@ nothing about whether a third-party developer could build the same thing.
 - **Watcher.** `/watch` follows a URL and tells you when its state *changes*:
   «🔴 example.com недоступен, 200 → 503», and the green one on recovery. Not on
   every poll — on a change.
+- **Polls and checklists.** `/poll Обедаем? | Да | Нет` and
+  `/task Релиз | собрать | выкатить`. The platform has neither, so these are a
+  message with inline buttons whose tally is edited in place — which is what a
+  poll looks like anyway, with the counting done here instead of by the server.
+- **`/streamdemo`.** A progressive report, for a platform with no streaming
+  API: one message, edited as the work proceeds, then a persistent result.
+- **`/status` and `/settings`.** What you have, and the time zone reminders are
+  read in.
 - **`/selftest`.** A capability report for the platform itself, with five
   statuses and no flattery. See below.
 

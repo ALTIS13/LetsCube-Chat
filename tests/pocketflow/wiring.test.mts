@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createFeatures } from "../../artifacts/pocketflow/src/app/features.ts";
-import { START_SCREEN_ACTIONS } from "../../artifacts/pocketflow/src/app/inbox.ts";
+import { HELP, START_SCREEN_ACTIONS } from "../../artifacts/pocketflow/src/app/inbox.ts";
 import { createRouter } from "../../artifacts/pocketflow/src/app/router.ts";
 
 /**
@@ -84,9 +84,25 @@ test("the inbox is asked last, so a feature mid-conversation claims its answer f
   const names = createFeatures().map((feature) => feature.name);
   assert.equal(names[names.length - 1], "inbox", "the inbox must be asked last");
   const inbox = names.indexOf("inbox");
-  for (const earlier of ["reminders", "watcher", "webhooks", "settings", "group", "selftest"]) {
+  for (const earlier of ["reminders", "watcher", "webhooks", "settings", "group", "devtools", "selftest"]) {
     const index = names.indexOf(earlier);
     assert.ok(index >= 0, `${earlier} is not registered`);
     assert.ok(index < inbox, `${earlier} must be asked before the inbox`);
+  }
+});
+
+test("every command /help advertises is a command that exists", () => {
+  // The help text is written by hand and the handlers are registered in code,
+  // so they are two lists that drift. A promised command that answers «не знаю
+  // такой команды» is the first thing a new user meets.
+  const features = createFeatures();
+  const handlers = new Set(features.flatMap((feature) => Object.keys(feature.commands ?? {})));
+  const NL = String.fromCharCode(10);
+  const advertised = HELP.split(NL)
+    .map((line) => /^\/([a-z_]+)/.exec(line.trim())?.[1])
+    .filter((name): name is string => Boolean(name));
+  assert.ok(advertised.length >= 6, `only ${advertised.length} commands found in /help`);
+  for (const name of advertised) {
+    assert.ok(handlers.has(name), `/help advertises /${name}, which nothing handles`);
   }
 });
