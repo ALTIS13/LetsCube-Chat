@@ -17456,7 +17456,7 @@ test is scoped to the updater writer so the two are not conflated.
 
 ---
 
-## D-252 `[ ]` The voice service-line test pins two database objects at versions production stopped running the same day
+## D-252 `[x]` The voice service-line test pins two database objects at versions production stopped running the same day
 
 **Severity:** medium, and of the kind that is only ever noticed by accident —
 nothing is wrong in the product, but a test that says it measures the recorded
@@ -17539,3 +17539,87 @@ clearing a stale flag in one statement, with the end line still landing.
 is inert until something compares it with `now()`; on the day a migration adds
 such a comparison, every fixture constant already in the suite acquires an
 expiry date, and the test that fails is not the one that was changed.
+
+### Fixed on 2026-09-19: two bases, and a case that keeps the chain honest
+
+**The structure.** `VOICE_MIGRATIONS` + `SUBJECT` became one ordered `CHAIN`
+running to the end of the record (`20260918280000`), with `SUBJECT` a member of
+it rather than something applied afterwards, and `BEFORE_SUBJECT` derived as
+`CHAIN.slice(0, CHAIN.indexOf(SUBJECT))`. Two builders come out of that, and
+every case now declares which it uses:
+
+- `databaseAsRecorded()` — the whole chain, what production runs. All eighteen
+  behavioural cases.
+- `databaseBeforeSubject()` — the chain truncated immediately before the
+  subject, so applying `SUBJECT` last is honest. The four self-check mutations,
+  the rollback, the deploy-moment case, and idempotence.
+
+The trap this entry predicted was measured rather than argued: with the whole
+chain applied and `SUBJECT` then applied on top — which is what widening the
+list alone would produce — the suite still reports 24 of 26 green, and the two
+that fail are the new private-chat case and the new ordering guard. The old
+writer is quietly back and nothing that existed before this fix notices.
+
+**`20260918260000` is excluded**, and so is `20260918180000`, which wants the
+`realtime` schema. Neither defines an object under test, and a `pg_cron` stub
+would only let that migration's self-check assert against the stub. The
+exclusion is not taken on faith: with the chain exactly as committed, all twelve
+functions and the trigger are byte-identical to production.
+
+**The md5 comparison, re-run rather than trusted** — read-only on `supabase-db`
+(PostgreSQL 17.6, `begin read only` … `rollback`) on 2026-09-19, against the
+same probe in PGlite:
+
+| Object | Old pinned base | New `CHAIN` | Production |
+| --- | --- | --- | --- |
+| `private.voice_channel_recount(uuid)` | `f828fd34…` | `5e2c7a3b…` | `5e2c7a3b…` |
+| `public.write_voice_call_service_message()` | `7cbc41ea…` | `38554dee…` | `38554dee…` |
+| the other ten functions, and the trigger | identical | identical | identical |
+
+**Which cases changed their answer when the base moved: none of the ones that
+already existed.** All 23 were green before and are green after, and that is the
+finding rather than a disappointment — `20260918240000` only adds ring arms
+beside the `active_since` one, and `20260918280000` only adds an early return
+for a chat type no case in the file had ever built. The stale base cost nothing
+that could be observed, which is exactly why it survived. To make the widening
+load-bearing, one behavioural case was added for the interaction
+`20260918280000` exists to fix: a private chat's room filling and emptying,
+which must stay silent.
+
+**Mutation evidence.** Eight runs, on a scratch copy of the file whose
+`migrationSql` applies a substitution and asserts it matched exactly once, and
+whose `CHAIN` can be overridden. Nothing under `.migration-backup/` was edited.
+
+| Mutation | Old base | New base |
+| --- | --- | --- |
+| the `'private'` early return in `20260918280000` disabled | invisible | **red**: the private case |
+| the two-minute grace in `20260918240000`'s recount → `'0 seconds'` | **invisible** | **red**: "the end line lands with no room_finished webhook at all" |
+| the same grace in `20260918170000`'s recount → `'0 seconds'` | **red**: the same case | invisible |
+
+The middle row is the defect stated as an experiment: a mutation to the recount
+production actually runs changed nothing under the old base. The bottom row is
+its mirror — under the old base the suite was measuring a function that had been
+superseded eight hours after it was written.
+
+**And a guard so it cannot recur quietly.** Two new cases. The first scans every
+recorded migration (comments stripped, whitespace collapsed) for a definition of
+any of the twelve functions or the trigger, and fails naming any file that
+defines one and is not in `CHAIN`; it also asserts at least one definer per
+object, so a scanner that has stopped matching goes red instead of passing. The
+second asserts `CHAIN` is in the record's order and that `SUBJECT` is not its
+last entry — the state this entry describes. What neither can see is stated in
+the file: a migration that changes what these objects *do* without redefining
+them is exactly the shape `20260918280000` was, and the answer to that is a
+behavioural case, not a scan.
+
+**Uncovered on the way.** `"a call already in progress when this is applied does
+not announce an ending"` was ordering its final assertion by `created_at, id`,
+the one query in the file still doing so — the tie the `lines()` helper's own
+comment documents. Measured at roughly one run in six on this workstation, and
+it is a flake that predates all of this. Now `order by ctid` like the rest; 12
+consecutive runs of the file green afterwards. Also noted, not acted on:
+`20260918280000` is one of only three migrations since 2026-09-11 with no
+recorded `.rollback.sql`, and the other two are the production repairs whose
+rollbacks are documented in their own headers.
+
+`tests/server` stands at **127/127**, from 124 plus these three cases.

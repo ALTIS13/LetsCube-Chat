@@ -20,10 +20,34 @@
  * schema as the migrations record it. It proves nothing about an object
  * production has and the migrations do not show; that is what a rehearsal on a
  * schema copy is for.
+ *
+ * ── Two bases, and why (D-252) ─────────────────────────────────────────────
+ *
+ * «The schema as the migrations record it» was a claim this file made and did
+ * not keep. It used to apply four recorded migrations and then the subject, and
+ * two of the objects it measures had been redefined **later the same day** --
+ * so every case here was green about a `private.voice_channel_recount` and a
+ * `write_voice_call_service_message` that production had already replaced. The
+ * record was honest; the fixed subset was not.
+ *
+ * So there are two bases now, and a case declares which it is for:
+ *
+ *   `databaseAsRecorded()`     the whole of `CHAIN` -- what production runs.
+ *                              Every behavioural case uses it, because a
+ *                              behavioural case is a claim about the product.
+ *   `databaseBeforeSubject()`  `CHAIN` truncated immediately before `SUBJECT`.
+ *                              Only the cases about the subject *file* use it:
+ *                              the four self-check mutations, idempotence, the
+ *                              rollback, and the deploy-moment case. All of
+ *                              them apply `SUBJECT` last, and applying it last
+ *                              on a database that has already run
+ *                              `20260918280000` would silently reinstate the
+ *                              writer that migration replaced -- a widening
+ *                              that looks like it worked and did not.
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test, { after, before } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -39,14 +63,78 @@ const rollbackSql = (name) =>
     "utf8",
   );
 
-/** The recorded migrations that own the objects this one hangs off, in order. */
-const VOICE_MIGRATIONS = [
-  "20260913150000_voice_channels",
-  "20260914140000_channel_categories",
-  "20260918160000_voice_rooms_many_and_the_stuck_flag",
-  "20260918170000_voice_recount_writes_only_when_something_changed",
+/**
+ * Everything below depends on the definition of one of these, so a recorded
+ * migration that replaces any of them belongs in `CHAIN`. The nine
+ * `20260913150000` created, the three `20260918200000` added, and the trigger.
+ */
+const OBJECTS_UNDER_TEST = [
+  "public.voice_channel_chat",
+  "private.voice_channel_recount",
+  "public.voice_participant_joined",
+  "public.voice_participant_left",
+  "public.voice_participants_replace",
+  "public.voice_channel_set_active",
+  "public.voice_participants_reap",
+  "public.voice_webhook_event_seen",
+  "public.voice_webhook_events_purge",
+  "public.voice_call_transition",
+  "public.voice_call_service_line",
+  "public.write_voice_call_service_message",
 ];
+const TRIGGER_UNDER_TEST = "trg_voice_call_service_message";
+
+/**
+ * The recorded migrations that own those objects, in the order the record
+ * applies them, ending where the record ends rather than where this file was
+ * written.
+ *
+ * "every recorded migration that defines one of these objects is in the chain"
+ * below asserts exactly that, so the list cannot go stale again in silence --
+ * which is the whole of D-252. An entry that owns nothing is here because the
+ * record needs it, and the need was measured rather than assumed: dropping it
+ * makes the next file fail to apply, with the error quoted beside it.
+ *
+ * Two recorded files inside this span are absent and neither owns an object
+ * under test: `20260918180000` wants the `realtime` schema and `20260918260000`
+ * wants `pg_cron`, and a stub of either would be a self-check asserting against
+ * the stub. Their absence is not taken on faith. With the chain exactly as
+ * written, `md5(pg_get_functiondef())` for all twelve functions and
+ * `md5(pg_get_triggerdef())` for the trigger are identical to production, read
+ * off `supabase-db` read-only on 2026-09-19; the two the old list got wrong
+ * were `private.voice_channel_recount` and
+ * `public.write_voice_call_service_message`.
+ */
+const CHAIN = [
+  // owns the voice tables, the webhook RPCs and private.voice_channel_recount
+  "20260913150000_voice_channels",
+  // needed: voice_channels.category_id, or 20260918160000 will not apply
+  "20260914140000_channel_categories",
+  // many rooms per chat, and the stuck-flag repair the hand-zeroed case cites
+  "20260918160000_voice_rooms_many_and_the_stuck_flag",
+  // owns private.voice_channel_recount: the write-only-when-changed rewrite
+  "20260918170000_voice_recount_writes_only_when_something_changed",
+  // owns voice_call_transition, voice_call_service_line, the writer and the
+  // trigger -- the SUBJECT below, and deliberately not the end of the chain
+  "20260918200000_a_call_says_so_in_the_conversation",
+  // needed: voice_channels.ring_*, or 20260918230000's self-check will not pass
+  "20260918220000_a_private_chat_can_ring",
+  "20260918230000_a_ring_cannot_be_forged",
+  // owns private.voice_channel_recount: the ring-residue arms beside active_since
+  "20260918240000_a_call_that_died_does_not_lock_the_pair_out",
+  // needed: messages.system_payload, or 20260918280000 will not apply
+  "20260918250000_a_call_says_so_in_the_private_chat",
+  "20260918270000_a_call_over_an_hour_says_hours",
+  // owns write_voice_call_service_message: the private-chat early return
+  "20260918280000_a_private_chat_has_no_channel_to_announce",
+];
+
+/**
+ * The file whose self-check, idempotence and rollback are measured below. It is
+ * a member of `CHAIN`, and deliberately not its last member.
+ */
 const SUBJECT = "20260918200000_a_call_says_so_in_the_conversation";
+const BEFORE_SUBJECT = CHAIN.slice(0, CHAIN.indexOf(SUBJECT));
 
 /**
  * Everything the four voice migrations and the new one reference, and nothing
@@ -212,19 +300,29 @@ async function execOrRollback(db, sql) {
   }
 }
 
-async function freshDatabase() {
+/** The stub plus the named recorded migrations, applied in the order given. */
+async function databaseThrough(names) {
   const db = await new PGlite();
   await db.exec(STUB);
-  for (const name of VOICE_MIGRATIONS) await execOrRollback(db, migrationSql(name));
+  for (const name of names) await execOrRollback(db, migrationSql(name));
   return db;
 }
+
+/** What production runs. Every behavioural case below is measured against it. */
+const databaseAsRecorded = () => databaseThrough(CHAIN);
+
+/**
+ * The chain truncated immediately before the subject, so that applying the
+ * subject -- whole, mutated, or followed by its rollback -- leaves it the last
+ * word on the objects it owns. Only the cases about the subject file use this.
+ */
+const databaseBeforeSubject = () => databaseThrough(BEFORE_SUBJECT);
 
 /** @type {PGlite} */
 let db;
 
 before(async () => {
-  db = await freshDatabase();
-  await execOrRollback(db, migrationSql(SUBJECT));
+  db = await databaseAsRecorded();
 });
 
 after(async () => {
@@ -264,6 +362,47 @@ async function group(roomName = "Общая") {
     )
   ).rows[0].id;
   return { chat, channel, anna, boris, outsider };
+}
+
+/**
+ * A private chat between two people, with the one room a call there gets.
+ *
+ * Built by hand rather than through `public.voice_private_room`, which wants an
+ * `auth.uid()` and a `blocked_from_chat` this stub has not got; the row is the
+ * shape that function inserts -- «Звонок», two seats -- copied from
+ * `20260918220000`. What matters is only that the chat is of type `private` and
+ * that it has a `voice_channels` row, because that pair is precisely what did
+ * not exist when the trigger was written.
+ */
+async function privatePair() {
+  serial += 1;
+  const suffix = String(serial).padStart(4, "0");
+  const anna = `aaaaaaaa-aaaa-4aaa-8aaa-${suffix}00000001`;
+  const boris = `bbbbbbbb-bbbb-4bbb-8bbb-${suffix}00000002`;
+  await db.exec(`
+    insert into auth.users (id) values ('${anna}'), ('${boris}');
+    insert into public.profiles (id, full_name, username)
+      values ('${anna}', 'Анна Ковалёва', 'anna${suffix}'),
+             ('${boris}', 'Борис Ильин', 'boris${suffix}');
+  `);
+  const chat = (
+    await db.query(
+      `insert into public.chats (type, created_by) values ('private', $1) returning id`,
+      [anna],
+    )
+  ).rows[0].id;
+  await db.exec(`
+    insert into public.chat_members (chat_id, user_id, role)
+      values ('${chat}', '${anna}', 'owner'), ('${chat}', '${boris}', 'member');
+  `);
+  const channel = (
+    await db.query(
+      `insert into public.voice_channels (chat_id, name, max_participants, created_by)
+         values ($1, 'Звонок', 2, $2) returning id`,
+      [chat, anna],
+    )
+  ).rows[0].id;
+  return { chat, channel, anna, boris };
 }
 
 /**
@@ -532,7 +671,11 @@ test("a call already in progress when this is applied does not announce an endin
   // the room **before** the trigger exists, so the conversation was never told
   // a call began. Raising the count after the migration would be a 0 -> N
   // transition like any other and would measure nothing.
-  const fresh = await freshDatabase();
+  //
+  // Base: `databaseBeforeSubject()`. This case is about the moment `SUBJECT`
+  // was applied, so the schema it is applied to has to be the one that existed
+  // then -- the chain's later entries had not been written.
+  const fresh = await databaseBeforeSubject();
   try {
     const chat = (
       await fresh.query(
@@ -568,12 +711,20 @@ test("a call already in progress when this is applied does not announce an endin
     assert.deepEqual(after, [], "a call in progress at deploy time announced an ending");
 
     // And the next real call announces itself normally.
+    //
+    // `ctid`, for the reason the `lines()` helper above gives: PGlite's clock
+    // ties the two `created_at` values and the fallback to a random `id` then
+    // shuffles the pair. This query was the one place in the file still
+    // ordering by `created_at, id`, and it flaked -- measured on 2026-09-19 at
+    // roughly one run in six, on a database no change of mine touches.
     await fresh.query(`select public.voice_participant_joined($1, $2, $3)`, [channel, user, T(5)]);
     await fresh.query(`select public.voice_participant_left($1, $2, $3)`, [channel, user, T(6)]);
     assert.deepEqual(
-      (await fresh.query(`select content from public.messages where chat_id = $1 order by created_at, id`, [chat])).rows.map(
-        (row) => row.content,
-      ),
+      (
+        await fresh.query(`select content from public.messages where chat_id = $1 order by ctid`, [
+          chat,
+        ])
+      ).rows.map((row) => row.content),
       ["Начался разговор в канале «Общая»", "Разговор в канале «Общая» закончился"],
     );
   } finally {
@@ -644,6 +795,59 @@ test("a second call is a second pair of lines", async () => {
   assert.deepEqual(await contents(chat), [
     "Начался разговор в канале «Общая»",
     "Разговор в канале «Общая» закончился",
+    "Начался разговор в канале «Общая»",
+    "Разговор в канале «Общая» закончился",
+  ]);
+});
+
+// ── the room that is not a channel ───────────────────────────────────────────
+
+test("a private chat's room fills and empties and the conversation stays silent", async () => {
+  // `20260918280000`, and the only case in this file that can tell the current
+  // writer from the one it replaced. Everything above seeds a group, for which
+  // the two are identical -- which is why the stale chain cost nothing visible
+  // and could have gone on costing nothing visible indefinitely.
+  //
+  // The owner found the defect on their first real call: five lines about one
+  // cancelled call, four of them from this trigger, naming a «канал» that
+  // exists only as `voice_private_room`'s internal name for the row. A private
+  // chat has no channel, and slice B already writes the call down from
+  // `voice_call_stop` with the outcome, the direction and the length.
+  //
+  // This is the case that makes `CHAIN` load-bearing rather than decorative.
+  // Measured on 2026-09-19: drop `20260918280000` from `CHAIN` and it fails on
+  // the first assertion with the two lines the migration exists to forbid,
+  // while every other case in the file stays green.
+  const { chat, channel, anna, boris } = await privatePair();
+
+  await setActive(channel, T(0));
+  await joined(channel, anna, T(1));
+  await joined(channel, boris, T(2));
+  assert.deepEqual(
+    await contents(chat),
+    [],
+    "a private chat was told a conversation began in a channel it has not got",
+  );
+
+  await left(channel, anna, T(3));
+  await left(channel, boris, T(4));
+  assert.deepEqual(
+    await contents(chat),
+    [],
+    "a private chat was told a conversation in a channel ended",
+  );
+
+  // The early return comes before the latch, so the row is left alone rather
+  // than half-written: a later change that moved the check below the transition
+  // arithmetic would leave this set.
+  assert.equal(await latch(channel), null, "the private room latched a call as announced");
+
+  // And the group beside it is unaffected -- the fix is a private-chat early
+  // return, not a trigger that has stopped working.
+  const heard = await group("Общая");
+  await joined(heard.channel, heard.anna, T(1));
+  await left(heard.channel, heard.anna, T(2));
+  assert.deepEqual(await contents(heard.chat), [
     "Начался разговор в канале «Общая»",
     "Разговор в канале «Общая» закончился",
   ]);
@@ -791,17 +995,171 @@ test("nobody may call the writer, and nobody may set the latch", async () => {
   );
 });
 
+// ── the chain itself ─────────────────────────────────────────────────────────
+
+/**
+ * Comments stripped, whitespace collapsed, lowercased.
+ *
+ * Without it the scan below finds a `create or replace function` for the writer
+ * in the prose of every migration that discusses one, and reports files that
+ * change nothing. Both comment forms go: the doc blocks these files open with,
+ * and a double dash to end of line. A double dash inside a string literal can
+ * only cost the scan a match, never invent one, and the per-object floor below
+ * turns a scanner that has stopped matching into a failure rather than a pass.
+ */
+function sqlOnly(text) {
+  let out = "";
+  let rest = text;
+  for (;;) {
+    const open = rest.indexOf("/*");
+    if (open < 0) break;
+    const close = rest.indexOf("*/", open + 2);
+    if (close < 0) {
+      rest = rest.slice(0, open);
+      break;
+    }
+    out += rest.slice(0, open) + " ";
+    rest = rest.slice(close + 2);
+  }
+  out += rest;
+  return out
+    .split("\n")
+    .map((line) => {
+      const dashes = line.indexOf("--");
+      return dashes < 0 ? line : line.slice(0, dashes);
+    })
+    .join(" ")
+    .split(/\s+/)
+    .join(" ")
+    .toLowerCase();
+}
+
+const MIGRATION_DIR = path.join(root, ".migration-backup/supabase/migrations");
+
+/** Applied migrations only: a rollback undoes one and a rehearsal never runs. */
+const recordedMigrations = () =>
+  readdirSync(MIGRATION_DIR)
+    .filter((name) => name.endsWith(".sql"))
+    .filter((name) => !name.endsWith(".rollback.sql") && !name.endsWith(".rehearsal.sql"))
+    .map((name) => name.slice(0, -4))
+    .sort();
+
+test("every recorded migration that defines one of these objects is in the chain", async () => {
+  // The repair for D-252, and the only part of it that keeps working after
+  // today. The old list was correct when it was written and wrong eight hours
+  // later, because nothing connected it to the record. This does.
+  //
+  // What it cannot see is named rather than implied: a migration that changes
+  // what these objects *do* without redefining them -- a column one of them
+  // reads, a constraint on a table one of them writes -- passes this case.
+  // That is the shape `20260918280000` itself describes, and the answer to it
+  // is a behavioural case, not a scan.
+  const owners = new Map();
+  const note = (object, file) => {
+    if (!owners.has(object)) owners.set(object, []);
+    owners.get(object).push(file);
+  };
+  for (const name of recordedMigrations()) {
+    const sql = sqlOnly(migrationSql(name));
+    for (const qualified of OBJECTS_UNDER_TEST) {
+      const bare = qualified.slice(qualified.indexOf(".") + 1);
+      const defines = [qualified, bare].some(
+        (spelling) =>
+          sql.includes(`create function ${spelling}(`) ||
+          sql.includes(`create or replace function ${spelling}(`),
+      );
+      if (defines) note(qualified, name);
+    }
+    if (
+      sql.includes(`create trigger ${TRIGGER_UNDER_TEST}`) ||
+      sql.includes(`create or replace trigger ${TRIGGER_UNDER_TEST}`)
+    ) {
+      note(TRIGGER_UNDER_TEST, name);
+    }
+  }
+
+  // A scanner that has stopped matching would otherwise pass this case by
+  // finding nothing to complain about.
+  for (const object of [...OBJECTS_UNDER_TEST, TRIGGER_UNDER_TEST]) {
+    assert.ok(
+      (owners.get(object) ?? []).length > 0,
+      `no recorded migration appears to define ${object}, so this scan is broken`,
+    );
+  }
+
+  const strays = [];
+  for (const [object, files] of owners) {
+    for (const file of files) {
+      if (!CHAIN.includes(file)) strays.push(`${file} redefines ${object}`);
+    }
+  }
+  assert.deepEqual(
+    strays,
+    [],
+    "a recorded migration redefines an object this file measures and is not in CHAIN, so " +
+      "every case here is asserting something about a definition production has replaced",
+  );
+});
+
+test("the chain is in the record's own order, and the subject is not its last entry", async () => {
+  const recorded = new Set(recordedMigrations());
+  for (const name of CHAIN) {
+    assert.ok(recorded.has(name), `CHAIN names ${name}, which is not a recorded migration`);
+  }
+  assert.deepEqual(CHAIN, [...CHAIN].sort(), "CHAIN is not in the order the record applies it");
+  assert.ok(CHAIN.includes(SUBJECT), "SUBJECT is not in CHAIN");
+  assert.ok(
+    BEFORE_SUBJECT.length > 0 && BEFORE_SUBJECT.length < CHAIN.length,
+    "BEFORE_SUBJECT is the whole chain or none of it, so one of the two bases is not a base",
+  );
+  assert.ok(
+    CHAIN.indexOf(SUBJECT) < CHAIN.length - 1,
+    "SUBJECT is the last entry of CHAIN again, which is the state D-252 described",
+  );
+});
+
 // ── the file itself ──────────────────────────────────────────────────────────
 
 test("the migration applies again over itself and takes no second effect", async () => {
-  const { chat, channel, anna } = await group("Общая");
-  await joined(channel, anna, T(1));
-  await execOrRollback(db, migrationSql(SUBJECT));
-  await left(channel, anna, T(2));
-  assert.deepEqual(await contents(chat), [
-    "Начался разговор в канале «Общая»",
-    "Разговор в канале «Общая» закончился",
-  ]);
+  // Base: `databaseBeforeSubject()`, and it used to be the shared one. Applying
+  // `SUBJECT` a second time to the shared database was harmless while the
+  // shared database ended on `SUBJECT`; now that it ends on `20260918280000`
+  // the same two lines would have quietly downgraded the writer for every case
+  // ordered after this one. Idempotence is a property of the file, so it is
+  // measured where the file is the last word.
+  const fresh = await databaseBeforeSubject();
+  try {
+    await execOrRollback(fresh, migrationSql(SUBJECT));
+    const chat = (
+      await fresh.query(
+        `insert into public.chats (type, name) values ('group', 'Команда') returning id`,
+      )
+    ).rows[0].id;
+    const channel = (
+      await fresh.query(
+        `insert into public.voice_channels (chat_id, name) values ($1, 'Общая') returning id`,
+        [chat],
+      )
+    ).rows[0].id;
+    const user = "ffffffff-ffff-4fff-8fff-000000000001";
+    await fresh.exec(`insert into auth.users (id) values ('${user}');
+      insert into public.profiles (id, full_name) values ('${user}', 'Анна Ковалёва');`);
+
+    await fresh.query(`select public.voice_participant_joined($1, $2, $3)`, [channel, user, T(1)]);
+    await execOrRollback(fresh, migrationSql(SUBJECT));
+    await fresh.query(`select public.voice_participant_left($1, $2, $3)`, [channel, user, T(2)]);
+
+    assert.deepEqual(
+      (
+        await fresh.query(`select content from public.messages where chat_id = $1 order by ctid`, [
+          chat,
+        ])
+      ).rows.map((row) => row.content),
+      ["Начался разговор в канале «Общая»", "Разговор в канале «Общая» закончился"],
+    );
+  } finally {
+    await fresh.close();
+  }
 });
 
 /**
@@ -861,7 +1219,11 @@ for (const mutation of SELF_CHECK_MUTATIONS) {
       "the mutation matched nothing in the migration, so this case proves nothing",
     );
     const mutated = source.replace(mutation.from, mutation.to);
-    const broken = await freshDatabase();
+    // Base: `databaseBeforeSubject()`, so the mutated file is the last word on
+    // the objects it owns. On the full chain, `20260918280000` would replace
+    // the writer immediately afterwards and the mutation would be measuring
+    // nothing -- which is exactly the trap D-252 named.
+    const broken = await databaseBeforeSubject();
     try {
       await assert.rejects(
         () => execOrRollback(broken, mutated),
@@ -884,7 +1246,11 @@ for (const mutation of SELF_CHECK_MUTATIONS) {
 }
 
 test("the rollback removes the trigger, the functions and the column, and keeps the lines", async () => {
-  const fresh = await freshDatabase();
+  // Base: `databaseBeforeSubject()`. A rollback of `SUBJECT` is only meaningful
+  // over the schema `SUBJECT` was applied to; run over the full chain it would
+  // drop objects `20260918280000` had since replaced and leave a shape nothing
+  // ever had.
+  const fresh = await databaseBeforeSubject();
   try {
     await execOrRollback(fresh, migrationSql(SUBJECT));
     const chat = (
