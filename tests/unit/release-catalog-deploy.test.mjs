@@ -293,6 +293,92 @@ test("signed updater manifest reads the validated immutable signature copy", () 
   assert.equal(manifest.platforms["windows-x86_64"].signature, immutableSignature);
 });
 
+/**
+ * D-251: a blocking update could not be published at all.
+ *
+ * The shell has had the whole `critical_update_required` state since it
+ * shipped — it blocks the window and refuses to be dismissed — and
+ * `write_updater_manifest` hard-coded `mandatory: false` and
+ * `minimumSupportedVersion: null`, so nothing the publisher wrote could ever
+ * reach it. The lever existed at one end and was not connected at the other,
+ * and the first person to reach for it would have been doing so during an
+ * incident.
+ *
+ * These run the publisher for real. They stop before minisign is needed,
+ * because the validation fires ahead of the file checks — which is itself
+ * the point: a bad `--minimum-supported-version` is refused before anything
+ * is signed, copied or locked.
+ */
+const updaterArgs = (version, channel, minimum) => [
+  publisherPath,
+  "windows",
+  version,
+  "/nonexistent-installer.exe",
+  "notes",
+  "--channel",
+  channel,
+  "--updater-artifact",
+  "/nonexistent-artifact.exe",
+  "--signature-file",
+  "/nonexistent-signature.sig",
+  ...(minimum === null ? [] : ["--minimum-supported-version", minimum]),
+];
+
+const runPublisher = (version, channel, minimum) =>
+  spawnSync(bash, updaterArgs(version, channel, minimum), { encoding: "utf8" });
+
+test("a minimum supported version is validated before anything is signed", () => {
+  const malformed = runPublisher("0.2.15", "stable", "1.2");
+  assert.notEqual(malformed.status, 0);
+  assert.match(malformed.stderr, /minimum supported version must be strict SemVer/);
+
+  // A minimum above the release strands everybody, including whoever installs
+  // it next, and the shell offers no way down.
+  const tooHigh = runPublisher("0.2.15", "stable", "0.2.16");
+  assert.notEqual(tooHigh.status, 0);
+  assert.match(tooHigh.stderr, /must not exceed the published version/);
+
+  // Refused on test rather than written and ignored: `is_critical_stable`
+  // honours it only on stable, so accepting it here would let somebody
+  // believe they had done something they had not.
+  const onTest = runPublisher("0.2.15", "test", "0.2.14");
+  assert.notEqual(onTest.status, 0);
+  assert.match(onTest.stderr, /only on the stable channel/);
+});
+
+test("a valid minimum supported version is accepted, and 0.2.9 is older than 0.2.10", () => {
+  // The control: without it the three refusals above would pass for a guard
+  // that refuses everything. Both reach the file check, which is the next
+  // thing the publisher does.
+  const accepted = runPublisher("0.2.15", "stable", "0.2.14");
+  assert.match(accepted.stderr, /installer must be a regular file/);
+
+  // Compared as numbers, not as text. A string comparison puts 0.2.9 after
+  // 0.2.10 and would refuse this — a defect that first appears on the tenth
+  // patch release, by which time nobody is looking at the publisher.
+  const tenth = runPublisher("0.2.10", "stable", "0.2.9");
+  assert.match(tenth.stderr, /installer must be a regular file/);
+});
+
+test("both manifest writers derive mandatory from the flag rather than hard-coding it", () => {
+  const source = readFileSync(publisherPath, "utf8");
+  // The two writers must agree: jq is used in production and Python is the
+  // fallback, and a manifest that depends on which one was installed is the
+  // failure this project already has a parity test for elsewhere.
+  assert.match(source, /mandatory: \(\$minimum != ""\)/);
+  assert.match(source, /"mandatory": bool\(minimum_supported_version\)/);
+  // Scoped to the updater writer. `write_download_manifest` carries the same
+  // pair for the download catalogue, which the Tauri shell never reads — a
+  // separate question, and asserting over the whole file would conflate them.
+  const updaterWriter = source.slice(source.indexOf("write_updater_manifest() {"));
+  assert.ok(
+    !/mandatory: false/.test(updaterWriter) &&
+      !/"mandatory": False/.test(updaterWriter),
+    "the hard-coded false in the updater writer is what D-251 was",
+  );
+  assert.match(source, /MINIMUM_SUPPORTED_VERSION=/);
+});
+
 test("legacy download catalog publisher remains stable-only", () => {
   const workspace = mkdtempSync(join(tmpdir(), "letscube-release-legacy-channel-"));
   const artifact = join(workspace, "candidate.exe");

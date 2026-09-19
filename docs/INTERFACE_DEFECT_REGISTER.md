@@ -16910,7 +16910,7 @@ re-sent file is the one case that reports its size correctly today.
 
 ---
 
-## D-251 `[ ]` A critical update cannot be published, on either channel
+## D-251 `[x]` A critical update cannot be published, on either channel
 
 **Severity:** medium, and latent — nothing is wrong until the day it is
 needed, which is the day it matters most.
@@ -16937,3 +16937,34 @@ effect.
 first time anybody reaches for this will be the worst possible time to discover
 the lever is not connected. `docs/operations/release-channels.md` records the
 same fact from the release side.
+
+**Fixed on 2026-09-19, with one flag rather than two.** `publish-native-release.sh`
+takes `--minimum-supported-version X.Y.Z`, and that single flag writes **both**
+`mandatory: true` and the minimum. Two flags would have allowed a combination
+that silently does nothing — the shell's rule is
+`channel == Stable && mandatory && installed < minimum`, so either field alone
+is inert — and a lever that can be half-pulled is the defect this closes, not
+one to reproduce in a new shape.
+
+Three refusals, each because the alternative is worse than an error:
+
+- not strict SemVer — refused before anything is signed, copied or locked;
+- **on the test channel** — refused rather than written and ignored, because
+  `is_critical_stable` honours it only on stable, and somebody who typed it
+  and saw it accepted would believe they had done something they had not;
+- **above the version being published** — that strands everybody, including
+  whoever installs it next, and the shell offers no way down.
+
+The comparison is numeric, field by field. A string comparison makes 0.2.9
+newer than 0.2.10, which first appears on the tenth patch release, by which
+time nobody is reading the publisher. Both arms are pinned by a test, and the
+first mutation I tried **survived** — changing only the `<` arm left the `>`
+arm giving the right answer by accident. It took mutating both to go red,
+which is the reminder that a surviving mutation can mean redundancy rather
+than reach.
+
+**A sibling, deliberately not touched.** `write_download_manifest` carries the
+same `mandatory: false` / `minimumSupportedVersion: null` pair for the
+**download** catalogue, which the Tauri shell never reads. Whether that one
+should be connected is a separate question about a different surface, and the
+test is scoped to the updater writer so the two are not conflated.

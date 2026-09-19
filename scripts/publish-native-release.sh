@@ -8,7 +8,8 @@ usage() {
 Usage:
   $0 PLATFORM CHANNEL VERSION BUILD ARTIFACT [NOTES] [--highlights-file FILE]
   $0 windows VERSION INSTALLER NOTES --channel stable|test \\
-    --updater-artifact SIGNED_BUNDLE --signature-file SIGNATURE
+    --updater-artifact SIGNED_BUNDLE --signature-file SIGNATURE \\
+    [--minimum-supported-version X.Y.Z]
 EOF
   exit 64
 }
@@ -20,6 +21,20 @@ fail() {
 
 strict_semver() {
   [[ "$1" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+}
+
+# True when $1 <= $2, both strict SemVer. Compared field by field as
+# numbers: a string comparison makes 0.2.10 older than 0.2.9, which is the
+# sort of defect that first appears on the tenth patch release.
+semver_le() {
+  local a b i
+  IFS='.' read -r -a a <<< "$1"
+  IFS='.' read -r -a b <<< "$2"
+  for i in 0 1 2; do
+    (( a[i] < b[i] )) && return 0
+    (( a[i] > b[i] )) && return 1
+  done
+  return 0
 }
 
 valid_download_channel() {
@@ -239,12 +254,13 @@ write_updater_manifest() {
       --arg url "$updater_public_url" \
       --argjson size "$updater_size" \
       --arg sha256 "$updater_sha256" \
+      --arg minimum "${minimum_supported_version:-}" \
       '{
         version: $version,
         notes: $notes,
         pub_date: $pub_date,
-        mandatory: false,
-        minimumSupportedVersion: null,
+        mandatory: ($minimum != ""),
+        minimumSupportedVersion: (if $minimum == "" then null else $minimum end),
         platforms: {
           "windows-x86_64": {
             signature: $signature,
@@ -260,17 +276,20 @@ write_updater_manifest() {
   VERSION="$version" NOTES="$notes" PUBLISHED_AT="$published_at" \
     UPDATER_SIGNATURE="$signature" UPDATER_URL="$updater_public_url" \
     UPDATER_SIZE="$updater_size" UPDATER_SHA256="$updater_sha256" \
+    MINIMUM_SUPPORTED_VERSION="${minimum_supported_version:-}" \
     "$json_writer" - "$output" <<'PY'
 import json
 import os
 import sys
 
+minimum_supported_version = os.environ.get("MINIMUM_SUPPORTED_VERSION", "")
+
 document = {
     "version": os.environ["VERSION"],
     "notes": os.environ["NOTES"],
     "pub_date": os.environ["PUBLISHED_AT"],
-    "mandatory": False,
-    "minimumSupportedVersion": None,
+    "mandatory": bool(minimum_supported_version),
+    "minimumSupportedVersion": minimum_supported_version or None,
     "platforms": {
         "windows-x86_64": {
             "signature": os.environ["UPDATER_SIGNATURE"],
@@ -377,6 +396,7 @@ publish_signed_updater() {
   channel=""
   updater_artifact=""
   signature_file=""
+  minimum_supported_version=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --channel)
@@ -394,6 +414,11 @@ publish_signed_updater() {
         signature_file="$(normalize_windows_path "$2")"
         shift 2
         ;;
+      --minimum-supported-version)
+        [[ -z "$minimum_supported_version" && $# -ge 2 ]] || usage
+        minimum_supported_version="$2"
+        shift 2
+        ;;
       *) usage ;;
     esac
   done
@@ -401,6 +426,28 @@ publish_signed_updater() {
   [[ "$platform" == "windows" ]] || fail "signed updater supports windows only"
   valid_updater_channel "$channel" || fail "unsupported updater channel"
   strict_semver "$version" || fail "version must be strict SemVer"
+
+  # A blocking update, and the only way to publish one (D-251).
+  #
+  # The shell's rule is `channel == Stable && mandatory && installed < minimum`
+  # (`is_critical_stable` in windows-tauri/src-tauri/src/updater.rs), so
+  # `mandatory` on its own can never make an update critical and a minimum on
+  # its own cannot either. One flag therefore sets both: a combination that
+  # silently does nothing is how a lever comes to be unconnected, which is the
+  # defect this closes rather than one to reproduce.
+  if [[ -n "$minimum_supported_version" ]]; then
+    strict_semver "$minimum_supported_version" \
+      || fail "minimum supported version must be strict SemVer"
+    # Refused on test rather than written and ignored. The shell honours a
+    # critical update only on stable, so a person who typed this on test and
+    # saw it accepted would believe they had done something they had not.
+    [[ "$channel" == "stable" ]] \
+      || fail "minimum supported version is honoured only on the stable channel"
+    # A minimum above the release strands everybody, including whoever
+    # installs it next, and there is no downgrade path.
+    semver_le "$minimum_supported_version" "$version" \
+      || fail "minimum supported version must not exceed the published version"
+  fi
   require_regular_file "$installer" "installer"
   [[ "${installer,,}" == *.exe ]] || fail "installer extension must be .exe"
   require_regular_file "$updater_artifact" "updater artifact"

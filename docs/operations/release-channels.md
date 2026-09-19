@@ -187,17 +187,21 @@ When Test is retired or abandoned, promote its current version to Stable rather
 than leaving it orphaned — otherwise every tester who switches back is carrying
 a build that exists nowhere.
 
-### A critical update cannot currently rescue them
-
-Two independent reasons, both deliberate:
+### A critical update still cannot rescue them, and that is deliberate
 
 - `is_critical_stable` returns false for Test, and `parseDesktopUpdateSnapshot`
   rejects any snapshot claiming `critical_update_required` on a non-Stable
-  channel. A blocking gate is a Stable-only mechanism.
-- `write_updater_manifest` hard-codes `mandatory` to false and
-  `minimumSupportedVersion` to null, so the publisher cannot express a critical
-  update **on either channel**. The path exists in the shell and has never been
-  reachable from the catalog.
+  channel. A blocking gate is a Stable-only mechanism, by design.
+- The publisher **can** now express one, since 2026-09-19 (D-251): pass
+  `--minimum-supported-version X.Y.Z` and the manifest carries `mandatory: true`
+  together with that minimum. One flag sets both, because the shell's rule is
+  `channel == Stable && mandatory && installed < minimum` and either field
+  alone is inert — a flag that can be half-pulled is worse than none.
+
+  It is refused on the Test channel, refused unless it is strict SemVer, and
+  refused if it exceeds the version being published; all three fire before
+  anything is signed, copied or locked. So it cannot be used to reach a
+  stranded tester: they are on Test, and a critical update is Stable-only.
 
 Do not hand-edit a manifest to force one. The next publish for that version
 would regenerate it and the edit would vanish; and a hand-written manifest is
@@ -259,6 +263,12 @@ day a download-catalog test manifest exists; until one does it reports
   pins that ("legacy download catalog publisher remains stable-only"). A new
   tester is therefore onboarded by installing Stable and switching the channel,
   or by being handed the installer directly.
+
+- **The download catalogue still hard-codes `mandatory: false`.** That is the
+  manifest the web downloads page and Android read, and the Tauri updater never
+  does, so connecting it is a separate question about a different surface. Left
+  as it is, and the D-251 test is scoped to the updater writer so the two do not
+  get conflated.
 
   That restriction is worth keeping until someone needs otherwise: the download
   catalog is the **public, unauthenticated** surface, and a channel typo there
