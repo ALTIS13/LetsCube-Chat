@@ -28,6 +28,7 @@ import {
   buildRoleHierarchy,
   parseRolePriorityInput,
   planPriorityMove,
+  readRoleColour,
   roleFormSignature,
   roleSwatchColour,
   sortRolesByHierarchy,
@@ -1176,7 +1177,24 @@ export function RolesPermissionsTab() {
               {roleAssignments.map(({ assignment, profile, role }) => {
                 if (!profile || !role) return null;
                 const busyKey = `remove-role-${assignment.user_id}-${assignment.role_id}`;
-                const swatch = roleSwatchColour(role);
+                // D-214's second residual. The dot has been the role's own
+                // colour since 2026-09-04 while the border stayed the tone's,
+                // so once the migration turned the owner's gold into `amber`
+                // this list drew an amber dot inside a pink border — one chip
+                // saying two things. A palette colour therefore takes the
+                // perimeter too.
+                //
+                // A HEX does not, and that is the whole reason the two are
+                // separated here rather than both read off `roleSwatchColour`.
+                // A hex only reaches this column through a rollback, and D-214
+                // measured those hexes at 1.50–2.06:1 as a mark; at the 55% a
+                // border is mixed to, the owner's gold would be about 1.2:1 on
+                // the light panel — a chip with no perimeter at all. In that
+                // window the tone keeps the border and the hex keeps the dot,
+                // which is exactly what this list did before today.
+                const colour = readRoleColour(role.colour);
+                const hexSwatch = colour?.kind === "hex" ? colour.hex : null;
+                const accent = colour?.kind === "palette" ? colour.css : null;
                 return (
                   <div
                     key={`${assignment.user_id}:${assignment.role_id}`}
@@ -1195,14 +1213,15 @@ export function RolesPermissionsTab() {
                     </div>
                     <KubBadge
                       tone={isCriticalRoleKey(role.key) ? "pink" : "cyan"}
+                      accent={accent}
                       pill
-                      dot={!swatch}
+                      dot={!hexSwatch}
                     >
-                      {swatch && (
+                      {hexSwatch && (
                         <span
                           aria-hidden
                           className="h-1.5 w-1.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: swatch }}
+                          style={{ backgroundColor: hexSwatch }}
                         />
                       )}
                       {getRoleLabel(role)}

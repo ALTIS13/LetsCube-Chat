@@ -18614,3 +18614,200 @@ inline `background-color`» answers 15 on `/admin/roles` (5 at 6px, 10 at 12px),
 itself once those inline styles are stripped. So the number is the marks this
 column paints and not something ambient — the check that an entry in this
 register has needed before, where a plausible number came from the wrong probe.
+---
+
+**D-214's two residuals — closed on 2026-09-19, and the border was decided on
+pixels rather than by symmetry.**
+
+The three steps of D-214 shipped and left two things named rather than folded
+in: `ProfileBadgeChip` dropped `colour` entirely, so a card drew the founder and
+the technical administrator identically while the catalogue said amber and blue;
+and in the administration panel's assignment list the badge's *border* came from
+the tone while its dot came from the role, so an amber dot could sit in a pink
+one.
+
+**The chain, read rather than reasoned about.** `public.profile_badges` returns
+`r.colour` for the `global_role` half and `null::text` for the achievement half;
+`projectProfileBadges` carries it into `ProfileBadge.colour` at
+`lib/profileBadges.ts:123`; `ProfileBadgeChip` read `icon`, `kind`, `key`,
+`weight`, `title` and `detail` and never `colour`. The chip has exactly **two**
+call sites, and both are inside `ChatInfoPanel` — `ProfileRoleSummary compact`
+in a private chat's information panel, and `member-card-badges` on a member's
+card. `ProfileRoleSummary`'s full form, which `UsersTab` renders, does not use
+the chip at all; it draws `KubBadge` from `roleTone` directly, and was left
+alone.
+
+One thing in the brief was off by a name and is worth correcting: the assignment
+list's border does not come from `badgeTone`. It is
+`tone={isCriticalRoleKey(role.key) ? "pink" : "cyan"}`, written inline in
+`RolesPermissionsTab.tsx`. Same shape, same defect, different origin — and the
+difference matters, because that expression *does* say something `badgeTone`
+does not: «this role can only be handed out by an owner or a technical
+administrator».
+
+**What `badgeTone` decides that a colour must not override.** Two things, and
+only one of them survives contact with the catalogue.
+
+- **`muted` for a medal is load-bearing.** Section 4.5 separates the families by
+  shape first and tone second: a standing is a rank and is coloured, a medal is
+  earned and is neutral. A person wearing «Владелец» and «Ветеран» reads the
+  first as a rank only because of that. `profile_badges` cannot put a colour on
+  a medal, so this can never arrive from production — which is exactly why the
+  refusal is in the client, where the decision is, and why the fixture carries a
+  medal with `colour: "amber"` that the database could not produce. Without that
+  row the guard could be deleted and every assertion would stay green.
+- **`pink` versus `cyan` for a standing is not.** It gives `pink` to `owner` and
+  `tech_admin` and `cyan` to everything else — a split that this register
+  already recorded as disagreeing with the catalogue it was meant to follow
+  («`badgeTone` gives `owner` pink, while the catalogue asks for gold»). On a
+  card, which shows one person and carries no legend, it is not a fact a reader
+  decodes.
+- **The three tones that state a fact — `danger`, `warn`, `online` — are never
+  reached.** `badgeTone`'s return type is `"pink" | "cyan" | "muted"`, and the
+  only other caller that passes an accent uses `pink`/`cyan`. So nothing
+  semantic is painted over anywhere today, and
+  `tests/unit/status-badge-contrast.test.mjs` now reads every `<KubBadge`
+  opening tag in the client and refuses an accent beside one of those three, so
+  the third caller is covered the day it is written.
+
+**The border decision, with the pixels.** Taken after measuring, and the
+measurement is what settled it. Read off element screenshots on the ground each
+chip actually composites on — the card is translucent, so that ground is not
+`--kub-surface` nor any other declared token. At 1440 it measures `#fafcfe`
+light and `#0a192f` dark, at 390 `#fdfdff` and `#102946`; across the twenty
+readings each ground is Δ1 to Δ10 in RGB from the nearest declared surface —
+near one, equal to none — and WHICH surface it is nearest to changes
+with the viewport — `--kub-surface` at 1440, `--kub-surface-3` at 390 — so the
+token cannot be chosen in advance, which is the whole reason this is
+photographed. On those grounds **a 55% border reads 2.06:1 to 3.14:1**: under
+the 3:1 a mark needs everywhere except the dark theme at 1440, and never more
+than 0.14 above it there. Today's tone borders and a role colour's border sit in
+the same band. The composite computed from `getComputedStyle` and the pixel read
+off the photograph agree to a median of 8 and a worst of 13 units of a channel,
+which for a 1px ring on a `rounded-full` chip is the antialiasing of the sample
+column rather than a disagreement about the colour.
+
+So the perimeter is not a carrier. It bounds the chip and signals nothing, and
+the only thing a second hue on it can do is contradict the mark. Photographed
+to be sure rather than argued: the owner's chip was cloned in the live page and
+the clone's border put back to `badgeTone`'s pink while it kept its amber crown
+— `output/d-214-residuals/border-experiment-{light,dark}-1440.png`. Side by side
+the whole chip reads as one object and the forced one reads as two, and in the
+dark theme the pink ring plainly out-argues the gold crown inside it. **The
+coloured mark in a toned border is the defect, not a second signal.** The
+perimeter therefore follows the mark, in both places.
+
+**A hex does not take either.** `roles.colour` held `^#[0-9a-fA-F]{6}$` until
+the migration and holds it again if that migration is rolled back, and D-214
+measured those hexes at 1.50–2.06:1 as a *mark* against a 3:1 floor. Mixed to
+the 55% a border takes, the owner's gold is about 1.2:1 on the light panel — a
+chip with no perimeter at all. So `ProfileBadgeChip` takes only a palette key
+and a hex falls back to the tone; the assignment list keeps the hex on its dot
+and the tone on its border, exactly as it did before today. That is also what
+makes the rollback reversible without a second client deploy.
+
+**The numbers.** The hue goes on the glyph — the chip's one marker, since «one
+marker, not two» already forbids a dot beside an icon — at the token's full
+strength rather than the perimeter's 55%. Measured as the browser resolved it
+against the composited ground:
+
+| | 1440 light | 1440 dark | 390 light | 390 dark |
+| --- | --- | --- | --- | --- |
+| member card | 5.83–5.91 | 7.44–7.47 | 5.88–5.96 | 6.18–6.24 |
+| information panel | 5.80–5.88 | 7.31–7.35 | 5.92–6.00 | 6.13–6.16 |
+
+The worst case across the whole palette on any of those eight grounds is
+**5.80:1** — above the 4.5 the palette is pinned at as *text* and well above the
+3 a mark answers to. One caveat recorded rather than smoothed over: at device
+ratio 1 a *regular*-weight 11px glyph is thin enough that no pixel reaches the
+token's core, and the strongest pixel of «Менеджер»'s glyph measures 4.05:1 on
+the light card. That is antialiasing, not the colour — at 390, where the device
+ratio is 2.625, the same glyph measures 5.96 — and it is still above the floor
+for a mark.
+
+**Never colour alone, and it was checked rather than claimed.** Every standing
+keeps a distinct glyph, which `badge-vocabulary.test.mts` refuses to let two
+badges share even by silhouette; its own word; and its weight. The strip was
+then re-rendered under `filter: grayscale(1)` and photographed —
+`output/profile-badge-colour/tech-admin-{light,dark}-no-colour-*.png` — and with
+every hue gone the two chips are still a gear beside «Тех. администратор» and a
+crown beside «Владелец». The word keeps the interface text colour, which is
+also a decision rather than an inheritance: `ChatRoleChip` sits directly above
+this strip on a member's card and colours ITS word, and that is the only thing
+telling a group's tag from a LETSCUBE standing. Painting both would have taken
+it away.
+
+**Mutation evidence.** Nine, each applied to the bytes, each proved to have
+reached the browser by a marker in the module Vite served, each run against the
+whole suite:
+
+| | caught by |
+| --- | --- |
+| M1 the chip stops handing its colour to `KubBadge` | e2e 3 failed / 1 passed |
+| M2 the glyph stops taking the colour | e2e 2 failed / 2 passed |
+| M3 the accent drives the dot, the border keeps the tone | e2e 3 failed / 1 passed; contrast 7 pass / 1 fail |
+| M4 the accent drives the border, the dot keeps the tone | e2e 1 failed / 3 passed; contrast 7 pass / 1 fail |
+| M5 a medal may be coloured after all | profile-badges 22 pass / 1 fail; e2e 2 failed / 2 passed |
+| M6 a hex is accepted again | profile-badges 22 pass / 1 fail; e2e 1 failed / 3 passed |
+| M7 the assignment badge stops handing its colour | roles-panel-contract 12 pass / 2 fail |
+| M8 the word takes the colour | member-badges 1 failed / 8 passed |
+| M9 an accent beside the `danger` tone | contrast 8 pass / 1 fail |
+
+**What the assignment list gives up, recorded rather than discovered later as a
+regression.** `isCriticalRoleKey` is literally `key === "owner" || key ===
+"tech_admin"`, and the same file uses it for something real: the assignable list
+is filtered by `currentAccess.critical`, so those two are the roles a reader
+cannot hand out without the standing to do it. Once a palette colour takes the
+perimeter, the pink/cyan split stops being visible there, and with it the
+one-glance grouping of those two rows.
+
+It was allowed to go, for a reason that is the same one this entry is about: the
+split was carried by nothing but a border hue at 55%, measured here at 2.06–3.14:1
+— below the 3:1 a mark answers to on every surface but dark/1440 — with no legend
+and no second cue. A signal a reader cannot reliably see is not a signal, and
+«never colour alone» applies to it as much as to the colours this change adds.
+The role's own name is in the chip and did not move.
+
+What is actually missing is an expression of «only an owner or a technical
+administrator can hand this one out» that a person can read. That is its own
+piece of work, not a side effect of a colour change, and it is not filed as part
+of D-214.
+
+**Two of those were findings rather than confirmations.** M4's first spelling
+dropped `dotClass[tone]` from the className and left the inline
+`backgroundColor` in place — an inline style beats a class, so the dot still
+rendered in the accent and the mutation changed nothing. A green mutation is
+either a gap in the tests or a mutation that was a no-op, and this one was the
+second. And the first pass called three mutations «stale» because it compared
+the served module against the one served a moment before: an empty answer
+compares equal to an empty answer, so ten seconds of a request Vite refused read
+exactly like a watcher that had missed the write. The rerun looks for a marker
+in the served text and refuses to run the suites until it is there.
+
+**One red test found on the way, and it predates this work.**
+`member-badges.spec.ts`'s «the badge's colour never reaches the words» has been
+failing since **2026-09-18**. It looks for the chip's word among the chip's own
+child nodes, and `f795e76e` gave `KubBadge` `pillTextChildren` that day — D-222's
+one-line contract — which wraps runs of text in a `min-w-0 truncate` span. So
+`hasText` was false and the test's own guard («the chip must carry a word, or
+this proves nothing») fired, every run, while the thing it guards was never
+broken. Confirmed by putting the four files back to the commit before this work
+and watching it fail there too. The probe now walks to the element that actually
+holds the word — which is also what the assertion always meant, since a chip
+whose own colour is right and whose label is painted by a child would have
+passed the old spelling — and the fixture gained one coloured role, because a
+test named «the badge's colour never reaches the words» needs a badge that has
+one. M8 above is what proves both halves.
+
+**Photographed** at 1440 and 390 in both themes, before and after, from the
+mocked fixture with invented people and invented roles — no production screen,
+no account, no avatar: `output/d-214-residuals/{before,after}-card-{maksim,anna,
+petr,olga}-{light,dark}-{1440,390}.png` for the member card,
+`{before,after}-panel-anna-{light,dark}-{1440,390}.png` for the information
+panel, and `zoom-{light,dark}-{1440,390}.png` for the strips side by side.
+Measurements in `readings-{before,after}.json`.
+
+**What did not change.** The chip's box: with the glyph's new wrapper 89.17×24.00,
+with the wrapper removed from the DOM 89.17×24.00. Every medal's numbers are
+identical before and after, in all four combinations. And no pixel of the
+administration panel moves for a role whose colour is null or a hex.

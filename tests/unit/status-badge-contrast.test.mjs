@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 /**
@@ -134,4 +134,89 @@ test("a coloured tone carries a dot, so colour is never the only signal", () => 
     /dot \?\? tone !== "muted"/,
     "with a neutral label the dot is what carries the tone; it must be on by default",
   );
+});
+
+test("an accent drives the mark and the perimeter together, and never the label", () => {
+  // D-214's residual, at the primitive. A caller with a colour of its own —
+  // a role's palette key — hands it in here rather than spelling these two
+  // recipes again, and the two must move together: the administration panel
+  // drew a role-coloured dot inside a tone-coloured border for a fortnight
+  // because they were spelled in two places.
+  //
+  // The border recipe is the tone's own, 55%, so a row of role-coloured chips
+  // and a row of toned ones read as one family. Measured off the pixels on the
+  // ground a badge really composites on, that border is 2.06–3.14:1 in every
+  // theme and viewport: it bounds the chip and signals nothing, which is
+  // exactly why a second hue on it could only contradict the mark.
+  assert.match(
+    badge,
+    /borderColor: `color-mix\(in srgb, \$\{accent\} 55%, transparent\)`/,
+    "the accent no longer reaches the perimeter",
+  );
+  assert.match(
+    badge,
+    /style=\{accent \? \{ backgroundColor: accent \} : undefined\}/,
+    "the accent no longer reaches the dot",
+  );
+  // And not the words. The label's 4.5:1 comes from `--kub-text` on every
+  // surface; an accent is a caller's value and this component cannot promise
+  // anything about it as text.
+  assert.doesNotMatch(
+    badge,
+    /color: accent/,
+    "an accent painting the label is the pairing that measured 2.62:1 with a different colour",
+  );
+});
+
+test("an accent is never put on a tone that means something", () => {
+  // `danger`, `warn` and `online` state a fact; `cyan` and `pink` name a
+  // family. An accent replaces the mark AND the perimeter, so on one of the
+  // first three it would paint over the only carrier the fact has — the label
+  // is neutral by design, which is the whole of this file.
+  //
+  // Read off the opening tags rather than off a list of call sites, so a third
+  // caller is covered the day it is written.
+  const root = new URL("../../artifacts/kub/src/", import.meta.url);
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const next = new URL(entry.name + (entry.isDirectory() ? "/" : ""), dir);
+      if (entry.isDirectory()) walk(next);
+      else if (entry.name.endsWith(".tsx")) files.push(next);
+    }
+  };
+  walk(root);
+
+  const SEMANTIC = ["danger", "warn", "online"];
+  let accented = 0;
+  for (const file of files) {
+    const text = readFileSync(file, "utf8");
+    let at = text.indexOf("<KubBadge");
+    while (at !== -1) {
+      // The opening tag: to the first `>` at brace depth zero, so an arrow
+      // function or a comparison inside an attribute cannot cut it short.
+      let depth = 0;
+      let end = at;
+      for (; end < text.length; end += 1) {
+        const char = text[end];
+        if (char === "{") depth += 1;
+        else if (char === "}") depth -= 1;
+        else if (char === ">" && depth === 0) break;
+      }
+      const tag = text.slice(at, end);
+      if (/\baccent=/.test(tag)) {
+        accented += 1;
+        for (const tone of SEMANTIC) {
+          assert.ok(
+            !tag.includes(`"${tone}"`),
+            `${file.pathname.split("/").pop()}: a KubBadge carries an accent and the «${tone}» tone. ` +
+              `The accent replaces the dot and the border, which on that tone are what say the fact. ` +
+              `Use the tone alone, or say the fact in the word.`,
+          );
+        }
+      }
+      at = text.indexOf("<KubBadge", end);
+    }
+  }
+  assert.ok(accented > 0, "nothing passes an accent any more; this guard is measuring nothing");
 });

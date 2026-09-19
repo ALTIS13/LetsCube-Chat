@@ -135,20 +135,38 @@ test("saving a role carries the rank and the colour through the one write path",
 
 test("a colour reaches a style attribute only from a value this build produced", () => {
   assert.match(source, /roleSwatchColour\(role\)/u);
-  // Two expressions may reach an inline background, and no third. `swatch` is
-  // `readRoleColour`'s own answer — six hex digits it normalised, or one of
-  // eight fixed custom-property references it built from an enumerated key.
-  // `chatRoleColourValue(entry.key)` is the picker's swatch, built from the
-  // palette entry being rendered. Neither interpolates a stored string, which
-  // is the whole of the vulnerability this test exists for.
+  // Three expressions may reach an inline background, and no fourth. `swatch`
+  // is `readRoleColour`'s own answer for the roles column — six hex digits it
+  // normalised, or one of eight fixed custom-property references it built from
+  // an enumerated key. `hexSwatch` is the same answer narrowed to its hex
+  // branch, for the assignment badge. `chatRoleColourValue(entry.key)` is the
+  // picker's swatch, built from the palette entry being rendered. None of them
+  // interpolates a stored string, which is the whole of the vulnerability this
+  // test exists for.
   const backgrounds = [...source.matchAll(/backgroundColor:\s*([^\s,}]+)/gu)].map((match) => match[1]);
   assert.ok(backgrounds.length > 0, "the swatch no longer paints anything");
-  const allowed = new Set(["swatch", "chatRoleColourValue(entry.key)"]);
+  const allowed = new Set(["swatch", "hexSwatch", "chatRoleColourValue(entry.key)"]);
   for (const value of backgrounds) {
     assert.ok(allowed.has(value), `an unvalidated value reaches a style attribute: ${value}`);
   }
   assert.doesNotMatch(source, /style=\{\{[^}]*role\.colour/u);
   assert.doesNotMatch(source, /style=\{\{[^}]*editColour/u);
+
+  // Since D-214's residual there is a fourth way out of this file and it does
+  // not look like a style: `KubBadge`'s `accent` reaches a `borderColor` and a
+  // `backgroundColor` inside that component. The same rule therefore has to be
+  // asserted on what is handed to it, or the guard above goes on passing while
+  // an unvalidated string leaves by the new door.
+  const accents = [...source.matchAll(/accent=\{([^}]+)\}/gu)].map((match) => match[1].trim());
+  assert.ok(accents.length > 0, "the assignment badge no longer hands KubBadge a colour");
+  for (const value of accents) {
+    assert.equal(value, "accent", `an unnarrowed value reaches KubBadge's accent: ${value}`);
+  }
+  assert.match(
+    code,
+    /const accent = colour\?\.kind === "palette" \? colour\.css : null/u,
+    "accent must be readRoleColour's palette branch, which is one of eight fixed references",
+  );
 });
 
 test("the colour picker offers the palette and nothing else", () => {
@@ -239,4 +257,35 @@ test("the form is only refilled when the selected role's own data changed", () =
   // role used to throw away half-typed text.
   assert.match(source, /roleFormSignature\(selectedRole, permissionKeys\)/u);
   assert.match(source, /if \(formSignatureRef\.current === signature\) return;/u);
+});
+
+test("the assignment badge's perimeter follows the role's own colour", () => {
+  // D-214's second residual. The dot in «Глобальные роли пользователей» has
+  // been the role's own colour since 2026-09-04 while the border stayed
+  // `badgeTone`'s, and nobody could see it while every role's colour was one of
+  // two hexes nothing drew. The migration made it visible: the owner's gold
+  // became `amber`, and an amber dot sat inside a pink border.
+  //
+  // Measured before it was decided, on the ground a badge really composites on:
+  // a 55% border reads 2.06–3.14:1 in every theme and viewport, under the 3:1
+  // a mark needs on all but one of them. It bounds the
+  // chip and signals nothing, so a second hue on it cannot be a second fact —
+  // only a contradiction. The perimeter therefore follows the mark.
+  assert.match(code, /const colour = readRoleColour\(role\.colour\)/u);
+  assert.match(code, /const accent = colour\?\.kind === "palette" \? colour\.css : null/u);
+  assert.match(code, /accent=\{accent\}/u, "the badge no longer hands its colour to KubBadge");
+
+  // And a HEX does not take the perimeter. It only reaches this column through
+  // a rollback, and D-214 measured those hexes at 1.50–2.06:1 as a MARK; mixed
+  // to the 55% a border takes, the owner's gold is about 1.2:1 on the light
+  // panel — a chip with no perimeter at all. In that window the tone keeps the
+  // border and the hex keeps the dot, which is what this list did before.
+  assert.match(code, /const hexSwatch = colour\?\.kind === "hex" \? colour\.hex : null/u);
+  assert.match(code, /dot=\{!hexSwatch\}/u);
+  assert.match(code, /backgroundColor: hexSwatch/u);
+  assert.doesNotMatch(
+    code,
+    /backgroundColor: swatch \}\}\s*\/>\s*\)\}\s*\{getRoleLabel/u,
+    "the assignment badge is painting an unfiltered swatch again",
+  );
 });

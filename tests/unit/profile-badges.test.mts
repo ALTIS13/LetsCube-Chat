@@ -8,7 +8,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { badgeTone } from "../../artifacts/kub/src/lib/badgeVocabulary.ts";
+import { CHAT_ROLE_COLOUR_KEYS } from "../../artifacts/kub/src/lib/chatRolePalette.ts";
 import {
+  badgeColourKey,
   badgeStrip,
   badgeUserIds,
   badgeWeight,
@@ -256,4 +259,71 @@ test("the resolved glyph is what the build's icon set is asked about", () => {
     knownIcons: new Set(["clock"]),
   });
   assert.equal(drawn.icon, "clock");
+});
+
+// ---------------------------------------------------------------------
+// The colour a chip may paint (D-214)
+// ---------------------------------------------------------------------
+//
+// `roles.colour` has held a palette KEY since
+// `20260919170000_a_role_colour_a_reader_can_see.sql`, and the chip had gone on
+// dropping it — so `owner` and `tech_admin`, the only two standings anybody
+// wears, were both drawn `pink` by `badgeTone` while the catalogue said amber
+// and blue. What a chip is allowed to paint is decided here rather than in the
+// component, so it can be argued about without a browser: the component is a
+// `.tsx` file and `node --test` cannot reach a decision left inside one.
+
+test("a standing paints the palette key it was given", () => {
+  assert.equal(badgeColourKey({ kind: "global_role", colour: "amber" }), "amber");
+  assert.equal(badgeColourKey({ kind: "global_role", colour: "blue" }), "blue");
+});
+
+test("a medal is never coloured, whatever the row says", () => {
+  // `profile_badges` answers `null::text` for the achievement half, so this
+  // cannot arrive today — and the rule is here rather than in the SQL because
+  // what it protects is a presentation decision. Section 4.5 separates the
+  // families by shape first and tone second: a standing is a rank and is
+  // coloured, a medal is earned and is neutral. A person wearing «Владелец» and
+  // «Ветеран» reads the first as a rank only because of that, and a colour
+  // arriving on the second would take it away without anything failing.
+  assert.equal(badgeColourKey({ kind: "achievement", colour: "amber" }), null);
+});
+
+test("a hex is refused, which is what makes the migration reversible", () => {
+  // Not «a colour we cannot name» — a colour measured to be illegible. D-214
+  // read the catalogue's own hexes at 1.50–2.06:1 in the light theme against a
+  // 3:1 floor for a mark, because they were the DARK palette's values used in a
+  // theme nobody had checked them in. A rollback puts them back, and the chip
+  // must then take the tone rather than paint a 1.5:1 mark.
+  assert.equal(badgeColourKey({ kind: "global_role", colour: "#F5B50A" }), null);
+  assert.equal(badgeColourKey({ kind: "global_role", colour: "F5B50A" }), null);
+  assert.equal(badgeColourKey({ kind: "global_role", colour: "#4d8bd0" }), null);
+});
+
+test("a key this build does not know paints nothing rather than guessing", () => {
+  // The column's constraint bounds the SHAPE of a key and cannot enumerate the
+  // palette, so a row may legally hold an entry a later build added — or one a
+  // later build dropped. Falling back to the tone is visible and honest.
+  assert.equal(badgeColourKey({ kind: "global_role", colour: "purple" }), null);
+  assert.equal(badgeColourKey({ kind: "global_role", colour: "" }), null);
+  assert.equal(badgeColourKey({ kind: "global_role", colour: null }), null);
+});
+
+test("the two standings anybody wears no longer collapse to one colour", () => {
+  // The defect in one assertion. Both are `pink` under `badgeTone` and always
+  // will be; what tells them apart is this.
+  const owner = badgeColourKey({ kind: "global_role", colour: "amber" });
+  const techAdmin = badgeColourKey({ kind: "global_role", colour: "blue" });
+  assert.notEqual(owner, techAdmin);
+  assert.equal(badgeTone("standing", "owner"), badgeTone("standing", "tech_admin"));
+});
+
+test("every colour a badge can paint is one the palette measured", () => {
+  // The guarantee this rests on: each key's token is held at 4.5:1 as TEXT on
+  // all three panel surfaces in both themes by `chat-role-palette.test.mts`,
+  // which is above the 3:1 a mark answers to. If a key could reach a chip
+  // without being in that list, the guarantee would not cover it.
+  for (const key of CHAT_ROLE_COLOUR_KEYS) {
+    assert.equal(badgeColourKey({ kind: "global_role", colour: key }), key);
+  }
 });

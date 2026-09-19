@@ -72,7 +72,12 @@ const badge = (
   detail: string,
   icon: string,
   rank: number,
-) => ({ user_id: who.id, kind, key, title, detail, icon, colour: null, rank });
+  // A standing's palette key, as `roles.colour` has held one since D-214's
+  // migration. Null everywhere but one row: the test named «the badge's colour
+  // never reaches the words» needs a badge that HAS a colour, or it asserts
+  // that nothing is not painted.
+  colour: string | null = null,
+) => ({ user_id: who.id, kind, key, title, detail, icon, colour, rank });
 
 /**
  * What `profile_badges` answers, with the icons the database really holds.
@@ -83,7 +88,7 @@ const badge = (
  */
 const BADGE_ROWS = [
   badge(ME, "global_role", "owner", "Владелец", "Полный доступ ко всему LETSCUBE", "crown", 100),
-  badge(ANNA, "global_role", "admin", "Администратор", "Управление людьми", "shield", 80),
+  badge(ANNA, "global_role", "admin", "Администратор", "Управление людьми", "shield", 80, "rose"),
   badge(
     ANNA,
     "achievement",
@@ -421,17 +426,38 @@ test("the badge's colour never reaches the words", async ({ page }) => {
   // 4.18 and 3.82 against the surfaces a chip sits on, under the 4.5 a label
   // needs, so the tone lives on the border and the dot and the word takes the
   // interface text colour — the same colour the person's name is drawn in.
+  //
+  // The word is looked for by walking to the deepest element that holds it,
+  // not among the chip's own child nodes. It stopped being a direct text node
+  // on 2026-09-18, when D-222 gave `KubBadge` `pillTextChildren` to keep a pill
+  // on one line: runs of text are wrapped in a `min-w-0 truncate` span, so
+  // `hasText` had been false — and this test red — ever since, while the thing
+  // it guards was never broken. Found on 2026-09-19 by D-214's residual work
+  // and confirmed against the commit before it.
+  //
+  // And the colour is now read off the element that actually holds the word
+  // rather than off the chip, which is what the assertion always meant: a chip
+  // whose own colour is right and whose label is painted by a child would pass
+  // the old spelling.
   const colours = await page.evaluate(() => {
     const strip = document.querySelector('[data-testid="member-card-badges"]');
     const name = document.querySelector('[data-testid="member-card-joined"]');
     const chip = strip?.querySelector("[data-badge-key]");
-    const text = chip
-      ? [...chip.childNodes].find((node) => node.nodeType === Node.TEXT_NODE)
-      : null;
+    const wanted = (chip?.textContent ?? "").trim();
+    let holder: Element | null = chip ?? null;
+    if (chip && wanted) {
+      for (;;) {
+        const next = [...holder!.children].find(
+          (child) => (child.textContent ?? "").trim() === wanted,
+        );
+        if (!next) break;
+        holder = next;
+      }
+    }
     return {
       reference: name ? getComputedStyle(name.parentElement as Element).color : null,
-      chip: chip ? getComputedStyle(chip as Element).color : null,
-      hasText: Boolean(text && (text.textContent ?? "").trim()),
+      chip: holder ? getComputedStyle(holder).color : null,
+      hasText: Boolean(wanted),
     };
   });
   expect(colours.hasText, "the chip must carry a word, or this proves nothing").toBe(true);

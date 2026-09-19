@@ -32,6 +32,7 @@
  */
 
 import { resolveBadgeIcon } from "./badgeVocabulary.ts";
+import { readChatRoleColour, type ChatRoleColour } from "./chatRolePalette.ts";
 
 /** One row as `profile_badges` returns it. */
 export interface ProfileBadgeRow {
@@ -75,6 +76,43 @@ export function badgeWeight(rank: number | null): ProfileBadgeWeight {
   if (value >= 100) return "fill";
   if (value >= 80) return "bold";
   return "regular";
+}
+
+/**
+ * The colour a chip may paint, or `null` for «take the tone» (D-214).
+ *
+ * Three refusals, each measured rather than chosen, and each one a way this
+ * could look right and be wrong:
+ *
+ *   1. **A medal never takes a colour.** `profile_badges` answers `null::text`
+ *      for the achievement half, so today this cannot happen — but the family
+ *      separation is the reason the rule is here rather than in the SQL. A
+ *      standing is a rank and is coloured; a medal is earned and is neutral,
+ *      and a person wearing «Владелец» and «Ветеран» reads the first as a rank
+ *      only because of that. A colour arriving on a medal would destroy it
+ *      silently, and `badgeTone`'s `muted` is the decision being protected.
+ *   2. **A hex is refused.** `roles.colour` held one until 2026-09-19 and holds
+ *      one again if that migration is rolled back. D-214 measured those hexes
+ *      at 1.50–2.06:1 in the light theme against a 3:1 floor, because they were
+ *      the DARK palette's values used in a theme nobody checked them in. So a
+ *      hex is not «a colour we cannot name», it is a colour known to be
+ *      illegible, and the chip keeps the tone instead. This is also what makes
+ *      the rollback safe without a second client deploy.
+ *   3. **A key this build does not know is refused**, which is
+ *      `readChatRoleColour`'s own contract: the column's constraint bounds the
+ *      SHAPE of a key and cannot enumerate the palette, so a row may hold an
+ *      entry a later build added. Falling back to the tone is visible; guessing
+ *      is not.
+ *
+ * What survives all three is one of eight `--kub-role-*` keys, each pinned at
+ * 4.5:1 as TEXT on all three panel surfaces in both themes by
+ * `tests/unit/chat-role-palette.test.mts` — well above the 3:1 a mark needs.
+ */
+export function badgeColourKey(
+  badge: Pick<ProfileBadge, "kind" | "colour">,
+): ChatRoleColour | null {
+  if (badge.kind !== "global_role") return null;
+  return readChatRoleColour(badge.colour);
 }
 
 export interface ProjectBadgesOptions {

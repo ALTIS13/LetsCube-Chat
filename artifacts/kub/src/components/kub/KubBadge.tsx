@@ -8,6 +8,42 @@ interface KubBadgeProps extends HTMLAttributes<HTMLSpanElement> {
   pill?: boolean;
   /** Defaults to a dot on every coloured tone; see the note below. */
   dot?: boolean;
+  /**
+   * One colour for this badge's mark and its perimeter, in place of the tone's
+   * (D-214).
+   *
+   * The tone is a vocabulary of six; a role's colour is the administrator's own
+   * choice out of eight palette keys, and there is no tone that can stand for
+   * it. So a caller that has such a colour hands it in here rather than
+   * spelling `KubBadge`'s recipes a second time — which is how the
+   * administration panel came to draw a role's dot in one hue inside a border
+   * in another.
+   *
+   * **The mark and the perimeter move together, and that is the point.** Both
+   * were measured on the ground a chip really composites on: the border is
+   * `color-mix` at 55%, which reads 2.06–3.14:1 on every surface a badge
+   * appears on in either theme — under the 3:1 a mark needs on all of them but
+   * the dark theme at 1440. It bounds the chip; it does not signal. So the
+   * only thing a second hue on it can do is contradict the mark.
+   *
+   * **The caller owns the value.** It reaches a style attribute, so it must be
+   * one this build produced — an enumerated palette reference or a normalised
+   * hex — never a string carried through from the database. `ProfileBadgeChip`
+   * and `RolesPermissionsTab` both narrow before they call.
+   *
+   * **Not on a tone that means something.** Three of the six say a fact rather
+   * than name a family — `danger`, `warn`, `online` — and an accent replaces
+   * the tone's mark and perimeter entirely, so on one of those it would paint
+   * over the only thing carrying the fact. The two callers that pass an accent
+   * both use `pink`/`cyan`, which after D-214 are a family label and nothing
+   * more: `badgeTone` gives `pink` to `owner` and `tech_admin` and `cyan` to
+   * the rest, a split that already disagreed with the catalogue it was meant to
+   * follow. `muted` is different again — it IS the decision that separates a
+   * medal from a standing, so `ProfileBadgeChip` refuses a colour on a medal
+   * before it gets here. `tests/unit/status-badge-contrast.test.mjs` is what
+   * refuses an accent on a semantic tone.
+   */
+  accent?: string | null;
   children: ReactNode;
 }
 
@@ -101,11 +137,20 @@ export function KubBadge({
   tone = "cyan",
   pill = false,
   dot,
+  accent = null,
   className,
+  style,
   children,
   ...rest
 }: KubBadgeProps) {
   const showDot = dot ?? tone !== "muted";
+  // The tone's class stays on the element even with an accent. An inline
+  // border colour wins over it, and if the accent is ever a value the browser
+  // refuses, the declaration is dropped and the chip keeps a perimeter rather
+  // than losing one — which on this component is the whole of its shape.
+  const accented = accent
+    ? { ...style, borderColor: `color-mix(in srgb, ${accent} 55%, transparent)` }
+    : style;
 
   return (
     <span
@@ -124,9 +169,15 @@ export function KubBadge({
         borderClass[tone],
         className,
       )}
+      style={accented}
       {...rest}
     >
-      {showDot && <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dotClass[tone])} />}
+      {showDot && (
+        <span
+          className={cn("h-1.5 w-1.5 shrink-0 rounded-full", accent ? null : dotClass[tone])}
+          style={accent ? { backgroundColor: accent } : undefined}
+        />
+      )}
       {pill ? pillTextChildren(children) : children}
     </span>
   );
