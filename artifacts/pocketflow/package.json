@@ -1,0 +1,27 @@
+{
+  "name": "@workspace/pocketflow",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#pf/*": "./src/*.ts"
+  },
+  "scripts": {
+    "build": "node ./build.mjs",
+    "start": "node --enable-source-maps ./dist/index.mjs",
+    "dev": "node --experimental-strip-types ./src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --experimental-strip-types ../../tests/pocketflow/*.test.mts"
+  },
+  "dependencies": {
+    "express": "^5",
+    "pg": "^8.20.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "catalog:",
+    "@types/pg": "^8.18.0",
+    "esbuild": "^0.27.3"
+  }
+}
