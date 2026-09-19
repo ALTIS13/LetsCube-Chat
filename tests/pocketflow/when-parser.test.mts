@@ -109,6 +109,22 @@ test("a unit may not eat the start of a word", () => {
   }
 });
 
+test("a false unit at the very start of the input is refused too", () => {
+  // The four above are all saved by a second rule — a trailing expression must
+  // consume the whole tail — so they stay red even without the unit guard.
+  // These do not: the false unit is at the head, where it would be accepted
+  // and the rest of the word left behind as the reminder's text. «5 минутах
+  // ходьбы до метро» would become «ах ходьбы до метро», in five minutes.
+  for (const input of [
+    "3 дома посмотреть",
+    "5 минутах ходьбы до метро",
+    "2 часовых пояса проверить",
+    "4 днища отчистить",
+  ]) {
+    assert.equal(failure(parseWhen(input, NOW, MSK)), "unrecognized", input);
+  }
+});
+
 test("сегодня вечером / tonight resolve to the documented hour, in the person's zone", () => {
   assert.equal(TIME_OF_DAY_HOURS.evening, 19);
   // 19:00 Moscow is 16:00 UTC; 19:00 New York on the same date is 23:00 UTC.

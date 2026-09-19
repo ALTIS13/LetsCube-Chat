@@ -611,6 +611,65 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-19 — one production migration (D-242), and why `letscube-bot-gateway` was not deployed
+
+**No application was deployed.** `letscube-web` keeps the baseline below; the bot
+gateway still runs `935a670db6ab…c62a35` (`Up 2 weeks`, healthy). One database
+migration was applied.
+
+**`20260919030000_a_refusal_to_set_a_picture_says_why.sql`**, applied as
+`supabase_admin` — `postgres` neither owns `bot_set_avatar_internal` nor could
+execute it. One transaction, self-check, `COMMIT`. Migration sha256
+`0b143ea7…48dfe2d1`; rehearsal and rollback recorded beside it in
+`.migration-backup/supabase/migrations/`.
+
+- **Backup, taken and verified first:**
+  `/srv/letscube/backups/pre-migrations/20260919-022448-before-avatar-refusal-says-why.schema.dump`,
+  1,640,957 bytes, sha256 `1ff13821…95bb2a90`. Verified by reading it back with
+  `pg_restore -l` inside the container — 2,504 TOC entries, the target function
+  among them. (`pg_restore -l /dev/stdin` over a pipe cannot verify a custom-format
+  dump: it needs to seek, and answers «did not find magic string in file header»
+  on a perfectly good archive. Copy the file into the container instead.)
+- **Live vs file, before touching anything:** the deployed definition and
+  `.migration-backup/supabase/migrations/20260904010000_bot_avatar.sql` agree
+  byte for byte — both bodies 1,368 bytes, sha256 `e5a09bcd…`.
+- **Rehearsed on production inside a rolled-back transaction**, on values rather
+  than on DDL: each of the five refusal paths called and its SQLSTATE read, once
+  as `supabase_admin` and once as `service_role`, before and after the change
+  spliced in verbatim. 24 measurements; production unchanged afterwards (5
+  `P0001` lines still present, ACL unchanged, 3 active bots, 3 owner rows).
+- **Verified after the apply**, the same twelve calls on the committed function:
+  `22023`, `42501`, `P0002`, `55000`, `22023`, and the success path returning —
+  identical as `service_role`. Live body now sha256 `7b5d1cff…`, identical to the
+  file.
+
+**The migration carries a second fix nobody had filed.** The function's ACL was
+`{supabase_admin=X/supabase_admin}`: `service_role`, the role the Bot Gateway
+resolves to through PostgREST, could not execute it at all, and every call
+answered `42501 permission denied for function bot_set_avatar_internal` before
+the function's own checks ran. `20260904010000_bot_avatar.sql` revoked from
+`public, anon, authenticated` and granted to nobody — the same mistake as the
+2026-09-05 `_kub_bot_avatar_path_allowed` repair, in the same migration, one
+function over. Fixing the SQLSTATEs alone would have shipped a feature that still
+could not work, and would have reported the permission failure as «Бот не
+найден». The grant is to `service_role` only; `anon`, `authenticated` and PUBLIC
+stay out and the self-check enforces it. (`postgres` now reads as able to execute
+it: it is a member of `service_role` and inherits the grant.)
+
+**The deployment of `letscube-bot-gateway` (D-241) is blocked on two things, both
+of them owner actions.** First, no credential on this instance can trigger a
+deployment: `personal_access_tokens` in `coolify-db` holds one row with abilities
+`["read"]`, auto-deploy is off (`is_auto_deploy_enabled = false`), and `php
+artisan` has no deploy command; every past deployment of this application went
+through the API with a token that no longer exists. Second,
+`applications.git_branch` for `twezs89u2m6d6ln6c0rpaqxe` is **`codex/bot-platform`,
+not `main`** — deploying it «at `main`» means changing the branch it follows.
+
+It does not have to be changed. `origin/codex/bot-platform` is `33a3bb83`
+(2026-09-12), an ancestor of `main`, and already contains `b5402f7d`; everything
+that enters this image is byte-identical to `main` there. Details and the
+calibrated pre-deploy probe are in D-241.
+
 ### 2026-09-19 — `b35da2e2` (the owner's first real call, three defects it found, and slice F)
 
 **Current baseline.** `letscube-web` runs image

@@ -743,7 +743,11 @@ export type TickSummary = {
  * owns the timer and this owns the work. `watcherJob` below packages it in the
  * shape the registry wants.
  */
-export async function watcherTick(ctx: AppContext, deps?: WatcherDeps): Promise<TickSummary> {
+export async function watcherTick(
+  ctx: AppContext,
+  deps?: WatcherDeps,
+  options?: { signal?: AbortSignal },
+): Promise<TickSummary> {
   const resolved = resolveDeps(deps);
   const now = ctx.now();
   const claimToken = resolved.newClaimToken();
@@ -757,6 +761,12 @@ export async function watcherTick(ctx: AppContext, deps?: WatcherDeps): Promise<
   });
 
   for (const watcher of due) {
+    // The scheduler is stopping. Hand back what we claimed and did not check,
+    // so the next process finds it due rather than waiting out the lease.
+    if (options?.signal?.aborted === true) {
+      await releaseWatcherClaim(ctx.db, watcher.id, claimToken);
+      continue;
+    }
     try {
       const check = await performCheck(watcher, resolved);
       const transition = decideTransition(watcher, check);
@@ -804,15 +814,27 @@ export async function watcherTick(ctx: AppContext, deps?: WatcherDeps): Promise<
   return summary;
 }
 
+/**
+ * The tick in the shape `scheduler.registerJob` wants.
+ *
+ * The context parameter is typed structurally rather than imported from
+ * `#pf/scheduler`, so this module does not depend on the scheduler at all —
+ * only on the one field it uses. `stop()` aborts that signal and then waits,
+ * and a tick that ignored it would make the drain a sleep.
+ */
 export function watcherJob(
   ctx: AppContext,
   deps?: WatcherDeps,
-): { name: string; intervalMs: number; run: () => Promise<void> } {
+): {
+  name: string;
+  intervalMs: number;
+  run: (context: { signal?: AbortSignal }) => Promise<void>;
+} {
   return {
     name: "watcher",
     intervalMs: WATCHER_TICK_INTERVAL_MS,
-    run: async () => {
-      await watcherTick(ctx, deps);
+    run: async (context) => {
+      await watcherTick(ctx, deps, { signal: context?.signal });
     },
   };
 }

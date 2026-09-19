@@ -759,7 +759,31 @@ test("a host that never answers is abandoned at the timeout", async () => {
   );
 });
 
-test("the request carries no credential and asks for no compression", async () => {
+test("safeFetch asks for no compression and attaches no credential", async () => {
+  // Asserted on the headers safeFetch *chooses*, not on ones the test passed
+  // in — a fixture that supplies its own `accept-encoding` and then checks it
+  // is testing the fixture.
+  let seen: Record<string, string> = {};
+  const hop: Hop = async (request) => {
+    seen = { ...request.headers };
+    return {
+      status: 200,
+      headers: {},
+      body: Buffer.alloc(0),
+      truncated: false,
+      remoteAddress: PUBLIC_V4,
+    };
+  };
+  await safeFetch("https://example.com/", { resolver: publicResolver, hop });
+  // A byte cap counted on a gzip stream is not a byte cap: a few hundred
+  // kilobytes can decompress into gigabytes.
+  assert.equal(seen["accept-encoding"], "identity");
+  assert.equal(seen.authorization, undefined);
+  assert.equal(seen.cookie, undefined);
+  assert.ok((seen["user-agent"] ?? "").startsWith("PocketFlow/"));
+});
+
+test("those headers reach the wire, not only the hop", async () => {
   const seen: Record<string, string | undefined> = {};
   await withServer(
     (request, response) => {
@@ -768,11 +792,13 @@ test("the request carries no credential and asks for no compression", async () =
       response.end();
     },
     async (target) => {
-      await performHop(hopRequest(target("/")));
+      await performHop(
+        hopRequest(target("/"), { headers: { "accept-encoding": "identity", "x-probe": "1" } }),
+      );
     },
   );
-  // A byte cap counted on a gzip stream is not a byte cap.
   assert.equal(seen["accept-encoding"], "identity");
+  assert.equal(seen["x-probe"], "1");
   assert.equal(seen.authorization, undefined);
   assert.equal(seen.cookie, undefined);
 });

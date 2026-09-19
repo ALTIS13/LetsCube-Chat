@@ -139,11 +139,16 @@ test("a run still in flight is not started a second time", async () => {
   assert.equal(starts, 1);
 
   time.advance(60_000);
-  await scheduler.tick();
+  // Started and **not awaited**, on purpose. Awaiting it would deadlock if the
+  // overlap guard were ever removed — the second run would block on the same
+  // gate this test only opens afterwards — and a deadlocked test is a test
+  // that reports nothing. `run` increments `starts` before its first await, so
+  // the assertion below is already decided by the time we reach it.
+  const second = scheduler.tick();
   assert.equal(starts, 1, "the second tick found the job already running");
 
   gate.resolve();
-  await first;
+  await Promise.all([first, second]);
 
   time.advance(60_000);
   await scheduler.tick();

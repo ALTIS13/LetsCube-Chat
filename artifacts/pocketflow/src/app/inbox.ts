@@ -4,6 +4,8 @@ import { button, keyboard, type AppContext } from "#pf/app/context";
 import type { CallbackContext, Feature, MessageContext } from "#pf/app/router";
 import { prettyJson, type Classification } from "#pf/lib/classify";
 import { asCode, clampMessage, untrusted } from "#pf/lib/render";
+import { SafeFetchError, safeFetch } from "#pf/lib/safeFetch";
+import { SsrfError } from "#pf/lib/ssrf";
 import { rememberCandidate, readCandidate } from "#pf/store/candidates";
 import {
   countItems,
@@ -43,6 +45,7 @@ const PRETTY = "inbox.pretty";
 const SHA = "inbox.sha";
 const FORGET = "inbox.forget";
 const PAGE = "inbox.page";
+const STATUS = "inbox.status";
 
 /** Owned by the reminders feature; the inbox only offers it. */
 const REMIND_FROM = "remind.from";
@@ -336,6 +339,55 @@ export function createInboxFeature(): Feature {
         });
       },
 
+      async [STATUS](input: CallbackContext) {
+        const candidate = await readCandidate(input.ctx.db, input.user.userId, input.args[0] ?? "");
+        if (!candidate) {
+          await input.ctx.bot.answerCallbackQuery(input.query.id, {
+            text: "Это предложение больше не действует",
+          });
+          return;
+        }
+        await input.ctx.bot.answerCallbackQuery(input.query.id, { text: "Проверяю…" });
+        await input.ctx.bot.sendChatAction(candidate.chatId as ChatId, "typing");
+
+        // The same guarded client the watcher uses, and for the same reason:
+        // this fetches an address somebody typed, so it is an SSRF surface
+        // whether it runs once or every five minutes. `truncate` rather than
+        // the default, because only the status line is wanted here and a large
+        // page must not be reported as a failure.
+        try {
+          const result = await safeFetch(candidate.content, {
+            method: "GET",
+            maxBytes: 64 * 1024,
+            onOversize: "truncate",
+            timeoutMs: 10_000,
+          });
+          const lines = [
+            (result.status < 400 ? "🟢 " : "🔴 ") + result.status,
+            "За " + Math.round(result.elapsedMs) + " мс",
+          ];
+          if (result.redirects > 0) {
+            lines.push("Переходов: " + result.redirects);
+            lines.push("Итог: " + untrusted(result.finalUrl));
+          }
+          await input.ctx.bot.sendText({
+            chatId: input.query.message.chatId,
+            text: clampMessage(lines.join(String.fromCharCode(10))),
+          });
+        } catch (error) {
+          // `publicMessage` is the only thing shown. A detailed reason maps the
+          // network this bot runs in, and a per-address answer is an oracle;
+          // the guard author made that call and it holds here too.
+          const message =
+            error instanceof SsrfError || error instanceof SafeFetchError
+              ? error.publicMessage
+              : "Не удалось проверить адрес";
+          await input.ctx.bot.sendText({
+            chatId: input.query.message.chatId,
+            text: "🔴 " + message,
+          });
+        }
+      },
       async [FORGET](input: CallbackContext) {
         // The id in the button is a lookup, never a permission: `deleteItem`
         // is scoped to the owner, so a forged id naming somebody else's item
@@ -381,10 +433,10 @@ export function createInboxFeature(): Feature {
             chatId,
             text: clampMessage(`Ссылка\nХост: ${untrusted(classification.hostname)}`),
             replyToMessageId: replyTo,
-            keyboard: keyboard([
-              button("Сохранить", SAVE, token),
-              button("Следить", WATCH_FROM, token),
-            ]),
+            keyboard: keyboard(
+              [button("Сохранить", SAVE, token), button("Следить", WATCH_FROM, token)],
+              [button("Проверить сейчас", STATUS, token)],
+            ),
           });
           return true;
         }
@@ -482,5 +534,5 @@ export function createInboxFeature(): Feature {
   };
 }
 
-export const INBOX_ACTIONS = { SAVE, PRETTY, SHA, FORGET, PAGE, REMIND_FROM, WATCH_FROM };
+export const INBOX_ACTIONS = { SAVE, PRETTY, SHA, STATUS, FORGET, PAGE, REMIND_FROM, WATCH_FROM };
 export const START_SCREEN_ACTIONS = [PAGE, REMINDERS_LIST, WEBHOOKS_LIST, WATCH_LIST] as const;

@@ -3,6 +3,7 @@ import type { CallbackContext, Feature, MessageContext } from "#pf/app/router";
 import type { Classification } from "#pf/lib/classify";
 import { asCode, clampMessage } from "#pf/lib/render";
 import { LETSCUBE_GAPS } from "#pf/transport/letscube";
+import { clearPendingPrompt, readPendingPrompt, setPendingPrompt } from "#pf/store/prompts";
 import { setDeveloperMode, setTimeZone } from "#pf/store/users";
 import type { Update } from "#pf/transport/types";
 
@@ -24,6 +25,9 @@ const TZ = "set.tz";
 const TZ_MANUAL = "set.tzmanual";
 const DEV_TOGGLE = "set.dev";
 const OPEN = "settings.open";
+
+/** The kind this feature writes into `pf_pending_prompts`, shared with every other. */
+const PROMPT_TIMEZONE = "settings.timezone";
 
 /**
  * The offered zones.
@@ -312,15 +316,13 @@ export function createSettingsFeature(): Feature {
           chatId: input.query.message.chatId,
           text: "Пришлите название зоны IANA, например Asia/Tbilisi.",
         });
-        await input.ctx.db.query(
-          `insert into pf_pending_prompts (chat_id, user_id, kind, context, expires_at)
-           values ($1, $2, 'settings.timezone', '{}'::jsonb, now() + interval '10 minutes')
-           on conflict (chat_id, user_id) do update
-             set kind = excluded.kind,
-                 context = excluded.context,
-                 expires_at = excluded.expires_at`,
-          [input.query.message.chatId, input.user.userId],
-        );
+        await setPendingPrompt(input.ctx.db, {
+          chatId: input.query.message.chatId,
+          userId: input.user.userId,
+          kind: PROMPT_TIMEZONE,
+          context: {},
+          expiresAt: new Date(input.ctx.now().getTime() + 10 * 60_000),
+        });
       },
 
       async [DEV_TOGGLE](input: CallbackContext) {
@@ -348,13 +350,18 @@ export function createSettingsFeature(): Feature {
 
     async onMessage(input: MessageContext, classification: Classification): Promise<boolean> {
       if (classification.kind !== "text") return false;
-      const pending = await input.ctx.db.query<{ kind: string }>(
-        `delete from pf_pending_prompts
-         where chat_id = $1 and user_id = $2 and kind = 'settings.timezone' and expires_at > now()
-         returning kind`,
-        [input.message.chat.id, input.user.userId],
+      // Read, then clear only if it is ours. A blind delete would swallow
+      // another feature's prompt — the row is one per (chat, user), so
+      // whoever deletes first wins and the other flow is left waiting for an
+      // answer that already went somewhere else.
+      const pending = await readPendingPrompt(
+        input.ctx.db,
+        input.message.chat.id,
+        input.user.userId,
+        input.ctx.now(),
       );
-      if (pending.rows.length === 0) return false;
+      if (pending?.kind !== PROMPT_TIMEZONE) return false;
+      await clearPendingPrompt(input.ctx.db, input.message.chat.id, input.user.userId);
       try {
         await setTimeZone(input.ctx.db, input.user.userId, classification.text.trim());
       } catch {

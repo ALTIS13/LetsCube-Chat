@@ -360,96 +360,15 @@ export async function snoozeReminder(
 // ---------------------------------------------------------------------------
 
 /**
- * «Пришлите дату», and anything else that waits for the next message.
- *
- * Keyed by (chat, user) and expiring, both from the schema: a flow somebody
- * abandoned must not silently eat their next unrelated message an hour later,
- * and two people in the same group must be able to be mid-flow at once.
- *
- * These three functions are not reminder-specific and are only here because
- * this module is the first to need them. They belong in a `store/prompts.ts`
- * as soon as a second feature wants one — see the report accompanying this
- * work; the shape is deliberately generic so that move is a cut and paste.
+ * Pending prompts moved to `store/prompts.ts` once a second feature needed
+ * them. Re-exported here so nothing that already imports them has to change,
+ * and so there is still only one implementation.
  */
-export type PendingPrompt<Context = Record<string, unknown>> = {
-  chatId: string;
-  userId: string;
-  kind: string;
-  context: Context;
-  expiresAt: Date;
-};
-
-export const PROMPT_TTL_MINUTES = 15;
-
-export async function setPendingPrompt(
-  db: Db,
-  input: {
-    chatId: string;
-    userId: string;
-    kind: string;
-    context: Record<string, unknown>;
-    expiresAt: Date;
-  },
-): Promise<void> {
-  await db.query(
-    `insert into pf_pending_prompts (chat_id, user_id, kind, context, expires_at)
-     values ($1, $2, $3, $4::jsonb, $5)
-     on conflict (chat_id, user_id) do update
-       set kind = excluded.kind,
-           context = excluded.context,
-           expires_at = excluded.expires_at,
-           created_at = now()`,
-    [input.chatId, input.userId, input.kind, JSON.stringify(input.context), input.expiresAt],
-  );
-}
-
-export async function readPendingPrompt<Context = Record<string, unknown>>(
-  db: Db,
-  chatId: string,
-  userId: string,
-  now: Date,
-): Promise<PendingPrompt<Context> | null> {
-  const result = await db.query<{
-    chat_id: string;
-    user_id: string;
-    kind: string;
-    context: unknown;
-    expires_at: Date | string;
-  }>(
-    `select chat_id, user_id, kind, context, expires_at
-     from pf_pending_prompts
-     where chat_id = $1 and user_id = $2 and expires_at > $3`,
-    [chatId, userId, now],
-  );
-  const row = result.rows[0];
-  if (!row) return null;
-  // `jsonb` arrives parsed from `pg` and from PGlite alike, but a driver that
-  // hands back text must not take the handler down with a parse error.
-  let context: unknown = row.context;
-  if (typeof context === "string") {
-    try {
-      context = JSON.parse(context);
-    } catch {
-      context = {};
-    }
-  }
-  return {
-    chatId: row.chat_id,
-    userId: row.user_id,
-    kind: row.kind,
-    context: (context ?? {}) as Context,
-    expiresAt: toDate(row.expires_at),
-  };
-}
-
-export async function clearPendingPrompt(db: Db, chatId: string, userId: string): Promise<void> {
-  await db.query(`delete from pf_pending_prompts where chat_id = $1 and user_id = $2`, [
-    chatId,
-    userId,
-  ]);
-}
-
-export async function prunePendingPrompts(db: Db, now: Date): Promise<number> {
-  const result = await db.query(`delete from pf_pending_prompts where expires_at < $1`, [now]);
-  return result.rowCount ?? 0;
-}
+export {
+  PROMPT_TTL_MINUTES,
+  clearPendingPrompt,
+  prunePendingPrompts,
+  readPendingPrompt,
+  setPendingPrompt,
+  type PendingPrompt,
+} from "#pf/store/prompts";
