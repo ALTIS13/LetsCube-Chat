@@ -7,11 +7,15 @@ import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
+  AUDIO_GAIN_HINT,
   AUDIO_MODE_SEGMENTS,
+  AUDIO_PROCESSING_SWITCHES,
   audioDeviceOptions,
   audioLevelPercent,
+  processingRefusalNote,
   selfMonitorHint,
   type AudioModeSegment,
+  type AudioProcessingKey,
 } from "../../artifacts/kub/src/lib/audioSettingsSurface.ts";
 
 /**
@@ -180,6 +184,72 @@ test("a running test is not told the thing it is running is merely available", (
   for (const line of [off, ready, on]) assert.ok(line.trim().length > 0);
 });
 
+/* ── what the browser did with the three constraints ──────────────────────── */
+
+const ALL_ON: Record<AudioProcessingKey, boolean> = {
+  noiseSuppression: true,
+  echoCancellation: true,
+  autoGainControl: true,
+};
+
+test("the three processing switches are the browser's three constraints, named once", () => {
+  assert.deepEqual(
+    AUDIO_PROCESSING_SWITCHES.map((entry) => entry.key),
+    ["noiseSuppression", "echoCancellation", "autoGainControl"],
+  );
+  assert.equal(new Set(AUDIO_PROCESSING_SWITCHES.map((entry) => entry.label)).size, 3);
+  for (const entry of AUDIO_PROCESSING_SWITCHES) {
+    assert.ok(entry.label.trim().length > 0);
+    assert.ok(entry.hint.trim().length > 0);
+  }
+});
+
+test("nothing on this screen claims processing the product does not perform", () => {
+  // Krisp is a commercial product; LiveKit's integration of it is a paid
+  // add-on. Neither is installed, and no word here may suggest otherwise — nor
+  // may any word claim a noise engine of the product's own. What the three
+  // switches reach is `getUserMedia` on the person's own browser, and that is
+  // all there is.
+  const words = [
+    AUDIO_GAIN_HINT,
+    ...AUDIO_PROCESSING_SWITCHES.flatMap((entry) => [entry.label, entry.hint]),
+    processingRefusalNote(ALL_ON, { noiseSuppression: false, echoCancellation: false, autoGainControl: false }) ?? "",
+  ].join(" ");
+  assert.doesNotMatch(words, /krisp/i);
+  assert.doesNotMatch(words, /нейросет|наш движок|собственн\w+ (движок|обработк)/i);
+});
+
+test("a constraint the browser refused is said, and one it granted is not", () => {
+  // The defect class this note exists for: a switch drawn in the position the
+  // person left it while the microphone does something else. A constraint is a
+  // request, and `getSettings()` is the only place the answer lives.
+  assert.equal(processingRefusalNote(ALL_ON, { noiseSuppression: true, echoCancellation: true, autoGainControl: true }), null);
+  const one = processingRefusalNote(ALL_ON, { noiseSuppression: false, echoCancellation: true, autoGainControl: true });
+  assert.ok(one, "a refused constraint produced no note at all");
+  assert.match(one, /Убрать шум/);
+  assert.doesNotMatch(one, /Убрать эхо/);
+  assert.match(one, /выключено/);
+
+  // The other direction: asked off, handed back on. A headset with its own
+  // processing really does this.
+  const forcedOn = processingRefusalNote(
+    { noiseSuppression: false, echoCancellation: false, autoGainControl: false },
+    { noiseSuppression: true, echoCancellation: false, autoGainControl: false },
+  );
+  assert.ok(forcedOn);
+  assert.match(forcedOn, /включено/);
+});
+
+test("a browser that reports nothing is not accused of anything", () => {
+  // WebKit's `getSettings()` omits all three. A note built out of `undefined`
+  // would put a warning in front of every Safari user on the strength of a
+  // missing field.
+  assert.equal(processingRefusalNote(ALL_ON, {}), null);
+  assert.equal(processingRefusalNote(ALL_ON, { noiseSuppression: undefined }), null);
+  assert.equal(processingRefusalNote(ALL_ON, { noiseSuppression: "true" }), null);
+  assert.equal(processingRefusalNote(ALL_ON, { noiseSuppression: 1 }), null);
+});
+
 // ── the vocabulary, read off the section's source ────────────────────────────
 
 test("the page ground is painted on the picker's track and nowhere else", () => {
@@ -269,6 +339,46 @@ test("the only perimeters left are the device field and the picker's track", () 
   assert.equal(kept.length, 2, `perimeters: ${kept.join(" | ")}`);
   assert.equal(kept.filter((s) => s.includes("kub-field")).length, 1);
   assert.equal(kept.filter((s) => s.includes(TRACK)).length, 1);
+});
+
+/**
+ * One sampler, which is the first thing D-261 asked to be established before
+ * anything was designed.
+ *
+ * This panel used to build its own `AudioContext`, its own `AnalyserNode` and
+ * its own `requestAnimationFrame` loop — a second answer to «how loud is this
+ * microphone», at sixty readings a second against the twenty
+ * `lib/micLevel.ts` takes for a call, and post-gain against that module's raw
+ * track. A threshold placed against the one was being compared, in the call,
+ * against the other.
+ *
+ * A source scan and honest about it: what it catches is somebody building a
+ * second sampler again. That the surviving one *works* is measured in
+ * `tests/e2e/audio-settings-meter.spec.ts`, which drives a known level into the
+ * page and reads the bar back out.
+ */
+function secondSampler(text: string): string[] {
+  const source = blankComments(text);
+  return ["createAnalyser", "getByteTimeDomainData", "getByteFrequencyData", "requestAnimationFrame"].filter(
+    (marker) => source.includes(marker),
+  );
+}
+
+test("the meter reads the level through the module a call reads it with", () => {
+  const text = read(SECTION);
+  assert.deepEqual(secondSampler(text), [], "the sound settings have built a second level sampler");
+  // And it really does read the shared one: an assertion that only forbids
+  // would pass just as well on a panel that had stopped measuring at all.
+  assert.match(blankComments(text), /openMicLevelSource\(/);
+});
+
+test("the one-sampler guarantee fails when an analyser comes back", () => {
+  const broken = mutate(
+    read(SECTION),
+    "      const source = track ? openMicLevelSource(track, receiveLevel) : null;",
+    "      const analyser = new AudioContextCtor().createAnalyser();\n      const source = track ? openMicLevelSource(track, receiveLevel) : null;",
+  );
+  assert.deepEqual(secondSampler(broken), ["createAnalyser"]);
 });
 
 // ── mutation: each source guarantee is proved by breaking it ─────────────────
@@ -375,6 +485,28 @@ test("the hint guarantee fails when a running test is called available again", a
       const hint = mod.selfMonitorHint as (a: boolean, b: boolean) => string;
       assert.equal(hint(false, true), hint(false, false));
       assert.match(hint(false, true), /Доступно во время проверки/);
+    },
+  );
+});
+
+test("the refusal guarantee fails when the note stops comparing", async () => {
+  // The mutation that matters is the one that makes the note trust the switch
+  // instead of the track: with the comparison gone, a browser that granted
+  // every constraint is still accused of refusing them, and — worse — the
+  // caller can no longer tell «all well» from «could not tell».
+  await withMutatedModule(
+    "    return typeof value === \"boolean\" && value !== asked[entry.key];",
+    "    return typeof value === \"boolean\";",
+    (mod) => {
+      const note = mod.processingRefusalNote as (
+        a: Record<string, boolean>,
+        b: Record<string, unknown>,
+      ) => string | null;
+      assert.notEqual(
+        note(ALL_ON, { noiseSuppression: true, echoCancellation: true, autoGainControl: true }),
+        null,
+        "the substitution did not reach the export",
+      );
     },
   );
 });

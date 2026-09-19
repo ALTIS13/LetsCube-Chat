@@ -6,21 +6,29 @@ import { fileURLToPath } from "node:url";
 import {
   MIC_ACTIVATION_DEFAULT,
   MIC_ACTIVATION_SEGMENTS,
+  MIC_AUTO_THRESHOLD_LABEL,
+  MIC_AUTO_THRESHOLD_MARGIN_DB,
+  MIC_AUTO_THRESHOLD_MAX,
+  MIC_AUTO_THRESHOLD_MIN_SAMPLES,
   MIC_GATE_CLOSED,
   MIC_GATE_FLOOR_DB,
   MIC_GATE_HOLD_MS,
   MIC_GATE_THRESHOLD_DEFAULT,
+  MIC_METER_STEP_PERCENT,
   MIC_TALK_KEY_DEFAULT,
   MIC_TALK_KEY_REFUSED,
   MIC_TALK_RELEASE_EVENTS,
+  autoMicThreshold,
   clampMicGateThreshold,
   micActivationHint,
+  micAutoThresholdNote,
   micControlWords,
   micGateCloseAt,
   micGateNeedsLevel,
   micGateOpenAt,
   micGateThresholdHint,
   micLevelPosition,
+  micMeterPercent,
   micTalkKeyFires,
   micTalkKeyLabel,
   micTalkKeyNote,
@@ -30,6 +38,7 @@ import {
   nextMicGate,
   readMicActivation,
   type MicActivation,
+  type MicAutoThresholdState,
   type MicGateState,
 } from "../../artifacts/kub/src/lib/micGate.ts";
 import { normalizeAudioSettings } from "../../artifacts/kub/src/hooks/useAudioSettings.ts";
@@ -119,6 +128,165 @@ test("the threshold is a position on the same axis the level is drawn on", () =>
   assert.equal(micLevelPosition(Number.NaN), 0);
   assert.equal(micLevelPosition(-1), 0);
   assert.equal(micLevelPosition(4), 1, "a peak over the analyser's midpoint is still the top of the bar");
+});
+
+/* ── The meter, and reduced motion ────────────────────────────────────────── */
+
+test("both bars on the screen are one measurement on one axis", () => {
+  // The defect D-261 names first, as arithmetic. Until 2026-09-20 the meter in
+  // «Уровень» was `round(level * 100)` and the bar under the threshold
+  // `round(micLevelPosition(level) * 100)`: one screen, one microphone, two
+  // pictures. A quiet room at a peak of 0.05 filled 5% of the first bar and
+  // 63% of the second, so a person who read the top one and set the bottom one
+  // was comparing two different quantities and could not know it.
+  const linear = (level: number) => Math.round(level * 100);
+  assert.equal(linear(0.05), 5);
+  assert.equal(micMeterPercent(0.05, false), 63);
+  // And the one that is drawn now is the one the threshold lives on: the bar's
+  // width and the handle's position are the same number when the level is
+  // exactly at the threshold.
+  for (const position of [0.1, 0.35, 0.6, 0.9]) {
+    assert.equal(
+      micMeterPercent(micGateOpenAt(position), false),
+      Math.round(position * 100),
+      `the bar and the handle disagree at ${position}`,
+    );
+  }
+});
+
+test("reduced motion coarsens the bar rather than stopping it", () => {
+  // The decision, stated as a test: the bar still answers, because a threshold
+  // control without a level is the guesswork it exists to end. What goes is the
+  // streaming — twenty steps instead of a hundred and one, and the caller drops
+  // the CSS transition on top of that.
+  const steps = new Set<number>();
+  for (let i = 0; i <= 200; i += 1) steps.add(micMeterPercent(i / 200, true));
+  assert.ok(steps.size <= 21, `reduced motion still draws ${steps.size} distinct widths`);
+  assert.ok(steps.size >= 10, "reduced motion has flattened the bar into something unreadable");
+  for (const width of steps) {
+    assert.equal(width % MIC_METER_STEP_PERCENT, 0, `${width}% is not on the step`);
+  }
+  // It still moves, and it still reaches both ends.
+  assert.equal(micMeterPercent(0, true), 0);
+  assert.equal(micMeterPercent(1, true), 100);
+  assert.notEqual(micMeterPercent(0.02, true), micMeterPercent(0.5, true));
+  // And nothing about it is a guess when the analyser answers rubbish.
+  for (const reduced of [false, true]) {
+    assert.equal(micMeterPercent(Number.NaN, reduced), 0);
+    assert.equal(micMeterPercent(-1, reduced), 0);
+    assert.equal(micMeterPercent(4, reduced), 100);
+  }
+});
+
+/* ── Placing the threshold from the room ──────────────────────────────────── */
+
+test("a measured threshold clears the room it measured, hysteresis included", () => {
+  // A steady room at −52 dBFS, two seconds of it at 50 ms a reading.
+  const room = 10 ** (-52 / 20);
+  const answer = autoMicThreshold(Array.from({ length: 40 }, () => room));
+  assert.notEqual(answer, null);
+  const openAt = micGateOpenAt(answer as number);
+  const closeAt = micGateCloseAt(answer as number);
+  // The whole reason the margin is 10 dB and not 3: the gate lets go 6 dB below
+  // where it opens, so a threshold that cleared the room only at its opening
+  // level would have its *closing* level buried in that room and would never
+  // close again once anybody spoke.
+  assert.ok(openAt > room, "the measured threshold does not even clear the room it measured");
+  assert.ok(closeAt > room, "the gate's closing level sits inside the room's own noise");
+  const marginDb = 20 * Math.log10(openAt / room);
+  assert.ok(
+    Math.abs(marginDb - MIC_AUTO_THRESHOLD_MARGIN_DB) < 1,
+    `the measured threshold sits ${marginDb.toFixed(1)} dB above the room, not ${MIC_AUTO_THRESHOLD_MARGIN_DB}`,
+  );
+});
+
+test("somebody who talks through the measurement still gets their room, not their voice", () => {
+  // Half the run is speech at −25 dBFS, which is where a laptop capture puts a
+  // conversational voice, and half is the room at −55.
+  const room = 10 ** (-55 / 20);
+  const speech = 10 ** (-25 / 20);
+  const mixed = autoMicThreshold(Array.from({ length: 60 }, (_, i) => (i % 2 === 0 ? room : speech)));
+  const quiet = autoMicThreshold(Array.from({ length: 60 }, () => room));
+  assert.notEqual(mixed, null);
+  // Stated as «the speech changed nothing», not as a bracket. A bracket was
+  // what this assertion was first: −55 < threshold < −25, which the mean
+  // satisfies — the mean of these two positions is −30 dBFS, comfortably
+  // inside it — so a mutation replacing the quarter-point with the mean stayed
+  // **green**. The claim is that talking during the measurement does not move
+  // the answer, and this is that claim.
+  assert.equal(mixed, quiet, `talking during the measurement moved the threshold from ${quiet} to ${mixed}`);
+  const db = 20 * Math.log10(micGateOpenAt(mixed as number));
+  assert.ok(db > -55, `the threshold at ${db.toFixed(1)} dBFS is under the room`);
+  assert.ok(db < -25, `the threshold at ${db.toFixed(1)} dBFS is above the speech it must let through`);
+  // The honest limit of this, written down rather than discovered later: the
+  // quarter-point is the room only while at least a quarter of the run is
+  // room. Somebody who talks without pause for the whole two seconds measures
+  // their own voice, and the note under the control tells them to be quiet for
+  // exactly that reason.
+});
+
+test("a run that measured nothing says so instead of inventing a threshold", () => {
+  // `null` and not `MIC_GATE_THRESHOLD_DEFAULT`: a function answering the
+  // default when it had nothing is indistinguishable from one that measured a
+  // room and found it exactly average, and the surface would have no way to say
+  // «не удалось измерить».
+  assert.equal(autoMicThreshold([]), null);
+  assert.equal(autoMicThreshold(Array.from({ length: MIC_AUTO_THRESHOLD_MIN_SAMPLES - 1 }, () => 0.01)), null);
+  assert.equal(autoMicThreshold(Array.from({ length: 30 }, () => Number.NaN)), null);
+  assert.notEqual(autoMicThreshold(Array.from({ length: MIC_AUTO_THRESHOLD_MIN_SAMPLES }, () => 0.01)), null);
+});
+
+test("a measured threshold is one the slider can hold, and never «never closes»", () => {
+  // Silence measures as position 0, and 0 is the one value that means the gate
+  // never closes. What keeps the answer off that floor is the **margin**, not a
+  // clamp: a `MIC_AUTO_THRESHOLD_MIN` of 0.05 stood here until a mutation
+  // showed it could never fire, because the margin already lifts position 0 to
+  // 0.143. The clamp went and this assertion stayed, which is the right way
+  // round — it pins the property rather than the mechanism, and it goes red if
+  // the margin is ever taken away.
+  const silent = autoMicThreshold(Array.from({ length: 40 }, () => 0)) as number;
+  assert.ok(silent > 0, `silence measured ${silent}`);
+  assert.notEqual(micGateOpenAt(silent), 0, "a measured threshold turned the gate off");
+  // A room so loud there is no headroom left is clamped rather than made
+  // unusable.
+  const loud = autoMicThreshold(Array.from({ length: 40 }, () => 0.9)) as number;
+  assert.ok(loud <= MIC_AUTO_THRESHOLD_MAX, `a loud room measured ${loud}`);
+  // And every answer lands on a step the slider can represent, or the handle
+  // would sit somewhere a hand can never put it back.
+  for (const level of [0, 0.001, 0.01, 0.05, 0.2, 0.5, 0.9, 1]) {
+    const answer = autoMicThreshold(Array.from({ length: 40 }, () => level)) as number;
+    // `answer * 100` is compared the other way round on purpose: 0.14 * 100 is
+    // 14.000000000000002 in binary floating point, so the multiplication is the
+    // wrong side to test on. What the slider needs is that the value is the
+    // nearest double to some hundredth, which is what this says.
+    assert.equal(answer, Math.round(answer * 100) / 100, `${answer} is not a hundredth`);
+  }
+});
+
+test("the measurement says something different in each of its four states", () => {
+  const states: MicAutoThresholdState[] = ["idle", "listening", "done", "failed"];
+  const notes = states.map(micAutoThresholdNote);
+  assert.equal(new Set(notes).size, 4, "two states of the measurement say the same thing");
+  for (const note of notes) assert.ok(note.trim().length > 20);
+  // The one that must not be mistaken for success.
+  assert.match(micAutoThresholdNote("failed"), /Не удалось/);
+  assert.match(micAutoThresholdNote("done"), new RegExp(String(MIC_AUTO_THRESHOLD_MARGIN_DB)));
+});
+
+test("nothing on this surface claims processing the product does not perform", () => {
+  // Krisp is a commercial product and LiveKit's integration of it is a paid
+  // add-on; neither is installed. The words this module hands the screen may
+  // not imply either, and they may not name a «движок» the product does not
+  // ship.
+  const words = [
+    ...(["idle", "listening", "done", "failed"] as MicAutoThresholdState[]).map(micAutoThresholdNote),
+    ...(["open", "voice", "ptt"] as MicActivation[]).map(micActivationHint),
+    micGateThresholdHint(true),
+    micGateThresholdHint(false),
+    MIC_AUTO_THRESHOLD_LABEL,
+  ].join(" ");
+  assert.doesNotMatch(words, /krisp/i);
+  assert.doesNotMatch(words, /шумоподавлени[ея] LETSCUBE|нейросет|ИИ-|AI-/i);
 });
 
 test("the default threshold sits between a quiet room and a speaking voice", () => {
@@ -413,7 +581,13 @@ test("every mode says what it does, once, in its own words", () => {
   // The threshold's own line changes with whether there is a level to look at,
   // which is the same courtesy `selfMonitorHint` was fixed to show.
   assert.notEqual(micGateThresholdHint(true), micGateThresholdHint(false));
-  assert.match(micGateThresholdHint(false), /проверку микрофона/);
+  // And the resting line names the control that will produce one. It used to
+  // say «запустите проверку микрофона **выше**» — a direction to a button in
+  // another group, which is the arrangement D-261 was filed about. The
+  // measurement is in this group now, so the line names it by the words on it;
+  // if the button is ever renamed, this goes red rather than the sentence
+  // quietly pointing at nothing.
+  assert.match(micGateThresholdHint(false), new RegExp(MIC_AUTO_THRESHOLD_LABEL));
 });
 
 /* ── The instrument, read as source ───────────────────────────────────────── */

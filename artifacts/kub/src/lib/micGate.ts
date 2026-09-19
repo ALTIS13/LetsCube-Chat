@@ -238,6 +238,124 @@ export function micLevelPosition(level: number): number {
   return 1 - db / MIC_GATE_FLOOR_DB;
 }
 
+/* ── The meter, and what «reduce motion» does to it ───────────────────────── */
+
+/**
+ * How coarse the bar becomes for somebody who has asked for reduced motion.
+ *
+ * 5% of the axis, which is 3.5 dB of the 70 the axis spans, and twenty
+ * distinguishable steps across it.
+ */
+export const MIC_METER_STEP_PERCENT = 5;
+
+/**
+ * The width of the level bar, as a percentage of the threshold's own axis.
+ *
+ * **The bar goes on moving under `prefers-reduced-motion`, and that is the
+ * decision rather than an omission.** The preference is about movement a person
+ * did not ask for and cannot use — a panel sliding, a card lifting, a ripple.
+ * This bar is the measurement: a threshold control without it is the guesswork
+ * the control exists to end, and freezing it would not reduce motion so much as
+ * remove the instrument. What is removed instead is the part that is genuinely
+ * animation rather than data:
+ *
+ *  - the reading is **quantised** to `MIC_METER_STEP_PERCENT`, so the bar steps
+ *    between twenty positions instead of streaming through 101 of them;
+ *  - the caller drops the CSS `transition`, so the browser stops interpolating
+ *    a further sixty frames between two readings that already arrive twenty
+ *    times a second.
+ *
+ * `aria-valuenow` is taken from the same number, so what a screen reader is
+ * told and what the eye sees are one reading and not two.
+ */
+export function micMeterPercent(level: number, reducedMotion: boolean): number {
+  const exact = micLevelPosition(level) * 100;
+  if (!reducedMotion) return Math.round(exact);
+  return Math.round(exact / MIC_METER_STEP_PERCENT) * MIC_METER_STEP_PERCENT;
+}
+
+/* ── Placing the threshold from the room rather than by eye ───────────────── */
+
+/**
+ * How far above the measured noise the threshold is placed, in dB.
+ *
+ * 10, and the first 6 of them are not taste: `micGateCloseAt` lets go 6 dB
+ * below where it opens, so a threshold sitting less than 6 dB above the room
+ * would have its *closing* level at or under the room's own noise and the gate,
+ * once opened, would never close again. 10 leaves 4 dB of headroom past that
+ * for a room that is not perfectly steady — a fan cycling, a street outside.
+ */
+export const MIC_AUTO_THRESHOLD_MARGIN_DB = 10;
+
+/** How long the measurement listens. Two seconds of room, no more. */
+export const MIC_AUTO_THRESHOLD_MS = 2000;
+
+/**
+ * The fewest readings an answer may be computed from.
+ *
+ * A guard rather than a schedule: the caller stops by the clock above, and this
+ * refuses an answer when the level never really arrived — a capture that ended,
+ * a browser that gave no `AudioContext`. Twenty is one second at the 50 ms the
+ * level is read on, so a run that produced fewer than this did not measure a
+ * room, and saying so is better than placing a threshold from four samples.
+ */
+export const MIC_AUTO_THRESHOLD_MIN_SAMPLES = 20;
+
+/**
+ * Which part of the run is taken as «the room».
+ *
+ * The quarter-point of the sorted readings, not the mean and not the median.
+ * Speech has gaps — the silence inside a sentence runs to about 250 ms, which
+ * is five readings — so a quarter of a two-second run is quiet whether the
+ * person stayed silent throughout or talked over half of it. The mean would be
+ * dragged up by every syllable, and the median by anyone who did not stop.
+ */
+export const MIC_AUTO_THRESHOLD_FLOOR_QUANTILE = 0.25;
+
+/**
+ * Never so high that ordinary speech cannot open it.
+ *
+ * There is deliberately **no matching floor**. One was written here first —
+ * `MIC_AUTO_THRESHOLD_MIN = 0.05`, guarding against a measured threshold of 0,
+ * which is the one value that means «never closes». A mutation proved it dead:
+ * the quietest room measures as position 0, and the margin above already lifts
+ * that to 10/70 = 0.143, so the clamp could not fire for any input. What keeps
+ * a measured threshold off the floor is the margin, and an unreachable clamp
+ * pretending to do it would have been a guarantee nothing could test.
+ */
+export const MIC_AUTO_THRESHOLD_MAX = 0.9;
+
+/**
+ * A threshold position measured from a run of levels, or `null` for «that was
+ * not a measurement».
+ *
+ * `null` rather than a default, and that distinction is the whole point: a
+ * function that answered `MIC_GATE_THRESHOLD_DEFAULT` when it had nothing would
+ * be indistinguishable from one that had measured a room and found it to be
+ * exactly average. The caller says «не удалось измерить» instead.
+ */
+export function autoMicThreshold(levels: readonly number[]): number | null {
+  const positions = levels
+    .filter((level) => Number.isFinite(level))
+    .map(micLevelPosition)
+    .sort((a, b) => a - b);
+  if (positions.length < MIC_AUTO_THRESHOLD_MIN_SAMPLES) return null;
+  const index = Math.min(
+    positions.length - 1,
+    Math.floor(positions.length * MIC_AUTO_THRESHOLD_FLOOR_QUANTILE),
+  );
+  const floor = positions[index];
+  // The margin is also what keeps the answer off the floor of the slider: the
+  // quietest possible room is position 0, and 0 is the one value that means
+  // «never closes». See `MIC_AUTO_THRESHOLD_MAX` for the clamp that was here
+  // and why it went.
+  const answer = floor + MIC_AUTO_THRESHOLD_MARGIN_DB / -MIC_GATE_FLOOR_DB;
+  if (answer >= MIC_AUTO_THRESHOLD_MAX) return MIC_AUTO_THRESHOLD_MAX;
+  // The slider steps in hundredths, so an answer it cannot represent would put
+  // the handle somewhere the person can never put it back.
+  return Math.round(answer * 100) / 100;
+}
+
 /* ── The key ──────────────────────────────────────────────────────────────── */
 
 /**
@@ -469,7 +587,40 @@ export const MIC_GATE_LEVEL_LABEL = "Уровень микрофона отно�
 export function micGateThresholdHint(testing: boolean): string {
   return testing
     ? "Полоса под ползунком светится, пока микрофон открыт. Говорите обычным голосом и поднимайте порог, пока не перестанет реагировать на тишину."
-    : "Запустите проверку микрофона выше, чтобы увидеть свой уровень рядом с порогом.";
+    : `Полоса под ползунком — ваш уровень на той же шкале. Нажмите «${MIC_AUTO_THRESHOLD_LABEL}»: микрофон включится, и вы её увидите.`;
+}
+
+/**
+ * The calibration control, and the three things it can be in the middle of.
+ *
+ * It is a **button and not a switch**, which is a decision and not a shortcut.
+ * Discord's «Automatically determine input sensitivity» keeps deciding for the
+ * whole call: it follows the room while you are in it. Nothing here can do
+ * that — the level a call reads lives in `hooks/useVoiceCall.ts`, on the call's
+ * own capture, and this screen's capture ends when the screen closes. A switch
+ * called «автоматически» that in fact measured once, here, and then stopped
+ * would be a label describing a mechanism the product does not have, which is
+ * the one thing the register refuses more consistently than any visual defect.
+ *
+ * So the control says what it does: it listens for two seconds and puts the
+ * threshold where the measurement says it goes.
+ */
+export type MicAutoThresholdState = "idle" | "listening" | "done" | "failed";
+
+export const MIC_AUTO_THRESHOLD_LABEL = "Подобрать порог";
+export const MIC_AUTO_THRESHOLD_BUSY_LABEL = "Слушаем…";
+
+export function micAutoThresholdNote(state: MicAutoThresholdState): string {
+  if (state === "listening") {
+    return "Помолчите: измеряем шум вашей комнаты. Займёт две секунды.";
+  }
+  if (state === "done") {
+    return `Порог поставлен на ${MIC_AUTO_THRESHOLD_MARGIN_DB} дБ выше измеренного шума комнаты. Скажите что-нибудь: полоса должна загораться на голосе и гаснуть в тишине.`;
+  }
+  if (state === "failed") {
+    return "Не удалось измерить: микрофон не дал уровень. Порог остался прежним.";
+  }
+  return `Слушает комнату две секунды и ставит порог на ${MIC_AUTO_THRESHOLD_MARGIN_DB} дБ выше её шума.`;
 }
 
 export const MIC_TALK_KEY_ROW_LABEL = "Клавиша для разговора";

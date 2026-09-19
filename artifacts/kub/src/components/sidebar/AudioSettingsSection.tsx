@@ -29,6 +29,7 @@ import {
   AUDIO_DEFAULT_INPUT_LABEL,
   AUDIO_DEFAULT_OUTPUT_LABEL,
   AUDIO_DEVICE_NAMES_NOTE,
+  AUDIO_GAIN_HINT,
   AUDIO_GAIN_LABEL,
   AUDIO_GROUP_DEVICES,
   AUDIO_GROUP_LEVEL,
@@ -41,15 +42,17 @@ import {
   AUDIO_OUTPUT_LABEL,
   AUDIO_OUTPUT_UNSUPPORTED_NOTE,
   AUDIO_PROCESSING_HINT,
+  AUDIO_PROCESSING_SWITCHES,
   AUDIO_RESET_LABEL,
   AUDIO_SELF_MONITOR_LABEL,
   audioDeviceOptions,
-  audioLevelPercent,
   deviceFallbackNote,
   micTestLabel,
+  processingRefusalNote,
   selfMonitorHint,
   type AudioDeviceChoice,
   type AudioModeSegment,
+  type AudioProcessingKey,
 } from "@/lib/audioSettingsSurface";
 import { DISABLED_SINK, FOCUS_RING, PRESS_SINK } from "@/lib/controlSurface";
 import {
@@ -57,20 +60,28 @@ import {
   MIC_ACTIVATION_GROUP_LABEL,
   MIC_ACTIVATION_SCOPE_NOTE,
   MIC_ACTIVATION_SEGMENTS,
+  MIC_AUTO_THRESHOLD_BUSY_LABEL,
+  MIC_AUTO_THRESHOLD_LABEL,
+  MIC_AUTO_THRESHOLD_MS,
   MIC_GATE_LEVEL_LABEL,
   MIC_GATE_THRESHOLD_LABEL,
   MIC_TALK_KEY_LISTENING,
   MIC_TALK_KEY_ROW_LABEL,
   MIC_TALK_TOUCH_NOTE,
+  autoMicThreshold,
   micActivationHint,
+  micAutoThresholdNote,
   micGateOpenAt,
   micGateThresholdHint,
-  micLevelPosition,
+  micMeterPercent,
   micTalkKeyLabel,
   micTalkKeyNote,
   micTalkKeyRefusal,
   type MicActivation,
+  type MicAutoThresholdState,
 } from "@/lib/micGate";
+import { openMicLevelSource, type MicLevelSource } from "@/lib/micLevel";
+import { prefersReducedMotion } from "@/lib/motion";
 import { coarsePointer } from "@/lib/pointer";
 import { cn } from "@/lib/utils";
 
@@ -108,14 +119,23 @@ export function AudioSettingsSection() {
   // What the player last found out about whether anything can be heard. Read
   // rather than assumed, and read again after each press that could change it.
   const [blocked, setBlocked] = useState(() => callSoundReadiness());
+  // What the browser actually did with the three processing constraints, which
+  // is not always what the three switches asked for. Read off the live track
+  // rather than assumed — see `processingRefusalNote`.
+  const [appliedNotice, setAppliedNotice] = useState<string | null>(null);
+  // The threshold measurement: which of its four states it is in, and the
+  // readings it has collected so far. The readings are a ref rather than state
+  // because they arrive twenty times a second and nothing draws them.
+  const [autoThreshold, setAutoThreshold] = useState<MicAutoThresholdState>("idle");
+  const autoRunRef = useRef<{ levels: number[]; until: number } | null>(null);
+  const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reducedMotion = useReducedMotion();
   const streamRef = useRef<MediaStream | null>(null);
-  const contextRef = useRef<AudioContext | null>(null);
-  const frameRef = useRef<number | null>(null);
+  const levelSourceRef = useRef<MicLevelSource | null>(null);
   const monitorContextRef = useRef<AudioContext | null>(null);
   const monitorSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const monitorGainRef = useRef<GainNode | null>(null);
   const monitorInputGainRef = useRef<GainNode | null>(null);
-  const testInputGainRef = useRef<GainNode | null>(null);
 
   const outputSelectionSupported = supportsAudioOutputSelection();
 
@@ -188,27 +208,31 @@ export function AudioSettingsSection() {
 
   const stopMicTest = (updateState = true) => {
     stopSelfMonitoring(updateState);
-    if (frameRef.current !== null) {
-      cancelAnimationFrame(frameRef.current);
-      frameRef.current = null;
-    }
+    // The level source owns its own `AudioContext` and its own clone of the
+    // track, and closing it is what stops the audio thread. There is no second
+    // analyser here any more: the meter on this screen and the gate in a call
+    // are one measurement, taken by `lib/micLevel.ts`, so a threshold placed
+    // against this bar is placed against the number the call will compare.
+    levelSourceRef.current?.close();
+    levelSourceRef.current = null;
+    if (autoTimerRef.current !== null) clearTimeout(autoTimerRef.current);
+    autoTimerRef.current = null;
+    autoRunRef.current = null;
     streamRef.current?.getTracks().forEach((track) => {
       track.onended = null;
       track.stop();
     });
     streamRef.current = null;
-    void contextRef.current?.close().catch(() => undefined);
-    contextRef.current = null;
-    testInputGainRef.current = null;
     if (updateState) {
       setTesting(false);
       setLevel(0);
       setProcessingNotice(null);
+      setAppliedNotice(null);
+      setAutoThreshold("idle");
     }
   };
 
   useEffect(() => {
-    applyLiveAudioGain(testInputGainRef.current?.gain ?? null, settings.micInputGain);
     applyLiveAudioGain(monitorInputGainRef.current?.gain ?? null, settings.micInputGain);
   }, [settings.micInputGain]);
 
@@ -303,6 +327,43 @@ export function AudioSettingsSection() {
     }
   };
 
+  /**
+   * End the measurement and place the threshold, on whatever it collected.
+   *
+   * `autoMicThreshold` answering `null` is not «use the default»: it is «that
+   * was not a measurement», and the control says so rather than writing a
+   * number nobody's room produced.
+   */
+  const finishAutoThreshold = useCallback(() => {
+    if (autoTimerRef.current !== null) clearTimeout(autoTimerRef.current);
+    autoTimerRef.current = null;
+    const run = autoRunRef.current;
+    autoRunRef.current = null;
+    if (!run) return;
+    const answer = autoMicThreshold(run.levels);
+    if (answer === null) {
+      setAutoThreshold("failed");
+      return;
+    }
+    updateSettings({ micGateThreshold: answer });
+    setAutoThreshold("done");
+  }, [updateSettings]);
+
+  /**
+   * One reading, from the one sampler, going to the two things that want it:
+   * the bar, and the measurement while one is running.
+   */
+  const receiveLevel = useCallback(
+    (value: number) => {
+      setLevel(value);
+      const run = autoRunRef.current;
+      if (!run) return;
+      run.levels.push(value);
+      if (Date.now() >= run.until) finishAutoThreshold();
+    },
+    [finishAutoThreshold],
+  );
+
   const setupMicTest = async (nextSettings: AudioSettings, restoreMonitoring = false) => {
     const AudioContextCtor = getAudioContextCtor();
     if (!navigator.mediaDevices?.getUserMedia || !AudioContextCtor) {
@@ -315,16 +376,9 @@ export function AudioSettingsSection() {
     try {
       const result = await requestMicStream(nextSettings);
       const stream = result.stream;
-      const context = new AudioContextCtor();
-      const analyser = context.createAnalyser();
-      const gain = context.createGain();
-      const source = context.createMediaStreamSource(stream);
-      const data = new Uint8Array(analyser.fftSize);
-      gain.gain.value = nextSettings.micInputGain;
-      source.connect(gain);
-      gain.connect(analyser);
-      stream.getAudioTracks().forEach((track) => {
-        track.onended = () => {
+      const track = stream.getAudioTracks()[0];
+      stream.getAudioTracks().forEach((each) => {
+        each.onended = () => {
           setError("Микрофон недоступен.");
           stopMicTest();
         };
@@ -332,26 +386,27 @@ export function AudioSettingsSection() {
       debugMicTrack(stream);
       void refreshDevices();
       streamRef.current = stream;
-      contextRef.current = context;
-      testInputGainRef.current = gain;
+
+      // The one place the level is read, and it is the module a call reads it
+      // with. A second analyser here would be a second answer to «how loud is
+      // this microphone» — on a different scale, at a different rate — and the
+      // threshold below is set by comparing the two.
+      const source = track ? openMicLevelSource(track, receiveLevel) : null;
+      if (!source) {
+        stopMicTest(false);
+        setError("Проверка микрофона не поддерживается этим браузером.");
+        return false;
+      }
+      levelSourceRef.current = source;
+
       setTesting(true);
       setProcessingNotice(result.deviceFallback
         ? deviceFallbackNote("input")
         : result.fallback
         ? "Часть обработки микрофона не поддерживается этим браузером. Используется стандартный режим."
         : null);
+      setAppliedNotice(readAppliedProcessing(track, nextSettings));
       if (result.deviceFallback) updateSettings({ selectedInputDeviceId: DEFAULT_AUDIO_DEVICE_ID });
-
-      const tick = () => {
-        analyser.getByteTimeDomainData(data);
-        let peak = 0;
-        for (const sample of data) {
-          peak = Math.max(peak, Math.abs(sample - 128));
-        }
-        setLevel(Math.min(1, peak / 128));
-        frameRef.current = requestAnimationFrame(tick);
-      };
-      tick();
 
       if (restoreMonitoring) {
         await enableSelfMonitoring(stream, nextSettings);
@@ -372,6 +427,26 @@ export function AudioSettingsSection() {
     await setupMicTest(settings);
   };
 
+  /**
+   * Measure the room and put the threshold above it.
+   *
+   * It starts the capture itself when there is none, which is the whole point
+   * of the control: the threshold used to be calibrated by pressing a button in
+   * a different group and then scrolling back, and a person who had not found
+   * that button saw a bar that never moved.
+   */
+  const startAutoThreshold = async () => {
+    if (autoRunRef.current) return;
+    const running = testing || (await setupMicTest(settings));
+    if (!running) return;
+    setAutoThreshold("listening");
+    autoRunRef.current = { levels: [], until: Date.now() + MIC_AUTO_THRESHOLD_MS };
+    // A level that stops arriving — a capture that ended under it, a context
+    // the browser suspended — must not leave the control saying «слушаем…» for
+    // the rest of the session.
+    autoTimerRef.current = setTimeout(finishAutoThreshold, MIC_AUTO_THRESHOLD_MS + 1500);
+  };
+
   const applySettingsLive = async (nextSettings: AudioSettings, options?: { forceReacquire?: boolean }) => {
     setProcessingNotice(null);
     if (!testing) return;
@@ -382,6 +457,9 @@ export function AudioSettingsSection() {
       try {
         await track.applyConstraints(buildAudioTrackConstraints(nextSettings, false));
         setProcessingNotice(null);
+        // Asked again, because `applyConstraints` resolving means the browser
+        // accepted the request and not that it granted it.
+        setAppliedNotice(readAppliedProcessing(track, nextSettings));
         setApplying(false);
         return;
       } catch {
@@ -538,6 +616,7 @@ export function AudioSettingsSection() {
       <AudioGroup caption={AUDIO_GROUP_LEVEL}>
         <SliderRow
           label={AUDIO_GAIN_LABEL}
+          hint={AUDIO_GAIN_HINT}
           value={settings.micInputGain}
           min={0}
           max={2}
@@ -553,20 +632,18 @@ export function AudioSettingsSection() {
           >
             {micTestLabel(testing)}
           </KubButton>
-          <div
-            role="meter"
-            aria-label={AUDIO_LEVEL_METER_LABEL}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={audioLevelPercent(level)}
-            data-testid="audio-level-meter"
-            className="h-2 min-w-0 overflow-hidden rounded-full bg-[var(--kub-surface-3)]"
-          >
-            <div
-              className="h-full rounded-full bg-[var(--kub-cyan)] transition-[width]"
-              style={{ width: `${audioLevelPercent(level)}%` }}
-            />
-          </div>
+          {/*
+            The same meter the threshold is drawn against, on the same axis.
+            These two bars used to disagree: this one was linear and the one
+            under the threshold logarithmic, so a peak of 0.05 filled 5% here
+            and 63% there — two pictures of one measurement, on one screen.
+          */}
+          <MicMeter
+            level={level}
+            reducedMotion={reducedMotion}
+            label={AUDIO_LEVEL_METER_LABEL}
+            testId="audio-level-meter"
+          />
         </div>
         <SwitchRow
           label={AUDIO_SELF_MONITOR_LABEL}
@@ -640,10 +717,61 @@ export function AudioSettingsSection() {
               min={0}
               max={1}
               step={0.01}
-              onChange={(micGateThreshold) => updateSettings({ micGateThreshold })}
-              below={<GateLevel level={testing ? level : 0} threshold={settings.micGateThreshold} />}
+              onChange={(micGateThreshold) => {
+                // A hand on the slider ends the measurement's claim on it: a
+                // note still saying «поставлен по комнате» over a number the
+                // person has since dragged would be describing the wrong one.
+                if (autoThreshold !== "listening") setAutoThreshold("idle");
+                updateSettings({ micGateThreshold });
+              }}
+              below={
+                <MicMeter
+                  level={testing ? level : 0}
+                  reducedMotion={reducedMotion}
+                  label={MIC_GATE_LEVEL_LABEL}
+                  testId="mic-gate-level"
+                  threshold={settings.micGateThreshold}
+                />
+              }
             />
             <AudioNote>{micGateThresholdHint(testing)}</AudioNote>
+            {/*
+              The measurement, in the group it belongs to. The capture it needs
+              is the one the «Уровень» group starts, and this control starts it
+              too when there is none — so the threshold can be set without
+              knowing that a button two rows up is a prerequisite.
+            */}
+            {/*
+              An action row, the shape «Сбросить настройки звука» is drawn in
+              at the foot of this panel — not a caption beside a button. The
+              first draft was the caption-and-button shape the talk key uses,
+              and at 390 it printed «Подобрать порог» twice on one line: that
+              row works for the key because the button carries the *value*
+              («Ё / ~») while the caption carries the question, and here there
+              is no value, only the verb.
+            */}
+            <button
+              type="button"
+              onClick={() => void startAutoThreshold()}
+              disabled={autoThreshold === "listening"}
+              aria-live="polite"
+              data-testid="mic-auto-threshold"
+              data-state={autoThreshold}
+              className={cn(
+                "kub-button grid w-full min-w-0 grid-cols-[1.125rem_minmax(0,1fr)] items-center gap-3 px-3 py-2 min-h-11 text-left kub-interactive transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] kub-raise-hover",
+                FOCUS_RING,
+                PRESS_SINK,
+                DISABLED_SINK,
+              )}
+            >
+              <KubIcon name="microphone" size={16} className="text-[color:var(--kub-muted)]" />
+              <span className="min-w-0 text-sm text-[color:var(--kub-text)]">
+                {autoThreshold === "listening" ? MIC_AUTO_THRESHOLD_BUSY_LABEL : MIC_AUTO_THRESHOLD_LABEL}
+              </span>
+            </button>
+            <AudioNote tone={autoThreshold === "failed" ? "danger" : "muted"}>
+              {micAutoThresholdNote(autoThreshold)}
+            </AudioNote>
           </>
         )}
 
@@ -714,31 +842,31 @@ export function AudioSettingsSection() {
             ))}
           </div>
         </div>
-        <SwitchRow
-          label="Убрать шум"
-          hint="Снижает шум вентиляторов и комнаты."
-          checked={settings.noiseSuppression}
-          disabled={applying}
-          testId="audio-noise-suppression"
-          onChange={(noiseSuppression) => void changeProcessingToggle("noiseSuppression", noiseSuppression)}
-        />
-        <SwitchRow
-          label="Убрать эхо"
-          hint="Полезно без наушников."
-          checked={settings.echoCancellation}
-          disabled={applying}
-          testId="audio-echo-cancellation"
-          onChange={(echoCancellation) => void changeProcessingToggle("echoCancellation", echoCancellation)}
-        />
-        <SwitchRow
-          label="Выравнивать голос"
-          hint="Автоматически держит уровень."
-          checked={settings.autoGainControl}
-          disabled={applying}
-          testId="audio-auto-gain"
-          onChange={(autoGainControl) => void changeProcessingToggle("autoGainControl", autoGainControl)}
-        />
+        {/*
+          Drawn from the list the refusal note names, so the sentence
+          «браузер не включил "Убрать шум"» and the switch it is about cannot
+          come to say different words for one control.
+        */}
+        {AUDIO_PROCESSING_SWITCHES.map((entry) => (
+          <SwitchRow
+            key={entry.key}
+            label={entry.label}
+            hint={entry.hint}
+            checked={settings[entry.key]}
+            disabled={applying}
+            testId={PROCESSING_TEST_IDS[entry.key]}
+            onChange={(checked) => void changeProcessingToggle(entry.key, checked)}
+          />
+        ))}
         <AudioNote>{AUDIO_PROCESSING_HINT}</AudioNote>
+        {/*
+          What the browser actually did, which is the only thing that makes the
+          three switches above honest. A constraint is a request; a headset with
+          its own processing, or a platform that does not expose the control,
+          answers it with whatever it likes and says so only in
+          `track.getSettings()`.
+        */}
+        {appliedNotice && <AudioNote tone="danger">{appliedNotice}</AudioNote>}
         {processingNotice && <AudioNote>{processingNotice}</AudioNote>}
       </AudioGroup>
 
@@ -1012,9 +1140,16 @@ function ActivationSegment({
 }
 
 /**
- * The live level, drawn under the threshold on the **same axis**.
+ * The live level, on the threshold's own axis — the one meter this screen has.
  *
- * `micLevelPosition` is the inverse of the mapping the slider's value goes
+ * Two bars are drawn from it: the one beside «Проверить микрофон» and the one
+ * under the threshold. They are one component rather than two because they are
+ * one measurement, and until 2026-09-20 they were not: the first was linear in
+ * amplitude and the second logarithmic, so a peak of 0.05 filled 5% of the
+ * first and 63% of the second, on the same screen, at the same instant. A
+ * person reading the loud one and setting the quiet one had no way to know.
+ *
+ * `micMeterPercent` is the inverse of the mapping the slider's value goes
  * through, so a bar at this width and the handle above it mean the same
  * loudness — which is the whole reason the threshold is stored as a position
  * rather than as a number of decibels. The two line up to within half a thumb
@@ -1022,32 +1157,99 @@ function ActivationSegment({
  * that much and a plain box does not; the reading that matters is the colour
  * rather than the alignment.
  *
- * Accent while the gate would be open and muted while it would not: that is
- * the answer a person is looking for while dragging, and it is `micGateOpenAt`
- * making it rather than this component.
+ * With a `threshold`, accent while the gate would be open and muted while it
+ * would not — the answer a person is looking for while dragging, and it is
+ * `micGateOpenAt` making it rather than this component. Without one there is no
+ * gate to be open, so the bar is simply the level.
+ *
+ * `transition-[width]` only when motion is wanted. See `micMeterPercent` for
+ * the whole of that decision, including why the bar still moves.
  */
-function GateLevel({ level, threshold }: { level: number; threshold: number }) {
-  const open = level > 0 && level >= micGateOpenAt(threshold);
-  const width = Math.round(micLevelPosition(level) * 100);
+function MicMeter({
+  level,
+  reducedMotion,
+  label,
+  testId,
+  threshold,
+}: {
+  level: number;
+  reducedMotion: boolean;
+  label: string;
+  testId: string;
+  threshold?: number;
+}) {
+  const width = micMeterPercent(level, reducedMotion);
+  const gated = threshold !== undefined;
+  const open = gated && level > 0 && level >= micGateOpenAt(threshold);
   return (
     <div
       role="meter"
-      aria-label={MIC_GATE_LEVEL_LABEL}
+      aria-label={label}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={width}
-      data-testid="mic-gate-level"
-      data-open={open ? "true" : "false"}
-      className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--kub-range-track)]"
+      data-testid={testId}
+      data-open={gated ? (open ? "true" : "false") : undefined}
+      className={cn(
+        "h-2 min-w-0 w-full overflow-hidden rounded-full bg-[var(--kub-range-track)]",
+        gated && "mt-1",
+      )}
     >
       <div
         className={cn(
-          "h-full rounded-full transition-[width]",
-          open ? "bg-[var(--kub-cyan)]" : "bg-[var(--kub-muted)]",
+          "h-full rounded-full",
+          !reducedMotion && "transition-[width]",
+          gated && !open ? "bg-[var(--kub-muted)]" : "bg-[var(--kub-cyan)]",
         )}
         style={{ width: `${width}%` }}
       />
     </div>
+  );
+}
+
+/**
+ * Whether this viewer has asked for reduced motion, kept current.
+ *
+ * `prefersReducedMotion()` is a reading rather than a subscription, and this
+ * panel is open for as long as somebody is adjusting it — long enough for the
+ * system setting to change under it, which is exactly what somebody who has
+ * just found the setting will do.
+ */
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(() => prefersReducedMotion());
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onChange = () => setReduced(query.matches);
+    setReduced(query.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+  return reduced;
+}
+
+/** The three switches, by the names the specs already reach them under. */
+const PROCESSING_TEST_IDS: Record<AudioProcessingKey, string> = {
+  noiseSuppression: "audio-noise-suppression",
+  echoCancellation: "audio-echo-cancellation",
+  autoGainControl: "audio-auto-gain",
+};
+
+/**
+ * What the browser actually did with the three constraints, off the live track.
+ *
+ * `getSettings()` is the only honest source. A browser that omits the keys —
+ * WebKit omits all three — produces no note at all rather than a guess.
+ */
+function readAppliedProcessing(track: MediaStreamTrack | undefined, settings: AudioSettings): string | null {
+  if (!track || typeof track.getSettings !== "function") return null;
+  return processingRefusalNote(
+    {
+      noiseSuppression: settings.noiseSuppression,
+      echoCancellation: settings.echoCancellation,
+      autoGainControl: settings.autoGainControl,
+    },
+    track.getSettings() as Partial<Record<AudioProcessingKey, unknown>>,
   );
 }
 
@@ -1090,6 +1292,7 @@ function ModeSegment({
 
 function SliderRow({
   label,
+  hint,
   value,
   min,
   max,
@@ -1098,6 +1301,8 @@ function SliderRow({
   below,
 }: {
   label: string;
+  /** Where the number applies, for a control whose reach is not obvious. */
+  hint?: string;
   value: number;
   min: number;
   max: number;
@@ -1112,6 +1317,9 @@ function SliderRow({
         <span className="min-w-0 text-[color:var(--kub-text)]">{label}</span>
         <span className="shrink-0 tabular-nums text-xs text-[color:var(--kub-muted)]">{formatAudioPercent(value)}</span>
       </span>
+      {hint && (
+        <span className="mb-1.5 block text-xs leading-snug text-[color:var(--kub-muted)]">{hint}</span>
+      )}
       <input
         type="range"
         min={min}

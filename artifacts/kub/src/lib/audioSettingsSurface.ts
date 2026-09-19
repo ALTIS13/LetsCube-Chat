@@ -95,6 +95,86 @@ export const AUDIO_APPLYING_NOTE = "Применяем настройки…";
 export const AUDIO_PROCESSING_HINT =
   "Если слышно эхо, наденьте наушники. Если голос звучит с артефактами, выберите «Без обработки».";
 
+/**
+ * Where «Усиление микрофона» actually applies, said under the slider.
+ *
+ * Measured rather than assumed, on 2026-09-20: the gain is a `GainNode` this
+ * application builds. `hooks/useVoiceRecorder.ts` builds one for a voice
+ * message, this panel builds one for the monitor — and a call builds none.
+ * `captureMicrophone()` in `hooks/useVoiceCall.ts` publishes the track
+ * `buildAudioTrackConstraints` asked for, and that object carries no gain of
+ * any kind, so the number above this line has never changed how loud anybody
+ * is heard in a call.
+ *
+ * The sentence exists because the meter beneath it stopped following this
+ * slider on the same day: the meter now reads the raw track, which is what the
+ * call's gate reads, and a control that visibly moves nothing needs to say
+ * where it does apply rather than leave somebody to conclude the meter is
+ * broken.
+ */
+export const AUDIO_GAIN_HINT =
+  "Применяется к голосовым сообщениям и к прослушиванию себя, но не к звонку — а полоса ниже показывает именно то, что уходит в звонок.";
+
+export type AudioProcessingKey = "noiseSuppression" | "echoCancellation" | "autoGainControl";
+
+export interface AudioProcessingSwitch {
+  readonly key: AudioProcessingKey;
+  readonly label: string;
+  readonly hint: string;
+}
+
+/**
+ * The three constraints, in the order they are drawn, with their words.
+ *
+ * Here rather than inline in the component because the note below has to name
+ * them: a sentence saying «браузер не включил "Убрать шум"» and a switch
+ * labelled «Убрать шум» are the same control said twice, and two copies of a
+ * label are two chances to rename one of them.
+ *
+ * **These are the browser's own processing and the only processing this
+ * product performs.** There is no LETSCUBE noise engine and nothing here is
+ * Krisp: that is a commercial product, LiveKit's integration of it is a paid
+ * add-on, and neither is installed. Whatever the three switches can do is
+ * exactly what `getUserMedia` on the person's own browser and device can do.
+ */
+export const AUDIO_PROCESSING_SWITCHES: readonly AudioProcessingSwitch[] = [
+  { key: "noiseSuppression", label: "Убрать шум", hint: "Снижает шум вентиляторов и комнаты." },
+  { key: "echoCancellation", label: "Убрать эхо", hint: "Полезно без наушников." },
+  { key: "autoGainControl", label: "Выравнивать голос", hint: "Автоматически держит уровень." },
+];
+
+/**
+ * What the browser did with the three, when it did not do what was asked.
+ *
+ * A constraint is a **request**. `getUserMedia` takes `noiseSuppression: false`
+ * and is free to hand back a track with it on anyway — a headset that does its
+ * own processing, a platform that does not expose the control, a browser that
+ * ignores it — and the only place the truth exists is `track.getSettings()`
+ * after the capture opened. Until this note the panel drew a switch in the
+ * position the person left it and never asked; the switch then said one thing
+ * and the microphone did another, silently, which is the defect class the
+ * register is full of.
+ *
+ * Only a value the browser actually reported is compared. A `getSettings()`
+ * that omits a key — WebKit omits all three — says nothing about it, and
+ * inventing a disagreement out of `undefined` would put a warning in front of
+ * every Safari user on the strength of a missing field.
+ */
+export function processingRefusalNote(
+  asked: Readonly<Record<AudioProcessingKey, boolean>>,
+  applied: Readonly<Partial<Record<AudioProcessingKey, unknown>>>,
+): string | null {
+  const missed = AUDIO_PROCESSING_SWITCHES.filter((entry) => {
+    const value = applied[entry.key];
+    return typeof value === "boolean" && value !== asked[entry.key];
+  });
+  if (missed.length === 0) return null;
+  const said = missed
+    .map((entry) => `«${entry.label}» ${applied[entry.key] ? "включено" : "выключено"}`)
+    .join(", ");
+  return `Браузер решил иначе: ${said}. Это решение системы и устройства — переключатель их не перебивает.`;
+}
+
 /** The button that starts and stops the microphone test. A button says a verb. */
 export function micTestLabel(testing: boolean): string {
   return testing ? "Остановить" : "Проверить микрофон";

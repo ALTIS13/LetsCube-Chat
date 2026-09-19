@@ -199,4 +199,103 @@ test.describe("under a running microphone", () => {
       });
     });
   }
+
+  /**
+   * The bar at a **known** level, which is the only way to photograph an
+   * instrument.
+   *
+   * Every frame above is taken against Chromium's fake capture device, which is
+   * a once-a-second beep: the bar in those pictures is whatever the beep was
+   * doing at the shutter, so they show the layout and say nothing about the
+   * reading. Here the level is driven through `window.__letscubeMicLevel`, the
+   * DEV seam in `lib/micLevel.ts`, so «at rest», «with signal» and «under the
+   * threshold» are three states rather than three lucky moments.
+   *
+   * That this works at all is the change: before 2026-09-20 the settings
+   * meter had an analyser of its own and this seam reached only a call.
+   */
+  for (const theme of ["dark", "light"] as const) {
+    test(`the meter at a known level, photographed (${theme})`, async ({ page, request }, info) => {
+      await requireFixtureServer(request);
+      await page.addInitScript(() => {
+        const probe = { push: null as ((level: number) => void) | null };
+        (window as unknown as { __capturePush: typeof probe }).__capturePush = probe;
+        window.__letscubeMicLevel = (onLevel: (level: number) => void) => {
+          probe.push = onLevel;
+          return { close() { probe.push = null; } };
+        };
+      });
+      await openSound(page, theme);
+      const width = page.viewportSize()?.width ?? 0;
+      const tag = `${process.env.KUB_CAPTURE_TAG || "after"}-${width}-${theme}`;
+      const push = (level: number) =>
+        page.evaluate(
+          (value) => (window as unknown as { __capturePush: { push: ((l: number) => void) | null } }).__capturePush.push?.(value),
+          level,
+        );
+
+      const level = page.locator('[data-audio-group="Уровень"]');
+      const gate = page.locator('[data-audio-group="Микрофон в звонке"]');
+
+      await page.getByTestId("audio-mic-test").click();
+      await expect(page.getByTestId("audio-self-monitor")).toBeEnabled();
+
+      // At rest: a capture that is running and a room that is silent.
+      await push(0);
+      await level.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(400);
+      await level.screenshot({ path: `output/audio/audio-${tag}-meter-rest.png` });
+
+      // With signal: −26 dBFS, which is a voice into a laptop capture.
+      await push(0.05);
+      await page.waitForTimeout(400);
+      await level.screenshot({ path: `output/audio/audio-${tag}-meter-signal.png` });
+
+      await page.getByTestId("mic-activation-picker").locator('[data-mic-activation="voice"]').click();
+      await expect(page.getByTestId("mic-gate-level")).toBeVisible();
+
+      // The threshold with the level under it — the gate shut, the bar muted.
+      await push(0.002);
+      await gate.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(400);
+      await gate.screenshot({ path: `output/audio/audio-${tag}-gate-below.png` });
+
+      // And over it — the gate open, the bar lit. Two pictures of one control,
+      // which is what the colour is for.
+      await push(0.05);
+      await expect(page.getByTestId("mic-gate-level")).toHaveAttribute("data-open", "true");
+      await page.waitForTimeout(400);
+      await gate.screenshot({ path: `output/audio/audio-${tag}-gate-above.png` });
+
+      // The threshold placed by the measurement rather than by a hand.
+      await push(0);
+      await page.getByTestId("mic-auto-threshold").click();
+      await expect(page.getByTestId("mic-auto-threshold")).toHaveAttribute("data-state", "listening");
+      await page.evaluate(() => {
+        const held = window as unknown as {
+          __capturePush: { push: ((l: number) => void) | null };
+          __captureTimer?: number;
+        };
+        held.__captureTimer = window.setInterval(() => held.__capturePush.push?.(0.0025118864315095794), 50);
+      });
+      await expect(page.getByTestId("mic-auto-threshold")).toHaveAttribute("data-state", "done", { timeout: 15_000 });
+      // Stopped before the last push, or the room would go on overwriting it:
+      // the first run of this capture left the driver running and photographed
+      // the room at 26% under a threshold of 40% while claiming to show a
+      // voice over it.
+      await page.evaluate(() => {
+        const held = window as unknown as { __captureTimer?: number };
+        if (held.__captureTimer !== undefined) window.clearInterval(held.__captureTimer);
+      });
+      await push(0.05);
+      await expect(page.getByTestId("mic-gate-level")).toHaveAttribute("data-open", "true");
+      await gate.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(400);
+      await gate.screenshot({ path: `output/audio/audio-${tag}-gate-measured.png` });
+      info.annotations.push({
+        type: "capture",
+        description: `output/audio/audio-${tag}-{meter-rest,meter-signal,gate-below,gate-above,gate-measured}.png`,
+      });
+    });
+  }
 });

@@ -401,7 +401,14 @@ export async function openDisclosure(page: Page, id: "decoration" | "application
  */
 export async function setColumnWidth(page: Page, width: number) {
   await page.evaluate((value) => {
-    document.documentElement.style.setProperty("--kub-chat-list-width", `${value as number}px`);
+    // On the region and on the two boxes that stand on the seam, which is where
+    // `ChatListResizer` writes since D-268. The root's copy is only index.css's
+    // first-paint default now, and setting it there changes nothing.
+    const px = `${value as number}px`;
+    document.querySelector<HTMLElement>("[data-kub-left-region]")?.style.setProperty("--kub-chat-list-width", px);
+    document
+      .querySelectorAll<HTMLElement>("[data-kub-chat-list-seam]")
+      .forEach((box) => box.style.setProperty("--kub-chat-list-width", px));
   }, width);
   await page.waitForTimeout(120);
 }
