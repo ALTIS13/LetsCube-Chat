@@ -130,14 +130,23 @@ begin
 end
 $role$;
 
--- ── what the conversations held before this file touched anything ──────────
+-- ── what was there before this file touched anything ───────────────────────
 --
--- Transaction-local, so it is gone at commit either way. It exists so that the
--- promise this file's header makes — that it removes a duplicate and not
--- anybody's messages — is checked rather than stated.
+-- Both transaction-local, so they are gone at commit either way. The
+-- definition is captured so that the self-check can state its claim exactly —
+-- «these two edits and nothing else» — against the text production was
+-- actually running, rather than against a copy of it in this file. The count is
+-- captured so that «this removes a duplicate, not anybody's messages» is
+-- checked rather than asserted.
 
 select pg_catalog.set_config(
-  'kub.messages_before_join_dedup',
+  'kub.invite_accept_before',
+  pg_catalog.pg_get_functiondef('public.group_invite_accept(uuid)'::regprocedure),
+  true
+);
+
+select pg_catalog.set_config(
+  'kub.messages_before_invite_accept_before',
   (select pg_catalog.count(*) from public.messages)::text,
   true
 );
@@ -158,9 +167,9 @@ declare
   v_display_name text := 'Пользователь';
   v_now timestamptz := now();
   -- Added 2026-09-19. How many members the chat has once this acceptance has
-  -- put its row in — read exactly as `write_membership_service_message` reads
-  -- it, because the whole point of the guard below is to agree with that
-  -- trigger about which of the two writes the line.
+  -- put its row in — read exactly as write_membership_service_message reads it,
+  -- because the whole point of the guard below is to agree with that trigger
+  -- about which of the two writes the line.
   v_members bigint := 0;
 begin
   if v_caller is null then
@@ -219,8 +228,8 @@ begin
    where id = v_invite.id
    returning * into v_invite;
 
-  -- `write_membership_service_message` (20260915140000) already writes a line
-  -- for this join, better worded, whenever the chat is of type `group` and has
+  -- write_membership_service_message (20260915140000) already writes a line
+  -- for this join, better worded, whenever the chat is of type group and has
   -- more than one member once the row is in. What follows covers exactly what
   -- that trigger declines — a channel, and a group whose only member is the
   -- person who has just joined — so that a join is announced once and never
@@ -257,41 +266,46 @@ revoke all on function public.group_invite_accept(uuid) from public, anon;
 grant execute on function public.group_invite_accept(uuid) to authenticated;
 
 -- ── the self-check, which raises rather than committing half of this ───────
+--
+-- **It creates nothing.** An earlier draft of this file drove a whole
+-- acceptance here — two accounts, a chat, an invite — and it was right in
+-- PGlite and impossible on production, where registration is invite-only and
+-- `handle_new_user` raises `invite_required` the moment a row reaches
+-- `auth.users`. The production rehearsal caught it, which is the step that
+-- exists for exactly this. It would have been wrong even had it worked: firing
+-- a live system's account-creation triggers is a side effect, and «inside a
+-- transaction I will roll back» is not a licence for one.
+--
+-- So the proof is split by where it can live. Everything below is answerable
+-- from `pg_proc`, `pg_trigger` and a `count(*)`. The behaviour — one line
+-- instead of two for a group, one for a channel, one for a lone joiner — is
+-- proved in `tests/server/group-join-announced-once.test.mjs`, where seeding
+-- accounts is free and correct.
 
 do $check$
 declare
-  v_before bigint := pg_catalog.current_setting('kub.messages_before_join_dedup')::bigint;
-  v_after bigint;
-  v_src text;
+  v_before text := pg_catalog.current_setting('kub.invite_accept_before');
+  v_after text := pg_catalog.pg_get_functiondef('public.group_invite_accept(uuid)'::regprocedure);
+  v_reverted text;
+  v_rows_before bigint := pg_catalog.current_setting('kub.messages_before_invite_accept_before')::bigint;
+  v_rows_after bigint;
   v_secdef boolean;
   v_pinned boolean;
-  v_chat uuid;
-  v_channel_chat uuid;
-  v_empty_chat uuid;
-  v_owner_id uuid;
-  v_joiner uuid;
-  v_invite uuid;
-  v_written integer;
-  v_line text;
 begin
-  -- 1. The function is still the thing the client calls: definer, pinned, and
-  --    reachable by `authenticated` and nobody else. A `create or replace` that
-  --    lost any of these would deploy and then refuse every acceptance.
+  -- 1. The function is still the thing the client calls. A `create or replace`
+  --    that lost `security definer`, its `search_path` or its grant would
+  --    deploy and then refuse every acceptance.
 
   select p.prosecdef,
          exists (
            select 1 from pg_catalog.unnest(p.proconfig) setting
             where setting like 'search_path=%'
-         ),
-         pg_catalog.pg_get_functiondef(p.oid)
-    into v_secdef, v_pinned, v_src
+         )
+    into v_secdef, v_pinned
     from pg_catalog.pg_proc p
     join pg_catalog.pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname = 'group_invite_accept';
 
-  if v_src is null then
-    raise exception 'public.group_invite_accept is gone';
-  end if;
   if not coalesce(v_secdef, false) then
     raise exception
       'group_invite_accept is no longer security definer, so accepting an invite will be refused by row level security';
@@ -306,13 +320,13 @@ begin
     raise exception 'anon can call group_invite_accept';
   end if;
 
-  -- 2. The other mechanism is still there. This file narrows one writer on the
-  --    strength of the other covering the ground, so if the other has gone the
-  --    premise has gone with it.
+  -- 2. The other writer is still there. This file's whole premise is that the
+  --    membership trigger covers the ground it gives up; if the trigger has
+  --    gone, the premise has gone with it and a join would be unannounced.
 
   if pg_catalog.to_regprocedure('public.write_membership_service_message()') is null then
     raise exception
-      'public.write_membership_service_message is gone, so narrowing this insert would leave a join unannounced';
+      'public.write_membership_service_message is gone, so the ground this file gives up is covered by nothing';
   end if;
   if not exists (
     select 1 from pg_catalog.pg_trigger
@@ -324,111 +338,64 @@ begin
       'trg_membership_service_message_insert is not on chat_members, so nothing else announces a join';
   end if;
 
-  -- 3. Behavioural, end to end, and rolled back so that nothing is committed.
-  --
-  --    Three chats, one acceptance each, and the whole claim of this file is
-  --    the number `1` in all three. A structural scan cannot see it: the guard
-  --    is a boolean expression whose correctness is entirely about what the
-  --    *other* mechanism does, and the only way to know is to run both.
-  --
-  --    Abandoned by raising a sentinel inside a plpgsql block, which is a
-  --    subtransaction, so the abort discards the chats, the invites, the
-  --    memberships, the messages and anything any other trigger wrote --
-  --    including the `set_config` that makes `auth.uid()` answer.
+  -- 3. The guard is in, or out, depending on which direction this file is.
 
-  begin
-    v_owner_id := pg_catalog.gen_random_uuid();
-    v_joiner := pg_catalog.gen_random_uuid();
-    insert into auth.users (id) values (v_owner_id), (v_joiner);
-    insert into public.profiles (id, full_name)
-      values (v_owner_id, 'Проверка Владелец'), (v_joiner, 'Проверка Участник');
-
-    perform pg_catalog.set_config('request.jwt.claim.sub', v_joiner::text, true);
-
-    -- (a) A group with a member already in it: the trigger's case.
-    insert into public.chats (type, name, created_by)
-      values ('group', 'Проверка дублирования', v_owner_id) returning id into v_chat;
-    insert into public.chat_members (chat_id, user_id, role)
-      values (v_chat, v_owner_id, 'owner') on conflict do nothing;
-    delete from public.messages where chat_id = v_chat;
-    insert into public.group_invites (chat_id, inviter_id, invitee_id)
-      values (v_chat, v_owner_id, v_joiner) returning id into v_invite;
-    perform public.group_invite_accept(v_invite);
-
-    select pg_catalog.count(*) into v_written from public.messages where chat_id = v_chat;
-    if v_written <> 1 then
-      raise exception
-        'accepting an invite into a group wrote % lines rather than one; the duplication this file removes is % ',
-        v_written, (select pg_catalog.string_agg(content, ' / ') from public.messages where chat_id = v_chat);
-    end if;
-    select content into v_line from public.messages where chat_id = v_chat;
-    if v_line is distinct from 'Проверка Участник присоединился(ась) к группе' then
-      raise exception
-        'the one line a group join leaves is «%», which is not the trigger''s wording -- the wrong writer was kept',
-        v_line;
-    end if;
-
-    -- (b) A chat of type `channel`: the trigger declines it, so this function
-    --     must not. Deleting the insert instead of narrowing it would make this
-    --     zero.
-    insert into public.chats (type, name, created_by)
-      values ('channel', 'Проверка канала', v_owner_id) returning id into v_channel_chat;
-    insert into public.chat_members (chat_id, user_id, role)
-      values (v_channel_chat, v_owner_id, 'owner') on conflict do nothing;
-    delete from public.messages where chat_id = v_channel_chat;
-    insert into public.group_invites (chat_id, inviter_id, invitee_id)
-      values (v_channel_chat, v_owner_id, v_joiner) returning id into v_invite;
-    perform public.group_invite_accept(v_invite);
-
-    select pg_catalog.count(*) into v_written from public.messages where chat_id = v_channel_chat;
-    if v_written <> 1 then
-      raise exception
-        'accepting an invite into a channel wrote % lines rather than one; the trigger does not cover a channel and this function must',
-        v_written;
-    end if;
-
-    -- (c) A group whose only member afterwards is the joiner: the trigger's
-    --     `v_members <= 1` guard declines it, so this function must not.
-    --
-    --     `created_by` is null so that `add_chat_creator_as_owner` puts nobody
-    --     in. Emptying it afterwards instead is not available:
-    --     `enforce_chat_member_delete` refuses to remove the last owner, which
-    --     is also why the three memberless groups on production got that way by
-    --     some route other than somebody leaving.
-    insert into public.chats (type, name, created_by)
-      values ('group', 'Проверка пустой группы', null) returning id into v_empty_chat;
-    delete from public.messages where chat_id = v_empty_chat;
-    insert into public.group_invites (chat_id, inviter_id, invitee_id)
-      values (v_empty_chat, v_owner_id, v_joiner) returning id into v_invite;
-    perform public.group_invite_accept(v_invite);
-
-    select pg_catalog.count(*) into v_written from public.messages where chat_id = v_empty_chat;
-    if v_written <> 1 then
-      raise exception
-        'accepting an invite into a group with no other member wrote % lines rather than one; the trigger declines that case and this function must not',
-        v_written;
-    end if;
-
-    raise exception 'group_join_dedup_probe' using errcode = 'P0001';
-  exception
-    when sqlstate 'P0001' then
-      if sqlerrm <> 'group_join_dedup_probe' then
-        raise;
-      end if;
-      raise notice 'the end-to-end probe passed and was rolled back';
-  end;
-
-  -- 4. Nobody's conversation history was deleted by this file.
-
-  select pg_catalog.count(*) into v_after from public.messages;
-  if v_after <> v_before then
-    raise exception
-      'this file changed the number of rows in public.messages from % to %; removing a duplicate does not delete what was already written',
-      v_before, v_after;
+  if (v_after like '%v_members%') is distinct from true then
+    raise exception 'the installed definition is not the one this file writes';
   end if;
 
-  raise notice
-    'a join into a group is announced once, by the membership trigger; a channel and a memberless group are still announced by group_invite_accept';
+  -- 4. **These two edits and nothing else.** Undo them on the definition that
+  --    is now installed, and what is left must be, character for character, the
+  --    definition this transaction found. A third line changed anywhere in the
+  --    function — a lost `on conflict`, a dropped `update` of the invite, a
+  --    reworded raise — survives every check above and fails here.
+  --
+  --    Skipped when the file has already been applied: there is then nothing to
+  --    undo, and the pair must simply be equal.
+
+  if v_before like '%v_members%' then
+    if v_after is distinct from v_before then
+      raise exception
+        'this file was already applied and replacing the function changed it anyway';
+    end if;
+  else
+    v_reverted := pg_catalog.replace(
+      pg_catalog.replace(v_after, $dclA$  v_now timestamptz := now();
+  -- Added 2026-09-19. How many members the chat has once this acceptance has
+  -- put its row in — read exactly as write_membership_service_message reads it,
+  -- because the whole point of the guard below is to agree with that trigger
+  -- about which of the two writes the line.
+  v_members bigint := 0;
+$dclA$, $dclB$  v_now timestamptz := now();
+$dclB$),
+      $grdA$  -- write_membership_service_message (20260915140000) already writes a line
+  -- for this join, better worded, whenever the chat is of type group and has
+  -- more than one member once the row is in. What follows covers exactly what
+  -- that trigger declines — a channel, and a group whose only member is the
+  -- person who has just joined — so that a join is announced once and never
+  -- twice. Deleting this insert outright would make both of those cases silent.
+  select count(*) into v_members
+    from public.chat_members where chat_id = v_invite.chat_id;
+
+  if coalesce(v_joined, false) and not (v_chat.type = 'group' and v_members > 1) then
+$grdA$, $grdB$  if coalesce(v_joined, false) then
+$grdB$);
+    if v_reverted is distinct from v_before then
+      raise exception
+        'the installed definition differs from the one this transaction found by more than the edits this file makes';
+    end if;
+  end if;
+
+  -- 5. Nobody's conversation history was touched.
+
+  select pg_catalog.count(*) into v_rows_after from public.messages;
+  if v_rows_after <> v_rows_before then
+    raise exception
+      'this file changed the number of rows in public.messages from % to %',
+      v_rows_before, v_rows_after;
+  end if;
+
+  raise notice 'a join into a group is announced once, by the membership trigger; a channel and a memberless group are still announced by group_invite_accept';
 end
 $check$;
 

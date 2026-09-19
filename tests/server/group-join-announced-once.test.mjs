@@ -456,50 +456,106 @@ test("the subject applies again over itself and takes no second effect", async (
 });
 
 /**
- * The self-check is only worth having if it fails, and the mutation has to be
- * made in the **file**: the migration is idempotent, so a change applied to a
- * live database is undone by the file's own statements before the check block
- * is reached.
+ * The self-checks are only worth having if they fail, and the mutation has to
+ * be made in the **file**: both files are idempotent, so a change applied to a
+ * live database is undone by their own statements before the check is reached.
  *
  * Each substitution is asserted to have applied. A replacement that silently
  * matched nothing would leave the file intact and the case green.
+ *
+ * ── What these can and cannot say, after 2026-09-19 ───────────────────────
+ *
+ * The self-checks used to drive a whole acceptance and could therefore name the
+ * consequence of each mistake: «a channel wrote 0 lines», «a group nobody is in
+ * wrote 0 lines», «wrote 2 lines rather than one». That was impossible on
+ * production — registration is invite-only and `handle_new_user` raises
+ * `invite_required` the moment a row reaches `auth.users` — and it was the
+ * wrong shape besides, so the checks are now structural.
+ *
+ * The cost is **discrimination, not coverage**. Three mistakes that used to
+ * produce three different sentences — the guard reverted, the guard's member
+ * count dropped, the insert replaced by `if false` — now all produce the same
+ * one: «the installed definition differs from the one this transaction found by
+ * more than the edits this file makes». The migration can still refuse every
+ * one of them; it can no longer say what each would have done. What each would
+ * have done is asserted above, in this file, where seeding accounts is free.
+ *
+ * In exchange the reconstruction check catches something the old behavioural
+ * probe could not: **a third line changed anywhere in the function**. A lost
+ * `on conflict`, a dropped update of the invite row, a reworded raise — none of
+ * those alters how many lines a join writes, so the old probe was blind to all
+ * of them, and the case below proves the new one is not.
  */
 const MUTATIONS = [
   {
-    what: "the guard is dropped, so the duplicate comes back",
+    what: "the guard is reverted, so the duplicate comes back",
     file: "sql",
-    from: "  if coalesce(v_joined, false) and not (v_chat.type = 'group' and v_members > 1) then",
-    to: "  if coalesce(v_joined, false) then",
-    raises: /wrote 2 lines rather than one/i,
+    // Anchored with the line that follows it in the function body. The `if`
+    // alone now occurs twice — once in the function and once inside the
+    // dollar-quoted fragment the self-check reverts with — and a mutation that
+    // matched both would change the check and the thing checked together,
+    // which is a consistent lie rather than a test.
+    from:
+      "  if coalesce(v_joined, false) and not (v_chat.type = 'group' and v_members > 1) then\n" +
+      "    select coalesce(nullif(full_name, ''), nullif(username, ''), 'Пользователь')",
+    to:
+      "  if coalesce(v_joined, false) then\n" +
+      "    select coalesce(nullif(full_name, ''), nullif(username, ''), 'Пользователь')",
+    raises: /differs from the one this transaction found by more than the edits/i,
   },
   {
-    what: "the insert is deleted rather than narrowed, so a channel goes silent",
+    what: "a third line changes — the insert loses its `on conflict`",
     file: "sql",
-    from: "  if coalesce(v_joined, false) and not (v_chat.type = 'group' and v_members > 1) then",
-    to: "  if false then",
-    raises: /channel wrote 0 lines rather than one/i,
+    // The capability the behavioural probe never had. This changes no count of
+    // lines at all: it turns a second acceptance from a silent no-op into a
+    // primary-key violation, which the old self-check could not have seen.
+    from: "  on conflict (chat_id, user_id) do nothing\n",
+    to: "",
+    raises: /differs from the one this transaction found by more than the edits/i,
   },
   {
-    what: "the guard forgets the member count, so a group nobody is in goes silent",
+    what: "the function stops being security definer",
     file: "sql",
-    from: "  if coalesce(v_joined, false) and not (v_chat.type = 'group' and v_members > 1) then",
-    to: "  if coalesce(v_joined, false) and v_chat.type <> 'group' then",
-    raises: /no other member wrote 0 lines rather than one/i,
+    from: "security definer\nset search_path = public",
+    to: "set search_path = public",
+    raises: /no longer security definer/i,
   },
   {
-    what: "the wrong writer is kept, so the group's line is the older wording",
+    what: "authenticated loses the grant it needs to accept an invite",
     file: "sql",
-    from: "  if coalesce(v_joined, false) and not (v_chat.type = 'group' and v_members > 1) then",
-    to: "  if coalesce(v_joined, false) and not (v_chat.type = 'group' and v_members > 99) then",
-    raises: /wrote 2 lines rather than one/i,
+    // Both lines, because `create or replace` keeps the existing ACL: revoking
+    // while the grant below still runs restores it, and the first attempt at
+    // this case passed for exactly that reason.
+    from:
+      "revoke all on function public.group_invite_accept(uuid) from public, anon;\n" +
+      "grant execute on function public.group_invite_accept(uuid) to authenticated;",
+    to: "revoke all on function public.group_invite_accept(uuid) from public, anon, authenticated;",
+    raises: /authenticated can no longer call group_invite_accept/i,
+  },
+  {
+    // Not a mutation of the file at all: the premise of the whole change is
+    // that the membership trigger covers the ground this insert gives up, and
+    // a database where that trigger has gone is a database this must refuse.
+    what: "the membership trigger is not on the database at all",
+    file: "sql",
+    drop: "drop trigger trg_membership_service_message_insert on public.chat_members;",
+    raises: /nothing else announces a join/i,
+  },
+  {
+    what: "the other writer is gone from the database",
+    file: "sql",
+    drop:
+      "drop trigger trg_membership_service_message_insert on public.chat_members;\n" +
+      "drop trigger trg_membership_service_message_delete on public.chat_members;\n" +
+      "drop function public.write_membership_service_message();",
+    raises: /the ground this file gives up is covered by nothing/i,
   },
   {
     // Placed where the file's own work is, which is where such an edit would
     // land. The guard is a `count(*)` latched at the top and compared inside
     // the check block, so it sees anything the file does *before* the check and
-    // nothing after it — a `delete` wedged between the check and `commit`
-    // would go past it. That is a limit of a self-check rather than of this
-    // case: a check can only assert about a state it is reached in.
+    // nothing after it — a `delete` wedged between the check and `commit` would
+    // go past it. That is a limit of a self-check rather than of this case.
     what: "the file starts deleting the rows the duplication already wrote",
     file: "sql",
     // And the database has to have such a row in it, or the `delete` removes
@@ -514,22 +570,38 @@ const MUTATIONS = [
     raises: /changed the number of rows in public\.messages/i,
   },
   {
-    what: "the rollback does not actually restore the older insert",
+    what: "the rollback leaves the guard in, so nothing is rolled back",
     file: "rollback",
-    from: "  if coalesce(v_joined, false) then",
-    to: "  if coalesce(v_joined, false) and not (v_chat.type = 'group' and 1 > 0) then",
-    raises: /wrote 1 lines rather than the two/i,
+    // Anchored with the following line, for the same reason as above.
+    from:
+      "  if coalesce(v_joined, false) then\n" +
+      "    select coalesce(nullif(full_name, ''), nullif(username, ''), 'Пользователь')",
+    to:
+      "  if coalesce(v_joined, false) and not (v_chat.type = 'group' and v_members > 1) then\n" +
+      "    select coalesce(nullif(full_name, ''), nullif(username, ''), 'Пользователь')",
+    raises: /the installed definition is not the one this file writes/i,
+  },
+  {
+    what: "the rollback restores something that is not what 20260511 wrote",
+    file: "rollback",
+    from: "  on conflict (chat_id, user_id) do nothing\n",
+    to: "",
+    raises: /differs from the one this transaction found by more than the edits/i,
   },
 ];
 
 for (const mutation of MUTATIONS) {
   test(`the self-check raises when ${mutation.what}`, async () => {
     const source = mutation.file === "sql" ? migrationSql(SUBJECT) : rollbackSql(SUBJECT);
-    assert.equal(
-      source.split(mutation.from).length - 1,
-      1,
-      "the mutation matched nothing, so this case proves nothing",
-    );
+    let text = source;
+    if (mutation.from !== undefined) {
+      assert.equal(
+        source.split(mutation.from).length - 1,
+        1,
+        "the mutation matched nothing, so this case proves nothing",
+      );
+      text = source.replace(mutation.from, mutation.to);
+    }
     const broken = await database({ withSubject: mutation.file === "rollback" });
     try {
       if (mutation.seed) {
@@ -537,12 +609,13 @@ for (const mutation of MUTATIONS) {
         await accept(broken, seeded.invite, seeded.joiner);
         assert.equal(
           (await linesIn(broken, seeded.chat)).length,
-          2,
-          "the seed was supposed to leave the duplicate this mutation deletes",
+          mutation.file === "rollback" ? 1 : 2,
+          "the seed did not leave the rows this mutation deletes",
         );
       }
+      if (mutation.drop) await execOrRollback(broken, mutation.drop);
       await assert.rejects(
-        () => execOrRollback(broken, source.replace(mutation.from, mutation.to)),
+        () => execOrRollback(broken, text),
         mutation.raises,
         "the self-check committed a state it was written to refuse",
       );
@@ -551,6 +624,175 @@ for (const mutation of MUTATIONS) {
     }
   });
 }
+
+test("the reconstruction check is reached rather than skipped on a first apply", async () => {
+  // Arm 4 is skipped when the file has already been applied, and a check that
+  // is always skipped is a check that passes for everything. This asserts the
+  // skip happens only where it should: applying the subject twice takes the
+  // skip and still succeeds, and the case above — a third line changed on a
+  // *first* apply — fails, which it could not do if the arm were never reached.
+  const fresh = await database({ withSubject: false });
+  try {
+    await execOrRollback(fresh, migrationSql(SUBJECT));
+    await execOrRollback(fresh, migrationSql(SUBJECT));
+    const definition = (
+      await fresh.query(
+        `select pg_get_functiondef('public.group_invite_accept(uuid)'::regprocedure) as d`,
+      )
+    ).rows[0].d;
+    assert.match(definition, /v_members/, "the guard is not installed after two applies");
+  } finally {
+    await fresh.close();
+  }
+});
+
+test("the rollback applies twice and the second is a no-op", async () => {
+  const fresh = await database();
+  try {
+    await execOrRollback(fresh, rollbackSql(SUBJECT));
+    await execOrRollback(fresh, rollbackSql(SUBJECT));
+    const definition = (
+      await fresh.query(
+        `select pg_get_functiondef('public.group_invite_accept(uuid)'::regprocedure) as d`,
+      )
+    ).rows[0].d;
+    assert.doesNotMatch(definition, /v_members/, "the guard survived two rollbacks");
+  } finally {
+    await fresh.close();
+  }
+});
+
+test("both files apply to a database where creating an account raises", async () => {
+  // The defect the production rehearsal found, reproduced rather than
+  // described. Registration on production is invite-only: `handle_new_user`
+  // fires on `auth.users` and raises `invite_required` unless the new account
+  // carries an invite. The previous draft of these files seeded two accounts
+  // inside the self-check, so it could not run there at all — `REHEARSAL_EXIT=3`,
+  // `ERROR: invite_required`, raised from `registration_invite_apply_from_profile`
+  // by way of `handle_new_user`.
+  //
+  // A source scan that no `insert into auth.users` remains is the case below.
+  // This one is the behavioural half: with that trigger in place, both files
+  // must still apply, and any future edit that reintroduces seeding fails here
+  // with the same error production gave.
+  const db2 = await database({ withSubject: false });
+  try {
+    await db2.exec(`
+      create function public.handle_new_user() returns trigger
+      language plpgsql as $fn$
+      begin
+        raise exception 'invite_required' using errcode = 'P0001';
+      end $fn$;
+      create trigger on_auth_user_created after insert on auth.users
+        for each row execute function public.handle_new_user();
+    `);
+    // The trigger really does refuse, or this case proves nothing.
+    await assert.rejects(
+      () => db2.query(`insert into auth.users (id) values (gen_random_uuid())`),
+      /invite_required/,
+      "the invite-only stand-in does not actually refuse an account",
+    );
+
+    await execOrRollback(db2, migrationSql(SUBJECT));
+    await execOrRollback(db2, rollbackSql(SUBJECT));
+    await execOrRollback(db2, migrationSql(SUBJECT));
+
+    const definition = (
+      await db2.query(
+        `select pg_get_functiondef('public.group_invite_accept(uuid)'::regprocedure) as d`,
+      )
+    ).rows[0].d;
+    assert.match(definition, /v_members/, "the guard is not installed");
+  } finally {
+    await db2.close();
+  }
+});
+
+test("the rehearsal form runs and leaves nothing behind", async () => {
+  // How the file is actually checked against production before it is applied:
+  // its own `begin;`/`commit;` are removed and the body is spliced into one
+  // transaction that is rolled back. Nothing in it may depend on owning its own
+  // transaction — `set local` and a transaction-local `set_config` both work
+  // inside an outer one, and this is where that is proved rather than assumed.
+  const fresh = await database({ withSubject: false });
+  try {
+    const before = (
+      await fresh.query(
+        `select md5(pg_get_functiondef('public.group_invite_accept(uuid)'::regprocedure)) as h`,
+      )
+    ).rows[0].h;
+
+    const spliced = migrationSql(SUBJECT)
+      .replace(/^begin;$/m, "")
+      .replace(/^commit;$/m, "");
+    assert.doesNotMatch(spliced, /^begin;$/m, "the splice left a begin");
+    assert.doesNotMatch(spliced, /^commit;$/m, "the splice left a commit");
+
+    await fresh.exec("begin");
+    await fresh.exec(spliced);
+    const inside = (
+      await fresh.query(
+        `select md5(pg_get_functiondef('public.group_invite_accept(uuid)'::regprocedure)) as h`,
+      )
+    ).rows[0].h;
+    assert.notEqual(inside, before, "the rehearsal changed nothing, so it rehearsed nothing");
+    await fresh.exec("rollback");
+
+    const after = (
+      await fresh.query(
+        `select md5(pg_get_functiondef('public.group_invite_accept(uuid)'::regprocedure)) as h`,
+      )
+    ).rows[0].h;
+    assert.equal(after, before, "the rolled-back rehearsal left the function changed");
+  } finally {
+    await fresh.close();
+  }
+});
+
+test("neither file creates a row of its own", async () => {
+  // The defect the production rehearsal found. `handle_new_user` raises
+  // `invite_required` on production the moment a row reaches `auth.users`, so a
+  // self-check that seeds an account cannot run there at all — and firing a
+  // live system's account-creation triggers would be a side effect even if it
+  // could. Comments stripped, because both headers discuss the seeding they no
+  // longer do.
+  const strip = (text) =>
+    text
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n")
+      .map((line) => line.replace(/--.*$/, ""))
+      .join("\n");
+  for (const [label, whole] of [
+    ["the migration", migrationSql(SUBJECT)],
+    ["the rollback", rollbackSql(SUBJECT)],
+  ]) {
+    // The function's own body legitimately inserts into chat_members and
+    // messages; everything outside it must not insert anywhere.
+    const text = strip(whole);
+    const open = text.indexOf("create or replace function public.group_invite_accept(");
+    const close = text.indexOf("end $$;", open);
+    const outside = text.slice(0, open) + text.slice(close);
+    for (const table of [
+      "auth.users",
+      "public.profiles",
+      "public.chats",
+      "public.chat_members",
+      "public.group_invites",
+      "public.messages",
+    ]) {
+      assert.doesNotMatch(
+        outside,
+        new RegExp("insert\\s+into\\s+" + table.replace(".", "\\."), "i"),
+        `${label} inserts into ${table} outside the function it replaces`,
+      );
+    }
+    assert.doesNotMatch(
+      outside,
+      /perform\s+public\.group_invite_accept/i,
+      `${label} calls the RPC it is replacing, which on production would need an account to exist`,
+    );
+  }
+});
 
 // ── the round trip ───────────────────────────────────────────────────────────
 
