@@ -114,30 +114,70 @@ test("saving a role carries the rank and the colour through the one write path",
   assert.match(save, /p_priority: priority/u);
   assert.match(save, /p_colour: colour/u);
   assert.match(save, /parseRolePriorityInput\(editPriority\)/u);
-  // Both are refused client-side before the round trip, so the administrator
-  // gets a sentence rather than a constraint violation.
+  // The rank is still refused client-side before the round trip, so the
+  // administrator gets a sentence rather than a constraint violation.
   assert.match(save, /if \(priority === null\)/u);
-  assert.match(save, /normalizeRoleColour\(colourText\)/u);
-  assert.match(save, /if \(colourText && colour === null\)/u);
+  // The colour is no longer refusable: the picker can only produce a palette
+  // key, so the only other thing this field can hold came out of the database
+  // — a hex from before D-214's migration, or a key a later build added. A
+  // null p_colour is «leave as is» in `role_update`, which is the honest
+  // answer for a colour this panel cannot represent, and it must not block a
+  // save that was about the name.
+  assert.match(save, /const colour = readChatRoleColour\(editColour\)/u);
+  // A hex can no longer be written from here at all. This is the assertion
+  // that fails if the free picker comes back through the save path.
+  assert.doesNotMatch(save, /normalizeRoleColour/u);
 });
 
 // ---------------------------------------------------------------------
 // The colour
 // ---------------------------------------------------------------------
 
-test("a colour reaches a style attribute only after being validated", () => {
-  assert.match(source, /type="color"/u);
+test("a colour reaches a style attribute only from a value this build produced", () => {
   assert.match(source, /roleSwatchColour\(role\)/u);
-  // Every inline background is the validated value and nothing else.
+  // Two expressions may reach an inline background, and no third. `swatch` is
+  // `readRoleColour`'s own answer — six hex digits it normalised, or one of
+  // eight fixed custom-property references it built from an enumerated key.
+  // `chatRoleColourValue(entry.key)` is the picker's swatch, built from the
+  // palette entry being rendered. Neither interpolates a stored string, which
+  // is the whole of the vulnerability this test exists for.
   const backgrounds = [...source.matchAll(/backgroundColor:\s*([^\s,}]+)/gu)].map((match) => match[1]);
   assert.ok(backgrounds.length > 0, "the swatch no longer paints anything");
+  const allowed = new Set(["swatch", "chatRoleColourValue(entry.key)"]);
   for (const value of backgrounds) {
-    assert.equal(value, "swatch", `an unvalidated value reaches a style attribute: ${value}`);
+    assert.ok(allowed.has(value), `an unvalidated value reaches a style attribute: ${value}`);
   }
   assert.doesNotMatch(source, /style=\{\{[^}]*role\.colour/u);
   assert.doesNotMatch(source, /style=\{\{[^}]*editColour/u);
-  // The picker needs a well-formed value even when the role has none.
-  assert.match(source, /value=\{normalizeRoleColour\(editColour\) \?\? COLOUR_PICKER_FALLBACK\}/u);
+});
+
+test("the colour picker offers the palette and nothing else", () => {
+  // D-214: a free hex holds ONE value and the product has TWO themes, so the
+  // owner's gold arrived as a 1.51:1 dot on the light ground. The free picker
+  // and the #rrggbb field are therefore gone, and what replaces them is the
+  // same eight keys `chat_roles.colour` has held since 20260918120000 — one
+  // palette, not a second colour system beside the first.
+  // `code`, not `source`. The comment above the picker names the control it
+  // replaced, and a check for a rendered control must not be defeated — or
+  // satisfied — by a sentence about it. Same trap the roles column's own note
+  // records two tests up.
+  assert.doesNotMatch(code, /type="color"/u);
+  assert.doesNotMatch(code, /COLOUR_PICKER_FALLBACK/u);
+  assert.doesNotMatch(code, /rrggbb/u);
+  assert.match(source, /CHAT_ROLE_COLOURS\.map\(\(entry\)/u);
+  assert.match(source, /setEditColour\(entry\.key\)/u);
+  // The list is rendered from the palette module, never re-spelled here: a
+  // second copy of the eight keys is a second palette waiting to drift.
+  assert.doesNotMatch(code, /"(slate|teal|amber|orange|rose|violet)"/u);
+  // Chosen is not signalled by colour alone — all eight swatches are coloured.
+  assert.match(source, /aria-pressed=\{selected\}/u);
+  assert.match(source, /aria-label=\{entry\.label\}/u);
+  assert.match(code, /scale-110 outline-2/u);
+  // 44px of target around the 28px disc (D-015).
+  assert.match(code, /h-11 w-11 shrink-0 items-center justify-center rounded-full/u);
+  // A value the palette has no entry for is said out loud rather than drawn as
+  // «no colour»: a role that looks uncoloured and is not gets edited wrong.
+  assert.match(source, /editColourUnknown/u);
 });
 
 test("the panel admits that a colour cannot be removed here", () => {

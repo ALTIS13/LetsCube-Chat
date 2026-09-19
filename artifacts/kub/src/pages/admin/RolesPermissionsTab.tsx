@@ -26,7 +26,6 @@ import {
   ROLE_PRIORITY_MAX,
   ROLE_PRIORITY_MIN,
   buildRoleHierarchy,
-  normalizeRoleColour,
   parseRolePriorityInput,
   planPriorityMove,
   roleFormSignature,
@@ -34,6 +33,12 @@ import {
   sortRolesByHierarchy,
   type PriorityMoveDirection,
 } from "@/lib/roleHierarchy";
+import {
+  CHAT_ROLE_COLOURS,
+  chatRoleColourValue,
+  readChatRoleColour,
+} from "@/lib/chatRolePalette";
+import { DISABLED_SINK, FOCUS_RING } from "@/lib/controlSurface";
 import type { DynamicRole, Permission, Profile, RoleScope } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { requestAppConfirm } from "@/lib/appDialogs";
@@ -48,9 +53,6 @@ import {
 
 const ROLE_SCOPES: RoleScope[] = ["global", "location", "chat"];
 const ROLE_KEY_RE = /^[a-z][a-z0-9_]{1,48}$/;
-
-/** Where the native picker starts for a role that has no colour of its own. */
-const COLOUR_PICKER_FALLBACK = "#4d8bd0";
 
 const PRIORITY_IS_NOT_POWER =
   "Порядок — только внешний вид списка. Он не даёт роли прав: доступ решают отмеченные ниже права, " +
@@ -103,6 +105,15 @@ export function RolesPermissionsTab() {
   const selectedRoleUsageKnown = selectedRole?.scope === "location" ? locationRoleUsageKnown : true;
   const selectedRoleDeleteLabel =
     selectedRoleUsageKnown && selectedRoleUsageCount === 0 ? "Удалить роль" : "Отключить роль";
+
+  // What the colour field is holding, in the palette's terms. `editColourKey`
+  // is the swatch that shows as chosen; `editColourUnknown` is a value the
+  // database gave us that this palette has no entry for — a hex from before the
+  // migration, or a key a later build added and this one has not. Both are
+  // stated on screen rather than silently drawn as «no colour», because a role
+  // that looks uncoloured and is not would be edited into the wrong state.
+  const editColourKey = readChatRoleColour(editColour);
+  const editColourUnknown = editColourKey === null && editColour.trim() !== "" ? editColour.trim() : null;
 
   const globalRoles = useMemo(
     () => orderedRoles.filter((role) => role.scope === "global" && role.is_active),
@@ -338,15 +349,16 @@ export function RolesPermissionsTab() {
       setError(`Ранг должен быть целым числом от ${ROLE_PRIORITY_MIN} до ${ROLE_PRIORITY_MAX}.`);
       return;
     }
-    // An empty box means "leave the colour as it is", because that is what the
-    // RPC does with a null: `colour = coalesce(p_colour, colour)`. There is no
-    // value that clears a colour, which the hint under the field says out loud.
-    const colourText = editColour.trim();
-    const colour = colourText ? normalizeRoleColour(colourText) : null;
-    if (colourText && colour === null) {
-      setError("Цвет должен быть в формате #rrggbb, например #4d8bd0.");
-      return;
-    }
+    // The picker can only produce a palette key, so anything else still in this
+    // field came out of the database: a hex from before
+    // `20260919170000_a_role_colour_a_reader_can_see.sql`, or a key this build
+    // of the client does not know. `role_update` reads a null `p_colour` as
+    // «leave as is» — `colour = coalesce(p_colour, colour)` — which is the
+    // honest answer for a colour this panel cannot represent. It neither
+    // invents a replacement nor blocks a save that was about the name. There is
+    // still no value that CLEARS a colour, which the hint under the swatches
+    // says out loud.
+    const colour = readChatRoleColour(editColour);
     await runAction(
       "save-role",
       () => supabase.rpc("role_update", {
@@ -715,8 +727,19 @@ export function RolesPermissionsTab() {
                             "h-3 w-3 shrink-0 rounded-full border border-[color:var(--kub-border-color)]",
                             !swatch && "bg-[color-mix(in_srgb,var(--kub-muted)_35%,transparent)]",
                           )}
-                          // Only ever a value `normalizeRoleColour` accepted:
-                          // six hex digits, so nothing else can reach the style.
+                          // Only ever a value `readRoleColour` accepted: six hex
+                          // digits it normalised itself, or one of the eight
+                          // fixed custom-property references `chatRoleColourValue`
+                          // builds from an enumerated palette key. The stored
+                          // string is never interpolated into either, so nothing
+                          // else can reach the style.
+                          //
+                          // (The line above named that property literally at
+                          // first. `theme-token-contract.test.mjs` scans every
+                          // source file for such a reference and cannot tell
+                          // prose from code, so an example in a comment reads as
+                          // a token nothing defines. Same trap, same answer, as
+                          // the note in `chatRolePalette.ts`.)
                           style={swatch ? { backgroundColor: swatch } : undefined}
                         />
                         <span className="min-w-0 flex-1">
@@ -840,33 +863,109 @@ export function RolesPermissionsTab() {
                     disabled={!canManageRoles}
                     hint="Больше — выше в своей области. Только порядок, не доступ. Одинаковые числа означают равный ранг."
                   />
-                  <div className="flex flex-col gap-1.5">
+                  {/*
+                    The palette, not a free hex. D-214 measured what the free
+                    `<input type="color">` used to write: one value in a column,
+                    two themes on screen, and the owner's gold arriving at
+                    1.51:1 as a 6px dot on the light ground — under the 3:1 a
+                    mark needs. Painting it, composing it toward the text
+                    colour and ringing it were all measured and all fail, so
+                    the value has to be a NAME the interface resolves per theme.
+
+                    These are the same eight `chat_roles.colour` has held since
+                    20260918120000, with the same `--kub-role-*` tokens declared
+                    in both theme blocks and pinned at 4.5:1 on all three
+                    surfaces by `chat-role-palette.test.mts`. One palette, one
+                    contract, one test — deliberately not a second colour system
+                    beside the first.
+
+                    THIS MUST NOT SHIP BEFORE THE MIGRATION. A key written into
+                    a column still bounded by `^#[0-9a-fA-F]{6}$` fails the save.
+                  */}
+                  <div className="flex flex-col gap-1.5 sm:col-span-2">
                     <span className="text-xs font-medium uppercase tracking-wide text-[color:var(--kub-muted)]">
                       Цвет роли
                     </span>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        aria-label="Выбрать цвет роли"
-                        value={normalizeRoleColour(editColour) ?? COLOUR_PICKER_FALLBACK}
-                        onChange={(event) => setEditColour(event.target.value)}
-                        disabled={!canManageRoles}
-                        className="h-11 w-12 shrink-0 cursor-pointer rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] p-1 disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
-                      />
-                      <KubInput
-                        containerClassName="min-w-0 flex-1"
-                        aria-label="Цвет роли в формате #rrggbb"
-                        value={editColour}
-                        onChange={(event) => setEditColour(event.target.value)}
-                        placeholder="#4d8bd0"
-                        spellCheck={false}
-                        disabled={!canManageRoles}
-                        error={editColour.trim() && !normalizeRoleColour(editColour) ? "Нужен формат #rrggbb." : null}
-                      />
+                    {/*
+                      A grid rather than a wrapping row, and `w-fit` so it is as
+                      wide as its own discs. Eight 44px targets are 352px: they
+                      fit on one line at `sm` and up because this block spans
+                      both columns of the form, and below it they break 4 and 4
+                      instead of the 7-and-1 a wrapping flex row produced at
+                      390 — photographed both ways.
+                    */}
+                    <div
+                      className="grid w-fit grid-cols-4 sm:grid-cols-8"
+                      role="group"
+                      aria-label="Цвет роли"
+                    >
+                      {CHAT_ROLE_COLOURS.map((entry) => {
+                        const selected = editColourKey === entry.key;
+                        return (
+                          <button
+                            key={entry.key}
+                            type="button"
+                            onClick={() => setEditColour(entry.key)}
+                            disabled={!canManageRoles}
+                            aria-label={entry.label}
+                            aria-pressed={selected}
+                            title={entry.label}
+                            // 44px of target around a 28px disc: the disc is the
+                            // size the chat picker already uses, and the target
+                            // is the one D-015 set. Shrinking the button to the
+                            // disc would have been the third picker in this
+                            // product to miss it.
+                            //
+                            // Disabled sinks, it does not fade. `opacity` on a
+                            // translucent panel shows the wallpaper through the
+                            // control instead of dimming it — the vocabulary in
+                            // `controlSurface.ts` has the measurements. The
+                            // veil has to reach the disc as well as the button,
+                            // or a picker nobody may use still shows eight
+                            // undimmed colours; `group-disabled` lays it over
+                            // the inline fill as an image, the way every other
+                            // sink in this product composites.
+                            className={cn(
+                              "group flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
+                              FOCUS_RING,
+                              DISABLED_SINK,
+                            )}
+                          >
+                            <span
+                              aria-hidden
+                              className={cn(
+                                "block h-7 w-7 rounded-full border border-[color:var(--kub-border-color)] transition-transform",
+                                "group-disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
+                                // Chosen is carried by an outline and a size,
+                                // not by the colour: a picker whose only signal
+                                // is «this one is coloured» says nothing, since
+                                // all eight are. The outline takes the theme's
+                                // own text colour, so it reads in both.
+                                selected && "scale-110 outline-2 outline-offset-2 outline-[color:var(--kub-text)]",
+                              )}
+                              // One of eight fixed references built from an
+                              // enumerated key. The stored string is never
+                              // interpolated into a style attribute.
+                              style={{ backgroundColor: chatRoleColourValue(entry.key) }}
+                            />
+                          </button>
+                        );
+                      })}
                     </div>
                     <p className="text-xs leading-relaxed text-[color:var(--kub-muted)]">
-                      Цвет можно поменять, но не убрать: пустое поле сервер понимает как «оставить как есть».
+                      Цвет можно поменять, но не убрать. У каждого цвета палитры своё значение для
+                      светлой и тёмной темы, поэтому метка роли читается в обеих.
                     </p>
+                    {editColourUnknown !== null && (
+                      <p className="text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                        {`Сейчас записано «${editColourUnknown}» — такого цвета в палитре нет, метка роли отображается нейтрально.`}
+                      </p>
+                    )}
+                    {editColourKey === null && editColourUnknown === null && (
+                      <p className="text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                        Цвет не выбран — метка роли отображается нейтрально.
+                      </p>
+                    )}
                   </div>
                 </div>
 

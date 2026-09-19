@@ -325,7 +325,11 @@ const wells = [
   ["pages/admin/UsersTab.tsx", 3],
   ["pages/admin/AuditTab.tsx", 8],
   ["pages/admin/LocationsTab.tsx", 6],
-  ["pages/admin/RolesPermissionsTab.tsx", 6],
+  // Five, not six, since D-214 replaced the role colour field — a free
+  // `<input type="color">` and a #rrggbb box, one well between them — with
+  // eight palette swatches, which are marks rather than fields and carry no
+  // well. The count is exact, so this still fails if a well appears or goes.
+  ["pages/admin/RolesPermissionsTab.tsx", 5],
   ["pages/admin/InvitesTab.tsx", 1],
   ["pages/admin/BanModal.tsx", 4],
   ["pages/admin/MuteModal.tsx", 6],

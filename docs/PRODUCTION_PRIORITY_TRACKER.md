@@ -953,6 +953,75 @@ the counter that would show `insert_failed` cannot be read as things stand.
 **Operationally it costs one retry.** A push to `main` re-triggers the webhook,
 and deployment 460 of the next commit finished normally.
 
+### 2026-09-19 — a role colour becomes a palette key (D-214), in three steps rather than one instant
+
+**Applied to production.** `20260919170000_a_role_colour_a_reader_can_see.sql`,
+sha256 `803200f9…`, identical on workstation, host and inside the container.
+`UPDATE 10`; the three blank rows untouched; the hex constraint replaced by the
+palette-key one, whose text is byte-identical to `chat_roles`’s own; `role_update`
+still owned by `supabase_admin`, still security definer, ACL still
+`authenticated=X` with no `anon`, and now validating a key rather than a hex.
+
+#### The ordering is the point
+
+A client and a database cannot flip in the same instant, so it went in three:
+
+1. **`ae2de203`** — the client reads *both* shapes. Deploy-safe alone: with
+   every row still a hex, nothing on screen changes. Validated in isolation by
+   setting the rest of the work aside — typecheck clean, unit **3314/3314**,
+   and the production build run on the state that was actually committed.
+2. the migration, after step one was live and the rollover had finished.
+3. the picker becomes eight swatches, once no writer can produce a hex.
+
+Within step one, one decision is load-bearing: **the palette is asked before
+the hex.** A key like `decade` is also a legal hex body and `normalizeRoleColour`
+accepts a bare one, so the other order would paint a colour nobody picked. A
+guard asserts no key is hex-shaped and its message says to rename the key —
+because the database, the rollback and every future reader have no such
+tiebreak.
+
+#### Two measurements corrected the entry that commissioned this
+
+D-214’s title is wrong twice. «Never reaches a pixel» is **false** — it reaches
+fifteen, all in the administration panel, which the entry never looked at.
+«And cannot» is **right**, and the blocker is one line: the column holds one
+value and the product has two themes. Three rescues were measured and all
+fail; the third, composing toward the text colour, cannot generalise because
+the picker was free — `#FFFFFF` at 80% reads 1.28:1.
+
+And the addendum’s own arithmetic was off, because its script walked up to the
+first fully-opaque ancestor and skipped the translucent material. Measured
+against the ground the marks really composite on: the 12×12 swatches do **not**
+«read fine» — light-theme gold is **1.47:1**, and they read because of the 1px
+ring and the size. The 6px dot goes from 1.51:1 to **4.97:1** on a palette key,
+and needs no ring — the border token composites to about 1.3:1 on that ground,
+so a ring would be a fainter line around a clearer mark.
+
+#### Evidence
+
+Backup `20260919-151623-before-role-colour-palette-key.{schema.dump,roles.csv}`,
+1,654,410 and 726 bytes, both `sha256sum -c` OK and the dump read back with
+`pg_restore -l` — 2,525 TOC entries with `role_update` present.
+
+Rehearsed **on production inside a rolled-back transaction**, the migration and
+its rollback spliced verbatim: owner `#F5B50A` → `amber` → `#F5B50A`, hex
+constraint → palette constraint → hex constraint, counts unchanged throughout,
+and no residue afterwards.
+
+**The splice itself caught a mistake worth recording.** Stripping `begin;` and
+`commit;` by matching anywhere removed **five** lines from the migration and
+four from the rollback, because `begin` also opens every plpgsql block — it
+would have rehearsed a corrupted function. Only the first bare `begin;` and the
+last bare `commit;` are the wrapper, and the strip now asserts it removed
+exactly two lines.
+
+**Still open, and named rather than folded in:** `ProfileBadgeChip` drops the
+colour entirely, so on a profile card the founder and the technical
+administrator still collapse to one tone — the assignment list now tells them
+apart and the card does not. And in that list the badge’s *border* still comes
+from the tone, so an amber dot can sit in a pink border. Both need their own
+decision and their own measurement.
+
 ### 2026-09-19 — PocketFlow, and the audit of the Bot Platform it forced
 
 **Nothing deployed.** A new workspace package, `artifacts/pocketflow`, plus a
