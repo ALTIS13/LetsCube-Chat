@@ -14,6 +14,10 @@
  * Usage:
  *   node scripts/verify-public-release-artifact.mjs windows
  *   node scripts/verify-public-release-artifact.mjs windows android
+ *   node scripts/verify-public-release-artifact.mjs --channel test windows
+ *
+ * The channel defaults to `stable`, which is the only one the public download
+ * surface reads.
  */
 
 import { createHash } from "node:crypto";
@@ -22,6 +26,14 @@ import { pathToFileURL } from "node:url";
 export const RELEASE_CATALOG_ORIGIN = "https://api.letscube.ru";
 export const MANIFEST_PATH = (platform, channel = "stable") =>
   `/releases/v1/${platform}/${channel}.json`;
+
+/**
+ * Mirrors `RELEASE_CHANNELS` in `artifacts/kub/src/lib/releaseCatalog.ts`. This
+ * file is plain ESM run by `node` with no build step, so it cannot import the
+ * TypeScript module; `tests/unit/release-catalog.test.mts` pins the two lists
+ * together so they cannot drift apart silently.
+ */
+export const RELEASE_CHANNELS = ["stable", "test"];
 
 /** Nothing LETSCUBE publishes is anywhere near this; it exists to bound the stream. */
 export const MAX_ARTIFACT_BYTES = 512 * 1024 * 1024;
@@ -62,8 +74,18 @@ export function assertArtifactUrl(rawUrl, platform, version) {
   return url;
 }
 
-/** The subset of the manifest a public download depends on. */
-export function assertPublishableManifest(manifest, platform) {
+/**
+ * The subset of the manifest a public download depends on.
+ *
+ * `channel` is the channel the document was *fetched as*. A manifest must agree
+ * with where it was served from: a `test` manifest sitting at `stable.json` is
+ * refused, and so is the reverse. That cross-check is the point — widening the
+ * set of legal channels must never weaken it.
+ */
+export function assertPublishableManifest(manifest, platform, channel = "stable") {
+  if (!RELEASE_CHANNELS.includes(channel)) {
+    throw new ArtifactVerificationError("channel", String(channel));
+  }
   if (!manifest || typeof manifest !== "object") {
     throw new ArtifactVerificationError("manifest", "not an object");
   }
@@ -73,7 +95,7 @@ export function assertPublishableManifest(manifest, platform) {
   if (manifest.platform !== platform) {
     throw new ArtifactVerificationError("manifest_platform", String(manifest.platform));
   }
-  if (manifest.channel !== "stable") {
+  if (manifest.channel !== channel) {
     throw new ArtifactVerificationError("manifest_channel", String(manifest.channel));
   }
   if (typeof manifest.version !== "string" || !SEMVER_PATTERN.test(manifest.version)) {
@@ -131,12 +153,17 @@ export async function measureArtifact(url, { fetchImpl = fetch, maxBytes = MAX_A
 
 /** Verifies one platform end to end. Returns a result rather than throwing on mismatch. */
 export async function verifyPlatform(platform, { fetchImpl = fetch, channel = "stable" } = {}) {
+  // The channel becomes a path segment, so it is checked before it is spliced
+  // into a URL rather than after the request has already been made.
+  if (!RELEASE_CHANNELS.includes(channel)) {
+    throw new ArtifactVerificationError("channel", String(channel));
+  }
   const manifestUrl = `${RELEASE_CATALOG_ORIGIN}${MANIFEST_PATH(platform, channel)}`;
   const response = await fetchImpl(manifestUrl, { redirect: "error" });
 
   if (response.status === 404) {
     // No manifest published for this platform yet.
-    return { platform, state: "unpublished", manifestUrl };
+    return { platform, channel, state: "unpublished", manifestUrl };
   }
   if (!response.ok) {
     throw new ArtifactVerificationError("manifest_http", `${platform} ${response.status}`);
@@ -147,9 +174,9 @@ export async function verifyPlatform(platform, { fetchImpl = fetch, channel = "s
     throw new ArtifactVerificationError("manifest_content_type", contentType || "missing");
   }
 
-  const { available, manifest } = assertPublishableManifest(await response.json(), platform);
+  const { available, manifest } = assertPublishableManifest(await response.json(), platform, channel);
   if (!available) {
-    return { platform, state: "unavailable", version: manifest.version, manifestUrl };
+    return { platform, channel, state: "unavailable", version: manifest.version, manifestUrl };
   }
 
   const measured = await measureArtifact(manifest.artifact.url, { fetchImpl });
@@ -158,6 +185,7 @@ export async function verifyPlatform(platform, { fetchImpl = fetch, channel = "s
 
   return {
     platform,
+    channel,
     state: sizeMatches && digestMatches ? "verified" : "mismatch",
     version: manifest.version,
     url: manifest.artifact.url,
@@ -167,9 +195,39 @@ export async function verifyPlatform(platform, { fetchImpl = fetch, channel = "s
   };
 }
 
-async function main(platforms) {
+/** Splits `--channel <name>` out of the argument list. Everything else is a platform. */
+export function parseArguments(argv) {
+  const platforms = [];
+  let channel = "stable";
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] !== "--channel") {
+      platforms.push(argv[index]);
+      continue;
+    }
+    index += 1;
+    if (index >= argv.length) throw new ArtifactVerificationError("channel", "missing value");
+    channel = argv[index];
+  }
+  if (!RELEASE_CHANNELS.includes(channel)) {
+    throw new ArtifactVerificationError("channel", String(channel));
+  }
+  return { platforms, channel };
+}
+
+async function main(argv) {
+  let platforms;
+  let channel;
+  try {
+    ({ platforms, channel } = parseArguments(argv));
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : error}\n`);
+    process.exitCode = 2;
+    return;
+  }
   if (platforms.length === 0) {
-    process.stderr.write("usage: node scripts/verify-public-release-artifact.mjs <platform...>\n");
+    process.stderr.write(
+      "usage: node scripts/verify-public-release-artifact.mjs [--channel stable|test] <platform...>\n",
+    );
     process.exitCode = 2;
     return;
   }
@@ -177,24 +235,26 @@ async function main(platforms) {
   let failed = false;
   for (const platform of platforms) {
     try {
-      const result = await verifyPlatform(platform);
+      const result = await verifyPlatform(platform, { channel });
       if (result.state === "verified") {
         process.stdout.write(
-          `${platform} ${result.version}: verified ${result.measured.size} bytes, sha256 ${result.measured.sha256}\n`,
+          `${platform} ${channel} ${result.version}: verified ${result.measured.size} bytes, sha256 ${result.measured.sha256}\n`,
         );
       } else if (result.state === "mismatch") {
         failed = true;
         process.stdout.write(
-          `${platform} ${result.version}: MISMATCH\n`
+          `${platform} ${channel} ${result.version}: MISMATCH\n`
             + `  declared ${result.declared.size} bytes sha256 ${result.declared.sha256}\n`
             + `  measured ${result.measured.size} bytes sha256 ${result.measured.sha256}\n`,
         );
       } else {
-        process.stdout.write(`${platform}: ${result.state}, nothing to verify\n`);
+        process.stdout.write(`${platform} ${channel}: ${result.state}, nothing to verify\n`);
       }
     } catch (error) {
       failed = true;
-      process.stdout.write(`${platform}: FAILED ${error instanceof Error ? error.message : error}\n`);
+      process.stdout.write(
+        `${platform} ${channel}: FAILED ${error instanceof Error ? error.message : error}\n`,
+      );
     }
   }
 

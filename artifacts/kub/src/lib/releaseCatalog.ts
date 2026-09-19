@@ -3,7 +3,19 @@ export const RELEASE_CATALOG_TIMEOUT_MS = 5_000;
 export const RELEASE_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
 
 export type ReleasePlatform = "android" | "windows" | "macos" | "ios" | "web";
-export type ReleaseChannel = "stable";
+
+/**
+ * `stable` is the released line; `test` is the pre-release line the Windows
+ * shell's channel switch points at. The union is closed on purpose: a channel
+ * becomes a path segment in `getReleaseManifestUrl`, so a caller must never be
+ * able to supply one.
+ *
+ * Widening this does not widen what the public surface asks for. Every caller
+ * still requests `stable` explicitly or by default; `test` exists so a
+ * pre-release manifest can be addressed and verified at all.
+ */
+export const RELEASE_CHANNELS = ["stable", "test"] as const;
+export type ReleaseChannel = (typeof RELEASE_CHANNELS)[number];
 
 export type ReleaseArtifact = {
   url: string;

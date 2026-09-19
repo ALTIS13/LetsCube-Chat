@@ -16909,3 +16909,31 @@ re-send path already writes **both** spellings into the message it creates, so a
 re-sent file is the one case that reports its size correctly today.
 
 ---
+
+## D-251 `[ ]` A critical update cannot be published, on either channel
+
+**Severity:** medium, and latent — nothing is wrong until the day it is
+needed, which is the day it matters most.
+
+**Found on 2026-09-19** while wiring the Test release channel, by the agent
+doing it.
+
+The Windows shell has a whole `critical_update_required` phase: it blocks the
+window, refuses to be dismissed, and `desktopUpdates.ts` deliberately allows it
+only on `stable` (an off-channel critical update is refused by the parser, and
+rightly). But `write_updater_manifest` in `scripts/publish-native-release.sh`
+hard-codes `mandatory: false` and `minimumSupportedVersion: null` in every
+manifest it writes. **So that phase has never been reachable from the
+catalogue**, and there is no flag on the publisher to make it reachable.
+
+It is not a bug in either half: the shell is right to have the state and right
+to restrict it, and a publisher that cannot accidentally force an update on
+everybody is the safer default. What is missing is the deliberate path — an
+explicit `--mandatory` (and a minimum supported version) that a person has to
+type, with the shell’s stable-only rule still deciding whether it takes
+effect.
+
+**Worth doing before it is wanted rather than during an incident**, because the
+first time anybody reaches for this will be the worst possible time to discover
+the lever is not connected. `docs/operations/release-channels.md` records the
+same fact from the release side.

@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   RELEASE_CATALOG_TTL_MS,
+  RELEASE_CHANNELS,
   compareReleaseVersions,
   createReleaseCatalogClient,
   getInstalledReleaseState,
@@ -266,5 +267,82 @@ test("artifact URLs must sit inside their own platform and version directory", (
   assert.equal(
     accepted.artifact?.url,
     "https://api.letscube.ru/releases/files/android/0.1.0/letscube-0.1.0.apk",
+  );
+});
+
+/**
+ * The Windows shell's update-channel switch has always offered Stable and Test
+ * (`DESKTOP_UPDATE_CHANNELS`), but `ReleaseChannel` was narrowed to a single
+ * literal, so the download catalog could not even address a pre-release
+ * manifest. These pin the widened union and, more importantly, pin that
+ * widening it did not weaken the check that a manifest must agree with the
+ * channel it was served as.
+ */
+
+test("the release channel union is exactly the two published channels", () => {
+  assert.deepEqual([...RELEASE_CHANNELS], ["stable", "test"]);
+});
+
+test("the verifier script mirrors the same channel list", async () => {
+  const script = await import("../../scripts/verify-public-release-artifact.mjs");
+  assert.deepEqual([...script.RELEASE_CHANNELS], [...RELEASE_CHANNELS]);
+});
+
+test("each channel addresses its own manifest path", () => {
+  for (const channel of RELEASE_CHANNELS) {
+    assert.equal(
+      getReleaseManifestUrl("windows", channel),
+      `https://api.letscube.ru/releases/v1/windows/${channel}.json`,
+    );
+  }
+});
+
+test("parseReleaseManifest accepts a test manifest fetched as test", () => {
+  const manifest = parseReleaseManifest(
+    androidManifest({ channel: "test" }),
+    "android",
+    "test",
+  );
+  assert.equal(manifest.channel, "test");
+});
+
+test("a manifest must agree with the channel it was served as, in both directions", () => {
+  const mismatches: Array<[string, "stable" | "test"]> = [
+    ["test", "stable"],
+    ["stable", "test"],
+  ];
+  for (const [declared, fetchedAs] of mismatches) {
+    assert.throws(
+      () => parseReleaseManifest(androidManifest({ channel: declared }), "android", fetchedAs),
+      (error: unknown) => (error as { code?: string }).code === "channel",
+      `a ${declared} manifest served at ${fetchedAs}.json must be refused`,
+    );
+  }
+});
+
+test("the two channels do not share a cache entry", async () => {
+  const storage = memoryStorage();
+  const now = Date.parse("2026-09-19T08:00:00.000Z");
+  const requested: string[] = [];
+  const client = createReleaseCatalogClient({
+    storage,
+    now: () => now,
+    fetchImpl: async (url) => {
+      const channel = String(url).includes("/test.json") ? "test" : "stable";
+      requested.push(channel);
+      return new Response(JSON.stringify(androidManifest({ channel })), { status: 200 });
+    },
+  });
+
+  const stable = await client.load("android", "stable");
+  const test1 = await client.load("android", "test");
+
+  // A warm stable cache must not be handed to a test load: both go to network.
+  assert.deepEqual(requested, ["stable", "test"]);
+  assert.equal(stable.manifest.channel, "stable");
+  assert.equal(test1.manifest.channel, "test");
+  assert.notEqual(
+    storage.getItem("letscube:release-catalog:v1:android:stable"),
+    storage.getItem("letscube:release-catalog:v1:android:test"),
   );
 });

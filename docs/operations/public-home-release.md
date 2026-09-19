@@ -8,6 +8,12 @@ it goes out, how to prove it, and what to do when it is wrong.
 It does not replace `docs/operations/bot-gateway.md` or the native updater
 runbooks. Those services deploy independently and are unaffected by this one.
 
+For the Stable/Test split — which branch feeds which channel, how a Test build
+is promoted, and why the Windows channel switch does not change the messenger —
+see `docs/operations/release-channels.md`. The manifests this document verifies
+are the **download catalog**, which is Stable-only; the Windows updater reads a
+different path with a different schema.
+
 ## What ships and where
 
 | Piece | Where it lives | Deployed by |

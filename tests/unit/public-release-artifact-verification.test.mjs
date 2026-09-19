@@ -7,6 +7,7 @@ import {
   assertArtifactUrl,
   assertPublishableManifest,
   measureArtifact,
+  parseArguments,
   verifyPlatform,
 } from "../../scripts/verify-public-release-artifact.mjs";
 
@@ -192,4 +193,86 @@ test("an artifact the server refuses to serve is an error, not a silent pass", a
     }),
     (error) => error instanceof ArtifactVerificationError && error.code === "artifact_http",
   );
+});
+
+/**
+ * `verifyPlatform` always accepted a `channel` option and could never honour
+ * it: it built the URL from the channel, then demanded the returned manifest
+ * say `stable`, so `{ channel: "test" }` threw `manifest_channel` for every
+ * correctly published test manifest. The cross-check itself is right and is
+ * pinned below in both directions; what changed is which channel it compares
+ * against.
+ */
+
+test("a test manifest is verified when it is fetched as the test channel", async () => {
+  const requested = [];
+  const fetchImpl = async (url) => {
+    requested.push(String(url));
+    if (String(url).includes("/releases/v1/")) {
+      return response({ json: manifest({ channel: "test" }) });
+    }
+    return response({ contentType: "application/octet-stream", body: [BYTES] });
+  };
+
+  const result = await verifyPlatform("windows", { fetchImpl, channel: "test" });
+
+  assert.equal(result.state, "verified");
+  assert.equal(result.channel, "test");
+  assert.equal(requested[0], "https://api.letscube.ru/releases/v1/windows/test.json");
+});
+
+test("a manifest is refused when it disagrees with the channel it was served as", async () => {
+  // A stable document sitting at test.json is as wrong as the reverse.
+  await assert.rejects(
+    () => verifyPlatform("windows", {
+      fetchImpl: fakeFetch({ manifestJson: manifest({ channel: "stable" }) }),
+      channel: "test",
+    }),
+    (error) => error.code === "manifest_channel",
+  );
+  await assert.rejects(
+    () => verifyPlatform("windows", {
+      fetchImpl: fakeFetch({ manifestJson: manifest({ channel: "test" }) }),
+      channel: "stable",
+    }),
+    (error) => error.code === "manifest_channel",
+  );
+});
+
+test("an unknown channel is refused before anything is fetched", async () => {
+  let fetched = 0;
+  await assert.rejects(
+    () => verifyPlatform("windows", {
+      fetchImpl: async () => {
+        fetched += 1;
+        return response({ json: manifest() });
+      },
+      channel: "../../etc/passwd",
+    }),
+    (error) => error instanceof ArtifactVerificationError && error.code === "channel",
+  );
+  assert.equal(fetched, 0, "the channel must be checked before it becomes a URL segment");
+});
+
+test("the command line splits the channel flag out of the platform list", () => {
+  assert.deepEqual(parseArguments(["windows", "android"]), {
+    platforms: ["windows", "android"],
+    channel: "stable",
+  });
+  assert.deepEqual(parseArguments(["--channel", "test", "windows"]), {
+    platforms: ["windows"],
+    channel: "test",
+  });
+  assert.deepEqual(parseArguments(["windows", "--channel", "test"]), {
+    platforms: ["windows"],
+    channel: "test",
+  });
+
+  for (const argv of [["--channel"], ["--channel", "preview", "windows"]]) {
+    assert.throws(
+      () => parseArguments(argv),
+      (error) => error instanceof ArtifactVerificationError && error.code === "channel",
+      `${argv.join(" ")} should be refused`,
+    );
+  }
 });
