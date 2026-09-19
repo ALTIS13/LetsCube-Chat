@@ -16657,7 +16657,7 @@ does not widen. A per-bot menu is a different surface and is not filed here.
 
 ---
 
-## D-245 `[ ]` The documented Bot API documentation entrypoint returns the release catalogue's 404
+## D-245 `[x]` The documented Bot API documentation entrypoint returns the release catalogue's 404
 
 **Severity:** low. `https://app.letscube.ru/bots/docs` serves the page correctly;
 only the `api.letscube.ru` convenience address is dead. It is filed because a
@@ -16684,6 +16684,30 @@ through to the `api.letscube.ru` catch-all, which is the release-catalogue nginx
 `docs/operations/bot-gateway.md` states the redirect twice as current behaviour
 and lists `curl -fsSI https://api.letscube.ru/bots/docs` among its verification
 commands; that step has been red for the whole life of the deployment.
+
+**Fixed on 2026-09-19, and not where it was declared.** The labels could not
+have worked from where they were: Coolify generates its own Compose from the
+application's settings, so a label in a repository file never reaches the
+running container. Put back as a Traefik **file-provider** router instead —
+`docs/deploy/traefik-dynamic/letscube-bot-docs.yaml`, installed as
+`/data/coolify/proxy/dynamic/zz-letscube-bot-docs.yaml`, picked up live
+because that provider runs with `watch=true`.
+
+It belongs to no container deliberately. Nothing is proxied, the request never
+reaches an application, and a label on the gateway would disappear the next
+time Coolify regenerated that container's labels — which is exactly how this
+was lost.
+
+Verified with controls, because a redirect that catches too much is worse than
+one that catches nothing:
+
+```
+/bots/docs                        301 -> https://app.letscube.ru/bots/docs   (200 when followed)
+/bots/docs/                       301 -> https://app.letscube.ru/bots/docs/
+/bots/nothing                     404      the redirect is scoped, not a catch-all
+/releases/v1/windows/stable.json  200      the release catalogue is unharmed
+POST /bot/v1/getMe                401      the gateway still routes, priority intact
+```
 
 ## D-246 `[x]` At 390 the recorder’s hint paints over the bot command menu
 

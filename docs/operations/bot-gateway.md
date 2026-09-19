@@ -72,12 +72,22 @@ Authenticated management traffic from the LETSCUBE app uses
 route `https://app.letscube.ru/bots/docs`. The page is served by `kub-web`, not
 by the Bot Gateway.
 
-**Not true in production, measured 2026-09-19 (D-245).** The redirect router is
-declared in `docs/deploy/docker-compose.coolify.yml` and was never applied: no
-container on the host carries a label mentioning `bots/docs`, and neither does
-Traefik's file provider. `https://api.letscube.ru/bots/docs` falls through to the
-release catch-all and answers `404` from nginx. `https://app.letscube.ru/bots/docs`
-serves the page normally, so only the convenience address is dead.
+**True again since 2026-09-19 (D-245), and by a different mechanism than the
+one this file used to describe.** It was declared as container labels in
+`docs/deploy/docker-compose.coolify.yml` and never applied — Coolify generates
+its own Compose from the application's settings, so a label written in a
+repository file never reaches the running container, and the request fell
+through to the release catch-all and answered `404` from nginx for the whole
+life of the deployment.
+
+It is now a Traefik **file-provider** router, `zz-letscube-bot-docs.yaml` in
+`/data/coolify/proxy/dynamic/`, kept in the repository at
+`docs/deploy/traefik-dynamic/letscube-bot-docs.yaml`. It belongs to no
+container on purpose: nothing is proxied, the request never reaches an
+application, and a label on the gateway would vanish the next time Coolify
+regenerated that container's labels — which is how it was lost in the first
+place. The file provider runs with `watch=true`, so installing it needs no
+proxy restart.
 
 ## Runtime Boundary
 
@@ -212,7 +222,7 @@ unchanged. The Compose labels add only higher-priority, narrower routers:
 
 | Priority | Public path | Target | Behavior |
 | --- | --- | --- | --- |
-| `210` | Exact `/bots/docs` or `/bots/docs/` | Redirect middleware | Permanent redirect to `https://app.letscube.ru/bots/docs`; query/suffix is preserved. **Declared but never deployed — see D-245.** |
+| `210` | `/bots/docs` or the `/bots/docs/` prefix | Redirect middleware | Permanent redirect to `https://app.letscube.ru/bots/docs`; query/suffix is preserved. Served by Traefik's file provider, not by a container label (D-245). |
 | `200` | Exact `/bot/v1` or `/bot/v1/*` | `letscube-bot-gateway:8098` | Rule is `Path('/bot/v1') || PathPrefix('/bot/v1/')`; sibling names such as `/bot/v10` do not match. |
 | `200` | Exact `/bot/manage/v1` or `/bot/manage/v1/*` | `letscube-bot-gateway:8098` | Rule is `Path('/bot/manage/v1') || PathPrefix('/bot/manage/v1/')`; sibling names do not match. |
 
