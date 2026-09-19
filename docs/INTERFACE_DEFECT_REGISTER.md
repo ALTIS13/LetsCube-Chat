@@ -18811,3 +18811,61 @@ Measurements in `readings-{before,after}.json`.
 with the wrapper removed from the DOM 89.17×24.00. Every medal's numbers are
 identical before and after, in all four combinations. And no pixel of the
 administration panel moves for a role whose colour is null or a hex.
+## D-253 `[x]` The connection panel's readings sat outside the panel
+
+**Severity:** high on sight — the owner reported it from a live call with a
+screenshot, and every reading in the panel was affected.
+
+**Surface:** `artifacts/kub/src/components/chat/VoiceCallCapsule.tsx`, the
+health panel opened by «Состояние связи» on the voice capsule.
+
+**Defect:** the glass layer carried `CAPSULE_GLASS`, which is
+`rounded-full border border-[color:var(--glass-line)]`, while the panel it
+covers is `rounded-xl`. The panel was written beside the capsule and took its
+line.
+
+**Why that is not merely untidy.** CSS does not draw a 9999px corner on a box
+that cannot hold one: when two corners would meet, every radius is scaled down
+by the same factor, which for a uniform radius is half the shorter side. The
+panel measures **751×277** on a wide conversation, so the glass was painted as a
+stadium with **139px** corners while the readings inside it stayed a rectangle.
+The graph, the media server's name, all three numbers and both sentences fell
+outside their own panel.
+
+**It was one misuse, not a pattern.** All six other users of `CAPSULE_GLASS` —
+`TopicStrip`, `ChannelRail`, `ChatSelectionBar`, `ComposerRecordingRow` (three
+places), `MessageInput` and the capsule itself — are pills whose own container
+is `rounded-full` too. Only this one was not.
+
+**Fix:** `rounded-[inherit]`, the idiom `AttachVideoQuality` already uses, so
+that there is no second number to keep in step with the container's.
+
+**Measured before and after, at 1440 and 390 in both themes:**
+
+| | before | after |
+|---|---|---|
+| radius as written | `3.35544e+07px` | `14px` |
+| radius as painted | **139px** | 14px |
+| corners of content outside the panel | 6 elements | 0 |
+
+**The test asserts the geometry, not the class.** Every corner of the content
+lies inside the shape the glass paints; the test computes the clamp itself and
+names the offending corner. Two weaker forms were rejected for reasons this
+register keeps meeting:
+
+- comparing the glass's radius with the panel's would pass just as happily on a
+  panel that had itself become a stadium;
+- comparing a computed style with `14px` cannot work at all, because
+  `getComputedStyle` **reports the radius as written, never the clamp the
+  browser applied** — which is precisely why this defect read like nothing was
+  wrong in the source and needed pixels to find.
+
+**Mutation:** putting `CAPSULE_GLASS` back turns it red at both viewports, and
+the failure names exactly the six elements the owner's screenshot shows, with
+`r=139`. The whole voice spec is 64/64.
+
+Reproduced first and photographed in both states before anything was changed:
+`output/voice-panel-probe/` (gitignored).
+
+---
+

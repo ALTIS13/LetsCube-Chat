@@ -611,6 +611,25 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-19 — `letscube-web` at `34500bca` (D-253, the panel that did not hold its readings)
+
+**Deployment 487, `finished`.** One healthy replica, image tag
+`l64kyyu1sysev2izzjjbizhe:34500bcaf03aa052416c5853b716381089cdca58`, read off the
+running container. Clone succeeded first time.
+
+**Proved to have reached the reader in both directions, by count rather than by
+presence**, because the marker this change adds — the literal
+`rounded-[inherit] border border-[color:var(--glass-line)]` — already existed in
+the bundle from another component, so "it is there" would have proved nothing.
+The previously served entry chunk carried it **3** times; the one the site serves
+now carries it **4**. Exactly one new use, which is the health panel's glass.
+
+Preceded by deployment 486 at `cf809d47` (D-214's two residuals, D-210 and
+D-200), also `finished` with a single healthy replica.
+
+Gates at `34500bca`: typecheck clean, the whole voice spec 64/64 at 1440,
+production build proved by its own `sw.js build 0ecae37c3d255199` line.
+
 ### 2026-09-19 — `letscube-web` at `164887bb` (D-214, the role colour a reader can see)
 
 **Deployment 484, `finished`.** One healthy replica, image tag
