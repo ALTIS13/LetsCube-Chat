@@ -611,6 +611,48 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-19 — `56c8f2b8` on every application, and the gateway finally moved
+
+**All five applications now run `56c8f2b8` and all five follow `main`.** Read
+off the running containers rather than trusted from a webhook.
+
+#### The Bot Gateway had not been deployed since 2026-09-02
+
+It ran `935a670`, seventeen days old, because it is the one application of
+five with Coolify auto-deploy off **and** it was following `codex/bot-platform`
+rather than `main`. Both are now fixed: the branch is `main`, and the image is
+`twezs89u2m6d6ln6c0rpaqxe:56c8f2b8…`, single container, healthy.
+
+That closes **D-241** (a bot’s picture could not be set), and it carries
+**D-248**’s gateway half — the `file_id` re-send — which until now was written
+and unreachable, so the database branch applied earlier today was inert.
+
+**Proved with a calibrated probe**, each route by its own method, because «it
+answered» and «something answered» are different facts:
+
+```
+PATCH …/avatar                401  gateway JSON      ← was 404 HTML before
+PATCH …/profile               401  gateway JSON      ← control, always existed
+PATCH …/definitelyNotARoute   404  <!DOCTYPE html>   ← control, never existed
+```
+
+#### The deployment credential, and why there was none
+
+Every past deployment of this application went through the Coolify API with a
+token that no longer exists; the only surviving token holds `["read"]`. On the
+owner’s explicit authorisation a second token was created with abilities
+**`["deploy"]`** — not `*`. Its plaintext was generated on the server and
+written only to `/root/.coolify-deploy-token`, mode 600; Coolify stores
+sha256 of it, so the database row cannot be turned back into a usable
+credential. Calibrated before use: **401** with no token, **404 `No resources
+found`** with the token and a nonexistent uuid, **200** with the real one.
+
+#### Branch state
+
+`main` and `integration/message-actions` are identical. `codex/bot-platform`
+remains at `33a3bb83`, an ancestor of `main`, and is now referenced by
+nothing.
+
 ### 2026-09-19 — `12b6acea` deployed, and the clone failure recurred with new evidence
 
 **Deployed.** `letscube-web` runs image

@@ -16237,7 +16237,7 @@ wiring worth its cost.
 A private conversation is unaffected — it has neither capsule nor rail, so the
 band stays.
 
-## D-241 `[ ]` A bot's picture cannot be set: the client and the database have the feature, the running gateway does not
+## D-241 `[x]` A bot's picture cannot be set: the client and the database have the feature, the running gateway does not
 
 **Severity:** high. The whole of `b5402f7d feat(bots): let an owner give a bot a
 picture` (2026-09-04) is unreachable in production, and has been since the day it
@@ -16358,6 +16358,31 @@ For the record, what deploying `main` itself would additionally build (not run):
 route plus the voice reconciler, the media variants worker and the preview
 backfill, and a `pnpm-lock.yaml` grown by 139 lines. None of it is reachable
 from the gateway entry; all of it has to compile for the image to build.
+
+**Closed on 2026-09-19 by deploying the gateway.** The route was never
+missing from the source — `b5402f7d` added it on 2026-09-04 — only from the
+running image, which was `935a670` (2026-09-02). `letscube-bot-gateway` is the
+one application of five with auto-deploy off, and it was additionally
+following `codex/bot-platform` rather than `main`; it now follows `main` and
+runs `56c8f2b8`.
+
+Proved by the same calibrated probe that found it, so that «it answered» is
+distinguishable from «something answered»:
+
+```
+PATCH …/avatar                401  {"ok":false,"error":{"code":"unauthorized"…   ← was 404 HTML
+PATCH …/profile               401  {"ok":false,"error":{"code":"unauthorized"…   ← control, always existed
+PATCH …/definitelyNotARoute   404  <!DOCTYPE html>…                              ← control, never existed
+```
+
+D-242 had to land first and did: without it, the refusals that route now
+reaches would all have arrived as 500s — and the repair turned out to be
+larger than the SQLSTATEs, because `service_role` held no EXECUTE on the
+function at all.
+
+**An authenticated upload has still not been performed**, because that needs a
+real owner's session and would be a production write. What is proved is that
+the route exists and authenticates; what is not is the happy path.
 
 ---
 
