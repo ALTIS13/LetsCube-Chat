@@ -781,3 +781,80 @@ test("the press that asks again actually asks again", () => {
     "the control offered to somebody who hears nothing does nothing",
   );
 });
+
+
+/* ── The sampler reads both directions, which it did not until 2026-09-19 ── */
+
+/**
+ * The arithmetic is `lib/voiceConnectionHealth.ts` and is driven with real
+ * numbers in `tests/unit/voice-connection-health.test.mts`. What only source
+ * can see is which stats the sampler actually collects — and the defect was
+ * exactly there: it chose **one** source, `published ?? any remote track`, so
+ * for anybody who was speaking it measured the outgoing half and nothing else.
+ */
+
+function sampleHealthBody() {
+  const at = code.indexOf("async sampleHealth()");
+  assert.ok(at > 0, "sampleHealth is gone");
+  const end = code.indexOf("async setOutputDevice", at);
+  assert.ok(end > at, "could not find the end of sampleHealth");
+  return code.slice(at, end);
+}
+
+test("the sampler reads the outgoing half and the incoming half, not one of them", () => {
+  const body = sampleHealthBody();
+
+  // The old shape, which must not come back: one source chosen with `??`.
+  assert.ok(
+    !body.includes("const source ="),
+    "the sampler is choosing one source again, so a publisher measures nothing that arrives",
+  );
+
+  const needles = [
+    ["outbound-rtp", "nothing reads what this client sends"],
+    ["remote-inbound-rtp", "nothing reads the server's report on our own stream"],
+    ["inbound-rtp", "nothing reads what arrives"],
+    ["totalSamplesReceived", "nothing can tell «arriving» from «being heard»"],
+    ["totalAudioEnergy", "nothing reads whether any voice is carrying sound"],
+  ];
+  for (const [needle, why] of needles) {
+    assert.ok(body.includes(needle), why);
+  }
+});
+
+test("the incoming half is summed over every subscribed voice, not read off one", () => {
+  // «Is anything reaching me at all» is a question about the room. Reading one
+  // participant would answer it with whether that person happens to be talking.
+  assert.match(
+    sampleHealthBody(),
+    /for \(const track of subscribed\)/,
+    "the sampler reads a single remote track again",
+  );
+});
+
+test("how many people are publishing is counted from publications, not from tracks", () => {
+  // A participant this client never subscribed to has a publication and no
+  // track. Counting tracks would report «nobody is publishing» for a room that
+  // is talking — which reads as `idle`, the one inbound answer that is not a
+  // fault, so the fault would be hidden by the field meant to reveal it.
+  const body = sampleHealthBody();
+  // Counted, not merely found. `sampleHealth` writes this field twice — once
+  // into the blank reading and once into the real one — and an `includes`
+  // matched the survivor when a mutation changed only the second, so the guard
+  // was green for a sampler that reported the wrong number. Both, and the
+  // wrong spelling nowhere.
+  const stated = body.split("remoteAudioTracks: publications.length").length - 1;
+  assert.equal(
+    stated,
+    2,
+    "the publishing count is not stated as a publication count in both readings",
+  );
+  assert.ok(
+    !body.includes("remoteAudioTracks: subscribed.length"),
+    "the publishing count is taken from subscribed tracks, which hides a missing subscription",
+  );
+  assert.ok(
+    body.includes("publications.length > 0 && subscribed.length === 0"),
+    "a room publishing while this client subscribed to nobody is not reported as zero packets",
+  );
+});

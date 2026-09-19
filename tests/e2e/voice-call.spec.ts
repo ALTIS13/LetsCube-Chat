@@ -445,8 +445,14 @@ async function installVoiceSeam(
   options: {
     refuseOutput?: boolean;
     others?: string[];
-    /** Which readings `sampleHealth` answers; «none» is the default. */
-    health?: "none" | "good" | "bad";
+    /**
+     * Which readings `sampleHealth` answers; «none» is the default.
+     *
+     * `deaf` is the 2026-09-19 case, and it is here because it is the one
+     * shape of a call that every earlier version of this panel drew as
+     * perfect: flawless outbound numbers and nothing arriving at all.
+     */
+    health?: "none" | "good" | "bad" | "deaf";
     /** What `serverName()` answers, as LiveKit composes it. */
     serverName?: string | null;
   } = {},
@@ -574,10 +580,46 @@ async function installVoiceSeam(
             // own, exactly as `voice-connection-health.test.mts` controls its
             // readings — the fixture never invents a plausible-looking number for
             // a behavioural assertion to read back.
+            // The incoming half of a reading, as a transport that is not one
+            // can honestly give it. Flat counters are a room where nothing is
+            // arriving; counters that move are a room where something is.
+            const incoming = (step: number, arriving: boolean) => ({
+              packetsReceived: arriving ? 1000 + step * 50 : 1000,
+              inboundLost: 0,
+              inboundJitterMs: 2,
+              samplesPlayed: arriving ? 48_000 * step : 48_000,
+              audioEnergy: arriving ? step : 0,
+              remoteAudioTracks: 1,
+            });
             if (health === "none") {
-              return { at, rttMs: null, jitterMs: null, packetsSent: null, packetsLost: null };
+              return {
+                at,
+                rttMs: null,
+                jitterMs: null,
+                packetsSent: null,
+                packetsLost: null,
+                packetsReceived: null,
+                inboundLost: null,
+                inboundJitterMs: null,
+                samplesPlayed: null,
+                audioEnergy: null,
+                remoteAudioTracks: null,
+              };
             }
             const step = held.healthSamples;
+            if (health === "deaf") {
+              // Outbound flawless — the exact numbers the owner had on screen
+              // — and the incoming counters standing still. Every version of
+              // this panel before 2026-09-19 called this «связь стабильна».
+              return {
+                at,
+                rttMs: 19,
+                jitterMs: 2,
+                packetsSent: 1000 + step * 100,
+                packetsLost: 0,
+                ...incoming(step, false),
+              };
+            }
             if (health === "bad") {
               return {
                 at,
@@ -588,6 +630,10 @@ async function installVoiceSeam(
                 packetsSent: 1000 + step * 100,
                 // Twenty per cent of everything sent since the last reading.
                 packetsLost: step * 20,
+                // The incoming half is healthy on purpose: this case exists to
+                // prove an OUTBOUND verdict still lands, and an inbound fault
+                // would outrank it and hide the thing being tested.
+                ...incoming(step, true),
               };
             }
             return {
@@ -598,6 +644,7 @@ async function installVoiceSeam(
               jitterMs: 3,
               packetsSent: 1000 + step * 100,
               packetsLost: 0,
+              ...incoming(step, true),
             };
           },
           async setDeafened(next: boolean) {
@@ -2309,16 +2356,39 @@ test("the panel asks the transport and draws what it is told", async ({ page, br
   await expect(page.getByTestId("voice-connection-server")).toHaveText("finland14135");
   await expect(panel).toHaveAttribute("data-voice-verdict", "good");
 
+  // The incoming half, which nothing in this panel measured until 2026-09-19.
+  // Its state is a sentence rather than a figure because the question somebody
+  // opens this for is «is anything reaching me», and both directions are named
+  // on screen so that neither can be read as «the connection».
+  await expect(page.getByTestId("voice-connection-inbound-state")).toHaveText("Принимаем");
+  await expect(page.getByTestId("voice-connection-inbound-loss")).toHaveText("0.0%");
+  // A stream that is arriving states its jitter. The starved case below is
+  // where that number has to disappear, and a test that only checked the dash
+  // would pass against a panel that never printed one.
+  await expect(page.getByTestId("voice-connection-inbound-jitter")).toHaveText("2 мс");
+  await expect(page.getByTestId("voice-connection-caption").first()).toHaveText("Исходящий поток");
+  await expect(page.getByTestId("voice-connection-caption").last()).toHaveText("Входящий поток");
+
   // Between 40 and 49 the ceiling stays at its floor, which is the case a
   // data-driven ceiling would flatten onto the graph's base.
   await expect(page.getByTestId("voice-connection-ceiling")).toHaveText("50 мс");
 
   // Closing it stops the sampling rather than leaving a timer behind.
-  const before = (await probe(page)).healthSamples;
+  //
+  // The count is read **after** the panel has gone and settled, not before the
+  // click. A reading already in flight when the panel closes still increments
+  // the stand-in — it counts on entry — and it was legitimately started while
+  // the panel was open, so comparing against a count taken before the click
+  // fails on a sample that is not evidence of anything. That race was always
+  // here and showed up the moment an assertion above shifted the timing by a
+  // few hundred milliseconds. Measuring growth after the dust settles is the
+  // stronger guard anyway: a timer left behind would add one a second.
   await page.getByTestId("voice-capsule-health").click();
   await expect(panel).toHaveCount(0);
+  await page.waitForTimeout(1200);
+  const settled = (await probe(page)).healthSamples;
   await page.waitForTimeout(1500);
-  expect((await probe(page)).healthSamples, "the panel is closed and still sampling").toBe(before);
+  expect((await probe(page)).healthSamples, "the panel is closed and still sampling").toBe(settled);
 });
 
 test("a bad connection says which threshold it crossed, and raises the ceiling", async ({
@@ -3134,4 +3204,54 @@ test("the health panel's own shape holds its readings", async ({ page, browserNa
   });
 
   expect(outside).toEqual([]);
+});
+
+
+/**
+ * The 2026-09-19 case, on screen.
+ *
+ * The owner sat in a voice channel hearing nothing and read «19 мс, потеря
+ * исходящих пакетов 0.0%, связь стабильна» off this panel. All three were
+ * true; all three were about what he was sending. This is that reading, and
+ * what the panel has to say about it now.
+ *
+ * It is an end-to-end case rather than another unit case because the unit
+ * suite already pins the arithmetic: what is left to prove is that the sentence
+ * reaches the pixels, which is the half that failed a reader who was looking
+ * straight at it.
+ */
+test("flawless outgoing numbers and nothing arriving is not «Связь стабильна»", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id], health: "deaf" });
+
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+  await page.getByTestId("voice-capsule-health").click();
+  const panel = page.getByTestId("voice-connection-panel");
+  await expect(panel).toBeVisible();
+  await expect
+    .poll(async () => (await probe(page)).healthSamples, { timeout: 8_000 })
+    .toBeGreaterThan(2);
+
+  // The outgoing half really is flawless, and the panel goes on saying so.
+  // The fix is not «report everything as broken»; it is «stop answering a
+  // question nobody asked».
+  await expect(page.getByTestId("voice-connection-average")).toHaveText("19 мс");
+  await expect(page.getByTestId("voice-connection-loss")).toHaveText("0.0%");
+
+  // And the half that was never measured now has the floor.
+  await expect(page.getByTestId("voice-connection-inbound-state")).toHaveText("Ничего не приходит");
+  await expect(panel).toHaveAttribute("data-voice-verdict", "not_receiving");
+  await expect(page.getByTestId("voice-connection-verdict")).not.toHaveText("Связь стабильна");
+  await expect(page.getByTestId("voice-connection-advice")).toContainText("не приходит");
+
+  // And the jitter goes with it. The fixture keeps reporting 2 ms after the
+  // packets stop, exactly as `inbound-rtp` does in a browser — measured by
+  // stopping a sender and reading the receiver four seconds later, where the
+  // value came back unchanged. «2 мс» under «Ничего не приходит» tells a
+  // reader that something is arriving, smoothly.
+  await expect(page.getByTestId("voice-connection-inbound-jitter")).toHaveText("—");
 });

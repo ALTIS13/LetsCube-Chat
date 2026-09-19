@@ -692,69 +692,135 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
     },
     async sampleHealth() {
       const at = Date.now();
+
+      /**
+       * What the room says is being published by other people, and what of it
+       * this client has actually subscribed to.
+       *
+       * Counted as **publications** rather than as tracks, and the difference
+       * is a fault this would otherwise hide: a participant whose audio we
+       * never subscribed to has a publication and no track, and counting
+       * tracks would report «nobody is publishing» for a room that is talking.
+       */
+      const publications = [...room.remoteParticipants.values()].flatMap((who) => [
+        ...who.audioTrackPublications.values(),
+      ]);
+      const subscribed = publications
+        .map((publication) => publication.track)
+        .filter((track): track is NonNullable<typeof track> => Boolean(track));
+
       const blank: VoiceHealthSample = {
         at,
         rttMs: null,
         jitterMs: null,
         packetsSent: null,
         packetsLost: null,
+        packetsReceived: null,
+        inboundLost: null,
+        inboundJitterMs: null,
+        samplesPlayed: null,
+        audioEnergy: null,
+        remoteAudioTracks: publications.length,
       };
-      // The published track when there is one; otherwise any subscribed track,
-      // because somebody the gateway refused publication to still has a
-      // connection worth measuring and would otherwise see an empty panel.
-      const source =
-        published ??
-        [...room.remoteParticipants.values()]
-          .flatMap((who) => [...who.audioTrackPublications.values()])
-          .map((publication) => publication.track)
-          .find((track) => Boolean(track)) ??
-        null;
-      if (!source) return blank;
 
-      let report: RTCStatsReport | undefined;
-      try {
-        report = await source.getRTCStatsReport();
-      } catch {
-        // A reading that failed is «unknown», which is what `blank` says. It is
-        // not a zero and it is not an error the call should notice.
-        return blank;
-      }
-      if (!report) return blank;
+      const reportOf = async (source: { getRTCStatsReport(): Promise<RTCStatsReport | undefined> }) => {
+        try {
+          return await source.getRTCStatsReport();
+        } catch {
+          // A reading that failed is «unknown». It is not a zero, and it is not
+          // an error the call should notice.
+          return undefined;
+        }
+      };
 
       let rttMs: number | null = null;
       let jitterMs: number | null = null;
       let packetsSent: number | null = null;
       let packetsLost: number | null = null;
+      let packetsReceived: number | null = null;
+      let inboundLost: number | null = null;
+      let inboundJitterMs: number | null = null;
+      let samplesPlayed: number | null = null;
+      let audioEnergy: number | null = null;
 
-      report.forEach((entry: Record<string, unknown>) => {
-        const kind = entry.type;
-        if (kind === "outbound-rtp" && typeof entry.packetsSent === "number") {
-          packetsSent = entry.packetsSent;
-        } else if (kind === "inbound-rtp" && packetsSent === null && typeof entry.packetsReceived === "number") {
-          // A listener has no outbound counter. What it can report is what it
-          // received and what went missing on the way, which is the same
-          // question asked from the other end.
-          packetsSent = entry.packetsReceived + (typeof entry.packetsLost === "number" ? entry.packetsLost : 0);
-          if (typeof entry.packetsLost === "number") packetsLost = entry.packetsLost;
-          if (typeof entry.jitter === "number") jitterMs = entry.jitter * 1000;
-        }
-        if (kind === "remote-inbound-rtp") {
-          if (typeof entry.roundTripTime === "number") rttMs = entry.roundTripTime * 1000;
-          if (typeof entry.jitter === "number") jitterMs = entry.jitter * 1000;
-          if (typeof entry.packetsLost === "number") packetsLost = entry.packetsLost;
-        }
-        // The transport's own round trip, used when the media report carries
-        // none — which is every reading before the first RTCP arrives, roughly
-        // the first second of every call.
+      const add = (held: number | null, value: unknown): number | null =>
+        typeof value === "number" && Number.isFinite(value) ? (held ?? 0) + value : held;
+
+      /**
+       * The transport's own round trip, used when a media report carries none
+       * — which is every reading before the first RTCP arrives, roughly the
+       * first second of every call.
+       */
+      const readCandidatePair = (entry: Record<string, unknown>) => {
         if (
-          kind === "candidate-pair" &&
+          entry.type === "candidate-pair" &&
           rttMs === null &&
           entry.state === "succeeded" &&
           typeof entry.currentRoundTripTime === "number"
         ) {
           rttMs = entry.currentRoundTripTime * 1000;
         }
-      });
+      };
+
+      // ── What we send. Only the published track knows, and a listen-only
+      // token has no answer to give — which is `null`, not zero.
+      if (published) {
+        const report = await reportOf(published);
+        report?.forEach((entry: Record<string, unknown>) => {
+          if (entry.type === "outbound-rtp" && typeof entry.packetsSent === "number") {
+            packetsSent = entry.packetsSent;
+          }
+          if (entry.type === "remote-inbound-rtp") {
+            // The server's report on **our** stream: the only place a sender
+            // learns what happened to what it sent.
+            if (typeof entry.roundTripTime === "number") rttMs = entry.roundTripTime * 1000;
+            if (typeof entry.jitter === "number") jitterMs = entry.jitter * 1000;
+            if (typeof entry.packetsLost === "number") packetsLost = entry.packetsLost;
+          }
+          readCandidatePair(entry);
+        });
+      }
+
+      // ── What arrives. Summed over every subscribed voice, because the
+      // question the panel is opened for is «is anything reaching me at all»,
+      // and one person's silence is not the room's. Bounded by the channel's
+      // participant cap, and only while the panel is open.
+      for (const track of subscribed) {
+        const report = await reportOf(track);
+        report?.forEach((entry: Record<string, unknown>) => {
+          if (entry.type === "inbound-rtp" && entry.kind === "audio") {
+            packetsReceived = add(packetsReceived, entry.packetsReceived);
+            inboundLost = add(inboundLost, entry.packetsLost);
+            samplesPlayed = add(samplesPlayed, entry.totalSamplesReceived);
+            audioEnergy = add(audioEnergy, entry.totalAudioEnergy);
+            if (typeof entry.jitter === "number") {
+              // The worst of them rather than the last: a reader notices the
+              // voice that is breaking up, not the average of the room.
+              const ms = entry.jitter * 1000;
+              inboundJitterMs = inboundJitterMs === null ? ms : Math.max(inboundJitterMs, ms);
+            }
+          }
+          readCandidatePair(entry);
+        });
+      }
+
+      // Somebody is publishing and this client has subscribed to none of them.
+      // Zero packets really are arriving, so it is reported as a measurement
+      // rather than as an absence — `starved` is the correct reading and
+      // `unknown` would hide it.
+      if (publications.length > 0 && subscribed.length === 0) {
+        packetsReceived = 0;
+        inboundLost = 0;
+        samplesPlayed = 0;
+      }
+
+      if (
+        rttMs === null &&
+        packetsSent === null &&
+        packetsReceived === null
+      ) {
+        return blank;
+      }
 
       return {
         at,
@@ -762,6 +828,12 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
         jitterMs: jitterMs === null ? null : Math.round(jitterMs * 10) / 10,
         packetsSent,
         packetsLost,
+        packetsReceived,
+        inboundLost,
+        inboundJitterMs: inboundJitterMs === null ? null : Math.round(inboundJitterMs * 10) / 10,
+        samplesPlayed,
+        audioEnergy,
+        remoteAudioTracks: publications.length,
       };
     },
     async resumeAudio() {

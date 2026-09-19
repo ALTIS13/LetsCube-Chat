@@ -13,16 +13,23 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  inboundLossBetween,
   lossBetween,
   roundLoss,
   trimVoiceSamples,
   voiceHealthAdvice,
   voiceHealthOf,
   voiceHealthScale,
+  voiceInboundIsFault,
+  voiceInboundJitterStands,
+  voiceInboundLabel,
+  voiceInboundOf,
   VOICE_HEALTH_THRESHOLDS,
   VOICE_HEALTH_WINDOW_MS,
+  VOICE_INBOUND_WINDOW_MS,
   VOICE_LOSS_WINDOW_MS,
   type VoiceHealthSample,
+  type VoiceInboundReading,
 } from "../../artifacts/kub/src/lib/voiceConnectionHealth.ts";
 
 const NOW = 1_800_000_000_000;
@@ -34,7 +41,41 @@ function sample(over: Partial<VoiceHealthSample> & { at: number }): VoiceHealthS
     jitterMs: "jitterMs" in over ? (over.jitterMs ?? null) : 3,
     packetsSent: "packetsSent" in over ? (over.packetsSent ?? null) : 1000,
     packetsLost: "packetsLost" in over ? (over.packetsLost ?? null) : 0,
+    // The incoming half defaults to a healthy room with one other person in
+    // it, so that every case written before this axis existed goes on
+    // measuring what it was written to measure. A test about the inbound axis
+    // states its own counters.
+    //
+    // **The defaults advance with `at`,** and that is the whole trick: these
+    // are cumulative counters, so a fixed default is a room in which nothing
+    // is arriving — which is `starved`, and which turned nine unrelated cases
+    // red the first time this helper was written with constants.
+    packetsReceived: "packetsReceived" in over ? (over.packetsReceived ?? null) : 1_000_000 + tick(over.at) * 50,
+    inboundLost: "inboundLost" in over ? (over.inboundLost ?? null) : 0,
+    inboundJitterMs: "inboundJitterMs" in over ? (over.inboundJitterMs ?? null) : 2,
+    samplesPlayed: "samplesPlayed" in over ? (over.samplesPlayed ?? null) : 100_000_000 + tick(over.at) * 48_000,
+    audioEnergy: "audioEnergy" in over ? (over.audioEnergy ?? null) : 1000 + tick(over.at),
+    remoteAudioTracks: "remoteAudioTracks" in over ? (over.remoteAudioTracks ?? null) : 1,
   };
+}
+
+/** How many seconds this reading is after `NOW`; negative for older ones. */
+function tick(at: number): number {
+  return Math.round((at - NOW) / 1000);
+}
+
+/**
+ * A pair of readings a second apart, for the incoming axis.
+ *
+ * Two is the minimum that can say anything: every quantity on this axis is a
+ * movement between cumulative counters, and one of those is a number with no
+ * direction.
+ */
+function incoming(
+  first: Partial<VoiceHealthSample>,
+  second: Partial<VoiceHealthSample>,
+): VoiceHealthSample[] {
+  return [sample({ at: NOW - 1000, ...first }), sample({ at: NOW, ...second })];
 }
 
 /** A clean run of readings, one a second, ending now. */
@@ -278,4 +319,388 @@ test("no readings still produce a drawable frame", () => {
   const scale = voiceHealthScale([], NOW);
   assert.equal(scale.maxMs, 50);
   assert.deepEqual(scale.points, []);
+});
+
+
+/* ── The incoming half, which nothing measured until 2026-09-19 ───────────── */
+
+/**
+ * Why this section exists, in one paragraph, because it is the most expensive
+ * thing this file has ever been written about.
+ *
+ * On 2026-09-19 the owner sat in a voice channel hearing nothing, opened this
+ * panel, and it told him «19 мс, потеря исходящих пакетов 0.0%, связь
+ * стабильна». Every one of those was true. All three were about what he was
+ * sending. Nothing in the product measured what was arriving, so the panel
+ * people open *because* audio is missing was structurally unable to see audio
+ * missing — and it did not merely fail to answer, it actively reassured.
+ *
+ * The discriminator below is `samplesPlayed`, and it was measured rather than
+ * reasoned about (Chrome, loopback `RTCPeerConnection`, two seconds a row):
+ * a loud sender with nothing attached moves 100 packets and **0** samples; the
+ * same sender attached moves 101 packets and 96480 samples; a **silent**
+ * sender attached moves 100 packets and 96480 samples. So samples tell «is
+ * anybody playing this» apart from «is anybody talking», which is the
+ * distinction every naive version of this feature gets wrong.
+ */
+
+test("inbound loss counts against what was expected, not against what arrived", () => {
+  // The denominator is the mirror of `lossBetween`'s and not a copy of it: a
+  // receiver knows what turned up and what it noticed missing, so the total
+  // that was coming is the sum. 10 lost out of 90 that arrived is 10%, not
+  // 11.1% — and getting this backwards understates every loss there is.
+  const [first, second] = incoming(
+    { packetsReceived: 1000, inboundLost: 0 },
+    { packetsReceived: 1090, inboundLost: 10 },
+  );
+  assert.equal(inboundLossBetween(first, second), 10);
+});
+
+test("inbound loss refuses the three things it cannot answer", () => {
+  const backwards = incoming(
+    { packetsReceived: 5000, inboundLost: 3 },
+    { packetsReceived: 40, inboundLost: 0 },
+  );
+  assert.equal(inboundLossBetween(backwards[0], backwards[1]), null, "a reconnect is not a negative loss");
+
+  const nothing = incoming(
+    { packetsReceived: 1000, inboundLost: 4 },
+    { packetsReceived: 1000, inboundLost: 4 },
+  );
+  assert.equal(inboundLossBetween(nothing[0], nothing[1]), null, "nothing expected is nothing to lose");
+
+  const missing = incoming({ packetsReceived: null }, {});
+  assert.equal(inboundLossBetween(missing[0], missing[1]), null, "a missing counter is unknown, not zero");
+});
+
+test("one reading says nothing about the incoming half", () => {
+  // A cumulative counter with nothing to compare it to has no direction, and
+  // reading it as «nothing is arriving» would put an alarm on screen in the
+  // first second of every call.
+  const one = voiceInboundOf([sample({ at: NOW, packetsReceived: 0, samplesPlayed: 0 })], NOW);
+  assert.equal(one.reading, "unknown");
+  assert.equal(voiceInboundIsFault(one.reading), false);
+});
+
+test("an empty room is idle, which is not a fault however still the counters are", () => {
+  // The state of somebody who is first into a channel. Every counter is flat
+  // and nothing is wrong, so this has to be decided before anything is
+  // measured — a rule the reading order in `voiceInboundOf` depends on.
+  const alone = voiceInboundOf(
+    incoming(
+      { remoteAudioTracks: 0, packetsReceived: 0, samplesPlayed: 0, audioEnergy: 0 },
+      { remoteAudioTracks: 0, packetsReceived: 0, samplesPlayed: 0, audioEnergy: 0 },
+    ),
+    NOW,
+  );
+  assert.equal(alone.reading, "idle");
+  assert.equal(voiceInboundIsFault("idle"), false);
+});
+
+test("packets arriving and samples moving is «receiving»", () => {
+  const view = voiceInboundOf(
+    incoming(
+      { packetsReceived: 1000, samplesPlayed: 48_000 },
+      { packetsReceived: 1050, samplesPlayed: 96_000 },
+    ),
+    NOW,
+  );
+  assert.equal(view.reading, "receiving");
+  assert.equal(view.remoteAudioTracks, 1);
+  assert.equal(view.packetsPerSecond, 50);
+});
+
+test("somebody publishing and nothing arriving is «starved»", () => {
+  const view = voiceInboundOf(
+    incoming(
+      { remoteAudioTracks: 1, packetsReceived: 1000, samplesPlayed: 48_000 },
+      { remoteAudioTracks: 1, packetsReceived: 1000, samplesPlayed: 48_000 },
+    ),
+    NOW,
+  );
+  assert.equal(view.reading, "starved");
+  assert.equal(voiceInboundIsFault("starved"), true);
+});
+
+test("packets arriving with nothing playing them is «unheard» — the 2026-09-19 defect", () => {
+  // Measured signature: packets advance, samples do not. This is what six days
+  // of voice channels looked like from inside the browser, and it is a
+  // different fault from `starved` with a different fix — one is the wire, one
+  // is this client — which is why it is a reading of its own.
+  const view = voiceInboundOf(
+    incoming(
+      { packetsReceived: 1000, samplesPlayed: 0, audioEnergy: 0 },
+      { packetsReceived: 1100, samplesPlayed: 0, audioEnergy: 0 },
+    ),
+    NOW,
+  );
+  assert.equal(view.reading, "unheard");
+  assert.equal(voiceInboundIsFault("unheard"), true);
+});
+
+test("a quiet participant is receiving, not broken", () => {
+  // The false-positive this axis would otherwise invent, and the reason the
+  // fault is read off `samplesPlayed` rather than off `audioEnergy`. Measured:
+  // a silent sender moves 96480 samples in two seconds and zero energy. A
+  // version that alarmed on flat energy would accuse everybody who stops
+  // talking of a broken call.
+  const view = voiceInboundOf(
+    incoming(
+      { packetsReceived: 1000, samplesPlayed: 48_000, audioEnergy: 5 },
+      { packetsReceived: 1100, samplesPlayed: 96_000, audioEnergy: 5 },
+    ),
+    NOW,
+  );
+  assert.equal(view.reading, "receiving");
+  assert.equal(view.carryingSound, false, "silence is reported as silence");
+  assert.equal(voiceInboundIsFault(view.reading), false);
+});
+
+test("a browser that reports no samples is unknown about playback, never «unheard»", () => {
+  // Firefox has no `totalSamplesReceived`. A missing counter must not be read
+  // as a zero — the rule `lossBetween` follows — or every Firefox call would
+  // draw an alarm about a fault that is not happening.
+  const view = voiceInboundOf(
+    incoming(
+      { packetsReceived: 1000, samplesPlayed: null },
+      { packetsReceived: 1100, samplesPlayed: null },
+    ),
+    NOW,
+  );
+  assert.equal(view.reading, "receiving");
+});
+
+test("a missing inbound counter is unknown, never «starved»", () => {
+  const view = voiceInboundOf(
+    incoming({ packetsReceived: null }, { packetsReceived: null }),
+    NOW,
+  );
+  assert.equal(view.reading, "unknown");
+  assert.equal(voiceInboundIsFault(view.reading), false);
+});
+
+test("counters that went backwards are a reconnection, not a silence", () => {
+  const view = voiceInboundOf(
+    incoming({ packetsReceived: 50_000 }, { packetsReceived: 40 }),
+    NOW,
+  );
+  assert.equal(view.reading, "unknown", "a re-established connection read as a fault");
+});
+
+test("the incoming window is short, so a room that fell silent says so", () => {
+  // Fifteen seconds of history would go on reporting «receiving» for a quarter
+  // of a minute after everything stopped, which is most of the time somebody
+  // spends looking at this panel.
+  assert.ok(VOICE_INBOUND_WINDOW_MS < VOICE_LOSS_WINDOW_MS);
+  const stale = [
+    sample({ at: NOW - VOICE_INBOUND_WINDOW_MS - 1, packetsReceived: 500 }),
+    sample({ at: NOW - 1000, packetsReceived: 1000 }),
+    sample({ at: NOW, packetsReceived: 1000 }),
+  ];
+  assert.equal(voiceInboundOf(stale, NOW).reading, "starved");
+});
+
+test("every incoming reading has a word for it, and only the two faults are faults", () => {
+  const readings: VoiceInboundReading[] = ["unknown", "idle", "receiving", "starved", "unheard"];
+  for (const reading of readings) {
+    const label = voiceInboundLabel(reading);
+    assert.ok(label.length > 0, `${reading} has no label`);
+  }
+  assert.deepEqual(
+    readings.filter(voiceInboundIsFault),
+    ["starved", "unheard"],
+    "the set of things drawn as a failure changed",
+  );
+});
+
+/* ── The verdict has to account for both directions ───────────────────────── */
+
+test("THE 2026-09-19 CASE: perfect outbound and nothing arriving is not «стабильна»", () => {
+  // The exact reading the owner had on screen while he could not hear a word:
+  // a 19 ms round trip and 0.0% outbound loss. Every outbound number is
+  // flawless and the call is not happening. If this ever returns "good" again,
+  // the panel has gone back to reassuring people about a call they cannot hear.
+  const held = [
+    sample({ at: NOW - 1000, rttMs: 19, packetsSent: 1000, packetsLost: 0, packetsReceived: 1000, samplesPlayed: 48_000 }),
+    sample({ at: NOW, rttMs: 19, packetsSent: 1050, packetsLost: 0, packetsReceived: 1000, samplesPlayed: 48_000 }),
+  ];
+  const health = voiceHealthOf(held, NOW);
+  assert.equal(health.outboundLossPercent, 0, "the outbound half really is clean");
+  assert.equal(health.averageRttMs, 19);
+  assert.equal(health.verdict, "not_receiving");
+  assert.equal(health.inbound.reading, "starved");
+  assert.notEqual(health.verdict, "good");
+});
+
+test("perfect outbound and nothing playing it is «unheard»", () => {
+  const held = [
+    sample({ at: NOW - 1000, rttMs: 17, packetsSent: 1000, packetsLost: 0, packetsReceived: 1000, samplesPlayed: 0 }),
+    sample({ at: NOW, rttMs: 17, packetsSent: 1050, packetsLost: 0, packetsReceived: 1100, samplesPlayed: 0 }),
+  ];
+  const health = voiceHealthOf(held, NOW);
+  assert.equal(health.verdict, "unheard");
+});
+
+test("an empty room with a clean connection is still «good»", () => {
+  // The guard on the guard: an axis that turns every quiet moment into a
+  // warning is worse than no axis, because people stop reading warnings.
+  const held = [
+    sample({ at: NOW - 1000, remoteAudioTracks: 0, packetsReceived: 0, samplesPlayed: 0 }),
+    sample({ at: NOW, remoteAudioTracks: 0, packetsReceived: 0, samplesPlayed: 0 }),
+  ];
+  const health = voiceHealthOf(held, NOW);
+  assert.equal(health.inbound.reading, "idle");
+  assert.equal(health.verdict, "good");
+});
+
+test("an incoming fault outranks an outgoing one, and an outgoing one still lands", () => {
+  const outboundBroken = { packetsSent: 1000, packetsLost: 0 };
+  const outboundBrokenLater = { packetsSent: 1100, packetsLost: 60 };
+
+  // Outbound broken, inbound fine: the outbound verdict survives, because the
+  // new axis must not mask the old one.
+  const onlyOut = voiceHealthOf(
+    [
+      sample({ at: NOW - 1000, ...outboundBroken, packetsReceived: 1000, samplesPlayed: 48_000 }),
+      sample({ at: NOW, ...outboundBrokenLater, packetsReceived: 1100, samplesPlayed: 96_000 }),
+    ],
+    NOW,
+  );
+  assert.equal(onlyOut.verdict, "distorting");
+
+  // Both broken: the one that means «you cannot hear anybody» wins, because a
+  // verdict is one sentence and that is the worse half.
+  const both = voiceHealthOf(
+    [
+      sample({ at: NOW - 1000, ...outboundBroken, packetsReceived: 1000, samplesPlayed: 48_000 }),
+      sample({ at: NOW, ...outboundBrokenLater, packetsReceived: 1000, samplesPlayed: 48_000 }),
+    ],
+    NOW,
+  );
+  assert.equal(both.verdict, "not_receiving");
+});
+
+test("an unknown incoming half leaves the outgoing verdict exactly as it was", () => {
+  const held = [
+    sample({ at: NOW - 1000, rttMs: 300, packetsReceived: null, samplesPlayed: null }),
+    sample({ at: NOW, rttMs: 300, packetsReceived: null, samplesPlayed: null }),
+  ];
+  const health = voiceHealthOf(held, NOW);
+  assert.equal(health.inbound.reading, "unknown");
+  assert.equal(health.verdict, "lagging");
+});
+
+test("both new verdicts have a sentence, and each names where the fault is", () => {
+  const notReceiving = voiceHealthAdvice("not_receiving");
+  const unheard = voiceHealthAdvice("unheard");
+  for (const [verdict, text] of [["not_receiving", notReceiving], ["unheard", unheard]] as const) {
+    assert.ok(text.length > 0, `${verdict} has no sentence`);
+    assert.ok(text.trim().endsWith("."), `${verdict} is a fragment rather than a sentence`);
+  }
+  assert.notEqual(notReceiving, unheard, "two different faults must not read as one");
+  // The one the reader can act on names the action; the other must not send
+  // somebody to their router when the link to the server is demonstrably fine.
+  assert.match(unheard, /браузер/i);
+  assert.doesNotMatch(notReceiving, /интернет/i);
+});
+
+test("the health of nothing carries an incoming half too", () => {
+  // The empty branch returns early, and an early return that forgets a field
+  // is how a panel renders `undefined.reading` on its first frame.
+  const empty = voiceHealthOf([], NOW);
+  assert.equal(empty.verdict, "unknown");
+  assert.equal(empty.inbound.reading, "unknown");
+});
+
+
+/* ── A number that stopped being a measurement ──────────────────────── */
+
+/**
+ * `inbound-rtp.jitter` is left at its last value when packets stop — measured
+ * in Chrome on 2026-09-19 by stopping the sender and reading the receiver four
+ * seconds later: zero packets moved, and the jitter came back still reported,
+ * still 0.001, byte-identical to the reading before the stop.
+ *
+ * Printed under «Ничего не приходит», «2 мс» tells a reader that something is
+ * arriving and arriving smoothly. It is the same objection this module already
+ * accepts for inbound loss, and the same one it accepts for the graph, where a
+ * gap is drawn as a gap rather than bridged.
+ */
+
+test("a starved stream shows no jitter, because the last one is four seconds stale", () => {
+  const view = voiceInboundOf(
+    incoming(
+      { remoteAudioTracks: 1, packetsReceived: 1000, samplesPlayed: 48_000, inboundJitterMs: 2 },
+      { remoteAudioTracks: 1, packetsReceived: 1000, samplesPlayed: 48_000, inboundJitterMs: 2 },
+    ),
+    NOW,
+  );
+  assert.equal(view.reading, "starved");
+  assert.equal(view.lastJitterMs, null, "a stale jitter is printed beside «nothing is arriving»");
+});
+
+test("an empty room shows no jitter either, because it belongs to somebody who left", () => {
+  const view = voiceInboundOf(
+    incoming(
+      { remoteAudioTracks: 0, inboundJitterMs: 7 },
+      { remoteAudioTracks: 0, inboundJitterMs: 7 },
+    ),
+    NOW,
+  );
+  assert.equal(view.reading, "idle");
+  assert.equal(view.lastJitterMs, null);
+});
+
+test("an unheard stream keeps its jitter, because the packets really are being timed", () => {
+  // Jitter is computed by the RTP stack from arrival times and owes nothing to
+  // playout. Measured: a stream with packets arriving and
+  // `totalSamplesReceived` stuck at 0 still reported `jitter`. The packets are
+  // genuinely arriving and genuinely being timed here; it is the playing-out
+  // that is not happening, and the row above this one says so.
+  const view = voiceInboundOf(
+    incoming(
+      { packetsReceived: 1000, samplesPlayed: 0, inboundJitterMs: 4 },
+      { packetsReceived: 1100, samplesPlayed: 0, inboundJitterMs: 4 },
+    ),
+    NOW,
+  );
+  assert.equal(view.reading, "unheard");
+  assert.equal(view.lastJitterMs, 4, "a live measurement was withheld");
+});
+
+test("a receiving stream keeps its jitter", () => {
+  const view = voiceInboundOf(
+    incoming(
+      { packetsReceived: 1000, samplesPlayed: 48_000, inboundJitterMs: 6 },
+      { packetsReceived: 1100, samplesPlayed: 96_000, inboundJitterMs: 6 },
+    ),
+    NOW,
+  );
+  assert.equal(view.reading, "receiving");
+  assert.equal(view.lastJitterMs, 6);
+});
+
+test("exactly the two readings where nothing is arriving withhold the number", () => {
+  const readings: VoiceInboundReading[] = ["unknown", "idle", "receiving", "starved", "unheard"];
+  assert.deepEqual(
+    readings.filter((reading) => !voiceInboundJitterStands(reading)),
+    ["idle", "starved"],
+    "the set of readings that withhold a jitter number changed",
+  );
+});
+
+test("a starved stream goes on producing samples, so the order of the two checks holds", () => {
+  // Not a hypothetical. Four seconds after the sender stopped,
+  // `packetsReceived` had not moved and `totalSamplesReceived` had risen by
+  // 192 000 — NetEq concealing the gap for an element still pulling from it.
+  // So «samples are moving» does not mean «packets are arriving», and asking
+  // about playout before arrival reads a dead stream as a healthy one.
+  const view = voiceInboundOf(
+    incoming(
+      { packetsReceived: 1000, samplesPlayed: 120_000 },
+      { packetsReceived: 1000, samplesPlayed: 312_000 },
+    ),
+    NOW,
+  );
+  assert.equal(view.reading, "starved", "a stream with no packets was read as healthy because samples moved");
 });

@@ -4,9 +4,14 @@ import { KubIcon } from "@/components/kub";
 import { useVoiceHealth } from "@/hooks/useVoiceHealth";
 import {
   voiceHealthAdvice,
+  voiceInboundIsFault,
+  voiceInboundLabel,
+  VOICE_HEALTH_INCOMING_CAPTION,
+  VOICE_HEALTH_OUTGOING_CAPTION,
   VOICE_HEALTH_THRESHOLDS,
   type VoiceHealthScale,
   type VoiceHealthVerdict,
+  type VoiceInbound,
 } from "@/lib/voiceConnectionHealth";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +45,18 @@ import { cn } from "@/lib/utils";
  * `prefers-reduced-motion` it would have to be turned off anyway — leaving a
  * feature that behaves differently for the people most likely to be
  * diagnosing a problem.
+ *
+ * ## The two directions are named, and that is a fix rather than a tidy-up
+ *
+ * Until 2026-09-19 every number here was outbound, and only one of them said
+ * so. The owner sat in a channel hearing nothing while this panel read «19 мс,
+ * 0.0%, связь стабильна» — all true, all about what he was sending. An
+ * unlabelled number is read as «the connection», so a row that measures one
+ * direction and says nothing about the other is not merely incomplete: it
+ * actively answers a question it never asked. Both halves are now measured and
+ * both sit under a heading that names them, and the incoming half leads with a
+ * state in words rather than a figure, because «ничего не приходит» is the
+ * sentence somebody opened this panel to find.
  */
 
 const GRAPH_WIDTH = 280;
@@ -79,10 +96,15 @@ export function VoiceConnectionPanel({
       )}
 
       <dl className="flex flex-col gap-0.5 text-sm" data-testid="voice-connection-numbers">
+        {/* The round trip belongs to neither direction on its own — it is the
+            path to the server and back — so it stays above both headings
+            rather than being claimed by one of them. */}
         <Row label="Средняя задержка" value={ms(health.averageRttMs)} testId="voice-connection-average" />
         <Row label="Последняя задержка" value={ms(health.lastRttMs)} testId="voice-connection-last" />
+
+        <Caption>{VOICE_HEALTH_OUTGOING_CAPTION}</Caption>
         <Row
-          label="Потеря исходящих пакетов"
+          label="Потеря пакетов"
           // `toFixed(1)`, not the number as it is. `roundLoss` returns 0 for a
           // clean connection and «0%» reads like a default while «0.0%» reads
           // like somebody measured — which is the distinction
@@ -95,6 +117,9 @@ export function VoiceConnectionPanel({
           }
           testId="voice-connection-loss"
         />
+
+        <Caption>{VOICE_HEALTH_INCOMING_CAPTION}</Caption>
+        <IncomingRows inbound={health.inbound} />
       </dl>
 
       <p
@@ -126,14 +151,96 @@ function ms(value: number | null): string {
   return value === null ? "—" : `${value} мс`;
 }
 
-function Row({ label, value, testId }: { label: string; value: string; testId: string }) {
+/**
+ * Which direction the rows under it are about.
+ *
+ * A `dt`-less line inside the `dl` rather than a heading outside it, so the
+ * list stays one list: the two halves are the same measurement taken at two
+ * ends, and splitting them into two `dl`s would put a semantic boundary where
+ * there is only a visual one.
+ */
+function Caption({ children }: { children: string }) {
   return (
-    <div className="flex min-w-0 items-baseline justify-between gap-2">
-      <dt className="min-w-0 truncate text-[color:var(--kub-muted)]">{label}</dt>
+    <p
+      className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]"
+      data-testid="voice-connection-caption"
+    >
+      {children}
+    </p>
+  );
+}
+
+/**
+ * The incoming half.
+ *
+ * **The state comes first, in words, and the numbers come after it.** Every
+ * other row here is a figure because a figure is what somebody is comparing
+ * against a threshold; this one is a sentence because the question is not «how
+ * much» but «is anything reaching me», and a reader who has just discovered
+ * they can hear nobody should not have to infer that from a dash.
+ *
+ * A fault is drawn in `--kub-danger-text`, which is the text-safe tone — never
+ * `--kub-warn`, which exists only for a mark. The rest is the ordinary muted
+ * value, including «Никто не передаёт»: an empty room is not a failure.
+ */
+function IncomingRows({ inbound }: { inbound: VoiceInbound }) {
+  const fault = voiceInboundIsFault(inbound.reading);
+  return (
+    <>
+      <Row
+        label="Состояние"
+        value={voiceInboundLabel(inbound.reading)}
+        testId="voice-connection-inbound-state"
+        tone={fault ? "danger" : "normal"}
+        data-reading={inbound.reading}
+      />
+      <Row
+        label="Потеря пакетов"
+        value={inbound.lossPercent === null ? "—" : `${inbound.lossPercent.toFixed(1)}%`}
+        testId="voice-connection-inbound-loss"
+      />
+      {/* One number over several senders, so it says which one: the worst
+          voice in the room, not an average — an average hides the person who
+          is breaking up behind everybody who is fine. A dash here is not a
+          formatting gap; `voiceInboundJitterStands` withholds the number for
+          a reading it would misrepresent. */}
+      <Row
+        label="Дрожание"
+        value={ms(inbound.lastJitterMs)}
+        testId="voice-connection-inbound-jitter"
+        title="Худший показатель среди собеседников"
+      />
+    </>
+  );
+}
+
+function Row({
+  label,
+  value,
+  testId,
+  tone = "normal",
+  title,
+  ...rest
+}: {
+  label: string;
+  value: string;
+  testId: string;
+  tone?: "normal" | "danger";
+  /** Hover text on the label, for a number that needs saying which one it is. */
+  title?: string;
+} & Record<`data-${string}`, string | undefined>) {
+  return (
+    <div className="flex min-w-0 items-baseline justify-between gap-2" {...rest}>
+      <dt className="min-w-0 truncate text-[color:var(--kub-muted)]" title={title}>
+        {label}
+      </dt>
       {/* `tabular-nums` so the numbers do not shuffle sideways once a second,
           which is what a proportional font does to a figure that changes. */}
       <dd
-        className="shrink-0 font-semibold tabular-nums text-[color:var(--kub-text)]"
+        className={cn(
+          "shrink-0 font-semibold tabular-nums",
+          tone === "danger" ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-text)]",
+        )}
         data-testid={testId}
       >
         {value}
@@ -165,7 +272,11 @@ function VerdictMark({ verdict }: { verdict: VoiceHealthVerdict }) {
         ? "Связь стабильна"
         : verdict === "lagging"
           ? `Задержка выше ${VOICE_HEALTH_THRESHOLDS.laggingRttMs} мс`
-          : `Потеря выше ${VOICE_HEALTH_THRESHOLDS.distortingLossPercent}%`}
+          : verdict === "not_receiving"
+            ? "Входящий звук не идёт"
+            : verdict === "unheard"
+              ? "Звук не воспроизводится"
+              : `Потеря выше ${VOICE_HEALTH_THRESHOLDS.distortingLossPercent}%`}
     </p>
   );
 }
