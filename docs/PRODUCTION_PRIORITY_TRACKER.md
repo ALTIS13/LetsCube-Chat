@@ -1233,6 +1233,68 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     it justifies, and read with item 32 (calls in a private chat), which is the
     other half of the same question.
 
+
+46. `[ ]` Tester's report, 2026-09-20, all of it from a phone. Eight items,
+    kept in his words where paraphrase would soften them. **Triage opens with
+    one question: which build was he on.** Android stable `0.1.4` was cut
+    before the interface rework, and on the previous wave (item 21) that single
+    fact explained several complaints. His screenshot shows the recent cube
+    wallpaper, so he may well be current — establish it, do not assume either
+    way, and say per item whether it reproduces on today's source.
+
+    **a. The type is too small, and he says so four times.** «Однако я
+    слепой… реально что-то читать тут у меня глаза начинают болеть», «какая-то
+    пытка для глаз», and outdoors in the light theme he cannot read what is
+    written. He compared against his notes app — «там прям норм» — and suspects
+    the face as much as the size: «либо сам формат шрифта такой». His own
+    proposal: the face Telegram uses, plus **a 125% text-size option**. Measure
+    ours against Telegram's on one device before changing anything: «мелко» can
+    be face, size, weight or contrast, which are four different fixes, and this
+    register has been wrong about fonts before (`fonts.check` is not a check).
+
+    **b. Photos do not swipe.** «я не могу влево-вправо свайп сделать и те же 2
+    отправленные фото сравнить». The viewer opens one image and stays on it.
+
+    **c. HD is a setting that does not do what it says.** «он по прежнему
+    сжимает фото, даже с включенной настройкой HD. Вместо 5 Мб к примеру, он
+    отправил 200 КБ». **A control whose label disagrees with its mechanism is
+    this register's most-repeated shape**, so it is filed at that weight rather
+    than as a preference. He wants no heavy compression by default plus a
+    separate «отправить в оригинальном размере». The owner's own framing from
+    the same thread: «если это вопрос дискового места… может просто удалять
+    фото, которым больше 8 месяцев». Overlaps item 25 — read them together.
+
+    **d. A message lost its text on reconnect, and this is the serious one.**
+    «Отвалился впн, файл с текстом не ушёл, перезапустил впн, файл улетел тут
+    же сам, но уже без текста!» **Silent data loss on a retry path.** The
+    caption existed long enough to be typed and shown, and the resend dropped
+    it without telling anybody. Reproduce before designing: cut the network
+    between the upload and the message insert and see which half is retried.
+
+    **e. The composer does not grow.** «в тг это поле умеет растягиваться по
+    высоте до определённого предела. А здесь нет» — two sentences and he must
+    scroll to see what he wrote, made worse by (a). Telegram is the reference
+    here by CLAUDE.md §7, since this is the chat.
+
+    **f. He cannot reply to, or forward, his own sent photo.** «Нельзя зажать
+    месседж и выбрать ответить. Нет такого. И даже переслать тебе он не даёт.
+    Только другим людям.» He guesses at the cause himself — «видимо считает,
+    что раз я тебе отправил…» — so find the real one. This branch is called
+    `integration/message-actions`; establish whether the actions exist and the
+    **long press** does not reach them on a photo, or whether they are absent
+    on his build.
+
+    **g. An important message cannot be raised.** «Тупо поставить "+" и поднять
+    важное сообщение вообще невозможно». Establish what he means; pinning is
+    the obvious reading and the register may already carry it.
+
+    **h. A forwarded message does not say where it came from.** «плюс не вижу
+    от кого переслал сообщения тебе». Both reference clients name the source.
+
+    Run it the way item 21 was run — reproduce, decide, and say plainly which
+    are old-bundle artefacts. **(d) first**, because it loses somebody's words
+    without saying so.
+
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
 `main` `17a1c47` to `245e4d9`, 32 commits, on the owner's standing permission to deploy without him.
