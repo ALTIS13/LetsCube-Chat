@@ -3,7 +3,7 @@ import { requireFixtureServer } from "./helpers/messageActionsFixture";
 import {
   openDisclosure,
   openSettingsScreen,
-  setColumnWidth,
+  setSettingsMeasure,
 } from "./helpers/settingsColumnFixture";
 
 /**
@@ -73,7 +73,7 @@ for (const theme of ["dark", "light"] as const) {
     await openDisclosure(page, "decoration");
 
     for (const width of COLUMNS) {
-      await setColumnWidth(page, width);
+      await setSettingsMeasure(page, width);
       await shoot(page, ACHIEVEMENTS, `${OUT}/achievements-column${width}-${theme}.png`, info);
     }
   });
@@ -98,7 +98,7 @@ for (const theme of ["dark", "light"] as const) {
     await expect(page.getByTestId("release-download-button")).toBeVisible();
 
     for (const width of COLUMNS) {
-      await setColumnWidth(page, width);
+      await setSettingsMeasure(page, width);
       await shoot(page, RELEASE, `${OUT}/release-column${width}-${theme}.png`, info);
     }
   });
@@ -118,7 +118,7 @@ for (const theme of ["dark", "light"] as const) {
     await openDisclosure(page, "application");
 
     for (const width of COLUMNS) {
-      await setColumnWidth(page, width);
+      await setSettingsMeasure(page, width);
       await shoot(page, STORAGE, `${OUT}/storage-column${width}-${theme}.png`, info);
     }
   });

@@ -9,7 +9,7 @@ import {
   gridTracks,
   openDisclosure,
   openSettingsScreen,
-  setColumnWidth,
+  setSettingsMeasure,
 } from "./helpers/settingsColumnFixture";
 
 /**
@@ -63,13 +63,13 @@ test.describe("the achievements grid", () => {
       });
 
     // The owner's own screenshot was taken here, at the width nobody drags.
-    await setColumnWidth(page, CHAT_LIST_DEFAULT_WIDTH);
+    await setSettingsMeasure(page, CHAT_LIST_DEFAULT_WIDTH);
     expect(await columns(), "at the default column one card fills the row").toBe(1);
 
-    await setColumnWidth(page, CHAT_LIST_MIN_WIDTH);
+    await setSettingsMeasure(page, CHAT_LIST_MIN_WIDTH);
     expect(await columns(), "at the narrowest column one card fills the row").toBe(1);
 
-    await setColumnWidth(page, CHAT_LIST_MAX_WIDTH);
+    await setSettingsMeasure(page, CHAT_LIST_MAX_WIDTH);
     expect(await columns(), "dragged wide, the list takes its two-column form").toBe(2);
   });
 
@@ -94,7 +94,7 @@ test.describe("the achievements grid", () => {
       );
 
     for (const width of [CHAT_LIST_MIN_WIDTH, CHAT_LIST_DEFAULT_WIDTH, CHAT_LIST_MAX_WIDTH]) {
-      await setColumnWidth(page, width);
+      await setSettingsMeasure(page, width);
       expect(await clipped(), `a title is clipped at a ${width}pt column`).toEqual([]);
     }
   });
@@ -122,15 +122,15 @@ test.describe("the release card", () => {
       };
     };
 
-    await setColumnWidth(page, CHAT_LIST_DEFAULT_WIDTH);
+    await setSettingsMeasure(page, CHAT_LIST_DEFAULT_WIDTH);
     const narrow = await shape();
     expect(narrow.tracks, "at the default column the header stacks").toBe(2);
     expect(narrow.share, "and the download runs the width of the content").toBeGreaterThan(0.6);
 
-    await setColumnWidth(page, CHAT_LIST_MIN_WIDTH);
+    await setSettingsMeasure(page, CHAT_LIST_MIN_WIDTH);
     expect(await trackCount(page, "release-distribution-card"), "and at the narrowest too").toBe(2);
 
-    await setColumnWidth(page, CHAT_LIST_MAX_WIDTH);
+    await setSettingsMeasure(page, CHAT_LIST_MAX_WIDTH);
     const wide = await shape();
     expect(wide.tracks, "dragged wide, the download takes the third column").toBe(3);
     expect(wide.share, "and shrinks to its own label").toBeLessThan(0.35);
@@ -163,12 +163,12 @@ test.describe("the release card", () => {
       return button.width / card.width;
     };
 
-    await setColumnWidth(page, CHAT_LIST_DEFAULT_WIDTH);
+    await setSettingsMeasure(page, CHAT_LIST_DEFAULT_WIDTH);
     expect(await share(), "at the default column it runs the width of the content").toBeGreaterThan(
       0.6,
     );
 
-    await setColumnWidth(page, CHAT_LIST_MAX_WIDTH);
+    await setSettingsMeasure(page, CHAT_LIST_MAX_WIDTH);
     expect(await share(), "dragged wide, it shrinks to its own label").toBeLessThan(0.35);
   });
 
@@ -223,20 +223,20 @@ test.describe("the release card", () => {
         return { stadium: radius >= el.getBoundingClientRect().height, radius };
       });
 
-    await setColumnWidth(page, CHAT_LIST_DEFAULT_WIDTH);
+    await setSettingsMeasure(page, CHAT_LIST_DEFAULT_WIDTH);
     const narrow = await stadium();
     expect(
       narrow.stadium,
       `the chip is still an ellipse at the default column (${narrow.radius}px)`,
     ).toBe(false);
 
-    await setColumnWidth(page, CHAT_LIST_MIN_WIDTH);
+    await setSettingsMeasure(page, CHAT_LIST_MIN_WIDTH);
     expect((await stadium()).stadium, "and at the narrowest, where it wraps hardest").toBe(false);
 
     // The other half of the pair, and the half a `sm:` mutation would keep
     // green on its own: dragged wide the chip fits on one line and is a pill
     // again, exactly as it has always been.
-    await setColumnWidth(page, CHAT_LIST_MAX_WIDTH);
+    await setSettingsMeasure(page, CHAT_LIST_MAX_WIDTH);
     const wide = await stadium();
     expect(wide.stadium, "dragged wide, the chip is a pill again").toBe(true);
   });
@@ -257,7 +257,7 @@ test.describe("the storage card", () => {
     // width and took it at their own max-content — 327px of buttons against a
     // 224px card, which left the path a track **0px wide**.
     for (const width of [CHAT_LIST_MIN_WIDTH, CHAT_LIST_DEFAULT_WIDTH, CHAT_LIST_MAX_WIDTH]) {
-      await setColumnWidth(page, width);
+      await setSettingsMeasure(page, width);
       const tracks = await gridTracks(page, "desktop-storage-card");
       expect(tracks.length, `the actions must not hold a column at a ${width}pt column`).toBe(2);
       expect(tracks[1], `the path is squeezed out at a ${width}pt column`).toBeGreaterThan(120);

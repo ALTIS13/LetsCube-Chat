@@ -10,12 +10,12 @@ import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip } from "./helpe
  * cards with rows, so each field is one line across the dialog.
  *
  * D-160 moved the screen again, and this file moved with it. From `md` the
- * settings are the list column's body, so the old desktop assertion — an input
- * at least 403px wide, inside a `role="dialog"` — is measuring a surface that
- * no longer exists at that width. **The premise changed, not just the number:**
- * a 360px column cannot and should not hold a 403px input. What replaced it is
- * the contract that actually matters at this width, and it is the pair the
- * dialog could not satisfy at once:
+ * settings were the list column's body, so the old desktop assertion — an input
+ * at least 403px wide, inside a `role="dialog"` — was measuring a surface that
+ * no longer existed at that width. **The premise changed, not just the
+ * number:** a 360px column cannot and should not hold a 403px input. What
+ * replaced it is the contract that actually matters at this width, and it is
+ * the pair the dialog could not satisfy at once:
  *
  *  - an input still wide enough to read what is typed into it, and
  *  - the phone section reachable **without scrolling**, which in the column is
@@ -24,6 +24,15 @@ import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip } from "./helpe
  *
  * The phone half of this file is untouched: below `md` the screen is the same
  * full-screen sheet it has always been.
+ *
+ * **D-285 moved it a third time, and the floor holds without being raised.**
+ * The column was dragged by hand and floored at 260, where the input was 66px
+ * and cut 58px off «Максим Орлов»; the screen is a surface over the application
+ * now, with a 560px content measure, so the input is 358px — well clear of the
+ * 150 below and, unlike the column's, not a number anybody can drag. Only the
+ * container the boxes are read from changed here, and the floor is left where
+ * D-160 put it: raising it to match the new surface would be claiming credit
+ * in the assertion rather than in the product.
  */
 async function openProfileSettingsSheet(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: "Меню" }).first().click();
@@ -32,16 +41,16 @@ async function openProfileSettingsSheet(page: import("@playwright/test").Page) {
   await expect(page.getByRole("heading", { name: "Профиль", exact: true })).toBeVisible();
 }
 
-async function openProfileSettingsColumn(page: import("@playwright/test").Page) {
+async function openProfileSettingsOverlay(page: import("@playwright/test").Page) {
   await page.getByTestId("side-menu-button").click();
   await expect(page.getByTestId("side-menu-layer")).toBeVisible();
   await page.getByTestId("side-menu-layer").getByRole("button", { name: "Настройки", exact: true }).click();
-  await expect(page.getByTestId("sidebar-settings")).toBeVisible();
+  await expect(page.getByTestId("settings-overlay")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Профиль", exact: true })).toBeVisible();
 }
 
 test.describe("LETSCUBE profile settings layout", () => {
-  test("on a desktop the fields keep a readable width in the column, and the phone row is one query away", async ({ page }) => {
+  test("on a desktop the fields keep a readable width, and the phone row is one query away", async ({ page }) => {
     test.skip(
       (page.viewportSize()?.width ?? 0) < 900,
       "this contract is about desktop width",
@@ -51,7 +60,7 @@ test.describe("LETSCUBE profile settings layout", () => {
 
     await gotoOrSkip(page, "/");
     await loginAsRoleOrSkip(page, role);
-    await openProfileSettingsColumn(page);
+    await openProfileSettingsOverlay(page);
 
     const nameBox = await page.getByTestId("settings-field-name").boundingBox();
     const usernameBox = await page.getByTestId("settings-field-username").boundingBox();
@@ -73,8 +82,8 @@ test.describe("LETSCUBE profile settings layout", () => {
       "the caption column has eaten the input",
     ).toBeGreaterThanOrEqual(150);
 
-    // And the phone row is reachable without scrolling: in the column that is
-    // the search, which the dialog never had.
+    // And the phone row is reachable without scrolling: the search, which the
+    // dialog never had and which the overlay keeps in its rail.
     await page.getByTestId("settings-search-input").fill("телефон");
     await expect(page.getByTestId("settings-open-phone")).toBeInViewport();
   });

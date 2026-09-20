@@ -15,7 +15,7 @@ import { NewChatModal } from "./NewChatModal";
 import { NewGroupModal } from "./NewGroupModal";
 import { FolderEditModal } from "./FolderEditModal";
 import { SettingsModal } from "./SettingsModal";
-import { SettingsPanel } from "@/components/settings/SettingsPanel";
+import { SettingsOverlay } from "@/components/settings/SettingsOverlay";
 import { openSavedMessagesChat } from "@/lib/savedMessages";
 import { SidebarSearchResults } from "@/components/search/SidebarSearchResults";
 import { ChatSearchPanel } from "@/components/search/ChatSearchPanel";
@@ -109,14 +109,20 @@ export function Sidebar() {
   const chatSearchOpen =
     !isPhone && chatSearch !== null && chatSearch.chatId === selectedChatId;
 
-  // Settings, the same way, since D-160. From `md` it is this column's body;
-  // below `md` there is no column on screen and it stays the full-screen sheet
+  // Settings. From `md` it is a surface over the application (D-285); below
+  // `md` there is no column on screen and it stays the full-screen sheet
   // `SettingsModal` has always been. The phone's «Профиль» tab opens the same
   // screen, which is why both flags are read here.
+  //
+  // It was this column's body between D-160 and D-285, and the reason it is not
+  // any more is that the column is dragged by hand: at the 260 floor the name
+  // field was 66px and «Максим Орлов» was cut 58px short of the end. How much
+  // room conversations get and how wide the settings are were one number.
+  // `lib/settingsSurface.ts` carries the whole argument, D-160's included.
   const settingsOpen = useAppStore((s) => s.settingsOpen);
   const closeSettingsPanel = useAppStore((s) => s.closeSettings);
   const openSettingsPanel = useAppStore((s) => s.openSettings);
-  const settingsColumnOpen = !isPhone && settingsOpen;
+  const settingsOverlayOpen = !isPhone && settingsOpen;
   const settingsSheetOpen = isPhone && (settingsOpen || mobileSection === "profile");
 
   const closeSettingsSheet = () => {
@@ -219,8 +225,6 @@ export function Sidebar() {
 
           {hasSearchQuery ? (
             <SidebarSearchResults query={searchQuery} />
-          ) : settingsColumnOpen ? (
-            <SettingsPanel />
           ) : chatSearchOpen && chatSearch ? (
             <ChatSearchPanel chatId={chatSearch.chatId} />
           ) : loading ? (
@@ -307,9 +311,10 @@ export function Sidebar() {
       {showNewGroup && (
         <NewGroupModal onClose={() => setShowNewGroup(false)} onRefetch={refetch} />
       )}
-      {/* Below `md` only. From `md` the same screen is this column's body, and
+      {/* Below `md` only. From `md` the same screen is the overlay below, and
           mounting both would run two copies of the settings state side by side. */}
       {settingsSheetOpen && <SettingsModal onClose={closeSettingsSheet} />}
+      {settingsOverlayOpen && <SettingsOverlay />}
 
       {/* `Ui::LayerWidget`, not a column and not a dropdown: it costs no width
           while it is closed, which is the whole of «удобно в боковом списке

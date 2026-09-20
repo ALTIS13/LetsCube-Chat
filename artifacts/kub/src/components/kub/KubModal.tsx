@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type CSSProperties, type ReactNode, type Ref } from "react";
 import { createPortal } from "react-dom";
 import { KubIcon } from "./KubIcon";
 import { isTopModalLayer, popModalLayer, pushModalLayer } from "@/lib/modalStack";
@@ -37,6 +37,20 @@ interface KubModalProps {
    * viewport width since the centered shell collapses to the screen edges.
    */
   mobileSheet?: boolean;
+  /**
+   * Geometry the caller owns, applied to the panel itself.
+   *
+   * `sizeClass` covers a dialog that carries a question or a form. The settings
+   * overlay (D-285) is sized from the constants in `lib/settingsSurface.ts`, so
+   * that the rendered box moves when one of them moves and a spec can hold the
+   * two together instead of holding a copy of the expression.
+   */
+  style?: CSSProperties;
+  /** The panel node, for a caller that has to measure its own box. */
+  panelRef?: Ref<HTMLDivElement>;
+  testId?: string;
+  /** D-136 counts the doors by name; the ✕ of a named modal is one of them. */
+  closeTestId?: string;
 }
 
 const sizeClass = {
@@ -63,6 +77,10 @@ export function KubModal({
   scrollBody = true,
   mobileSheet = true,
   tone = "default",
+  style,
+  panelRef,
+  testId,
+  closeTestId,
 }: KubModalProps) {
   const pointerStartedInsideRef = useRef(false);
 
@@ -178,6 +196,9 @@ export function KubModal({
         )}
         role="dialog"
         aria-modal="true"
+        style={style}
+        ref={panelRef}
+        data-testid={testId}
       >
         {(title || icon) && (
           <div className="flex items-start justify-between gap-3 px-4 sm:px-5 py-3 sm:py-4 flex-shrink-0 border-b border-[color:var(--kub-border-color)]">
@@ -212,6 +233,7 @@ export function KubModal({
               // an icon-only control: 32px on a pointer, 44px on a finger.
               className="kub-icon-action kub-interactive flex-shrink-0 p-1.5 rounded-lg text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] kub-raise-hover transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
               aria-label="Закрыть"
+              data-testid={closeTestId}
             >
               <KubIcon name="close" size={16} />
             </button>

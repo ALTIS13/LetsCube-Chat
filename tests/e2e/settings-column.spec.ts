@@ -10,8 +10,26 @@ import {
 } from "./helpers/messageActionsFixture";
 
 /**
- * Settings, after it moved out of a centred dialog and into the list column
- * (D-160).
+ * Settings, after it stopped being the list column's body (D-285).
+ *
+ * **This file was written for D-160 and its premise is gone.** D-160's numbers
+ * and its complaint are quoted below unchanged because they were right and the
+ * rules they produced are still the rules; what moved is where the screen is
+ * drawn. The column is dragged by hand and floors at 260, and at 260 the «Имя»
+ * field was 66px with 58px of «Максим Орлов» cut off — a decision about how
+ * much room conversations get, applied to a screen that has nothing to do with
+ * them. So the screen is a surface over the application now, and this file
+ * asserts that **it is not in the column** rather than that it is.
+ *
+ * Three of its four facts survive verbatim on the new surface and are kept
+ * here rather than deleted: a label within a readable distance of its value,
+ * the search narrowing the screen and giving it back, and the phone's sheet
+ * untouched. The fourth — «the column's body, covering and blurring nothing» —
+ * is the one D-285 reverses, and it is replaced by its opposite with the
+ * reason, not quietly relaxed. The geometry of the new surface is
+ * `settings-overlay-geometry.spec.ts`.
+ *
+ * What D-160 recorded, and what is still being prevented:
  *
  * What was wrong, measured on this fixture at 1440 before the change: the
  * screen opened at `KubModal`'s `xl` size — 896px — on every width, which is
@@ -130,35 +148,42 @@ test.beforeEach(async ({ request }) => {
   await requireFixtureServer(request);
 });
 
-test.describe("settings is a state of the list column", () => {
-  test("from md it takes the column, covering and blurring nothing", async ({ page }) => {
+test.describe("settings is a surface over the application, not a state of the list", () => {
+  test("from md it leaves the column alone, and is not sized by it", async ({ page }) => {
     test.skip(isPhone(page), "below md there is no column; the sheet is asserted separately");
 
     await boot(page);
     await openSettings(page, false);
 
-    const panel = page.getByTestId("sidebar-settings");
-    await expect(panel).toBeVisible();
+    // **The inversion of D-160's first fact, and the reason it is not a
+    // relaxation.** D-160 required no dialog at this width because the dialog
+    // it was removing was a constant 896 on every screen. What stands here is
+    // not that dialog: it is sized from the window, it carries a rail, and the
+    // margin it leaves is the dismissal the owner asked for by name. The
+    // numbers that make it a different thing are held in
+    // `settings-overlay-geometry.spec.ts`; what this file still owns is that
+    // the **chat list is not what the settings are made of**.
+    await expect(page.getByTestId("settings-overlay")).toBeVisible();
 
-    // 1. Not a dialog. The 896px sheet is gone, and so is the side list that
-    // opened it — nothing `role="dialog"` is left standing over the page.
-    await expect(page.locator('[role="dialog"]')).toHaveCount(0);
-
-    // 2. Nothing is frosting the application behind it. This is the half a
-    // width assertion misses: a narrower dialog would still blur the page.
-    await expect(page.locator(".kub-modal-overlay")).toHaveCount(0);
-
-    // 3. The panel is inside the left region and no wider than it, so the
-    // conversation beside it keeps every pixel it had.
-    const box = (await panel.boundingBox())!;
+    // **Not «the old test id is absent».** A test id nothing renders any more
+    // is an assertion that can never fail, which is not a contract. What can
+    // fail is the geometry: the screen has to be a surface the left region
+    // does not contain, so putting it back into the column by any road — a
+    // panel in the column's body, or an overlay clamped to the region's box —
+    // turns this red.
+    const panel = (await page.getByTestId("settings-overlay").boundingBox())!;
     const region = (await page.locator("[data-kub-left-region]").boundingBox())!;
-    expect(box, "the settings panel has no box").not.toBeNull();
-    expect(Math.round(box.x + box.width)).toBeLessThanOrEqual(Math.round(region.x + region.width) + 1);
-    const viewportWidth = page.viewportSize()!.width;
+    expect(panel, "the settings surface has no box").not.toBeNull();
+    expect(region, "the left region is gone while the settings are open").not.toBeNull();
     expect(
-      Math.round((box.width / viewportWidth) * 100),
-      "the panel is as wide a share of the screen as the dialog was",
-    ).toBeLessThan(45);
+      Math.round(panel.x + panel.width),
+      "the settings surface still ends inside the chat-list region",
+    ).toBeGreaterThan(Math.round(region.x + region.width));
+
+    // The list is still on screen and still holding its chats. That is the
+    // half D-160 was buying with the column, and it is kept: the settings do
+    // not take the person's conversations away to be read.
+    await expect(page.getByTestId("chat-list-item")).toHaveCount(CHAT_COUNT);
   });
 
   test("a value sits beside its label rather than at the far end of the row", async ({ page }) => {
@@ -166,14 +191,16 @@ test.describe("settings is a state of the list column", () => {
 
     await boot(page);
     await openSettings(page, false);
-    await expect(page.getByTestId("sidebar-settings")).toBeVisible();
+    await expect(page.getByTestId("settings-overlay")).toBeVisible();
 
-    const gaps = await rowGaps(page, "[data-testid='sidebar-settings']");
+    const gaps = await rowGaps(page, "[data-testid='settings-overlay']");
     expect(gaps.length, "no label/value rows were measured").toBeGreaterThan(0);
 
-    // 822px rows stranded «Виден» 570px from «Статус «в сети»». The column's
-    // row cannot do that: either the two share a line within a readable reach,
-    // or the value wraps underneath, which is not stranding at all.
+    // 822px rows stranded «Виден» 570px from «Статус «в сети»». Unchanged by
+    // D-285, and it is the contract the new surface had to buy its width
+    // *without* breaking: the content keeps a 560px measure whatever the panel
+    // does, because the gap is `rowWidth - 231` and 360 puts the ceiling at
+    // 591. Raise `SETTINGS_CONTENT_MEASURE` past it and this goes red.
     for (const row of gaps) {
       expect(
         row.gap,
@@ -188,7 +215,7 @@ test.describe("settings is a state of the list column", () => {
     await boot(page);
     await openSettings(page, false);
 
-    const panel = page.getByTestId("sidebar-settings");
+    const panel = page.getByTestId("settings-overlay");
     const sections = panel.locator("[data-settings-section]");
     await expect(sections).toHaveCount(4);
 
@@ -211,20 +238,20 @@ test.describe("settings is a state of the list column", () => {
     await expect(page.getByTestId("settings-open-phone")).toBeVisible();
   });
 
-  test("closing gives the column back to the chat list", async ({ page }) => {
-    test.skip(isPhone(page), "the column is the subject of this test");
+  test("closing puts the application back", async ({ page }) => {
+    test.skip(isPhone(page), "the overlay is the subject of this test");
 
     await boot(page);
     await openSettings(page, false);
-    await expect(page.getByTestId("sidebar-settings")).toBeVisible();
+    await expect(page.getByTestId("settings-overlay")).toBeVisible();
 
     await page.getByTestId("settings-close").click();
-    await expect(page.getByTestId("sidebar-settings")).toHaveCount(0);
+    await expect(page.getByTestId("settings-overlay")).toHaveCount(0);
     await expect(page.getByTestId("chat-list-item")).toHaveCount(CHAT_COUNT);
   });
 
-  test("the profile still saves, from the column", async ({ page }) => {
-    test.skip(isPhone(page), "the column is the subject of this test");
+  test("the profile still saves, from the overlay", async ({ page }) => {
+    test.skip(isPhone(page), "the overlay is the subject of this test");
 
     const fixture = await boot(page);
     await openSettings(page, false);
@@ -257,10 +284,12 @@ test.describe("settings is a state of the list column", () => {
     // The phone's form, where it has always been.
     await expect(page.locator('[role="dialog"]')).toHaveCount(1);
     await expect(page.getByTestId("settings-field-name")).toBeVisible();
-    // And no column panel, which is not merely hidden here: below `md` the
-    // column is `display:none` rather than unmounted, so a panel mounted there
-    // would be a second live copy of the settings state behind the sheet.
-    await expect(page.getByTestId("sidebar-settings")).toHaveCount(0);
+    // And no overlay, which is not merely hidden here: below `md` the column is
+    // `display:none` rather than unmounted, so a second form mounted there
+    // would be a second live copy of the settings state behind the sheet. The
+    // gate is `useIsMobile()` at both mount sites in `Sidebar`, and this is
+    // what holds it — drop the `!isPhone` and this goes red.
+    await expect(page.getByTestId("settings-overlay")).toHaveCount(0);
     await expect(page.getByTestId("settings-search-input")).toHaveCount(0);
   });
 });

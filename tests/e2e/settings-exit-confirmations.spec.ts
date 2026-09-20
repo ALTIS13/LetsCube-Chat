@@ -246,10 +246,10 @@ test.describe("D-136: leaving settings with something typed", () => {
     await openSettings(page);
     await page.getByTestId("settings-field-name").fill("Максим Орлов-Тестов");
 
-    // The dialog below `md` has three of its own; the column has two. Each is
-    // tried in turn, answered «Продолжить», and the text has to still be there
-    // for the next one — a door that closed the screen would fail on the door
-    // after it.
+    // The sheet below `md` has three of its own; the overlay from `md` has
+    // four. Each is tried in turn, answered «Продолжить», and the text has to
+    // still be there for the next one — a door that closed the screen would
+    // fail on the door after it.
     const doors: (() => Promise<void>)[] = isPhone(page)
       ? [
           () => page.getByRole("button", { name: "Закрыть", exact: true }).first().click(),
@@ -259,11 +259,22 @@ test.describe("D-136: leaving settings with something typed", () => {
       : [
           () => page.getByTestId("settings-close").click(),
           async () => {
-            // The column's second door: Escape empties the search field first
-            // and leaves on the second press.
+            // Escape empties the search field first and leaves on the second
+            // press, so a long query is not lost to one keystroke.
             await page.getByTestId("settings-search-input").click();
             await page.keyboard.press("Escape");
           },
+          // **The dim, which is new with D-285 and is the door the owner named
+          // second**: «либо по затемнению в любом месте сбоку от окна
+          // настроек». A door that reaches `KubModal`'s own `onClose` instead
+          // of the screen's `requestClose` drops the typed name exactly as the
+          // other four used to, so it belongs in this list and not only in the
+          // geometry spec.
+          async () => {
+            const box = (await page.getByTestId("settings-overlay").boundingBox())!;
+            await page.mouse.click(Math.round(box.x / 2), Math.round(box.y + box.height / 2));
+          },
+          () => page.keyboard.press("Escape"),
         ];
 
     for (const [index, door] of doors.entries()) {

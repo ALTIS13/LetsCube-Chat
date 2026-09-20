@@ -413,6 +413,31 @@ export async function setColumnWidth(page: Page, width: number) {
   await page.waitForTimeout(120);
 }
 
+/**
+ * Drives the settings screen's own container, which since D-285 is no longer
+ * the chat-list column.
+ *
+ * **This is the instrument D-222 needs and the reason it survived the move.**
+ * Those contracts are pairs of widths at *one* viewport: the settings content
+ * used to be a column the owner drags, so at 1440 the same window produced two
+ * different container widths and a `@media` query could not answer. The
+ * container is the overlay's measure now, and it is a CSS variable for exactly
+ * this — write it and the cards reflow while the window does not move, so
+ * putting `sm:` back on any of those lines still turns the narrow half red.
+ *
+ * `--kub-settings-measure` is what `SettingsOverlay` sets from
+ * `SETTINGS_CONTENT_MEASURE`, and this writes the same property on the same
+ * box, which is the live mechanism rather than a stand-in for it.
+ */
+export async function setSettingsMeasure(page: Page, width: number) {
+  await page.evaluate((value) => {
+    const box = document.querySelector<HTMLElement>("[data-testid='settings-measure']");
+    if (!box) throw new Error("the settings measure box is not on screen");
+    box.style.setProperty("--kub-settings-measure", `${value as number}px`);
+  }, width);
+  await page.waitForTimeout(120);
+}
+
 /** The grid tracks of a card's own header grid, in CSS pixels. */
 export function gridTracks(page: Page, testId: string): Promise<number[]> {
   return page.evaluate((id) => {

@@ -390,9 +390,11 @@ test("no control defeats its own touch class with a smaller min-height utility",
     "artifacts/kub/src/components/kub/KubHelpNotes.tsx",
     "artifacts/kub/src/components/settings/InfoHint.tsx",
     "artifacts/kub/src/components/sidebar/SettingsModal.tsx",
-    // The screen's own rows, and the column form that renders them (D-160).
+    // The screen's own rows, and the surface that renders them — the list
+    // column's body from D-160 until D-285, an overlay over the application
+    // since.
     "artifacts/kub/src/components/settings/SettingsScreen.tsx",
-    "artifacts/kub/src/components/settings/SettingsPanel.tsx",
+    "artifacts/kub/src/components/settings/SettingsOverlay.tsx",
     "artifacts/kub/src/components/sidebar/AudioSettingsSection.tsx",
   ];
   let checked = 0;

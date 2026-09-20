@@ -9,7 +9,7 @@ import { type Row, requireFixtureServer } from "./helpers/messageActionsFixture"
 import {
   openDisclosure,
   openSettingsScreen,
-  setColumnWidth,
+  setSettingsMeasure,
 } from "./helpers/settingsColumnFixture";
 
 /**
@@ -431,7 +431,7 @@ test("no device name is cut off at any width the handle allows", async ({ page, 
     });
 
   for (const width of [CHAT_LIST_MIN_WIDTH, CHAT_LIST_DEFAULT_WIDTH, CHAT_LIST_MAX_WIDTH]) {
-    await setColumnWidth(page, width);
+    await setSettingsMeasure(page, width);
     expect(await clipped(), `a device name is clipped at a ${width}pt column`).toEqual([]);
     expect(await overflowing(), `a switch is outside the block at ${width}pt`).toBe(0);
   }
