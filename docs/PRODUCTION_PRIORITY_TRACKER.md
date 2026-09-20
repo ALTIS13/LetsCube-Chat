@@ -1295,6 +1295,143 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     are old-bundle artefacts. **(d) first**, because it loses somebody's words
     without saying so.
 
+    **Triage of 2026-09-20. The platform question is answered first, and its
+    answer retires the premise this item was written on.** Android stable is
+    **0.1.7 build 8**, published 2026-09-17T23:01:32Z and cut at `facd7c6e` —
+    three releases past the `0.1.4` named above, and well past the interface
+    rework. Read off the live manifest
+    (`https://api.letscube.ru/releases/v1/android/stable.json`), not recalled.
+    The bundled web copy in `android/app/src/main/assets/public` is that
+    release's: the calibrated probe the 0.1.7 publish used passes in both
+    directions on it — «member-card-badges» present, the removed
+    «chat-info-member-badges» gone — while «Роли группы», which landed after
+    the cut, is absent. Its service worker is `bb1270373e6d22ef`; production
+    web is `84e36ff3a8af2ddd`. Android embeds its bundle at build time, so that
+    APK is **73 commits under `artifacts/kub/` behind** the branch head, almost
+    all of them voice and call work.
+
+    The cube wallpaper he photographed is `--kub-chat-pattern` from `f91eed3a`,
+    and it **is** in the 0.1.7 bundle — so the screenshot is consistent with
+    0.1.7 and rules `0.1.4` out. It does not separate the APK from the mobile
+    browser, which runs the current web build. Every surface the eight items
+    name is present in the 0.1.7 bundle: `attach-caption`, «Добавить подпись»,
+    «Повторить отправку», `attach-hd`, «Высокое качество»,
+    `staged-attachment-item`, «Закрепить», «Переслано». **So none of the eight
+    is an old-bundle artefact**, and each verdict below is against today's
+    source.
+
+    - **(d) — D-286, reproduced, fixed, and the only one that was losing
+      data.** The caption was an argument of the send and a field of nothing.
+      The attach sheet — the phone's send step — closes the instant the send
+      starts and takes its own caption state with it (`AttachSheet.tsx:330`, an
+      `onClose()` that is not awaited); `sendMediaFromSheet` discards the send's
+      `false`; and `retryStagedAttachment` passed the literal empty string, as
+      it had since `1cd206b5`. So the photo kept its bytes and its «Повторить»
+      and had nothing left to say. The composer path was never the one at risk:
+      it restores what it cleared (`restoreComposerTextIfCurrent`). Reproduced
+      in `tests/e2e/media-send-path.spec.ts` by cutting the upload half and
+      pressing «Повторить» — red on an empty content against the exact sentence
+      typed. The caption now rides on the attachment (`captionCarrierId` in
+      `lib/attachmentSendQueue.ts`, pure and unit-tested, four mutations red),
+      and the retry reads it back. The e2e goes red again if the retry is put
+      back to the empty string.
+    - **The other cut was my fixture, not the product.** Refusing the *insert*
+      while the bytes went up made the photo and its caption vanish from the
+      interface entirely — no failed bubble, no tile — which looked like a
+      second, worse defect. It was the mock: its `messages` GET ignored the
+      `client_message_id` filter, so `fetchMessageByClientId`, which is how the
+      client asks whether a row it could not acknowledge landed anyway
+      (`useMessages.ts:1069`), was answered with the chat's first message, and
+      the send replaced its own optimistic copy with somebody else's greeting.
+      The mock now honours the filter, and the product does leave something to
+      retry. Kept as a green guard.
+    - **(a) — measure first, and the measurement that mattered came from the
+      source.** Chat message bodies are Tailwind `text-sm leading-relaxed` =
+      **14px / 22.75px** (`MessageBubble.tsx:1566, 1581, 1835`); only
+      `--text-xs` is overridden, to 13px (`index.css:89`); meta and times are
+      12px; the composer is `text-base sm:text-sm`, i.e. **16px on a phone**.
+      So what he types is two pixels larger than what he reads, on the same
+      screen. The face is
+      `'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
+      (`index.css:147`), loaded from `fonts.googleapis.com` (`index.html:52`).
+      **The rendered comparison against Telegram is not done and must not be
+      guessed**: a first attempt inside `media-send-path.spec.ts` measured the
+      *fallback* face, because that spec aborts every non-loopback request and
+      therefore blocks the font host — the trap the register already carries as
+      «fonts.check is not a check» — and its dark pass never switched theme,
+      returning the light numbers twice. His own proposal (the Telegram face
+      plus a 125% option) stands; an accessibility setting is likely the better
+      half of the answer than moving everybody's default, and item 21's «(6)
+      text size» is the same request from the previous wave.
+    - **(b) — real, and one line wide.** `MediaViewer` has arrows, arrow keys
+      and a touch swipe, all gated on a `sequence` prop (`MediaViewer.tsx:119`,
+      `:133`, `:163`). Exactly one of its three call sites passes one, and it
+      is Chat info → Shared media (`ChatInfoPanel.tsx:3425`); the
+      conversation's own viewer passes none (`ChatWindow.tsx:1827`), so a photo
+      opened from a bubble is a dead end. The zoom gesture does **not** swallow
+      the swipe — it stops propagation only while pinching or panning.
+    - **(c) — the label disagrees with the mechanism, exactly as filed.** HD
+      switches the photo profile from `compact` (1280px at 0.76) to `original`
+      (2560px at 0.90) — but `compress` is decided by which *button* was
+      pressed, never by `hd` (`attachSheet.ts:280-287`), so a 5 MB photo is
+      resized and re-encoded either way. `mediaQuality.ts:153` says so in its
+      own comment: «`original` here is still a re-encode». On an engine with no
+      WebP encoder the profile quality is discarded too and both rungs encode
+      at 0.85, so HD then changes nothing but pixel count. The genuine path
+      exists and is reachable on a phone — «Отправить без сжатия» in the «…»
+      menu (`AttachMoreMenu.tsx:61`, third column of the phone header), capped
+      at 50 MB — it is simply not what the control named HD does. **The storage
+      question is the owner's and is recorded, not decided**: «может просто
+      удалять фото, которым больше 8 месяцев». Options to put to him rather
+      than pick from: an age-based sweep of originals only, keeping the 1280px
+      preview the conversation already shows; a per-chat or per-account quota;
+      or no retention at all and a paid tier. Overlaps item 25.
+    - **(f) — real, and the cause is not the one he guessed.** Neither `reply`
+      nor `forward` consults whether the message is yours (`messageActions.ts`
+      gates them on `ctx.can.reply` and `ctx.can.forward` alone). Two separate
+      things defeat him. **The gesture**: a tap is discarded when it lands on a
+      content control (`MessageList.tsx:1854`), and `isContentControl` matches
+      `button` (`:1672`) — a photo's opener *is* a button labelled «Открыть
+      фото» (`MessageBubble.tsx:1796`), so the tap opens the viewer and the
+      action card is never scheduled. The long press does fire, but it calls
+      `startSelection`, and the selection bar offers only Переслать, Копировать
+      and Удалить — **no Ответить** (`ChatSelectionBar.tsx:73`). Swipe-left to
+      reply still works on a photo; it is undiscoverable. **The forward
+      target**: `ForwardModal.tsx:40` filters the source chat out of the list,
+      and in a private chat with X the chat *with X* is the source — which is
+      «переслать тебе он не даёт. Только другим людям.», word for word.
+      Not fixed here: the gesture half collides with the recorded D-071
+      decision («every action in the long-press and right-click menu»), and
+      flipping the long press to the menu strands selection mode, which the
+      phone card has no «Выбрать» to re-enter by. It needs the owner's word and
+      a read of the reference, not a unilateral flip.
+    - **(e) — not a defect on today's source.** The composer does grow: one
+      resting row at 44px, a layout effect sizing it to `scrollHeight` capped
+      at `MAX_COMPOSER_HEIGHT_PX = 140` (`MessageInput.tsx:18, 1006`), about
+      five lines before it scrolls, with the inline height and the
+      `max-h-[140px]` class agreeing. Nothing in the dock or the CSS fixes a
+      height. Two sentences at 16px do fit. What is real is that 140px is *our*
+      ceiling and may simply be lower than Telegram's, and that (a) makes every
+      line shorter than he expects — so this is a number to choose against the
+      reference, not a broken mechanism. One nit found: the effect depends on
+      the text alone, so a rotation does not re-measure until the next
+      keystroke.
+    - **(g) — pinning exists; what he met was (f).** «Закрепить» is in both the
+      phone card and the desktop menu (`messageActions.ts:121, 147`), with no
+      client-side permission gate — every signed-in member sees it, and the
+      server decides. But the phone card is opened by a **tap**, and on a photo
+      the tap opens the viewer. So on media it is unreachable for the same
+      reason «Ответить» is. Confirm the reading of «поставить "+"» with him: it
+      may be pinning, and it may be a reaction.
+    - **(h) — half built.** `forwarded_from_id` is persisted
+      (`messageForward.ts:82`) and `MessageBubble.tsx:1391` already renders
+      «Переслано от имя» — but only from `message.forward_origin`, a
+      local-UI-only field whose own doc comment says nothing on the server
+      carries it. Its three references in the repository are the type, that
+      consumer, and the QA screenshot fixture. So every real forward shows the
+      bare word «Переслано». It needs a name the server can supply for a source
+      row the reader may not be able to see.
+
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
 `main` `17a1c47` to `245e4d9`, 32 commits, on the owner's standing permission to deploy without him.

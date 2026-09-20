@@ -163,3 +163,31 @@ export function nextClientSentAt(previous: string | null, nowMs: number): string
   const at = Number.isFinite(previousMs) ? Math.max(nowMs, previousMs + 1) : nowMs;
   return new Date(at).toISOString();
 }
+
+/**
+ * Which attachment of a send keeps the caption, so a retry can send it again.
+ *
+ * D-286, the tester of 2026-09-20: «Отвалился впн, файл с текстом не ушёл,
+ * перезапустил впн, файл улетел тут же сам, но уже без текста!»
+ *
+ * The caption used to be an argument of the send and nothing else. It is typed
+ * in the attach sheet, which closes the moment the send starts and takes its
+ * own state with it; the composer restores what it cleared, but the sheet has
+ * nowhere to restore to. So when the send failed, the caption was already
+ * nowhere: the attachment kept its bytes and its «Повторить», and the retry had
+ * nothing to say. Kept on the attachment, it survives as long as the file does.
+ *
+ * Only the first attachment carries it, which is the message the caption is
+ * written into — the rest of a multi-file send go silent, as they did before.
+ * `alreadySent` is for a voice or video message, whose caption goes ahead of it
+ * as its own text message: once that message is in, the caption is spoken for.
+ */
+export function captionCarrierId<T extends { id: string }>(
+  targets: readonly T[],
+  caption: string,
+  alreadySent: boolean,
+): string | null {
+  if (alreadySent) return null;
+  if (!caption.trim()) return null;
+  return targets[0]?.id ?? null;
+}

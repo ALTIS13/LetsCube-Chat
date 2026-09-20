@@ -120,7 +120,7 @@ import {
   type StagedUploadScopeToken,
 } from "@/lib/stagedUploadWorkflow";
 import { describeUploadFailure, uploadFailureFeedback, uploadFailureMessage } from "@/lib/uploadFailure";
-import { ATTACHMENT_UPLOAD_CONCURRENCY, nextClientSentAt, runOrderedSend } from "@/lib/attachmentSendQueue";
+import { ATTACHMENT_UPLOAD_CONCURRENCY, captionCarrierId, nextClientSentAt, runOrderedSend } from "@/lib/attachmentSendQueue";
 import type { Json, MessageWithSender } from "@/types/database";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
 
@@ -1036,6 +1036,18 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     );
     if (!targets.length) return false;
 
+    // D-286: from here the caption belongs to the attachment, not to this
+    // call. The attach sheet closes on send and keeps nothing; the composer
+    // restores what it cleared, but a sheet has nowhere to restore to. Without
+    // this the retry of a failed send had no caption to send.
+    const captionCarrier = captionCarrierId(targets, captionText, false);
+    for (const attachment of targets) {
+      updateStagedAttachment(attachment.id, (current) => ({
+        ...current,
+        caption: attachment.id === captionCarrier ? captionText : null,
+      }));
+    }
+
     let sentAny = false;
     const firstTarget = targets[0];
     if (captionText && (firstTarget?.kind === "voice" || firstTarget?.kind === "video_message")) {
@@ -1052,6 +1064,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         return false;
       }
       sentAny = true;
+      // The caption is a message of its own now, so the attachment must not
+      // send it a second time when it is retried.
+      if (captionCarrier) {
+        updateStagedAttachment(captionCarrier, (current) => ({ ...current, caption: null }));
+      }
     }
 
     // Every attachment of this send is under way from here, the ones waiting for
@@ -1163,7 +1180,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   }, [replyTo?.id, removeStagedAttachment, sendMediaMessage, sendMessage, updateStagedAttachment, uploadScope, uploadStagedAttachment, userId]);
 
   const retryStagedAttachment = useCallback((attachmentId: string) => {
-    void sendStagedAttachments("", attachmentId);
+    // With the caption the send was asked for, not without it (D-286).
+    const attachment = stagedAttachmentsRef.current.find((item) => item.id === attachmentId);
+    void sendStagedAttachments(attachment?.caption ?? "", attachmentId);
   }, [sendStagedAttachments]);
 
   /**

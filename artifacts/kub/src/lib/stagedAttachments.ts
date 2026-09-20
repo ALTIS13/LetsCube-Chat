@@ -45,6 +45,12 @@ export interface StagedAttachment {
   error: string | null;
   clientMessageId: string;
   uploaded: StagedAttachmentUpload | null;
+  /**
+   * The caption this attachment is to be sent with, kept so that a retry has
+   * it (D-286). Only the attachment that carries the caption holds one; see
+   * `captionCarrierId` in `lib/attachmentSendQueue.ts`.
+   */
+  caption?: string | null;
   durationMs?: number;
   width?: number;
   height?: number;

@@ -41,11 +41,17 @@ const CHAT_ID = "22222222-2222-4222-8222-2222222222e1";
 const NOW = "2026-09-11T12:00:00.000Z";
 const CHAT_NAME = "Площадка на Лесной";
 const GREETING = "Пришлите фото и видео с площадки";
+const CAPTION = "Вот фасад с восточной стороны";
 const PUBLIC_MEDIA = `${FIXTURE_HOST}/storage/v1/object/public/media/`;
 const STORAGE_TOO_LARGE = {
   statusCode: "413",
   error: "Payload too large",
   message: "The object exceeded the maximum allowed size",
+};
+const STORAGE_UNREACHABLE = {
+  statusCode: "503",
+  error: "Service Unavailable",
+  message: "The storage service is unreachable",
 };
 
 type PickedFile = { name: string; mimeType: string; buffer: Buffer };
@@ -69,6 +75,12 @@ type Backend = {
   /** How storage answers an upload: null is the default success. */
   answer: (upload: Upload) => StorageAnswer | null | Promise<StorageAnswer | null>;
   holdChatUpdates: boolean;
+  /**
+   * Refuses the message insert while the upload still succeeds — the network
+   * cut between the two halves of a media send (D-286). `inserts` records the
+   * attempt either way, so a test can read what the refused attempt carried.
+   */
+  refuseInsert: boolean;
   release: () => Promise<void>;
 };
 
@@ -133,6 +145,78 @@ test.describe("the send path of photos and videos", () => {
     await expect.poll(() => backend.inserts.length).toBe(2);
     expect(uploadOf(backend, backend.inserts[1])?.name).toBe("clip.mp4");
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
+  });
+
+  /**
+   * D-286, the tester of 2026-09-20: «Отвалился впн, файл с текстом не ушёл,
+   * перезапустил впн, файл улетел тут же сам, но уже без текста!»
+   *
+   * A media send has two halves — the bytes and the row — and a caption belongs
+   * to neither. It is an argument of the send, not a field of the attachment,
+   * so the only thing that survives a failure is the attachment: the retry
+   * re-sends it with nothing to say. `retryStagedAttachment` passes `""`, and
+   * from the attach sheet the typed caption is not anywhere else either — the
+   * sheet closed and took its own state with it.
+   *
+   * The caption is read back out of the field before the send, so a test that
+   * never typed one cannot pass this as "both empty".
+   */
+  test("a caption survives the retry of a send whose upload was cut off", async ({ page }) => {
+    const backend = await installBackend(page);
+    let cut = true;
+    backend.answer = () => (cut ? { status: 503, body: STORAGE_UNREACHABLE } : null);
+    await openChat(page);
+
+    await pickPhotosOrVideos(page, [await testPhoto("facade.png", 30)]);
+    const captionField = page.getByTestId("attach-caption");
+    await captionField.fill(CAPTION);
+    await expect(captionField, "the caption was typed before the send").toHaveValue(CAPTION);
+    await sendPicked(page, 1);
+
+    const tile = page.getByTestId("staged-attachment-item");
+    const retry = tile.getByRole("button", { name: "Повторить отправку" });
+    await expect(retry).toBeVisible();
+    expect(backend.inserts.length, "nothing was inserted while the bytes were refused").toBe(0);
+
+    // The connection is back and the file goes, exactly as he described it.
+    cut = false;
+    await retry.click();
+    await expect.poll(() => backend.inserts.length).toBe(1);
+    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
+
+    expect(backend.inserts[0]?.content, "the retry sent the photo without its caption").toBe(CAPTION);
+    await expect(
+      page.locator('[data-message-bubble="true"]').filter({ hasText: CAPTION }),
+      "the delivered message shows the caption",
+    ).toHaveCount(1);
+  });
+
+  /**
+   * The other cut, between the two halves: the bytes are up and the row is
+   * refused. D-287. What the send leaves behind is nothing at all — no failed
+   * bubble in the conversation and no attachment above the composer — while the
+   * chat list goes on showing «Фото» as the last thing said.
+   */
+  test("a send whose row was refused leaves something to retry", async ({ page }) => {
+    const backend = await installBackend(page);
+    await openChat(page);
+
+    await pickPhotosOrVideos(page, [await testPhoto("facade.png", 30)]);
+    await page.getByTestId("attach-caption").fill(CAPTION);
+    backend.refuseInsert = true;
+    await sendPicked(page, 1);
+
+    await expect.poll(() => backend.inserts.length).toBe(1);
+    expect(backend.inserts[0]?.content, "the first attempt carried the caption").toBe(CAPTION);
+
+    // One of the two has to be there, or the photo is simply gone.
+    const tiles = page.getByTestId("staged-attachment-item");
+    const failedBubble = page.locator('[data-message-bubble="true"]').filter({ hasText: CAPTION });
+    await expect
+      .poll(async () => (await tiles.count()) + (await failedBubble.count()), {
+        message: "the refused send left neither an attachment nor a failed message",
+      })
+      .toBeGreaterThan(0);
   });
 
   test("uploads run side by side, and the messages arrive in the order the files were picked", async ({ page }) => {
@@ -656,6 +740,7 @@ async function installBackend(page: Page): Promise<Backend> {
     chatUpdates: 0,
     answer: () => null,
     holdChatUpdates: false,
+    refuseInsert: false,
     release: async () => {
       await Promise.all(held.splice(0).map((route) => route.fulfill({ status: 204 }).catch(() => undefined)));
     },
@@ -731,6 +816,11 @@ async function installBackend(page: Page): Promise<Backend> {
       const body = (request.postDataJSON() ?? {}) as Record<string, unknown>;
       backend.inserts.push(body);
       backend.insertedAt.push(Date.now());
+      // The bytes are up, the row is not: what a dropped connection looks like
+      // between the two halves of a media send.
+      if (backend.refuseInsert) {
+        return json(route, { code: "PGRST000", details: null, hint: null, message: "connection lost" }, 503);
+      }
       const row = {
         ...message(
           `55555555-5555-4555-8555-${String(5555555555 + backend.inserts.length).padStart(12, "0")}`,
@@ -754,7 +844,18 @@ async function installBackend(page: Page): Promise<Backend> {
     if (url.pathname.includes("/rest/v1/messages")) {
       if (method !== "GET") return json(route, []);
       const chatId = eq("chat_id");
-      const rows = messages.filter((row) => !chatId || row.chat_id === chatId);
+      // `client_message_id` is how the client asks whether a row it could not
+      // acknowledge landed anyway (`fetchMessageByClientId`). A mock that
+      // ignores the filter answers that question with the first message of the
+      // chat, and the send then replaces its own optimistic copy with somebody
+      // else's greeting — a defect that exists only in the fixture.
+      const clientMessageId = eq("client_message_id");
+      const userId = eq("user_id");
+      const rows = messages.filter((row) => (
+        (!chatId || row.chat_id === chatId)
+        && (!clientMessageId || row.client_message_id === clientMessageId)
+        && (!userId || row.user_id === userId)
+      ));
       if ((request.headers().prefer ?? "").includes("count=exact")) {
         return json(route, [], 200, { "access-control-expose-headers": "Content-Range", "content-range": "*/0" });
       }

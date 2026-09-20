@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   ATTACHMENT_UPLOAD_CONCURRENCY,
+  captionCarrierId,
   nextClientSentAt,
   runOrderedSend,
   type OrderedSendSteps,
@@ -236,4 +237,38 @@ test("client_sent_at rises through a send, even within one millisecond or with a
   assert.equal(third, "2026-09-11T12:00:05.000Z");
   assert.equal(nextClientSentAt(third, start), "2026-09-11T12:00:05.001Z");
   assert.equal(nextClientSentAt("not a time", start), first);
+});
+
+/**
+ * D-286: «файл улетел тут же сам, но уже без текста!»
+ *
+ * The caption has to be the attachment's, because nothing else outlives the
+ * send: the attach sheet closes with its own state, and the composer's restore
+ * has nothing to restore into. The browser half is in
+ * `tests/e2e/media-send-path.spec.ts`.
+ */
+test("the caption is carried by the first attachment of a send, and by nothing else", () => {
+  const targets = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  assert.equal(captionCarrierId(targets, "фасад с востока", false), "a");
+  // The rest of a multi-file send go silent, as they did before.
+  assert.notEqual(captionCarrierId(targets, "фасад с востока", false), "b");
+  assert.notEqual(captionCarrierId(targets, "фасад с востока", false), "c");
+  assert.equal(captionCarrierId([{ id: "only" }], "подпись", false), "only");
+  assert.equal(captionCarrierId([], "подпись", false), null);
+});
+
+test("no caption to carry means nothing is stored, so a retry cannot resurrect one", () => {
+  const targets = [{ id: "a" }, { id: "b" }];
+  assert.equal(captionCarrierId(targets, "", false), null);
+  // Whitespace is not a caption; the send trims it away before it is written.
+  assert.equal(captionCarrierId(targets, "   ", false), null);
+  assert.equal(captionCarrierId(targets, String.fromCharCode(10, 9, 32), false), null);
+});
+
+test("a caption already sent as its own message is not carried a second time", () => {
+  // A voice or video message sends its caption ahead of itself as text. Once
+  // that message is in, retrying the recording must not repeat it.
+  const targets = [{ id: "voice" }];
+  assert.equal(captionCarrierId(targets, "послушай", true), null);
+  assert.equal(captionCarrierId(targets, "послушай", false), "voice");
 });
