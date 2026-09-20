@@ -917,6 +917,50 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     roles and permissions work of item 19, which owns the model it would
     extend.
 
+
+45. `[ ]` The micro-group: a conversation for a few people that is not a server.
+    Named by the owner on 2026-09-20, while we were deciding whether a private
+    chat's two-person voice cap should be lifted: «при подобной ситуации в
+    дискорде происходит создание микро-группы под 2+ человек которую владелец может
+    также снести по надобности, иногда удобнее чем заходить на сервер основной».
+
+    **It settles a design question rather than adding a wish**, which is why it
+    is filed at once. Item 44 lifts the participant cap on **group** voice
+    channels while private chats stay at two, and the obvious objection is
+    «what if a third person is needed in a one-to-one call». Discord's answer
+    is not to widen the DM: it is to make a **group DM**, a distinct and
+    lighter object. So the rule for item 44 stands and gains a reason — a
+    private chat is two people by definition, and «one more person» is a
+    different object, not a bigger one.
+
+    **What we have, read off production 2026-09-20:** 28 private chats, 15
+    groups, no `channel` rows. A group already carries voice channels, the
+    roles machinery, folders and invites — it is shaped like a server. There is
+    no third shape, so «the three of us, right now» costs somebody a full group
+    with everything that implies. (`chat_roles` is empty across the whole
+    database today, so the weight is in the concept rather than in anybody's
+    data yet, which makes this a cheap moment to add a lighter shape.)
+
+    What has to be decided, and none of it is obvious:
+
+    - **Is it a third `chats.type`, or a group with its machinery hidden?** A
+      new type touches every RLS policy and every place that branches on type;
+      a flag risks a «group that pretends» whose seams show later. Read how
+      Discord separates a group DM from a guild before choosing.
+    - **Who may delete it.** His word is «владелец», which for us is loaded:
+      migration `20260911120000` had to stop a private chat's owner deleting it
+      for both sides, because whoever opens a private chat becomes its owner.
+      A micro-group needs its deletion rule stated deliberately rather than
+      inherited from `Chat owners delete chat`.
+    - **What it does not get.** The point of the object is that it is lighter,
+      so the list of what it *lacks* — channels, roles, folders, invites — is
+      the specification, and writing it down is what stops it drifting into a
+      group.
+
+    Reference is Discord by CLAUDE.md §7. Sequence after item 44, whose rule it
+    justifies, and read it together with item 32 (calls in a private chat),
+    which is the other half of the same question.
+
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
 `main` `17a1c47` to `245e4d9`, 32 commits, on the owner's standing permission to deploy without him.
