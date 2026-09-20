@@ -8,6 +8,7 @@ import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import { createClient } from "@/lib/supabase/client";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import { getChatDisplayInfo, isSavedChat } from "@/lib/chatDisplay";
+import { chatRowProfileTarget } from "@/lib/chatRowProfile";
 import { comparePinnedOrder, sortChatsForSidebar } from "@/lib/chatSort";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
@@ -73,6 +74,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
   // same snapshot through the same shared load.
   const chatMutes = useChatMutes();
   const requestChatPanel = useAppStore((s) => s.requestChatPanel);
+  const openUserProfile = useAppStore((s) => s.openUserProfile);
   const [openMenu, setOpenMenu] = useState<ChatMenuState | null>(null);
   /** Whether the open menu has stepped into the durations. */
   const [muteChoiceOpen, setMuteChoiceOpen] = useState(false);
@@ -355,12 +357,27 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
     // modal with a different shape, different contents and its own subset of
     // these very actions. There is one contact card now, the same one the chat
     // header opens, so the two routes cannot drift apart again.
-    if (isPrivate) {
+    //
+    // **D-283 keeps that and gives back what it cost.** The consolidation was
+    // right about the danger and did not notice where the survivor lived: the
+    // card was a layer of the information panel, the panel a child of the
+    // conversation, so the only route to a person ran through opening a chat
+    // with them — and this entry ran `selectAndOpenPanel("info")`, which is
+    // `onChatSelect` first. The card is now its own component drawn by two
+    // containers, and this one opens it over the shell. Still one
+    // implementation; no longer one door.
+    //
+    // Who it opens is decided in `lib/chatRowProfile.ts`, where `node --test`
+    // can run it: the predicate used to be `chat.type === "private"`, which is
+    // also true of a bot conversation, and a bot has no person behind it.
+    const profileTarget = chatRowProfileTarget(chat, currentUser?.id ?? null);
+    if (profileTarget.kind === "person") {
+      const { userId } = profileTarget;
       actions.push({
         id: "profile",
         icon: "profile",
         label: "Открыть профиль",
-        run: () => selectAndOpenPanel("info"),
+        run: () => openUserProfile(userId),
       });
     }
 
@@ -558,6 +575,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
     movePinnedChat,
     muteChoiceOpen,
     onChatSelect,
+    openUserProfile,
     orderedPinnedChatIds,
     removeChatLocally,
     requestChatPanel,

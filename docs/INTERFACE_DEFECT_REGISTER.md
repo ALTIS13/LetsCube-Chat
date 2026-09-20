@@ -19883,6 +19883,28 @@ and in the information panel, and neither drawing can be pressed. The volume
 control the product built on 2026-09-18 is invisible to anybody who is not in a
 server channel.
 
+### D-283 made item 3 of this entry a one-line call, and did not take it
+
+**2026-09-20.** «Профиль» was listed above as «the member card this product
+already has (`chat-info-member-card`) and that the voice menu cannot reach» —
+and *cannot reach* was the accurate word, because the card was a local function
+inside `ChatInfoPanel`, drawn as a layer of a panel that is a child of a
+conversation. A voice menu had nothing to call.
+
+It has now. D-283 extracted the card to `components/chat/MemberCard.tsx` and
+gave it a standalone container mounted on the shell, driven by one store action:
+`useAppStore.getState().openUserProfile(userId)`. Any surface that draws a face
+can open the person from wherever it stands, and nothing it does enters a
+conversation.
+
+**This entry stays open on purpose.** What D-283 supplies is the door, not the
+menu: the capsule's face stack and `VoiceChannelRow` still have no press at all,
+the capsule's stack is still `hidden … sm:flex` so a phone draws no faces to
+press, and items 1, 2 and 4 above — volume, a per-person local mute, and not
+building a second path to the moderation pair — are untouched. Closing this
+entry means building that menu on the two surfaces that lack it, with the
+four entries in the order recorded above.
+
 ---
 
 ## D-267 `[ ]` Deafen is global, in-call and in two places; a per-person mute has no entry
@@ -21761,5 +21783,158 @@ rather than served. That is queue item 35 of
 `docs/PRODUCTION_PRIORITY_TRACKER.md` — «where you were» is state the product
 owns and restores — and the vetoes here may only be widened after the matching
 restoration exists and has been proved.
+
+---
+
+## D-283 `[x]` «Открыть профиль» opened the conversation, and told her you had read her message
+
+**Reported by the owner, 2026-09-20:** «У нас пропала возможность открыть
+профиль пользователя не заходя в ЛС с ним.» Queue item 36a of
+`docs/PRODUCTION_PRIORITY_TRACKER.md`, and the one part of that item that is a
+located regression rather than an assessment.
+
+**Severity:** medium on reach — it is one entry on one menu — and high on the
+kind of wrong it was: the label promised a person and the action performed an
+act with a consequence in somebody else's client.
+
+### The measurement, taken before anything was changed
+
+`ChatList.tsx:362` offered «Открыть профиль» and its `run` was
+`selectAndOpenPanel("info")`, which is `onChatSelect(chat.id)` followed by
+`requestChatPanel(chat.id, "info")`. So the entry **entered the conversation**
+and then opened the information panel's fourth layer, which is where the
+person's card lives.
+
+That was proved rather than read. A probe asserting the shipped behaviour
+**positively** was run against the unmodified build at 1440 and 390 on
+2026-09-20, both green:
+
+- `chat-header-shell` visible and `welcome-screen` gone — a conversation was
+  open;
+- and the receipts the fixture recorded:
+  `mark_chat_read_through {p_chat_id: …, p_read_through: "2026-09-20T10:00:00.000Z"}`
+  at both widths, plus `mark_chat_delivered` at 390.
+
+**The second line is the part nobody would have noticed.** Entering a
+conversation reports its incoming messages read, so asking who somebody is told
+them you had read what they wrote. A person checking a stranger's card before
+deciding whether to answer had already answered, in the only way the other side
+can see.
+
+### Why it happened, and what was right about the cause
+
+The comment above the entry records it: two profile surfaces — a modal of its
+own beside the information card — were consolidated into one «so the two routes
+cannot drift apart again». **That was correct and is kept.** Two
+implementations of a person's card do drift; this product had the drift.
+
+What the consolidation did not notice is *where the survivor lived*. The card
+was a local function inside `ChatInfoPanel`, drawn as the fourth layer of a
+sub-view stack, and the panel is a child of the conversation. So the surviving
+surface was reachable only through a chat, and the capability «open a person»
+went out with the duplicate rather than with the decision.
+
+### The repair
+
+**One card, two containers.**
+
+- `components/chat/MemberCard.tsx` — the card, moved out of `ChatInfoPanel`
+  unchanged except for one prop. `joinedLabel` is now passed in, exactly as
+  `roleLabel` and `presenceLabel` already were, because «В группе с 3 сентября»
+  is a fact about **a chat** and `formatJoinedAt(null)` answers «Дата входа
+  неизвестна» — a sentence about a group the reader never asked about.
+- `components/profile/UserProfileOverlay.tsx` — the standalone container,
+  mounted on `MainLayout` rather than in either column, because the whole point
+  is that the reader does not move between them. It reads the profile fresh
+  rather than trusting the row (a person who changed their picture while the
+  list sat open would be drawn stale on the one surface that is entirely about
+  them), and it passes empty answers for every chat-scoped fact rather than
+  guessing a standing out of the private conversation the two happen to share.
+- `lib/chatRowProfile.ts` — **who** the row opens, as a pure decision.
+- `ChatList.tsx` — the entry now calls `openUserProfile(userId)`. Nothing else
+  on that menu changed.
+
+### The narrowing that came with it, stated plainly
+
+The old predicate was `chat.type === "private" && !isSaved`, and **a bot
+conversation is `type === "private"`**. So a bot row offered «Открыть профиль»
+too, and there is no person behind one: `other_user` is null and the
+counterpart is a `bots` entry. Routed to a person's card it would draw an empty
+one, so the entry is now **absent** on a bot row —
+`docs/operations/reference-clients.md` section 8 is this product's own rule for
+a control that cannot work. Nothing is lost that is not one press away: the row
+still carries «Открыть», and the conversation's header opens the bot's
+information. **D-263 owns giving a bot a card worth opening**, and until it does
+this is the honest state.
+
+Four further cases the pure module now decides, none of which the old predicate
+could: a private row whose counterpart is oneself, a private row whose
+counterpart has not arrived yet, a member row whose `profiles` join was refused,
+and a counterpart found through `members` when `other_user` is absent.
+
+### What this is **not**, and why that is deliberate
+
+Discord's answer to this problem is **two** surfaces — a compact popout carrying
+«Полный профиль», and the full modal with tabs — and they do not drift because
+the small one is a summary of the large one with an explicit escalation. That
+is the right target and it is **not built here**: it is a design the owner has
+to approve, and it belongs to queue item 36's second half, after the assessment
+in `docs/operations/reference-clients.md`. What is here is the card this product
+already has, reachable from where it was not.
+
+**A third surface still exists and is recorded rather than touched.**
+`components/search/SearchShared.tsx:389` draws «Мини-профиль» — avatar, name,
+никнейм with a copy control, bio, «Открыть чат» — inside the search. It carries
+no badges, no presence, no join date and no escalation, and `ChatInfoPanel`'s
+own comment explains why it was not reused there: its back control says «Назад к
+результатам», which is a lie outside the search, and its test ids are pinned by
+the search's specs. It is the drift the consolidation feared, arriving from the
+one direction nobody was watching. Closing it is part of the two-tier design,
+not of this repair.
+
+### Evidence
+
+- **Red then green, on the assertion that names the defect.**
+  `tests/e2e/profile-without-entering-chat.spec.ts` — the profile opens, the
+  conversation does not (`chat-header-shell` count 0, the welcome pane or the
+  chat list still on screen), and **no read receipt is sent**. 10 of 10 across
+  1440, 1920, 360, 390 and 412.
+- **The inverse, which is the part that makes the first one mean something.**
+  The positive probe of the shipped behaviour, green before, went red after —
+  at the `chat-header-shell` assertion, at both widths.
+- **Mutation.** Restoring `selectAndOpenPanel("info")` in the entry turns the
+  new spec red at 1440 and 390. Five mutations of `lib/chatRowProfile.ts` —
+  dropping the bot check, the saved check, the `members` fallback, the self
+  comparison and the missing-profile guard — each turn
+  `tests/unit/chat-row-profile.test.mts` red.
+- **A guard that pinned the defect, inverted.**
+  `tests/unit/profile-window.test.mts` required `selectAndOpenPanel("info")` on
+  this very entry. It was written to protect «one surface» and it had come to
+  protect «one door». Both halves are stated now, and a second case pins that
+  the card has one implementation drawn by two containers.
+- **`mark_chat_delivered` is deliberately outside the assertion.** `useChats`
+  sends it from the **list**, for a row whose last message arrived; it fires
+  whether or not anybody opened anything, and at 390 it landed inside the
+  measurement window while at 1440 it did not. Asserting on it would make the
+  test about the receipt scheduler's timing rather than about the entry — and
+  «delivered» is true either way, because the device did receive the message.
+- **Photographed** at 1440 and 390, light and dark, and the contrast measured
+  off the pixels rather than off the tokens. Muted text (никнейм, presence,
+  bio) **6.06:1** on dark and **5.83:1** on light; the name and the dialog
+  title **13.74:1** and **18.9:1**. All above AA.
+- Gates at this commit: typecheck clean across `scripts`, `api-server`,
+  `mockup-sandbox` and `kub`; unit suite **3642/3642**, 0 skipped;
+  `tests/server` **144/144**; production build proved by its own lines
+  (`sw.js build 60d182e299e44abe`, `built in 9.32s`).
+
+### One fixture correction that came out of it
+
+`tests/e2e/helpers/messageActionsFixture.ts` answered **`me`** to
+`profiles?id=eq.<uuid>` whatever the id was, so the first run of the new spec
+drew the signed-in account's card on somebody else's row — a fixture fault that
+looks exactly like a product fault. It now answers a person it was given, and
+keeps the old `me` fallback for an id it was not, because several specs read
+their own profile through filters this route still does not model and silently
+emptying those would be a worse lie than the one being fixed.
 
 ---

@@ -16,6 +16,7 @@ import { usePermissionAccess } from "@/hooks/useRole";
 import type { ChatRolesView } from "@/hooks/useChatRoles";
 import { ChatRolesModal } from "./ChatRolesModal";
 import { ChatRoleChip } from "./ChatRoleChip";
+import { MemberCard, type MemberRow } from "./MemberCard";
 import { DISABLED_SINK } from "@/lib/controlSurface";
 import { chatRoleAssignDenial, topChatRole, type ChatRole } from "@/lib/chatRoles";
 import { chatInviteAdmission } from "@/lib/chatInviteAccess";
@@ -289,10 +290,6 @@ const MEDIA_KIND_MESSAGE_TYPES: Record<MessageMediaKind, readonly MediaMessageTy
  * built from anything but that query — a fixture, a test — has no reason to
  * carry it, and `formatJoinedAt` says so rather than guessing.
  */
-type MemberRow = Profile & {
-  chat_role: "owner" | "admin" | "member";
-  joined_at?: string | null;
-};
 type InviteWithProfiles = {
   id: string;
   invitee_id: string;
@@ -3311,6 +3308,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
             isSelf={memberCard.id === currentUser?.id}
             roleLabel={chatRoleLabel(memberCard.chat_role, words.possessive)}
             presenceLabel={getUserPresenceState(memberCard, presenceNow).label}
+            joinedLabel={formatJoinedAt(memberCard.joined_at)}
             showOnlineDot={getUserPresenceState(memberCard, presenceNow).isOnline}
             badges={memberBadgeStrips.get(memberCard.id) ?? null}
             groupRoles={chatRoles.rolesOf(memberCard.id)}
@@ -3641,184 +3639,6 @@ async function fetchHiddenMessageIdSet(
     return new Set();
   }
   return new Set((data ?? []).map((row) => row.message_id));
-}
-
-/**
- * The person a member row opens (D-168).
- *
- * What the entry asked for is the bottom half of this: the row itself «carries
- * nothing at all — no username, no last seen, no join date». Two of those three
- * belong on the row, where they are scanned; the join date belongs here, where
- * it is read. `d424f96` established the same division for badges — one on the
- * row, the whole strip on the person's own card — after photographing a
- * three-line row at 390 points, and this follows it rather than re-litigating
- * it.
- *
- * No perimeter anywhere in here, per rule 11 of the material contract: the card
- * is a layer of the panel, not a box inside it, and the one thing that does
- * carry a line is `KubNotice`, which rule 11 lists as a line that means
- * something.
- */
-function MemberCard({
-  member,
-  isSelf,
-  roleLabel,
-  presenceLabel,
-  showOnlineDot,
-  badges,
-  groupRoles,
-  groupVocabulary,
-  onToggleGroupRole,
-  assigning,
-  opening,
-  onOpenChat,
-}: {
-  member: MemberRow;
-  isSelf: boolean;
-  roleLabel: string;
-  /** «в сети», «был(а) 12 мин назад» — empty when presence cannot be read. */
-  presenceLabel: string;
-  showOnlineDot: boolean;
-  badges: BadgeStrip | null;
-  /** What this group calls this person, highest first (D-215). */
-  groupRoles: ChatRole[];
-  /** Every role the group has, or null when this account may not hand them out. */
-  groupVocabulary: ChatRole[] | null;
-  onToggleGroupRole: (role: ChatRole, wear: boolean) => void;
-  /** The role id being written, so one control shows it rather than all of them. */
-  assigning: string | null;
-  opening: boolean;
-  onOpenChat: () => void;
-}) {
-  return (
-    <div
-      className="flex flex-col items-center px-5 py-6 text-center"
-      data-member-card-id={member.id}
-    >
-      <UserAvatar user={member} size="xl" showOnline={showOnlineDot} />
-      <div className="mt-4 max-w-full text-lg font-bold text-[color:var(--kub-text)] [overflow-wrap:anywhere]">
-        {memberDisplayName(member)}
-      </div>
-      <div
-        className="mt-1 max-w-full truncate text-sm text-[color:var(--kub-muted)]"
-        data-testid="member-card-username"
-      >
-        {formatUsername(member.username)}
-      </div>
-      {roleLabel && (
-        <div className="mt-2 text-sm font-semibold text-[color:var(--kub-accent-text)]">
-          {roleLabel}
-        </div>
-      )}
-      {/* Said only when it can be. A person who turned presence off writes
-          `online_at = null`, and «не в сети» would report that refusal as a
-          fact about where they are. */}
-      {presenceLabel && (
-        <div className="mt-1 text-sm text-[color:var(--kub-muted)]" data-testid="member-card-presence">
-          {presenceLabel}
-        </div>
-      )}
-      <div className="mt-1 text-xs text-[color:var(--kub-muted)]" data-testid="member-card-joined">
-        {formatJoinedAt(member.joined_at)}
-      </div>
-      {/* This group's own words for this person, above LETSCUBE's (D-215).
-          Above, and separated, because the two answer different questions —
-          «кто он здесь» and «кто он вообще» — and the row above has already
-          shown only the first. Discord's popout stacks them the same way: the
-          server's roles first, the account's badges under them. */}
-      {(groupRoles.length > 0 || (groupVocabulary?.length ?? 0) > 0) && (
-        <div className="mt-4 w-full" data-testid="member-card-group-roles">
-          <div className="flex max-w-full flex-wrap items-center justify-center gap-1.5">
-            {groupRoles.map((role) => (
-              <ChatRoleChip
-                key={role.id}
-                role={role}
-                onRemove={groupVocabulary ? () => onToggleGroupRole(role, false) : undefined}
-              />
-            ))}
-            {groupRoles.length === 0 && (
-              <span className="text-xs text-[color:var(--kub-muted)]">Ролей в группе нет</span>
-            )}
-          </div>
-          {/* What is left to give. Only the roles this person does not wear, so
-              the control is «дать» and never a toggle that looks like a filter. */}
-          {groupVocabulary && groupVocabulary.length > 0 && (
-            <div
-              className="mt-2 flex max-w-full flex-wrap items-center justify-center gap-1.5"
-              data-testid="member-card-role-picker"
-            >
-              {groupVocabulary.map((role) => (
-                <button
-                  key={role.id}
-                  type="button"
-                  onClick={() => onToggleGroupRole(role, true)}
-                  disabled={assigning !== null}
-                  aria-label={`Выдать роль «${role.name}»`}
-                  data-testid="member-card-role-give"
-                  data-role-id={role.id}
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-full border border-dashed border-[color:var(--kub-border-color)] px-2 py-0.5 text-[12px] text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
-                    // The sink, not a fade: this card is translucent, and
-                    // lowering a control's opacity on it shows the wallpaper
-                    // through the control rather than dimming it.
-                    // `control-vocabulary` refuses the fade for that reason and
-                    // it caught this one. (It scans source and cannot tell
-                    // prose from code, so naming the forbidden class here would
-                    // turn it red again — the second guard in one session to
-                    // read a comment as a violation.)
-                    DISABLED_SINK,
-                  )}
-                >
-                  <KubIcon name="create" size={11} className="shrink-0" />
-                  <span className="min-w-0 truncate">{role.name}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-      {/* Everything this person wears on LETSCUBE, words included — the whole
-          strip, because `PROFILE_CARD_BADGE_LIMITS` is uncapped. This is the
-          surface D-213 moved it to: a card is about the person, so a word has
-          room to be read, where the member row is about this group. */}
-      {badges && (
-        <div
-          className="mt-4 flex max-w-full flex-wrap items-center justify-center gap-1.5"
-          data-testid="member-card-badges"
-        >
-          {badges.shown.map((badge) => (
-            <ProfileBadgeChip key={`${badge.kind}:${badge.key}`} badge={badge} />
-          ))}
-          {badges.hidden > 0 && (
-            <KubBadge tone="muted" pill>
-              +{badges.hidden}
-            </KubBadge>
-          )}
-        </div>
-      )}
-      {member.bio && (
-        <p className="mt-4 max-w-sm text-sm leading-relaxed text-[color:var(--kub-muted)] [overflow-wrap:anywhere]">
-          {member.bio}
-        </p>
-      )}
-      <div className="mt-6 w-full max-w-xs">
-        <KubButton
-          variant="primary"
-          fullWidth
-          // Your own row opens your own card, because hiding it would make the
-          // list inconsistent for exactly one reader. The action that makes no
-          // sense there is the one that is refused, not the card.
-          disabled={isSelf}
-          loading={opening}
-          leftIcon={<KubIcon name="chatBubble" size={14} />}
-          onClick={onOpenChat}
-          data-testid="member-card-open-chat"
-        >
-          Открыть чат
-        </KubButton>
-      </div>
-    </div>
-  );
 }
 
 /**

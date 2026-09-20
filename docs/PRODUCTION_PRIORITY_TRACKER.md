@@ -572,6 +572,19 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     summary of the large one with an explicit escalation, not a second
     implementation of it.
 
+    **a is repaired, 2026-09-20 — D-283 in
+    `docs/INTERFACE_DEFECT_REGISTER.md`.** The card was extracted from
+    `ChatInfoPanel` to `components/chat/MemberCard.tsx` and given a standalone
+    container on the shell; the row entry opens the person and enters nothing.
+    Measured before the change rather than described: the shipped build sent
+    `mark_chat_read_through` at 1440 and 390, so asking who somebody was told
+    them you had read what they wrote. The entry is now absent on a **bot** row,
+    which the old `type === "private"` predicate had been offering it on; D-263
+    owns giving a bot a card. **The two-surface split is not built** — it is
+    the design half of this item and waits on the assessment and the owner's
+    approval. A third profile surface, the search's «Мини-профиль», is recorded
+    in D-283 and deliberately untouched.
+
     **b. «Глубина функционала не соответствует.»** Discord's DM-row context
     menu in his screenshot carries: пометить как прочитанное, закрепить,
     профиль, начать звонок, добавить заметку (видна только вам), добавить

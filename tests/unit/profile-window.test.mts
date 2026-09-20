@@ -532,7 +532,7 @@ test("the media viewer is drawn above the window it was opened from", () => {
   assert.ok(viewer.includes("z-[90]"), "the viewer lost the z-index the portal exists to make meaningful");
 });
 
-test("there is one profile surface, and the chat list opens it", () => {
+test("there is one profile surface, and the chat list opens it without entering the chat", () => {
   const list = readFileSync("artifacts/kub/src/components/sidebar/ChatList.tsx", "utf8");
   // Right-clicking a row used to open a second, differently shaped mini-profile
   // with its own subset of these very actions.
@@ -540,15 +540,62 @@ test("there is one profile surface, and the chat list opens it", () => {
   assert.doesNotMatch(list, /setPreviewChatId/, "the chat list owns profile state of its own again");
   assert.doesNotMatch(list, /data-chat-profile-preview/, "the mini-profile markup is back");
 
-  // Both entries must reach the card, and by the route the chat window already
-  // listens on — the same one «Поиск в чате» uses.
-  const profileAction = list.match(/id: "profile",[\s\S]{0,220}?\n\s{6}\}\);/);
+  /**
+   * **This assertion was inverted by D-283, and the inversion is the point.**
+   *
+   * It used to require `selectAndOpenPanel("info")` here — it pinned, as a
+   * contract, the very behaviour the owner reported as a loss: «У нас пропала
+   * возможность открыть профиль пользователя не заходя в ЛС с ним.» The card
+   * was right to be one; the route through a conversation was not, and a guard
+   * that reads source cannot tell «one surface» from «one door» unless
+   * somebody writes down which it meant.
+   *
+   * So both halves are stated now. The entry reaches the overlay, and it must
+   * **not** reach the chat: `openUserProfile` takes a person, never a chat id.
+   */
+  const profileAction = list.match(/id: "profile",[\s\S]{0,260}?\n\s{6}\}\);/);
   assert.ok(profileAction, "the chat list no longer offers «Открыть профиль»");
-  assert.match(profileAction[0], /selectAndOpenPanel\("info"\)/, "«Открыть профиль» opens something else");
+  assert.match(profileAction[0], /openUserProfile\(userId\)/, "«Открыть профиль» opens something else");
+  assert.doesNotMatch(
+    profileAction[0],
+    /selectAndOpenPanel|onChatSelect/,
+    "«Открыть профиль» enters the conversation again (D-283)",
+  );
 
+  // And it is offered for a person only. `chat.type === "private"` is also
+  // true of a bot conversation, which has no person behind it; the decision is
+  // in `lib/chatRowProfile.ts` and covered by `chat-row-profile.test.mts`.
+  assert.match(
+    list,
+    /chatRowProfileTarget\(chat, currentUser\?\.id \?\? null\)/,
+    "the chat list decides who a row's profile is by itself again",
+  );
+
+  // The group entry keeps the old route, and must: a group's information IS
+  // the conversation's, and the panel is where it lives.
   const groupAction = list.match(/id: "group-info",[\s\S]{0,260}?\n\s{6}\}\);/);
   assert.ok(groupAction, "the chat list no longer offers the group information entry");
   assert.match(groupAction[0], /selectAndOpenPanel\("info"\)/, "the group entry opens something else");
+});
+
+test("the person's card has one implementation, drawn by both of its containers", () => {
+  // What the consolidation comment in `ChatList` protects, restated where it
+  // can be checked. `MemberCard` is a module now; the information panel and
+  // the standalone overlay both import it, and neither rebuilds it.
+  const card = readFileSync("artifacts/kub/src/components/chat/MemberCard.tsx", "utf8");
+  assert.match(card, /export function MemberCard\(/, "the card is no longer exported");
+
+  const panel = readFileSync("artifacts/kub/src/components/chat/ChatInfoPanel.tsx", "utf8");
+  assert.match(panel, /from "\.\/MemberCard"/, "the panel builds a card of its own again");
+  assert.doesNotMatch(panel, /^function MemberCard\(/m, "a second card is back inside the panel");
+
+  const overlay = readFileSync("artifacts/kub/src/components/profile/UserProfileOverlay.tsx", "utf8");
+  assert.match(overlay, /from "@\/components\/chat\/MemberCard"/, "the overlay builds a card of its own");
+  // The overlay belongs to no chat, so it must not invent the chat-scoped
+  // facts the card can draw: a standing in a group, a join date, a role chip.
+  assert.match(overlay, /roleLabel=""/, "the overlay invents a standing for somebody");
+  assert.match(overlay, /joinedLabel=""/, "the overlay invents a join date");
+  assert.match(overlay, /groupRoles=\{\[\]\}/, "the overlay invents group roles");
 });
 
 test("every action and confirmation the card carried is still on it", () => {

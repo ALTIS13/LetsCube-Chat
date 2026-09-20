@@ -135,6 +135,17 @@ export const USERNAME_TAKEN = "Это имя пользователя уже з�
 /** Anything else the profile save can fail with and nobody can act on. */
 export const PROFILE_SAVE_FAILED = "Не удалось сохранить профиль. Попробуйте ещё раз.";
 
+/**
+ * A person's card could not be read (D-283).
+ *
+ * It covers two different situations on purpose, and says neither of them:
+ * the read failed, and the read was refused by row-level security and came
+ * back empty. «Такого пользователя нет» would report the second as a fact
+ * about the person rather than about what we were allowed to see — the
+ * mistake D-140 and D-193 record on the other side.
+ */
+export const PROFILE_UNAVAILABLE = "Не удалось открыть профиль.";
+
 // ---------------------------------------------------------------------------
 // Phone verification (settings-profile D5)
 // ---------------------------------------------------------------------------
@@ -293,6 +304,7 @@ export const PLAIN_UNAVAILABLE_MESSAGES: readonly string[] = [
   CHAT_OPEN_SIGNED_OUT,
   USERNAME_TAKEN,
   PROFILE_SAVE_FAILED,
+  PROFILE_UNAVAILABLE,
   PHONE_CODE_UNAVAILABLE,
   ANDROID_PUSH_UNAVAILABLE,
   BROWSER_PUSH_UNAVAILABLE,

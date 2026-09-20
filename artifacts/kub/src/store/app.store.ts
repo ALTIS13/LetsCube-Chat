@@ -147,6 +147,23 @@ interface AppState {
   clearChatPanelRequest: (key: number) => void
 
   /**
+   * Whose profile is open over the shell, if anybody's (D-283).
+   *
+   * Here rather than in a component because the surfaces that need to open one
+   * are in different columns and, for two of them, in different trees: the
+   * chat list's row menu, and — once D-266 lands — a face in a call, which is
+   * drawn in the capsule and in the information panel at once. A piece of
+   * state one of them owned would make the other two import it, which is how
+   * this product ended up with two profile modals before.
+   *
+   * It is deliberately NOT a chat id. Opening a person must not name a
+   * conversation, because naming one is what the regression did.
+   */
+  profileOverlayUserId: string | null
+  openUserProfile: (userId: string) => void
+  closeUserProfile: () => void
+
+  /**
    * Which chat's in-chat search is open, if any.
    *
    * It lives here rather than in `ChatWindow` because from `md` the search is a
@@ -489,6 +506,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => (
       state.chatPanelRequest?.key === key ? { chatPanelRequest: null } : state
     )),
+
+  profileOverlayUserId: null,
+  openUserProfile: (userId) =>
+    set((state) => (state.profileOverlayUserId === userId ? state : { profileOverlayUserId: userId })),
+  closeUserProfile: () =>
+    set((state) => (state.profileOverlayUserId === null ? state : { profileOverlayUserId: null })),
 
   chatSearch: null,
   openChatSearch: (chatId) =>

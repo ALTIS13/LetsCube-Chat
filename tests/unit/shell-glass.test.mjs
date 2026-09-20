@@ -338,7 +338,18 @@ const veiled = [
   // other one here, so it wears the veil rather than a fixed hover colour.
   // 18 before D-235 added the bots of a group under its people: the row and
   // its «Убрать».
-  ["components/chat/ChatInfoPanel.tsx", 20],
+  // 19 since D-283. Nothing was removed: the member card became its own file,
+  // and the one hover it owns — D-215's dashed «Выдать роль» chip — went with
+  // it. The pair still totals 20, which is the point of counting them per file
+  // rather than across the tree.
+  ["components/chat/ChatInfoPanel.tsx", 19],
+  // The member card, extracted from the panel above by D-283 so a profile can
+  // be opened without entering a conversation. One hover, D-215's.
+  ["components/chat/MemberCard.tsx", 1],
+  // The card's standalone container. It draws the card and nothing of its own,
+  // so it carries no hover — kept at zero so the leftover checks still run on
+  // it, the way `SettingsModal.tsx` is.
+  ["components/profile/UserProfileOverlay.tsx", 0],
   // Two, down from eleven on 2026-09-11: the hover cluster, the per-message
   // context menu and its reaction pickers left the bubble for
   // `MessageActionLayer` and `MessageReactions`, which are counted below.

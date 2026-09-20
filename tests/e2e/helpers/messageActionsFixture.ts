@@ -269,6 +269,19 @@ export async function openFixture(page: Page, options: FixtureOptions): Promise<
         );
         return json(route, one(holder ? [holder] : []));
       }
+      // `id=eq.<uuid>` is how ONE person is fetched — the profile overlay
+      // (D-283) does exactly this, and before this branch existed the route
+      // answered `me` to it, so a card opened on somebody else drew the
+      // signed-in account. A person this fixture was given is answered; an id
+      // it was not given keeps the old `me` fallback below rather than
+      // answering null, because several specs read their own profile through
+      // filters this route still does not model, and silently emptying those
+      // would be a worse lie than the one being fixed.
+      const oneId = eq("id");
+      if (oneId) {
+        const known = [me, ...(options.people ?? [])].find((person) => person.id === oneId);
+        if (known) return json(route, one([known]));
+      }
       // `id=in.(…)` is how a list of people is fetched by id — the blocked-people
       // list does exactly this. Only the people this fixture was given exist;
       // every other filter still answers `me`, as it did.
