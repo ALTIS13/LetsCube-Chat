@@ -9,6 +9,7 @@ import { showActionFeedback } from "@/lib/actionFeedback";
 import { requestAppConfirm } from "@/lib/appDialogs";
 import { BotManagementError, botManagement, type BotCommand, type BotDetail } from "@/lib/botManagement";
 import { botAccessLabel } from "@/lib/chatBots";
+import { SURFACE_FORM_BOX, SURFACE_FORM_MEASURE } from "@/lib/surfaceMeasure";
 import {
   BOT_WEBHOOK_SECRET_HINT,
   botActionFeedback,
@@ -144,8 +145,15 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
 
   return (
     <div className="min-w-0">
+      {/* The sheet runs the pane; what is written on it runs the column. The
+          first version capped only the tabs and the body, and the bot's own
+          name then stood 200px to the left of the column it heads — a header
+          that does not line up with what it heads reads as two panels. The
+          padding moved inside the cap for the same reason: with the sheet
+          padded and the cap inside it, the name landed 24px right of the
+          cards, which is a misalignment a reader sees and no test would. */}
       <div className="kub-glass border-b border-[color:var(--kub-border-color)] px-4 py-4 sm:px-6">
-        <div className="flex min-w-0 items-start gap-3">
+        <div className="mx-auto flex min-w-0 items-start gap-3" style={MEASURE_CONTENT}>
           <BotAvatar bot={bot} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -167,13 +175,21 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
       {!owner && <Notice>Доступ разработчика: команды, webhook, настройки приватности и диагностика.</Notice>}
 
       <Tabs defaultValue="main" className="min-w-0">
-        <TabsList className="kub-glass grid h-auto w-full grid-cols-2 gap-1 rounded-none border-b border-[color:var(--kub-border-color)] p-2 sm:grid-cols-4">
+        {/* The sheet and its rule run the width of the pane; the tabs run the
+            width of the column they navigate. Two boxes rather than one so the
+            border still divides the whole pane — Discord's own content pane is
+            a full-width header over a centred column, and a rule that stopped
+            at 744 would read as a card edge instead of a division. */}
+        <div className="kub-glass border-b border-[color:var(--kub-border-color)] p-2">
+          <TabsList className="mx-auto grid h-auto w-full grid-cols-2 gap-1 rounded-none border-0 bg-transparent sm:grid-cols-4" style={MEASURE_CONTENT}>
           {[["main", "Основное"], ["api", "API"], ["team", "Команда"], ["diagnostics", "Диагностика"]].map(([value, label]) => (
             <TabsTrigger key={value} value={value} className="min-h-11 rounded-md text-xs text-[color:var(--kub-muted)] data-[state=active]:bg-[var(--kub-raised)] data-[state=active]:text-[color:var(--kub-text)] data-[state=active]:shadow-none">{label}</TabsTrigger>
           ))}
-        </TabsList>
+          </TabsList>
+        </div>
 
-        <TabsContent value="main" className="m-0 space-y-5 p-4 sm:p-6">
+        <TabsContent value="main" className="m-0">
+          <div data-testid="bot-settings-measure" className="mx-auto w-full space-y-5 p-4 sm:p-6" style={MEASURE_BOX}>
           <Section title="Профиль" error={errors.profile} description={owner ? "Имя пользователя закреплено за ботом и не изменяется." : "Профиль доступен только владельцу."}>
             <div className="grid gap-3">
               <KubInput label="Название" value={profile.display_name} onChange={(event) => setProfile({ ...profile, display_name: event.target.value })} disabled={!owner || !editable} maxLength={64} />
@@ -235,9 +251,11 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
               <KubButton variant="danger" className="min-h-11" onClick={() => setConfirm("delete")} leftIcon={<KubIcon name="delete" size={17} />}>Запросить удаление</KubButton>
             </Section>
           )}
+          </div>
         </TabsContent>
 
-        <TabsContent value="api" className="m-0 space-y-5 p-4 sm:p-6">
+        <TabsContent value="api" className="m-0">
+          <div data-testid="bot-settings-measure" className="mx-auto w-full space-y-5 p-4 sm:p-6" style={MEASURE_BOX}>
           <Section title="Команды" error={errors.commands} description="До 100 команд, доступных пользователям бота.">
             <div className="space-y-2">
               {commands.map((command, index) => (
@@ -338,9 +356,11 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
               </div>
             </Section>
           )}
+          </div>
         </TabsContent>
 
-        <TabsContent value="team" className="m-0 space-y-5 p-4 sm:p-6">
+        <TabsContent value="team" className="m-0">
+          <div data-testid="bot-settings-measure" className="mx-auto w-full space-y-5 p-4 sm:p-6" style={MEASURE_BOX}>
           <Section title="Разработчики" error={errors.developers} description="Разработчики могут менять API-конфигурацию, но не профиль, токен или состояние бота.">
             {owner && editable && <div className="mb-4 flex flex-col gap-2 sm:flex-row"><KubInput aria-label="Имя пользователя разработчика" value={developerUsername} onChange={(event) => setDeveloperUsername(event.target.value)} placeholder="username" containerClassName="flex-1" /><KubButton className="min-h-11" disabled={!developerUsername || mutations.addDeveloper.isPending} onClick={() => void run("addDeveloper", async () => { await mutations.addDeveloper.mutateAsync(developerUsername); setDeveloperUsername(""); })}>Добавить разработчика</KubButton></div>}
             <div className="space-y-2">
@@ -348,9 +368,11 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
               {detail.developers.length === 0 && <KubEmptyState title="Разработчиков пока нет" description="Владелец может добавить участника по имени пользователя." className="py-5" />}
             </div>
           </Section>
+          </div>
         </TabsContent>
 
-        <TabsContent value="diagnostics" className="m-0 p-4 sm:p-6">
+        <TabsContent value="diagnostics" className="m-0">
+          <div data-testid="bot-settings-measure" className="mx-auto w-full p-4 sm:p-6" style={MEASURE_BOX}>
           <Section title="Агрегированная диагностика" description={`Обновлено ${formatDate(detail.diagnostics.refreshed_at)}`}>
             <dl className="grid gap-px overflow-hidden rounded-md bg-[var(--kub-border-color)] sm:grid-cols-2 kub-raise">
               <Metric label="Режим доставки" value={detail.diagnostics.delivery_mode === null ? "Не настроен" : detail.diagnostics.delivery_mode === "webhook" ? "Webhook" : "getUpdates"} />
@@ -359,6 +381,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
               <Metric label="Последняя ошибка" value={detail.diagnostics.last_error_code ?? "Нет"} />
             </dl>
           </Section>
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -418,6 +441,30 @@ function ConfirmDialog({ action, onClose, onConfirm }: { action: ConfirmAction; 
   const [title, description, confirmLabel] = copy[action];
   return <AlertDialog.Root open onOpenChange={(open) => !open && onClose()}><AlertDialog.Portal><AlertDialog.Overlay className="fixed inset-0 z-[75] bg-black/45" /><AlertDialog.Content className="bots-management-surface kub-glass-strong fixed left-1/2 top-1/2 z-[76] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[color:var(--kub-border-color)] p-5"><AlertDialog.Title className="text-lg font-semibold text-[color:var(--kub-text)]">{title}</AlertDialog.Title><AlertDialog.Description className="mt-2 text-sm leading-6 text-[color:var(--kub-muted)]">{description}</AlertDialog.Description><div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><AlertDialog.Cancel asChild><KubButton variant="secondary" className="min-h-11">Отмена</KubButton></AlertDialog.Cancel><AlertDialog.Action asChild><KubButton variant={action === "pause" || action === "rotate" ? "primary" : "danger"} className="min-h-11" onClick={() => void onConfirm()}>{confirmLabel}</KubButton></AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>;
 }
+
+/**
+ * The cap, as a style rather than as a class.
+ *
+ * Built from `SURFACE_FORM_BOX` rather than written beside it, so moving the
+ * constant moves the rendered box and `page-surface-fit.spec.ts` sees it —
+ * the rule `SettingsOverlay` records for the same reason. A Tailwind
+ * arbitrary value here would be a second copy of the number, and D-285 is
+ * explicit about what a value clamped in two places costs: one of the two
+ * can be mutated with the suite still green.
+ */
+const MEASURE_BOX = { maxWidth: `${SURFACE_FORM_BOX}px` } as const;
+
+/**
+ * The same column for a sheet that draws its own padding.
+ *
+ * The pane's header and its tab strip each pad themselves — `sm:px-6` and
+ * `p-2` — so the box that has to be capped there is the measure itself rather
+ * than the measure plus a gutter it is not drawing. Both work out to the same
+ * left edge as the body's 744, which is the point: 696 centred inside
+ * `1088 - 48` and 696 centred inside `1088 - 16` both start at 548, where the
+ * cards start.
+ */
+const MEASURE_CONTENT = { maxWidth: `${SURFACE_FORM_MEASURE}px` } as const;
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));

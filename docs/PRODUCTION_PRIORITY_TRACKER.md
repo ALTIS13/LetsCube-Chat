@@ -775,7 +775,16 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     Sequence it after item 36, whose profile work draws these same chips.
 
 
-39. `[ ]` The settings overlay's shape, applied to every other full surface.
+39. `[x]` The settings overlay's shape, applied to every other full surface.
+    **Done 2026-09-21 as D-286.** The audit answered the question the item
+    asked to ask first: all three surfaces are already full routes, so the
+    container defect D-285 fixed is not there. Two real ones are — «Мои боты»
+    drew its own title in a 6px box at 390 and ran 8px past a 360pt window,
+    and the bot settings pane had no measure at all (a 1460px field for 48px
+    of content at 1920). The administration's tab strip never scrolled the
+    section being read into view on a phone. «Задачи» was measured and left
+    alone. Numbers, mutations and what was deliberately not changed are in the
+    register.
     Asked for by the owner on 2026-09-20, right after he reported the settings
     screen rendering «криво» inside a narrowed chat list: «такой же подход как
     к настройкам по возможности к остальным местам примени, страница ботов,

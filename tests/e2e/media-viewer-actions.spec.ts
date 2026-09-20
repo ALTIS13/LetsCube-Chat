@@ -1,6 +1,5 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import {
-  AUDIO_GAIN_LABEL,
   AUDIO_GROUP_LEVEL,
   AUDIO_INPUT_LABEL,
 } from "../../artifacts/kub/src/lib/audioSettingsSurface";
@@ -460,28 +459,80 @@ test("the sound settings no longer offer a second playback volume (D-149)", asyn
   await page.getByRole("button", { name: /Звук/ }).first().click();
 
   // The contract is two absences, and an absence passes on a blank page as
-  // happily as on the right one. So the screen is proved open first — the
-  // section's own root, and the group the removed control used to sit beside.
+  // happily as on the right one. So the screen is proved open first — and this
+  // is the third proof this case has had, because the first two were both
+  // things the product was free to move.
   //
-  // That anchor used to be the literal «Громкость», the heading of the box
-  // D-149 emptied. `e9c2790f` then replaced the box with the captioned groups
-  // this reads now, and the case went red while its two real assertions went
-  // on passing — the exact shape D-210 is about. The words come from the
-  // module the surface prints them from, so the anchor follows a rename
-  // instead of going stale behind one; the two absences stay written out,
-  // because they are the strings that must never come back.
+  // **What happened twice.** The anchor was the literal «Громкость», the
+  // heading of the box D-149 emptied; `e9c2790f` replaced that box with
+  // captioned groups and the case went red while its two real assertions went
+  // on passing — D-210's shape. `4fc9b2c5` repaired it by anchoring on
+  // «Усиление микрофона», taken from the module the surface prints it from, on
+  // the reasoning that the anchor would then follow a rename. **It was not a
+  // rename that broke it.** Ten hours later `3e8abfa5` moved that row behind
+  // the «Расширенные настройки голоса» fold, which is conditionally mounted —
+  // so the row left the DOM entirely, `toBeVisible()` could not pass, and
+  // D-149 went unchecked for nineteen and a half hours while five commits
+  // rewrote this very panel.
+  //
+  // **So the anchor stops being a string.** What proves the screen is open is
+  // the panel's root and the *number of groups it drew*: a shape rather than a
+  // word, which a rename cannot move, a fold cannot hide (the fold's own
+  // `AudioGroup` renders whether it is open or not) and a blank page cannot
+  // satisfy.
   const panel = page.getByTestId("audio-settings");
   await expect(panel).toBeVisible();
-  const levelGroup = panel.locator(`[data-audio-group="${AUDIO_GROUP_LEVEL}"]`);
-  await expect(levelGroup).toBeVisible();
-  await expect(panel.getByText(AUDIO_GAIN_LABEL, { exact: true })).toBeVisible();
+  const groups = panel.locator("[data-audio-group]");
+  await expect(
+    groups,
+    "the sound settings drew no groups at all, so the absences below would be vacuous",
+  ).not.toHaveCount(0);
+  const groupCount = await groups.count();
+
+  // **And the fold is opened before the absences are read, which is the half
+  // that is about the contract rather than about the anchor.** Until now these
+  // two lines only ever saw the part of the screen that happened to be
+  // mounted, so a «Голосовые сообщения» slider put back behind any disclosure
+  // would have satisfied them — the defect returning in the one place the
+  // guard cannot see. Opening every `aria-expanded="false"` in the panel, in a
+  // loop, means a disclosure added later is opened by this code without anybody
+  // remembering to come back, which is the only form of «impossible a third
+  // time» that does not depend on the next person reading this comment.
+  for (let guard = 0; guard < 8; guard += 1) {
+    const closed = panel.locator("[aria-expanded='false']");
+    const before = await closed.count();
+    if (before === 0) break;
+    // Brought into view before it is pressed, and this is not tidiness. The
+    // panel scrolls inside an overlay whose dim closes it, so a control that
+    // moves between the actionability check and the press hands the click to
+    // the backdrop — seen once here: the settings were gone from the page and
+    // the failure landed four lines later, looking like a missing label.
+    await closed.first().scrollIntoViewIfNeeded();
+    // The count, not the element: `closed.first()` re-resolves to a different
+    // control the moment one of them opens, so asserting on it would ask the
+    // next closed disclosure whether the previous one opened.
+    await closed.first().click();
+    await expect(closed).toHaveCount(before - 1);
+  }
+
+  // **The screen is still the screen.** `toHaveCount(0)` below is satisfied by
+  // a panel that has ceased to exist, which is the same vacuous shape this
+  // whole case is about — so the panel and its group count are re-read first.
+  // Written after the loop rather than before it because what it guards
+  // against is the loop itself.
+  await expect(panel, "the sound settings closed while their folds were opened").toBeVisible();
+  await expect(groups, "the panel lost sections while its folds were opened").toHaveCount(groupCount);
+  await expect(
+    panel.locator("[aria-expanded='false']"),
+    "a disclosure in the sound settings would not open, so part of the screen was never read",
+  ).toHaveCount(0);
 
   await expect(page.getByText("Голосовые сообщения", { exact: true })).toHaveCount(0);
   await expect(page.getByText("применяется только в LETSCUBE")).toHaveCount(0);
 
   // The section has to be on screen for the evidence to show anything: the
   // disclosure opens below the fold of a settings column.
-  await levelGroup.scrollIntoViewIfNeeded();
+  await panel.locator(`[data-audio-group="${AUDIO_GROUP_LEVEL}"]`).scrollIntoViewIfNeeded();
   await expect(panel.getByText(AUDIO_INPUT_LABEL, { exact: true }).first()).toBeVisible();
   await page.screenshot({ path: shotPath(info, "sound-settings-light") });
   await stampTheme(page, "dark");

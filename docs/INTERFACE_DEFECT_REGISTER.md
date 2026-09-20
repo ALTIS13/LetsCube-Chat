@@ -22219,3 +22219,189 @@ their own profile through filters this route still does not model and silently
 emptying those would be a worse lie than the one being fixed.
 
 ---
+
+## D-286 `[x]` The pages that are not the messenger: one is cut in half on a phone, one has no measure at all
+
+Tracker item 39, and the owner's own words for the job: «такой же подход как к
+настройкам по возможности к остальным местам примени, страница ботов, админка
+и т.д», with the condition that is the acceptance test — «обязательно проверь
+что все функции корректно помещаются и отображаются удобно для пользователя на
+маленьком и большом разрешении».
+
+### The first finding is that D-285's defect is not there
+
+«Мои боты», `/admin` and «Задачи» are **full routes at `100vw`**. None of them
+is anybody's column and none inherits a width decided for something else, so
+the mechanism D-285 fixed — the settings and the chat list being one number —
+cannot reach them. Item 39 asked for this to be established before the
+treatment was assumed, and this is that check.
+
+What the audit found instead is the same harm arriving from the other two
+directions. Measured on `botSettingsFixture` and `adminFixture`, both themes,
+at 360, 390, 1440 and 1920:
+
+| surface | viewport | what | number |
+| --- | --- | --- | --- |
+| «Мои боты» title | 390 | its own name | a **6px** box, 63px of «Мои боты» hidden — **91%** |
+| «Мои боты» subtitle | 390 | «1 из 3» | a 6px box, 29px of 35 hidden |
+| «Мои боты» page | 360 | the row | **8px past** the right edge, clipped inside `bots-page` |
+| bot settings «Название» | 1440 | a text field | **980px** holding 48px of content |
+| bot settings «Название» | 1920 | the same field | **1460px** holding the same 48px |
+| administration tab strip | 390 | the marked tab | «Поддержка» **679px past** the strip's right edge with `scrollLeft` 0; «Роли и права» 206px past |
+| administration tab strip | 360 | the same | 709px and 236px |
+
+**«Задачи» is fine and is left alone.** No finding at any of the four widths
+beyond a 22px ellipsis on its subtitle at 360, which is an honest truncation.
+The administration's own content is already `max-w-5xl` and centred — 1024 at
+1440 and at 1920 — so its wide end is not this defect's to touch either.
+Recording what was measured and *not* changed is half of the acceptance test.
+
+### The mechanisms, one line each
+
+- **The title.** `KubHeader` gives the title `flex-1 min-w-0` and the trailing
+  group `flex-shrink-0`, so the title is the only box in the row that can
+  give, and a «Документация» link beside a «Создать бота» button took all of
+  it. Both labels now come off below `sm` and stay as `aria-label`, so every
+  accessible name — and every spec that asks for one — is unchanged.
+- **The measure.** The bot settings pane had none. It has Discord's own 696
+  (`.panel__6131a`, build 615980), **not** the settings' 560: that number
+  exists because the settings row strands a value from its label past 591, and
+  the audit's stranding probe found no such row in this pane at all.
+- **The strip.** It scrolls and nothing ever scrolled it. The marked tab is
+  brought into the strip's own view with `scrollLeft` arithmetic rather than
+  `scrollIntoView`, which walks every scrollable ancestor and would take the
+  page with it.
+
+### The cap goes on the padded box, and that is the load-bearing detail
+
+`bot-settings-container-queries.spec.ts` is D-222's tier 2 and asserts
+container widths as literals — 652 at a 700pt window, 368 at 768, 652 again at
+1052. Capping the **content** at 696 would have made the 700pt window's
+section 648 and turned that instrument red for no reader's reason. Capping the
+**padded** box at `696 + 2 × 24 = 744` binds only above a 1096pt window, so all
+three literals and every phone project are untouched to the pixel. The
+arithmetic is in `lib/surfaceMeasure.ts`, pinned by
+`tests/unit/surface-measure.test.mts`.
+
+### A constant was written, mutated, found unreachable and deleted
+
+`HEADER_TITLE_FLOOR = 96` held a floor under the title in `KubHeader`.
+**Mutating it to 0 left the suite green**: once the page stopped asking its
+header to carry two labelled controls on a phone, the title had 168px of a
+360pt row and the floor could not bind at any width the product ships. It is
+gone. What holds the rule now is a contract rather than a number — no control
+of a page header may be drawn outside it, asserted on both pages that use
+`KubHeader`.
+
+### The first contract measured the wrong box, and the mutation said so
+
+The overflow assertion read `documentElement.scrollWidth`. `bots-page` is
+`overflow-hidden`, so a header that does not fit is clipped inside the page and
+the document reports nothing: with both labels put back, «Создать бота» is
+drawn where nobody can press it and that check stayed **green** through all of
+it. It is now `bot-settings-container-queries.spec.ts`'s own instrument —
+measure the control against the box that is supposed to contain it. The audit
+had seen the truth all along (`clipped 8px` on `bots-page` at 360); the
+contract had asked the wrong element about it.
+
+### Fixed 2026-09-21
+
+`lib/surfaceMeasure.ts` holds the numbers and the argument and imports nothing.
+Four mutations, all red:
+
+| mutation | what goes red |
+| --- | --- |
+| the phone gets both header labels back | `page-surface-fit` at 360 — a control outside the header |
+| the cap removed from the bot settings column | `page-surface-fit` at 1440 |
+| `SURFACE_FORM_MEASURE` 696 → 900 | `page-surface-fit` at 1440 |
+| the strip's scroll-into-view removed | `page-surface-fit` at 390 |
+
+The 696 is asserted as a **literal** in the spec, not as `SURFACE_FORM_MEASURE`:
+the first version read the constant it was testing, widening it to 900 widened
+the cap with it, and the assertion agreed with itself and passed. D-285 records
+the identical failure on the settings gutter. A contract that reads its own
+subject cannot fail.
+
+Measured after: all three of the pane's left edges — the bot's name, the tab
+strip and the cards — land on **548** at 1440 and **788** at 1920, and the
+column is 696 inside a 744 box at both. `shell-glass`'s row for the tab strip
+moved with the surface it names, and losing the glass there still turns it red.
+
+---
+
+## D-287 `[x]` A guard that stopped guarding, for the second time, and the hole underneath it
+
+`tests/e2e/media-viewer-actions.spec.ts`'s D-149 case was found red on a
+stashed tree, so it is nobody's regression. Its anchor had moved, and the case
+failed before reaching the two assertions it exists for.
+
+### The dates, because the interval is the finding
+
+| event | commit | when |
+| --- | --- | --- |
+| the case is written | `47cd4523` | 2026-09-13 19:43 |
+| «Громкость» removed — the **first** break | `e9c2790f` | 2026-09-14 21:32 |
+| D-210 repairs it, anchoring on «Усиление микрофона» | `4fc9b2c5` | 2026-09-19 19:23 |
+| the gain row moves behind the «Расширенные настройки голоса» fold | `3e8abfa5` | 2026-09-20 05:24 |
+
+The first red lasted **4 days 21 hours**. The repair lasted **10 hours**. The
+second red was **19½ hours** old when it was found.
+
+**What went unguarded.** `AudioSettingsSection.tsx` — the very panel the two
+absences are evaluated against — was rewritten **five times on 2026-09-20**
+while the guard aborted at its anchor: `e2d276c7`, `0075becd`, `5f2e00df`,
+`f86c5be8`, and `779e6081` on the settings screen around it. Separately,
+`7d1513b4` replaced `SettingsPanel.tsx` with `SettingsOverlay.tsx` and updated
+nine e2e specs — **not this one**, whose whole navigation preamble walks that
+path, because it was already red. Read statically, D-149's contract still holds
+and its mechanism (`playbackVolume.ts`, `AudioMessage.tsx`,
+`ChatMediaPlayback.tsx`, `useAudioSettings.ts`) was untouched throughout. The
+exposure was real; the outcome is clean.
+
+### Why the previous repair failed, and what replaced it
+
+D-210's repair reasoned that taking the anchor from the module the surface
+prints it from would make it follow a rename. **It was not a rename.** The row
+moved behind a disclosure that is *conditionally mounted*, so it left the DOM
+entirely and `toBeVisible()` could not pass.
+
+So the anchor stops being a string. What proves the screen is open is the
+panel's root and **the number of groups it drew** — a shape, which a rename
+cannot move, a fold cannot hide, and a blank page cannot satisfy.
+
+### The bigger half: the fold was a hole, not only a nuisance
+
+Until now the two absences only ever saw the part of the screen that happened
+to be mounted, so **a «Голосовые сообщения» slider put back behind any
+disclosure would have satisfied them** — the defect returning in the one place
+the guard cannot look. The case now opens every `aria-expanded="false"` in the
+panel in a loop, so a disclosure added later is opened without anybody
+remembering to come back.
+
+Four mutations, and the third is a measurement rather than a check:
+
+| mutation | result |
+| --- | --- |
+| «Голосовые сообщения» back in plain sight | **red** |
+| the same, behind the fold | **red** |
+| the same, behind the fold, with the fold loop removed | **green** — this is exactly what was unguarded |
+| `data-audio-group` renamed away, so the panel draws no groups | **red** — the proof-of-screen is not vacuous |
+
+**And the loop had a vacuous pass of its own, closed before it shipped.** Its
+«every fold is open» assertion counts closed disclosures inside the panel, and
+a panel that has ceased to exist has none. One run was exactly that: a click
+landed on the overlay's dim — the panel scrolls, and D-285 made the dim a door
+— the settings closed, and the failure surfaced four lines later looking like a
+missing label. The control is now scrolled into view before it is pressed, and
+the panel and its group count are re-read after the loop.
+
+### Also found, not fixed here
+
+`the busiest header the viewer can draw still fits a phone (D-147, D-148)`, in
+the same file, is **red at 360 and green at 390, 1440 and 1920** — the media
+viewer's own title box is **59px** where it requires 80. Proved pre-existing by
+stashing this change and re-running. Filed rather than fixed: it is D-147's
+header, not this defect's, and it was red only because nobody had run that
+project.
+
+---

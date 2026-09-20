@@ -48,6 +48,21 @@ export function KubHeader({
     >
       {leading && <div className="flex-shrink-0 flex items-center gap-2">{leading}</div>}
       {(title || subtitle) && (
+        // `flex-1 min-w-0` beside a `flex-shrink-0` trailing group makes this
+        // the only box in the row that can give — and on «Мои боты» at 390 it
+        // gave 91% of itself: a 6px box with 63px of the title scrolled out of
+        // it, so the page's own name was one vertical stroke of the «М».
+        //
+        // **A `min-width` floor was written here and then removed**, and the
+        // reason is worth more than the floor was. It was mutated to 0 and the
+        // suite stayed green: once the page stopped asking its header to carry
+        // two labelled controls on a phone, the title had 168px of a 360pt row
+        // and the floor never bound. A constant nothing can reach is a tested
+        // opinion, so what holds this now is the contract in
+        // `page-surface-fit.spec.ts` — no control of a page header may be
+        // drawn outside it, and the title's own text may not be cut — which is
+        // asserted on both pages that use this component and goes red when a
+        // surface gives the row more than it can hold.
         <div className="flex-1 min-w-0">
           {title && (
             <div className="text-sm font-semibold text-[color:var(--kub-text)] truncate">

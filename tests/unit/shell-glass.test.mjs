@@ -61,7 +61,15 @@ const panels = [
   // The bot settings surfaces. The pane holding them is ground, so these are
   // the panels of that page the way the cards are the panels of settings.
   ["components/bots/BotSettingsPanel.tsx", "px-4 py-4 sm:px-6", "kub-glass"],
-  ["components/bots/BotSettingsPanel.tsx", "grid h-auto w-full", "kub-glass"],
+  // The tab strip's landmark moved from `grid h-auto w-full` — the
+  // `TabsList` itself — to the sheet around it, and the reason is item 39.
+  // The strip's sheet and its rule run the width of the pane; the tabs run
+  // the 696pt column they navigate, so the two are now two elements and only
+  // the outer one is the material. The row still points at a real surface and
+  // still goes red if that surface loses its glass; what it no longer does is
+  // insist that the box wearing the material and the box laying out the tabs
+  // be the same box.
+  ["components/bots/BotSettingsPanel.tsx", "border-[color:var(--kub-border-color)] p-2", "kub-glass"],
   ["components/bots/BotSettingsPanel.tsx", "rounded-md border border-[color:var(--kub-border-color)] p-4", "kub-glass"],
 ];
 

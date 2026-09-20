@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Link, useLocation, Route, Switch, Redirect } from "wouter";
 import { useCanReadModerationQueue, usePermissionAccess, useRoleAccess } from "@/hooks/useRole";
 import { useAppStore } from "@/store/app.store";
@@ -55,6 +56,7 @@ const TABS: ReadonlyArray<TabDef> = [
 
 export function AdminLayout() {
   const [location] = useLocation();
+  const tabStrip = useRef<HTMLDivElement | null>(null);
   const currentUser = useAppStore((s) => s.currentUser);
   const { isStaff, isAdmin, checking } = useRoleAccess();
   const moderationQueue = useCanReadModerationQueue();
@@ -62,6 +64,32 @@ export function AdminLayout() {
   const supportAccess = usePermissionAccess(["support.view"]);
   const canViewSupport = supportAccess.hasPermission("support.view");
   const accessChecking = checking || supportAccess.checking || moderationQueue.checking;
+
+  /**
+   * Bring the section being read into the strip's own view, and nothing else's.
+   *
+   * Scoped to the strip: `element.scrollIntoView()` walks every scrollable
+   * ancestor, so on a screen where the content is also scrolled it would move
+   * the page under the reader's hands to answer a question about a tab bar.
+   * The arithmetic is the whole fix — `nearest` in both directions, expressed
+   * as the two edges rather than as a call, so a tab just over the right edge
+   * and one 679px past it take the same path.
+   */
+  useEffect(() => {
+    const strip = tabStrip.current;
+    if (!strip) return;
+    const marked = strip.querySelector<HTMLElement>("[aria-current='page']");
+    if (!marked) return;
+    const stripBox = strip.getBoundingClientRect();
+    const markedBox = marked.getBoundingClientRect();
+    // 8px of the neighbour left showing, so the strip says it continues.
+    const margin = 8;
+    if (markedBox.right > stripBox.right) {
+      strip.scrollLeft += markedBox.right - stripBox.right + margin;
+    } else if (markedBox.left < stripBox.left) {
+      strip.scrollLeft -= stripBox.left - markedBox.left + margin;
+    }
+  }, [location, accessChecking, isStaff, isAdmin, canReadReports, canViewSupport]);
 
   if (!currentUser) {
     return (
@@ -136,13 +164,24 @@ export function AdminLayout() {
           </div>
         </div>
 
-        <div className="flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 overflow-x-auto no-scrollbar">
+        {/* The strip scrolls, and until item 39 nothing ever scrolled it.
+            Measured at 390 on the fixture: on `/admin/support` the marked tab
+            sat **679px past the right edge** of a 390px strip with
+            `scrollLeft` at 0, and on `/admin/roles` 206px past it — so on a
+            phone the administration's only navigation showed four sections
+            the reader was not in and never the one they were. A support
+            operator, whose one tab is the last of ten, could not see it at
+            all. `useEffect` rather than `scrollIntoView` on the element: that
+            call walks every scrollable ancestor and would take the page with
+            it, which is how a fix for this becomes a jump. */}
+        <div ref={tabStrip} data-testid="admin-tabs" className="flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 overflow-x-auto no-scrollbar">
           {visibleTabs.map((t) => {
             const active = location === t.path || location.startsWith(`${t.path}?`);
             return (
               <Link
                 key={t.id}
                 href={t.path}
+                aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 h-11 text-[12px] sm:text-xs font-semibold uppercase tracking-wide transition-colors whitespace-nowrap relative",
                   active ? "text-[color:var(--kub-accent-text)]" : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"

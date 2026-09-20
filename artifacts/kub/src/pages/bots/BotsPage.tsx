@@ -68,16 +68,24 @@ export function BotsPage() {
             {/* The Bot API documentation has existed at /bots/docs all along and
                 nothing linked to it, so it could only be found by knowing the
                 address. */}
+            {/* Both words come off the row below `sm`, and the reason is the
+                one measured on this header: the trailing group and the title
+                were competing for a 390pt row, the title is the only box that
+                can give, and it was giving all of it. The names stay as
+                `aria-label`, so the accessible name — which is what a reader
+                on a screen reader hears and what every spec here asks for — is
+                unchanged; what goes is 113px of drawn text on a phone. */}
             <a
               href="/bots/docs"
               target="_blank"
               rel="noreferrer"
-              className="kub-button kub-interactive inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
+              aria-label="Документация"
+              className="kub-button kub-interactive inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
             >
               <KubIcon name="help" size={15} />
-              Документация
+              <span className="hidden sm:inline">Документация</span>
             </a>
-            <KubButton variant="primary" size="sm" className="min-h-11" disabled={!eligibility?.can_create} onClick={() => setCreateOpen(true)} leftIcon={<KubIcon name="bot" size={17} />}>Создать бота</KubButton>
+            <KubButton variant="primary" size="sm" className="min-h-11 min-w-11" aria-label="Создать бота" disabled={!eligibility?.can_create} onClick={() => setCreateOpen(true)} leftIcon={<KubIcon name="bot" size={17} />}><span className="hidden sm:inline">Создать бота</span></KubButton>
           </div>
         }
       />
