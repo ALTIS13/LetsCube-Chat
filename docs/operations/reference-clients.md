@@ -357,6 +357,77 @@ vary it», not as «Discord's maximum».**
 
 ---
 
+### The settings surface, read for D-285 — 2026-09-20, SHIPPED
+
+Read off the same build, 615980, and worth recording separately because **every
+class name our earlier notes would have searched for is gone from it.**
+`standardSidebarView`, `sidebarRegion`, `contentTransitionWrap`,
+`settingsCloseButton`: zero occurrences across 584 CSS files and 1,415 JS
+chunks. `contentRegion`/`contentColumn` survive only in a dead composed string
+in module `192173` that nothing imports. Discord rebuilt its settings; what
+follows is the current shell, from `openUserSettings` (module `766075`) down.
+
+The settings are **`openModalLazy`, not a layer push** — that is the first
+correction, and it is the one that makes the rest follow.
+
+| | Discord renderer (web = desktop), build 615980 |
+| --- | --- |
+| Shell | an **inset sheet**, never `inset: 0`. `.modal_e44912` is `width/height: calc(100% - var(--custom-viewport-padding) * 2)` with `max-width: 1400px` |
+| Inset | `--space-40` = **40px** at and below a 1600px window; `calc(--space-40 + --custom-app-top-bar-height)` = **72px** above it |
+| Corner, border | `--radius-md` = 12px, `1px solid var(--border-subtle)`, `box-shadow: var(--shadow-high)` |
+| Sidebar | **`flex: 0 0 240px`**, `border-inline-end: 1px solid var(--border-muted)`; `<nav aria-label="Settings pages">` |
+| Content pane | `flex: 1 1 auto`, `overflow: hidden`, with its own **48px** header |
+| Content column | `.panel__6131a { max-width: 696px; min-width: 300px; margin-inline: auto; padding: 0 16px; margin-block: 64px }` — 80px below 1080 |
+| ✕ | a real `<button>`, `aria-label="Close"`, last flex child of the **content pane's** 48px header, 8px from its right edge. **No visible ESC hint** — the legacy close button that carries one still ships, but not in settings |
+| The dim | a real scrim element, `role="none"`, black at **72.16%** in dark and **52.16%** in light, and **no `backdrop-filter`**: the blur class exists but settings does not request it |
+| Animation | opacity 0→1 and `scale(0.9)`→`scale(1)`, react-spring `{mass:1, tension:1000, friction:48}` with a 64ms delay; 300ms mount window; scale pinned to 1 under reduced motion |
+
+**Does a click on the dim close it? Yes, and the owner was right to say so.**
+This was the question the work turned on, so here is the chain rather than the
+conclusion. The scrim carries an `onClick` that dispatches `MODAL_CLOSE`; the
+top modal subscribes and calls `onCloseRequest` unless `dismissable === false`.
+Settings never passes `dismissable`, so it is `undefined`, and it does pass
+`onCloseRequest`. The click reaches the scrim rather than the wrapper above it
+because `.layerContainer__59d0d` is `pointer-events: none` and only the scrim
+and the sheet re-assert `auto`. Escape takes the identical path.
+
+**And the two limits on that claim, because they decide whether he can
+demonstrate it.** Below a 1080px window the sheet goes **full-bleed** —
+`width: 100%; height: 100%; border: none; border-radius: 0` — so there is no
+gutter left and only ✕ and Escape work. Above it the clickable band is 40px a
+side, widening to `(viewport − 1400) / 2` once the cap binds.
+
+### Discord does not solve narrow-desktop settings, and that is the finding
+
+**There is no breakpoint anywhere that puts its settings into one column by
+width.** The complete list of responsive rules on that shell is four: 1600px
+drops the inset from 72 to 40, 1080px goes full-bleed *while staying two
+columns*, 1080px grows the content column's block margin, and a `max-height:
+550px` rule. Nothing else.
+
+The one-column mode exists, and it is gated on **the user agent, not the
+viewport**: `.mobile__409aa` is applied from `ua-parser-js` `os.family` ∈
+{Android, iOS, Windows Phone} and not a tablet — the same predicate that sets
+`body.is-mobile`. So a desktop browser dragged to 320px keeps a 240px sidebar
+beside a column with `min-width: 300px` and simply **clips**, because
+`.content_e9e3ed` is `overflow: hidden`. Discord solves phones, by UA, and
+leaves narrow desktop windows broken.
+
+This matters to us twice. We have no UA gate to lean on — a Tauri window and a
+browser tab are the same renderer at the same width — and we ship a 768px
+switch to a sheet that Discord has no equivalent of. **So where we differ from
+Discord here we are differing from something it did not solve**, not from a
+decision it made. D-285 folds the rail into the content below an 860px panel
+and keeps the dim clickable down to the 768 switch; both are places Discord
+clips or goes full-bleed.
+
+What could not be established: the original source filenames (`.css.map` and
+`.js.map` are not served — they return the SPA shell), the computed pixel
+values (nothing was run, only read), and whether an experiment swaps module
+`382567` wholesale.
+
+---
+
 ## 6. Subject 3 — Call controls while in a voice call
 
 Because of section 1, «reachable from where» is the same on Discord web and

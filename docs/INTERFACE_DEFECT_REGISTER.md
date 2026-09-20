@@ -21786,6 +21786,189 @@ restoration exists and has been proved.
 
 ---
 
+## D-285 `[x]` Settings are as wide as the chat list, so narrowing the list cripples them
+
+**Numbered 285 rather than 284 on purpose.** Two other agents were working in
+this worktree on 2026-09-20; D-283 was taken while this was being measured and
+D-284 is left for the voice work in flight. A gap is cheaper than a collision.
+
+**Reported by the owner, 2026-09-20:** «Сейчас у нас настройки открываются по
+сути там где отображаются чаты, если это меню сделано узким пользователем то
+функции отображаются криво, лучше поменять подобный подход на то что делает
+discord. Закрыть настройки в дискорде я могу просто кликнув по крестику справа
+сверху, либо по затемнению в любом месте сбоку от окна настроек.» With eight
+screenshots of Discord's settings.
+
+### «Криво», measured rather than accepted
+
+The screen was the list column's body since D-160, the list is dragged by hand,
+and `CHAT_LIST_MIN_WIDTH` floors it at 260. Measured on
+`settingsColumnFixture` at 1440, dark and light, with «Максим Орлов» in the
+name field:
+
+| chat list | settings surface | share of 1440 | «Имя» input | of the name hidden |
+| --- | --- | --- | --- | --- |
+| **260** (the floor) | 260 | 18.1% | **66px** | **58px** |
+| 300 | 300 | 20.8% | 106px | 18px |
+| 360 (the default) | 360 | 25.0% | 166px | 0 |
+| 440 | 440 | 30.6% | 246px | 0 |
+| 540 (the ceiling) | 540 | 37.5% | 346px | 0 |
+
+**The defect is not the wrapping the word «криво» suggests.** D-222's container
+queries did their job: there is **zero** horizontal overflow at any width, and
+nothing is clipped out of its box. What is wrong is cheaper to state and worse
+to live with — at the floor **a person cannot read their own name back**, 58px
+of it is scrolled out of a 66px input, and «Никнейм» loses 7px. Below that,
+«Заблокировано в настройках браузера» runs two lines in a 134px ribbon and
+«Системный микрофон · Чистый голос» runs three. Frames:
+`output/d285/col-{260,300,360,540}-{dark,light}-chromium-desktop-1440.png`.
+
+The mechanism is one sentence: **how much room a person's conversations get and
+how wide their settings are were the same number.** They are two decisions.
+
+### Why D-160's conclusion is reversed and its complaint is not
+
+D-160 took this screen out of an 896px centred dialog for three measured
+reasons, all of them correct: a constant that was 62.2% of a 1440 screen and
+46.7% of a 1920 one, rows 822px wide that stranded «Виден» 570px from «Статус
+«в сети»», and 248px below the fold. **None of that is being re-introduced, and
+each is answered on its own number** rather than waved past:
+
+| D-160's complaint | then | now |
+| --- | --- | --- |
+| a constant that ignores the window | 896 everywhere | `min(1100, viewport − 80)` — 1100 at 1440, 944 at 1024, 688 at the 768 switch |
+| dead margin each side | 272 at 1440, 512 at 1920 | **170** and **410** — and it is the dismissal the owner asked for, so it is a control, not waste |
+| a value stranded from its label | 570px | the content keeps a **560px measure** whatever the panel does |
+| below the fold at 1440 | 248px | four sections one click apart on a rail |
+
+**The 560 is not a taste.** The label-to-value gap is `rowWidth − 231`, measured
+across every row of the screen at five widths with `settings-column.spec.ts`'s
+own `rowGaps`; its «< 360» puts the ceiling at 591. 560 takes it with 31px of
+headroom and leaves 358px for the «Имя» input — more than the 346 the 540
+column gave, which is the width the whole name was legible at. **Mutating
+`SETTINGS_CONTENT_MEASURE` to 900 reproduces D-160 exactly**, and the test says
+so in its own words: «Оформление» is 508px from its value on a 778px row.
+
+One part of D-160's complaint is **not** answered and is recorded here rather
+than glossed: it objected to «blurring an application nobody had asked to
+leave», and the overlay still carries `KubModal`'s `backdrop-blur-sm`. Discord
+does not blur — its scrim is flat black at 72.16% in dark and 52.16% in light,
+and the blur class exists but settings does not request it (see
+`reference-clients.md`). Changing it means changing the shared
+`.kub-modal-overlay` for every dialog in the product, which is not this
+defect's to do. The argument that it is now acceptable is that the person has
+asked to leave: they opened a surface that takes 1100 of 1440 points.
+
+### What Discord actually does, and the two places ours deliberately differs
+
+Read off the shipped bundle, build 615980, rather than from the screenshots;
+the whole measurement is in `docs/operations/reference-clients.md`. Adopted
+unchanged: the **inset sheet** rather than a full-window layer, the **40px**
+inset, the **240px** sidebar, the content column **centred with side padding**,
+and the ✕ at the top right. Two differences, each with its reason:
+
+- **the measure is 560 where Discord's is 696.** Their row does not put a label
+  at one end of a line and its value at the other; ours does, and 591 is where
+  that starts costing. Copying 696 would strand a value by 465px;
+- **the rail folds into the content below an 860px panel, and the dim stays
+  clickable down to the 768 switch.** Discord does neither: below a 1080px
+  window it goes full-bleed — losing the very dismissal the owner is asking
+  for — and at narrow desktop widths it simply **clips**, because its
+  one-column mode is gated on the **user agent**, not the viewport. We have no
+  UA gate to lean on and would not want one. This is bettering the reference
+  where the reference did not solve the problem, not differing from a decision
+  it made.
+
+### Fixed 2026-09-20
+
+`lib/settingsSurface.ts` holds every number and the argument above, imports
+nothing, and is reached directly by `tests/unit/settings-surface.test.mts`.
+`components/settings/SettingsOverlay.tsx` is the surface;
+`components/settings/SettingsPanel.tsx` is gone. `KubModal` gained four
+optional props — `style`, `panelRef`, `testId`, `closeTestId` — and nothing
+else, so the ✕, Escape, the backdrop, the modal stack (D-181, and the
+2026-09-15 top-layer rule) and the D-179 portal are the shipped code rather
+than a second copy of it.
+
+**D-136 is preserved and widened.** Every door still goes through one
+`requestClose` on the screen. The desktop form had two doors and now has
+**four** — the ✕, Escape in the search field, **a click on the dim**, and
+Escape anywhere — and `settings-exit-confirmations.spec.ts` walks all four in
+turn, answering «Продолжить», requiring the typed name to still be in hand for
+the next one. Routing `leave` to `closeSettings` instead of `requestClose`
+turns that spec red.
+
+**Three existing contracts changed rather than bent, and all three are named.**
+`settings-column.spec.ts`'s first fact — «the column's body, covering and
+blurring nothing» — is the one D-285 reverses, and it is replaced by its
+opposite with the reason in the file; its other three facts survive verbatim on
+the new surface, including the gap rule, which is the one that had to be bought
+*without* breaking. `desktop-shell.spec.ts` asserted `sidebar-settings` and no
+dialog at desktop width; it now asserts the overlay. And
+`settings-container-queries.spec.ts` plus `session-devices.spec.ts` drove
+D-222's cards by dragging the column: they drive `--kub-settings-measure`
+instead, through a new `setSettingsMeasure` in the fixture. **That is the same
+instrument, not a weaker one** — the point of those pairs is two container
+widths at *one* viewport, which a `@media` query cannot answer, and writing the
+variable keeps that exactly. Put `sm:` back on any of those lines and the
+narrow half still goes red.
+
+**Six mutations, all red:**
+
+| mutation | what goes red |
+| --- | --- |
+| panel width re-bound to `--kub-chat-list-width` | `settings-overlay-geometry` |
+| `SETTINGS_CONTENT_MEASURE` 560 → 900 | `settings-column` **and** `settings-overlay-geometry`, with D-160's own stranding in the message |
+| the measure cap removed entirely | the same two |
+| `SETTINGS_OVERLAY_GUTTER_X` → 0 | `settings-surface` unit |
+| `leave` routed to `closeSettings` | `settings-exit-confirmations` |
+| the `!isPhone` gate dropped | `settings-column` at 390 |
+
+**Two pure functions were written, tested and then deleted**, and the reason
+is the rule about declarations: `settingsSurfaceKind()` and
+`settingsContentWidth()` had unit tests and **nothing that renders ever called
+either**. The switch between the two forms is `useIsMobile()`, which is
+reactive where a constant is not, and the content's cap is applied in CSS and
+measured off the rendered box. A tested function nothing reaches is a tested
+opinion.
+
+**The gutter mutation was green on the first pass, and that is worth keeping.**
+Both assertions were written against `SETTINGS_OVERLAY_GUTTER_X` itself, so
+setting it to 0 turned them into «at least −1 pixels», which every panel
+satisfies. A contract that reads its own subject cannot fail. Both are literals
+now — 24 points a side — and the unit test is where it bites, because at 1440
+the 1100 cap hides a gutter of 0 entirely.
+
+### Two method findings, both of which cost time
+
+**A panel that animates in must not be measured while it is doing it.** The
+first geometry run reported the panel 1234px wide against a layout that said
+1240 — six pixels short, which reads exactly like a wrong constant.
+`kub-modal-panel-in` opens from `scale(0.99)`. The fix is to wait on the
+panel's own `getAnimations()`, scoped to the panel and never
+`document.getAnimations()`, which a spinner would hold open for ever. This is
+interface-material rule 14 arriving from the measuring side.
+
+**The phone sheet's frame is not byte-reproducible, so md5 is not a valid
+instrument for it.** Checking that the phone was untouched, the dark frame
+differed from the pre-change capture by a uniform 1/255 across every pixel —
+max 118 on glyph edges, mean 1.2. It was not the change: with the full change
+in place, one capture was byte-identical in dark, another byte-identical in
+light, and **three consecutive runs of the same code with nothing edited
+between them alternated by exactly that amount**. The surface is translucent and
+its compositing is not deterministic run to run. D-160 recorded «the phone
+frames are md5-identical before and after in both themes, checked rather than
+claimed»; on this surface that check can pass or fail by luck. Compare with a
+tolerance, or compare layout rather than pixels.
+
+**Frames:** `output/d285/overlay-{dark,light}-chromium-desktop-1440.png`,
+`overlay-app-*`, `narrow-{1024,900,820,768}-*` and the before set
+`col-{260,300,360,540}-*`. The phone sheet is unchanged in code path — below
+`md` only `SettingsModal` mounts, and the four new `KubModal` props are all
+`undefined` there.
+
+---
+
 ## D-283 `[x]` «Открыть профиль» opened the conversation, and told her you had read her message
 
 **Reported by the owner, 2026-09-20:** «У нас пропала возможность открыть
