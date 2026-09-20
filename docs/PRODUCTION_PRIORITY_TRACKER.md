@@ -1921,6 +1921,76 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     Still unestablished and worth one more pass before building: how Discord's
     DM list marks a bot, if it does.
 
+
+48. `[ ]` A bot should offer an interface, not demand a command. The owner's
+    direction of 2026-09-21, and it is a criticism of the reference rather than
+    a request to copy it:
+
+    > «У большей части ботов дискорда есть недостаток: чтобы использовать их
+    > функционал, надо вызывать конкретную команду через / с прикреплением
+    > ссылки… это неудобно. Лучше когда имеется мини-интерфейс, в котором есть
+    > поле для вставки ссылки и нужные кнопки управления + прогресса музыки…
+    > Боты должны быть более функциональны и гибки в плане визуала.»
+
+    **The flaw he names is real and worth stating precisely**, because it is
+    the thing to design against: a slash command with arguments makes the
+    person compose the call. They must know the verb, know the order, and hold
+    the link while they type. An interface inverts that — it shows what it
+    wants and takes it.
+
+    He also names the two models an interface can have, and they are the two
+    both reference clients actually implement:
+
+    1. **Shared** — everyone who can see the chat sees the interface and can
+       use it. Right for a thing the room is doing together: a queue, a poll,
+       a track everybody is listening to.
+    2. **Private and temporary** — «создавать временный интерфейс для
+       конкретного пользователя, который не видят другие, и управлять из него,
+       а потом удалить если не нужен». Right for a thing one person is doing
+       in a shared room.
+
+    **Two of the four capabilities this needs already exist**, measured
+    2026-09-21 before this was filed:
+
+    | | state |
+    | --- | --- |
+    | buttons under a message (`{text, callback_data}`, `{text, url}`) | **exists** — `BotInlineKeyboard`, with a press path and an answer that can alert or toast |
+    | a bot editing a message it already sent | **exists** — `editMessageText`, so a progress bar is already possible |
+    | **a text input inside the interface** | **missing** — buttons only |
+    | **a message visible to one person in a shared chat** | **missing entirely** |
+
+    So the direction is nearer than it looks, and the two gaps are of very
+    different sizes.
+
+    **The input field** is the smaller one and is what his own example turns
+    on: a place to paste the link, so the link stops being an argument to a
+    command. Both references have a form of it — Telegram through a Web App or
+    a forced reply, Discord through a modal — and they differ enough that the
+    choice needs the measurement §7 asks for.
+
+    **Per-viewer visibility is the hard one and should be recognised as a data
+    question before it is a feature.** A message here is a row in a chat, read
+    by its members through RLS; «visible to one member» is a new axis on that,
+    and every surface that counts, searches, notifies, exports or syncs
+    messages would meet it. Discord's answer is an *ephemeral* response that
+    the server never persists for anybody else — which is a different thing
+    from a row with a narrower policy, and is probably the cheaper shape for us
+    too. Establish that before designing, and note that item 43's Web App
+    surface and this share the question.
+
+    **Constraints he set.** «Существующие опции не ломай, но можешь улучшить
+    если реально будет работать лучше» — so the inline keyboard and the
+    callback path stay and may be extended, not replaced. And there is a live
+    subject to judge against rather than a hypothetical: **Langame**, the
+    working bot already in test, whose «ответы бота и т.п.» he wants brought
+    into a more convenient form. Read what it actually sends today before
+    designing what it could send.
+
+    Sequenced after D-263, whose three complaints are the floor this builds
+    on: a command that does nothing, a `/cmd` silently dropped in a group, and
+    a bot with no profile card. An interface on top of a command path that
+    does not work would be a second thing that does not work.
+
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
 `main` `17a1c47` to `245e4d9`, 32 commits, on the owner's standing permission to deploy without him.
