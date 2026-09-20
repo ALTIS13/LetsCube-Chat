@@ -947,28 +947,51 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     crown on its creator. Its own message history and media. Removed as
     quickly as it is made.
 
-    **The hard part, which the seamlessness hides.** The call is already
-    running in the private chat's own voice channel, capped at two *by
-    definition* (item 44). Promoting means a different chat with a different
-    voice channel — so either the live call migrates, or the two people are
-    momentarily dropped and rejoined. **A promotion that interrupts the
-    conversation it grew out of is not seamless and would be the defect that
-    kills the feature.** Establish what Discord actually does here before
-    designing it; this is the measurement this entry owes.
+    **What actually happens, from the owner rather than from my guess.** This
+    entry first said the live call must either migrate or be interrupted, and
+    that an interruption «would kill the feature». That was wrong, and it is
+    worth recording as wrong because the fear was doing design work:
 
-    Two things still to settle:
+    > «создаётся эта самая группа и в неё по сути созваниваются заново люди
+    > которые были в изначальном войс чате в лс + происходит дозвон до добавленного
+    > человека, у него эта группа появляется в списке чатов, явно визуально показывается
+    > как новая и как та в которой ему идёт звонок в данный момент»
 
-    - **Deletion.** «владелец может снести по надобности» and the crown says who
-      that is — but «snести» for everyone is exactly what migration
-      `20260911120000` had to stop a private chat's owner doing, since whoever
-      opens one becomes its owner. Here the creator is explicit and marked, so
-      the answer may legitimately differ; it has to be **stated**, with «delete
-      for all» and «leave» distinguished, not inherited from
-      `Chat owners delete chat`.
-    - **What it does not get.** The point is that it is lighter, so the list of
-      what it **lacks** — channels, roles, folders, invites, categories — is
-      the specification. Writing it down is what stops it drifting into a
-      group.
+    **So it is a rejoin, and the rejoin is fine.** No session migrates. The
+    group is made, the two who were already talking are reconnected into its
+    channel automatically, and the added person is **rung**. The seamlessness
+    is perceptual — it is fast and nobody presses anything — not a continuous
+    transport. That is a far cheaper build than a migrating session, and it
+    means the two-person cap on the private channel is never in the way.
+
+    **The dependency this creates, and it is hard rather than the call was.**
+    «дозвон до добавленного человека» is **ringing**, and this product has
+    none: item 32 records that one-to-one calls do not exist precisely because
+    nothing tells another person that somebody is calling, in the three states
+    they can be in — application in front, background tab, closed. The
+    micro-group needs that same mechanism, so **item 32's ring is a
+    prerequisite for item 45**, not a neighbour. Build it once.
+
+    And its own surface requirement, which is a chat-list state we do not have:
+    the group must appear for the invited person marked **both as new and as
+    ringing right now**. Two facts at once, in a row that today carries
+    neither.
+
+    **Ownership is settled and is not the private-chat case.** The owner:
+    «владелец вправе делать что угодно со своей группой, также как создатель
+    сервера… если не передал полномочия». Full rights, delegable, the same
+    model a group's creator already has. The worry this entry carried — that
+    migration `20260911120000` had to stop a private chat's owner deleting it
+    for both sides — **does not transfer**, and the reason is exactly why the
+    crown matters: there, «owner» was an accident of who happened to open the
+    conversation; here it is a deliberate act with a visible mark. Record that
+    distinction in the policy, because the two look identical in the schema and
+    are opposite in intent.
+
+    Still to settle: **what it does not get.** The point is that it is lighter,
+    so the list of what it **lacks** — channels, roles, folders, invites,
+    categories — is the specification, and writing it down is what stops it
+    drifting into a group.
 
     **Production state, read 2026-09-20:** 28 private chats, 15 groups, no
     `channel` rows; a group already carries voice channels, the roles
