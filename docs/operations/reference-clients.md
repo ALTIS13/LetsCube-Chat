@@ -715,12 +715,25 @@ assumption it is easy to make:
    filtered for storage calls; the one hit is an in-memory settings-panel
    snapshot. Reload `/channels/<g>/<c>` and you are in that channel, **at the
    bottom**.
-2. **It does not auto-jump to the first unread.** Having unreads forces a
-   *fetch*, never a jump target. The unread is a **clickable banner** —
+2. **It does not auto-jump to the first unread on a cold boot**, and in fact
+   **no unread-derived jump target exists anywhere in the main bundle.** With no
+   message id, `M` always ends at `fetchMessages({limit, jump:{jumpType:
+   ANIMATED}})`, which `loadComplete` resolves to `jumpTargetId: s?.messageId ??
+   null` — null. `getOldestUnreadMessageId` has exactly **one** read in the
+   whole 12MB bundle, and it is a topic-summary highlight picker, never a
+   position. The unread is a **clickable banner** instead —
    `NewMessagesBarJumpToNewMessages_`, analytics section `NEW_MESSAGES_BANNER`,
    aria-label «Jump to last unread message», beside a «Mark As Read» button and
    a «New Messages» divider. The two genuine auto-jumps are thread-only: the
    first-ever open of a thread, and a thread with tracked unreads.
+
+   **A correction to an earlier sentence in this section, made the same day.**
+   It said «having unreads forces a *fetch*». That is not a general rule: the
+   clause is `(0,u.A)(n) && m.Ay.hasUnread(n) && (S=!0)`, and `u.A` (module
+   `343328`) is `e === getDMFromUserId("1232523165893132288")` — the DM with
+   Discord's own changelog account, and nothing else. Generalising one line of a
+   minified conditional is how a reference acquires a rule its subject does not
+   have.
 3. **Discord web does not persist the last route.** `DefaultRouteStore` (module
    `650048`) persists `lastViewedPath` and handles `SAVE_LAST_ROUTE` — and those
    action names occur **exactly once each in the entire bundle**, in the handler
@@ -737,6 +750,83 @@ assumption it is easy to make:
 
 The per-guild map is why clicking a server icon returns you to the channel you
 last had open **in that server**, across a reload.
+
+### Opening a channel and booting on one are two different events — 2026-09-20
+
+This distinction is recorded separately because getting it wrong is what put a
+false choice in front of the owner. A first read of the bundle established the
+**boot** case and was written up as though it were the whole behaviour; the
+owner, who uses the client daily, described the opposite for the **open** case.
+Both are true. A reference that names only one of two events is a reference that
+will be quoted as a rule.
+
+**Case 1 — cold boot or reload on `/channels/<g>/<c>`. SHIPPED**, build
+`615980`. The list lands **at the bottom**, with the unread banner if there are
+unreads. `M` is reached through `_initialize(){ subscribe("CONNECTION_OPEN", w) }`,
+the per-channel message store is empty or `cached`, so it always fetches, and
+the fetch carries no jump target.
+
+**Case 2 — opening a channel in the running app. OWNER REPORT, mechanism
+UNESTABLISHED.** Asked directly, the owner answered: «Да, верно, возвращает к
+разделителю непрочитанного чтобы можно было прочитать то что упущено с
+последнего посещения чата.» That is what he sees, daily. It is **not** graded
+SHIPPED, because the code that would do it was looked for and not found: both
+paths converge on the same `M` (an in-app open arrives through the action map
+entry `CHANNEL_SELECT: x`), and `M` has no branch that derives a position from
+unread state.
+
+**What the bundle does show for case 2, SHIPPED, and it is a different
+mechanism.** In `M`:
+
+```js
+let p = c.A.getOrCreate(n);
+p.loadingMore || p.ready && !p.cached ? null != a && (S = !0) : …
+```
+
+Re-opening a channel whose in-memory store is already `ready` and not `cached`,
+with no message id, leaves the fetch flag false — so `M` does **nothing**: no
+fetch, no jump, no scroll reset, and `initialScrollSequenceId`, the counter a
+load uses to trigger an initial scroll, is never bumped. A cold boot cannot
+reach that branch. So the asymmetry is real and is enough to produce «the place
+where I stopped» as **position retention** rather than as a jump to the divider.
+
+The two are distinguishable in use, which is how this gets settled without more
+reading: **retention returns you to your spot even with no unreads; a divider
+jump only shows itself when there are unreads.** What would settle the mechanism
+in code is the lazy chat chunk that consumes `initialScrollSequenceId` and
+`jumpTargetId`, which was not fetched. Recorded in section 13.
+
+**No per-channel scroll offset is kept anywhere**, in memory or on disk:
+`savedScroll`, `restoreScroll` and `scrollToMessage` are zero occurrences, and
+the `scrollPosition` / `scrollOffset` / `anchorId` hits are search UI, settings
+panels, and the virtualiser's generic row anchoring. Whatever retention happens
+is the store plus the un-bumped sequence id plus a DOM subtree React did not
+discard.
+
+### Ours lands on the divider in both cases, and that is a better answer
+
+Not a divergence to excuse — an improvement, in the sense CLAUDE.md section 7
+allows, and the reason is a difference in where the fact lives.
+
+**Discord's reading position is a client fact.** Nothing about it is persisted,
+there is no unread-derived jump target in the main bundle, and the retention
+above dies with the page. So a cold boot genuinely cannot put them back where
+they stopped, and landing at the bottom with a banner is the honest answer to
+that constraint.
+
+**Ours is a server fact.** `ChatWindow.tsx:691-697` latches the entry position
+from `chat.unread_count` and `chat_members.last_read_at` — both read from the
+database on every boot — and `MessageList.tsx:453` and `:1295-1300` turn them
+into the first unread message and scroll to it. Verified 2026-09-20 by reading
+those lines, not assumed. Because the position comes back from the server, **a
+reload can land exactly where a click lands**, and the divider, the
+«Новые сообщения» chip (`MessageList.tsx:1976-1991`), the jump-to-bottom control
+with its count (`:957-960`) and the follow-while-at-bottom behaviour (`:1105`)
+are all already in place for both.
+
+The only thing missing was an address to reload *onto*; that is queue item 35's
+first piece. Where Discord has one behaviour on open and another on boot, we
+have one behaviour, and it is the better of their two.
 
 ### The five minutes the owner named: two constants, and which one he meant — 2026-09-20, SHIPPED
 

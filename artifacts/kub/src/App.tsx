@@ -42,6 +42,7 @@ import {
   isPasswordRecoveryUrl,
 } from "@/lib/authRecovery";
 import { isAuthRoute, isPublicRoute } from "@/lib/publicRoutes";
+import { isMessengerRoute } from "@/lib/chatRoute";
 import { decideRootExperience } from "@/lib/publicHomeRouting";
 import { DesktopWindowChrome } from "@/components/layout/DesktopWindowChrome";
 
@@ -473,16 +474,27 @@ function AppRoutes() {
           microphone open with nothing on screen saying so. The rule about
           which locations need this one is `lib/voiceShellBar.ts`. */}
       <VoiceCallShell>
-        <Switch>
-          <Route path="/login" component={LoginForm} />
-          <Route path="/register" component={RegisterForm} />
-          <Route path="/admin/:rest*" component={AdminLayout} />
-          <Route path="/admin" component={AdminLayout} />
-          <Route path="/tasks" component={TasksPage} />
-          <Route path="/bots" component={BotsPage} />
-          <Route path="/" component={MainLayout} />
-          <Route component={NotFound} />
-        </Switch>
+        {/* The messenger is outside the `Switch` on purpose. It answers at two
+            kinds of location — the chat list at `/` and every conversation at
+            `/chat/<id>` — and a `Switch` would hold those in two sibling
+            `Route`s, so moving between them would swap which child is rendered
+            and React would unmount and remount the whole application on every
+            chat opened. `lib/chatRoute.ts` decides what counts as the
+            messenger; a near match is not one and falls through to `NotFound`
+            below, exactly as an unknown path always has. */}
+        {isMessengerRoute(location) ? (
+          <MainLayout />
+        ) : (
+          <Switch>
+            <Route path="/login" component={LoginForm} />
+            <Route path="/register" component={RegisterForm} />
+            <Route path="/admin/:rest*" component={AdminLayout} />
+            <Route path="/admin" component={AdminLayout} />
+            <Route path="/tasks" component={TasksPage} />
+            <Route path="/bots" component={BotsPage} />
+            <Route component={NotFound} />
+          </Switch>
+        )}
       </VoiceCallShell>
     </>
   );

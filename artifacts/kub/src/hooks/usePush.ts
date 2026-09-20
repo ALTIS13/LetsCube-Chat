@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { mapPgError } from "@/lib/errors";
 import { requestChatMessageJump } from "@/lib/chatJumpEvents";
 import { safeOpenChat } from "@/lib/safeOpenChat";
+import { chatAddressPath } from "@/lib/chatRoute";
 import { isNativeAndroid, isNativeApp, nativePushPendingMessage, supportsBrowserPush } from "@/lib/platform/capabilities";
 import { BROWSER_PUSH_UNAVAILABLE, PUSH_UNAVAILABLE } from "@/lib/plainMessages";
 import { isDesktopApp } from "@/lib/platform/desktop";
@@ -566,7 +567,14 @@ function openPushTargetInApp(rawUrl: string): void {
   if (chatId) {
     void safeOpenChat(chatId).then((opened) => {
       if (opened) {
-        window.history.pushState(null, "", `${target.pathname}${target.hash}`);
+        // The conversation's own address, rather than the path the notification
+        // happened to name with the ids hanging off it as a query. A tap now
+        // leaves a URL that survives a reload, and `useChatAddress` sees the
+        // location and the selection already agreeing, so it does not navigate
+        // a second time. The jump stays here: this path selected the chat
+        // itself, so the hook has no «open» to hang one on.
+        const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+        window.history.pushState(null, "", `${base}${chatAddressPath(chatId, messageId)}${target.hash}`);
         window.dispatchEvent(new PopStateEvent("popstate"));
         if (messageId) {
           window.setTimeout(() => requestChatMessageJump(chatId, messageId), 150);

@@ -23,6 +23,23 @@ const PUBLIC_ROUTE_HEADINGS = [
 // Paths that only look like the fixed public routes. They must stay protected.
 const PUBLIC_ROUTE_NEAR_MATCHES = ["/download/preview", "/bots/docs/nested"] as const;
 
+// A conversation's address, and the paths that only look like one. The strict
+// rule is `lib/chatRoute.ts`; what this matrix adds is that the router agrees
+// with it — a real address mounts the messenger, a near match does not, and
+// neither is reachable without a session.
+const CHAT_ADDRESS_ID = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
+const MESSAGE_ADDRESS_ID = "550e8400-e29b-41d4-a716-446655440000";
+const CHAT_ADDRESS = `/chat/${CHAT_ADDRESS_ID}`;
+const CHAT_ADDRESS_NEAR_MATCHES = [
+  "/chat",
+  "/chat/not-a-uuid",
+  // One UUID group short: the mistake this project has already shipped once.
+  "/chat/3f2504e0-4f89-41d3-0305e82c3301",
+  `${CHAT_ADDRESS}/message/${MESSAGE_ADDRESS_ID}`,
+  `${CHAT_ADDRESS}/m/${MESSAGE_ADDRESS_ID}/extra`,
+] as const;
+const NOT_FOUND_HEADING = "404 Page Not Found";
+
 const RUNTIME_CONFIGURATION_HEADING = "Подключение к серверу не настроено";
 const PUBLIC_HOME_HEADING = "Мессенджер для общения и совместной работы";
 
@@ -228,6 +245,85 @@ test.describe("public home routing integration", () => {
         await expect(page.getByRole("heading", { level: 1, name: heading })).toHaveCount(0);
       }
     }
+  });
+
+  test("a guest deep link to a conversation goes to login, like every protected route", async ({ page }) => {
+    await installRuntime(page, "browser");
+    await installSupabaseFixture(page);
+
+    // The conversation's address is protected, not public: `isPublicRoute` is
+    // an exact set and this is not in it. Giving conversations an address must
+    // not open a door beside the public one.
+    for (const route of [CHAT_ADDRESS, `${CHAT_ADDRESS}/m/${MESSAGE_ADDRESS_ID}`]) {
+      await page.goto(route);
+
+      await expect(page).toHaveURL(/\/login$/);
+      await expect(page.getByTestId("auth-form-shell")).toBeVisible();
+      await expect(page.getByRole("heading", { name: PUBLIC_HOME_HEADING })).toHaveCount(0);
+    }
+  });
+
+  for (const runtime of ["capacitor_android", "tauri_windows"] as const) {
+    test(`${runtime} guest deep link to a conversation goes to login`, async ({ page }) => {
+      await installRuntime(page, runtime);
+      await installSupabaseFixture(page);
+
+      await page.goto(CHAT_ADDRESS);
+
+      await expect(page).toHaveURL(/\/login$/);
+      await expect(page.getByTestId("auth-form-shell")).toBeVisible();
+    });
+  }
+
+  test("an authenticated conversation address mounts the messenger, not a 404", async ({ page }) => {
+    await installRuntime(page, "browser");
+    await installSession(page);
+    await installSupabaseFixture(page);
+
+    await page.goto(CHAT_ADDRESS);
+
+    await expect(page.getByTestId("desktop-app-shell")).toBeVisible();
+    await expect(page.getByRole("heading", { name: NOT_FOUND_HEADING })).toHaveCount(0);
+    await expect(page.getByTestId("auth-form-shell")).toHaveCount(0);
+    // What the address is *worth* — that it lands where a click lands — needs a
+    // conversation to land in, and this matrix's backend serves none. That is
+    // `tests/e2e/chat-address.spec.ts`, against the fixture that does.
+  });
+
+  test("a conversation-address near match is not a conversation", async ({ page }) => {
+    await installRuntime(page, "browser");
+    await installSession(page);
+    await installSupabaseFixture(page);
+
+    for (const route of CHAT_ADDRESS_NEAR_MATCHES) {
+      await page.goto(route);
+
+      await expect(
+        page.getByRole("heading", { name: NOT_FOUND_HEADING }),
+        `${route} was treated as a conversation`,
+      ).toBeVisible();
+      await expect(page.getByTestId("desktop-app-shell")).toHaveCount(0);
+    }
+  });
+
+  test("an address for a conversation this account cannot see returns to the list and says so", async ({ page }) => {
+    await installRuntime(page, "browser");
+    await installSession(page);
+    await installSupabaseFixture(page);
+
+    // The id is taken on trust so nobody waits on a round-trip: the chat list
+    // is what carries a conversation's unread state, and hydrating a summary
+    // early would hand `ChatWindow` a row claiming nothing is unread, which
+    // costs exactly the entry position the address exists to keep. So the list
+    // answers first — and when it comes back without this conversation in it,
+    // the selection is dropped, the address follows it back to `/`, and the
+    // server is asked once, which is what produces the sentence.
+    await page.goto(CHAT_ADDRESS);
+    await expect(page.getByTestId("desktop-app-shell")).toBeVisible();
+
+    await expect(page).toHaveURL(/\/$/, { timeout: 20_000 });
+    await expect(page.getByTestId("welcome-screen")).toBeVisible();
+    await expect(page.getByText("Чат недоступен")).toBeVisible({ timeout: 20_000 });
   });
 });
 

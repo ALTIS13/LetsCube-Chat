@@ -11,7 +11,9 @@ import { VoiceCallRing } from "@/components/chat/VoiceCallRing";
 import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { BottomNav } from "./BottomNav";
 import { DesktopUpdatePill } from "@/components/desktop/DesktopUpdatePill";
+import { UserProfileOverlay } from "@/components/profile/UserProfileOverlay";
 import { useDesktopUpdate } from "@/hooks/useDesktopUpdate";
+import { useChatAddress } from "@/hooks/useChatAddress";
 import { cn } from "@/lib/utils";
 
 /**
@@ -31,6 +33,13 @@ export function MainLayout() {
   const isMobileChatOpen = !!selectedChatId;
   const desktopUpdate = useDesktopUpdate();
   const updateBlocking = desktopUpdate?.presentation?.blocking === true;
+
+  // The conversation's address. Mounted here because the messenger is the only
+  // surface that has one, and because `App.tsx` renders this component for both
+  // kinds of messenger location without remounting it — so the hook's memory of
+  // which side moved last survives moving between conversations, which is the
+  // whole of how Back tells a click apart from a step backwards.
+  useChatAddress();
 
   useEffect(() => {
     const handleResize = () => {
@@ -226,6 +235,13 @@ export function MainLayout() {
             bitten by a stacking context clamping what a pane opens. */}
         {!isMobileChatOpen && <BottomNav />}
       </div>
+      {/* A person, opened from a row or a face rather than from a conversation
+          (D-283). Mounted on the shell and not inside a pane: the chat list
+          lives in one column and the conversation in the other, and the whole
+          point of this surface is that asking who somebody is does not move
+          the reader between them. `KubModal` portals to the body, so its place
+          in this tree costs nothing but its lifetime. */}
+      <UserProfileOverlay />
     </div>
   );
 }
