@@ -22,6 +22,10 @@ import { KubGlassLayer } from "@/components/kub";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { applyReactionPlan, planReactionToggle } from "@/lib/messageReactions";
+import { useMessageMediaUrl } from "@/hooks/useMediaObjectUrl";
+import { conversationMediaIndex, conversationMediaRows } from "@/lib/conversationMedia";
+import { mediaOriginality } from "@/lib/mediaOriginality";
+import { mediaDayLabel } from "@/lib/sharedMediaBrowsing";
 import { useAppStore } from "@/store/app.store";
 import { cn } from "@/lib/utils";
 import type { MessageWithSender } from "@/types/database";
@@ -104,10 +108,11 @@ export default function PublicPreviewCapturePage() {
   const setMessageDeleteRequest = useAppStore((state) => state.setMessageDeleteRequest);
   const currentUserId = useAppStore((state) => state.currentUser?.id ?? null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  // The photo viewer, opened from a bubble exactly as `ChatWindow` opens it. No
-  // product preview carries a picture, so it never opens during a capture; the
-  // QA specs that zoom a photo inject one.
-  const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
+  // The photo viewer, opened from a bubble exactly as `ChatWindow` opens it —
+  // by message id, with the item and the sequence built from the conversation
+  // (D-288). No product preview carries a picture, so it never opens during a
+  // capture; the QA specs that zoom or step through a photo inject them.
+  const [openMediaId, setOpenMediaId] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<MessageWithSender | null>(null);
   // The computer's side list, owned here for the reason `Sidebar` owns it: from
   // `md` the button that opens it is on the folder rail, not in the header.
@@ -215,6 +220,25 @@ export default function PublicPreviewCapturePage() {
       current.map((message) => (message.id === messageId ? { ...message, content, edited_at: now } : message)),
     );
   }, []);
+
+  /**
+   * The same sequence `ChatWindow` builds, over the fixture's own messages
+   * (D-288). Above the early returns, because `useMessageMediaUrl` is a hook
+   * and a hook may not be skipped — the rule this file's composer already
+   * carries a note about.
+   */
+  const previewMedia = useMemo(() => conversationMediaRows(messages), [messages]);
+  const openMediaIndex = conversationMediaIndex(previewMedia, openMediaId);
+  const openMediaRow = openMediaIndex === null ? null : previewMedia[openMediaIndex] ?? null;
+  const openMediaUrl = useMessageMediaUrl(openMediaRow);
+  const openMediaItem: MediaViewerItem | null = openMediaRow && openMediaUrl
+    ? {
+      type: openMediaRow.type === "video" ? "video" : "image",
+      url: openMediaUrl,
+      title: openMediaRow.content ?? (openMediaRow.type === "video" ? "Видео" : "Фото"),
+      originality: mediaOriginality(openMediaRow.media_metadata),
+    }
+    : null;
 
   if (error) {
     return (
@@ -336,7 +360,7 @@ export default function PublicPreviewCapturePage() {
                 onHideForMe={() => undefined}
                 onTogglePin={togglePin}
                 onForward={(message) => setForwardingMessages([message])}
-                onOpenMedia={setOpenMedia}
+                onOpenMedia={setOpenMediaId}
                 bottomRef={bottomRef}
                 chatMembers={members}
                 chatType={activeChat.type}
@@ -435,7 +459,23 @@ export default function PublicPreviewCapturePage() {
           onOpenSaved={() => undefined}
         />
       )}
-      <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
+      <MediaViewer
+        media={openMediaItem}
+        onClose={() => setOpenMediaId(null)}
+        sequence={openMediaRow && openMediaIndex !== null ? {
+          state: {
+            index: openMediaIndex,
+            loaded: previewMedia.length,
+            total: previewMedia.length,
+            totalExact: true,
+            hasMore: false,
+            moreAt: "start",
+          },
+          onSelect: (index) => setOpenMediaId(previewMedia[index]?.id ?? null),
+          onNeedMore: () => undefined,
+          stamp: mediaDayLabel(openMediaRow.created_at, Date.now()),
+        } : undefined}
+      />
     </div>
   );
 }

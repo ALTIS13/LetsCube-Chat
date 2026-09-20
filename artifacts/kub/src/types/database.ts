@@ -2090,9 +2090,29 @@ export interface MessageWithSender extends Message {
   send_error?: string | null
   /**
    * Local UI: who wrote the original of a forwarded message, when the client
-   * knows. Nothing on the server carries it yet — the source row can sit in a
-   * chat the reader is not a member of — so a forwarded message from the
-   * server reads «Переслано» without a name until it does.
+   * knows it another way. The preview fixture sets it; so may anything that
+   * learns the origin without a read. It wins over the join below, because a
+   * name the client already holds beats one that has not landed yet.
    */
   forward_origin?: { name: string } | null
+  /**
+   * The source message, joined (D-291).
+   *
+   * Identity only, and `null` where RLS refused it — the reader is not a member
+   * of the chat the original was sent to. So the person who forwarded it sees
+   * the name and a stranger in the target chat does not; the limit and what
+   * would remove it are recorded in `lib/messageForwardOrigin.ts`.
+   */
+  forwarded_from?: ForwardedFromRow | null
+}
+
+/** The identity of a forwarded message's source, as the projection embeds it. */
+export interface ForwardedFromRow {
+  id: string
+  type?: MessageWithSender["type"]
+  deleted_at?: string | null
+  user_id?: string | null
+  bot_id?: string | null
+  sender?: Profile | null
+  bot?: BotProfile | null
 }

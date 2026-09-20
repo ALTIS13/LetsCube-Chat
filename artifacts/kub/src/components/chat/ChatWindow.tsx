@@ -48,7 +48,12 @@ import {
   voiceCapsuleState,
 } from "@/lib/voiceChannel";
 import { useMessages } from "@/hooks/useMessages";
-import { useMessageMediaVariantUrls, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
+import { resolveOriginalPreviewUrl, useMessageMediaVariantUrls, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
+import { useMessageMediaUrl } from "@/hooks/useMediaObjectUrl";
+import { conversationMediaIndex, conversationMediaRows } from "@/lib/conversationMedia";
+import { isUncompressedMedia } from "@/lib/mediaCompression";
+import { mediaOriginality } from "@/lib/mediaOriginality";
+import { mediaDayLabel } from "@/lib/sharedMediaBrowsing";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
 import { useAppStore } from "@/store/app.store";
 import { createClient, getSupabasePublicUrl } from "@/lib/supabase/client";
@@ -231,7 +236,15 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const [showInfo, setShowInfo] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [pinError, setPinError] = useState<string | null>(null);
-  const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
+  /**
+   * The picture or video the viewer is on, held by **message id** (D-288).
+   *
+   * An index would drift: a page of older history lands at the front of the
+   * conversation and shifts every index behind it. An id cannot, so the viewer
+   * survives a prepend that happens while it is open — which is exactly what a
+   * step past the oldest loaded picture asks for.
+   */
+  const [openMediaId, setOpenMediaId] = useState<string | null>(null);
   const [draftRestore, setDraftRestore] = useState<{ id: string; text: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   // Both pieces of chrome run over the conversation, so both have to report the
@@ -1462,6 +1475,62 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     [chatId, messageMediaVariants, messages, userId],
   );
 
+  /**
+   * The conversation's own pictures and videos, and where the open one stands
+   * among them (D-288).
+   *
+   * What the sequence *is* — the chat rather than the message, chronological
+   * rather than the grid's order — is decided in `lib/conversationMedia.ts`
+   * against a measurement of Telegram; this is only the wiring.
+   *
+   * The item is built here rather than in the bubble's press, for the reason
+   * `ChatInfoPanel` gives for doing the same: a photograph reached by a swipe
+   * must be the same object a tap on it would have produced, or the «Оригинал»
+   * badge and the preview would depend on how the reader arrived.
+   */
+  const conversationMedia = useMemo(() => conversationMediaRows(conversation), [conversation]);
+  const openMediaIndex = conversationMediaIndex(conversationMedia, openMediaId);
+  const openMediaRow = openMediaIndex === null ? null : conversationMedia[openMediaIndex] ?? null;
+  const openMediaUrl = useMessageMediaUrl(openMediaRow);
+  const openMediaItem: MediaViewerItem | null = openMediaRow && openMediaUrl
+    ? {
+      type: openMediaRow.type === "video" ? "video" : "image",
+      url: openMediaUrl,
+      title: openMediaRow.content ?? (openMediaRow.type === "video" ? "Видео" : "Фото"),
+      originality: mediaOriginality(openMediaRow.media_metadata),
+      ...(isUncompressedMedia(openMediaRow.media_metadata)
+        ? {
+          original: true,
+          previewUrl:
+            messageMediaVariants[openMediaRow.id]?.previewUrl ?? resolveOriginalPreviewUrl(openMediaRow)?.url,
+        }
+        : {}),
+    }
+    : null;
+  /**
+   * A step past the oldest loaded picture, waiting for the history it asked for.
+   *
+   * The grid's `pendingViewerStep` pointed at the forward end; this one points
+   * backward, because a conversation's next page is *older* and lands in front.
+   * Held until the rows arrive and then taken, so the reader ends up on the
+   * previous photograph rather than on the one they were already looking at.
+   * Released either way: a page that failed or brought no picture ends the wait.
+   */
+  const [pendingMediaStepBack, setPendingMediaStepBack] = useState(false);
+  useEffect(() => {
+    if (!pendingMediaStepBack) return;
+    if (openMediaIndex === null) {
+      setPendingMediaStepBack(false);
+      return;
+    }
+    if (openMediaIndex > 0) {
+      setOpenMediaId(conversationMedia[openMediaIndex - 1]?.id ?? null);
+      setPendingMediaStepBack(false);
+    } else if (!loadingOlder && !hasMoreOlder) {
+      setPendingMediaStepBack(false);
+    }
+  }, [conversationMedia, hasMoreOlder, loadingOlder, openMediaIndex, pendingMediaStepBack]);
+
   return (
     <ChatMediaPlaybackProvider chatId={chatId} playlist={mediaPlaylist}>
       <div
@@ -1551,7 +1620,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onRetrySend={(msg) => void retryMessageSend(msg)}
             onEditFailedSend={handleEditFailedSend}
             onDiscardLocalMessage={(msg) => discardLocalMessage(msg.id)}
-            onOpenMedia={setOpenMedia}
+            onOpenMedia={setOpenMediaId}
             bottomRef={bottomRef}
             isTyping={isTyping}
             highlightedId={highlightedId}
@@ -1843,7 +1912,34 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         currentUserId={userId}
         onDelete={handleDeleteMessages}
       />
-        <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
+        {/* A place in the conversation, not a single detached picture (D-288).
+            Stepping past the oldest loaded one asks the conversation for its
+            next page of history instead of stopping — the mechanic the grid
+            already runs at its own far end, pointed the other way. */}
+        <MediaViewer
+          media={openMediaItem}
+          onClose={() => setOpenMediaId(null)}
+          sequence={openMediaRow && openMediaIndex !== null ? {
+            state: {
+              index: openMediaIndex,
+              loaded: conversationMedia.length,
+              total: conversationMedia.length,
+              // Never exact while older history is unread: this surface counts
+              // what it has loaded, not what the chat holds, so «7+» is the
+              // true answer and «7» would be a claim it cannot make.
+              totalExact: !hasMoreOlder,
+              hasMore: hasMoreOlder,
+              loading: loadingOlder,
+              moreAt: "start",
+            },
+            onSelect: (index) => setOpenMediaId(conversationMedia[index]?.id ?? null),
+            onNeedMore: () => {
+              setPendingMediaStepBack(true);
+              void loadOlderMessages();
+            },
+            stamp: mediaDayLabel(openMediaRow.created_at, Date.now()),
+          } : undefined}
+        />
       </div>
     </ChatMediaPlaybackProvider>
   );

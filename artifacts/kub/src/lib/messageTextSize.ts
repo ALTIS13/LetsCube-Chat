@@ -35,13 +35,13 @@
  * - **13 rather than 12**, because below that our own `--text-xs` (13px) would
  *   be larger than the message body, and a time stamp that outgrows the
  *   sentence it belongs to is a worse defect than a dense list.
- * - **22 rather than 30**, because our composer stops growing at a fixed
- *   140px. At 30px that ceiling is under four lines and the field starts
- *   scrolling almost at once, which is complaint (e) of the same report made
- *   worse by the fix for (a). 22 is 137% of the new default and 157% of the
- *   old one — comfortably past the «125%» he asked for, which lands on 20.
+ * - **22 rather than 30**, because of what it does to the composer. That
+ *   reason has since been made structural rather than fixed — see below — but
+ *   the number stands: 22 is 137% of the new default and 157% of the old one,
+ *   comfortably past the «125%» the tester asked for, which lands on 20.
  *
- * Whoever widens it should move `MAX_COMPOSER_HEIGHT_PX` in the same commit.
+ * Whoever widens it should look at `composerMaxHeight` at the new top of the
+ * range before doing so.
  *
  * The leading ratio is Tailwind's `leading-relaxed`, 1.625, which is what the
  * bubbles used when they were `text-sm leading-relaxed`; keeping the ratio is
@@ -91,6 +91,72 @@ export function isDefaultMessageTextSize(sizePx: number): boolean {
 /** «16 px — как обычно» / «20 px». What the settings row shows. */
 export function messageTextSizeSummary(sizePx: number): string {
   return isDefaultMessageTextSize(sizePx) ? `${sizePx} px — по умолчанию` : `${sizePx} px`;
+}
+
+// ── the composer, which now reads the same number (D-289) ────────────────
+
+/**
+ * What the reader types is the size of what they read.
+ *
+ * D-289. D-287 moved the body to 16 and left the composer at
+ * `text-base sm:text-sm`, so from 640px up the field was **14 while the body
+ * was 16** — the phone's old asymmetry inverted onto the desktop — and at
+ * every non-default slider position the two disagreed by however far the
+ * reader had moved it. A person who enlarges the text because they cannot read
+ * it cannot read what they are typing either.
+ *
+ * **This is ours, not Telegram's, and saying so is the point.** Telegram's
+ * «Размер текста сообщений» slider governs the message body **only** — measured
+ * on the device on 2026-09-20 by dragging it to 30 and reading the composer
+ * back: its resting height (107 device px) and its line step (56) came out
+ * byte-identical to the same measurements at 16, while the settings screen's
+ * own synthetic preview grew visibly. An earlier note in the register said the
+ * slider «governs both»; it does not. What is true is that at Telegram's
+ * default the two agree at 16dp, and binding ours is how we get that agreement
+ * at every setting rather than only at one. CLAUDE.md §7 permits bettering the
+ * reference where the difference is written down instead of claimed as
+ * adoption, and this is the writing down.
+ */
+
+/** `py-2.5` on the field: 10px above the first line and 10px below the last. */
+export const COMPOSER_VERTICAL_PADDING_PX = 20;
+
+/**
+ * How many lines the field grows to before it scrolls.
+ *
+ * **Six, which is Telegram Android's**, measured on the device on 2026-09-20:
+ * its composer saturates at 387 device px, and 387 = 51px of padding + 6 × 56px
+ * of line. Ours held five — the old fixed 140px ceiling over a 24px leading.
+ *
+ * The number of lines is the thing worth fixing, and a **pixel** ceiling cannot
+ * fix it: 140px is five lines at 16px and three and a half at 22px, so the
+ * reader who enlarged the text because they could not read it would be handed
+ * a shorter field for their trouble. Six lines at every size is the whole
+ * reason this is expressed as a count.
+ */
+export const MAX_COMPOSER_LINES = 6;
+
+/**
+ * The composer at rest, in pixels: one line and its padding.
+ *
+ * The recording row is held to the same number. It carries no text and could
+ * have stayed at its old fixed 44px, but then starting a recording would jerk
+ * the conversation by the difference — 2px at the default and 12px at the top
+ * of the range.
+ */
+export function composerRestHeight(sizePx: number): number {
+  return Math.ceil(messageTextLineHeight(clampMessageTextSize(sizePx)) + COMPOSER_VERTICAL_PADDING_PX);
+}
+
+/**
+ * The composer's ceiling, in pixels: six lines and the padding.
+ *
+ * Rounded up, so the sixth line is never clipped by a fraction of a pixel —
+ * the rule `attachSheet.ts` keeps about its own measured height.
+ */
+export function composerMaxHeight(sizePx: number): number {
+  const line = messageTextLineHeight(clampMessageTextSize(sizePx));
+  return Math.ceil(line * MAX_COMPOSER_LINES + COMPOSER_VERTICAL_PADDING_PX);
 }
 
 /** Every size the control offers, smallest first. */

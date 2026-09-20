@@ -5,7 +5,6 @@ import { KubIcon, KubModal } from "@/components/kub";
 import { MessageBubble, getVisibleMediaCaption, isRoundVideoMessage } from "./MessageBubble";
 import { MessageActionLayer, type MessageMenuRequest } from "./MessageActionLayer";
 import { MessageActionsContext, type MessageActionsContextValue, type ReactionPerson } from "./messageActionsContext";
-import type { MediaViewerItem } from "./MediaViewer";
 import { TypingIndicator } from "./TypingIndicator";
 import type { ChatMember, MessageWithSender, Profile } from "@/types/database";
 import { cn } from "@/lib/utils";
@@ -89,7 +88,7 @@ interface MessageListProps {
   onRetrySend?: (msg: MessageWithSender) => void;
   onEditFailedSend?: (msg: MessageWithSender) => void;
   onDiscardLocalMessage?: (msg: MessageWithSender) => void;
-  onOpenMedia?: (media: MediaViewerItem) => void;
+  onOpenMedia?: (messageId: string) => void;
   bottomRef: RefObject<HTMLDivElement | null>;
   isTyping?: boolean;
   typingUser?: string;
@@ -568,7 +567,7 @@ export function MessageList({
     retrySend: (message) => handlersRef.current.onRetrySend?.(message),
     editFailedSend: (message) => handlersRef.current.onEditFailedSend?.(message),
     discardLocalMessage: (message) => handlersRef.current.onDiscardLocalMessage?.(message),
-    openMedia: (media) => handlersRef.current.onOpenMedia?.(media),
+    openMedia: (messageId) => handlersRef.current.onOpenMedia?.(messageId),
     // The shape is decided when the menu opens, by the width: below 640px the
     // phone's, from 640px the desktop's — whichever pointer asked for it.
     openMenu: (messageId, point, source) => {
@@ -1584,7 +1583,7 @@ interface MessageRowActions {
   retrySend: (message: MessageWithSender) => void;
   editFailedSend: (message: MessageWithSender) => void;
   discardLocalMessage: (message: MessageWithSender) => void;
-  openMedia: (media: MediaViewerItem) => void;
+  openMedia: (messageId: string) => void;
   openMenu: (messageId: string, point: { x: number; y: number }, source: "tap" | "pointer" | "keyboard") => void;
   closeMenu: () => void;
   startSelection: (messageId: string) => void;

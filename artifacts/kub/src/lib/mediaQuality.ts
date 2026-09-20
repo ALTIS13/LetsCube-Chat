@@ -186,3 +186,62 @@ export function photoSendQuality(hd: boolean): MediaQuality {
 export function isHdPhotoQuality(value: MediaQuality): boolean {
   return value === PHOTO_SEND_HD;
 }
+
+// ── what the control says it does (D-290) ──────────────────────────────
+
+/**
+ * D-290, from the tester of 2026-09-20: «он по прежнему сжимает фото, даже
+ * с включенной настройкой HD. Вместо 5 Мб к примеру, он отправил 200 КБ».
+ *
+ * **He read the control correctly and it was the control that was wrong.** HD
+ * moves the re-encode from 1280px at 0.76 to 2560px at 0.90 — see
+ * `IMAGE_PROFILES` above. It raises a **resolution cap**. It does not stop the
+ * re-encode, and it never could: whether a photograph is compressed at all is
+ * decided by which control sends it, not by this flag. A 5 MB picture comes out
+ * at a megabyte or so with HD on, which is not 200 KB and is also not 5 MB.
+ *
+ * Two things were saying otherwise, and both are fixed here rather than
+ * explained away.
+ *
+ * **The word.** Ours said «качество», which in this context reads as «без
+ * сжатия» — the name of the *other* path, the one under «…» that really does
+ * upload the picked bytes. Telegram says **«разрешение»**, measured on the
+ * device on 2026-09-20: pressing its HD badge draws «Фотография будет в
+ * высоком разрешении.» and pressing it again «… в обычном разрешении.». That
+ * is exactly what the mechanism does, so it is what ours says now.
+ *
+ * **The badge.** Ours read «HD» whether HD was on or off, and left the state to
+ * a fill colour. Telegram's badge **is** the state: **SD** when the photograph
+ * will go at the ordinary resolution and **HD** when it will not. A control
+ * whose face is its name rather than its state is the same defect one size
+ * smaller, so ours is the state now too.
+ */
+
+/** What the badge reads: the state it is in, not the name of the control. */
+export function photoSendQualityBadge(hd: boolean): string {
+  return hd ? "HD" : "SD";
+}
+
+/**
+ * The sentence the control makes true, said at the moment of pressing.
+ *
+ * «Разрешение», never «качество» and never «без сжатия» — the second of
+ * those is a different control and saying it here is the whole defect.
+ */
+export function photoSendQualitySentence(hd: boolean): string {
+  return hd
+    ? "Фото уйдут в высоком разрешении"
+    : "Фото уйдут в обычном разрешении";
+}
+
+/**
+ * The second line, which names the path this control is **not**.
+ *
+ * The tester wanted his 5 MB back and pressed the only thing that looked like
+ * it would do that. Saying where the real one is costs a line and answers the
+ * question the control raises.
+ */
+export const PHOTO_SEND_ORIGINAL_HINT = "Исходный файл — «Отправить без сжатия» в меню «…»";
+
+/** One key, so pressing the badge twice replaces the line rather than stacking two. */
+export const PHOTO_SEND_QUALITY_FEEDBACK_KEY = "attach-photo-quality";

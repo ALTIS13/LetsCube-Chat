@@ -14,8 +14,6 @@ import {
 } from "react";
 import type { MessageWithSender } from "@/types/database";
 
-/** The composer stops growing here and scrolls instead. */
-const MAX_COMPOSER_HEIGHT_PX = 140;
 import { cn } from "@/lib/utils";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { CameraCaptureModal } from "./CameraCaptureModal";
@@ -32,6 +30,8 @@ import { showAppAlert } from "@/lib/appDialogs";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
 import { DEFAULT_MEDIA_QUALITY } from "@/lib/mediaQuality";
+import { composerMaxHeight, composerRestHeight } from "@/lib/messageTextSize";
+import { useMessageTextSize } from "@/hooks/useMessageTextSize";
 import { isNativeApp, microphonePermissionHelp } from "@/lib/platform/capabilities";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { useVoiceRecorder, formatVoiceDuration as formatRecorderDuration } from "@/hooks/useVoiceRecorder";
@@ -987,6 +987,15 @@ export function MessageInput({
   };
 
   /**
+   * The size the reader chose, which now governs this field as well as the
+   * bubbles (D-289). One number: `kub-message-text` gives the field its face
+   * and leading, and these two give it its resting height and its ceiling.
+   */
+  const { size: messageTextSize } = useMessageTextSize();
+  const maxComposerHeight = composerMaxHeight(messageTextSize);
+  const composerRest = composerRestHeight(messageTextSize);
+
+  /**
    * The composer's height follows its text, in the same commit that changes it.
    *
    * It used to be set imperatively: `handleSend` called `setText("")` — queued —
@@ -1007,8 +1016,17 @@ export function MessageInput({
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, MAX_COMPOSER_HEIGHT_PX)}px`;
-  }, [text]);
+    el.style.height = `${Math.min(el.scrollHeight, maxComposerHeight)}px`;
+    // The ceiling is in the dependencies because it moves: it is six lines of
+    // whatever the reader set, not a fixed 140px, so a size changed while a
+    // draft is standing has to re-measure the field it is standing in.
+    //
+    // This line is the whole ceiling. The field used to carry `max-h-[140px]`
+    // as well, and the pair is exactly the duplication that drifts — proved
+    // redundant rather than assumed: with the CSS rule deleted the composer
+    // tests all stayed green, because a layout effect runs before paint and
+    // the clamp has therefore always landed first.
+  }, [maxComposerHeight, text]);
 
   const insertEmoji = (emoji: string) => {
     const el = textareaRef.current;
@@ -1459,6 +1477,7 @@ export function MessageInput({
         <div className="group/composer relative flex items-end gap-2">
           {recording && holdRecorderState ? (
             <ComposerRecordingRow
+              heightPx={composerRest}
               mode={holdRecorderState.mode}
               phase={holdRecorderState.phase}
               durationMs={holdElapsedMs}
@@ -1524,7 +1543,12 @@ export function MessageInput({
             placeholder="Сообщение…"
             rows={1}
             className={cn(
-              "relative min-w-0 flex-1 bg-transparent resize-none outline-none text-base sm:text-sm leading-6 py-2.5 max-h-[140px] overflow-y-auto text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]",
+              // `kub-message-text` is the one class the bubbles read, so what
+              // is typed here is the size of what is read there — at every
+              // setting, not only at the default (D-289). It replaced
+              // `text-base sm:text-sm leading-6`, which was 16 on a phone and
+              // 14 from 640px up while the body had already moved to 16.
+              "kub-message-text relative min-w-0 flex-1 bg-transparent resize-none outline-none py-2.5 overflow-y-auto text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]",
               // The field's own left inset, unless the bot menu is standing in
               // it — then the button is the inset, and a second one would open
               // a 52px hole between the capsule's edge and the first letter.

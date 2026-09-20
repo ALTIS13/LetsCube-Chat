@@ -1,6 +1,7 @@
 import type { KeyboardEvent } from "react";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { DISABLED_SINK, DISABLED_SINK_FILLED, FOCUS_RING, FOCUS_RING_WITHIN, PRESS_FILLED } from "@/lib/controlSurface";
+import { photoSendQualityBadge, photoSendQualitySentence } from "@/lib/mediaQuality";
 import { cn } from "@/lib/utils";
 
 interface AttachSendBarProps {
@@ -26,6 +27,11 @@ interface AttachSendBarProps {
  * How many go is said in the sheet's title — «Выбрано 3» — which is the glass
  * capsule look the owner chose, and in this button's own accessible name, so a
  * screen reader hears it at the control that sends.
+ *
+ * The HD badge reads its **state** and speaks of **разрешение**, for the reason
+ * `lib/mediaQuality.ts` records under D-290: it raises the re-encode's
+ * resolution cap and stops nothing, so a word that reads as «без сжатия» is a
+ * control disagreeing with its own mechanism.
  */
 export function AttachSendBar({ sendLabel, caption, onCaptionChange, onSend, hdAvailable, hd, onHdChange, busy }: AttachSendBarProps) {
   const handleCaptionKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -56,10 +62,13 @@ export function AttachSendBar({ sendLabel, caption, onCaptionChange, onSend, hdA
         <button
           type="button"
           data-testid="attach-hd"
+          data-photo-resolution={hd ? "hd" : "sd"}
           aria-pressed={hd}
           disabled={busy}
-          aria-label={hd ? "Фото уйдут в высоком качестве" : "Фото уйдут в обычном качестве"}
-          title={hd ? "Высокое качество" : "Обычное качество"}
+          // «Разрешение», not «качество» — which is what this actually
+          // changes, and what the tester read as «без сжатия» (D-290).
+          aria-label={photoSendQualitySentence(hd)}
+          title={photoSendQualitySentence(hd)}
           onClick={() => onHdChange(!hd)}
           className={cn(
             "kub-interactive relative flex h-11 shrink-0 items-center justify-center rounded-full px-3 text-[13px] font-semibold tracking-[0.06em]",
@@ -70,7 +79,9 @@ export function AttachSendBar({ sendLabel, caption, onCaptionChange, onSend, hdA
             FOCUS_RING,
           )}
         >
-          HD
+          {/* The state, as Telegram's badge is, rather than the control's name
+              over a fill colour a phone reads as decoration. */}
+          {photoSendQualityBadge(hd)}
         </button>
       )}
       <button

@@ -296,6 +296,19 @@ export interface MediaSequenceState {
   hasMore: boolean;
   /** A page is on its way. */
   loading?: boolean;
+  /**
+   * Which end of the loaded run the unloaded ones are at.
+   *
+   * `"end"` — the default and the grid's case: «Общие медиа» is newest-first
+   * and its next page is appended, so the far end is the forward one.
+   *
+   * `"start"` — the conversation's case (D-288). Its media are chronological
+   * and the next page of history is *prepended*, so the far end is the backward
+   * one. Without this the two surfaces would have to disagree about what
+   * «forward» means, which is how a reader ends up walking up a conversation
+   * they were reading down.
+   */
+  moreAt?: "start" | "end";
 }
 
 /**
@@ -338,10 +351,16 @@ export type MediaStepPlan =
 export function planMediaStep(state: MediaSequenceState, delta: -1 | 1): MediaStepPlan {
   const index = Math.trunc(state.index);
   const loaded = Math.trunc(state.loaded);
-  if (delta === -1) return index > 0 ? { kind: "move", index: index - 1 } : { kind: "none" };
+  // Whether the far end in this direction is the one with unloaded items behind
+  // it. `moreAt` defaults to `"end"`, so a caller that never heard of it — the
+  // shared-media grid — is answered exactly as before.
+  const moreThisWay = state.hasMore && (delta === -1 ? state.moreAt === "start" : (state.moreAt ?? "end") === "end");
+  if (delta === -1) {
+    if (index > 0) return { kind: "move", index: index - 1 };
+    return moreThisWay ? (state.loading ? { kind: "none" } : { kind: "load" }) : { kind: "none" };
+  }
   if (index + 1 < loaded) return { kind: "move", index: index + 1 };
-  if (state.hasMore) return state.loading ? { kind: "none" } : { kind: "load" };
-  return { kind: "none" };
+  return moreThisWay ? (state.loading ? { kind: "none" } : { kind: "load" }) : { kind: "none" };
 }
 
 /**
@@ -356,8 +375,9 @@ export function planMediaStep(state: MediaSequenceState, delta: -1 | 1): MediaSt
  */
 export function mediaStepOffered(state: MediaSequenceState, delta: -1 | 1): boolean {
   const index = Math.trunc(state.index);
-  if (delta === -1) return index > 0;
-  return index + 1 < Math.trunc(state.loaded) || state.hasMore;
+  const moreThisWay = state.hasMore && (delta === -1 ? state.moreAt === "start" : (state.moreAt ?? "end") === "end");
+  if (delta === -1) return index > 0 || moreThisWay;
+  return index + 1 < Math.trunc(state.loaded) || moreThisWay;
 }
 
 /**

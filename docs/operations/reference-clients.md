@@ -2324,3 +2324,150 @@ every script did before this change.
 that honest**: Inter's x-height relative to its em is 0.544 against Roboto's
 0.548, a difference inside what the measurement can resolve. Swapping the face
 was never going to help the tester read anything. Somebody will ask.
+
+
+## 18. Subject 10 — the viewer's sequence, the composer's ceiling, and what HD says
+
+**Second device pass, 2026-09-20**, same phone as section 16 (`A063`, Android
+15, 1080 x 2400 at density 420, so 1 dp = 2.625 device px; Telegram 12.10.3).
+Taken to settle three questions item 46 left open — (b), (c) and the composer —
+each of which was about to be answered by taste instead.
+
+**The privacy rule, and how this pass kept it.** The type and the composer were
+measured in Telegram's own settings screen and in a chat with a **published demo
+bot**, neither of which holds anybody's data. The photo viewer was measured in
+the **public channel `@telegram`**, so the pictures crossed are published ones
+rather than the owner's. The attach sheet had to be opened over the owner's own
+gallery: no frame of it was ever rendered — every capture masked all of the
+screen but the two bands being read — and one tap opened the camera by mistake,
+whose capture was deleted unviewed in the same breath. Nothing was sent. Every
+device capture taken for this pass was deleted once it had been read, and none
+is in the repository.
+
+**Two settings of the owner's were changed and both were put back and read
+back**: the text-size slider (dragged to 30 and returned to 16, verified by the
+label) and the picker's HD badge (toggled to SD and returned to HD, verified by
+the glyph).
+
+### 18.1 The photo viewer's sequence — MEASURED ON DEVICE, 2026-09-20
+
+The question item 46 (b) leaves open is not «wire the prop» but **what the
+sequence is**: every picture in the conversation, the ones loaded, or the ones
+in that message. Telegram answers it in the header.
+
+Opening a picture from the feed of `@telegram` drew:
+
+| | |
+| --- | --- |
+| header line 1 | the chat's name |
+| header line 2 | that item's own date and time |
+| below them | **«237 из 244»** |
+
+**244 is the whole chat's media**, orders of magnitude past what the feed had
+loaded — Telegram keeps a shared-media index per chat and the viewer browses it.
+So the unit is **the chat**, not the message and not the album.
+
+A swipe **left** moved it to **«238 из 244»**. So:
+
+- **forward is left**, which is what `mediaSwipeStep` already does;
+- **1 is the oldest**: this item is dated 19 July and the channel's newest post
+  is 25 August, so the index rises with recency and «next» walks **towards the
+  newer end** — the direction the reader was already travelling down the feed;
+- **«N из M» is the wording**, character for character what
+  `mediaPositionLabel` has produced since D-171. Nothing to adopt there.
+
+**Where ours differs on purpose (D-288).** The order is chronological and the
+count is «N из M», as above. What ours cannot have for nothing is Telegram's
+*total*: we keep no per-chat media index, and querying one before the viewer
+could open would put a round trip in front of a tap. Ours is therefore the media
+of the **loaded conversation**, and stepping off its old end asks the
+conversation for its next page of history. The label hedges — «3 из 7+» — which
+is the same `+` the counted rows use and is true, where a bare «7» would be a
+claim this surface has not read.
+
+Note also that «Общие медиа» is newest-first and its viewer steps that way,
+while this one is oldest-first. That is deliberate: **the viewer's order is the
+order of the surface that opened it.** Giving the conversation the grid's order
+would make «next» walk the reader back up the chat they were reading down.
+
+### 18.2 The composer's ceiling — MEASURED ON DEVICE, 2026-09-20
+
+Measured by typing filler into a demo bot's composer and reading the `EditText`
+bounds back after each addition. Nothing was sent; the draft was cleared and the
+field verified back at one line.
+
+| lines | height, device px | dp |
+| --- | --- | --- |
+| 1 (at rest) | 107 | 40.8 |
+| 3 | 219 | 83.4 |
+| 4 | 275 | 104.8 |
+| 5 | 331 | 126.1 |
+| 6 | **387** | **147.4** |
+| 7+ | 387 — it scrolls | 147.4 |
+
+So the step is **56 device px (21.33 dp)** a line over **51 px of padding**, and
+**Telegram Android's composer stops at exactly six lines**. Ours stopped at
+five: a fixed 140px over a 24px leading.
+
+**The correction, and it is the useful part.** Section 16.1 and item 46 both
+say Telegram's «Размер текста сообщений» slider governs the message body *and*
+the composer. **It does not.** Dragged to 30, the composer's resting height
+(107 px) and its line step (56 px) came back byte-identical to the readings at
+16, while the settings screen's own synthetic preview grew visibly — so the
+slider took effect and the composer ignored it. The earlier claim came from
+noticing that Telegram's default is 16dp for both and inferring the rest.
+
+What is true is narrower and still useful: **at Telegram's default the two
+agree**. Binding ours (D-289) is how we get that agreement at *every* setting
+rather than only at one, and CLAUDE.md §7 requires that to be written down as
+ours rather than claimed as adoption — which this paragraph is.
+
+### 18.3 What Telegram's HD says, and how long it remembers — MEASURED, 2026-09-20
+
+Item 46 (c). Ours is a per-send pill in the send bar that reads «HD» whether or
+not HD is on, with «качество» only in a tooltip a phone never shows.
+
+Telegram's, measured in its picker's photo editor:
+
+- **It is the third of four tools** in the editor's toolbar — crop, draw,
+  **HD/SD**, adjust — with the send button outside the capsule to its right.
+- **The badge is the state, not the name.** It reads **SD** when the photograph
+  will go at the ordinary resolution and **HD** when it will not, in a rounded
+  outline box either way.
+- **Pressing it says what it will do, in words**, as a tooltip above the
+  toolbar: «Фотография будет в **высоком разрешении**.» and
+  «Фотография будет в **обычном разрешении**.»
+- **The word is «разрешение».** Never «качество», and never «без сжатия» — which
+  is the honest description of the mechanism, because HD raises a resolution cap
+  and stops no compression. Ours does exactly the same thing (1280 at 0.76
+  against 2560 at 0.90) and said «качество», which is what the tester read as
+  «без сжатия» and why he expected 5 MB.
+- **It is remembered across sends.** Set to SD, backed out of the picker,
+  reopened, a photograph opened again: still SD. Restored to HD afterwards.
+- **The default state observed was HD.** Ours is SD, by the owner's instruction
+  of 2026-09-13 («по стоку загрузку в sd качестве»).
+
+**What was adopted (D-290):** the state badge and the wording, including the
+sentence at the moment of pressing — with one line more than Telegram draws,
+naming «Отправить без сжатия», because that is the path the tester was actually
+reaching for and nothing told him it existed.
+
+**What was not, and is the owner's to settle:** the memory. Ours resets every
+send, and `AttachSheet` carries a note saying so deliberately, because D-119's
+objection was to a quality question that was asked every time *and* then applied
+for ever. Telegram's answer is the middle one — never asked, remembered when
+chosen — and the tester's own words («с включенной настройкой HD») say he
+expected ours to behave that way. Recorded in the tracker under item 46 rather
+than changed here.
+
+### 18.4 What this pass did not establish
+
+- **Telegram's «send as file» path on Android** was not measured: reaching it
+  means long-pressing the send button with a photograph selected, and a misread
+  there sends somebody's picture. The iOS shape D-119 was built from stands
+  unre-verified.
+- **The viewer's paging behaviour at the far end of a long chat** — whether
+  Telegram loads more media when a finger runs past what it holds — was not
+  measured; only that its count is the whole chat's.
+- **Our own surfaces were not measured on the device this pass.** Everything
+  about ours above is from the source and from the browser at 390 and 1440.

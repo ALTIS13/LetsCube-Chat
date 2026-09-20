@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   clampMessageTextSize,
+  composerMaxHeight,
+  composerRestHeight,
   isDefaultMessageTextSize,
   messageTextLineHeight,
   messageTextSizeSteps,
@@ -71,4 +73,65 @@ test("the summary says which one is the default, because that is the question so
   assert.equal(messageTextSizeSummary(16), "16 px — по умолчанию");
   assert.equal(messageTextSizeSummary(20), "20 px");
   assert.equal(messageTextSizeSummary(13), "13 px");
+});
+
+
+// ── D-289: the composer reads the same number ────────────────────────────
+
+test("the composer grows to six lines and no further, at every size", () => {
+  // Six is Telegram Android's, measured on the device on 2026-09-20: its field
+  // saturates at 387 device px = 51 of padding + 6 × 56 of line.
+  //
+  // Every number below is a literal, and they are the arithmetic of six lines
+  // plus 20px of padding at a 1.625 leading. An assertion written as
+  // `line * MAX_COMPOSER_LINES + PADDING` would move with the constant it
+  // exists to pin and stay green through the change that breaks the product.
+  assert.equal(composerMaxHeight(13), 147);
+  assert.equal(composerMaxHeight(14), 157);
+  assert.equal(composerMaxHeight(15), 167);
+  assert.equal(composerMaxHeight(16), 176);
+  assert.equal(composerMaxHeight(18), 196);
+  assert.equal(composerMaxHeight(20), 215);
+  assert.equal(composerMaxHeight(22), 235);
+});
+
+test("the ceiling is a count of lines, so enlarging the text never shortens the field", () => {
+  // The defect a fixed ceiling has: 140px was five lines at 16 and three and a
+  // half at 22, so the reader who could not read the text was handed a smaller
+  // field for asking. Every step must give MORE room than the one below it.
+  const steps = messageTextSizeSteps();
+  for (let i = 1; i < steps.length; i += 1) {
+    assert.ok(
+      composerMaxHeight(steps[i]) > composerMaxHeight(steps[i - 1]),
+      `${steps[i]}px must give a taller field than ${steps[i - 1]}px`,
+    );
+  }
+  // And the count itself holds: six lines fit inside the ceiling at both ends
+  // of the range, and a seventh does not.
+  for (const size of [13, 16, 22]) {
+    const line = messageTextLineHeight(size);
+    assert.ok(line * 6 + 20 <= composerMaxHeight(size), `six lines must fit at ${size}px`);
+    assert.ok(line * 7 + 20 > composerMaxHeight(size), `a seventh must not fit at ${size}px`);
+  }
+});
+
+test("the composer at rest is one line and its padding", () => {
+  assert.equal(composerRestHeight(13), 42);
+  assert.equal(composerRestHeight(16), 46);
+  assert.equal(composerRestHeight(22), 56);
+  // 46 rather than the 44 the old `leading-6` gave, which is what the recording
+  // row now follows so that starting a recording moves nothing.
+  assert.notEqual(composerRestHeight(16), 44);
+});
+
+test("an unusable stored size gives the composer the default's heights, not a broken one", () => {
+  // The field is sized from the same clamp the body is, so storage — which
+  // other software can write to — cannot produce a field of NaN pixels.
+  for (const bad of [undefined, null, "", "огромный", Number.NaN]) {
+    assert.equal(composerMaxHeight(bad as unknown as number), 176);
+    assert.equal(composerRestHeight(bad as unknown as number), 46);
+  }
+  // Out of range is clamped to the ends rather than honoured.
+  assert.equal(composerMaxHeight(400), 235);
+  assert.equal(composerMaxHeight(1), 147);
 });

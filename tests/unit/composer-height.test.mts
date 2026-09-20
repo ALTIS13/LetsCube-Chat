@@ -21,6 +21,23 @@ const source = readFileSync("artifacts/kub/src/components/chat/MessageInput.tsx"
  * are written to fail on the shape of the bug, not on the presence of a word.
  */
 
+/**
+ * The file with its prose taken out.
+ *
+ * Every negative assertion below reads this rather than `source`. A doc comment
+ * that *names* the shape it replaced — «the field used to carry
+ * `max-h-[140px]`» — reads to a regular expression exactly like the shape being
+ * refused, so a guard written against the raw text goes red on its own
+ * explanation. That has happened in this repository before and is recorded as
+ * «a grep that matched a comment».
+ *
+ * Block comments go whole; a line comment only counts where it opens the line,
+ * so a `//` inside a string or a URL is left alone.
+ */
+const code: string = source
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .replace(/^[ \t]*\/\/.*$/gm, "");
+
 function composerBody(): string {
   const start = source.indexOf("export function MessageInput");
   assert.notEqual(start, -1, "MessageInput is gone");
@@ -30,10 +47,21 @@ function composerBody(): string {
 test("the height is derived from the text in a layout effect", () => {
   // `useEffect` would run after paint and reintroduce the stagger; a layout
   // effect runs after React writes the DOM and before the browser paints.
+  //
+  // The ceiling moved from a module constant to `maxComposerHeight`, six lines
+  // of whatever size the reader chose (D-289), and it joined `text` in the
+  // dependencies — a size changed under a standing draft has to re-measure the
+  // field that draft is standing in. The contract this pins is unchanged: one
+  // layout effect, deriving the height, clamped.
   assert.match(
     source,
-    /useLayoutEffect\(\(\) => \{[\s\S]{0,400}?el\.style\.height = `\$\{Math\.min\(el\.scrollHeight, MAX_COMPOSER_HEIGHT_PX\)\}px`;[\s\S]{0,80}?\}, \[text\]\);/,
+    /useLayoutEffect\(\(\) => \{[\s\S]{0,400}?el\.style\.height = `\$\{Math\.min\(el\.scrollHeight, maxComposerHeight\)\}px`;/,
     "the composer no longer sizes itself from `text` in a layout effect",
+  );
+  assert.match(
+    source,
+    /\}, \[maxComposerHeight, text\]\);/,
+    "the layout effect no longer re-measures when either the text or the size changes",
   );
 });
 
@@ -71,12 +99,37 @@ test("the send path still returns focus to the composer", () => {
 test("there is no second sizer on the input event", () => {
   // `onInput={handleInput}` sized it a second way. The textarea is controlled by
   // `text`, so the layout effect already covers typing.
-  assert.ok(!/onInput=\{handleInput\}/.test(source), "the input handler is sizing it again");
-  assert.ok(!/const handleInput = \(\) => \{/.test(source), "handleInput is back");
+  assert.ok(!/onInput=\{handleInput\}/.test(code), "the input handler is sizing it again");
+  assert.ok(!/const handleInput = \(\) => \{/.test(code), "handleInput is back");
 });
 
-test("the growth limit is a named constant, not a literal in two places", () => {
-  assert.match(source, /const MAX_COMPOSER_HEIGHT_PX = \d+;/);
-  const literals = [...source.matchAll(/Math\.min\(el\.scrollHeight, 140\)/g)];
+test("the growth limit is one number, computed, and written down in one place", () => {
+  // It used to be a module constant — and, beside it, `max-h-[140px]` on the
+  // element: a pair that can drift, and did nothing to the reader who had
+  // enlarged the text, because 140px is five lines at 16 and three and a half
+  // at 22 (D-289).
+  assert.match(
+    source,
+    /const maxComposerHeight = composerMaxHeight\(messageTextSize\);/,
+    "the ceiling is no longer computed from the reader's own size",
+  );
+  assert.ok(
+    !/const MAX_COMPOSER_HEIGHT_PX/.test(code),
+    "the fixed ceiling is back beside the computed one",
+  );
+  // Neither the old number nor any other may be written into the clamp.
+  const literals = [...code.matchAll(/Math\.min\(el\.scrollHeight, \d+\)/g)];
   assert.equal(literals.length, 0, "the limit is hard-coded again");
+  // And the element must not carry a second ceiling of its own: a CSS
+  // `max-height` beside the clamp is the same pair in a different spelling.
+  assert.ok(!/max-h-\[\d+px\]/.test(code), "a fixed CSS ceiling is back on the field");
+  assert.ok(!/maxHeight:/.test(code), "a second ceiling is back on the field");
+});
+
+test("the field takes its face and leading from the conversation's own class", () => {
+  // The defect D-289 closed: `text-base sm:text-sm` made the composer 16px on a
+  // phone and 14 from 640px up, while the body had already moved to 16 and
+  // gained a 13–22 setting the field ignored.
+  assert.match(source, /"kub-message-text relative min-w-0 flex-1/, "the field stopped reading the message size");
+  assert.ok(!/text-base sm:text-sm/.test(code), "the fixed pair is back on the field");
 });

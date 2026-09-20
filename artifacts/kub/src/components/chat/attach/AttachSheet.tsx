@@ -45,7 +45,13 @@ import {
   originalLimitMessage,
   type IncomingFilesSource,
 } from "@/lib/mediaCompression";
-import { photoSendQuality } from "@/lib/mediaQuality";
+import { showActionFeedback } from "@/lib/actionFeedback";
+import {
+  PHOTO_SEND_ORIGINAL_HINT,
+  PHOTO_SEND_QUALITY_FEEDBACK_KEY,
+  photoSendQuality,
+  photoSendQualitySentence,
+} from "@/lib/mediaQuality";
 import { useVideoSendLadder } from "@/hooks/useVideoSendLadder";
 import { isNativeAndroid } from "@/lib/platform/capabilities";
 import { cn } from "@/lib/utils";
@@ -124,6 +130,12 @@ export default function AttachSheet({
   // Off for every send, and not remembered between them: the objection D-119
   // recorded was to being asked and then having the answer applied for ever
   // afterwards. The sheet unmounts with the send, so this resets itself.
+  //
+  // Telegram does remember it — measured on the device on 2026-09-20: set to SD,
+  // left, reopened, still SD — and the tester called ours «настройка HD»,
+  // which is what a person calls a control that looks like a preference. That
+  // is a decision about D-119's own rule and is recorded for the owner under
+  // item 46 rather than taken here.
   const [hd, setHd] = useState(false);
   const [dragY, setDragY] = useState(0);
   const [dragFrom, setDragFrom] = useState(0);
@@ -296,6 +308,27 @@ export default function AttachSheet({
       },
     );
   }, [filesSelected.length, gallerySelected.length, onClose]);
+
+  /**
+   * The badge, and the sentence it makes true (D-290).
+   *
+   * Telegram draws a line at the moment of pressing — «Фотография будет в
+   * высоком разрешении.» — rather than leaving the reader to infer it from
+   * two letters, and that line is the whole difference between a control whose
+   * name a person has to guess at and one that states its effect. Ours says the
+   * same thing and, on the same line, names the path this control is not:
+   * somebody reaching for HD to get their 5 MB back is reaching for the wrong
+   * one, and nothing used to tell them so.
+   */
+  const changePhotoResolution = (next: boolean) => {
+    setHd(next);
+    showActionFeedback({
+      kind: "info",
+      title: photoSendQualitySentence(next),
+      detail: PHOTO_SEND_ORIGINAL_HINT,
+      key: PHOTO_SEND_QUALITY_FEEDBACK_KEY,
+    });
+  };
 
   const send = async (mode: AttachSendMode) => {
     if (!chosen.length || encoding) return;
@@ -550,7 +583,7 @@ export default function AttachSheet({
         onSend={() => void send("compressed")}
         hdAvailable={offersHd}
         hd={hd}
-        onHdChange={setHd}
+        onHdChange={changePhotoResolution}
         busy={encoding}
       />
     </div>

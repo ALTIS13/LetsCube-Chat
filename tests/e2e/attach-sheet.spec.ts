@@ -246,6 +246,59 @@ test.describe("the attach sheet (D-122)", () => {
     expect(backend.inserts[1]).toMatchObject({ media_metadata: { media_quality: "original", uncompressed: false } });
   });
 
+  /**
+   * D-290. The tester read «HD» as «без сжатия» and got 200 KB from a 5 MB
+   * photograph: «он по прежнему сжимает фото, даже с включенной настройкой HD».
+   * He read it correctly; the control was wrong. HD raises the re-encode's
+   * resolution cap from 1280 to 2560 and stops nothing.
+   *
+   * Asserted on the rendered face and the accessible name, and on the word
+   * itself: «качество» in this control is the defect, because it is what a
+   * person reads as the name of the other path.
+   */
+  test("the badge is the state and it speaks of resolution, never of quality (D-290)", async ({ page }) => {
+    await installBackend(page);
+    await openChat(page);
+
+    const sheet = await openSheet(page);
+    await pick(page, '[data-attach-entry="library"]', [await testPhoto("facade.png", 30)]);
+    const badge = sheet.getByTestId("attach-hd");
+
+    await expect(badge).toHaveText("SD");
+    await expect(badge).toHaveAttribute("data-photo-resolution", "sd");
+    await expect(badge).toHaveAccessibleName("Фото уйдут в обычном разрешении");
+
+    await badge.click();
+    await expect(badge).toHaveText("HD");
+    await expect(badge).toHaveAttribute("data-photo-resolution", "hd");
+    await expect(badge).toHaveAccessibleName("Фото уйдут в высоком разрешении");
+
+    // Neither state may say «качество», which is the word that sent him here.
+    for (const attribute of ["aria-label", "title"]) {
+      const value = (await badge.getAttribute(attribute)) ?? "";
+      expect(value, `${attribute} must not promise quality`).not.toContain("качеств");
+      expect(value, `${attribute} must not promise the other path`).not.toContain("без сжатия");
+    }
+  });
+
+  /**
+   * The line Telegram draws at the moment of pressing, measured on the device
+   * on 2026-09-20: «Фотография будет в высоком разрешении.» Ours says
+   * the same and names the path this control is not, which is the one he was
+   * actually reaching for.
+   */
+  test("pressing the badge says what it will do, and where the original lives (D-290)", async ({ page }) => {
+    await installBackend(page);
+    await openChat(page);
+
+    const sheet = await openSheet(page);
+    await pick(page, '[data-attach-entry="library"]', [await testPhoto("facade.png", 30)]);
+    await sheet.getByTestId("attach-hd").click();
+
+    await expect(page.getByText("Фото уйдут в высоком разрешении").first()).toBeVisible();
+    await expect(page.getByText("Отправить без сжатия", { exact: false }).first()).toBeVisible();
+  });
+
   test("HD is not offered until a photograph is selected (D-174)", async ({ page }) => {
     await installBackend(page);
     await openChat(page);

@@ -1,6 +1,6 @@
 import type { BotProfile, MessageWithSender, Profile } from "../types/database.ts";
 
-type ActorSource = Pick<MessageWithSender, "id" | "type" | "user_id" | "bot_id" | "client_message_id"> & {
+export type ActorSource = Pick<MessageWithSender, "id" | "type" | "user_id" | "bot_id" | "client_message_id"> & {
   sender?: Profile | null;
   bot?: BotProfile | null;
 };

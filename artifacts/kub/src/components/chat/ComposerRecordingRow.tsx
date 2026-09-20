@@ -22,6 +22,16 @@ export interface ComposerRecordingPreview {
 }
 
 export interface ComposerRecordingRowProps {
+  /**
+   * The composer's resting height, which this row takes so that starting a
+   * recording does not move the conversation (D-289).
+   *
+   * It was a fixed 44px while the field was too. Now the field is one line of
+   * whatever text size the reader chose — 42px at 13 and 56px at 22 — and a row
+   * that kept the old number would jerk the whole list by the difference the
+   * moment a finger went down on the microphone.
+   */
+  heightPx: number;
   mode: RecordingMode;
   phase: RecordingPhase;
   durationMs: number;
@@ -71,6 +81,7 @@ export interface ComposerRecordingRowProps {
  * nothing here writes a fill, a blur or a shadow of its own (rule 1).
  */
 export function ComposerRecordingRow({
+  heightPx,
   mode,
   phase,
   durationMs,
@@ -98,8 +109,9 @@ export function ComposerRecordingRow({
       data-recording-row={mode}
       data-recording-phase={phase}
       data-cancel-armed={cancelArmed ? "true" : "false"}
+      style={{ height: `${heightPx}px` }}
       className={cn(
-        "relative grid h-11 w-full items-center gap-2 rounded-full",
+        "relative grid w-full items-center gap-2 rounded-full",
         stopped ? "grid-cols-[auto_1fr_auto] px-1" : "grid-cols-[1fr_auto_1fr] pl-3 pr-1",
       )}
     >

@@ -23,10 +23,15 @@ import type { ChatRole } from "@/lib/chatRoles";
 import { useAppStore } from "@/store/app.store";
 import { FormattedText, isLocationPreviewMessage } from "@/lib/formatText";
 import { KubIcon } from "@/components/kub";
-import type { MediaViewerItem } from "./MediaViewer";
 import { useChatMediaPlayback, VideoCircleProgressRing, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 import { ROUND_VIDEO_OPEN_CLASS, ROUND_VIDEO_PLAYBACK_CLASS } from "@/lib/conversationStacking";
 import { mediaOriginality } from "@/lib/mediaOriginality";
+import {
+  FORWARDED_FROM_PREFIX,
+  FORWARDED_WITHOUT_ORIGIN,
+  forwardOriginName,
+  showsForwardedLine,
+} from "@/lib/messageForwardOrigin";
 import type { MessageDeliveryState } from "@/lib/messageDelivery";
 import {
   getGroupReadReceiptAriaLabel,
@@ -74,7 +79,16 @@ interface MessageBubbleProps {
   onRetrySend?: () => void;
   onEditFailedSend?: () => void;
   onDiscardLocalMessage?: () => void;
-  onOpenMedia?: (media: MediaViewerItem) => void;
+  /**
+   * The reader opened this message's picture or video (D-288).
+   *
+   * The **message id**, not a built item: the conversation owns the sequence
+   * the viewer walks, so it builds every item the same way — see
+   * `lib/conversationMedia.ts`. A bubble that handed over a finished object
+   * would make the photograph a tap produces differ from the one a swipe
+   * produces, which is the defect `ChatInfoPanel` already names.
+   */
+  onOpenMedia?: (messageId: string) => void;
   isSelectionMode?: boolean;
   messagesMap?: Record<string, MessageWithSender>;
   mediaVariant?: MessageMediaVariantUrls;
@@ -893,6 +907,20 @@ export function MessageBubble({
    */
   const authorRoleColour = readChatRoleColour(authorChatRole?.colour ?? null);
   const textContent = message.content ?? "";
+  /**
+   * Who wrote the original, where the reader may know (D-291).
+   *
+   * `forwarded_from` is the joined source row — `null` when RLS refused it — and
+   * `forward_origin` is anything the client already knew. Which wins, and the
+   * three different reasons there may be no name at all, are in
+   * `lib/messageForwardOrigin.ts`.
+   */
+  const forwardOrigin = forwardOriginName({
+    forwardedFromId: message.forwarded_from_id,
+    explicit: message.forward_origin,
+    source: message.forwarded_from,
+  });
+
   const mediaCaption = getVisibleMediaCaption(message);
   const mediaDimensions = getMessageMediaDimensions(message);
   // Sent without compression: the stored file is the original, and the preview
@@ -1388,17 +1416,22 @@ export function MessageBubble({
               <QuickReactionButton messageId={message.id} placement={isMe ? "left" : "right"} onReact={onReaction} />
             )}
 
-            {message.forwarded_from_id && (
+            {showsForwardedLine(message.forwarded_from_id) && (
               <div
                 data-message-forwarded="true"
+                // The name where it can be had, and «Переслано» on its own
+                // where it cannot — which is a reader who is not in the chat the
+                // original was sent to, not a bug (D-291). The attribute says
+                // which of the two this is, so a test can tell them apart.
+                data-forward-origin={forwardOrigin ? "named" : "unnamed"}
                 className="mb-1 min-w-0 max-w-full truncate text-[12px] leading-snug text-[color:var(--kub-accent-text)]"
               >
-                {message.forward_origin?.name ? (
+                {forwardOrigin ? (
                   <>
-                    Переслано от <span className="font-semibold">{message.forward_origin.name}</span>
+                    {FORWARDED_FROM_PREFIX} <span className="font-semibold">{forwardOrigin}</span>
                   </>
                 ) : (
-                  "Переслано"
+                  FORWARDED_WITHOUT_ORIGIN
                 )}
               </div>
             )}
@@ -1469,20 +1502,11 @@ export function MessageBubble({
                     // The viewer is always the original, so there is nothing to
                     // open until the original has an address.
                     if (!originalUrl) return;
-                    onOpenMedia?.({
-                      type: "image",
-                      url: originalUrl,
-                      title: message.content ?? "Фото",
-                      // What the stored file is, read from the row rather than
-                      // inferred from the absence of a flag (D-097).
-                      originality: mediaOriginality(message.media_metadata),
-                      ...(uncompressedMedia
-                        ? {
-                          original: true,
-                          previewUrl: imageDisplayUrl && imageDisplayUrl !== originalUrl ? imageDisplayUrl : undefined,
-                        }
-                        : {}),
-                    });
+                    // The id only: what the viewer shows, and what it says
+                    // about the file (D-097's three states, the preview beside
+                    // an original), is built once by the conversation so a
+                    // picture reached by a swipe is the one a tap produces.
+                    onOpenMedia?.(message.id);
                   }}
                 />
               </MediaWithCaption>
@@ -1497,15 +1521,7 @@ export function MessageBubble({
                   playbackItem={createPlaybackItemFromMessage(message, isMe, videoPlaybackUrl)}
                   onOpen={() => {
                     if (!originalUrl) return;
-                    onOpenMedia?.({
-                      type: "video",
-                      url: originalUrl,
-                      title: message.content ?? "Видео-сообщение",
-                      // A round message's metadata carries neither the flag nor
-                      // a picked size, so this is «unknown» and the viewer says
-                      // nothing — which is the honest answer, not an oversight.
-                      originality: mediaOriginality(message.media_metadata),
-                    });
+                    onOpenMedia?.(message.id);
                   }}
                 />
               ) : (
@@ -1519,13 +1535,7 @@ export function MessageBubble({
                     playbackItem={createPlaybackItemFromMessage(message, isMe, videoPlaybackUrl)}
                     onOpen={() => {
                       if (!originalUrl) return;
-                      onOpenMedia?.({
-                        type: "video",
-                        url: originalUrl,
-                        title: message.content ?? "Видео",
-                        originality: mediaOriginality(message.media_metadata),
-                        ...(uncompressedMedia ? { original: true } : {}),
-                      });
+                      onOpenMedia?.(message.id);
                     }}
                   />
                 </MediaWithCaption>

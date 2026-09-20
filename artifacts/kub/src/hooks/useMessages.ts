@@ -448,7 +448,7 @@ export function useMessages(
       .single();
     if (!data) return;
 
-    const nextMessage = data as MessageWithSender;
+    const nextMessage = data as unknown as MessageWithSender;
     if (nextMessage.chat_id !== activeChatId) return;
     if (
       topicIdRef.current !== undefined &&
@@ -866,7 +866,7 @@ export function useMessages(
             .single();
           if (data) {
             const current = useAppStore.getState().messages[payload.new.chat_id] ?? [];
-            const nextMessage = data as MessageWithSender;
+            const nextMessage = data as unknown as MessageWithSender;
             const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]));
             if (fetchedHiddenIds.size) rememberHiddenMessageIds(fetchedHiddenIds);
             const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
@@ -1628,7 +1628,7 @@ export function useMessages(
       .eq("id", messageId).single();
     if (updatedMsg && activeChatId) {
       const current = useAppStore.getState().messages[activeChatId] ?? [];
-      setMessages(activeChatId, current.map((m) => m.id === messageId ? (updatedMsg as MessageWithSender) : m));
+      setMessages(activeChatId, current.map((m) => m.id === messageId ? (updatedMsg as unknown as MessageWithSender) : m));
     }
   }, [chatId, supabase, setMessages]);
 
@@ -1758,6 +1758,11 @@ function buildRealtimeMessage(row: MessageWithSender): MessageWithSender {
     reactions: row.reactions ?? [],
     bot: row.bot ?? null,
     reply_to: row.reply_to ?? (row.reply_to_id ? undefined : (null as unknown as undefined)),
+    // The same shape for the forwarded source (D-291): absent means «the join
+    // has not happened yet», null means «there is nothing to join to». A
+    // realtime row carries no joins, so a forward arrives unnamed for the
+    // frame before the refetch below replaces it.
+    forwarded_from: row.forwarded_from ?? (row.forwarded_from_id ? undefined : null),
   };
 }
 
@@ -1765,6 +1770,8 @@ function buildRealtimeMessage(row: MessageWithSender): MessageWithSender {
 function needsJoinedRow(message: MessageWithSender): boolean {
   if (message.bot_id) return true;
   if (message.reply_to_id) return true;
+  // A forward needs its source read before it can say who wrote the original.
+  if (message.forwarded_from_id && !message.forwarded_from) return true;
   return Boolean(message.user_id && !message.sender);
 }
 

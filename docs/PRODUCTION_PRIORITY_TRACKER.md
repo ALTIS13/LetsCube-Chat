@@ -1589,6 +1589,181 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     of the gesture and one of the font are red; the settings-row count guard was
     moved 16 → 17 deliberately, which is what it is for.
 
+    ### The third pass, 2026-09-20: (b), (c), (h) and the composer
+
+    A second device pass answered the three questions the first one left to
+    taste. Full record in section 18 of `docs/operations/reference-clients.md`;
+    the privacy rule it was run under, and the two of the owner's settings that
+    were changed and put back, are stated at the top of it.
+
+    **(b) is fixed. D-288.** `MediaViewer` has had arrows, keys and a swipe
+    since D-171, all behind a `sequence` prop that only «Общие медиа» passed, so
+    the viewer opened from a bubble was a dead end. What the prop should carry
+    was the real question and it was measured rather than chosen: Telegram's
+    in-chat viewer draws **«237 из 244»** and a swipe left moved it to «238», so
+    the unit is **the chat**, the order is **chronological**, and «N из M» is
+    already our own wording character for character.
+
+    - The sequence is the pictures and videos of the **loaded conversation**,
+      in the conversation's own order, and stepping off its old end asks the
+      conversation for its next page of history — `planMediaStep`'s existing
+      mechanic, pointed the other way by a new `moreAt: "start"`.
+    - **Ours is not Telegram's count** and the label says so: «3 из 7+» while
+      history is unread. Telegram keeps a per-chat media index; querying one
+      before the viewer could open would put a round trip in front of a tap.
+    - The open picture is held by **message id, not index**, because a page of
+      older history lands at the *front* and an index would silently point at a
+      different photograph.
+    - «Общие медиа» stays newest-first and this one is oldest-first, deliberately:
+      **the viewer's order is the order of the surface that opened it**, or
+      «next» would walk the reader back up the chat they were reading down.
+    - The boundary with D-287's row swipe is unchanged and is asserted again
+      here: a drag inside the open viewer belongs to the viewer.
+
+    **The composer is bound to the message size. D-289, and it corrects this
+    register.** D-287 left the field on `text-base sm:text-sm` — 16 on a phone,
+    **14 from 640px up while the body had moved to 16** — and unmoved at every
+    slider position.
+
+    - The field now carries `.kub-message-text`, so one number governs both.
+    - **The ceiling is six lines, not 140 pixels.** Six is Telegram Android's,
+      measured: its composer saturates at 387 device px = 51 of padding + 6 × 56
+      of line. A *pixel* ceiling cannot be right once the size moves — 140px is
+      five lines at 16px and three and a half at 22 — so the reader who enlarged
+      the text because they could not read it was being handed a shorter field
+      for asking. Measured across the range: rest 42/46/56px and ceiling
+      147/176/235px at 13/16/22.
+    - The recording row follows the resting height for the same reason; at 44px
+      it would have jerked the conversation by 12px at the top of the range.
+    - **The correction.** This file and section 16.1 both said Telegram's slider
+      governs the composer as well. **It does not** — dragged to 30, the
+      composer's resting height and line step came back byte-identical to the
+      readings at 16 while the settings preview grew visibly. So the binding is
+      **ours**, written down as ours in `lib/messageTextSize.ts` rather than
+      claimed as adoption. What is true is that at Telegram's default the two
+      agree; binding is how we get that at every setting rather than at one.
+
+    **(c): the label is fixed, the memory is the owner's to settle. D-290.**
+    The triage was right about the mechanism — HD moves the re-encode from
+    1280px at 0.76 to 2560px at 0.90 and stops no compression — and the tester
+    read the control correctly. Two things were lying:
+
+    - **The word.** «Качество» reads as «без сжатия», which is the name of the
+      *other* path. Telegram says **«разрешение»**, measured: pressing its badge
+      draws «Фотография будет в высоком разрешении.» Ours says the same now, and
+      adds a line Telegram does not — naming «Отправить без сжатия», because
+      that is what he was actually reaching for and nothing told him it existed.
+    - **The badge.** Ours read «HD» whether or not HD was on, leaving the state
+      to a fill colour. Telegram's badge **is** the state, SD or HD. Ours is now
+      too.
+
+    **Not changed, and put to the owner:** Telegram **remembers** the choice
+    across sends — set to SD, left, reopened, still SD — and the tester's own
+    words («с включенной настройкой HD») say he expected ours to. Ours resets
+    every send and `AttachSheet` carries a note saying so on purpose, because
+    D-119's objection was to a quality question asked every time *and* then
+    applied for ever. Telegram's arrangement is the middle one: never asked,
+    remembered when chosen. Changing this would not touch «по стоку загрузку в
+    sd качестве» — the shipped default stays SD — but it does move a decision
+    D-119 recorded, so it is not taken here.
+
+    **The storage question, recorded with costs and not decided.** The owner's
+    framing was «если это вопрос дискового места… может просто удалять фото,
+    которым больше 8 месяцев». Four options, and one hard fact that constrains
+    the fourth:
+
+    1. **Leave the default at SD.** No storage cost, and the complaint recurs
+       for everyone who does not find the badge.
+    2. **Move the default to HD** (2560 at 0.90). Costs roughly a megabyte a
+       photograph instead of a couple of hundred kilobytes. Reversible, no
+       migration, and it is what Telegram's own default state was on the device.
+    3. **Send originals by default.** An order of magnitude more per photograph
+       and it changes the upload path, not just a profile.
+    4. **Delete media older than N months.** **This one breaks forwarding as
+       built**: `forward_message` copies the source's variant rows *pointing at
+       the same files* (20260911144000 says so in its own header), so deleting a
+       source's objects empties every forward of it, in chats whose members
+       never saw the original message. It would need forwards to be
+       re-rendered under the target's own path — a second transcode per forward,
+       which that migration names as the alternative it did not take — before
+       any age-based deletion could be safe. It is also a data-loss policy, so
+       it needs notice, a backup story and a decision about whether the message
+       survives its picture.
+
+    **What is not known and would decide between 1–3:** how fast the media
+    bucket is actually growing. Nothing in this repository measures it; a
+    read-only pass over `storage.objects` would, and none was taken.
+
+    **(h) is half fixed, and the half is named. D-291.** `forward_origin` was a
+    field with one consumer, one type and one fixture and nothing that ever
+    filled it, so every real forward read a bare «Переслано».
+
+    - The projection now embeds the source message's **identity only**
+      (`forwarded_from:messages!forwarded_from_id(...)`), the same shape and the
+      same cost as the `reply_to` embed it sits beside.
+    - RLS answers it as it answers any read of `public.messages`:
+      `is_chat_member(chat_id)`. So **the person who forwarded it sees the name**
+      — they are a member of the source chat by definition, since
+      `forward_message` refuses otherwise, and that is the tester's own case
+      word for word — and **a stranger in the target chat does not**. Nothing is
+      widened and no policy is touched.
+    - A deleted source gives no name either: a name must not outlive the message
+      it belonged to.
+
+    **What would close the other half, for the owner.** Telegram denormalises,
+    and the proof it is stored rather than joined is its own privacy setting: a
+    sender who forbids linking still has their *name* travel with the forward,
+    which no join could produce. Ours would need a column on `public.messages`
+    filled by `forward_message` from the server's own row of the source.
+    That is a production migration — additive, one column, one function
+    replaced, with a backfill that can only reach forwards whose source still
+    exists and is readable by the migration — so under §10 it needs the owner's
+    approval, a verified backup and a rehearsal. **Not proposed as SQL here**,
+    because the shape of the column (a name, or a name plus an id, or a jsonb
+    like Telegram's `fwd_from`) is a product decision about what a forward is
+    allowed to reveal, and that is his.
+
+    Gates at this commit: typecheck clean across all packages, unit
+    **3726/3726**, `tests/server` **144/144**, production build proved by
+    `sw.js build 09bf7c7fb7b2e724` and `built in 8.75s`.
+
+    The affected e2e, each on the server it actually needs — which cost this
+    task an hour before the pattern was recognised, so it is written down: the
+    fixture server (`VITE_SUPABASE_URL=http://127.0.0.1:54321`) carries the
+    conversation, composer, forward and attach specs, and a **second** server
+    with `VITE_PUBLIC_PREVIEW_FIXTURE=1` carries `message-touch-gestures`,
+    `message-render-stability` and `media-viewer-zoom`. Run against the wrong
+    one they all fail at 16.7s apiece and look exactly like a regression.
+
+    - fixture server: **60/60** at 1440 (of 61 — see the pre-existing red
+      below) and **34/34** at 390;
+    - preview-fixture server: **8/8** at 1440 and **19/19** at 390.
+
+    **Thirty-two mutations are red**, all written against literals rather than
+    against the constants they pin — nine on the viewer's sequence, four on its
+    wiring in `ChatWindow`, eight on the composer, three on its guards, and
+    eight on the HD wording and the forward origin. One mutation came back
+    **green** and was a finding rather than a gap: the field carried both a JS
+    clamp and a CSS `max-height`, and the CSS one is unreachable because a
+    layout effect runs before paint — so the pair that can drift was removed
+    rather than tested twice.
+
+    **One red that is not this change's**, verified by stashing the whole branch
+    and re-running it: «the sound settings no longer offer a second playback
+    volume (D-149)» in `media-viewer-actions.spec.ts`. Its anchor,
+    `AUDIO_GAIN_LABEL`, now sits inside a collapsed «Ещё» disclosure in
+    `AudioSettingsSection.tsx`, so it fails before the two absence assertions
+    the case exists to make ever run — D-149's actual contract has been
+    unchecked for as long as that disclosure has been collapsed. The test's own
+    comment describes this happening to it once before, which makes this the
+    second time. Not fixed here; filed.
+
+    Two guards in `composer-height.test.mts` were moved to the new shape rather
+    than deleted, and in doing so hit the register's own «a grep that matched a
+    comment»: a doc comment naming `max-h-[140px]` as the thing it replaced
+    reads to a regular expression exactly like the thing being refused. They
+    strip comments now, and three mutations prove they still bite.
+
 
 47. `[ ]` Separating the kinds of conversation, so the list stops being
     noise. Asked for by the owner on 2026-09-20, and he framed it as something
