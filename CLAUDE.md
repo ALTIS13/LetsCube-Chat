@@ -658,6 +658,19 @@ before claiming a Stable version or publishing an update.
 - Before editing, state the observed root cause and intended scoped patch.
 - Add tests proportional to the behavioral risk.
 - Validate before committing; review before pushing; deploy only after validation.
+- **Staging by path is not enough when another agent shares this worktree.**
+  `git add <path>` takes the file **whole**, so a neighbour's in-flight edit to
+  the same file rides into your commit — and if the rest of their change is
+  still untracked, your commit cannot build. Measured on 2026-09-20: `054bf8ee`
+  carried half of another agent's `MainLayout.tsx`, which imports a
+  `UserProfileOverlay` that was not in that revision, and it reached `main`.
+  Before committing, read `git diff --cached`, or resolve every `@/` import in
+  the commit's own files against that same commit's tree — the check reproduces
+  the defect exactly and takes seconds.
+- **Read `origin/main..HEAD` as its own step before pushing.** A `git log` and a
+  `git push` chained in one command means you see another agent's commits in the
+  output and can no longer stop. Their presence in that list is a halt, not a
+  line of output: it means work nobody reviewed is about to be deployed.
 - Keep reports in Russian for the user, but code/docs may follow the repository's
   existing language conventions.
 - Check `git status` frequently because another Apple-focused agent may create
