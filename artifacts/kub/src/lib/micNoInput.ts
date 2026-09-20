@@ -13,19 +13,90 @@
  * module is a decision with no test. Everything here is reachable from
  * `node --test`, and `tests/unit/mic-no-input.test.mts` holds it.
  *
- * ## The distinction that makes the warning honest
+ * ## What «nothing» means, measured rather than assumed
  *
- * **Digital silence is not a quiet room.** The level this module is fed is
- * `lib/micLevel.ts`'s peak — the largest distance any sample in a 2048-sample
- * window sits from the 8-bit midpoint, divided by 128. A live capture of a
- * quiet room never reads exactly 0: Chromium's own fake device sits at 0.0078
- * between its beeps (measured, and written down in `micLevel.ts`). What reads
- * exactly 0 is a capture that is producing no signal — a headset with its
- * hardware mute closed, a device muted in the operating system's mixer, an
- * input the browser opened and the machine never fed.
+ * **This module shipped on 2026-09-20 with `level > 0` and that rule could
+ * never fire.** The reasoning behind it was that a dead input reads exactly 0
+ * while anything live does not. The owner disproved it the same day on real
+ * hardware: his microphone has an analogue volume dimmer, and with it turned
+ * fully to zero Discord says it is getting no audio and this product said
+ * nothing at all. A dimmer at zero is **attenuation, not disconnection** — the
+ * capsule still captures and the converter still converts, so what arrives is
+ * tiny and non-zero, `heard` was set on the very first reading, and `heard` is
+ * terminal by design.
  *
- * So the test is `level > 0`, not `level > someFloor`. A floor would turn this
- * into «you are being quiet», which is not a defect and not worth a warning.
+ * ## The instrument, and why it has only one number below −42 dBFS
+ *
+ * The level this module is fed is `lib/micLevel.ts`'s peak: the largest
+ * distance any sample in a 2048-sample window sits from the 8-bit midpoint of
+ * `AnalyserNode.getByteTimeDomainData`, divided by 128. So the **only values it
+ * can ever report are k/128**, and everything below turns on what that byte
+ * conversion does with a small number.
+ *
+ * Measured in Chromium 2026-09-20, driving known amplitudes through the same
+ * graph the product builds (`output/d272-measure-floor.mjs`):
+ *
+ * | true signal | byte peak | level reported |
+ * | --- | --- | --- |
+ * | −90 dBFS (one 16-bit converter step) | 1 | 0.0078125 |
+ * | −60 dBFS | 1 | 0.0078125 |
+ * | −43 dBFS | 1 | 0.0078125 |
+ * | −42 dBFS | 2 | 0.015625 |
+ * | −36 dBFS | 3 | 0.0234375 |
+ * | −24 dBFS | 9 | 0.0703125 |
+ *
+ * **The conversion floors, and that is a fact about the specification rather
+ * than about one browser.** `getByteTimeDomainData` is defined as
+ * `b = ⌊128(1 + x)⌋`, so the rounding is asymmetric: a positive sample has to
+ * reach a whole step to move the byte at all, while **any** negative sample,
+ * however small, lands on 127 — one step below the midpoint.
+ *
+ * Measured on 2026-09-20 with a DC offset, which is the one signal that can
+ * tell the two explanations apart (`output/d277-byte-asymmetry.mjs`); an
+ * oscillator cannot, because every window of one contains both signs:
+ *
+ * | constant offset | raw byte | reported |
+ * | --- | --- | --- |
+ * | +3.05e−5 (one 16-bit step) | 128 | 0 |
+ * | −3.05e−5 | 127 | 1 |
+ * | +1/128 | 129 | 1 |
+ * | −1/128 | 127 | 1 |
+ *
+ * Every real audio signal is bipolar, so every live capture reports at least
+ * one step. `level > 0` was therefore satisfied by very nearly anything, and
+ * the only way to read a true 0 is absolute digital silence on every sample —
+ * in practice a disabled track or a suspended context.
+ *
+ * The consequence that matters: **byte peak 1 is a single bucket 48 dB wide**,
+ * spanning −90.3 dBFS up to about −42.1 dBFS. It does not mean «this quiet»;
+ * it means «too quiet for this instrument to put a number on». And because the
+ * cause is the specification's own formula, it is not a Chromium quirk to be
+ * re-checked on Safari: every compliant implementation floors the same way.
+ *
+ * ## So the floor is the instrument's own resolution
+ *
+ * `MIC_NO_INPUT_FLOOR` is one byte step, and the test is `>` — a reading has to
+ * reach **two** steps, which is louder than about −42.5 dBFS, to count as
+ * sound. That is not a chosen number and cannot drift, because it is the
+ * boundary between the bucket that carries no information and the first one
+ * that does. Speech peaks at roughly −25 dBFS into a laptop capture, which is
+ * byte peak 9 — nine times over the line.
+ *
+ * **And this is why the gate's threshold is not reused here**, which was the
+ * obvious alternative. `micGateOpenAt(MIC_GATE_THRESHOLD_DEFAULT)` is 0.00531,
+ * i.e. −45.5 dBFS — **below one byte step**, so a floor set from it would be
+ * cleared by every non-zero reading and would reproduce exactly the defect
+ * above. A decision the instrument cannot represent cannot be borrowed. The two
+ * do share the axis, which is the part worth sharing: both are levels on
+ * `micGateOpenAt`'s scale and both can be drawn on the same meter.
+ *
+ * ## What this costs, stated rather than discovered later
+ *
+ * A person who joins a call and makes **no sound above −42.5 dBFS for ten
+ * continuous seconds** is warned, even though their microphone works. That is
+ * the trade this floor buys and it is the same trade Discord makes. One sound
+ * anywhere in the call clears it permanently (`heard` is terminal), so it costs
+ * a silent listener one sentence and nobody else.
  *
  * **It is not a diagnosis, and the copy must not pretend otherwise.** A
  * browser whose noise suppression emits true digital silence between words
@@ -102,6 +173,61 @@
  */
 export const MIC_NO_INPUT_AFTER_MS = 10_000;
 
+/**
+ * The quietest reading that counts as sound: one step of the instrument.
+ *
+ * `lib/micLevel.ts` reports `peak / 128` out of `getByteTimeDomainData`, so the
+ * only values that exist are k/128 and this is k = 1. The test against it is
+ * **strictly greater**, so a reading has to reach k = 2 — louder than about
+ * −42.5 dBFS — before the microphone is considered to have produced anything.
+ *
+ * Why here rather than a number of decibels: the whole argument for this value
+ * is that it is the instrument's resolution, and the instrument counts bytes.
+ * Written as a dB figure it would look like a choice somebody could tune, and
+ * the next person would tune it.
+ *
+ * The measurement behind it is in this module's header, and the scripts that
+ * took it are `output/d272-measure-floor.mjs` and
+ * `output/d277-byte-asymmetry.mjs`. The one line to remember: a signal at
+ * −90 dBFS — one 16-bit converter step above absolute silence — already
+ * reports k = 1, because the byte conversion floors and the negative half of
+ * any signal therefore lands a step below the midpoint. So k = 1 is not a
+ * level at all; it is a 48 dB bucket meaning «below the bottom of this scale».
+ *
+ * **What would invalidate this value, said here because it does not look like
+ * it can drift.** The argument is «one step of the instrument», and the
+ * instrument is `getByteTimeDomainData`. The same `AnalyserNode` also offers
+ * `getFloatTimeDomainData`, which in the same measurement resolved every level
+ * down to −90 dBFS exactly. If `lib/micLevel.ts` ever reads the float path —
+ * and D-278 is the case for doing so — then 1/128 stops being a resolution and
+ * becomes −42.1 dBFS, a tuned number, which is precisely what the paragraph
+ * above says this must not be. It would still be a defensible figure (17 dB
+ * under conversational speech, 18 dB over a quiet room), but it would need
+ * that justification written out instead of this one.
+ */
+export const MIC_NO_INPUT_FLOOR = 1 / 128;
+
+/**
+ * How many readings above the floor it takes to call a microphone alive.
+ *
+ * Three, and the number is not a new one: `lib/micLevel.ts` already says «a
+ * syllable is around 150 ms, so three readings inside the shortest thing worth
+ * opening the gate for is the fewest that can be called responsive», and the
+ * sampler runs at 50 ms because of it. Three readings is that same 150 ms.
+ *
+ * It exists because `heard` is **terminal**, which makes a single reading a
+ * very cheap way to switch the warning off for a whole call. Measured on
+ * 2026-09-20: the product's default constraints give speech **+13 dB** (byte 9
+ * raw, byte 40 processed), so a keyboard click near a dimmed microphone can
+ * clear a one-reading rule while a person still cannot be heard. A click is
+ * one reading; a syllable is three.
+ *
+ * Counted **consecutively** and reset by any reading at or below the floor, so
+ * what it asks for is 150 ms of continuous sound rather than three transients
+ * spread over a minute.
+ */
+export const MIC_NO_INPUT_HEARD_READINGS = 3;
+
 /* ── The state ────────────────────────────────────────────────────────────── */
 
 /**
@@ -113,18 +239,24 @@ export const MIC_NO_INPUT_AFTER_MS = 10_000;
  * arrived, or because the capture is not in a state that can be judged.
  */
 export interface MicNoInputState {
-  /** When the current run of exact silence began, or `null` for no run. */
+  /** When the current run of silence began, or `null` for no run. */
   readonly silentSince: number | null;
-  /** This capture has produced sound at least once. Terminal. */
+  /** This capture has produced sound for long enough to count. Terminal. */
   readonly heard: boolean;
   /** Whether the warning is showing right now. */
   readonly warned: boolean;
+  /**
+   * Consecutive readings above `MIC_NO_INPUT_FLOOR`, up to the point where
+   * they add up to `heard`. Reset by any reading at or below the floor.
+   */
+  readonly above: number;
 }
 
 export const MIC_NO_INPUT_CLEAR: MicNoInputState = {
   silentSince: null,
   heard: false,
   warned: false,
+  above: 0,
 };
 
 export interface MicNoInputInput {
@@ -173,25 +305,39 @@ export interface MicNoInputInput {
 export function nextMicNoInput(state: MicNoInputState, input: MicNoInputInput): MicNoInputState {
   if (!input.enabled) return MIC_NO_INPUT_CLEAR;
 
-  // `> 0` and nothing else, which is also why there is no `Number.isFinite`
-  // guard here as there is in `nextMicGate`. One was written and then removed
-  // on 2026-09-20, because no mutation could make it matter: `NaN > 0` is
-  // already `false`, so a level the analyser could not produce falls to the
-  // safe side — silence — through the comparison itself. A guard a test cannot
-  // reach is a guard that is not doing anything, and leaving it in would have
-  // suggested this branch had two decisions in it when it has one.
-  if (input.level > 0) {
-    // The answer to the whole question, and it is kept for the life of this
-    // capture. `warned: false` rather than left alone: a warning still on
-    // screen over a microphone that has just been heard is a stale sentence,
-    // and a person whose headset mute they just opened should see it go.
-    return { silentSince: null, heard: true, warned: false };
-  }
+  // Terminal, and tested before the level rather than after it: once a capture
+  // has proved itself there is nothing left for a reading to change.
   if (state.heard) return state;
 
+  // `> MIC_NO_INPUT_FLOOR`, not `> 0`. The shipped rule was `> 0` and could
+  // never fire: the byte conversion rounds up, so a signal 90 dB below full
+  // scale still reports a whole step and `heard` was set on the first reading
+  // of every call. The header carries the measurement and the owner's dimmer,
+  // which is the hardware that found it.
+  //
+  // Still no `Number.isFinite` guard, and still for the reason a mutation
+  // proved on 2026-09-20: `NaN > anything` is already `false`, so a level the
+  // analyser could not produce falls to the safe side — silence — through the
+  // comparison itself. A guard a test cannot reach is not doing anything.
+  if (input.level > MIC_NO_INPUT_FLOOR) {
+    const above = state.above + 1;
+    if (above >= MIC_NO_INPUT_HEARD_READINGS) {
+      // The answer to the whole question, and it is kept for the life of this
+      // capture. `warned: false` rather than left alone: a warning still on
+      // screen over a microphone that has just been heard is a stale sentence,
+      // and somebody who has just opened their headset's mute should see it go.
+      return { silentSince: null, heard: true, warned: false, above };
+    }
+    // Not yet sound — a transient, on the way to being a syllable or not. The
+    // silence run deliberately carries **on** underneath it rather than
+    // restarting, because a click is not a reason to give somebody another ten
+    // seconds of being inaudible.
+    return { ...state, above };
+  }
+
   if (!input.judgeable) {
-    if (state.silentSince === null && !state.warned) return state;
-    return { ...state, silentSince: null, warned: false };
+    if (state.silentSince === null && !state.warned && state.above === 0) return state;
+    return { ...state, silentSince: null, warned: false, above: 0 };
   }
 
   const since = state.silentSince ?? input.now;
@@ -203,6 +349,7 @@ export function nextMicNoInput(state: MicNoInputState, input: MicNoInputInput): 
     silentSince: since,
     heard: false,
     warned: due,
+    above: 0,
   };
 }
 

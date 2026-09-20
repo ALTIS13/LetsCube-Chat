@@ -20618,7 +20618,9 @@ we ever want this, it is proved by packet capture and by nothing else.
 
 **Built: row 4, «Предупреждение об отсутствии звука».** A switch in the new
 advanced fold, on by default, and a sentence in the call capsule when the
-microphone has produced nothing at all for ten seconds. The rule is
+microphone has produced nothing at all for ten seconds. **Its first rule was
+wrong and never fired — see D-277**, which is also where the measurement of
+what the instrument can actually resolve lives. The rule is
 `artifacts/kub/src/lib/micNoInput.ts` and it is pure;
 `tests/unit/mic-no-input.test.mts` holds it, fifteen mutations watched go red.
 
@@ -20875,5 +20877,228 @@ element at 1440 and 390, so no future wording can quietly outgrow the slot.
   because the fixture answered every seeded column whatever the query asked for.
   The fixture now projects through the `select`, as PostgREST does, and the same
   mutation is red.
+
+---
+
+## D-277 `[x]` «Микрофон не даёт звука» could never fire, because 1/128 is not a level
+
+**Found on real hardware by the owner**, hours after D-275 shipped the warning:
+«у меня на микрофоне есть диммер громкости и когда я выкручиваю его в ноль то
+при заходе в голосовой канал дискорда мне пишет что звука нет… а letscube
+сейчас такого не видит хотя как вижу опция есть».
+
+**The mechanism.** A dimmer is analogue attenuation, not disconnection. The
+capsule still captures and the converter still converts, so a tiny non-zero
+signal arrives — and the rule was `level > 0`, which that satisfies. `heard` is
+terminal by design, so it was set on the first reading of the call and the
+warning was dead for the session.
+
+**The assumption behind `> 0` was named as untested in the D-275 report and was
+false.** That is the entry worth having: it was written down as «only a person
+with a headset can confirm this», and a person with a headset disconfirmed it
+the same evening.
+
+### The instrument, measured
+
+`lib/micLevel.ts` reports `peak / 128` out of `AnalyserNode.getByteTimeDomainData`,
+so the only values that exist are k/128. Known amplitudes driven through the
+same graph the product builds (`output/d272-measure-floor.mjs`, Chromium,
+2026-09-20):
+
+| true signal | byte peak | level reported |
+| --- | --- | --- |
+| −90 dBFS (one 16-bit converter step) | 1 | 0.0078125 |
+| −60 dBFS | 1 | 0.0078125 |
+| −43 dBFS | 1 | 0.0078125 |
+| −42 dBFS | 2 | 0.015625 |
+| −36 dBFS | 3 | 0.0234375 |
+| −24 dBFS | 9 | 0.0703125 |
+
+**The byte conversion floors, which is specified rather than Chromium's own.** `getByteTimeDomainData` is `b = ⌊128(1 + x)⌋`, so a positive sample must reach a whole step to move the byte while **any** negative sample lands on 127. Measured with a DC offset on 2026-09-20 (`output/d277-byte-asymmetry.mjs`), which is the one signal that can separate the two explanations: +3.05e−5 reports 0, −3.05e−5 reports 1. Every real signal is bipolar, so every live capture reports at least one step, and because the cause is the specification's formula this is not a quirk to re-check on Safari. A signal one 16-bit converter step above
+absolute silence — −90.3 dBFS, which is 3.05e-5 on this scale — already reports a
+whole byte. So byte peak 1 is not a level at all: it is **a single bucket 48 dB
+wide** meaning «below the bottom of this scale», and `> 0` is satisfied by
+practically anything.
+
+### The processing, measured — and the hypothesis it refutes
+
+The standing hypothesis was that `autoGainControl`, on by default, amplifies a
+dimmed capsule back into visibility, and that therefore **no** floor on a
+post-AGC level could be correct. Tested with Chromium's file-backed fake capture
+device, feeding known WAVs through the real constraint pipeline
+(`output/d272-measure-agc.mjs`), reading the published track and its clone over
+the same window after a two-second settle:
+
+| fixture | constraints ON (product default) | OFF (raw) |
+| --- | --- | --- |
+| digital silence | byte 0 | byte 0 |
+| noise −60 dBFS | byte 1 | byte 1 |
+| noise −50 dBFS | byte 1 | byte 1 |
+| noise −45 dBFS | **byte 1** | byte 2 |
+| speech-like bursts −25 dBFS | **byte 40** | byte 9 |
+
+**AGC is in the path — and it helps.** Speech goes from byte 9 to byte 40, which
+is **+13 dB**. Quiet stationary noise goes the other way: −45 dBFS drops from
+byte 2 to byte 1, because noise suppression removes exactly that. So the default
+processing chain *widens* the gap between a dimmed capsule and a voice rather
+than closing it — the opposite of the hypothesis, and it is why a floor works.
+
+Two probes had to be thrown away before those numbers were trustworthy, and both
+failures are worth keeping:
+
+- The first run read the two tracks **one after the other** across a 4-second
+  fixture, so the clone's window fell past the end of the file. It reported that
+  a cloned track carries no processing. It does; the file had run out.
+- The first speech fixture was a **steady 220 Hz sine**, which is the worst
+  speech proxy there is — noise suppression is built to remove stationary
+  signals. It measured NS and nearly got reported as «processing attenuates
+  speech». Syllables are bursts; the fixture is bursts now.
+
+### The rule now
+
+`MIC_NO_INPUT_FLOOR` is one byte step and the test is strictly greater, so a
+reading has to reach byte 2 — louder than about −42.5 dBFS — to count. That is
+not a chosen number: it is the boundary between the bucket that carries no
+information and the first one that does, and it cannot drift because it is a
+property of the instrument.
+
+**And `MIC_NO_INPUT_HEARD_READINGS` is 3**, because `heard` is terminal and one
+reading is a very cheap way to switch the warning off for a whole call. With
+AGC's +13 dB a keyboard click near a dimmed microphone clears a one-reading
+rule. Three readings is 150 ms at the sampler's 50 ms period — the same
+syllable-length reasoning `lib/micLevel.ts` already uses to pick that period.
+
+**Why the gate's threshold is not reused**, which was the obvious alternative
+and is the right instinct: `micGateOpenAt(MIC_GATE_THRESHOLD_DEFAULT)` is
+0.00531, i.e. −45.5 dBFS — **below one byte step**. A floor set from it would be
+cleared by every non-zero reading and would reproduce this defect exactly. A
+decision the instrument cannot represent cannot be borrowed. The two do share
+the axis, which is the part worth sharing.
+
+Seventeen mutations watched go red, the first of them being the shipped rule
+itself: `input.level > MIC_NO_INPUT_FLOOR` → `input.level > 0` turns the new
+case red while everything else stays green.
+
+**Both measurement scripts live under `output/`, which is gitignored**, so they
+will not survive a clean checkout — the tables above are the durable record and
+are why they are tables rather than a sentence saying «measured». Either script
+is about forty lines and the method is described well enough here to rebuild:
+drive known amplitudes through an `AnalyserNode` for the first, and known WAVs
+through `--use-file-for-fake-audio-capture` for the second.
+
+---
+## D-278 `[ ]` The axis promises 70 dB and the instrument delivers 42
+
+**Not fixed. Measured, designed, and left for the owner**, because every honest
+fix changes behaviour that somebody is already relying on.
+
+`MIC_GATE_FLOOR_DB` is −70 and `micLevelPosition` is `1 − db/floor`. The
+instrument, measured in D-277, cannot report anything below −42.14 dBFS except
+exact zero. Three consequences, all arithmetic:
+
+1. **A dead microphone draws the bar at 40%.** Byte peak 1 → −42.14 dBFS →
+   position 0.398. The owner saw this and called it «что-то странное», which is
+   the correct reaction: a meter that rests at 40% is not a meter.
+2. **The bottom 39.8% of the threshold slider is unreachable.**
+   `micGateOpenAt(p)` first reaches one byte step at p = 0.3980, so every
+   position below that is cleared by any non-zero reading and means exactly the
+   same thing as every other position below it.
+3. **«По голосу» at its default cannot close the microphone at all**, which is
+   stronger than it first looked and is a functional defect rather than a
+   cosmetic one. The gate closes only when the level falls below
+   `micGateOpenAt(p)`; the quietest level the instrument can report is 1/128;
+   and `micGateOpenAt(p) > 1/128` only for **p > 0.398**. Every stored position
+   at or below that — the shipped default `MIC_GATE_THRESHOLD_DEFAULT` of 0.35
+   among them — leaves a gate that is mathematically incapable of closing.
+   Voice activation is inoperative for anybody who has not dragged the slider
+   past 40%.
+
+**Why a local fix is worse than none.** Clamping the bar to zero below one byte
+step makes the bar agree with the warning and immediately disagree with the
+**gate**: a byte-1 reading clears `micGateOpenAt(0.35)`, so the microphone would
+be publishing while the bar showed empty. Clamping `micGateOpenAt` instead
+leaves the handle drawable in a region the bar can never reach. The three
+instruments — bar, handle, gate — are one axis and have to move together.
+
+**Two ways out, and the second one was missed the first time round.** The
+first is to make the axis match the instrument: `MIC_GATE_FLOOR_DB` from −70 to
+about −42, one `MIC_LEVEL_AUDIBLE = 2 / 128` used by bar, gate and warning
+alike. It works, and it costs a stored-settings migration — a stored 0.35 means
+−45.5 dBFS today and would mean −27.4 dBFS after, a far stricter gate that
+could cut out a quiet speaker. That cost is what held this entry open.
+
+**The second is to change the instrument instead of the axis, and it costs
+nothing.** The dead zone is not a property of audio or of the axis; it is a
+property of reading an 8-bit API. The same `AnalyserNode` carries
+`getFloatTimeDomainData`, and the float column was sitting in D-277's own
+measurement the whole time, unread:
+
+| true signal | byte peak → level | float peak |
+| --- | --- | --- |
+| −90 dBFS | 1 → 0.0078125 | 3.162e−5 |
+| −60 dBFS | 1 → 0.0078125 | 1.000e−3 |
+| −45 dBFS | 1 → 0.0078125 | 5.623e−3 |
+| −42 dBFS | 2 → 0.0156250 | 7.943e−3 |
+| −24 dBFS | 9 → 0.0703125 | 6.310e−2 |
+
+**The float path is exact at every level down to −90 dBFS.** Re-run
+independently on 2026-09-20 (`output/d272-measure-floor.mjs`, the last column).
+
+So `lib/micLevel.ts:154` reading `getFloatTimeDomainData` into a `Float32Array`
+instead of `getByteTimeDomainData` into a `Uint8Array` — same node, same 2048
+window, same peak loop, four times the bytes copied out of a read that costs
+6.6 µs — settles all three consequences at once **and changes no stored value's
+meaning**, because `MIC_GATE_FLOOR_DB` stays at −70 and every position goes on
+denoting the decibels it always denoted:
+
+- the bar rests near 0 on a dimmed capsule instead of at 40%, because −70 dBFS
+  now reads as −70 dBFS;
+- the bottom 39.8% of the slider becomes reachable, so the default 0.35
+  (−45.5 dBFS) starts gating for the first time;
+- **no migration**, which was the whole reason this entry stayed open.
+
+**What it does cost, stated rather than found later.** `MIC_NO_INPUT_FLOOR`
+loses its justification the moment the instrument changes: 1/128 is «one step of
+the instrument» only while the instrument counts bytes, and becomes a tuned
+−42.1 dBFS afterwards. It is still a defensible figure — 17 dB under
+conversational speech, 18 dB over a quiet room — but the argument has to be
+rewritten, and the module header now says so at the constant. And the gate will
+genuinely start closing for anyone in «По голосу» who has been relying on it
+never closing; that is the feature beginning to work, but it is a behaviour
+change and belongs in the same reviewed step.
+
+---
+## D-279 `[ ]` The live level bar is behind a mode nobody has selected
+
+**Not fixed, deliberately.** The owner, looking for the sensitivity control:
+«не вижу этой самой живой полосы с уровнями громкости микрофона с
+соответствующей регулировкой чувствительности».
+
+Two separate reasons he cannot see one, and they need different answers:
+
+1. **The calibration bar is behind the mode.**
+   `AudioSettingsSection.tsx` renders the threshold slider, its bar and
+   «Подобрать порог» behind `settings.micActivation === "voice"`. «Всегда» is
+   the default, so most people never see any of it.
+2. **The «Уровень» meter is behind a button.** It reads 0 until «Проверить
+   микрофон» is pressed, and it has to be — drawing a live level means holding
+   the microphone open, and a settings screen that turns somebody's microphone
+   on by itself is a worse defect than this one.
+
+**The recommendation, with the reasoning, since this should not move by
+reflex: the meter belongs outside the mode gate; the threshold stays inside
+it.** The meter answers «is my microphone working, and how loud am I» — a
+question every mode has, and precisely the question the D-277 warning raises, so
+a person told «микрофон не даёт звука» must have a bar to look at. The threshold
+answers «where should the gate open», which only «По голосу» has; drawing it in
+«Всегда» would be a control that changes nothing, which is the defect class this
+register is full of.
+
+Discord shows both together always, but that is not a counter-argument: its
+sensitivity slider applies in its automatic mode too, and ours does not.
+
+**Do this after D-278, not before.** Moving the bar into «Всегда» before the
+axis is honest would put a bar that rests at 40% in front of every user instead
+of only those who chose «По голосу».
 
 ---

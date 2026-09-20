@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   MIC_NO_INPUT_AFTER_MS,
   MIC_NO_INPUT_CLEAR,
+  MIC_NO_INPUT_FLOOR,
+  MIC_NO_INPUT_HEARD_READINGS,
   MIC_NO_INPUT_HINT,
   MIC_NO_INPUT_WARNING,
   MIC_NO_INPUT_WARNING_DETAIL,
@@ -35,11 +37,28 @@ import {
 /** A capture that can be judged: the call is up, publishing, not muted. */
 const LIVE = { enabled: true, judgeable: true };
 
-/** Walk a number of readings of exact silence, 50ms apart as the sampler is. */
-function silence(state: MicNoInputState, from: number, ms: number): MicNoInputState {
+/** Walk a number of readings at one level, 50ms apart as the sampler is. */
+function walk(state: MicNoInputState, from: number, ms: number, level: number): MicNoInputState {
   let held = state;
   for (let at = from; at <= from + ms; at += 50) {
-    held = nextMicNoInput(held, { ...LIVE, level: 0, now: at });
+    held = nextMicNoInput(held, { ...LIVE, level, now: at });
+  }
+  return held;
+}
+
+/** Exact digital silence, which is what a disabled track reads. */
+function silence(state: MicNoInputState, from: number, ms: number): MicNoInputState {
+  return walk(state, from, ms, 0);
+}
+
+/**
+ * A syllable: `MIC_NO_INPUT_HEARD_READINGS` readings comfortably over the
+ * floor, which is 150 ms at the sampler's 50 ms period.
+ */
+function speech(state: MicNoInputState, from: number, level = 0.3125): MicNoInputState {
+  let held = state;
+  for (let i = 0; i < MIC_NO_INPUT_HEARD_READINGS; i += 1) {
+    held = nextMicNoInput(held, { ...LIVE, level, now: from + i * 50 });
   }
   return held;
 }
@@ -94,7 +113,7 @@ test("one sound answers the question for the life of the capture", () => {
   // Mutation: `level > 0` -> `level >= 0`. Under it silence counts as sound,
   // `heard` is set on the first reading of every call, and the warning can
   // never appear at all — green in a suite that only checks the happy path.
-  const heard = nextMicNoInput(warned, { ...LIVE, level: 0.0078, now: start + 20_000 });
+  const heard = speech(warned, start + 20_000);
   assert.equal(heard.heard, true);
   assert.equal(heard.warned, false);
   assert.equal(heard.silentSince, null);
@@ -110,20 +129,78 @@ test("one sound answers the question for the life of the capture", () => {
   assert.equal(later.heard, true);
 });
 
-test("a quiet room is not silence, and the smallest reading there is counts", () => {
-  // 1/128 is the smallest non-zero peak the sampler can produce — one sample
-  // one step off the midpoint. The whole honesty of this feature is that this
-  // number and 0 are different answers.
+/**
+ * **The case this whole episode exists to produce.**
+ *
+ * The owner's microphone has an analogue volume dimmer. Turned fully to zero,
+ * Discord tells him it is getting no audio; this product said nothing. The
+ * reason is in the module header: a dimmer attenuates, it does not disconnect,
+ * so the capture still produces a tiny non-zero reading — and the shipped rule
+ * was `level > 0`, which that reading satisfies.
+ *
+ * 1/128 is not «very quiet». It is the **only** value the instrument can report
+ * for anything between −90.3 dBFS and about −42.5 dBFS, because
+ * `getByteTimeDomainData` rounds up and one byte is the smallest step there is.
+ * A signal one 16-bit converter step above absolute silence reports it.
+ *
+ * Mutation, and it is the one that matters here: `input.level >
+ * MIC_NO_INPUT_FLOOR` -> `input.level > 0`, which is the rule that shipped.
+ * Under it `heard` is set on the first reading and this test goes red.
+ */
+test("a level that is persistently tiny but non-zero raises the warning", () => {
+  const start = 8_000_000;
+  // **The literal 1/128, not `MIC_NO_INPUT_FLOOR`**, and the difference is not
+  // style. Written symbolically this test pins the *relationship* and not the
+  // *value*: setting the constant to 0 left it green, measured on 2026-09-20,
+  // because the walk then fed zeros and still warned. 1/128 is what the
+  // instrument actually reports for a dimmed capsule — a fact about
+  // `getByteTimeDomainData`, not about this module — so it belongs here as a
+  // number the rule has to cope with rather than as a name the rule chooses.
+  const held = walk(MIC_NO_INPUT_CLEAR, start, MIC_NO_INPUT_AFTER_MS, 1 / 128);
+  assert.equal(held.heard, false, "a dimmed microphone must not count as heard");
+  assert.equal(held.warned, true);
+  // And the analyser is still wanted, because the question is still open.
+  assert.equal(micNoInputNeedsLevel(true, held), true);
+
+  // The constant is that value, said once so a reader of the two tests above
+  // can see which side of the boundary each of them is on.
+  assert.equal(MIC_NO_INPUT_FLOOR, 1 / 128);
+});
+
+test("one step above the floor is sound, and the floor itself is not", () => {
+  // The two sides of the boundary, so the assertion above cannot be satisfied
+  // by a rule that simply stopped believing in sound.
   //
-  // Mutation: `level > 0` -> `level > 1 / 128`. Under it the quietest real
-  // capture there can be is called dead.
-  const held = silence(
-    nextMicNoInput(MIC_NO_INPUT_CLEAR, { ...LIVE, level: 1 / 128, now: 0 }),
-    0,
-    MIC_NO_INPUT_AFTER_MS * 2,
-  );
-  assert.equal(held.heard, true);
-  assert.equal(held.warned, false);
+  // Mutation: `>` -> `>=` on the floor. Under it the dimmed microphone counts
+  // as heard again and the test above goes red with this one.
+  const start = 9_000_000;
+  assert.equal(speech(MIC_NO_INPUT_CLEAR, start, 2 / 128).heard, true);
+  assert.equal(speech(MIC_NO_INPUT_CLEAR, start, MIC_NO_INPUT_FLOOR).heard, false);
+});
+
+test("a click is not a syllable, and does not switch the warning off for the call", () => {
+  // `heard` is terminal, so a single reading is a very cheap way to disable the
+  // warning for a whole call. Measured 2026-09-20: the product's default
+  // constraints give speech +13 dB, so a transient near a dimmed microphone
+  // clears a one-reading rule while its owner still cannot be heard.
+  //
+  // Mutation: `MIC_NO_INPUT_HEARD_READINGS` 3 -> 1. Under it the click below
+  // counts as a working microphone.
+  const start = 10_000_000;
+  let held = MIC_NO_INPUT_CLEAR;
+  for (let at = start; at <= start + MIC_NO_INPUT_AFTER_MS; at += 50) {
+    // One reading in every twenty is loud — a keyboard, a chair — and the
+    // nineteen around it are the dimmed capsule. Deliberately off the
+    // deadline’s own phase: a loud reading carries the run rather than
+    // advancing it, so a click landing exactly on the tenth second would
+    // make this test measure its own arithmetic instead of the rule.
+    held = nextMicNoInput(held, { ...LIVE, level: at % 1000 === 500 ? 0.5 : 0, now: at });
+  }
+  assert.equal(held.heard, false, "a transient counted as a working microphone");
+  assert.equal(held.warned, true);
+
+  // And a real syllable does clear it, on the same levels.
+  assert.equal(speech(held, start + MIC_NO_INPUT_AFTER_MS).heard, true);
 });
 
 test("a muted person is not told we cannot hear their microphone", () => {
@@ -202,7 +279,7 @@ test("the analyser is asked for only while the question is open", () => {
   // microphone has proved itself.
   assert.equal(micNoInputNeedsLevel(true, MIC_NO_INPUT_CLEAR), true);
   assert.equal(
-    micNoInputNeedsLevel(true, { silentSince: null, heard: true, warned: false }),
+    micNoInputNeedsLevel(true, { silentSince: null, heard: true, warned: false, above: 3 }),
     false,
   );
 });

@@ -23,6 +23,7 @@ import {
 import { openMicLevelSource, type MicLevelSource } from "@/lib/micLevel";
 import {
   MIC_NO_INPUT_CLEAR,
+  MIC_NO_INPUT_HEARD_READINGS,
   micNoInputNeedsLevel,
   nextMicNoInput,
   type MicNoInputState,
@@ -947,7 +948,13 @@ function syncLevelSource(): void {
     // us nothing about the microphone, and «nothing measured» must not be
     // printed as «nothing arrived». It also closes the question, so the retry
     // above does not go on asking a browser that has already said no.
-    evaluateNoInput(1);
+    //
+    // A syllable's worth of readings rather than one, because `heard` needs
+    // `MIC_NO_INPUT_HEARD_READINGS` of them — a single loud reading is a click
+    // and deliberately does not count. Written as the loop rather than as a
+    // back door into the rule module, so there is one way for a capture to
+    // become `heard` and it is the same way for every caller.
+    for (let i = 0; i < MIC_NO_INPUT_HEARD_READINGS; i += 1) evaluateNoInput(1);
     evaluateGate();
   }
 }

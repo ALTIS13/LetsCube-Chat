@@ -1684,7 +1684,10 @@ test("«Рация»: a call joins closed, and «выключен» is not how i
   // Mutation: `micNoInputNeedsLevel` -> `enabled`. Under it this line stays
   // `true` for the length of every call in this mode, which is exactly the
   // battery defect the old assertion here was guarding.
-  await pushLevel(page, 0.5);
+  // Three readings, not one: `MIC_NO_INPUT_HEARD_READINGS` is a syllable
+  // (150ms at the sampler's 50ms period) because a single loud reading is a
+  // click and must not switch the warning off for a whole call.
+  for (let i = 0; i < 3; i += 1) await pushLevel(page, 0.5);
   expect(await probe(page)).toMatchObject({ levelRunning: false, levelClosed: 1 });
 
   // The two states the brief names, told apart. Not held is an ordinary control
@@ -1922,7 +1925,10 @@ test("«Всегда» is the behaviour this product already had, and costs noth
   // which is what keeps this bounded; the test below shows the same call with
   // the warning off, where nothing is opened at all.
   expect(after.levelRunning).toBe(true);
-  await pushLevel(page, 0.5);
+  // Three readings, not one: `MIC_NO_INPUT_HEARD_READINGS` is a syllable
+  // (150ms at the sampler's 50ms period) because a single loud reading is a
+  // click and must not switch the warning off for a whole call.
+  for (let i = 0; i < 3; i += 1) await pushLevel(page, 0.5);
   expect(await probe(page)).toMatchObject({ levelRunning: false, levelClosed: 1 });
   await expect(page.getByTestId("voice-capsule-talk")).toHaveCount(0);
   await expect(page.getByTestId("voice-capsule-mute")).toHaveAttribute(
@@ -2033,7 +2039,8 @@ test("a microphone that produces nothing is said so in the capsule", async ({
   //
   // Mutation: `if (level > 0)` -> `if (false)` in `nextMicNoInput`. The
   // sentence then stays up over a microphone that is working.
-  await pushLevel(page, 0.5);
+  // A syllable, for the reason in the «Рация» test above.
+  for (let i = 0; i < 3; i += 1) await pushLevel(page, 0.5);
   await expect(warning).toHaveCount(0);
 });
 
