@@ -194,42 +194,85 @@ export function speakRoleNarrowsSpeech(role: ChatRole | null | undefined): boole
 /**
  * The bounds of the seat field.
  *
- * `max_participants` is `smallint not null default 10` and carries **no CHECK**,
- * so these two numbers are the product's rule rather than the database's, and
- * that is said here rather than left to be inferred. Two, because a room for
- * one person is not a room. Ninety-nine, because the column would accept 32767
- * and no voice server in this deployment would, and a field that offers a
- * number the call cannot honour is a field that lies.
+ * **Two sentences that used to stand here were wrong, and both were corrected
+ * by reading the database rather than by reasoning.**
  *
- * Zero is deliberately **not** offered as «без ограничения». `voiceJoinVerdict`
- * reads a limit of 0 as unbounded, but the gateway compares the same column
- * before it mints a token and nothing here has measured which way it reads a
- * zero. Writing one to find out would be an experiment on a live room.
+ * The first said `max_participants` «carries **no CHECK**, so these two numbers
+ * are the product's rule rather than the database's». Production has carried
+ * `check (max_participants between 2 and 20)` since `20260913150000`, so for as
+ * long as this field has offered 2…99, every number from 21 upwards that
+ * anybody typed was written, refused by Postgres and shown as «не удалось
+ * сохранить». `20260920130000_a_group_voice_channel_has_no_seat_limit.sql`
+ * moves the column to the number a person was actually offered.
+ *
+ * The second said zero was «the one value whose meaning is not known», because
+ * nothing had measured how the gateway read it and «writing one to find out
+ * would be an experiment on a live room». It was measured on 2026-09-20 —
+ * against throwaway rooms on the production SFU, created, read back and
+ * deleted, which is not an experiment on anybody's call — and the answer is in
+ * `supabase/functions/voice-gateway/seatLimit.mjs`.
+ *
+ * So: **0 is «без ограничения»**, which is the owner's «изначально ограничения
+ * быть не должно» and the column's default now. Two, because a room for one
+ * person is not a room. Ninety-nine, because a deliberate number should be one
+ * the SFU will honour, and the column would accept 32767.
  */
+export const SEAT_LIMIT_UNLIMITED = 0;
 export const SEAT_LIMIT_MIN = 2;
 export const SEAT_LIMIT_MAX = 99;
-export const SEAT_LIMIT_DEFAULT = 10;
+export const SEAT_LIMIT_DEFAULT = SEAT_LIMIT_UNLIMITED;
+
+/** «Без ограничения» — the seat count that is not a count. */
+export const SEAT_LIMIT_UNLIMITED_LABEL = "Без ограничения";
+
+/**
+ * What the seat field says under itself, so that 0 is a value somebody can
+ * choose on purpose rather than one they discover.
+ *
+ * It names the number, because a field of type `number` cannot show a word: the
+ * reader has to be told which digit means «no limit» or they will read an empty
+ * room's «0» as a room that admits nobody.
+ */
+export const SEAT_LIMIT_UNLIMITED_NOTE = "0 — без ограничения.";
 
 /**
  * The seat count as the update may carry it.
  *
  * A field a person is typing into passes through every intermediate state,
  * including the empty string and a lone minus sign, so anything that is not a
- * finite number falls back to the column's own default rather than to zero —
- * which would be the one value whose meaning is not known.
+ * finite number falls back to the column's own default — which is now 0, «no
+ * limit», rather than a number nobody chose.
+ *
+ * Zero passes through untouched. Everything else is clamped into 2…99, so a
+ * one-seat room is still impossible and the old floor of two survives for every
+ * value that is a limit at all.
  */
 export function normalizeSeatLimit(value: unknown): number {
   const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
   if (!Number.isFinite(parsed)) return SEAT_LIMIT_DEFAULT;
-  return Math.min(SEAT_LIMIT_MAX, Math.max(SEAT_LIMIT_MIN, Math.trunc(parsed)));
+  const whole = Math.trunc(parsed);
+  if (whole <= SEAT_LIMIT_UNLIMITED) return SEAT_LIMIT_UNLIMITED;
+  return Math.min(SEAT_LIMIT_MAX, Math.max(SEAT_LIMIT_MIN, whole));
 }
 
-/** What a voice row says about itself on the right: «10 мест», and who speaks. */
+/** Whether a stored seat count means «as many as turn up». */
+export function seatLimitIsUnlimited(value: number | null | undefined): boolean {
+  return normalizeSeatLimit(value ?? SEAT_LIMIT_UNLIMITED) === SEAT_LIMIT_UNLIMITED;
+}
+
+/**
+ * What a voice row says about itself on the right: «10 мест», and who speaks.
+ *
+ * An unlimited room says «Без ограничения» rather than «0 мест», which would be
+ * the same sentence a room nobody can enter would show.
+ */
 export function voiceChannelSummaryLine(input: {
   maxParticipants: number | null | undefined;
   speakRole: ChatRole | null | undefined;
 }): string {
-  const seats = seatCountLabel(normalizeSeatLimit(input.maxParticipants));
+  const limit = normalizeSeatLimit(input.maxParticipants);
+  const seats =
+    limit === SEAT_LIMIT_UNLIMITED ? SEAT_LIMIT_UNLIMITED_LABEL : seatCountLabel(limit);
   if (!speakRoleNarrowsSpeech(input.speakRole)) return seats;
   return `${seats} · ${speakRoleLabel(input.speakRole)}`;
 }

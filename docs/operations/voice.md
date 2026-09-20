@@ -129,7 +129,10 @@ settings:
 
 - **how many seats** — `max_participants`, which the SFU enforces. The gateway
   compares the row's `participant_count` against it before it mints a token, so
-  a full room refuses at the token rather than at the SDK;
+  a full room refuses at the token rather than at the SDK. **0 is «no limit»**
+  and is the column's default since 2026-09-20 — see «The ten that was never
+  where it looked» below, which is also where the two-sided change that makes 0
+  mean anything is written down;
 - **who may speak** — `speak_role`, and it is not decorative. The gateway
   computes `canPublish` from the member's role against it and mints the token
   with that claim, so somebody below the bar joins, hears everything and cannot
@@ -152,8 +155,10 @@ The equivalent by hand, for a deployment being set up before anybody is an
 administrator of anything:
 
 ```sql
-insert into public.voice_channels (chat_id, name, created_by, max_participants)
-values ('<a group chat id>', 'Общий голос', '<a member id>', 10);
+-- max_participants is omitted on purpose: the column's default is 0, «no
+-- limit», which is what a new room should hold.
+insert into public.voice_channels (chat_id, name, created_by)
+values ('<a group chat id>', 'Общий голос', '<a member id>');
 ```
 
 `participant_count` and `active_since` are deliberately not written by any
@@ -168,6 +173,86 @@ happening; it only costs the reconciler one extra question per tick. The
 reconciler sweeps at most 64 channels that have somebody in them per tick
 (`VOICE_RECONCILER_CHANNEL_LIMIT`), which is a bound on *occupied* rooms rather
 than on how many a group may have.
+
+## The ten that was never where it looked, 2026-09-20
+
+The owner: «изначально ограничения быть не должно, я тебе ранее говорил что для
+того чтобы всё в будущем работало стабильно когда будет много пользователей, мы
+должны будем балансировать нагрузку и подключать пользователей на менее
+загруженные серверы связи». Horizontal scaling is the answer to capacity; a cap
+is not a capacity plan.
+
+**Two things everybody believed about where the ten lived were wrong, and both
+were settled by measurement rather than by reading.** Throwaway rooms were
+created on the production SFU, read back and deleted — no call was touched:
+
+```
+CreateRoom asked max_participants=50      ->  the SFU stored 50
+CreateRoom asked max_participants=100000  ->  the SFU stored 100000
+CreateRoom asked max_participants=0       ->  the SFU stored 10
+CreateRoom omitted the field entirely     ->  the SFU stored 10
+```
+
+1. **`room.max_participants` in `livekit.yaml` never capped our rooms.**
+   `auto_create: false`, so every room here comes from the gateway's own
+   `CreateRoom`, which passes the channel row's number — and an explicit number
+   above the config default is not clamped. The cap was always
+   `public.voice_channels.max_participants`. Restarting the SFU with a different
+   config would have changed nothing.
+2. **Except for a zero**, which is proto3's zero value and indistinguishable
+   from an absent field, so the SFU substitutes the config default. This is the
+   trap: writing 0 into the column while the YAML still said 10 would have left
+   every guard in the product reporting «no limit» and the eleventh person still
+   refused — by the SFU, with no line anywhere saying why.
+
+**So the change is three halves and none of them works alone**, and the order
+they go in is not free:
+
+1. **the gateway and the client** first. The shipped gateway answers a 0 with
+   `503 unavailable`, so it has to understand 0 before any row carries one. With
+   the old database this deploy changes nothing.
+2. **`/srv/letscube/voice/livekit.yaml`**, `room.max_participants` from `10` to
+   `0`, then `cd /srv/letscube/voice && docker compose up -d`. **This restarts
+   the SFU and drops every call in progress**, so it wants a quiet moment. With
+   the old database it also changes nothing: every row still names its own
+   number and the config default is never reached.
+3. **`20260920130000_a_group_voice_channel_has_no_seat_limit.sql`**, which moves
+   the rows to 0 and is the step that actually lifts the limit.
+
+Rolling back runs the same list backwards; the migration's rollback header says
+so too, because taking the database back alone leaves rows saying 10 against a
+config whose fallback is 0.
+
+**That zero really is unbounded at the join, not merely stored.** Measured
+against an isolated probe SFU — its own container, its own throwaway key,
+`auto_create: false`, removed afterwards — with real Chromium participants, a
+control first so that «everybody got in» could not be a broken probe:
+
+| room | attempts | admitted | first refusal |
+| --- | --- | --- | --- |
+| `max_participants: 3` | 5 | **3** | attempt 4 |
+| `max_participants: 10` | 12 | **10** | attempt 11 |
+| `max_participants: 0` | 14 | **14** | none |
+
+The middle row is the one this change removes, refusing exactly where it was
+said to refuse. The bottom row goes past the config default of 10 and does not
+stop.
+
+**One reading that is not evidence:** `ListRooms` reported `num_participants: 0`
+for all three rooms while the joins were happening. The participants published
+no media, so they very likely never reached the state that counter reports. The
+admission result does not rest on it — the control refusing the 4th and the 11th
+is what proves the SFU was counting — but nobody should quote that zero as a
+measurement of anything.
+
+**A private chat still holds two, and that is a definition rather than a cap.**
+The owner, on how a one-to-one conversation grows: «при подобной ситуации в
+дискорде происходит создание микро-группы под 2+ человека, которую владелец
+может также снести по надобности». Discord answers «a third person is needed in
+a DM» with a *different object*, a group DM — not with a wider DM. So
+`public.voice_private_room` writes 2, and since 2026-09-20 a trigger refuses
+anything else for a private chat rather than leaving it to a convention. See the
+migration's header for what that trigger closes, which was reachable.
 
 ## Coming back after a drop: what the server imposes, which is less than anybody assumed
 
@@ -188,7 +273,7 @@ whole of its `room:` block:
 room:
   auto_create: false
   empty_timeout: 60
-  max_participants: 10
+  max_participants: 0   # was 10 until 2026-09-20; see below
 ```
 
 `grep -nE 'timeout|auto_create|departure'` over that file returns exactly those

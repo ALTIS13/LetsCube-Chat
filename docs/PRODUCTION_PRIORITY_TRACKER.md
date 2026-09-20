@@ -911,6 +911,134 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     promise the host has not been asked to keep. Measure before lifting, and
     lift deliberately rather than to infinity.
 
+    ### Done 2026-09-20, and the paragraph above was wrong about where the ten was
+
+    «Changing it is a one-line configuration change» named the wrong line.
+    Measured against the production SFU with throwaway rooms — created, read
+    back, deleted, no call touched — `CreateRoom` asking for 50 stored **50**
+    and asking for 100000 stored **100000**. With `auto_create: false` every
+    room comes from the gateway's own `CreateRoom`, which passes the channel
+    row's number, so `livekit.yaml` never clamped anything. **The cap was
+    `public.voice_channels.max_participants`.**
+
+    The YAML governed exactly one case, and it is the case the obvious fix walks
+    into: a `CreateRoom` asking for **0** came back holding **10**, because 0 is
+    proto3's zero value and an absent field takes the config default. Writing 0
+    into the column while the YAML still said 10 would have left every guard in
+    the product reporting «no limit» and the eleventh person still refused, by
+    the SFU, with nothing anywhere saying why.
+
+    Shipped as three halves, in this order, none of which works alone — the
+    ordering, the rollback and the restart that drops live calls are in
+    `docs/operations/voice.md` under «The ten that was never where it looked»:
+
+    1. the gateway and the client, which learn that 0 means «no limit»;
+    2. `/srv/letscube/voice/livekit.yaml`, `room.max_participants` 10 → 0;
+    3. `20260920130000_a_group_voice_channel_has_no_seat_limit.sql`.
+
+    **What was lifted, and what deliberately was not.** A group voice channel
+    now defaults to 0 and the ceiling for an explicit number moved 20 → 99 —
+    not a preference but a live divergence, since `serverChannelVocabulary.ts`
+    has always offered 2…99 while the database's CHECK was `between 2 and 20`,
+    so every number a person typed from 21 up was refused by Postgres after
+    being shown as acceptable. A **private** chat still holds two, because that
+    is a definition and not a capacity: the owner's own answer to a third person
+    in a one-to-one is «создание микро-группы под 2+ человека», which is
+    Discord's group DM — a different object, not a wider one. See item 45.
+
+    That definition was also **not enforced** until now. `authenticated` holds
+    column UPDATE on `max_participants`, «admins manage voice channels» is
+    `is_chat_admin(chat_id)` FOR ALL, there was no trigger, and whoever opens a
+    private chat becomes its owner — 25 elevated memberships across 28 private
+    chats. One PostgREST PATCH raised a one-to-one call to 20 seats and the
+    gateway then admitted a third. Proved red-before-green on a throwaway
+    database shaped with production's exact ACLs and policies: before, the
+    attack as `authenticated` reported «the private one-to-one call now holds 10
+    seats»; after, «a private chat holds two people by definition». Widening the
+    CHECK to 99 would have widened that hole, which is why closing it belongs in
+    the same migration rather than in a later one.
+
+    ### The measurement the owner asked for: «как будет возможность замеряй»
+
+    **That zero is unbounded at the join, not merely stored.** Real Chromium
+    participants against an isolated probe SFU — its own container, its own
+    throwaway key, `auto_create: false`, removed afterwards — with controls
+    first, so «everybody got in» could not be a broken probe:
+
+    | room | attempts | admitted | first refusal |
+    | --- | --- | --- | --- |
+    | `max_participants: 3` | 5 | **3** | attempt 4 |
+    | `max_participants: 10` | 12 | **10** | attempt 11 |
+    | `max_participants: 0` | 14 | **14** | none |
+
+    `ListRooms` reported `num_participants: 0` throughout — those participants
+    published no media and very likely never reached the state that counter
+    reports. **Do not quote that zero as a measurement.** The admission result
+    rests on the controls refusing at 4 and at 11, which is the SFU counting.
+
+    **What one SFU node carries, and why it is two numbers rather than one.** An
+    SFU forwards `N × (N−1)` streams per room, so one 20-person room and twenty
+    2-person rooms are completely different loads. From slice 1's real
+    measurement — 10 audio publishers all subscribing to each other, 90 streams,
+    ten minutes, in `docs/operations/voice-probe.md` — the container spent
+    **18.58% of its 2-core limit** and 64 MiB:
+
+    - **≈0.21% of the allocation per forwarded stream.** Extrapolated, 100%
+      arrives at ≈485 streams, i.e. `N(N−1) = 485`, i.e. **one room of about 22
+      people** saturates the current 2 cores.
+    - **Concurrent small rooms are nearly free**: twenty 2-person rooms are 40
+      streams, ≈8% of the allocation. Ten 4-person rooms are 120 streams, ≈25%.
+    - **Memory is not the binding constraint**: ≈3.3 MiB per participant over a
+      31 MiB floor puts 1 GiB at roughly 290 participants, far beyond where CPU
+      arrives.
+
+    So the honest headline is **«about twenty in one room, or a hundred-odd
+    spread across small ones»**, on today's 2-core cap — and the cap is a
+    `docker compose` line, not a hardware limit. The host has 8 cores and was at
+    18% while this was measured.
+
+    **What could not be reached, stated rather than glossed.** A fresh media
+    load test at N > 10 needs `livekit-cli`, which is not installed on the host
+    and which was not downloaded. The numbers above are arithmetic over slice
+    1's measurement, not a new one; the admission table is a new measurement but
+    of signalling only. The figure that would settle it is one
+    `livekit-cli load-test --audio-publishers 20` run against an idle SFU.
+
+    ### The balancing plan, written and not built
+
+    The owner's standing instruction is «инфраструктура должна иметь возможность
+    расширения… чтобы параллелить нагрузку голоса/чата/передачи данных». What
+    that costs, in order, and what the number above says about the order:
+
+    1. **Raise the container's own cap first.** `letscube-voice` is limited to
+       2 cores on an 8-core host running at 18%. Going to 4 cores roughly
+       doubles the single-room ceiling for the price of one line in
+       `/srv/letscube/voice/docker-compose.yml` and a restart. **Nothing else on
+       this list is worth spending until this is spent**, and D-262's own
+       finding cuts the same way: Realtime is the uncapped one, so the thing to
+       do about Realtime is give it a limit, not give the SFU a sibling.
+    2. **Then LiveKit's multi-node path**, which is the horizontal scaling the
+       owner described. It needs **Redis** and a **second node** before it
+       returns anything, and the routing of a client to a less-loaded node is
+       LiveKit's own, not something to write: nodes publish load to Redis and
+       the signalling connection is routed to the least loaded. Read what it
+       requires before promising it.
+    3. **The constraint a second node inherits.** Docker's address pools on this
+       host are load-bearing — the provider gateway conflict recorded in
+       `CLAUDE.md` — and the SFU needs real media ports, so a second node is a
+       second set of published UDP ports and a second `node_ip`, not another
+       container behind the same proxy.
+    4. **What the number says about when.** At ≈22 per room on 2 cores, a second
+       *node* buys nothing for a single large room — LiveKit does not split one
+       room across nodes without its distributed setup and even then a room has
+       a home node. A second node buys **more concurrent rooms**. So: more cores
+       for bigger rooms, more nodes for more rooms, and today the product has
+       neither problem — 18 accounts, 15 groups, and an SFU idling at 0.2%.
+
+    Deciding to spend on (2) should wait for a real `livekit-cli` run and for
+    the connection-slope measurement D-262 asks for, both of which are cheap and
+    neither of which has been done.
+
     **The settings surface, from his screenshots.** Discord's channel has four
     sections — Обзор, Права доступа, Приглашения, Интеграция — plus a
     destructive «Удалить канал» standing apart from them. Обзор carries the

@@ -19,11 +19,18 @@ import {
   voiceOccupancy,
   voiceOccupancyLabel,
   voiceParticipantsLine,
+  voiceSeatsExhausted,
+  VOICE_SEATS_UNLIMITED,
   type VoiceCallPhase,
   type VoiceChannelSummary,
   type VoiceChannelWriteRefusal,
   type VoiceParticipant,
 } from "../../artifacts/kub/src/lib/voiceChannel.ts";
+import {
+  SEAT_LIMIT_DEFAULT,
+  SEAT_LIMIT_UNLIMITED,
+} from "../../artifacts/kub/src/lib/serverChannelVocabulary.ts";
+import { VOICE_SEATS_UNLIMITED as GATEWAY_SEATS_UNLIMITED } from "../../supabase/functions/voice-gateway/seatLimit.mjs";
 
 /**
  * The voice channel's rules, away from React and away from a browser.
@@ -454,14 +461,62 @@ test("nothing is offered before the first read, or where the tables are absent",
   assert.equal(control({ supported: false, hasChannel: true }), null);
 });
 
-test("a new voice chat is named, and holds what the SFU will let it hold", () => {
+test("a new voice chat is named, and holds as many people as turn up", () => {
   const draft = newVoiceChannelDraft();
   assert.equal(draft.name, "Общий голос");
-  // Ten is the SFU's own room limit and what the one existing row carries.
-  // Asking for more would write a number the server will not honour.
-  assert.equal(draft.maxParticipants, 10);
+  // The owner, 2026-09-20: «изначально ограничения быть не должно». The ten
+  // that used to be asserted here was justified by `livekit.yaml`'s
+  // `room.max_participants: 10` — and that justification was measured false on
+  // the production SFU the same day: a `CreateRoom` asking for 50 stored 50.
+  // `auto_create: false`, so the gateway's own number was always the cap.
+  assert.equal(draft.maxParticipants, VOICE_SEATS_UNLIMITED);
+  assert.equal(VOICE_SEATS_UNLIMITED, 0);
   // A fresh object each time: the caller spreads it into an insert.
   assert.notEqual(newVoiceChannelDraft(), draft);
+});
+
+test("the four modules that read this column spell «no limit» the same way", () => {
+  // Before today they did not, and that is what this pins. `voiceJoinVerdict`
+  // read 0 as unbounded, `seatLabel` as «print nothing», `useVoiceChannel`
+  // rewrote it to 1 and the gateway answered 503 — four readings of one
+  // smallint. `voiceChannel.ts` imports nothing on purpose, so the constant is
+  // written out in each module and held equal here instead.
+  assert.equal(VOICE_SEATS_UNLIMITED, SEAT_LIMIT_UNLIMITED);
+  assert.equal(VOICE_SEATS_UNLIMITED, GATEWAY_SEATS_UNLIMITED);
+  assert.equal(SEAT_LIMIT_DEFAULT, VOICE_SEATS_UNLIMITED);
+});
+
+test("an unlimited room is never full, and never says a number it does not have", () => {
+  const unlimited = { participantCount: 40, maxParticipants: VOICE_SEATS_UNLIMITED };
+  assert.equal(voiceSeatsExhausted(unlimited), false);
+  // A broken column must read as «no limit» rather than as «nobody may join»:
+  // the second locks a group out of its own channel over a bad row.
+  assert.equal(voiceSeatsExhausted({ participantCount: 1, maxParticipants: -3 }), false);
+  assert.equal(voiceSeatsExhausted({ participantCount: 1, maxParticipants: Number.NaN }), false);
+
+  // And the ordinary case still refuses, which is the half of this that proves
+  // the change did not simply delete the cap.
+  assert.equal(voiceSeatsExhausted({ participantCount: 10, maxParticipants: 10 }), true);
+  assert.equal(voiceSeatsExhausted({ participantCount: 11, maxParticipants: 10 }), true);
+  assert.equal(voiceSeatsExhausted({ participantCount: 9, maxParticipants: 10 }), false);
+  // The private chat's two, which is a product definition and not a capacity.
+  assert.equal(voiceSeatsExhausted({ participantCount: 2, maxParticipants: 2 }), true);
+
+  // «3 из 0» would read as a full room; the unlimited room prints the count it
+  // has and no pair.
+  assert.equal(voiceOccupancyLabel(3, VOICE_SEATS_UNLIMITED), "3 в канале");
+  assert.equal(voiceOccupancyLabel(1, VOICE_SEATS_UNLIMITED), "1 в канале");
+  assert.equal(voiceOccupancyLabel(0, VOICE_SEATS_UNLIMITED), "Никого нет");
+  assert.equal(voiceOccupancyLabel(3, 10), "3 из 10");
+
+  // The row is offered and is not full.
+  const offer = voiceChannelRowOffer({
+    chatType: "group",
+    myRole: "member",
+    channel: { id: "c", name: "Общий голос", ...unlimited },
+  });
+  assert.equal(offer.offered, true);
+  assert.equal(offer.offered && offer.full, false);
 });
 
 test("a refused write is classified from what PostgREST actually sends", () => {

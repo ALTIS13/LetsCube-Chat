@@ -347,6 +347,98 @@ test("a full channel is refused before a room is created or a token minted", asy
   assert.equal("token" in body, false);
 });
 
+// `resetToken` rather than `reset`: the token route's per-isolate limiter is
+// one object for the life of this process and these three are mints like any
+// other -- see the note above `nextTokenCallerId`. Written with `reset` first,
+// which turned an unrelated test twenty lines up into a 429.
+test("an unlimited channel admits the eleventh person, and asks the SFU for no cap", async () => {
+  // The owner, 2026-09-20: «изначально ограничения быть не должно». Against the
+  // shipped code this was a **503**, not a 409 — `maxParticipants < 1` was read
+  // as a misconfigured deployment — so nothing anywhere said «no limit» and the
+  // column could not express what the owner asked for.
+  const base = defaultPlan();
+  resetToken({
+    table: (state) => {
+      if (state.table === "voice_channels") {
+        const row = base.table(state);
+        return {
+          data: { ...row.data, max_participants: 0, participant_count: 10 },
+          error: null,
+        };
+      }
+      return base.table(state);
+    },
+  });
+  const response = await handler(tokenRequest());
+  const body = await readJson(response);
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(body.maxParticipants, 0);
+  assert.equal(typeof body.token, "string");
+
+  // And the room it creates carries the same zero. This only means «unbounded»
+  // to an SFU whose own `room.max_participants` is 0 — measured on 2026-09-20,
+  // a `CreateRoom` asking 0 against the production config of 10 came back
+  // holding 10 — which is why `/srv/letscube/voice/livekit.yaml` changes with
+  // this commit and why `seatLimit.mjs` names that dependency.
+  const call = createRoomCall();
+  assert.ok(call, "no CreateRoom was made");
+  assert.equal(JSON.parse(call[1].body).maxParticipants, 0);
+});
+
+test("a two-seat channel still refuses a third, which is a private chat's definition and not a cap", async () => {
+  // `public.voice_private_room` gives every private chat a room of exactly two
+  // and re-asserts it on every call, and
+  // `20260920130000_a_group_voice_channel_has_no_seat_limit.sql` now holds that
+  // in a trigger as well. The reason is the owner's: Discord answers «a third
+  // person is needed in a DM» with a **group DM** — a different object — not
+  // with a wider DM. So this refusal must survive a change whose whole purpose
+  // is to remove a limit, and it is the case that proves the change did not
+  // over-reach.
+  const base = defaultPlan();
+  resetToken({
+    table: (state) => {
+      if (state.table === "voice_channels") {
+        const row = base.table(state);
+        return {
+          data: { ...row.data, max_participants: 2, participant_count: 2 },
+          error: null,
+        };
+      }
+      return base.table(state);
+    },
+  });
+  const response = await handler(tokenRequest());
+  const body = await readJson(response);
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(body, { ok: false, error: "channel_full" });
+  assert.equal(createRoomCall(), null);
+});
+
+test("a seat count the column could not have held is a refusal, not an open door", async () => {
+  // A negative `max_participants` cannot pass the CHECK, so seeing one means
+  // the row was not read as this function believes. Reading it as 0 would turn
+  // a broken row into a channel with no limit at all, which is the failure this
+  // whole change has to avoid being able to produce.
+  const base = defaultPlan();
+  resetToken({
+    table: (state) => {
+      if (state.table === "voice_channels") {
+        const row = base.table(state);
+        return { data: { ...row.data, max_participants: -1 }, error: null };
+      }
+      return base.table(state);
+    },
+  });
+  const response = await handler(tokenRequest());
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(await readJson(response), { ok: false, error: "unavailable" });
+  assert.equal(createRoomCall(), null);
+});
+
 test("a muted member joins without permission to publish", async () => {
   reset({
     rpc: (name) => {

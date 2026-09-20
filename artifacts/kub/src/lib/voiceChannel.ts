@@ -242,8 +242,45 @@ export function voiceChannelRowOffer(input: {
   return {
     offered: true,
     channel: input.channel,
-    full: input.channel.participantCount >= input.channel.maxParticipants,
+    full: voiceSeatsExhausted(input.channel),
   };
+}
+
+/**
+ * The seat count that means «as many as turn up», and the two rules that read
+ * it.
+ *
+ * The owner, 2026-09-20: «изначально ограничения быть не должно». 0 is the
+ * column's default since
+ * `20260920130000_a_group_voice_channel_has_no_seat_limit.sql` and it is
+ * LiveKit's own spelling for an unbounded room.
+ *
+ * The constant is written out here rather than imported because this module
+ * imports nothing (see the header), and the same zero appears in
+ * `serverChannelVocabulary.ts`, `serverChannels.ts`, `channelRail.ts` and
+ * `supabase/functions/voice-gateway/seatLimit.mjs`. `voice-channel.test.mts`
+ * pins them equal, so the copies cannot drift apart without a test going red —
+ * which is what the four *disagreeing* readings of this column before today
+ * cost: `voiceJoinVerdict` read 0 as unbounded, `seatLabel` as «print nothing»,
+ * `useVoiceChannel` rewrote it to 1, and the gateway called it a 503.
+ */
+export const VOICE_SEATS_UNLIMITED = 0;
+
+/**
+ * Whether this channel has run out of room.
+ *
+ * Unlimited skips the comparison rather than comparing against a large number.
+ * A negative or fractional limit is treated as a limit of zero, i.e. unbounded,
+ * because every writer of this column now floors at zero and a broken value
+ * must not turn into «nobody may join».
+ */
+export function voiceSeatsExhausted(input: {
+  participantCount: number;
+  maxParticipants: number;
+}): boolean {
+  const limit = Math.floor(input.maxParticipants);
+  if (!Number.isFinite(limit) || limit <= VOICE_SEATS_UNLIMITED) return false;
+  return input.participantCount >= limit;
 }
 
 /**
@@ -252,11 +289,21 @@ export function voiceChannelRowOffer(input: {
  * The maximum is always printed, because the number that decides whether a
  * person can join is the pair and not the count. «3 из 10» beside an empty
  * channel would read as a defect, so zero gets its own sentence.
+ *
+ * A room with no limit has no pair to print and says only the count: «3 из 0»
+ * would read as a full room, which is the opposite of what it is.
  */
 export function voiceOccupancyLabel(count: number, max: number): string {
   const present = Math.max(0, Math.floor(count));
   if (present === 0) return "Никого нет";
-  return `${present} из ${Math.max(present, Math.floor(max))}`;
+  const limit = Math.floor(max);
+  if (!Number.isFinite(limit) || limit <= VOICE_SEATS_UNLIMITED) {
+    // «3 в канале», and «1 в канале» for one — grammatical at every count, so
+    // this module keeps its promise of importing nothing rather than growing a
+    // second copy of the vocabulary's pluralizer.
+    return `${present} в канале`;
+  }
+  return `${present} из ${Math.max(present, limit)}`;
 }
 
 /**
@@ -542,7 +589,7 @@ export function voiceCapsuleState(input: {
     };
   }
 
-  const full = channel.participantCount >= channel.maxParticipants;
+  const full = voiceSeatsExhausted(channel);
 
   if (phase === "failed" && refusal) {
     return {
@@ -631,15 +678,22 @@ export interface VoiceChannelDraft {
  * starts the thing, and a form in front of it would turn a one-tap mechanic
  * into a configuration screen for two values almost nobody would change.
  *
- * Ten is not a preference. It is what `livekit.yaml` on the production SFU
- * already limits a room to and what the one existing row in
- * `public.voice_channels` carries, so a client that asked for more would be
- * writing a number the server will not honour — the gateway compares
- * `participant_count` against this column before it mints, and the SFU has the
- * last word either way.
+ * **The ten that used to be here was wrong about why it was here.** It said:
+ * «It is what `livekit.yaml` on the production SFU already limits a room to …
+ * so a client that asked for more would be writing a number the server will not
+ * honour.» Measured against that SFU on 2026-09-20, with throwaway rooms
+ * created, read back and deleted: `CreateRoom` asking for 50 stored 50, and
+ * asking for 100000 stored 100000. `auto_create: false` means every room here
+ * comes from the gateway's own `CreateRoom`, which passes this column — so the
+ * config value never clamped anything, and the cap was this number all along.
+ *
+ * It is 0 now, «no limit», which is the owner's «изначально ограничения быть не
+ * должно» and the column's own default. An administrator who wants a smaller
+ * room says so in the channel's settings; nobody has to undo a cap they never
+ * asked for.
  */
 export function newVoiceChannelDraft(): VoiceChannelDraft {
-  return { name: "Общий голос", maxParticipants: 10 };
+  return { name: "Общий голос", maxParticipants: VOICE_SEATS_UNLIMITED };
 }
 
 /**

@@ -69,10 +69,18 @@ export function useVoiceChannel(
             id: room.id,
             name: room.name,
             participantCount: Math.max(0, room.participantCount ?? 0),
-            // The same floor the single-channel read carried: a row without a
-            // limit is drawn as the column's own default rather than as a room
-            // that cannot hold anybody.
-            maxParticipants: Math.max(1, room.maxParticipants ?? 10),
+            // A row without a limit is the **unlimited** room, not a room with
+            // the column's old default.
+            //
+            // This line used to read `Math.max(1, room.maxParticipants ?? 10)`,
+            // which was the one reading of this column that could not survive
+            // `20260920130000_a_group_voice_channel_has_no_seat_limit.sql`: it
+            // turned 0 into 1, so the capsule would have said «Мест больше нет»
+            // about the very channels the owner asked to have no limit, while
+            // the rail beside it (`seatLabel`) printed nothing and the gateway
+            // let everybody in. A floor is the wrong shape for a value whose
+            // smallest member means «no floor».
+            maxParticipants: Math.max(0, room.maxParticipants ?? 0),
           }
         : null,
       participantIds: room ? [...(channels.participants.get(room.id) ?? [])] : [],

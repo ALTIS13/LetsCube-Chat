@@ -37,7 +37,8 @@ import {
   SEAT_LIMIT_LABEL,
   SEAT_LIMIT_DEFAULT,
   SEAT_LIMIT_MAX,
-  SEAT_LIMIT_MIN,
+  SEAT_LIMIT_UNLIMITED,
+  SEAT_LIMIT_UNLIMITED_NOTE,
   SPEAK_ROLE_LABEL,
   SPEAK_ROLE_LISTENERS_NOTE,
   SPEAK_ROLE_OPTIONS,
@@ -1098,18 +1099,35 @@ function ChannelFields({
             <label className={CAPTION_CLASS} htmlFor={`${idPrefix}-seats`}>
               {SEAT_LIMIT_LABEL}
             </label>
+            {/*
+              `min` is the unlimited value, not the smallest limit: 0 is what a
+              channel holds by default and typing it is how somebody takes a cap
+              back off. `normalizeSeatLimit` still refuses 1, so the floor of two
+              survives for every value that is a limit at all -- but a `min` of
+              two would have made the default unreachable from the control that
+              owns it, which is the shape of a field that cannot express its own
+              column.
+            */}
             <input
               id={`${idPrefix}-seats`}
               data-testid={`${idPrefix}-seats`}
               type="number"
               inputMode="numeric"
-              min={SEAT_LIMIT_MIN}
+              min={SEAT_LIMIT_UNLIMITED}
               max={SEAT_LIMIT_MAX}
               value={seats}
               disabled={busy}
               onChange={(event) => onSeats(event.target.value)}
               className={FIELD_CLASS}
+              aria-describedby={`${idPrefix}-seats-note`}
             />
+            <p
+              id={`${idPrefix}-seats-note`}
+              data-testid={`${idPrefix}-seats-note`}
+              className={CAPTION_CLASS}
+            >
+              {SEAT_LIMIT_UNLIMITED_NOTE}
+            </p>
           </div>
           <div>
             <span className={CAPTION_CLASS}>{SPEAK_ROLE_LABEL}</span>

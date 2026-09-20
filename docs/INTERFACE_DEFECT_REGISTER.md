@@ -19392,6 +19392,36 @@ anything back.
 is **10**. Whatever the hardware can carry, no voice channel admits an eleventh
 person until that line changes.
 
+### That last paragraph was wrong about which line, corrected 2026-09-20
+
+It named `livekit.yaml`. Measured against the production SFU the next day, by
+creating throwaway rooms, reading back what the server stored and deleting them:
+`CreateRoom` asking for 50 stored **50**, asking for 100000 stored **100000**.
+`auto_create: false`, so every room in this product comes from the voice
+gateway's own `CreateRoom`, which passes the channel row's number — the config
+value never clamped it. **The eleventh person was refused by
+`public.voice_channels.max_participants`, not by the YAML**, and changing that
+line alone would have changed nothing.
+
+It capped exactly one case, and that case was the trap: a `CreateRoom` asking
+for **0** came back holding **10**, because 0 is proto3's zero value,
+indistinguishable from an absent field, and an absent field takes the config
+default. So the fix is two-sided — the column *and* the YAML — and is written up
+in `docs/operations/voice.md` under «The ten that was never where it looked»,
+with the ordering the two halves have to go in.
+
+Shipped 2026-09-20 as
+`20260920130000_a_group_voice_channel_has_no_seat_limit.sql`: a group channel
+defaults to 0, «no limit», which is the owner's «изначально ограничения быть не
+должно». A private chat still holds two, and now by a trigger rather than by a
+convention — see that file's header for the hole that closed.
+
+**What this does not change about D-262.** The capacity question stands exactly
+as written above, and lifting the cap makes it sharper rather than answering it.
+The measurement is in the tracker's item 44; the short of it is that the SFU's
+cost is `N × (N−1)` per room, so it is **room size** and not user count that
+reaches the 2-core allocation, and a single «capacity» figure would hide that.
+
 ---
 
 ## D-263 `[ ]` The bot platform's remaining nuances, and how a bot looks in a chat
@@ -21785,6 +21815,74 @@ owns and restores — and the vetoes here may only be widened after the matching
 restoration exists and has been proved.
 
 ---
+
+## D-284 `[ ]` A one-to-one call can be told the room is at maximum participants
+
+**Severity:** low on reach, high on what it says about the product. Nobody is
+blocked by it; the sentence is simply about a capacity that is really a
+definition, which is the same class of defect as a control whose label
+disagrees with its mechanism.
+
+**Found while removing the ten-person cap** (`20260920130000_a_group_voice_
+channel_has_no_seat_limit.sql`), by checking what each fullness sentence says
+in a private chat rather than in a group.
+
+### The two sentences that cannot reach a private chat, checked rather than assumed
+
+- **«Мест больше нет»** — `voiceCapsuleState` in
+  `artifacts/kub/src/lib/voiceChannel.ts`. Unreachable: `ChatWindow.tsx` sets
+  `voiceEnabled = chat?.type === "group"` and passes `null` to
+  `useServerChannels` for anything else, so `capsuleChannel` is `null` and the
+  capsule returns its hidden state.
+- **«Заполнен»** — `artifacts/kub/src/components/chat/VoiceChannelRow.tsx`.
+  Unreachable: `voiceChannelRowOffer` refuses `chatType !== "group"` outright,
+  so the row never mounts.
+
+So the literal worry — a channel-shaped «заполнен» over a one-to-one call —
+does not happen, and that is worth recording so nobody re-derives it.
+
+### The one that does reach it
+
+**«В голосовом чате уже максимум участников.»** —
+`voiceGatewayRefusalText("channel_full")` in
+`artifacts/kub/src/lib/voiceGateway.ts`.
+
+The chain: `public.voice_private_room` gives every private chat a room of
+exactly two, the gateway refuses a mint at `participant_count >= 2` with
+`channel_full`, `useVoiceCall` turns the code into that sentence, and
+`useVoiceRing`'s `startVoiceRing` / `answerVoiceRing` return it as
+`{ ok: false, refusal }`. It is shown as an error toast by `ChatHeader.tsx`,
+`MessageList.tsx` and `VoiceCallRing.tsx`.
+
+Two seats and two possible people means the sentence describes a crowd in a
+conversation that cannot have one. What actually happened is a stale
+`participant_count` after a crashed leave, or the other person's second device
+— neither of which is «максимум участников».
+
+`voiceRingRefusalText` (`artifacts/kub/src/lib/voiceRing.ts`) has **no** `full`
+case of its own; it never produces a seat sentence, which is why the group
+wording leaks into the one-to-one path.
+
+### Why it was not fixed in that commit
+
+The honest fix is for the ring path to render the refusal **code** through
+`voiceRingRefusalText` instead of taking `call.refusal`, which is already
+rendered text. The code does not reach there: the voice-call store publishes
+`{ phase: "failed", refusal }` and nothing else, so carrying it means changing
+`artifacts/kub/src/hooks/useVoiceCall.ts` — a file another agent held open on
+2026-09-20.
+
+The alternative, rewording the shared sentence to suit two seats, makes it worse
+for the group case, which is the case that commit was about. So it is filed
+rather than bodged.
+
+### What to do
+
+Give the failed phase a `refusalCode` beside its `refusal`, add a `channel_full`
+case to `voiceRingRefusalText` worded for a call rather than for a room — the
+true statement is that the conversation is already in progress — and have
+`useVoiceRing` prefer it. Pin it with a test that a private chat's refusal never
+contains «участник» or «мест».
 
 ## D-285 `[x]` Settings are as wide as the chat list, so narrowing the list cripples them
 

@@ -12,6 +12,9 @@ import {
   SEAT_LIMIT_DEFAULT,
   SEAT_LIMIT_MAX,
   SEAT_LIMIT_MIN,
+  SEAT_LIMIT_UNLIMITED,
+  SEAT_LIMIT_UNLIMITED_LABEL,
+  SEAT_LIMIT_UNLIMITED_NOTE,
   SERVER_CHANNEL_MESSAGES,
   SPEAK_ROLE_LISTENERS_NOTE,
   SPEAK_ROLE_OPTIONS,
@@ -26,6 +29,7 @@ import {
   channelsReadFailureText,
   classifyChannelWriteError,
   normalizeSeatLimit,
+  seatLimitIsUnlimited,
   personCountLabel,
   seatCountLabel,
   speakRoleLabel,
@@ -204,21 +208,47 @@ test("a room that narrows speech says the rest may still listen", () => {
   assert.doesNotMatch(SPEAK_ROLE_LISTENERS_NOTE, /нельзя|запрещ|недоступ/iu);
 });
 
-test("the seat count is clamped into the product's own bounds and never becomes zero", () => {
+test("zero is «no limit» and every other value is clamped into the product's bounds", () => {
   assert.equal(normalizeSeatLimit(10), 10);
-  assert.equal(normalizeSeatLimit(1), SEAT_LIMIT_MIN);
-  assert.equal(normalizeSeatLimit(0), SEAT_LIMIT_MIN);
-  assert.equal(normalizeSeatLimit(-5), SEAT_LIMIT_MIN);
   assert.equal(normalizeSeatLimit(32767), SEAT_LIMIT_MAX);
   assert.equal(normalizeSeatLimit("25"), 25);
   assert.equal(normalizeSeatLimit(7.9), 7);
-  // A field somebody is typing into passes through every intermediate state,
-  // and zero is the one value whose meaning at the gateway is not known.
+
+  // The owner, 2026-09-20: «изначально ограничения быть не должно». 0 is that,
+  // it is the column's default since
+  // `20260920130000_a_group_voice_channel_has_no_seat_limit.sql`, and it
+  // survives this function -- which used to raise it to two, so a channel
+  // carrying the new default would have been read as a two-person room by
+  // every sentence this module writes.
+  assert.equal(normalizeSeatLimit(0), SEAT_LIMIT_UNLIMITED);
+  assert.equal(SEAT_LIMIT_UNLIMITED, 0);
+
+  // One seat is still not a room, and the floor of two still holds for every
+  // value that is a limit at all. A negative number is a broken value, not a
+  // small one, and «no limit» is the safe reading: a two-seat room conjured out
+  // of a corrupt column would lock a group out of its own channel.
+  assert.equal(normalizeSeatLimit(1), SEAT_LIMIT_MIN);
+  assert.equal(normalizeSeatLimit(-5), SEAT_LIMIT_UNLIMITED);
+
+  // A field somebody is typing into passes through every intermediate state.
   assert.equal(normalizeSeatLimit(""), SEAT_LIMIT_DEFAULT);
   assert.equal(normalizeSeatLimit("-"), SEAT_LIMIT_DEFAULT);
   assert.equal(normalizeSeatLimit(null), SEAT_LIMIT_DEFAULT);
   assert.equal(normalizeSeatLimit(Number.NaN), SEAT_LIMIT_DEFAULT);
+  assert.equal(SEAT_LIMIT_DEFAULT, SEAT_LIMIT_UNLIMITED);
+
+  // The ceiling is the one the field has always offered, and the database now
+  // agrees with it: the CHECK on production was `between 2 and 20` while this
+  // said 99, so every number from 21 up was refused by Postgres after being
+  // shown as acceptable here.
+  assert.equal(SEAT_LIMIT_MAX, 99);
   assert.ok(SEAT_LIMIT_MIN >= 2 && SEAT_LIMIT_MAX <= 32767);
+
+  assert.equal(seatLimitIsUnlimited(0), true);
+  assert.equal(seatLimitIsUnlimited(null), true);
+  assert.equal(seatLimitIsUnlimited(undefined), true);
+  assert.equal(seatLimitIsUnlimited(10), false);
+  assert.equal(seatLimitIsUnlimited(2), false);
 });
 
 test("a room's own line carries its seats, and who speaks only when that is narrower", () => {
@@ -227,7 +257,22 @@ test("a room's own line carries its seats, and who speaks only when that is narr
     voiceChannelSummaryLine({ maxParticipants: 4, speakRole: "admin" }),
     "4 места · Только администраторы",
   );
-  assert.equal(voiceChannelSummaryLine({ maxParticipants: null, speakRole: null }), "10 мест");
+  // «0 мест» is the sentence a room nobody may enter would show, and this is
+  // the opposite of that room.
+  assert.equal(
+    voiceChannelSummaryLine({ maxParticipants: 0, speakRole: "member" }),
+    SEAT_LIMIT_UNLIMITED_LABEL,
+  );
+  assert.equal(
+    voiceChannelSummaryLine({ maxParticipants: 0, speakRole: "owner" }),
+    `${SEAT_LIMIT_UNLIMITED_LABEL} · Только владелец`,
+  );
+  assert.equal(
+    voiceChannelSummaryLine({ maxParticipants: null, speakRole: null }),
+    SEAT_LIMIT_UNLIMITED_LABEL,
+  );
+  assert.doesNotMatch(SEAT_LIMIT_UNLIMITED_NOTE, /\bкан[ае]л/iu);
+  assert.match(SEAT_LIMIT_UNLIMITED_NOTE, /0/u);
 });
 
 test("the occupancy note exists only while somebody is inside", () => {

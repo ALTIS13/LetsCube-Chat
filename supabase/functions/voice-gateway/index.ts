@@ -71,6 +71,11 @@ import {
 import { createVoiceModerationRateLimiter } from "./moderationRateLimit.mjs";
 import { readUuid, voiceRoomName } from "./roomName.mjs";
 import {
+  liveKitMaxParticipants,
+  readSeatLimit,
+  voiceChannelIsFull,
+} from "./seatLimit.mjs";
+import {
   readBearerToken,
   readWebhookAuthToken,
   verifyLiveKitWebhookToken,
@@ -299,12 +304,23 @@ async function mintToken(request: Request): Promise<Response> {
 
   // 4. The cap, read from the table. Step 5 asks the SFU to enforce the same
   //    number, which is the enforcement that actually binds.
-  const maxParticipants = Number(channelRow.max_participants);
-  const participantCount = Number(channelRow.participant_count);
-  if (!Number.isFinite(maxParticipants) || maxParticipants < 1) {
+  //
+  //    0 means «no limit» — the owner's «изначально ограничения быть не
+  //    должно» — and it is the column's default since
+  //    `20260920130000_a_group_voice_channel_has_no_seat_limit.sql`. Both the
+  //    refusal below and the comparison after it are in `seatLimit.mjs`, which
+  //    also records the measurement that says why 0 only reaches the SFU as
+  //    «unbounded» while `livekit.yaml` carries `room.max_participants: 0`.
+  const maxParticipants = readSeatLimit(channelRow.max_participants);
+  if (maxParticipants === null) {
     return jsonResponse(request, { ok: false, error: "unavailable" }, 503);
   }
-  if (Number.isFinite(participantCount) && participantCount >= maxParticipants) {
+  if (
+    voiceChannelIsFull({
+      limit: maxParticipants,
+      participantCount: channelRow.participant_count,
+    })
+  ) {
     return jsonResponse(request, { ok: false, error: "channel_full" }, 409);
   }
 
@@ -398,9 +414,16 @@ async function createLiveKitRoom(
           authorization: `Bearer ${adminToken.token}`,
           "content-type": "application/json",
         },
+        // `maxParticipants` goes across unchanged, 0 included — and 0 is only
+        // «unbounded» to an SFU whose own `room.max_participants` is 0, because
+        // 0 is proto3's zero value and an absent field takes the config
+        // default. Measured on 2026-09-20: against the production config of 10,
+        // a room asked for 0 came back holding 10. `seatLimit.mjs` carries the
+        // whole measurement and the constant that makes this dependency
+        // greppable.
         body: JSON.stringify({
           name: voiceRoomName(channelId),
-          maxParticipants,
+          maxParticipants: liveKitMaxParticipants(maxParticipants),
           emptyTimeout: ROOM_EMPTY_TIMEOUT_SECONDS,
         }),
         signal: AbortSignal.timeout(LIVEKIT_REQUEST_TIMEOUT_MS),
