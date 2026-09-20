@@ -1142,12 +1142,6 @@ test("owner and developer management verbs map to fixed RPCs", async (t) => {
       body: {},
       rpc: "bot_cancel_deletion_internal",
     },
-    {
-      method: "PATCH",
-      path: `/bot/manage/v1/bots/${BOT_ID}/privacy/${CHAT_ID}`,
-      body: { request_full_visibility: true },
-      rpc: "bot_privacy_request_internal",
-    },
   ] as const;
 
   for (const current of cases) {
@@ -1266,13 +1260,14 @@ test("detail projects only bounded owner/developer configuration and diagnostics
           created_at: "2026-08-31T01:30:00.000Z",
         },
       ],
+      // D-276: the row the RPC answered still carries the two approval
+      // fields, because an un-migrated deployment still has the columns.
+      // The client is told the state and nothing about a request.
       privacy: [
         {
           chat_id: CHAT_ID,
           chat_name: "Operations",
           privacy_mode: "restricted",
-          full_visibility_requested_at: "2026-08-31T02:30:00.000Z",
-          full_visibility_approved: false,
         },
       ],
       webhook: {
@@ -1294,6 +1289,119 @@ test("detail projects only bounded owner/developer configuration and diagnostics
       args: { p_actor_id: USER_ID, p_bot_id: BOT_ID },
     },
   ]);
+});
+
+/**
+ * D-276. The two halves of removing the request, each measured on its own.
+ *
+ * The route is the one a client could reach; the projection is what every
+ * client is told. Pinning only the route would leave the two dead fields on the
+ * wire, and pinning only the projection would leave the door open.
+ */
+test("the full-visibility request route is gone, whatever verb is tried", async (t) => {
+  const calls: ManagementCall[] = [];
+  const server = await listen(
+    createManagementApp({
+      calls,
+      async rpc() {
+        return { data: { success: true }, error: null };
+      },
+    }),
+  );
+  t.after(() => close(server));
+
+  // Measured against a control path rather than against a fixed 404: this app
+  // is the whole gateway, and what it answers for a path with no route is its
+  // business, not this change's contract. What is asserted is that the privacy
+  // path is now indistinguishable from a path that never existed.
+  for (const method of ["PATCH", "POST", "PUT", "DELETE"] as const) {
+    const send = (path: string) =>
+      call(server, path, {
+        method,
+        headers: {
+          authorization: `Bearer ${ACCESS_TOKEN}`,
+          "content-type": "application/json",
+          "x-request-id": REQUEST_ID,
+        },
+        body: JSON.stringify({ request_full_visibility: true }),
+      });
+    const gone = await send(`/bot/manage/v1/bots/${BOT_ID}/privacy/${CHAT_ID}`);
+    const control = await send(`/bot/manage/v1/bots/${BOT_ID}/no-such-thing/${CHAT_ID}`);
+    assert.equal(
+      gone.status,
+      control.status,
+      `${method} on the privacy path answers ${gone.status} where a path with no route answers ${control.status}`,
+    );
+    assert.notEqual(gone.status, 200, `${method} still reaches a privacy route`);
+  }
+  // Nothing was called. `bot_privacy_request_internal` is still granted to
+  // `service_role` in the database until the migration drops it, so «no route»
+  // is the only thing standing between a client and that write.
+  assert.deepEqual(calls, [], "a removed route still called an RPC");
+});
+
+test("a membership the database answers without the dropped columns reads the same", async (t) => {
+  // The other side of the same deployment-ordering question: once
+  // `20260920120000_bot_full_visibility_request_removal.sql` is applied the RPC
+  // stops emitting the two keys, and `.strict()` must not refuse the row for
+  // their absence. Both shapes must project to exactly the same wire payload.
+  const shapes = [
+    { chat_id: CHAT_ID, chat_name: "Operations", privacy_mode: "restricted" },
+    {
+      chat_id: CHAT_ID,
+      chat_name: "Operations",
+      privacy_mode: "restricted",
+      full_visibility_requested_at: "2026-08-31T02:30:00.000Z",
+      full_visibility_approved: false,
+    },
+  ];
+  const seen: unknown[] = [];
+  for (const privacy of shapes) {
+    const server = await listen(
+      createManagementApp({
+        async rpc() {
+          return {
+            data: [
+              {
+                bot_id: BOT_ID,
+                username: "cube_helper",
+                display_name: "Cube Helper",
+                description: "",
+                avatar_url: null,
+                state: "active",
+                delete_after: null,
+                owner_role: "owner",
+                active_token_prefix: null,
+                token_created_at: null,
+                token_last_used_at: null,
+                created_at: "2026-08-30T01:00:00.000Z",
+                updated_at: "2026-08-31T02:00:00.000Z",
+                commands: [],
+                developers: [],
+                privacy: [privacy],
+                webhook_configured: false,
+                webhook_url: null,
+                delivery_mode: null,
+                pending_update_count: 0,
+                failure_count: 0,
+                last_error_code: null,
+                diagnostics_refreshed_at: "2026-08-31T03:00:00.000Z",
+              },
+            ],
+            error: null,
+          };
+        },
+      }),
+    );
+    t.after(() => close(server));
+    const response = await call(server, `/bot/manage/v1/bots/${BOT_ID}`, {
+      headers: { authorization: `Bearer ${ACCESS_TOKEN}` },
+    });
+    assert.equal(response.status, 200, JSON.stringify(response));
+    seen.push((response.body as { result: { privacy: unknown } }).result.privacy);
+  }
+  assert.deepEqual(seen[0], [{ chat_id: CHAT_ID, chat_name: "Operations", privacy_mode: "restricted" }]);
+  assert.deepEqual(seen[1], seen[0], "the two database shapes reach the client differently");
 });
 
 test("detail fails closed when SQL includes private token or webhook fields", async (t) => {

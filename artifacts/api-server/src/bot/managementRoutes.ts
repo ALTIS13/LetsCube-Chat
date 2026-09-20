@@ -175,9 +175,6 @@ const commandsInputSchema = z
 const developerInputSchema = z
   .object({ username: z.string().regex(/^[A-Za-z0-9_.-]{2,64}$/) })
   .strict();
-const privacyInputSchema = z
-  .object({ request_full_visibility: z.boolean() })
-  .strict();
 const commandSchema = z
   .object({
     command: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/),
@@ -192,15 +189,35 @@ const developerSchema = z
     created_at: timestampSchema,
   })
   .strict();
+/**
+ * One row of `bot_management_detail_internal`'s `privacy` array (D-257, D-276).
+ *
+ * The two approval fields are **optional here and never forwarded**, and that
+ * is a deployment ordering decision rather than indecision. `.strict()` refuses
+ * an unknown key, so a schema that required them would break the moment the
+ * migration drops the columns, and one that forbade them would break until it
+ * does. Optional-and-dropped parses both shapes, so the code and the migration
+ * can be applied in either order.
+ *
+ * Remove them from this schema once
+ * `20260920120000_bot_full_visibility_request_removal.sql` is applied
+ * everywhere; until then they are the only part of this file that knows the
+ * columns ever existed.
+ */
 const privacySchema = z
   .object({
     chat_id: uuidSchema,
     chat_name: z.string().min(1).max(256),
     privacy_mode: z.enum(["restricted", "full"]),
-    full_visibility_requested_at: timestampSchema.nullable(),
-    full_visibility_approved: z.boolean(),
+    full_visibility_requested_at: timestampSchema.nullable().optional(),
+    full_visibility_approved: z.boolean().optional(),
   })
   .strict();
+
+/** What a client is told: the state, and nothing about a request. */
+function privacyRow(row: z.infer<typeof privacySchema>) {
+  return { chat_id: row.chat_id, chat_name: row.chat_name, privacy_mode: row.privacy_mode };
+}
 const diagnosticsFields = {
   delivery_mode: z.enum(["polling", "webhook"]).nullable(),
   pending_update_count: z.number().int().min(0).max(1_000_000),
@@ -719,17 +736,18 @@ export function createBotManagementRouter(
     "/bots/:botId/deletion/cancel",
     mutationRoute(input, "bot_cancel_deletion_internal", () => ({})),
   );
-  router.patch(
-    "/bots/:botId/privacy/:chatId",
-    mutationRoute(input, "bot_privacy_request_internal", (request) => {
-      const chatId = uuidSchema.parse(request.params.chatId);
-      const body = privacyInputSchema.parse(request.body);
-      return {
-        p_chat_id: chatId,
-        p_request_full_visibility: body.request_full_visibility,
-      };
-    }),
-  );
+  /**
+   * `PATCH /bots/:botId/privacy/:chatId` stood here until D-276 and is gone.
+   *
+   * It called `bot_privacy_request_internal`, which set
+   * `chat_bot_members.full_visibility_requested_at` and nothing else. Nothing
+   * in this server or in the client ever wrote `full_visibility_approved_by`,
+   * and no approver existed anywhere, so the route could only move a membership
+   * into a state that was permanent and read as pending. The owner's decision
+   * was Telegram's model — the bot owner sets privacy, the group consents by
+   * adding the bot, nothing is approved afterwards — so the request is removed
+   * rather than answered.
+   */
 
   router.get(
     "/bots/:botId",
@@ -752,7 +770,7 @@ export function createBotManagementRouter(
           bot: botSummary(row),
           commands: row.commands,
           developers: row.developers,
-          privacy: row.privacy,
+          privacy: row.privacy.map(privacyRow),
           webhook: {
             configured: row.webhook_configured,
             url: row.webhook_url,

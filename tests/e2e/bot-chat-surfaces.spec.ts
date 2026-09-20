@@ -21,15 +21,18 @@ import {
  * registered and never listed, and a bot in search that led to a modal saying
  * it could not be opened.
  *
- * Two of the mechanics are measured against a door that **does not exist on the
- * deployment**, and that is deliberate rather than an oversight — see the module
- * header of `artifacts/kub/src/lib/botCallback.ts`:
+ * Two of the mechanics are measured against the fixture rather than against the
+ * deployment's own door, and that is deliberate rather than an oversight — see
+ * the module header of `artifacts/kub/src/lib/botCallback.ts`:
  *
  *   - `public.bot_update_enqueue_internal`, the only writer of the bot update
  *     queue, is granted to `service_role` alone, so a press has no path from an
- *     ordinary account. The client calls `bot_callback_press`, a wrapper that
- *     has to exist; here it is played by the fixture, both answering and absent,
- *     so both halves of the behaviour are pinned before the wrapper is written.
+ *     ordinary account. The client calls `bot_callback_press`, a wrapper which
+ *     **does exist on the deployment** — `20260914150000_bot_press_and_bot_chat.sql`,
+ *     with EXECUTE held by `authenticated`, measured 2026-09-20, correcting a
+ *     comment here that went on saying it did not. Here it is played by the
+ *     fixture, both answering and absent, so both halves stay pinned: a client
+ *     cannot assume a deployment took the migration.
  *   - `public.chat_bot_members` has SELECT and no other verb for
  *     `authenticated`, so a chat with a bot cannot be created from the client.
  *     What can be done today — opening one that already exists — is what the

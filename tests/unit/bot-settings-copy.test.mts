@@ -19,6 +19,7 @@ import {
   BOT_WEBHOOK_SECRET_HINT,
   botActionFeedback,
   botActionSection,
+  BOT_SETTINGS_ACTIONS,
   botAvatarRemoveConfirm,
   botDeveloperRemoveConfirm,
   botWebhookDeleteConfirm,
@@ -36,13 +37,42 @@ const ACTIONS: BotSettingsAction[] = [
   "commands",
   "webhookSave",
   "webhookDelete",
-  "privacyRequest",
-  "privacyCancel",
   "rotateToken",
   "revokeToken",
   "addDeveloper",
   "removeDeveloper",
 ];
+
+/**
+ * The list above is the panel's own, and this is what keeps it honest: every
+ * key of `COPY` has to appear in it, and nothing else may. Without this the
+ * suite walks a list that can silently fall behind the table — measured on
+ * 2026-09-20, when a re-added `privacyRequest` entry left every test green.
+ */
+test("the hand-written list is exactly what the table holds", () => {
+  assert.deepEqual([...BOT_SETTINGS_ACTIONS].sort(), [...ACTIONS].sort());
+});
+
+test("nothing the panel can set off asks for something nobody can grant", () => {
+  // D-257: «Запросить полный доступ» had no answer anywhere — no approver in
+  // the client, the server or the database — so the request was a permanent
+  // state that read as a pending one. D-276 removed it; this is what stops it
+  // coming back through the copy table.
+  for (const action of BOT_SETTINGS_ACTIONS) {
+    assert.ok(
+      !action.toLowerCase().includes("privacy"),
+      `«${action}» is a privacy action again, and nothing in this product answers one`,
+    );
+    const done = botActionFeedback(action);
+    if (!done) continue;
+    for (const word of ["запрос", "одобр", "рассмотр"]) {
+      assert.ok(
+        !`${done.title} ${done.detail ?? ""}`.toLocaleLowerCase("ru-RU").includes(word),
+        `«${done.title}» promises «${word}», which nothing can deliver`,
+      );
+    }
+  }
+});
 
 test("every action says something when it works, except the one whose result is already on screen", () => {
   for (const action of ACTIONS) {
@@ -85,8 +115,6 @@ test("an action's error belongs to the section whose button produced it", () => 
   assert.equal(botActionSection("webhookSave"), "webhook");
   assert.equal(botActionSection("webhookDelete"), "webhook");
   assert.equal(botActionSection("commands"), "commands");
-  assert.equal(botActionSection("privacyRequest"), "privacy");
-  assert.equal(botActionSection("privacyCancel"), "privacy");
   assert.equal(botActionSection("rotateToken"), "token");
   assert.equal(botActionSection("revokeToken"), "token");
   assert.equal(botActionSection("addDeveloper"), "developers");

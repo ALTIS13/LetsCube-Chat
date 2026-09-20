@@ -50,12 +50,18 @@ const developerSchema = z.object({
   username: z.string().min(1).max(64).nullable(),
   created_at: timestampSchema,
 }).strict();
+/**
+ * What a bot's membership of one chat lets it read (D-257, D-276).
+ *
+ * `full_visibility_requested_at` and `full_visibility_approved` stood here
+ * until D-276 and are gone from the wire: the API server no longer forwards
+ * them, because the request they belonged to had no answer anywhere and has
+ * been removed rather than completed. `privacy_mode` is the whole of the state.
+ */
 const privacySchema = z.object({
   chat_id: z.string().uuid(),
   chat_name: z.string().min(1).max(256),
   privacy_mode: z.enum(["restricted", "full"]),
-  full_visibility_requested_at: timestampSchema.nullable(),
-  full_visibility_approved: z.boolean(),
 }).strict();
 const diagnosticsSchema = z.object({
   delivery_mode: z.enum(["polling", "webhook"]).nullable(),
@@ -228,8 +234,6 @@ export const botManagement = {
   revokeToken: (botId: string) => request(`/bots/${botId}/token/revoke`, successSchema, json("POST")),
   requestDeletion: (botId: string) => request(`/bots/${botId}/deletion/request`, successSchema, json("POST")),
   cancelDeletion: (botId: string) => request(`/bots/${botId}/deletion/cancel`, successSchema, json("POST")),
-  setPrivacyRequest: (botId: string, chatId: string, requestFullVisibility: boolean) =>
-    request(`/bots/${botId}/privacy/${chatId}`, successSchema, json("PATCH", { request_full_visibility: requestFullVisibility })),
   setWebhook: (botId: string, input: { url: string; secret: string; drop_pending_updates: boolean }) =>
     request(`/bots/${botId}/webhook`, successSchema, json("PUT", input)),
   deleteWebhook: (botId: string, dropPendingUpdates: boolean) =>

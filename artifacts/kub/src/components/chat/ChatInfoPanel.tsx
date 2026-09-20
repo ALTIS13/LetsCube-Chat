@@ -37,17 +37,21 @@ import {
 } from "@/lib/chatSettings";
 import { BotLikeAvatar } from "@/components/bots/BotAvatar";
 import { BotTag } from "@/components/bots/BotTag";
-import { fetchChatBots, removeChatBot } from "@/lib/chatBotMembership";
+import {
+  type ChatBotMember,
+  fetchChatBotMemberships,
+  removeChatBot,
+} from "@/lib/chatBotMembership";
 import {
   BOT_MEMBERS_EMPTY,
   BOT_MEMBERS_HEADING,
+  BOT_MEMBERS_HISTORY_NOTE,
   BOT_REMOVE_FAILED,
   BOT_REMOVE_LABEL,
   BOT_REMOVING_LABEL,
-  BOT_VISIBILITY_NOTE,
   botDisplayName,
+  botMemberStatusLine,
   botMembershipFailureMessage,
-  botSecondaryLine,
   chatBotPartner,
   type BotLike,
 } from "@/lib/chatBots";
@@ -537,8 +541,11 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
     writeProfileWindowPlacement(placementRef.current);
   };
   const [members, setMembers] = useState<MemberRow[]>([]);
-  /** The group's bots, which are not members and do not arrive with them (D-235). */
-  const [chatBots, setChatBots] = useState<readonly BotLike[]>([]);
+  /**
+   * The group's bots, which are not members and do not arrive with them (D-235),
+   * each with what its membership lets it read (D-276).
+   */
+  const [chatBots, setChatBots] = useState<readonly ChatBotMember[]>([]);
   const [removingBotId, setRemovingBotId] = useState<string | null>(null);
   const [botError, setBotError] = useState<string | null>(null);
   /** Set when the member read was refused, so the tab can say so (D-168). */
@@ -731,7 +738,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
       setChatBots([]);
       return;
     }
-    const byChat = await fetchChatBots([chat.id]);
+    const byChat = await fetchChatBotMemberships([chat.id]);
     setChatBots(byChat.get(chat.id) ?? []);
   }, [chat.id, isGroup]);
 
@@ -2138,7 +2145,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
       setBotError(botMembershipFailureMessage(result.error, BOT_REMOVE_FAILED));
       return;
     }
-    setChatBots((current) => current.filter((held) => held.id !== bot.id));
+    setChatBots((current) => current.filter((held) => held.bot.id !== bot.id));
     dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
   };
 
@@ -2740,17 +2747,22 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
                   </div>
                 ) : (
                   <>
+                    {/* What holds for every bot in every mode, and only that.
+                        What each one can read is on its own row below (D-276):
+                        a paragraph here can state one rule, and two bots are
+                        allowed to be in two states. */}
                     <p
                       className="px-4 pb-2 text-[11px] leading-4 text-[color:var(--kub-muted)]"
                       data-testid="chat-info-bot-visibility"
                     >
-                      {BOT_VISIBILITY_NOTE}
+                      {BOT_MEMBERS_HISTORY_NOTE}
                     </p>
-                    {chatBots.map((bot) => (
+                    {chatBots.map(({ bot, privacyMode }) => (
                       <div
                         key={bot.id}
                         data-testid="chat-info-bot"
                         data-bot-id={bot.id}
+                        data-bot-privacy={privacyMode}
                         className="flex items-center gap-3 px-4 py-2 kub-raise-hover"
                       >
                         <BotLikeAvatar bot={bot} size="sm" />
@@ -2761,8 +2773,20 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
                             </span>
                             <BotTag />
                           </div>
-                          <div className="truncate text-xs text-[color:var(--kub-muted)]">
-                            {botSecondaryLine(bot)}
+                          {/* The status slot, and the whole of the group's side
+                              of the privacy model: nobody here approves
+                              anything, so being told is the only thing a member
+                              can act on — by removing the bot. Every native
+                              Telegram client puts the same fact in the same
+                              place, where a person's «был(а) недавно» goes,
+                              rather than on a line of its own; see the header
+                              of `lib/chatBots.ts` for the strings and for what
+                              their web clients do instead, which is nothing. */}
+                          <div
+                            data-testid="chat-info-bot-access"
+                            className="break-words text-xs leading-4 text-[color:var(--kub-muted)]"
+                          >
+                            {botMemberStatusLine(bot, privacyMode)}
                           </div>
                         </div>
                         {isOwnerOrAdmin && (

@@ -59,6 +59,23 @@ const HELPER = {
   updated_at: AT,
 };
 
+/**
+ * A second bot, for D-276: two rows in one group that must say different
+ * things. `privacy_mode: "full"` is not reachable on the deployment today —
+ * nothing writes it — so this is what the surface will draw once a bot's owner
+ * can turn the setting off, pinned now rather than after it ships.
+ */
+const SCRIBE = {
+  id: "5bbbbbbb-1111-4111-8111-000000000002",
+  username: "scribe_bot",
+  display_name: "Протокол",
+  description: "Ведёт итоги встреч",
+  avatar_url: null,
+  state: "active",
+  created_at: AT,
+  updated_at: AT,
+};
+
 /** The five columns `chat_bots_available` returns, named as it names them. */
 const AVAILABLE_ROW = {
   bot_id: HELPER.id,
@@ -145,7 +162,7 @@ async function openPanel(page: Page, options: OpenOptions = {}): Promise<Fixture
             body: { code: "P0001", message: addRaises, details: null, hint: null },
           };
         }
-        live.push({ chat_id: GROUP, bot: HELPER });
+        live.push({ chat_id: GROUP, privacy_mode: "restricted", bot: HELPER });
         return { body: true };
       }
       if (name === "chat_bot_remove") {
@@ -185,10 +202,24 @@ async function openPanel(page: Page, options: OpenOptions = {}): Promise<Fixture
 
   await page.route("**/rest/v1/chat_bot_members*", (route: Route) => {
     if (route.request().method() !== "GET") return route.fallback();
+    // PostgREST answers the columns it was asked for and no others, and this
+    // fixture has to do the same. Answering every seeded column whatever the
+    // query said made the read untestable: dropping `privacy_mode` from the
+    // select left this spec green, because the mock supplied it anyway.
+    // Measured 2026-09-20, which is why the projection is here.
+    const select = new URL(route.request().url()).searchParams.get("select") ?? "";
+    const asked = new Set(select.split(",").map((part) => part.split(/[(:]/)[0].trim()));
+    const projected = live.map((row) => {
+      const out: Row = {};
+      for (const [key, value] of Object.entries(row)) {
+        if (key === "bot" ? asked.has("bot") || asked.has("bots") : asked.has(key)) out[key] = value;
+      }
+      return out;
+    });
     return route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(live),
+      body: JSON.stringify(projected),
     });
   });
 
@@ -297,7 +328,7 @@ test("adding one calls the door with this group and this bot, and says what it d
 });
 
 test("the group's own list shows the bot once it is in, marked as one", async ({ page }, info) => {
-  await openPanel(page, { joined: [{ chat_id: GROUP, bot: HELPER }] });
+  await openPanel(page, { joined: [{ chat_id: GROUP, privacy_mode: "restricted", bot: HELPER }] });
 
   await expect(memberBots(page)).toBeVisible();
   await expect(memberBots(page)).toContainText("Боты в группе");
@@ -310,8 +341,76 @@ test("the group's own list shows the bot once it is in, marked as one", async ({
   await page.screenshot({ path: shotPath(info, "group-bot-member"), fullPage: false });
 });
 
+/**
+ * D-276. The group's side of the privacy model is being told, and nothing else.
+ *
+ * Telegram puts a bot's privacy state on its row in the member list — «Users
+ * can always see a bot's current privacy setting in the list of group members»
+ * — and that is the whole of the group's half: nobody here approves anything,
+ * so the only thing a member can act on is the fact. Before this the fact was
+ * one paragraph over the whole list, which can state one rule for bots that are
+ * allowed to be in two states.
+ */
+test("each bot's row says what that bot can read, and two bots may disagree", async ({ page }) => {
+  await openPanel(page, {
+    joined: [
+      { chat_id: GROUP, privacy_mode: "restricted", bot: HELPER },
+      { chat_id: GROUP, privacy_mode: "full", bot: SCRIBE },
+    ],
+  });
+
+  const rows = memberBots(page).getByTestId("chat-info-bot");
+  await expect(rows).toHaveCount(2);
+  // Ordered by display name: «Помощник» before «Протокол».
+  await expect(rows.nth(0).getByTestId("chat-info-bot-access")).toHaveText(
+    "@helper_bot · Видит только обращения к нему",
+  );
+  await expect(rows.nth(1).getByTestId("chat-info-bot-access")).toHaveText(
+    "@scribe_bot · Видит все сообщения группы",
+  );
+  // The status slot, not a line of its own: a bot's row has the same two lines
+  // a person's row has, and the second is where «был(а) недавно» goes.
+  await expect(rows.nth(0).locator("div.min-w-0 > div")).toHaveCount(2);
+
+  // And it must actually be readable. `truncate` is an ellipsis, not an error,
+  // so a line that outgrows the slot fails silently — which is what the first
+  // version of this line did at both widths. Measured on the rendered element,
+  // because a computed style cannot see a clamp.
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.waitForTimeout(150);
+    for (const index of [0, 1]) {
+      const cut = await rows.nth(index).getByTestId("chat-info-bot-access").evaluate((node) => {
+        const element = node as HTMLElement;
+        // Wrapping is fine and clipping is not, so both axes are measured: a
+        // `truncate` here would show `scrollWidth > clientWidth`, and a line
+        // held to one row by a height would show it on `scrollHeight`.
+        return Math.max(element.scrollWidth - element.clientWidth, element.scrollHeight - element.clientHeight);
+      });
+      expect(cut, `the access line on row ${index} is clipped by ${cut}px at ${width}`).toBeLessThanOrEqual(0);
+    }
+  }
+
+  // The paragraph above says only what holds for both, so it cannot be read as
+  // a claim about either one.
+  const note = memberBots(page).getByTestId("chat-info-bot-visibility");
+  await expect(note).toHaveText("Переписку группы до своего добавления бот не увидит.");
+});
+
+test("a bot whose membership carries no privacy mode is shown as the narrow one", async ({
+  page,
+}) => {
+  // A row the server answered without the column — an older deployment, or a
+  // read that did not ask for it. The line must not widen in silence: «видит
+  // все сообщения» is the sentence a person would act on.
+  await openPanel(page, { joined: [{ chat_id: GROUP, bot: HELPER }] as unknown as Row[] });
+  await expect(memberBots(page).getByTestId("chat-info-bot-access")).toHaveText(
+    "@helper_bot · Видит только обращения к нему",
+  );
+});
+
 test("an administrator can take it out again; a member cannot", async ({ page }) => {
-  const fixture = await openPanel(page, { joined: [{ chat_id: GROUP, bot: HELPER }] });
+  const fixture = await openPanel(page, { joined: [{ chat_id: GROUP, privacy_mode: "restricted", bot: HELPER }] });
 
   const remove = memberBots(page).getByTestId("chat-info-bot-remove");
   await expect(remove).toHaveCount(1);
@@ -327,7 +426,7 @@ test("an administrator can take it out again; a member cannot", async ({ page })
 test("a member sees which bots are in the room but is offered no way out for them", async ({
   page,
 }) => {
-  await openPanel(page, { myRole: "member", joined: [{ chat_id: GROUP, bot: HELPER }] });
+  await openPanel(page, { myRole: "member", joined: [{ chat_id: GROUP, privacy_mode: "restricted", bot: HELPER }] });
   await expect(memberBots(page).getByTestId("chat-info-bot")).toHaveCount(1);
   await expect(
     memberBots(page).getByTestId("chat-info-bot-remove"),
@@ -384,7 +483,7 @@ test("both surfaces, photographed in both themes", async ({ page }, info) => {
   for (const theme of ["dark", "light"] as const) {
     await openPanel(page, {
       available: [AVAILABLE_ROW],
-      joined: [{ chat_id: GROUP, bot: HELPER }],
+      joined: [{ chat_id: GROUP, privacy_mode: "restricted", bot: HELPER }],
       theme,
     });
     await expect(memberBots(page).getByTestId("chat-info-bot")).toHaveCount(1);

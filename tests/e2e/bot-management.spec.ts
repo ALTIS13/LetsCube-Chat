@@ -756,8 +756,6 @@ function detail(bot: ReturnType<typeof summary>) {
       chat_id: "44444444-4444-4444-8444-444444444444",
       chat_name: "Команда продукта",
       privacy_mode: "restricted",
-      full_visibility_requested_at: null,
-      full_visibility_approved: false,
     }],
     webhook: { configured: true, url: WEBHOOK_URL },
     diagnostics: {

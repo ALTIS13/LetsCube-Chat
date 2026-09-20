@@ -2,17 +2,23 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  BOT_ACCESS_FULL,
+  BOT_ACCESS_RESTRICTED,
   BOT_ADD_FAILED,
+  BOT_MEMBERS_HISTORY_NOTE,
   BOT_REMOVE_FAILED,
   BOT_VISIBILITY_NOTE,
   CHAT_BOT_MESSAGES,
+  botAccessLabel,
   botAddedMessage,
+  botMemberStatusLine,
   botDisplayName,
   botMembershipFailureMessage,
   botSecondaryLine,
   chatBotMembers,
   chatBotPartner,
   isBotDoorMissing,
+  readBotPrivacyMode,
 } from "../../artifacts/kub/src/lib/chatBots.ts";
 import { INTERNALS_PATTERN } from "../../artifacts/kub/src/lib/plainMessages.ts";
 
@@ -192,4 +198,118 @@ test("nothing this module shows explains the machine", () => {
       `«${message}» explains the machine rather than the situation`,
     );
   }
+});
+
+
+// ---------------------------------------------------------------------------
+// D-276: the privacy state, said on the bot's own row
+// ---------------------------------------------------------------------------
+
+test("each privacy mode gets its own words, and the two are not the same sentence", () => {
+  // The whole point of the line is that a reader can tell two bots apart at a
+  // glance. Two labels that differ only in a word nobody reads would pass a
+  // «there is a label» test and fail the person.
+  assert.equal(botAccessLabel("restricted"), BOT_ACCESS_RESTRICTED);
+  assert.equal(botAccessLabel("full"), BOT_ACCESS_FULL);
+  assert.notEqual(BOT_ACCESS_RESTRICTED, BOT_ACCESS_FULL);
+
+  const restricted = BOT_ACCESS_RESTRICTED.toLocaleLowerCase("ru-RU");
+  const full = BOT_ACCESS_FULL.toLocaleLowerCase("ru-RU");
+  // `restricted` is `bot_can_receive_message`'s narrow branch: only what is
+  // addressed to the bot. It must not read as «everything».
+  assert.ok(restricted.includes("только"), "the restricted line does not say it is limited");
+  assert.ok(!restricted.includes("все сообщения"), "the restricted line reads as full access");
+  // `full` is the wide branch, and must not be hedged into sounding limited.
+  assert.ok(full.includes("все сообщения"), "the full line does not say it reads everything");
+  assert.ok(!full.includes("только"), "the full line reads as limited");
+});
+
+test("a row without a privacy mode is read as the narrow one", () => {
+  // The column's own default is `restricted`, every live row is in it, and the
+  // failure this guards against is a missing or unknown value drawn as «видит
+  // все сообщения» — a silent widening on the one line a person would act on.
+  for (const value of [undefined, null, "", "unknown", "FULL", 1, {}, ["full"]]) {
+    assert.equal(readBotPrivacyMode(value), "restricted", `«${String(value)}» was not read as restricted`);
+  }
+  // Only the exact string the CHECK admits reads as full.
+  assert.equal(readBotPrivacyMode("full"), "full");
+  assert.equal(readBotPrivacyMode("restricted"), "restricted");
+});
+
+test("the paragraph over the list claims nothing a single bot could contradict", () => {
+  // It stands above two rows that are allowed to disagree, so it may only carry
+  // the clause every branch of `bot_can_receive_message` shares:
+  // `messages.created_at >= chat_bot_members.joined_at`.
+  const note = BOT_MEMBERS_HISTORY_NOTE.toLocaleLowerCase("ru-RU");
+  assert.ok(note.includes("не увидит"), "the paragraph never says what is excluded");
+  assert.ok(
+    note.includes("до своего добавления") || note.includes("до добавления"),
+    "the paragraph drops the history clause, which is the only thing it is for",
+  );
+  // The per-bot claims belong on the rows. A paragraph repeating either of them
+  // would be wrong for the other bot in the same group.
+  for (const perBot of ["упоминания", "@никнейм", "ответы на его сообщения", "все сообщения"]) {
+    assert.ok(
+      !note.includes(perBot),
+      `the paragraph states «${perBot}», which is true of one bot and not of the next`,
+    );
+  }
+});
+
+test("the invite-time note is untouched, because there it is about one bot being added", () => {
+  // `GroupInviteModal` shows `BOT_VISIBILITY_NOTE` while the add is being
+  // decided, about a membership `chat_bot_add` hard-codes to `restricted`. That
+  // is a decision about one bot, so the long form is right there and stays.
+  const note = BOT_VISIBILITY_NOTE.toLocaleLowerCase("ru-RU");
+  assert.ok(note.includes("@никнейм"));
+  assert.ok(note.includes("историю"));
+  assert.notEqual(BOT_VISIBILITY_NOTE, BOT_MEMBERS_HISTORY_NOTE);
+});
+
+test("nothing left in this module offers or implies an approval", () => {
+  // D-257: «Запрошен полный доступ» was a permanent state that read like a
+  // pending one, because no approver existed anywhere. Every word this module
+  // can draw is checked, so a sentence added later cannot quietly bring the
+  // promise back.
+  for (const message of CHAT_BOT_MESSAGES) {
+    const text = message.toLocaleLowerCase("ru-RU");
+    for (const promise of ["запрос", "одобр", "подтвержд", "рассмотр", "ожида"]) {
+      assert.ok(
+        !text.includes(promise),
+        `«${message}» offers «${promise}», and nothing in this product can answer it`,
+      );
+    }
+  }
+});
+
+
+test("the bot's line in the member list is its status slot: identity, then state", () => {
+  // The shape a person's row has one line above — `Владелец группы · был(а)
+  // недавно` — so the two read the same way.
+  assert.equal(botMemberStatusLine(BOT, "restricted"), "@helper_bot · Видит только обращения к нему");
+  assert.equal(botMemberStatusLine(BOT, "full"), "@helper_bot · Видит все сообщения группы");
+
+  // The handle stays, and it is not decoration: this product has no mention
+  // autocomplete, `@никнейм` has to be typed for the bot to be delivered
+  // anything in a group (D-244), and this row is the only place a member who
+  // did not add the bot can read it. Telegram's own status string has no handle
+  // because their composer completes it; ours cannot.
+  for (const mode of ["restricted", "full"] as const) {
+    assert.ok(
+      botMemberStatusLine(BOT, mode).startsWith("@helper_bot"),
+      "the handle left the one screen a group member can read it from",
+    );
+    assert.ok(
+      botMemberStatusLine(BOT, mode).includes(botAccessLabel(mode)),
+      "the status slot stopped carrying the state",
+    );
+  }
+
+  // The description gives way to the access, even for a bot that has one: a
+  // slot that sometimes says what a bot reads and sometimes what it is for is
+  // not a status slot. `botSecondaryLine` still carries both, for the screen
+  // that picks which bot to add.
+  const chatty = { ...BOT, description: "Напоминает о встречах" };
+  assert.ok(!botMemberStatusLine(chatty, "restricted").includes("Напоминает"));
+  assert.equal(botSecondaryLine(chatty), "@helper_bot · Напоминает о встречах");
 });

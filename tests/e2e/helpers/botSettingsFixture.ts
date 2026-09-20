@@ -166,8 +166,6 @@ export async function openBotSettings(page: Page, options: BotSettingsFixtureOpt
             chat_id: "33333333-3333-4333-8333-00000000d222",
             chat_name: "Команда продукта",
             privacy_mode: "restricted",
-            full_visibility_requested_at: null,
-            full_visibility_approved: false,
           },
         ],
         webhook: { configured: true, url: "https://hooks.example.invalid/letscube" },

@@ -1,7 +1,12 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { isBotDoorMissing, type BotLike } from "@/lib/chatBots";
+import {
+  type BotPrivacyMode,
+  isBotDoorMissing,
+  readBotPrivacyMode,
+  type BotLike,
+} from "@/lib/chatBots";
 
 /**
  * Reading and changing which bots are in a chat (D-235, D-236).
@@ -81,8 +86,23 @@ function readBot(value: unknown): BotLike | null {
   };
 }
 
+/** A bot in a chat, and what that membership lets it read (D-276). */
+export interface ChatBotMember {
+  readonly bot: BotLike;
+  /**
+   * `chat_bot_members.privacy_mode`. It is a property of the membership and not
+   * of the bot, which is why it is here and not on `BotLike`: the same bot in
+   * two groups is allowed to be in two states.
+   *
+   * `authenticated` already holds SELECT on this column under «chat members and
+   * owners read bot membership», so reading it needs no new grant and no
+   * migration — measured on the deployment 2026-09-20.
+   */
+  readonly privacyMode: BotPrivacyMode;
+}
+
 /**
- * The live bots of each of these chats.
+ * The live bot memberships of each of these chats.
  *
  * A failure answers an empty map rather than throwing: a chat list that cannot
  * read bot memberships must look exactly like a chat list with no bots in it,
@@ -93,12 +113,16 @@ function readBot(value: unknown): BotLike | null {
  * in `chat_bot_members` with `removed_at` null, and drawing «Бот» for something
  * the authoriser refuses every operation to would be a mark that lies.
  */
-export async function fetchChatBots(chatIds: readonly string[]): Promise<Map<string, BotLike[]>> {
-  const byChat = new Map<string, BotLike[]>();
+export async function fetchChatBotMemberships(
+  chatIds: readonly string[],
+): Promise<Map<string, ChatBotMember[]>> {
+  const byChat = new Map<string, ChatBotMember[]>();
   if (chatIds.length === 0) return byChat;
   const { data, error } = await looseClient()
     .from("chat_bot_members")
-    .select<{ chat_id?: unknown; bot?: unknown }[]>(`chat_id,bot:bots(${BOT_COLUMNS})`)
+    .select<{ chat_id?: unknown; privacy_mode?: unknown; bot?: unknown }[]>(
+      `chat_id,privacy_mode,bot:bots(${BOT_COLUMNS})`,
+    )
     .in("chat_id", chatIds)
     .is("removed_at", null)
     .limit(500);
@@ -113,12 +137,31 @@ export async function fetchChatBots(chatIds: readonly string[]): Promise<Map<str
     const embedded = Array.isArray(row?.bot) ? row.bot[0] : row?.bot;
     const bot = readBot(embedded);
     if (!chatId || !bot || bot.state !== "active") continue;
+    const entry: ChatBotMember = { bot, privacyMode: readBotPrivacyMode(row?.privacy_mode) };
     const held = byChat.get(chatId);
-    if (held) held.push(bot);
-    else byChat.set(chatId, [bot]);
+    if (held) held.push(entry);
+    else byChat.set(chatId, [entry]);
   }
-  for (const bots of byChat.values()) {
-    bots.sort((left, right) => left.display_name.localeCompare(right.display_name, "ru-RU"));
+  for (const members of byChat.values()) {
+    members.sort((left, right) =>
+      left.bot.display_name.localeCompare(right.bot.display_name, "ru-RU"),
+    );
+  }
+  return byChat;
+}
+
+/**
+ * The same read, projected to the bots alone.
+ *
+ * `useChats` hangs these on every chat row to answer «is this a bot chat?», a
+ * question the membership's privacy mode has nothing to do with. Keeping the
+ * projection here rather than widening `BotLike` is what stops a property of
+ * the membership from travelling on the bot.
+ */
+export async function fetchChatBots(chatIds: readonly string[]): Promise<Map<string, BotLike[]>> {
+  const byChat = new Map<string, BotLike[]>();
+  for (const [chatId, members] of await fetchChatBotMemberships(chatIds)) {
+    byChat.set(chatId, members.map((member) => member.bot));
   }
   return byChat;
 }

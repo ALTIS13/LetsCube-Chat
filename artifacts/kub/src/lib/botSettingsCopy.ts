@@ -37,7 +37,6 @@ export type BotSettingsSection =
   | "deletion"
   | "commands"
   | "webhook"
-  | "privacy"
   | "token"
   | "developers";
 
@@ -53,8 +52,6 @@ export type BotSettingsAction =
   | "commands"
   | "webhookSave"
   | "webhookDelete"
-  | "privacyRequest"
-  | "privacyCancel"
   | "rotateToken"
   | "revokeToken"
   | "addDeveloper"
@@ -92,13 +89,23 @@ const COPY: Record<BotSettingsAction, BotActionCopy> = {
   commands: { section: "commands", done: { title: "Сохранено", detail: "Команды бота обновлены." } },
   webhookSave: { section: "webhook", done: { title: "Сохранено", detail: "Webhook обновлён." } },
   webhookDelete: { section: "webhook", done: { title: "Webhook удалён" } },
-  privacyRequest: { section: "privacy", done: { title: "Запрос отправлен" } },
-  privacyCancel: { section: "privacy", done: { title: "Запрос отменён" } },
   rotateToken: { section: "token", done: null },
   revokeToken: { section: "token", done: { title: "Токен отозван" } },
   addDeveloper: { section: "developers", done: { title: "Разработчик добавлен" } },
   removeDeveloper: { section: "developers", done: { title: "Разработчик убран" } },
 };
+
+/**
+ * Every action the table knows, read off the table itself.
+ *
+ * Exported so the suite iterates `COPY` rather than a second hand-written copy
+ * of the union. It was such a copy until D-276, and it was measured: adding a
+ * `privacyRequest` entry back to `COPY` left the whole suite green, because the
+ * list the test walked did not have it. A table and a list of its keys always
+ * drift; one of them has to be derived.
+ */
+export const BOT_SETTINGS_ACTIONS: readonly BotSettingsAction[] =
+  Object.keys(COPY) as BotSettingsAction[];
 
 /** Which section prints this action's error. */
 export function botActionSection(action: BotSettingsAction): BotSettingsSection {

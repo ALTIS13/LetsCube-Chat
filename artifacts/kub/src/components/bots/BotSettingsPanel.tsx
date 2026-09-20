@@ -8,6 +8,7 @@ import { useBotMutations } from "@/hooks/useBots";
 import { showActionFeedback } from "@/lib/actionFeedback";
 import { requestAppConfirm } from "@/lib/appDialogs";
 import { BotManagementError, botManagement, type BotCommand, type BotDetail } from "@/lib/botManagement";
+import { botAccessLabel } from "@/lib/chatBots";
 import {
   BOT_WEBHOOK_SECRET_HINT,
   botActionFeedback,
@@ -295,13 +296,35 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
             </div>
           </Section>
 
-          <Section title="Приватность в группах" error={errors.privacy} description="Полный доступ запрашивается отдельно для каждого чата и подтверждается администратором группы.">
+          {/* D-257, D-276. This box used to offer «Запросить полный доступ» and
+              «Отменить запрос». Nothing could answer either: `full_visibility_approved`
+              was read in three places and written in none — no action in this
+              client, no route in the API server, no approver in the database —
+              so «Запрошен полный доступ» was a permanent state that read like a
+              pending one, and one live group membership was sitting in it.
+
+              The owner's decision was Telegram's model, where a bot's privacy
+              is the bot owner's setting and the group's consent is the act of
+              adding it: there is nothing to approve afterwards. So the request
+              is gone rather than completed, and what is left here is a reading
+              of the state. The same words appear on the bot's row in each
+              group's member list, which is where the people it affects can see
+              them — `botAccessLabel` is the single source of both.
+
+              No control is drawn because none exists yet: nothing in this
+              product writes `privacy_mode`. When the owner's own switch is
+              built it belongs here, and it will need a write path that today's
+              schema has no room for. */}
+          <Section title="Приватность в группах" description="Бот видит только обращённые к нему сообщения. Участники каждой группы видят это в её списке ботов.">
             <div className="space-y-2">
-              {detail.privacy.map((item) => {
-                const requested = Boolean(item.full_visibility_requested_at) && !item.full_visibility_approved;
-                const label = item.privacy_mode === "full" && item.full_visibility_approved ? "Полный доступ одобрен" : requested ? "Запрошен полный доступ" : "Ограниченный";
-                return <div key={item.chat_id} className="flex flex-col gap-2 border-b border-[color:var(--kub-rule)] py-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><div className="break-words text-sm font-medium text-[color:var(--kub-text)]">{item.chat_name}</div><div className="mt-1 text-xs text-[color:var(--kub-muted)]">{label}</div></div>{item.privacy_mode !== "full" && <KubButton variant="secondary" size="sm" className="min-h-11" disabled={!editable} onClick={() => void run(requested ? "privacyCancel" : "privacyRequest", async () => { await botManagement.setPrivacyRequest(bot.id, item.chat_id, !requested); await mutations.refresh(); })}>{requested ? "Отменить запрос" : "Запросить полный доступ"}</KubButton>}</div>;
-              })}
+              {detail.privacy.map((item) => (
+                <div key={item.chat_id} data-bot-privacy={item.privacy_mode} className="flex flex-col gap-2 border-b border-[color:var(--kub-rule)] py-3 sm:flex-row sm:items-center">
+                  <div className="min-w-0 flex-1">
+                    <div className="break-words text-sm font-medium text-[color:var(--kub-text)]">{item.chat_name}</div>
+                    <div className="mt-1 text-xs text-[color:var(--kub-muted)]">{botAccessLabel(item.privacy_mode)}</div>
+                  </div>
+                </div>
+              ))}
               {detail.privacy.length === 0 && <KubEmptyState title="Бот не добавлен в группы" description="Настройки появятся после добавления в чат." className="py-5" />}
             </div>
           </Section>

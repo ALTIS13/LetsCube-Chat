@@ -42,10 +42,13 @@
  *      also takes the actor's id as an argument rather than reading
  *      `auth.uid()`, which is why opening that grant as it stands would let one
  *      member forge a press as another. The client therefore calls a wrapper,
- *      `bot_callback_press`, which does not exist yet; `classifyBotCallbackFailure`
- *      recognises its absence and `BOT_CALLBACK_UNAVAILABLE` is what the surface
- *      says while it is absent. `lib/botCallback.ts` carries the exact shape the
- *      server half needs.
+ *      `bot_callback_press`. It **exists on the deployment** as of
+ *      `20260914150000_bot_press_and_bot_chat.sql`, and `authenticated` holds
+ *      EXECUTE on it — measured 2026-09-20, correcting a comment here that went
+ *      on saying it did not. `classifyBotCallbackFailure` still recognises its
+ *      absence and `BOT_CALLBACK_UNAVAILABLE` is still what a deployment without
+ *      it would say, because the client cannot assume a migration ran.
+ *      `lib/botCallback.ts` carries the exact shape the server half needs.
  */
 
 import { INTERNALS_PATTERN, plainFailure } from "./plainMessages.ts";
