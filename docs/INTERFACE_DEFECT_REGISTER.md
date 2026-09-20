@@ -21210,12 +21210,47 @@ dragging the handle had to look up at another row and estimate its x.
 
 `MicMeter`, with a threshold, is now one object carrying three things:
 
-- **the scale**, two zones split at the threshold at 16% strength, so the
-  boundary exists in a silent room;
-- **the level in two parts** — `--kub-warn` up to the boundary, `--kub-cyan`
-  past it — so a voice growing louder is seen to *cross* it at exactly that x;
-- **the boundary itself**, a 2px rule painted in the track's own colour, so it
-  reads as a gap in the bar rather than as a mark on it.
+- **the mark**, a 2px rule in `--kub-muted` at the threshold's own position,
+  drawn **under** the fills, so the boundary exists in a silent room —
+  measured from the rendered pixels at **7.47:1** against the track in the
+  dark theme and **4.80:1** in the light one;
+- **the level in two parts** — `--kub-warn` up to the mark, `--kub-cyan` past
+  it — so a voice growing louder is seen to *cross* it at exactly that x;
+- **the gap**, the same 2px in the track's own colour drawn **over** the fills
+  and only once one of them has covered the mark. It is not ornament: amber
+  and blue are 1.94:1 apart in luminance in the dark theme and **1.32:1** in
+  the light one, so the filled boundary is a hue break and almost nothing
+  else, and a reader who cannot separate those hues would have nothing. The
+  track against either fill is 9.94:1 and 5.12:1 dark, 3.28:1 and 4.34:1
+  light.
+
+### The first version of that failed, in the one state the owner is in
+
+**It implied the boundary instead of drawing one**: two 16% track tints either
+side with a 2px gap between them, every token in it a real token. Measured off
+the rendered pixels afterwards, at rest: the two zones **1.09:1** apart in the
+dark theme and **1.03:1** in the light one, the gap **1.33:1** against the warm
+zone. A second reader looked at the screenshot and reported that the meter had
+no bar at all — there is one; he could not see it.
+
+That is precisely the owner's state, because his dimmer is at zero and after
+D-278 his level reads near nothing. And `micGateThresholdHint` promises it in
+words — «засечка на ней — порог» — so the copy was describing something the
+pixels did not show, which is this register's most repeated shape appearing in
+a new place.
+
+**A gap can only be seen where something has been taken out of.** In a silent
+room there was nothing there to take, and on a dark panel the gap *is* the
+panel — 1.03:1 away. The mark is a real mark now, and it is drawn first so a
+fill covers it, which is why no single colour has to clear 3:1 against both a
+near-black track and a bright amber at once.
+
+**Pinned by measurement, not by class name**, because a class-name assertion
+cannot catch 1.09:1 — that is exactly how it shipped. The two new cases in
+`audio-settings-meter.spec.ts` photograph the meter, decode it with `sharp` and
+read the painted row, in both themes, per `interface-material.md` rule 7. Six
+mutations go red, the first being the mark back to `--kub-range-track`, which
+is the version that shipped.
 
 Amber against blue rather than Discord's warm against green, and that is not a
 palette convenience. `--kub-warn` is this material's one warm tone and is
@@ -21245,14 +21280,21 @@ Clipping is now representable for the first time (the float path can exceed
 
 ### Proof
 
-- `tests/e2e/audio-settings-meter.spec.ts` — «the level crosses a line that is
-  on screen, in two different hues»: the hue distance between the two fills,
-  the boundary's position against the threshold, the accent part unpainted
-  below it, and the notch still drawn at 0%. Five mutations watched go red,
-  the first being the two fills back to `--kub-muted`/`--kub-cyan`, which
-  measures **1.04°** and fails.
+- `tests/e2e/audio-settings-meter.spec.ts`, three cases. «The level crosses a
+  line that is on screen, in two different hues» holds the hue distance
+  between the two fills, the boundary's position against the threshold, and
+  the accent part unpainted below it. «The threshold is visible with nothing
+  arriving», in both themes, photographs the meter in a silent room and
+  measures the mark against the track either side of it at a 3:1 floor. «The
+  covered boundary survives without the hue», in both themes, does the same
+  for the gap against each fill.
+- Six mutations watched go red: the mark back to `--kub-range-track` (the
+  version that shipped, 1.00:1 against the bare track), the mark given no
+  width, the mark pinned to the left edge, the gap never drawn, the warm fill
+  back to `--kub-muted` (which measures **1.04°** from the accent), and the
+  boundary ignoring the threshold.
 - Photographed at 1440 and 390 in both themes, at rest, below the threshold and
-  above it: `output/audio/audio-after2-*`.
+  above it, and looked at: `output/audio/audio-fix-*`.
 
 ### And one test-instrument defect found on the way
 

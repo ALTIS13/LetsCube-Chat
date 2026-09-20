@@ -1304,11 +1304,16 @@ function ActivationSegment({
  * **mechanic** — the boundary is visible inside the coloured object, always,
  * rather than inferred by comparing two of them:
  *
- *  - a notch at the threshold's own position, drawn whatever the level is, so
+ *  - a mark at the threshold's own position, drawn whatever the level is, so
  *    the line exists on screen when the room is silent;
- *  - the fill in two parts, `--kub-warn` up to the notch and `--kub-cyan`
- *    past it, so a voice growing louder is seen to **cross** it at exactly
- *    that x.
+ *  - the fill in two parts, `--kub-warn` up to the mark and `--kub-cyan` past
+ *    it, so a voice growing louder is seen to **cross** it at exactly that x.
+ *
+ * Both of those are measured against a 3:1 floor from the rendered pixels
+ * rather than from the token values, because the first version of this was
+ * not: it implied the boundary with two 16% track tints and a gap, which came
+ * out at **1.09:1** and **1.33:1** and was reported by a reader as «there is
+ * no bar». See the comments at the two elements.
  *
  * Amber against blue rather than Discord's warm against green, and that is
  * not a palette convenience. `--kub-warn` is this material's one warm tone and
@@ -1340,12 +1345,16 @@ function MicMeter({
   const width = micMeterPercent(level, reducedMotion);
   const gated = threshold !== undefined;
   const open = gated && level > 0 && level >= micGateOpenAt(threshold);
-  // The notch, on the meter's own axis rather than on the slider's: the same
+  // The mark, on the meter's own axis rather than on the slider's: the same
   // `micLevelPosition` mapping the width goes through, which is what makes the
   // two comparable at all.
   const line = gated ? Math.round(micLevelPosition(micGateOpenAt(threshold)) * 100) : 0;
   const below = Math.min(width, line);
   const above = Math.max(0, width - line);
+  // Whether the level has reached the mark. Below this the mark is on bare
+  // track and carries the boundary itself; at or past it the mark is painted
+  // over and the gap takes the job.
+  const covered = gated && line > 0 && width >= line;
   return (
     <div
       role="meter"
@@ -1364,30 +1373,44 @@ function MicMeter({
       {gated ? (
         <>
           {/*
-            The scale, which exists whatever the level is. Discord's answer to
-            «where is the line» is that its whole track is two colours split at
-            the handle, so the boundary is on screen in a silent room; these
-            two zones are that, at a sixth of the strength, so they read as the
-            ground the level is drawn on rather than as a reading of it.
+            **The засечка, and it is under the fills rather than over them.**
+
+            The first version of this drew the boundary as a 2px gap in the
+            track's own colour, on top, with the two zones either side tinted
+            at 16%. Measured off the rendered pixels afterwards, at rest and in
+            the dark theme: the two zones were **1.09:1** apart and the gap was
+            **1.33:1** against the warm one. Reviewed by a second reader who
+            looked at the screenshot and reported that the meter had no bar at
+            all — it does; he could not see it. A gap can only be seen where
+            something has been taken out of, and in a silent room there is
+            nothing there to take.
+
+            That is the state the owner is in, because his dimmer is at zero,
+            and it is also the state `micGateThresholdHint` describes in so
+            many words. A sentence about a landmark that is invisible is the
+            register's most repeated shape.
+
+            So the mark is a real mark, in `--kub-muted` — this material's
+            quiet-mark tone — measured at 7.47:1 against the track in the dark
+            theme and 4.80:1 in the light one, against a floor of 3:1. Drawn
+            **first**, so a fill covers it, which is why there is no colour
+            that has to clear 3:1 against both a near-black track and a bright
+            amber at once.
           */}
           <div
             aria-hidden="true"
-            className="absolute inset-y-0 left-0 bg-[color-mix(in_srgb,var(--kub-warn)_16%,transparent)]"
-            style={{ width: `${line}%` }}
-          />
-          <div
-            aria-hidden="true"
-            className="absolute inset-y-0 right-0 bg-[color-mix(in_srgb,var(--kub-cyan)_16%,transparent)]"
+            data-testid={`${testId}-notch`}
+            className="absolute inset-y-0 w-[2px] -translate-x-px bg-[var(--kub-muted)]"
             style={{ left: `${line}%` }}
           />
           {/*
-            And the level on top of it, in two parts. `35ms` rather than one of
-            the motion tokens, and it is the one number here taken from
-            Discord's own bundle (`transition:width 35ms ease`, build 615980):
-            a reading arrives every `MIC_LEVEL_PERIOD_MS`, so a transition
-            longer than 50ms spends its whole life drawing a level the
-            microphone never had. The smoothing this meter has is the
-            analyser's own 42.7ms window, and it does not need a second one.
+            And the level over it, in two parts. `35ms` rather than one of the
+            motion tokens, and it is the one number here taken from Discord's
+            own bundle (`transition:width 35ms ease`, build 615980): a reading
+            arrives every `MIC_LEVEL_PERIOD_MS`, so a transition longer than
+            50ms spends its whole life drawing a level the microphone never
+            had. The smoothing this meter has is the analyser's own 42.7ms
+            window, and it does not need a second one.
           */}
           <div
             data-testid={`${testId}-below`}
@@ -1406,19 +1429,23 @@ function MicMeter({
             style={{ left: `${line}%`, width: `${above}%` }}
           />
           {/*
-            The boundary itself, painted in the track's own colour so it reads
-            as a **gap** in the bar rather than as a mark on it — the one thing
-            that cannot be mistaken for a reading. Inset rather than centred: a
-            2px rule centred on the boundary would put half of itself in the
-            accent zone, which is the one place it must not blur the edge it is
-            marking.
+            The boundary again, **only once a fill has covered the mark**, and
+            this one is the gap: the track's own colour, so it reads as a bite
+            out of the bar. It is not decoration for the hue break above it.
+            Amber and blue are 1.94:1 apart in luminance in the dark theme and
+            **1.32:1** in the light one — a hue break and almost nothing else —
+            so for a reader who cannot separate those hues the filled boundary
+            would otherwise not exist. The track against either fill is 9.94:1
+            and 5.12:1 dark, 3.28:1 and 4.34:1 light.
           */}
-          <div
-            aria-hidden="true"
-            data-testid={`${testId}-notch`}
-            className="absolute inset-y-0 w-[2px] -translate-x-px bg-[var(--kub-range-track)]"
-            style={{ left: `${line}%` }}
-          />
+          {covered && (
+            <div
+              aria-hidden="true"
+              data-testid={`${testId}-gap`}
+              className="absolute inset-y-0 w-[2px] -translate-x-px bg-[var(--kub-range-track)]"
+              style={{ left: `${line}%` }}
+            />
+          )}
         </>
       ) : (
         <div

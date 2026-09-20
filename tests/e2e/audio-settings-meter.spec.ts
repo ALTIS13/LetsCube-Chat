@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import sharp from "sharp";
 import {
   chat,
   membership,
@@ -76,8 +77,11 @@ function seed(): { chats: Row[]; memberships: Row[]; messages: Row[] } {
   };
 }
 
-async function openSound(page: Page) {
+async function openSound(page: Page, theme: "dark" | "light" = "dark") {
   await openFixture(page, { me: ME, people: [ANNA], ...seed() });
+  // `openFixture` seeds the dark theme; a later init script wins. The two
+  // contrast measurements below need both, and the light one is the worse.
+  await page.addInitScript((value) => localStorage.setItem("kub-theme", value as string), theme);
   // Before the application boots, so the first `openMicLevelSource` already
   // finds it. The module gates this on `import.meta.env.DEV`, so the branch
   // folds away in a production build and there is no path to it there.
@@ -182,6 +186,52 @@ async function fillHue(page: Page, testId: string): Promise<number> {
     return (hue * 60 + 360) % 360;
   }, testId);
 }
+
+
+/* ── Measuring what is actually painted ──────────────────────────────────── */
+
+/**
+ * One horizontal row of the meter, decoded from a photograph of it.
+ *
+ * `docs/operations/interface-material.md` rule 7: contrast is measured from
+ * photographed pixels and not from token values, because the token is not what
+ * composites. Here it is not even close to academic — the first version of the
+ * threshold mark was a gap in the track's own colour between two 16% tints,
+ * every token in it was a real token, and the whole boundary came out at
+ * 1.09:1 and could not be seen.
+ */
+async function meterRow(page: Page, testId: string): Promise<{ row: [number, number, number][]; scale: number }> {
+  const meter = page.getByTestId(testId);
+  const box = await meter.boundingBox();
+  expect(box, `no ${testId} on screen to photograph`).not.toBeNull();
+  const shot = await meter.screenshot();
+  const raw = await sharp(shot).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width, height, channels } = raw.info;
+  const y = Math.floor(height / 2);
+  const row: [number, number, number][] = [];
+  for (let x = 0; x < width; x += 1) {
+    const at = (y * width + x) * channels;
+    row.push([raw.data[at], raw.data[at + 1], raw.data[at + 2]]);
+  }
+  return { row, scale: width / box!.width };
+}
+
+function luminance([r, g, b]: readonly [number, number, number]): number {
+  const channel = (value: number) => {
+    const v = value / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+function contrastRatio(a: readonly [number, number, number], b: readonly [number, number, number]): number {
+  const x = luminance(a);
+  const y = luminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
+/** WCAG's floor for a graphical object that carries meaning. */
+const BOUNDARY_CONTRAST_FLOOR = 3;
 
 test.describe("the level meter is an instrument", () => {
   test.beforeEach(async ({ request }) => {
@@ -376,6 +426,120 @@ test.describe("the level meter is an instrument", () => {
     expect(atRest.height).toBeGreaterThan(0);
     expect(Math.abs(atRest.at - 0.35)).toBeLessThan(0.02);
   });
+
+  /**
+   * **The threshold has to be locatable with no sound arriving**, which is the
+   * state the owner is in and the state the first version of this failed.
+   *
+   * He has an analogue dimmer on his microphone and it is at zero, so after
+   * D-278 his level reads near nothing — and the boundary was implied by two
+   * 16% track tints with a 2px gap between them. Measured off the rendered
+   * pixels: the two zones **1.09:1** apart in the dark theme and **1.03:1** in
+   * the light one, the gap **1.33:1** against the warm zone. A second reader
+   * looked at the screenshot and reported that there was no meter bar at all.
+   *
+   * It is also what `micGateThresholdHint` promises in words — «засечка на
+   * ней — порог» — so the copy was describing something the pixels did not
+   * show, which is this register's most repeated shape.
+   *
+   * Photographed and decoded rather than read off `getComputedStyle`, because
+   * **a class-name assertion cannot catch 1.09:1**; that is exactly how it
+   * shipped. Both themes, because the light one was the worse of the two.
+   *
+   * Mutation: the mark back to `bg-[var(--kub-range-track)]` — the gap this
+   * replaced. It measures 1.00:1 against the bare track and this goes red.
+   */
+  for (const theme of ["dark", "light"] as const) {
+    test(`the threshold is visible with nothing arriving (${theme})`, async ({ page }) => {
+      const panel = await openSound(page, theme);
+      await panel.getByTestId("audio-mic-test").click();
+      await expect(panel.getByTestId("audio-self-monitor")).toBeEnabled();
+      await panel.getByTestId("mic-activation-picker").locator('[data-mic-activation="voice"]').click();
+      const gate = panel.getByTestId("mic-gate-level");
+      await expect(gate).toBeVisible();
+
+      // A silent room, which is the whole point: nothing is filled.
+      await pushLevel(page, 0);
+      await expect(gate).toHaveAttribute("aria-valuenow", "0");
+      await expect(gate).toHaveAttribute("data-open", "false");
+      // The gap belongs to the covered state and must not be drawn here — it
+      // would sit on top of the mark and paint it back out in track colour.
+      await expect(panel.getByTestId("mic-gate-level-gap")).toHaveCount(0);
+      await page.waitForTimeout(120);
+
+      const { row, scale } = await meterRow(page, "mic-gate-level");
+      const at = Math.round((35 / 100) * (row.length / scale) * scale);
+      // The mark is 2px wide, centred on the boundary and then scaled by the
+      // device pixel ratio; a pixel either side of centre is inside it at any
+      // ratio this suite runs at.
+      const mark = row[at - 1];
+      const left = row[at - Math.round(8 * scale)];
+      const right = row[at + Math.round(8 * scale)];
+
+      const against = (ground: readonly [number, number, number], where: string) => {
+        const ratio = contrastRatio(mark, ground);
+        expect(
+          ratio,
+          `the threshold mark is rgb(${mark.join(",")}) at ${ratio.toFixed(2)}:1 against the ` +
+            `${where} rgb(${ground.join(",")}) in the ${theme} theme, with nothing arriving. ` +
+            `A boundary that carries meaning needs ${BOUNDARY_CONTRAST_FLOOR}:1. The version ` +
+            `that shipped on 2026-09-20 measured 1.33:1 and a reader reported no bar at all.`,
+        ).toBeGreaterThanOrEqual(BOUNDARY_CONTRAST_FLOOR);
+      };
+      against(left, "track to its left");
+      against(right, "track to its right");
+
+      // And it is where the threshold is, not merely somewhere.
+      expect(Math.abs((at - 1) / scale - 0.35 * (row.length / scale))).toBeLessThan(3);
+    });
+  }
+
+  /**
+   * And once a fill covers the mark, the boundary is still there **without
+   * relying on the hue break**.
+   *
+   * Amber against blue is a real separation and it is what the owner asked
+   * for, but it is a separation in *hue*: measured from the tokens, the two
+   * fills are 1.94:1 apart in luminance in the dark theme and **1.32:1** in
+   * the light one. A reader who cannot tell those two hues apart would have
+   * nothing. The gap — the track's own colour, drawn over both — is what they
+   * have, and it is measured here against each fill in turn.
+   *
+   * Mutation: drop the `covered &&` guard's element. Both assertions go red.
+   */
+  for (const theme of ["dark", "light"] as const) {
+    test(`the covered boundary survives without the hue (${theme})`, async ({ page }) => {
+      const panel = await openSound(page, theme);
+      await panel.getByTestId("audio-mic-test").click();
+      await expect(panel.getByTestId("audio-self-monitor")).toBeEnabled();
+      await panel.getByTestId("mic-activation-picker").locator('[data-mic-activation="voice"]').click();
+      const gate = panel.getByTestId("mic-gate-level");
+
+      await pushLevel(page, 0.05);
+      await expect(gate).toHaveAttribute("data-open", "true");
+      await expect(panel.getByTestId("mic-gate-level-gap")).toHaveCount(1);
+      await page.waitForTimeout(150);
+
+      const { row, scale } = await meterRow(page, "mic-gate-level");
+      const at = Math.round(0.35 * row.length);
+      const gap = row[at - 1];
+      const warm = row[at - Math.round(8 * scale)];
+      const accent = row[at + Math.round(8 * scale)];
+
+      for (const [ground, where] of [
+        [warm, "warm fill below it"],
+        [accent, "accent fill above it"],
+      ] as const) {
+        const ratio = contrastRatio(gap, ground);
+        expect(
+          ratio,
+          `the covered boundary is rgb(${gap.join(",")}) at ${ratio.toFixed(2)}:1 against the ` +
+            `${where} rgb(${ground.join(",")}) in the ${theme} theme. Colour is not the only ` +
+            `carrier: the two fills themselves are only 1.32:1 apart in luminance in the light theme.`,
+        ).toBeGreaterThanOrEqual(BOUNDARY_CONTRAST_FLOOR);
+      }
+    });
+  }
 
   /**
    * «Подобрать порог»: two seconds of a room, and a threshold that clears it
