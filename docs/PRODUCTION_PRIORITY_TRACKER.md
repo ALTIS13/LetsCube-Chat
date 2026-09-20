@@ -819,35 +819,50 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     when it is made.
 
 
-43. `[ ]` A bot that makes a voice channel for whoever walks into the lobby.
-    Named by the owner on 2026-09-20 while correcting the voice-retention
-    measurement: «у бота добавленного на сервер имеется удобный функционал
-    завязанный на автоматическом создании голосового канала для пользователя
-    если тот заходит в условный голосовой канал с названием …». **His message
-    was cut off at the channel's name**, so the name and any further detail are
-    unconfirmed and must be asked before this is designed — what is recorded
-    here is the mechanic, which is recognisable on its own.
+43. `[ ]` A bot that makes a voice channel for whoever walks into the lobby —
+    and the channel belongs to them. Named by the owner on 2026-09-20 and
+    specified by him the same evening.
 
-    The pattern is Discord's «join to create»: a lobby voice channel exists
-    whose only purpose is to be entered; a bot watching it creates a fresh
-    channel for whoever joined, moves them into it, usually grants them rights
-    over it, and removes it when the last person leaves.
+    **The lobby is a voice channel called «➕ Создать канал».** Whoever joins
+    it gets a channel of their own and is moved into it. His words for the
+    rest: «пользователь может в нём сидеть и управлять им пока он не удалён из-за
+    его выхода (даже если заходит другой пользователь, а тот что создал выходит,
+    то канал может жить пока его создатель не захочет отключить, права на управление
+    в этом войсе также за ним)».
 
-    Why it is worth recording as more than a feature: it is the first thing
-    asked of this product's bots that **acts on voice**, and our bot platform
-    today is a chat platform. It needs the events (somebody joined a voice
-    channel), the permissions (a bot creating and deleting channels, moving a
-    participant) and the cleanup (a channel that removes itself), none of which
-    exist. So it is a bot-platform capability question first and a feature
-    second, and it should be scoped against what Discord's own bot API grants —
-    that is also the area where the owner rates Discord's bots highly, «из-за
-    большей кастомизации и удобства их реализации».
+    **So the lifetime is owned rather than emptiness-driven, and that corrects
+    a note written into this item a day earlier.** It said `empty_timeout: 60`
+    gives a self-removing channel its signal instead of a timer. It does not,
+    on its own: an owned channel may outlive its own emptiness at its owner's
+    discretion and may outlive its owner's presence while other people are in
+    it. Emptiness is an input; ownership is the rule.
 
-    Two facts from today that bear on the cleanup half and save a measurement:
-    `livekit.yaml` has `auto_create: false`, so only our gateway can bring a
-    room into being, and `empty_timeout: 60` closes an empty one after a
-    minute — a self-removing channel therefore has a natural signal to hang on
-    rather than needing a timer of its own.
+    Three things the spec does not settle, written out because each fails only
+    later:
+
+    - **The orphan.** The creator leaves, others stay, the creator never comes
+      back. A channel whose only closing condition is a person who is gone is a
+      channel that never closes.
+    - **The immortal.** «пока его создатель не захочет отключить» read literally
+      has no upper bound, and a group collects one of these per curious
+      visitor. Read Discord's own answer before inventing one.
+    - **What «управлять» contains** — rename, participant limit, lock, move
+      or remove somebody, hand ownership on. Each is a permission and our model
+      has none of them per channel. `voice_channels` grants are already unusual
+      (INSERT is table-level while UPDATE is per column), so this is a
+      data-model question and not a switch.
+
+    Why it is bigger than a feature: it is the first thing asked of this
+    product's bots that **acts on voice**, and the bot platform today is a chat
+    platform. The events (somebody joined a voice channel), the permissions (a
+    bot creating and deleting channels, moving a participant) and the cleanup
+    all have to exist first. Scope it against Discord's bot API — the area the
+    owner rates Discord highest on, «из-за большей кастомизации и удобства их
+    реализации».
+
+    One measured fact that still holds: `auto_create: false`, so only our
+    gateway can bring a room into being. A bot cannot conjure one; every
+    created channel goes through the same door as every other.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
