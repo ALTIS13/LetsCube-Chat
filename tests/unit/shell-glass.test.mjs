@@ -271,11 +271,13 @@ const veiled = [
   // the phone's second folder surface, opened by a «Папки» tab beside the folder
   // strip at the top of the chat list; the tab, the screen and the file are all
   // gone. Nothing took its job — `FolderTabs.tsx` above already had it.
-  // Two action rows since 2026-09-20: «Сбросить настройки звука» at the foot of
-  // the panel, and «Подобрать порог» inside «Микрофон в звонке». The second is
-  // the same object as the first — a full-width row whose whole area is the
-  // target — so it finds its hover the same way.
-  ["components/sidebar/AudioSettingsSection.tsx", 2],
+  // Three action rows since 2026-09-20: «Сбросить настройки звука» at the foot
+  // of the panel, «Подобрать порог» inside «Микрофон в звонке», and the
+  // «Показать расширенные настройки голоса» disclosure that was added the same
+  // evening. All three are the same object — a full-width row whose whole area
+  // is the target — so all three find their hover the same way, which is the
+  // reason this number may go up for a row of that shape and for nothing else.
+  ["components/sidebar/AudioSettingsSection.tsx", 3],
   ["components/sidebar/NewGroupModal.tsx", 1],
   ["components/sidebar/NewChatModal.tsx", 1],
   // `components/layout/AppTopBar.tsx` was here at 1 until 2026-09-12. Its hover

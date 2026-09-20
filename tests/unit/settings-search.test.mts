@@ -62,6 +62,23 @@ test("a row is found by what a person calls it, not only by what it is called", 
   assert.deepEqual(idsOf(matchSettingsRows("рамка", EVERYONE)), ["decoration"]);
 });
 
+/**
+ * The word the owner used, which the catalogue did not have (2026-09-20).
+ *
+ * «Усиление» was a keyword and «чувствительность» was not — so the row was
+ * findable by the one control on it that does **not** reach a call (D-271)
+ * and not by the one that does. A search catalogue is a list of the words
+ * people actually use, and this is the evidence of one of them.
+ *
+ * Mutation: remove either word from the audio row's `keywords`. Each line
+ * below goes red on its own.
+ */
+test("the microphone row answers to the words the owner uses for it", () => {
+  assert.deepEqual(idsOf(matchSettingsRows("чувствительность", EVERYONE)), ["audio"]);
+  assert.deepEqual(idsOf(matchSettingsRows("рация", EVERYONE)), ["audio"]);
+  assert.deepEqual(idsOf(matchSettingsRows("усиление", EVERYONE)), ["audio"]);
+});
+
 test("a heading finds the whole block under it", () => {
   const result = settingsSearchResult("конфиденциальность", EVERYONE);
   assert.deepEqual([...result.sections], ["privacy"]);

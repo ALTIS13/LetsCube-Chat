@@ -112,6 +112,58 @@ for (const theme of ["dark", "light"] as const) {
 }
 
 /**
+ * The fold at the foot of the panel, both ways, at both widths and in both
+ * themes.
+ *
+ * Two pictures of one control, which is the only way to photograph a
+ * disclosure: closed, it is one row and the whole claim is that the screen
+ * above it is calmer; open, it is four rows and the claim is that they are
+ * still the same objects the rest of the panel draws.
+ *
+ * The full-window frames are taken with it **open**, because the closed state
+ * is already what every other capture in this file shows.
+ */
+for (const theme of ["dark", "light"] as const) {
+  test(`the advanced fold, closed and open (${theme})`, async ({ page, request }, info) => {
+    await requireFixtureServer(request);
+    const panel = await openSound(page, theme);
+    const width = page.viewportSize()?.width ?? 0;
+    const tag = `${process.env.KUB_CAPTURE_TAG || "after"}-${width}-${theme}`;
+    const fold = panel.locator('[data-audio-group="Расширенные настройки голоса"]');
+
+    await fold.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(250);
+    await expect(page.getByTestId("audio-advanced-toggle")).toHaveAttribute("aria-expanded", "false");
+    await fold.screenshot({ path: `output/audio/audio-${tag}-advanced-closed.png` });
+
+    await page.getByTestId("audio-advanced-toggle").click();
+    await expect(page.getByTestId("audio-advanced")).toBeVisible();
+    await fold.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await fold.screenshot({ path: `output/audio/audio-${tag}-advanced-open.png` });
+
+    // And the whole panel with it open, walked down the same way the frames
+    // above are — the point of the fold is what the *screen* looks like, which
+    // an element shot of the fold itself cannot show.
+    const frames = await scrollThrough(page, "settings-section-audio");
+    for (let i = 0; i <= frames; i += 1) {
+      if (i > 0) {
+        await page.evaluate(() => {
+          const scroller = (window as unknown as { __audioScroller: HTMLElement }).__audioScroller;
+          scroller.scrollTop += scroller.clientHeight - 80;
+        });
+        await page.waitForTimeout(250);
+      }
+      await page.screenshot({ path: `output/audio/audio-${tag}-open-${i}.png` });
+    }
+    info.annotations.push({
+      type: "capture",
+      description: `output/audio/audio-${tag}-advanced-{closed,open}.png and -open-*.png (${frames + 1})`,
+    });
+  });
+}
+
+/**
  * The states that only exist once something has been pressed: a mode set by
  * hand, and a microphone test with self-monitoring running. Chromium's fake
  * device stands in for the hardware — see the reporting note about what that
@@ -132,7 +184,13 @@ test.describe("under a running microphone", () => {
       const tag = `${process.env.KUB_CAPTURE_TAG || "after"}-${width}-${theme}`;
 
       // A mode nobody chose: «Вручную» is what the switches put the settings in.
+      // The switches are behind «Показать расширенные настройки голоса» since
+      // 2026-09-20, so the fold is opened first — which is also the state this
+      // photograph should be taken in, since a «Вручную» nobody can see the
+      // cause of is not what the picture is about.
       await page.locator('[data-audio-mode="raw"]').click();
+      await page.getByTestId("audio-advanced-toggle").click();
+      await expect(page.getByTestId("audio-advanced")).toBeVisible();
       await page.getByTestId("audio-echo-cancellation").click();
       await page.locator('[data-audio-mode="custom"]').scrollIntoViewIfNeeded();
       await page.waitForTimeout(250);

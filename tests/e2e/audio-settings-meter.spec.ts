@@ -346,6 +346,13 @@ test.describe("the level meter is an instrument", () => {
     const panel = page.getByTestId("settings-section-audio");
     await expect(panel).toBeVisible();
 
+    // The three constraints moved behind «Показать расширенные настройки
+    // голоса» on 2026-09-20. The **note** did not — it is a fact about the live
+    // track and stays where a person can see it without opening anything,
+    // which is what the `toHaveCount(0)` and the `toBeVisible` below measure.
+    await panel.getByTestId("audio-advanced-toggle").click();
+    await expect(panel.getByTestId("audio-advanced")).toBeVisible();
+
     // «Чистый голос» is the default, so all three are asked for.
     await expect(panel.getByTestId("audio-noise-suppression")).toHaveAttribute("aria-checked", "true");
     await expect(panel.getByText(/Браузер решил иначе/)).toHaveCount(0);

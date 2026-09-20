@@ -114,11 +114,14 @@ test.describe("the sound settings speak the settings screen's own vocabulary", (
         (el) => getComputedStyle(el).backgroundImage !== "none",
       ).length;
     });
-    // Five since 2026-09-18: «Звуки» and «Микрофон в звонке» joined
+    // Six since 2026-09-20, when the advanced fold was added at the foot of
+    // the panel. Its box is drawn whether or not it is open — the toggle is
+    // its first row — so this number does not move with the disclosure.
+    // Five before that: «Звуки» and «Микрофон в звонке» joined
     // «Устройства», «Уровень» and «Обработка голоса», all drawn as the same
     // object by the same `AudioGroup` — which is what this number is really
     // counting.
-    expect(veiled).toBe(5);
+    expect(veiled).toBe(6);
   });
 
   /**
@@ -129,7 +132,9 @@ test.describe("the sound settings speak the settings screen's own vocabulary", (
   test("nothing inside the panel is nested inside anything else", async ({ page }) => {
     const panel = await openSound(page);
     const groups = panel.locator("[data-audio-group]");
-    await expect(groups).toHaveCount(5);
+    // Six since 2026-09-20: the advanced fold is a group like the others,
+    // drawn by the same `AudioGroup` and therefore flat like the others.
+    await expect(groups).toHaveCount(6);
     const nested = await page.evaluate(() => {
       const panel = document.querySelector<HTMLElement>('[data-testid="settings-section-audio"]')!;
       return [...panel.querySelectorAll<HTMLElement>("[data-audio-group]")].filter(
@@ -143,13 +148,31 @@ test.describe("the sound settings speak the settings screen's own vocabulary", (
   test("every on/off control is a switch", async ({ page }) => {
     const panel = await openSound(page);
     await expect(panel.locator('input[type="checkbox"]')).toHaveCount(0);
-    // The call sound, the notification sound, noise suppression, echo
-    // cancellation, auto gain, self-monitoring.
-    await expect(panel.getByRole("switch")).toHaveCount(6);
+    // Three with the panel as it opens: the call sound, the notification
+    // sound and self-monitoring. The other four moved behind
+    // «Показать расширенные настройки голоса» on 2026-09-20, which is
+    // the whole point of the fold — so asserting both counts is what proves it
+    // hides rather than merely exists.
+    await expect(panel.getByRole("switch")).toHaveCount(3);
     await expect(panel.getByTestId("audio-self-monitor")).toBeDisabled();
+    for (const id of ["audio-noise-suppression", "audio-echo-cancellation", "audio-auto-gain"]) {
+      await expect(panel.getByTestId(id)).toHaveCount(0);
+    }
+
+    await panel.getByTestId("audio-advanced-toggle").click();
+    await expect(panel.getByTestId("audio-advanced-toggle")).toHaveAttribute("aria-expanded", "true");
+    // The three constraints and the no-input warning, on top of the three above.
+    await expect(panel.getByRole("switch")).toHaveCount(7);
+    await expect(panel.locator('input[type="checkbox"]')).toHaveCount(0);
     for (const id of ["audio-noise-suppression", "audio-echo-cancellation", "audio-auto-gain"]) {
       await expect(panel.getByTestId(id)).toHaveAttribute("aria-checked", "true");
     }
+    // On by default, which is `MIC_NO_INPUT_DEFAULT` reaching the screen.
+    await expect(panel.getByTestId("audio-no-input-warning")).toHaveAttribute("aria-checked", "true");
+
+    // And it closes again, taking them with it.
+    await panel.getByTestId("audio-advanced-toggle").click();
+    await expect(panel.getByRole("switch")).toHaveCount(3);
   });
 
   /**
@@ -339,6 +362,11 @@ test.describe("the sound settings speak the settings screen's own vocabulary", (
   test("the picker and the switches still move each other", async ({ page }) => {
     const panel = await openSound(page);
     const picker = panel.getByTestId("audio-mode-picker");
+    // The three switches are behind the fold since 2026-09-20; the picker is
+    // not, which is the split — the plain-language choice stays on the calm
+    // screen and the three constraints it writes are the advanced expansion of
+    // it. Opened first here so this test goes on measuring the wiring.
+    await panel.getByTestId("audio-advanced-toggle").click();
 
     await picker.locator('[data-audio-mode="raw"]').click();
     await expect(picker.locator('[data-audio-mode="raw"]')).toHaveAttribute("aria-checked", "true");

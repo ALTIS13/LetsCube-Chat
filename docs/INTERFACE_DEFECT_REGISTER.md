@@ -19040,7 +19040,14 @@ reaches it as a plain new join either way.
 
 ---
 
-## D-257 `[ ]` A bot may request full access to a group and nobody can grant it
+## D-257 `[x]` A bot may request full access to a group and nobody can grant it
+
+**Decided and carried out on 2026-09-20 as D-276**, on the owner's answer to the
+two options below: «Убираем запрос, делаем также как telegram» — option 2. The
+measurement there corrects this entry in two places: there is a **sixth** reader
+of the columns (`public.chat_bot_add`, added the day after this was filed), and
+**one live membership was actually sitting in the requested state**. The
+migration is written and rehearsed; it is not applied.
 
 **Reported by the bot-platform tester, 2026-09-19:** «кажись бот может запрашивать
 полный доступ на группу, но нет нигде у админа кнопки апрувнуть его».
@@ -19942,6 +19949,35 @@ flight.
 3. Leave deafen where it is, and settle its reachability with whoever owns the
    chat-list column.
 
+### Settled with the column's owner, 2026-09-20, and the gap is narrower and worse than written above
+
+Measured rather than read off the stylesheet — see D-272 for the instrument and
+the full table. Two corrections to the paragraph above.
+
+- **«a narrowed column» is not a state anybody rests in.** `settleChatListState`
+  rests the list at 260 or above, or folded at 66; the 66..260 band exists only
+  while the handle is held. So the reachable loss is not a narrowed list, it is
+  a **folded** one — and deafen is already at `opacity 0.093` at 180 and exactly
+  `0` at 150, both of which are only passed through.
+- **The folded list is the real case, and D-269 made it one click away.** Before
+  2026-09-20 folding took a double click on a seam that draws nothing. It now
+  has a chevron, correctly, and that is precisely when «somebody in a call who
+  folded their list has no deafen» stopped being hypothetical.
+
+At the fold the three `__extra` controls measure `opacity 0`, width 0 — the
+interpolation doing exactly what it was written to do — and the one control that
+was meant to survive does not fit the column either (**D-272**). So the honest
+statement of this half is: *at the folded list a call has no deafen, no
+microphone, no connection reading, and a «Выйти» lying 29px across the rail
+beside it.*
+
+Not fixed here. Both halves point at the same small change in
+`VoiceCallBar.tsx` — the controls that matter at 66 points have to be the width
+of a control rather than of a word, the way the hold-to-talk button already
+switches between `w-8` and `px-2.5` — and that is a change to the bar, which is
+in flight for the voice-settings track. Filed, measured, and photographed:
+`output/shots/2026-09-20-chat-list-clamp/call-1440-02c-column-folded-66.png`.
+
 ---
 ## D-268 `[x]` The chat-list drag re-resolved every element's style on every frame
 
@@ -20078,7 +20114,7 @@ both ways.
 
 ---
 
-## D-270 `[ ]` At the list's widest the conversation keeps 42% of the window, and the backdrop painted on it compresses with it
+## D-270 `[x]` At the list's widest the conversation keeps 42% of the window, and the backdrop painted on it compresses with it
 
 **Severity:** medium. The owner's second complaint of 2026-09-20: «панель с
 голосовыми каналами и текстовыми … двигает дальше интерфейс из-за чего красивый
@@ -20161,8 +20197,163 @@ That second one changes `aria-valuemax`, the drag's clamp and a shipped e2e
 expectation, and it is a product decision about how wide a person may make their
 own chat list. **Not taken without the owner.**
 
+### Taken, 2026-09-20: «Ширину списка чатов перенимай у дискорда (чтобы работало также красиво адаптивно на разных разрешениях)»
+
+Two halves, and the second one is the reason this is not simply `540 → 359`.
+
+**What Discord actually does, measured rather than described.** Its whole left
+region clamps at **432** and the number is a hard constant: there is no viewport
+term in the resize path and not one `@media (width)` rule touching the sidebar
+in its 3.4 MB of stylesheets. Read on 2026-09-20 out of
+`https://discord.com/assets/web.<hash>.js`, `BUILD_NUMBER 615980`:
+
+```js
+E = (0, n1.A)({ minDimension: 264, maxDimension: 432, …, orientation: HORIZONTAL_RIGHT })
+…  role="separator" aria-valuemin={264} aria-valuemax={432} aria-label="Resize Sidebar"
+…  case "Home": t = 264; case "End": t = 432; n = Math.min(Math.max(t, 264), 432)
+…  Number.isNaN(e) && (e = 375)                      // the default
+…  function Lp(e){ …document.body.style.setProperty("--custom-guild-sidebar-width", `${e}px`) }
+```
+
+`--custom-guild-sidebar-width` is the **whole** region:
+`.sidebarList { width: calc(var(--custom-guild-sidebar-width) - var(--custom-guild-list-width) - 1px) }`
+and the guild rail is 76 (a 44pt avatar and 16 of padding each side), so the
+channel list alone is 187…355 about a default of 298. Its `:root` default is
+`268px`. This confirms the numbers D-270 already carried, independently, and it
+corrects the framing: the figure to put beside ours is 432, not 355.
+
+**Web and desktop are one build, not two that agree.** The desktop client's own
+HTTP cache holds `https://discord.com/assets/web.<hash>.js` URLs — its renderer
+downloads this bundle — and the build number in the bundle fetched from the web
+is the same 615980 D-269 recorded off the shipped desktop client. Checked both,
+they agree, and the question is off the table. (The collapse is still
+`&& !1`-ed here too, so D-269's finding holds on web as well.)
+
+**Why we do more than Discord does.** A constant is only safe for the window
+Discord ships. Discord is a window with a floor under its width; we are also a
+browser tab that can be 900 points wide beside an editor. And Discord's region
+is the only fixed column before its conversation, where ours is followed by
+`ChannelRail` — 224 more points in any group with channels — so the same region
+costs us 224 points more than it costs Discord. One number cannot be right for
+a 1024 tab and a 2560 monitor.
+
+**So the ceiling is a share of the window: `CHAT_LIST_MAX_SHARE = 0.3`, which is
+`432 / 1440`.** `chatListMaxWidth(viewportWidth)` in `lib/desktopChatList.ts`
+returns `round(viewport × 0.3) − 73`, floored at 260 and capped at Telegram's
+540:
+
+| window | region allowed | list allowed | conversation at 1440-style layout |
+| --- | --- | --- | --- |
+| 1024 | 333 | 260 (floored) | |
+| 1280 | 384 | 311 | |
+| **1440** | **432** | **359** | 784, where it was **603** |
+| 1920 | 576 | 503 | 1120 |
+| 2133 | 613 | 540 | |
+| 2560 | 613 | 540 | unchanged from before |
+
+Two properties worth stating: at 1440 it is **exactly** Discord's number, and at
+2133 and above **nobody loses a point of what this product already allowed**.
+
+**A rule from the viewport, not from the shell.** `window.innerWidth` and no
+`isDesktopShell()` anywhere: a maximised Tauri window, a browser tab sharing a
+laptop screen and the same tab on a 2560 monitor are three numbers to one rule,
+and the shell would have told us which shell it is without telling us the only
+fact that matters. Checked for the fold and the handle too — a window is
+resized by its own chrome and a tab is not, and neither the chevron nor the drag
+reads anything but the width. It changes nothing.
+
+**The ceiling clamps what is drawn and never what is stored**, which is the
+design's one load-bearing asymmetry. A width chosen on a monitor is a decision;
+a 1280 laptop is a fact about right now. `readDesktopChatListState` takes no
+viewport at all, and the `resize` listener re-draws through `applyWidth` —
+three leaf writes on the region and the two seam boxes, never on
+`document.documentElement` (D-268) — and never calls `writeStored`. Undock and
+the list is 260; dock again and the 540 is there.
+
+Held by `tests/unit/desktop-chat-list.test.mts` (seven new cases) and
+`tests/e2e/desktop-shell.spec.ts` → «the widest the handle goes is a share of
+the window» and «a narrower window redraws the list and never rewrites what was
+stored», the latter driving `setViewportSize` to 1100 and back.
+
+**Twelve mutations, each watched go red**, and one of them was green first and
+found a real gap. Unit: the ceiling replaced by Discord's constant 359; the
+floor lowered to the strip; the unreadable window made restrictive; the region
+chrome not subtracted; and each of `effectiveChatListWidth`,
+`settleChatListState`, `liveChatListWidth` ignoring the ceiling handed to it.
+End-to-end: the drag, the release, `aria-valuemax`, the resize listener removed,
+and the resize listener made to write storage. **The one that passed** was
+dropping the ceiling from the pointer-move path — because the release clamps
+anyway, the column visibly overran the window under the hand and sprang back
+when let go, and every assertion stayed green. The test now holds the drag
+before releasing it, and that mutation goes red.
+
+Photographed at 1440 and 1920, both themes, widest / before / narrowest /
+folded, plus 390:
+`output/shots/2026-09-20-chat-list-clamp/`.
+
+**Two shipped e2e expectations moved, as this entry predicted.** Every literal
+drag width in `desktop-shell.spec.ts` (420, 440, 460) is now `ceilingFor(page) − n`,
+because a number that is a normal width at 1920 is past the ceiling at 1440.
+`settings-container-queries.spec.ts` and `session-devices.spec.ts` are
+untouched: their `setColumnWidth` writes the custom property directly and never
+goes through the handle, so «any width the handle allows» there is now a
+superset rather than a contradiction.
+
 ---
-## D-271 `[ ]` «Усиление микрофона» does not reach a call
+## D-271 `[x]` «Усиление микрофона» does not reach a call — and it is not the control the owner meant
+
+**Corrected on 2026-09-20, title and body.** The entry below was filed against
+the right *fact* and the wrong *complaint*. What the owner said, when the entry
+was shown to him: «Не усиление, чувствительность микрофона, усиление пусть будет
+также как в дискорде (фото)». So there were two claims wearing one title, and they
+have opposite answers.
+
+**The sensitivity — the voice-activation threshold — reaches a call. It always
+did.** The chain, read on 2026-09-20 and every link named:
+
+1. `hooks/useVoiceCall.ts:readGateSettings()` reads `settings.micGateThreshold`
+   out of stored settings;
+2. `watchMicrophoneGate()` re-reads it on the settings event and on `storage`,
+   so a threshold dragged **during** a call takes effect in that call;
+3. `evaluateGate()` passes it to `nextMicGate` as `threshold` on every reading;
+4. the answer goes to `VoiceRoom.setMicrophoneOpen`, which is
+   `hooks/voiceRoom.ts:708` → `applyMicrophoneOpen()` →
+   `published.mediaStreamTrack.enabled = microphoneOpen && !published.isMuted`.
+
+And that last line is not a formality: `lib/micLevel.ts`'s header carries the
+measurement, taken 2026-09-18 against a loopback `RTCPeerConnection` — with the
+sender enabled, 4902 bytes went out in two seconds; with the same track
+disabled, 482, which is comfort noise. The threshold really does decide what a
+listener hears.
+
+**The gain does not reach a call, and the original entry is right about that.**
+It is kept verbatim below because the finding stands and the reasoning in it is
+what the fix followed.
+
+**What was done about each, the same day.**
+
+- The gain: moved behind «Показать расширенные настройки голоса» with the
+  sentence that says where it does apply, which is the second of the two
+  options the entry below names — **removing it from the call's vocabulary**
+  rather than wiring it up against `autoGainControl`. It is not deleted,
+  because it genuinely governs voice messages and self-monitoring.
+- The arrangement «как в дискорде»: the fold itself, and the finding that the
+  «усиление» in the owner's screenshot is Discord's **Автоматическая
+  регулировка усиления**, a switch — which this product already has, as
+  «Выравнивать голос», and which already reaches a call through the same
+  constraint object the entry below measured. See **D-275**.
+- The sensitivity: nothing was wrong with it, but nothing was *testing* it
+  either. See **D-274**, which is the finding that came out of checking this
+  entry rather than trusting it.
+
+**The lesson, since it cost a cycle.** An entry that names the wrong control is
+worse than no entry: this one was measured twice, independently, and both
+measurements were of a control nobody had complained about. Read the complaint
+against the vocabulary of the surface before measuring — «усиление» and
+«чувствительность» are one word apart and three modules apart.
+
+### The original entry, unchanged
+
 
 **Found while repairing D-261**, by the agent that was told to stay out of the
 file where it lives — so it is filed rather than fixed, and the screen says so
@@ -20194,5 +20385,495 @@ relationship to `autoGainControl` — or removing the slider from the call's
 vocabulary and saying plainly that it governs recordings and monitoring.
 Wiring it up without settling that would produce a control that changes
 something, unpredictably, which is worse than one that changes nothing.
+
+---
+
+## D-272 `[ ]` At the folded list «Выйти» is 29px wider than the column it is in
+
+**Found while measuring D-267**, on 2026-09-20, photographing the call bar at
+every column width the handle can produce.
+
+**Surface:** `artifacts/kub/src/components/chat/VoiceCallBar.tsx` (the leave
+control, the only child of the row **without** `kub-voice-call-bar__extra`),
+`artifacts/kub/src/index.css:2678` (the rule that closes the other three).
+
+**The rule the bar states about itself** is at the head of its own file: as the
+chat-list column narrows «the names and two of the three controls close, and
+«Выйти» stays, because leaving a call is the one thing that must not require
+widening a column first». The first half works. The second does not fit.
+
+**Measured** at 1440, in a call, standing in a conversation that is not the
+call's, dragging the handle through the band and reading the boxes — through
+the handle rather than by writing `--kub-chat-list-width`, because the fade is
+driven by `--kub-chat-list-narrow` and only `ChatListResizer` computes it (a
+first pass that wrote the width alone reported `opacity: 1` at every width and
+made the defect look absent):
+
+| column | narrow ratio | deafen opacity | deafen width | «Выйти» width | past the column's right edge |
+| --- | --- | --- | --- | --- | --- |
+| 360 | 0.000 | 1.000 | 32 | 63 | −12 |
+| 260 | 0.000 | 1.000 | 32 | 63 | −12 |
+| 220 | 0.206 | 0.546 | 25 | 63 | −12 |
+| 180 | 0.412 | 0.093 | 17 | 63 | −12 |
+| 150 | 0.567 | **0.000** | 12 | 63 | −12 |
+| 120 | 0.722 | 0.000 | 7 | 63 | −5 |
+| 90 | 0.876 | 0.000 | 1 | 63 | **+8** |
+| 66 | 1.000 | 0.000 | 0 | 63 | **+29** |
+
+`output/shots/2026-09-20-chat-list-clamp/call-1440-02c-column-folded-66.png`
+shows it: at the strip of avatars the word is cut to «Вы» and the pill lies
+across the channel rail beside it.
+
+**Why it is only visible now.** The 66..260 band is a place to pass through and
+not to stop — `settleChatListState` rests the list at 260 or above, or folded at
+66 — so until 2026-09-20 the only resting state where this shows was reached by
+a double click on a seam that draws nothing (D-269). **D-269 shipped a chevron
+for that fold**, which is correct and which makes this state one click away and
+discoverable. The fold did not cause the overflow; it revealed it.
+
+**Not a fade.** The three `__extra` controls are drawn narrow and transparent,
+which is the interpolation working. This one is at its full 63px in a 66px box
+with 12px of padding each side, so it has 42px of room and needs 63.
+
+**What a fix has to decide.** «Выйти» at the strip has to become the width of a
+control rather than the width of a word — the same 32px disc the other three
+use, keeping its name in `aria-label` and `title` exactly as the hold-to-talk
+control already does between the column and the band (`column ? "w-8" :
+"px-2.5"`). That pattern is in this file already and is the smallest honest
+answer; the alternative, letting the row scroll, would put the one control that
+must never need a gesture behind a gesture.
+
+---
+
+---
+## D-274 `[x]` the gate's threshold reached a call and no test could tell
+
+**Found on 2026-09-20 by checking D-271 rather than trusting it**, and it is
+the more useful half of that check. The threshold *works* — the chain is in
+D-271. What did not exist was any test that could tell the difference between
+a call reading the stored number and a call reading a constant.
+
+**The measurement, not the argument.** `tests/e2e/voice-call.spec.ts` had one
+test for the mode, «По голосу»: the gate follows the voice, holds across a gap
+and closes after it». It seeds `micGateThreshold: 0.4` and drives levels of
+0.5 and 0. Its own comment says what that costs: «a threshold of 0.4 of the
+range is −42 dBFS; the levels below are either far above it or silence, so
+nothing here depends on the exact number.»
+
+So: hardcode `threshold: 0.35` — the shipped default — in `evaluateGate`, and
+**that test stays green**, measured, while every person who had dragged the
+slider is gated at somebody else's number. The whole «По голосу» feature could
+have regressed to «one threshold for everybody» and the suite would have
+reported success.
+
+**Closed by a pair of cases whose levels bracket the default**, which is what
+makes a constant impossible to satisfy:
+
+- 0.2 of the range opens at a peak of 0.00158, the default 0.35 at 0.00531,
+  and 0.7 at 0.0891;
+- a level of **0.003** must open the gate at 0.2 — it would not at 0.35 or
+  above;
+- a level of **0.02** must leave it shut at 0.7 — it would open at 0.35 or
+  below.
+
+Both assert `track.enabled` on the real `MediaStreamTrack`, which is what a
+listener at the other end would or would not hear.
+
+**Mutation evidence, 2026-09-20**, in `hooks/useVoiceCall.ts`:
+
+| mutation | the two new cases | the old mode test |
+| --- | --- | --- |
+| `threshold: settings.threshold` → `threshold: 0.35` | **both red** | **green** |
+| `threshold: settings.threshold` → `threshold: 1` | low case red | red |
+
+The first row is the entry. The second is there because a mutation that turns
+everything red proves nothing about which test is doing the work.
+
+**The general shape, worth more than this instance.** A test that seeds a
+parameter and then chooses inputs far from it is testing the *mechanism* and
+not the *parameter*. The tell is already in the comment: a test that says
+«nothing here depends on the exact number» is announcing that it cannot see the
+number. When a parameter reaches a decision, at least one case has to sit close
+enough to the boundary that moving the parameter moves the answer.
+
+---
+
+## D-275 `[x]` Discord's seven advanced voice settings, one at a time, per surface
+
+**Why this exists.** The owner sent a screenshot of Discord's desktop
+«Расширенные настройки голоса» and said «усиление пусть будет также как в
+дискорде». Copying a list of seven switches would have produced several controls
+that cannot work on a web page — which is the defect class this whole register
+is about. So every item was checked, and the check was not a reading of blog
+posts.
+
+**Method, and why it is trustworthy.** Discord's **shipped web bundle**, read on
+2026-09-20: `BUILD_NUMBER 615980`, channel `stable`, `VERSION_HASH
+2ae1bc1225ba4bf504c4d700814c349182721466`; entry
+`https://discord.com/assets/web.d793fc00a2d44795.js`, and the Voice & Video
+settings chunk `https://discord.com/assets/5195a9a856cce50d.js` (546 887 bytes,
+sha256 `48080799…b650`), found by walking all 5107 chunks of the webpack map.
+The desktop client loads **the same bundle** in Electron and branches on
+`isPlatformEmbedded = (window.DiscordNative != null)` plus the media engine it
+picks, so one file carries both capability tables. The order of rows in
+`INPUT_PROFILE_VOICE_ADVANCED_ACCORDION.buildLayout` matches the owner's
+screenshot exactly.
+
+Two rows were confirmed a second way, against the **installed desktop client's
+native module** on this workstation — `...\Discord\app-1.0.9258\modules\discord_voice-1\discord_voice\discord_voice.node`, 22 118 328 bytes, dated
+2026-09-17, sha256 `2bf2290d…6b014`.
+
+Every row is gated twice in Discord's own code: `usePredicate` decides whether
+the row is **rendered at all**, `useDisabled` whether it is **greyed**.
+
+### The seven
+
+| # | Discord's control | Discord desktop | Discord **web** | our browser | our Tauri (Windows) | our Android | verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Автоматическая регулировка усиления | present; greyed for a headset with certified AGC | **present** (absent in Safari) | **have it** — `autoGainControl`, as «Выравнивать голос» | same | same | **done, and it already reached a call.** This is the «усиление» in the owner's screenshot |
+| 2 | Расширенная активация по голосу | present, greyed | present, **always greyed** (absent in Safari) | **impossible as such** — it is a Krisp ML VAD | possible natively, a whole subsystem | possible natively | **no.** See the greying note below |
+| 3 | Отключить системную обработку входящего звука | only under the experimental audio subsystem | **absent** | **impossible** — no web API turns off the OS capture path | possible, but the capture would have to leave the webview | possible natively | **no** |
+| 4 | Предупреждение об отсутствии звука | present | **absent** — `usePredicate: () => isPlatformEmbedded` | **possible**, and Discord's own web client does the measurement internally (analyser at 20 ms) without offering the setting | same | same | **built.** See below |
+| 5 | Предупреждение о переключении голосового канала | present | **present** (no predicate at all) | possible, pure UI | same | same | **not now** — we have no channel-switch flow that needs it yet |
+| 6 | Глобальное приглушение звука + «Сила приглушения» | **Windows only**; absent on macOS and Linux | **absent** | **impossible** — ducking *other applications* needs the OS mixer | **possible**, and the exact path is known | partial: `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`, binary, no slider | **desktop-only; not built.** See below |
+| 7 | Качество обслуживания | present, **off by default** | **absent** (`setQoS(e){}` is an empty method) | only a hint: `networkPriority = "high"` | same hint, and that is enough | same | **a one-line possibility, unmeasured.** See below |
+
+So Discord's own web client shows **three** of the seven: AGC, a permanently
+greyed Advanced Voice Activity, and the channel-switch warning.
+
+### Row 2, why it is greyed — the obvious explanation is wrong
+
+The hypothesis put to me was that it greys out because Krisp noise suppression
+is on and the two conflict. **Refuted from the byte:**
+
+```js
+useDisabled: () => getMode() !== VOICE_ACTIVITY || !getModeOptions().autoThreshold
+```
+
+Neither gate reads the noise-suppression choice. The switch is live only in
+Voice Activity mode **with** automatic input sensitivity on; in the owner's
+screenshot one of those is false. Krisp acts differently — without it the row
+**disappears** rather than greying, because
+`isAdvancedVoiceActivitySupported() === krispModuleLoaded && !krispFatalError`.
+The telemetry field in the same bundle settles what the control is:
+`vad_use_advanced_voice_activity: modeOptions.vadUseKrisp` — it is "use Krisp's
+model for voice detection instead of an amplitude threshold".
+
+**And a dating warning that matters.** Datamined builds 511568 (2026-03-16) and
+526986 (2026-04-10) carry the **inverted** condition. Discord flipped it between
+April and September 2026. Any source older than May 2026 is wrong about this
+row — which is exactly why the owner asked for 2026 references.
+
+### Row 6, what it actually ducks — settled, with the API
+
+Discord's own Russian string, from today's bundle: «Снижает громкость звука **в
+других приложениях** на указанный процент, когда кто-то говорит.» Other
+applications, not Discord's own streams. Not to be confused with «Stream
+Attenuation» under Streaming, which *is* an internal sidechain compressor.
+
+The native module names the mechanism: `AudioAttenuationPlatformImpl::Attenuate`
+and `::Restore`, the Core Audio GUIDs `CLSID_MMDeviceEnumerator`,
+`IAudioSessionManager2`, `IAudioSessionControl2` and **`ISimpleAudioVolume`** —
+and `Discord::SetDuckingPreference(bool)`, which is how an application **opts
+out** of Windows' own Default Ducking Experience. `IAudioVolumeDuckNotification`
+is **absent**, so Microsoft's ducking-notification path is not used at all:
+Discord enumerates other processes' audio sessions and sets their volume
+directly, which is what the Windows mixer sliders do.
+
+**For us:** impossible in a browser, and not "not yet" — there is no web API for
+another process's volume, in any specification. Possible in our Tauri shell from
+Rust with the `windows` crate (`Win32::Media::Audio::{IMMDeviceEnumerator,
+IAudioSessionManager2, IAudioSessionControl2, ISimpleAudioVolume}`), and the
+webview architecture does not get in the way because we would be adjusting
+*other* processes. Not built, and not recommended without the owner asking: it
+reaches outside our own application, Discord ships it on one platform out of
+three, and its own default is `attenuation: 0` — off.
+
+### Row 7, QoS — it is DSCP, and the browser can already do the useful half
+
+The native module imports `QOSCreateHandle`, `QOSAddSocketToFlow`,
+`QOSRemoveSocketFromFlow` and `QOSCloseHandle` from `qwave.dll`, and **not**
+`QOSSetFlow` or `QOSSetOutgoingDSCPValue` — the two that need administrator
+rights. So Discord attaches its UDP socket to a qWAVE flow and lets Windows mark
+the packets.
+
+**The correction worth recording, because the first answer was wrong.** It was
+reported that DSCP is unreachable from Tauri and Android because the sockets
+belong to the webview. The first half is true and the conclusion was not:
+Chromium does the same qWAVE dance itself (`net/socket/udp_socket_win.cc`,
+`DscpManager`), and per-media DSCP through `RtpSender::SetParameters` has been on
+by default since **Chrome 73**, including Android and WebView; the WebRTC commit
+"Enable DSCP by default" is 2022-04-14. So one line from the page —
+`sender.setParameters()` with `encodings[0].networkPriority = "high"` — gets the
+marking on Windows and Android with no native code. Firefox does not mark
+(Bugzilla 1249575, still NEW); Safari gives no signal.
+
+**Not established, and not to be assumed:** which `QOS_TRAFFIC_TYPE` Discord
+passes, and therefore the code point on the wire. Microsoft's mapping gives Voice
+to 0x38, **not** the EF/46 of RFC 8837. And a discuss-webrtc thread from
+2024-11-18 reports Chrome 130 on macOS marking 0 instead of AF41, unanswered. If
+we ever want this, it is proved by packet capture and by nothing else.
+
+### What was built, and what was deliberately not
+
+**Built: row 4, «Предупреждение об отсутствии звука».** A switch in the new
+advanced fold, on by default, and a sentence in the call capsule when the
+microphone has produced nothing at all for ten seconds. The rule is
+`artifacts/kub/src/lib/micNoInput.ts` and it is pure;
+`tests/unit/mic-no-input.test.mts` holds it, fifteen mutations watched go red.
+
+Note what this means: **Discord's web client does not have this control, and we
+do.** `usePredicate: () => isPlatformEmbedded` is the only row of the seven tied
+directly to the native shell — and it is tied there by product choice, not by
+capability, since Discord's own web client runs the same silence detection
+internally. A browser can do this perfectly well, and the failure it catches is
+the one this product spent a day diagnosing.
+
+**Built: the fold itself.** «Показать расширенные настройки голоса», at the foot
+of the panel where Discord puts its own. Behind it: the three browser constraints
+one at a time, the new warning, and «Усиление микрофона». The plain-language
+«Чистый голос / Без обработки» picker stays outside it, because that is the
+control a person actually needs; the three switches are the same three settings
+taken apart. Measured effect at 1440 and at 390: the panel is **three
+viewport-height frames instead of four** with the fold closed.
+
+**Deliberately not built:** rows 2, 3, 5, 6 and 7, each for the reason in the
+table. Nothing is drawn greyed out with a tooltip — a control that cannot work on
+a surface is **absent** from that surface, which is the rule this register keeps
+having to restate.
+
+**Two known gaps in what *was* built, named rather than left to be found.**
+
+1. **The warning appears in the capsule and not in the call bar.**
+   `components/chat/VoiceCallBar.tsx` belonged to another track on the evening
+   this was written and was not touched. So somebody who is in a call while
+   looking at a different conversation — which is the ordinary case on a phone
+   — is not told. `useVoiceNoInput(channelId)` is the whole of what that surface
+   needs; it is three lines and one `data-testid`.
+2. **A microphone that dies mid-call is not caught.** The analyser closes as
+   soon as the capture has produced one sound, which is what keeps the cost
+   bounded; the trade is written into `lib/micNoInput.ts`'s header along with
+   the cheap way to close it if it is ever wanted — the sender's own
+   `media-source.audioLevel`, which the encoder already computes. Note before
+   reaching for it: it reads 0 whenever the gate has the track disabled, and it
+   is empty until the peer connection is actually established, so it cannot
+   answer «does this microphone work» before a call — measured 2026-09-20.
+
+### What is still not established
+
+- The `QOS_TRAFFIC_TYPE` Discord passes, so the actual DSCP on the wire.
+- The Safari version from which `media-source.audioLevel` is available in a
+  release. The code has been in WebKit since 2023-10-16 and the WPT baseline
+  passes, but MDN says "false" on the strength of a 2023-04-28 data entry written
+  six months before the implementation landed. **Check on a real iPhone before
+  building anything on it.**
+- Whether Safari honours the `autoGainControl` / `noiseSuppression` constraints
+  at all. Discord's own predicate treats Safari as unsupported for AGC.
+- Everything about Discord's web behaviour above is read from its code, not from
+  a rendered settings screen — that would need an account to sign in with.
+
+---
+## D-276 `[x]` The request nobody could answer is gone, and the state it stood for finally has an audience
+
+**Severity:** the removal is a dead end retired; the audience is the actual
+product change. **Surfaces:** «Приватность в группах» in the bot settings panel,
+and «Боты в группе» in a group's information panel.
+
+This is D-257 decided and carried out. The owner's answer to the two options
+that entry put was **«Убираем запрос, делаем также как telegram»**, and the
+migration is written and rehearsed but **not applied** — the lead applies it.
+
+### What was measured first, read-only, on production 2026-09-20
+
+Everything below was read inside `begin; set transaction read only; … rollback;`.
+
+| fact | value |
+| --- | --- |
+| membership rows in `chat_bot_members` | 2, both live, both `restricted` |
+| rows with `full_visibility_requested_at` set | **1** — a group, raised 2026-09-19 08:36 UTC |
+| rows ever approved (`full_visibility_approved_by`) | 0 |
+| rows with `privacy_mode = 'full'` | 0, and structurally impossible |
+| `bot_privacy_requested` audit events | 1 |
+| functions reading the columns | 6 — one more than the code grep found |
+| functions writing `chat_bot_members` | 4, none of which ever wrote `'full'` |
+| `authenticated` grants on the table | `SELECT` only, on every column |
+
+**The sixth reader is the one a code search misses.** `public.chat_bot_add` was
+added on 2026-09-19, after D-257 was filed, and its `on conflict do update`
+copies both columns forward. The register's own list of three was correct on the
+day it was written and stale two days later; the database was asked, not the
+tree.
+
+**And the dead end was worse than «no approver».**
+`chat_bot_members_visibility_approval_check` refuses `privacy_mode = 'full'`
+unless *both* columns are set, and nothing could set the approver — so `full`
+was not merely unreached, it was **unreachable by constraint**. Both
+authorisation gates carried `and full_visibility_approved_by is not null` beside
+`privacy_mode = 'full'`, a pair no row has ever been in. Four modules' doc
+comments stated, correctly, that a two-party flow existed; none of them said
+that nothing could ever complete it.
+
+**One live row would have been stranded.** After the button goes, that
+membership would have kept a timestamp that made «Запрошен полный доступ»
+permanent for its owner — the same defect, now with no control to cancel it. It
+is discarded rather than answered, and it is not lost: the
+`bot_privacy_requested` row stays in `private.bot_audit_events`, which the
+migration does not touch, and the rollback carries the statement that would
+reconstruct the column from it.
+
+### What was removed
+
+- **The client:** «Запросить полный доступ» / «Отменить запрос», their
+  `run(...)` calls, `botManagement.setPrivacyRequest`, and the two
+  `privacyRequest` / `privacyCancel` entries in the copy table.
+- **The server:** `PATCH /bots/:botId/privacy/:chatId` and its input schema.
+- **The words:** «Полный доступ запрашивается отдельно для каждого чата и
+  подтверждается администратором группы» — a sentence that named an
+  administrator who did not exist — and the three-way label whose `full` branch
+  was unreachable.
+
+**The two approval fields are optional on the wire and never forwarded, and that
+is a deployment-ordering decision rather than indecision.** Both schemas are
+`.strict()`: one that required the fields breaks the moment the migration drops
+the columns, and one that forbade them breaks until it does. Optional-and-dropped
+parses both shapes, so the code deploy and the migration are order-independent
+in either direction. A unit test pins that both database shapes reach the client
+as the same bytes.
+
+### The columns: dropped, and why that is the safer choice
+
+The alternative was to leave two always-null columns and a CHECK nothing can
+satisfy. Leaving them keeps a **trap**, not a guard:
+
+1. Under the chosen model `privacy_mode` is the whole of the state, and the
+   owner's own privacy switch is the obvious next change. The CHECK would refuse
+   the row it writes — D-200's class exactly, a control the database refuses —
+   and the next agent would meet it having read four comments describing an
+   approval flow that never existed.
+2. A column that is always null sitting inside an authorisation conjunct reads
+   as an approval mechanism to everyone who finds it.
+
+**What replaces the CHECK as the guard on `full` is not nothing.** Before, `full`
+was impossible because the constraint demanded an approver nothing could write.
+After, it is impossible because **nothing writes the column and no client role
+may write the table** — `chat_bot_add` hard-codes `'restricted'` on a join and
+on a re-add, `authenticated` holds `SELECT` and no other verb, and RLS is on.
+The migration's self-check asserts the writer set is exactly
+`chat_bot_add, chat_bot_remove, open_or_create_bot_chat`, that none of them names
+`'full'`, that no client role holds INSERT/UPDATE/DELETE, and that RLS is
+enabled. **No writer of `privacy_mode` is added by this change**, so no bot's
+access moves.
+
+### The audience, which is the part that was not a deletion
+
+Removing the request without giving the state a home would have left a group
+unable to find out what a bot in it can read — D-257's own words: the request had
+«no counterpart **and** no audience».
+
+**The claim that the fact was only shown once at add time turned out to be
+wrong.** `BOT_VISIBILITY_NOTE` was already rendered over the group's bot list.
+The real defect was subtler and worse: it is **one paragraph speaking for every
+bot in the room**, stating the `restricted` rules as a universal truth. It was
+true only because `full` happened to be unreachable — correct by accident, and a
+lie the moment two bots differ.
+
+So the paragraph keeps only the clause that holds in every branch of
+`bot_can_receive_message` — `messages.created_at >= chat_bot_members.joined_at`,
+the one nobody guesses — and **what each bot can read moved onto that bot's own
+row**, driven by its own `privacy_mode`. `authenticated` already holds SELECT on
+that column under the existing policy, so the audience needed **no migration, no
+new grant and no new round trip**: `fetchChatBots` became a projection of a
+`fetchChatBotMemberships` that asks for one more column.
+
+**Three facts about Telegram decided the shape, and each was measured in their
+sources rather than taken from the documentation:**
+
+1. It is a **status string in the slot where «last seen…» would go** —
+   `lng_status_bot_reads_all` / `lng_status_bot_not_reads_all` (Desktop),
+   `BotStatusRead` / `BotStatusCantRead` (Android),
+   `Bot.GroupStatusReadsHistory` / `…DoesNotReadHistory` (iOS) — not a badge and
+   not an extra line. So this replaces the bot's second line rather than adding
+   a third: a row taller than every person's, with the fact on a line no other
+   row uses, puts it where the eye is not looking.
+2. **Both Telegram web clients have none of it.** The identical greps return
+   nothing across Web A and Web K. Recorded so nobody «corrects» this surface
+   later by reading the web client; their web is behind their native.
+3. **No Telegram client draws a «bot» badge at all.** Ours does. That divergence
+   is D-263's and stays; it is named here only so this change is not later read
+   as claiming Telegram for it.
+
+**Where this deliberately diverges, and why.** Telegram's status string is the
+state alone, with no handle — because their composer completes `@name`. **This
+product has no mention autocomplete anywhere**, measured, so in a group
+`@никнейм` has to be typed for `bot_can_receive_message` to deliver anything
+(D-244), and this row is the only place a member who did not add the bot can
+read it. Matching Telegram exactly would have taken the handle off the one
+screen that shows it. The line is `@helper_bot · Видит только обращения к нему`.
+
+**And it wraps rather than truncates, which was found by looking at the
+pixels.** The first version truncated at both release widths, and what the
+ellipsis ate was the end of the access — the one fact the line exists to carry.
+`truncate` is an ellipsis, not an error, so it fails silently. The spec now
+measures `scrollWidth`/`scrollHeight` against the client box on the rendered
+element at 1440 and 390, so no future wording can quietly outgrow the slot.
+
+### What was deliberately not built
+
+- **No owner-side privacy switch.** Telegram's model has one — the developer
+  sets it in BotFather — and this change stops short of it on purpose: it needs
+  a write path for `privacy_mode` that today's schema has nowhere to put, and it
+  changes what a bot can read, which is a security decision that deserves its own
+  review. After this migration `privacy_mode` is the only authority, so that
+  switch has somewhere to land; before it, it had a CHECK in the way.
+- **No approval side.** That was the option the owner rejected.
+- **No profile card behind a bot's row in the member list.** The row is not
+  clickable, so the bot's description is no longer reachable from that screen —
+  it is still on the invite screen, where it helps choose. Making the row open a
+  card is the natural follow-up and is not in this change.
+- **No re-add of the stranded request.** Reconstructing it from the audit table
+  is a statement in the rollback's header, to be run deliberately or not at all.
+
+### Evidence
+
+- Migration `20260920120000_bot_full_visibility_request_removal.sql` and its
+  `.rollback.sql`, both in `.migration-backup/supabase/migrations/`. The five
+  rewritten function bodies are a **textual delta of `pg_get_functiondef` read
+  off production**, generated rather than transcribed, with each edit asserted to
+  match exactly once.
+- **Rehearsed, not applied**, on a throwaway local Postgres 18 cluster restored
+  from a schema-only dump of production (no data) seeded to production's exact
+  shape: 2 memberships, 1 of them requested, 1 audit row. Forward → rollback →
+  forward all commit clean and leave the row counts untouched.
+- **18 mutations, every one watched going red.** Seven on the migration: the
+  columns not dropped, the request function left, a function left un-rewritten,
+  `receive_all` widened, a new writer setting `'full'`, `UPDATE` granted to
+  `authenticated`, RLS switched off. Eleven on the client and server: both label
+  branches, the unknown-mode default, the paragraph regaining a per-bot claim,
+  the server forwarding the approval fields, the route coming back, a privacy
+  action re-added to the copy table, the read dropping `privacy_mode`, the
+  paragraph replacing the rows, the access leaving the status slot, and the slot
+  going back to `truncate`.
+- Screenshots before and after at 390 and 1440 in both themes under
+  `output/bot-privacy/`.
+- Gates: typecheck clean across all five packages; unit suite **3582/3582**,
+  0 skipped; `tests/server` **144/144**; the bot e2e set **76 passed** on
+  `chromium-desktop-1440` with the two viewport-gated skips then run and passed
+  on `chromium-mobile-390`.
+
+### Three things this cost a cycle each, worth carrying
+
+- **`grep "^ERROR"` found nothing in a psql log with 314 errors**, because the
+  client is localised and writes `ОШИБКА`. The restore looked clean and was not.
+  Set `lc_messages` or grep both needles; «no errors» from a localised tool is
+  «unknown».
+- **The first version of the migration's own guard was a false positive.** It
+  looked for `privacy_mode = 'full'` in any function body and matched the two
+  gates that only *compare* it. The rehearsal caught it; reading the file would
+  not have. The guard now measures who **writes** the table.
+- **A mutation that stays green may be unreachable rather than redundant.**
+  Dropping `privacy_mode` from the client's `select` left the e2e spec green,
+  because the fixture answered every seeded column whatever the query asked for.
+  The fixture now projects through the `select`, as PostgREST does, and the same
+  mutation is red.
 
 ---

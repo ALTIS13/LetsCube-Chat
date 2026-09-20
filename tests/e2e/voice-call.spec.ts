@@ -1673,8 +1673,19 @@ test("«Рация»: a call joins closed, and «выключен» is not how i
   // no moment between publishing and the first press when the room is audible.
   expect(await micLive(page)).toBe(false);
   expect((await probe(page)).micOpen).toEqual([false]);
-  // And no meter: only «По голосу» needs an AudioContext.
-  expect((await probe(page)).levelRunning).toBe(false);
+  // A meter, and for a reason that is not the gate's: «Рация» needs no level
+  // at all, but the no-input warning does until the microphone has produced one
+  // sound, and that warning is on for everybody who has not switched it off.
+  // The cost is bounded rather than absent — the next assertion is the bound.
+  expect((await probe(page)).levelRunning).toBe(true);
+  // One reading, and the analyser closes: the question «does this microphone
+  // work» has been answered and nothing is left running for the conversation.
+  //
+  // Mutation: `micNoInputNeedsLevel` -> `enabled`. Under it this line stays
+  // `true` for the length of every call in this mode, which is exactly the
+  // battery defect the old assertion here was guarding.
+  await pushLevel(page, 0.5);
+  expect(await probe(page)).toMatchObject({ levelRunning: false, levelClosed: 1 });
 
   // The two states the brief names, told apart. Not held is an ordinary control
   // at rest; muted is the slashed glyph this product has always drawn.
@@ -1902,16 +1913,157 @@ test("«Всегда» is the behaviour this product already had, and costs noth
 
   expect(await micLive(page)).toBe(true);
   const after = await probe(page);
-  // No meter, and the gate asked the transport for nothing but «open» — a mode
-  // that pushed a stream of gate changes would be the old behaviour reimplemented
-  // rather than left alone.
-  expect(after.levelRunning).toBe(false);
+  // The gate asked the transport for nothing but «open» — a mode that pushed a
+  // stream of gate changes would be the old behaviour reimplemented rather than
+  // left alone.
   expect(after.micOpen).toEqual([true]);
+  // The meter this mode's *gate* has no use for, running anyway because the
+  // no-input warning has not yet heard anything. It closes on the first sound,
+  // which is what keeps this bounded; the test below shows the same call with
+  // the warning off, where nothing is opened at all.
+  expect(after.levelRunning).toBe(true);
+  await pushLevel(page, 0.5);
+  expect(await probe(page)).toMatchObject({ levelRunning: false, levelClosed: 1 });
   await expect(page.getByTestId("voice-capsule-talk")).toHaveCount(0);
   await expect(page.getByTestId("voice-capsule-mute")).toHaveAttribute(
     "title",
     "Выключить микрофон",
   );
+});
+
+/**
+ * The threshold **value** reaches a call, which is a different claim from the
+ * one the mode tests above make.
+ *
+ * Filed as D-274 on 2026-09-20, and found by asking what the existing
+ * «По голосу» test would still pass under. Its own comment says it: «a
+ * threshold of 0.4 of the range is −42 dBFS; the levels below are either far
+ * above it or silence, so nothing here depends on the exact number». That is
+ * true, and it is the gap — hardcode `threshold: MIC_GATE_THRESHOLD_DEFAULT`
+ * in `evaluateGate` and every gate test in this file stays green, while every
+ * person who had dragged the slider is gated at somebody else's number.
+ *
+ * The shape that closes it is two calls whose levels **bracket the shipped
+ * default**, so that hardcoding any single number turns one of them red.
+ * 0.2 of the range opens at a peak of 0.00158, the default 0.35 at 0.00531,
+ * and 0.7 at 0.0891. So:
+ *
+ *   - a level of 0.003 opens the gate at 0.2 and would not at 0.35 or above;
+ *   - a level of 0.02 leaves it shut at 0.7 and would open it at 0.35 or below.
+ *
+ * Neither case can be satisfied by a constant, and the pair brackets the one
+ * constant somebody would most plausibly reach for.
+ *
+ * Mutations watched go red on 2026-09-20, both in `evaluateGate`:
+ *   - `threshold: settings.threshold` -> `threshold: 0.35`, the shipped
+ *     default — **both** cases red;
+ *   - `threshold: settings.threshold` -> `threshold: 1` — the low case red.
+ *
+ * And the measurement that made this worth writing: under the first of those,
+ * «По голосу: the gate follows the voice» **stays green**. That test is
+ * what this file had, and it is why the gap existed.
+ */
+for (const { threshold, level, opens, what } of [
+  { threshold: 0.2, level: 0.003, opens: true, what: "a low threshold opens on a quiet voice" },
+  { threshold: 0.7, level: 0.02, opens: false, what: "a high one leaves a louder voice shut" },
+]) {
+  test(`«По голосу»: the stored threshold is what a call compares against — ${what}`, async ({
+    page,
+    browserName,
+  }) => {
+    needsWebRtc(browserName);
+    await open(page, {
+      channel: { participantCount: 1 },
+      present: [ANNA.id],
+      audio: { micActivation: "voice", micGateThreshold: threshold },
+    });
+    await action(page).click();
+    await expect(action(page)).toHaveText("Выйти");
+    expect(await micLive(page)).toBe(false);
+
+    await pushLevel(page, level);
+    expect(await micLive(page)).toBe(opens);
+  });
+}
+
+/**
+ * The no-input warning reaches a call, which is the whole reason it exists.
+ *
+ * A switch that cannot change its own outcome is the defect class
+ * `docs/INTERFACE_DEFECT_REGISTER.md` is full of, and building one more of them
+ * while correcting D-271 would be its own joke. So this drives the real path:
+ * a stored setting, a real capture, the level seam, and the sentence in the
+ * capsule that a person actually reads.
+ *
+ * **Ten real seconds, deliberately.** `MIC_NO_INPUT_AFTER_MS` is wall-clock and
+ * the gate reads `Date.now()`; a fake clock here would prove that a fake clock
+ * advances. `tests/unit/mic-no-input.test.mts` holds the arithmetic in
+ * microseconds — this holds that the arithmetic is wired to something.
+ *
+ * What it does **not** reach, said plainly: no real microphone is involved. The
+ * level arrives through `window.__letscubeMicLevel`, so what is proved is that
+ * a run of exact zeros raises the sentence and one non-zero reading clears it.
+ * That a dead microphone really produces exact zeros, and a live quiet room
+ * really does not, is a claim about the browser that only a person with a
+ * headset can confirm.
+ */
+test("a microphone that produces nothing is said so in the capsule", async ({
+  page,
+  browserName,
+}) => {
+  needsWebRtc(browserName);
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+
+  const warning = page.getByTestId("voice-capsule-no-input");
+  // Nothing at first: a person who has just joined has not had time to speak,
+  // and a warning inside that window is a warning at the wrong person.
+  //
+  // Mutation: `MIC_NO_INPUT_AFTER_MS` -> 0. This line goes red.
+  await pushLevel(page, 0);
+  await expect(warning).toHaveCount(0);
+
+  await page.waitForTimeout(10_100);
+  await pushLevel(page, 0);
+  await expect(warning).toBeVisible();
+  await expect(warning).toContainText("Микрофон не даёт звука");
+
+  // And one sound takes it away, without a reload and without a timer.
+  //
+  // Mutation: `if (level > 0)` -> `if (false)` in `nextMicNoInput`. The
+  // sentence then stays up over a microphone that is working.
+  await pushLevel(page, 0.5);
+  await expect(warning).toHaveCount(0);
+});
+
+/**
+ * The old cost contract, exactly: a call in «Всегда» with the no-input warning
+ * off opens no `AudioContext` at all, ever.
+ *
+ * This is the assertion the test above used to carry, and it is kept here
+ * rather than dropped because the warning is a **setting**: somebody who turns
+ * it off is asking for the behaviour this product had before 2026-09-20, and a
+ * feature that went on paying for itself after being switched off would be the
+ * defect this register is full of.
+ *
+ * Mutation: `micGateNeedsLevel(...) || micNoInputNeedsLevel(settings.noInput,
+ * noInput)` -> `... || micNoInputNeedsLevel(true, noInput)`. Under it the
+ * switch changes nothing about the cost and this goes red while the test above
+ * stays green — which is why both are needed.
+ */
+test("«Всегда» with the warning off opens nothing at all", async ({ page, browserName }) => {
+  needsWebRtc(browserName);
+  await open(page, {
+    channel: { participantCount: 1 },
+    present: [ANNA.id],
+    audio: { micNoInputWarning: false },
+  });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+
+  expect(await micLive(page)).toBe(true);
+  expect(await probe(page)).toMatchObject({ levelRunning: false, levelClosed: 0, micOpen: [true] });
 });
 
 test("«Выйти» ends the call and closes the microphone", async ({ page, browserName }) => {
@@ -2126,6 +2278,42 @@ test("the held control takes a press above its paint, and is still painted at 32
     [box.x - 5, box.y - 5] as [number, number],
   );
   expect(beside).not.toBe("voice-capsule-talk");
+});
+
+/**
+ * The no-input warning as a picture, in both themes.
+ *
+ * The test above proves it appears; this one is what it looks like when it
+ * does, which is the half a person actually meets. The sentence wraps, it sits
+ * under the capsule's own line, and the capsule grows — so the frame has to
+ * show the conversation under it, not the capsule cropped out of context.
+ */
+test("the silent microphone, photographed in both themes", async ({
+  page,
+  browserName,
+}, info: TestInfo) => {
+  needsWebRtc(browserName);
+  await open(page, { channel: { participantCount: 1 }, present: [ANNA.id] });
+  await action(page).click();
+  await expect(action(page)).toHaveText("Выйти");
+
+  // Ten real seconds once, then a photograph per theme — `stampTheme` repaints
+  // without touching the call, so the wait is not paid twice.
+  await pushLevel(page, 0);
+  await page.waitForTimeout(10_100);
+  await pushLevel(page, 0);
+  await expect(page.getByTestId("voice-capsule-no-input")).toBeVisible();
+
+  for (const theme of ["dark", "light"] as const) {
+    await stampTheme(page, theme);
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: `output/voice-call/no-input-${theme}-${info.project.name}.png` });
+  }
+  info.annotations.push({
+    type: "capture",
+    description: `output/voice-call/no-input-{dark,light}-${info.project.name}.png`,
+  });
 });
 
 test("the hold-to-talk control, photographed in both themes", async ({

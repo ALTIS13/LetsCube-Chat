@@ -25,7 +25,9 @@ import {
   SOUND_SCOPE_NOTE,
 } from "@/lib/callSounds";
 import {
+  AUDIO_ADVANCED_GROUP,
   AUDIO_APPLYING_NOTE,
+  audioAdvancedLabel,
   AUDIO_DEFAULT_INPUT_LABEL,
   AUDIO_DEFAULT_OUTPUT_LABEL,
   AUDIO_DEVICE_NAMES_NOTE,
@@ -81,6 +83,7 @@ import {
   type MicAutoThresholdState,
 } from "@/lib/micGate";
 import { openMicLevelSource, type MicLevelSource } from "@/lib/micLevel";
+import { MIC_NO_INPUT_HINT, MIC_NO_INPUT_LABEL } from "@/lib/micNoInput";
 import { prefersReducedMotion } from "@/lib/motion";
 import { coarsePointer } from "@/lib/pointer";
 import { cn } from "@/lib/utils";
@@ -127,6 +130,11 @@ export function AudioSettingsSection() {
   // readings it has collected so far. The readings are a ref rather than state
   // because they arrive twenty times a second and nothing draws them.
   const [autoThreshold, setAutoThreshold] = useState<MicAutoThresholdState>("idle");
+  // The advanced fold: component state, deliberately not a stored setting. The
+  // reasoning is at the group itself, beside the list of what went behind it.
+  const [advanced, setAdvanced] = useState(false);
+  const advancedButtonId = useId();
+  const advancedPanelId = useId();
   const autoRunRef = useRef<{ levels: number[]; until: number } | null>(null);
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reducedMotion = useReducedMotion();
@@ -613,16 +621,14 @@ export function AudioSettingsSection() {
         {deviceNotice && <AudioNote>{deviceNotice}</AudioNote>}
       </AudioGroup>
 
+      {/*
+        «Уровень» is the measurement and nothing else now. «Усиление микрофона»
+        used to open this group and is under «Расширенные настройки голоса» at
+        the foot of the panel — it is the one control here that does **not**
+        reach a call (D-271), and a slider that cannot change what a listener
+        hears has no business above the meter that shows what they do hear.
+      */}
       <AudioGroup caption={AUDIO_GROUP_LEVEL}>
-        <SliderRow
-          label={AUDIO_GAIN_LABEL}
-          hint={AUDIO_GAIN_HINT}
-          value={settings.micInputGain}
-          min={0}
-          max={2}
-          step={0.05}
-          onChange={(micInputGain) => updateSettings({ micInputGain })}
-        />
         <div className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-3 py-2 min-h-11">
           <KubButton
             size="sm"
@@ -842,22 +848,6 @@ export function AudioSettingsSection() {
             ))}
           </div>
         </div>
-        {/*
-          Drawn from the list the refusal note names, so the sentence
-          «браузер не включил "Убрать шум"» and the switch it is about cannot
-          come to say different words for one control.
-        */}
-        {AUDIO_PROCESSING_SWITCHES.map((entry) => (
-          <SwitchRow
-            key={entry.key}
-            label={entry.label}
-            hint={entry.hint}
-            checked={settings[entry.key]}
-            disabled={applying}
-            testId={PROCESSING_TEST_IDS[entry.key]}
-            onChange={(checked) => void changeProcessingToggle(entry.key, checked)}
-          />
-        ))}
         <AudioNote>{AUDIO_PROCESSING_HINT}</AudioNote>
         {/*
           What the browser actually did, which is the only thing that makes the
@@ -868,6 +858,107 @@ export function AudioSettingsSection() {
         */}
         {appliedNotice && <AudioNote tone="danger">{appliedNotice}</AudioNote>}
         {processingNotice && <AudioNote>{processingNotice}</AudioNote>}
+      </AudioGroup>
+
+      {/*
+        The fold, at the foot of the panel where Discord puts its own.
+
+        It is the arrangement the owner asked for on 2026-09-20 — «усиление
+        пусть будет также как в дискорде» — and the arrangement is most of what
+        there was to take. Of the seven controls in Discord's advanced panel,
+        one is a switch we already have and it already reaches a call
+        («Выравнивать голос», the `autoGainControl` constraint); one is a
+        warning about a silent microphone, which is below; and the rest are
+        native capabilities a web page does not have — ducking other
+        applications' audio needs the operating system's mixer, and QoS is a
+        socket option. `docs/INTERFACE_DEFECT_REGISTER.md` D-275 goes through
+        all seven with a verdict per surface. Nothing here is drawn greyed out
+        with a tooltip: a control that cannot work on this surface is absent
+        from it.
+
+        Closed by default and **not** remembered. A disclosure whose state
+        outlives the visit is one a person finds already open without having
+        opened it, and the whole job of this one is that the screen above it
+        starts calm.
+      */}
+      <AudioGroup label={AUDIO_ADVANCED_GROUP}>
+        <button
+          type="button"
+          id={advancedButtonId}
+          aria-expanded={advanced}
+          // Only while the panel exists, exactly as `DisclosureRow` in the
+          // settings screen does it: `aria-controls` pointing at an id that is
+          // not in the document is a dangling reference.
+          aria-controls={advanced ? advancedPanelId : undefined}
+          data-testid="audio-advanced-toggle"
+          onClick={() => setAdvanced((open) => !open)}
+          className={cn(
+            "kub-button grid w-full min-w-0 grid-cols-[1.125rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 min-h-11 text-left kub-interactive transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] kub-raise-hover",
+            FOCUS_RING,
+            PRESS_SINK,
+          )}
+        >
+          <KubIcon name="settings" size={16} className="text-[color:var(--kub-muted)]" />
+          <span className="min-w-0 text-sm text-[color:var(--kub-text)]">{audioAdvancedLabel(advanced)}</span>
+          <KubIcon
+            name="chevronDown"
+            size={14}
+            className={cn(
+              "shrink-0 text-[color:var(--kub-muted)] transition-transform duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)]",
+              advanced && "rotate-180",
+            )}
+          />
+        </button>
+        {advanced && (
+          <div
+            id={advancedPanelId}
+            role="region"
+            aria-labelledby={advancedButtonId}
+            data-testid="audio-advanced"
+            className="divide-y divide-[color:var(--kub-rule)]"
+          >
+            {/*
+              The three constraints one at a time. The plain-language choice
+              between them — «Чистый голос» / «Без обработки» — stays above the
+              fold, because that is the control a person needs; these are the
+              same three settings taken apart, and «Вручную» is the state they
+              leave the picker in when they stop agreeing.
+            */}
+            {AUDIO_PROCESSING_SWITCHES.map((entry) => (
+              <SwitchRow
+                key={entry.key}
+                label={entry.label}
+                hint={entry.hint}
+                checked={settings[entry.key]}
+                disabled={applying}
+                testId={PROCESSING_TEST_IDS[entry.key]}
+                onChange={(checked) => void changeProcessingToggle(entry.key, checked)}
+              />
+            ))}
+            <SwitchRow
+              label={MIC_NO_INPUT_LABEL}
+              hint={MIC_NO_INPUT_HINT}
+              checked={settings.micNoInputWarning}
+              testId="audio-no-input-warning"
+              onChange={(micNoInputWarning) => updateSettings({ micNoInputWarning })}
+            />
+            {/*
+              Last, and the only control on this screen that cannot change what
+              a listener hears. Its own line says where it does apply; D-271 is
+              why that line exists and why this is here rather than over the
+              meter.
+            */}
+            <SliderRow
+              label={AUDIO_GAIN_LABEL}
+              hint={AUDIO_GAIN_HINT}
+              value={settings.micInputGain}
+              min={0}
+              max={2}
+              step={0.05}
+              onChange={(micInputGain) => updateSettings({ micInputGain })}
+            />
+          </div>
+        )}
       </AudioGroup>
 
       <div className="overflow-hidden rounded-xl kub-raise">
@@ -975,12 +1066,36 @@ function debugMicTrack(stream: MediaStream) {
  * painted inside a panel, which is why the section read as a hole rather than
  * as part of the screen.
  */
-function AudioGroup({ caption, children }: { caption: string; children: ReactNode }) {
+/**
+ * A group of rows.
+ *
+ * `caption` is optional because one group's first row is a button that names it
+ * — the advanced fold — and a heading above that button would print the same
+ * words twice. `label` is what `data-audio-group` says, so a captionless group
+ * can still be found by a capture spec; it defaults to the caption, which is
+ * what every other group here relies on.
+ *
+ * The box below is the **one** group shape this file may draw, and
+ * `tests/unit/audio-settings-surface.test.mts` counts it: a second box string
+ * anywhere in this component is the dialect D-121 was about, so a new group
+ * comes through here or not at all.
+ */
+function AudioGroup({
+  caption,
+  label,
+  children,
+}: {
+  caption?: string;
+  label?: string;
+  children: ReactNode;
+}) {
   return (
-    <section data-audio-group={caption}>
-      <h4 className="mb-1.5 px-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-[color:var(--kub-muted)]">
-        {caption}
-      </h4>
+    <section data-audio-group={label ?? caption}>
+      {caption && (
+        <h4 className="mb-1.5 px-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-[color:var(--kub-muted)]">
+          {caption}
+        </h4>
+      )}
       <div className="overflow-hidden rounded-xl divide-y divide-[color:var(--kub-rule)] kub-raise">
         {children}
       </div>

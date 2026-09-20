@@ -9,6 +9,7 @@ import {
   holdVoiceTalk,
   resumeVoiceAudio,
   useVoiceAudioBlocked,
+  useVoiceNoInput,
   useVoiceJoinProgress,
   useVoiceSpeechRevoked,
   useVoiceTalkHeld,
@@ -17,6 +18,7 @@ import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { CAPSULE_GLASS, CAPSULE_CONTROL_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING } from "@/lib/controlSurface";
 import { micControlWords } from "@/lib/micGate";
+import { MIC_NO_INPUT_WARNING, MIC_NO_INPUT_WARNING_DETAIL } from "@/lib/micNoInput";
 import { cn } from "@/lib/utils";
 import { orderVoiceParticipants, type VoiceCapsuleView, type VoiceChannelSummary, type VoiceParticipant } from "@/lib/voiceChannel";
 
@@ -133,6 +135,10 @@ export function VoiceCallCapsule({
   // compute — and a capsule drawing another chat's room must not offer a press
   // that would act on the call this person is actually in.
   const audioBlocked = useVoiceAudioBlocked(channel?.id ?? null);
+  // And again, on the same terms: one live fact about this client's own
+  // capture, which no pure rule over a snapshot could compute because it is a
+  // measurement taken twenty times a second.
+  const noInput = useVoiceNoInput(channel?.id ?? null);
   // The mode is a stored setting and the hold is one live fact about this
   // client, so neither arrives in `view` — which is built by a pure function
   // from things a `node --test` process can hold. The same reasoning
@@ -320,6 +326,35 @@ export function VoiceCallCapsule({
               data-testid="voice-capsule-forced-mute"
             >
               Модератор выключил ваш микрофон.
+            </div>
+          )}
+          {/* The microphone that is producing nothing, said in the same place
+              and the same voice as the line above it — for the same reason,
+              too: without it the person is simply inaudible and everything on
+              this screen says they are fine.
+
+              Wrapping rather than `truncate`, like the moderator line: this is
+              the other sentence in the capsule that has to be read to the end,
+              and the chrome stack is measured with a border-box
+              `ResizeObserver` so the conversation's inset follows on its own.
+
+              **It reports the measurement and does not diagnose**, which is a
+              rule `tests/unit/mic-no-input.test.mts` holds rather than a
+              style: the same reading comes from a hardware mute, a system
+              mixer and a noise suppressor emitting true silence, and naming
+              any one of them would be a guess printed as a fact. The detail
+              names the three things to check instead.
+
+              Below the moderator line rather than above it, and both can be up
+              at once: a silenced person whose microphone is also dead should
+              be told the thing they can act on second, after the thing they
+              cannot. */}
+          {noInput && (
+            <div
+              className="text-[11px] leading-snug text-[color:var(--kub-danger-text)]"
+              data-testid="voice-capsule-no-input"
+            >
+              {MIC_NO_INPUT_WARNING}. {MIC_NO_INPUT_WARNING_DETAIL}
             </div>
           )}
         </div>

@@ -115,6 +115,38 @@ export const AUDIO_PROCESSING_HINT =
 export const AUDIO_GAIN_HINT =
   "Применяется к голосовым сообщениям и к прослушиванию себя, но не к звонку — а полоса ниже показывает именно то, что уходит в звонок.";
 
+/* ── The fold at the foot of the panel ────────────────────────────────────── */
+
+/**
+ * What `data-audio-group` calls the advanced group.
+ *
+ * It has no printed caption — its first row is a button that names it, which is
+ * the shape Discord's «Показать расширенные настройки голоса» has and the
+ * reason a heading above it would be the same words twice. The attribute stays
+ * so `tests/e2e/audio-settings-capture.spec.ts` can photograph the group on its
+ * own, the way it already photographs «Микрофон в звонке».
+ */
+export const AUDIO_ADVANCED_GROUP = "Расширенные настройки голоса";
+
+/**
+ * The toggle, which says what pressing it will do rather than what it is.
+ *
+ * Discord's own control is a verb in both states and this follows it, for a
+ * reason that outlives the reference: a chevron already says «there is more
+ * here», so a static noun on the button would leave the only moving part of the
+ * row carrying the whole meaning.
+ *
+ * **What went behind the fold, and why those.** The panel above it is what a
+ * person needs to be heard: a microphone, an output, the meter that proves the
+ * microphone works, and how it opens in a call. What is here is the rest —
+ * the three browser constraints one at a time (the plain-language choice
+ * between them stays outside, as the picker), the warning about a silent
+ * microphone, and «Усиление микрофона», which does not reach a call at all.
+ */
+export function audioAdvancedLabel(open: boolean): string {
+  return open ? "Скрыть расширенные настройки голоса" : "Показать расширенные настройки голоса";
+}
+
 export type AudioProcessingKey = "noiseSuppression" | "echoCancellation" | "autoGainControl";
 
 export interface AudioProcessingSwitch {

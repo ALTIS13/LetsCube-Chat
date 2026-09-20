@@ -21,6 +21,12 @@ import {
   type MicGateState,
 } from "@/lib/micGate";
 import { openMicLevelSource, type MicLevelSource } from "@/lib/micLevel";
+import {
+  MIC_NO_INPUT_CLEAR,
+  micNoInputNeedsLevel,
+  nextMicNoInput,
+  type MicNoInputState,
+} from "@/lib/micNoInput";
 import { MIC_SILENCE_CLEAR, nextMicSilence, type MicSilenceState } from "@/lib/micSilence";
 import {
   classifyMicrophoneError,
@@ -149,6 +155,21 @@ export interface VoiceCallState {
    * another device, a tab restored into a call.
    */
   audioBlocked: boolean;
+  /**
+   * Whether the microphone has produced nothing at all for long enough to say
+   * so — Discord's «Предупреждение об отсутствии звука».
+   *
+   * **In `VoiceCallState` rather than beside it**, which is the opposite of the
+   * choice `speakers` below is given, and for the opposite reason: this can
+   * change at most twice in a call, where `speakers` changes on every syllable
+   * anybody in the room utters. A field that moves twice costs two renders of
+   * the subtree; one that moves twenty times a second cost 190 of them, which
+   * is the measurement in that comment.
+   *
+   * The rule behind it is `lib/micNoInput.ts`'s, and what it can and cannot
+   * distinguish is in that module's header.
+   */
+  noInputWarning: boolean;
   /** A Russian sentence when the last attempt was refused; null otherwise. */
   refusal: string | null;
 }
@@ -171,6 +192,11 @@ const IDLE: VoiceCallState = {
   // Cleared with the call at both ends of its life, like `speechRevoked` above
   // and for the same reason: one call's blocked playback is not the next call's.
   audioBlocked: false,
+  // Cleared with the call at both ends of its life, like the two above: one
+  // call's silent microphone is not the next call's, and a warning that
+  // survived a rejoin would be a sentence about a capture that no longer
+  // exists.
+  noInputWarning: false,
   refusal: null,
 };
 
@@ -641,6 +667,27 @@ export function useVoiceAudioBlocked(channelId: string | null): boolean {
 }
 
 /**
+ * Whether this client's own microphone has produced nothing at all.
+ *
+ * Scoped by `channelId` and read as a primitive for the two reasons the two
+ * above are: the capsule drawing another chat's channel must not print a
+ * sentence about a capture that belongs to the call this person is actually
+ * in, and a boolean snapshot means `Object.is` stops the render when the answer
+ * did not move.
+ *
+ * The measurement behind it is `lib/micNoInput.ts`, and what it can and cannot
+ * tell apart is in that module's header. In short: it says nothing arrived, not
+ * why.
+ */
+export function useVoiceNoInput(channelId: string | null): boolean {
+  const read = useCallback(
+    () => state.noInputWarning && state.channelId === channelId,
+    [channelId],
+  );
+  return useSyncExternalStore(subscribe, read, read);
+}
+
+/**
  * Ask the browser again, from a gesture.
  *
  * A plain exported function rather than the component reaching through
@@ -761,10 +808,25 @@ function forgetOutputDevice(): void {
  * JSON, and doing it for every key somebody types in the composer is a cost
  * nobody asked for.
  */
-let gateSettings: { activation: MicActivation; threshold: number; talkKey: string } | null = null;
+let gateSettings: {
+  activation: MicActivation;
+  threshold: number;
+  talkKey: string;
+  noInput: boolean;
+} | null = null;
 let gate: MicGateState = MIC_GATE_CLOSED;
 /** The last reading, or 0 when nothing is measuring. Never stale on purpose. */
 let micLevel = 0;
+/**
+ * Whether this capture has produced anything, and for how long it has not.
+ *
+ * Beside the gate rather than inside it because they answer different
+ * questions from the same reading: the gate asks «is this person talking right
+ * now», and this asks «is this microphone alive at all». `lib/micNoInput.ts`
+ * holds the second rule, and it is what decides when the analyser below can be
+ * closed again.
+ */
+let noInput: MicNoInputState = MIC_NO_INPUT_CLEAR;
 let levelSource: MicLevelSource | null = null;
 let stopWatchingGate: (() => void) | null = null;
 
@@ -798,11 +860,58 @@ function evaluateGate(): void {
 }
 
 /**
- * Start or stop the level source to match the mode.
+ * What the last reading says about whether this microphone is alive.
  *
- * Only «По голосу» needs one, which is `micGateNeedsLevel`'s whole job: an
- * `AudioContext` and a 50ms timer running for a call in «Всегда» or «Рация»
- * would be a battery cost with nothing reading it.
+ * Separate from `evaluateGate` above, and called beside it rather than from
+ * inside it, because the two have different lifetimes: the gate is asked on
+ * every reading for the length of the call, and this stops being asked the
+ * moment the microphone produces one sound.
+ *
+ * `judgeable` is the capture's state, not the gate's — see the field's comment
+ * in `lib/micNoInput.ts`. A level source runs on a **clone** of the track that
+ * the gate never disables, so a working microphone reads its true level in
+ * «Рация» between presses, and requiring an open gate here would tell a
+ * push-to-talk user their microphone was dead for not pressing the key.
+ *
+ * It ends by re-running `syncLevelSource`, which is the whole cost story: the
+ * reading that sets `heard` is also the reading that lets the `AudioContext`
+ * close in the two modes whose gate has no use for it.
+ */
+function evaluateNoInput(level: number): void {
+  const settings = gateSettings;
+  if (!settings) return;
+  const before = noInput;
+  noInput = nextMicNoInput(before, {
+    enabled: settings.noInput,
+    judgeable: state.phase === "connected" && state.canPublish && !state.micMuted,
+    level,
+    now: Date.now(),
+  });
+  if (noInput.warned !== state.noInputWarning) patch({ noInputWarning: noInput.warned });
+  // Only when the answer to «does this need measuring» can have changed, so
+  // the ordinary reading — silence, still silent — costs one comparison.
+  //
+  // **This is mutual recursion with `syncLevelSource`, and it is bounded at one
+  // step.** `heard` moves `false -> true` exactly once in the life of a
+  // capture, so the second call finds `before.heard === noInput.heard` and
+  // stops. The path that looks alarming is the one where the browser has no
+  // `AudioContext`: `syncLevelSource` calls `evaluateNoInput(1)`, which calls
+  // `syncLevelSource`, which tries the analyser a second time and gets the same
+  // refusal — two frames, then done, and `heard` is already set so the third
+  // call never happens.
+  if (before.heard !== noInput.heard) syncLevelSource();
+}
+
+/**
+ * Start or stop the level source to match what needs one.
+ *
+ * Two customers, and either is enough. The gate needs a level only in «По
+ * голосу», which is `micGateNeedsLevel`'s whole job: an `AudioContext` and a
+ * 50ms timer running for a call in «Всегда» or «Рация» would be a battery cost
+ * with nothing reading it. The no-input warning needs one in every mode — but
+ * only until the microphone has produced a sound, which is what
+ * `micNoInputNeedsLevel` answers and why that cost is bounded by a few seconds
+ * rather than by the length of the conversation.
  *
  * A browser that cannot measure — no `AudioContext`, or a graph that threw —
  * leaves the microphone **open**. For a call that is the safer failure: not
@@ -812,7 +921,9 @@ function evaluateGate(): void {
  */
 function syncLevelSource(): void {
   const settings = gateSettings;
-  const needed = Boolean(settings && micGateNeedsLevel(settings.activation));
+  const needed = Boolean(
+    settings && (micGateNeedsLevel(settings.activation) || micNoInputNeedsLevel(settings.noInput, noInput)),
+  );
   if (!needed) {
     levelSource?.close();
     levelSource = null;
@@ -826,10 +937,17 @@ function syncLevelSource(): void {
   if (!track) return;
   levelSource = openMicLevelSource(track, (level) => {
     micLevel = level;
+    evaluateNoInput(level);
     evaluateGate();
   });
   if (!levelSource) {
     micLevel = 1;
+    // The same «treat it as sound» this branch already applies to the gate, and
+    // for the same reason one line down: a browser that cannot measure has told
+    // us nothing about the microphone, and «nothing measured» must not be
+    // printed as «nothing arrived». It also closes the question, so the retry
+    // above does not go on asking a browser that has already said no.
+    evaluateNoInput(1);
     evaluateGate();
   }
 }
@@ -918,12 +1036,22 @@ function watchTalkKey(): () => void {
 }
 
 /** The mode as it is right now, for a gate that is about to be applied. */
-function readGateSettings(): { activation: MicActivation; threshold: number; talkKey: string } {
+function readGateSettings(): {
+  activation: MicActivation;
+  threshold: number;
+  talkKey: string;
+  noInput: boolean;
+} {
   const settings = getAudioSettings();
   return {
     activation: settings.micActivation,
     threshold: settings.micGateThreshold,
     talkKey: settings.micTalkKey,
+    // Read here with the other three so that turning the warning off during a
+    // call takes effect in that call: `watchMicrophoneGate` re-reads all of
+    // this on the settings event, and a value read once at the join would be a
+    // switch that only works next time.
+    noInput: settings.micNoInputWarning,
   };
 }
 
@@ -974,6 +1102,11 @@ function forgetMicrophoneGate(): void {
   levelSource = null;
   micLevel = 0;
   gate = MIC_GATE_CLOSED;
+  // Including `heard`, which is a fact about **this capture** — the next call
+  // opens a different one, possibly on a different device. The published flag
+  // is not cleared here; `IDLE` and every `{ ...IDLE }` spread already carry
+  // `noInputWarning: false`, which is the same guarantee `speechRevoked` gets.
+  noInput = MIC_NO_INPUT_CLEAR;
   gateSettings = null;
   publishTalkHeld(false);
 }

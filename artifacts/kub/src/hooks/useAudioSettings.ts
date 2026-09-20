@@ -26,6 +26,8 @@ import {
   readCallSoundEnabled,
   readNotificationSoundEnabled,
 } from "../lib/callSounds.ts";
+// And again, for the same reason.
+import { MIC_NO_INPUT_DEFAULT, readMicNoInputEnabled } from "../lib/micNoInput.ts";
 
 export type AudioProcessingMode = "clean" | "raw" | "custom";
 
@@ -81,6 +83,19 @@ export interface AudioSettings {
    * office still wants their telephone to ring.
    */
   notificationSoundEnabled: boolean;
+  /**
+   * Whether a call warns when the microphone is producing nothing.
+   *
+   * Discord's «Предупреждение об отсутствии звука», and the only one of its
+   * seven advanced voice settings this product can honestly offer in a browser.
+   * Absent in stored settings reads as **on**, for the reason
+   * `callSoundEnabled` above is given: the person who has never opened this
+   * panel is exactly the person who will not know why nobody can hear them.
+   *
+   * The rule is `lib/micNoInput.ts`'s — including what «nothing» means, which
+   * is the whole honesty of the feature — and nothing about it is decided here.
+   */
+  micNoInputWarning: boolean;
 }
 
 export const AUDIO_SETTINGS_STORAGE_KEY = "kub:audio-settings:v1";
@@ -102,6 +117,7 @@ export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   micTalkKey: MIC_TALK_KEY_DEFAULT,
   callSoundEnabled: CALL_SOUND_DEFAULT,
   notificationSoundEnabled: NOTIFICATION_SOUND_DEFAULT,
+  micNoInputWarning: MIC_NO_INPUT_DEFAULT,
 };
 
 function toFiniteNumber(value: unknown, fallback: number) {
@@ -193,6 +209,9 @@ export function normalizeAudioSettings(value: unknown): AudioSettings {
     // rule, and a second copy of it here would be a second answer.
     callSoundEnabled: readCallSoundEnabled(settings?.callSoundEnabled),
     notificationSoundEnabled: readNotificationSoundEnabled(settings?.notificationSoundEnabled),
+    // Through `lib/micNoInput.ts` for the reason the five above are read
+    // through their own modules: one rule about what an absent value means.
+    micNoInputWarning: readMicNoInputEnabled(settings?.micNoInputWarning),
   };
 }
 

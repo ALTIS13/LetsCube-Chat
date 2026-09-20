@@ -324,7 +324,17 @@ export const SETTINGS_ROWS: readonly SettingsRowMeta[] = [
   // shares a letter with «Активные сеансы».
   { id: "devices", section: "privacy", label: "Активные сеансы", keywords: ["устройства", "устройство", "сеансы", "сессии", "вход", "звонки", "телефон", "компьютер", "devices", "sessions"] },
   { id: "theme", section: "application", label: "Тема", keywords: ["тёмная", "темная", "светлая", "dark", "light", "внешний вид", "оформление"] },
-  { id: "audio", section: "application", label: "Звук", keywords: ["микрофон", "аудио", "голос", "громкость", "усиление"] },
+  // «чувствительность» since 2026-09-20, and it is not decoration either: it is the
+  // word the owner used for the voice-activation threshold, and this row was
+  // findable by «усиление» — the control that does **not** reach a call — and
+  // not by the one that does. «рация» joins it for the same reason: it is what
+  // the mode is called on the screen, and nothing else on this list spells it.
+  {
+    id: "audio",
+    section: "application",
+    label: "Звук",
+    keywords: ["микрофон", "аудио", "голос", "громкость", "усиление", "чувствительность", "рация"],
+  },
   { id: "updates", section: "application", label: "Обновления", keywords: ["версия", "update", "загрузка", "приложение"] },
   { id: "admin", section: "service", label: "Админ-панель", keywords: ["управление", "модерация", "баны", "мьюты", "пользователи"] },
 ];
