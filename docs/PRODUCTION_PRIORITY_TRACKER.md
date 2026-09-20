@@ -1339,6 +1339,62 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     are old-bundle artefacts. **(d) first**, because it loses somebody's words
     without saying so.
 
+
+47. `[ ]` Separating the kinds of conversation, so the list stops being
+    noise. Asked for by the owner on 2026-09-20, and he framed it as something
+    **Telegram does badly** rather than as something to copy: «ботов много,
+    людей тоже и групп очевидно не меньше, получается что всё в кучу
+    сваливается без возможности это корректно отфильтровать по типу, то же
+    самое при добавлении в папки… у меня буквально перед глазами шум из чатов».
+
+    His proposal: either three folders created from the start, or «небольшая
+    капсула фильтрации по типу чатов».
+
+    **This is the same design problem as item 45, seen from the other side, and
+    that is the finding worth recording.** Item 45 gives this product three
+    shapes — личный чат, групповой чат, сервер — and those are exactly the
+    categories he wants to filter by. His own sentence says so: «у нас тем
+    более будут сервера, групповые чаты и личные сообщения между людьми, и
+    этому надо корректное разделение чтобы не сливалось в кучу.» So building
+    the three shapes **without** deciding the separation would manufacture the
+    noise he is complaining about, at a larger scale than Telegram has it,
+    because a server is a heavier object than a group.
+
+    **The two references disagree, and that makes this a boundary case for
+    CLAUDE.md §7 rather than a straight lookup.**
+
+    - **Discord separates by structure, not by filter.** Servers live in their
+      own rail; direct messages have their own list. There is no «filter by
+      type» because the types never share a list in the first place.
+    - **Telegram separates by folder**, one list holding everything, and the
+      owner's report is that this fails at his volume.
+
+    §7 gives folders to Telegram and the shell to Discord — and this question
+    sits exactly on that seam. It has to be decided deliberately and written
+    down, because whichever way it goes, the other reference will look like an
+    unfixed gap to a future reader.
+
+    Three things to settle, in this order:
+
+    1. **Structure or filter.** If servers get their own rail as in Discord,
+      most of the noise never forms and the filter becomes a much smaller
+      question about what remains — people, group chats and bots in one list.
+      That is probably the real decision hiding here.
+    2. **Where bots sit.** He names them first and separately: «ботов много».
+      A bot conversation is a private chat by type today, which is why they mix
+      in. Whether «bot» is a fourth category or an attribute of a private chat
+      is a data question with a visible consequence.
+    3. **What folders are then for.** If type separation is structural, folders
+      stop carrying that load and become what they are elsewhere — a personal
+      grouping across types. Say that explicitly, or folders will be asked to
+      do both jobs and do neither well.
+
+    **Do not design this before the phone survey (item 46, part 3) reports.**
+    The owner asked for exactly that order — «обдумай этот момент корректнее
+    после того как проверишь telegram/discord на телефоне» — and both answers
+    are on that device: Telegram's folder-and-filter row at the top of the
+    chat list, and Discord's rail. Measure both, then decide.
+
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
 `main` `17a1c47` to `245e4d9`, 32 commits, on the owner's standing permission to deploy without him.
