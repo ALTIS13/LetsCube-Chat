@@ -531,7 +531,7 @@ as such.
 
 | Client | Mechanism | What the user sees |
 | --- | --- | --- |
-| Discord web | reload; the served bundle carries `BUILD_NUMBER` and `VERSION_HASH` | nothing, normally. Plus a standing `DOWNLOAD_NAG`. INHERITED / SHIPPED |
+| Discord web | reload, **only ever on a click**; hourly poll of `version.stable.json`, armed on the gateway connection. SHIPPED, read at the source 2026-09-20 — see below | a green download icon in the toolbar, at most once every 7 days on stable / 1 day elsewhere. Nothing else. Plus a standing `DOWNLOAD_NAG` |
 | Discord desktop, Windows | **host manifest with per-module versions and binary deltas.** OFFICIAL, read 2026-09-20 from Discord's own update manifest: host `1.0.9059`, with a delta entry from `1.0.9058`, and 17 independently versioned modules each with its own sha256 and full/delta URLs | silent background update, module by module |
 | Discord desktop, macOS | `0.0.412`, published `2026-09-14T17:15:31` — OFFICIAL, from Discord's update endpoint | |
 | Discord desktop, Linux | `1.0.158`, published `2026-09-14T23:28:40` — OFFICIAL, same endpoint | |
@@ -610,6 +610,233 @@ Three consequences, recorded as observations rather than a plan:
    drift for a heavier release and a slower fix path, since every web change
    would then need a signed shell release. **We chose the remote shape. The
    point is to know we chose it.**
+
+### Discord web's update path, read at the source — 2026-09-20, SHIPPED
+
+Build `615980`, channel `stable`, `VERSION_HASH 2ae1bc1225ba4bf504c4d700814c349182721466`,
+read from `https://discord.com/assets/web.d793fc00a2d44795.js` (12,082,177 bytes)
+and the en-US string table `https://discord.com/assets/fe3ffe9a64a7ff75.js`
+(chunk 1868, module 459463). Section 12's method, including its corrected
+fallback URL shape, is what reached the string table. The whole path is one
+module: **578152, `AutoUpdateManager`**.
+
+**Detection.** The poll is **one hour**, not five minutes:
+
+```js
+let E = +d.A.Millis.HOUR, A = 7*d.A.Millis.DAY, h = +d.A.Millis.DAY,
+    I = r.w.get("lastNonRequiredUpdateShown", Date.now());
+handlePostConnectionOpen(){ this.checkForUpdates(), clearInterval(this._checkInterval),
+                            this._checkInterval = setInterval(this.checkForUpdates, E) }
+```
+
+It is armed on the **gateway's** `POST_CONNECTION_OPEN`, with one immediate
+check, rather than on page load. The request is
+`/assets/version.${RELEASE_CHANNEL}.json` with a cache-buster `_` of
+`Date.now()/1e3/60/5|0` — **a five-minute bucket, which is a caching detail and
+not a poll interval.** Anyone reading this bundle in a hurry will find that `5`
+and report it as the frequency; it is not. Fetched live the same day, the
+endpoint answers exactly
+`{"hash":"2ae1bc1225ba4bf504c4d700814c349182721466","required":false}`, matching
+the hash the bundle carries as a **build-time string literal**.
+
+**It never reloads by itself. Established by exhaustion, not by absence of
+evidence.** `location.reload` occurs **nine** times in the 12MB bundle; all nine
+were read. One is the update path — `quitAndInstall()`, reached only from the
+action `AUTO_UPDATER_QUIT_AND_INSTALL`, dispatched from exactly one place, a
+click handler on a toolbar download icon. The other eight are a one-time domain
+migration, three staff build-override paths, a build-override clear button, the
+crash screen's submit-report button, an audio-settings reset, and a
+parental/age-verification card's button. Supporting counts, all zero:
+`forceReload`, `NOTIFY_UPDATE`, `scheduleUpdate`, `location.replace(`,
+`location.assign(`, **`skipWaiting`**, and **`navigator.serviceWorker` — Discord
+web registers no service worker at all.**
+
+**The sharpest fact in the whole read:** a build the server marks `required`
+takes the *same click path*. `required` skips the throttle and nothing else.
+**Discord web has no forced reload of any kind** — not on idle, not when
+hidden, not on navigation, not for a required build.
+
+**The throttle, confirmed exactly, with three refinements.**
+
+```js
+if (e.body.required || (0,l.kK)()) return this._handleUpdateDownloaded(!1);
+let t = "stable" === window.GLOBAL_ENV.RELEASE_CHANNEL ? A : h;
+if (Date.now() - I > t) return r.w.set("lastNonRequiredUpdateShown", Date.now()), …
+```
+
+Seven days on stable, one day on **every** non-stable channel (the ternary is
+`stable ? :`, so «ptb and canary» was right but understated). The refinements:
+the store is `window.localStorage` through a wrapper that Discord then
+`delete`s off `window` — with an **in-memory fallback** when it throws, so the
+throttle silently degrades to per-session in any context where site data is
+blocked; the timestamp `I` is read **once at module load**, not per check; and
+the second bypass `(0,l.kK)()` is a build-override **cookie**, i.e. staff only.
+
+**What it refuses to interrupt, and the string we had truncated.** The guard is
+`RTCConnectionStore.isConnected()` — an **established RTC connection**
+(`getState() === RTC_CONNECTED`), not merely having a voice channel selected.
+Resolved from the string table:
+
+| hash | string |
+| --- | --- |
+| `tiu1ly` | Briefly leave voice? |
+| `zK+lqW` | Updating Discord while in a voice channel will cause you to leave briefly. **You're probably going to update anyway but, you know, just warning you.** |
+| `ETE/oC` | Cancel |
+| `QDX/qu` | Update anyway! |
+
+Our notes stopped the body at «leave briefly.» The second sentence is shipped.
+`confirmVariant: "critical-primary"`, and the same four hashes are reused by the
+build-override modal — so it is a shared «you are in voice, this will interrupt
+it» confirmation rather than an update-specific one.
+
+### «Where you were»: the address is the mechanism — 2026-09-20, SHIPPED
+
+Read from the same build. This is the half of the update question that is really
+a routing question, and Discord's answer is unambiguous.
+
+**The routes, as the router receives them.** Built by generators in modules
+`901123` and `302495`, not written as literals:
+
+```
+/channels/:guildId(@me|@favorites|@guilds-empty-nux|@inbox|@guild-upsell-list|\d+)/:channelId(…|\d+)?/:messageId?
+/channels/:guildId(…)/:channelId(…)/threads/:threadId/:messageId?
+```
+
+**The third segment is the whole restore mechanism.** `MessageManager` (module
+`547`) parses the message id **out of `location.pathname`**; with one it calls
+`jumpToMessage({… flash:true})` and suppresses the initial scroll
+(`avoidInitialScroll: null != r.messageId`), and without one `jumpTargetId`
+resolves to `null` and the list lands at the present.
+
+Three consequences worth having in writing, because each of them contradicts an
+assumption it is easy to make:
+
+1. **No scroll position is persisted anywhere.** All 58 `scrollTop` sites were
+   filtered for storage calls; the one hit is an in-memory settings-panel
+   snapshot. Reload `/channels/<g>/<c>` and you are in that channel, **at the
+   bottom**.
+2. **It does not auto-jump to the first unread.** Having unreads forces a
+   *fetch*, never a jump target. The unread is a **clickable banner** —
+   `NewMessagesBarJumpToNewMessages_`, analytics section `NEW_MESSAGES_BANNER`,
+   aria-label «Jump to last unread message», beside a «Mark As Read» button and
+   a «New Messages» divider. The two genuine auto-jumps are thread-only: the
+   first-ever open of a thread, and a thread with tracked unreads.
+3. **Discord web does not persist the last route.** `DefaultRouteStore` (module
+   `650048`) persists `lastViewedPath` and handles `SAVE_LAST_ROUTE` — and those
+   action names occur **exactly once each in the entire bundle**, in the handler
+   map. Nothing dispatches them. `get defaultRoute(){ return … ME }` is
+   hardcoded to `/channels/@me`. The store is vestigial: the URL carries
+   everything.
+
+**What *is* persisted** is the selection, in `localStorage`:
+
+| store | key | fields that matter here |
+| --- | --- | --- |
+| `SelectedChannelStore` (309010) | `"SelectedChannelStore"` | `selectedChannelId`, **`selectedVoiceChannelId`**, **`lastConnectedTime`**, `selectedChannelIds` (per-guild map), `mostRecentSelectedTextChannelIds` |
+| `SelectedGuildStore` (967198) | `"SelectedGuildStore"` | `selectedGuildId`, `lastSelectedGuildId` |
+
+The per-guild map is why clicking a server icon returns you to the channel you
+last had open **in that server**, across a reload.
+
+### The five minutes the owner named: two constants, and which one he meant — 2026-09-20, SHIPPED
+
+The owner's claim was «даже в случае обрыва от канала я гарантировано вернусь в
+него по возврату связи в течении 5 минут». Five minutes is a real shipped
+Discord number. It is **two** different `3e5` constants in two different stores,
+and neither of them is a client-side limit on rejoining after a reload.
+
+**(a) `RTCConnectionStore` (763827) — the drop window, in memory.** On
+`VOICE_STATE_UPDATES`, in the branch where there is no live RTC connection:
+
+```js
+if (!l && null != v && (0,s.tB)() - v >= 3e5)
+    return o.h.wait(()=>n(730852).default.disconnect()), e;
+```
+
+`v` is stamped when the connection reaches `RTC_CONNECTED` and refreshed on
+every `RTC_CONNECTION_PING`, read against a monotonic clock. So: when the
+gateway hands back a voice state for your own session and you have no RTC
+connection, **rejoin** — unless your last voice ping is more than five minutes
+old, in which case disconnect. `v` is cleared by `LOGOUT` and by a *deliberate*
+teardown, so hanging up on purpose forgets it while dropping off does not. That
+is what makes it a drop window specifically. **`v` is a module variable: after a
+reload it is `null`, the guard does not apply, and the rejoin proceeds with no
+client-side limit at all.**
+
+**(b) `SelectedChannelStore` (309010) — the reload-side counterpart, on disk.**
+On `CONNECTION_OPEN`:
+
+```js
+function k(){ … null != o && Date.now() - o >= 3e5 && (l = null, e = !0); return e }
+```
+
+`o` is `lastConnectedTime`, refreshed by a **60-second heartbeat while you are
+in voice**; `l` is `selectedVoiceChannelId`. So across a reload, if you were in
+voice less than five minutes ago the remembered voice channel survives; past
+five minutes it is forgotten.
+
+**Gateway and voice transport, for completeness.** The gateway backoff is
+`new Backoff(1e3, 6e4)` — 1s to 60s, jittered — and `_doResume()` sends `RESUME`
+with `{token, session_id, seq}`; after four consecutive failures `_reset` nulls
+`sessionId` and `seq` and the next attempt is a full `IDENTIFY`. **`sessionId`
+and `seq` are heap-only**, conspicuously absent from the persisted snapshot, so
+a page reload can never resume the gateway. The voice websocket has its own much
+tighter clamp, `new Backoff(1e3, 5e3)`, and its own `Resuming` state.
+
+**Nothing auto-joins voice on startup.** Every `selectVoiceChannel(…)` call site
+is a user action — a channel click, the `SWITCH_TO_VOICE_CHANNEL` keybind, an
+RPC command, accepting a call — or an auto-*disconnect*: a five-hour idle kick
+(`Gh.start(18e6, …)`) and the AFK-channel move. `VOICE_SERVER_UPDATE` is inert
+without an existing connection. Zero hits for `resumeVoice`, `autoReconnect`,
+`RECONNECT_TIMEOUT`, `disconnectTimeout`, `shouldResume`, `canResume`.
+
+**So the guarantee the owner feels is produced by three things acting together**,
+none of which we have: the voice channel id surviving in `localStorage` for five
+minutes past the last heartbeat; the gateway re-announcing his voice state on
+reconnect; and the server holding that voice state long enough for it to arrive.
+Only the first is ours to build. The third is not observable from the bundle —
+see section 13.
+
+### Where ours differs from Discord's deliberately, and the reason
+
+Two differences, both departures, both argued rather than preferred. CLAUDE.md
+section 7 makes Discord the reference for this subject, so a departure owes a
+reason here.
+
+**1. We reload without a click; Discord never does.** The reason is that their
+click is cheap and ours is not. Discord's reload returns you to the same channel
+— the URL says which — and to the same voice channel, if you were in one within
+the last five minutes. Ours returns you to the chat list and ends your call.
+When accepting an update costs that much, people do not accept it, which is
+exactly what happened: the owner ran a bundle two commits old for as long as his
+tab stayed open. So instead of making the offer more insistent we made it
+unnecessary **in the one state where it costs nothing** — no call, no
+conversation open, and the tab hidden for a minute or untouched for ten
+(`appUpdateNotice.ts`, `shouldRestartQuietly`). Where the click *is* expensive
+we still do exactly what Discord does: offer, and never act.
+
+The cadence is the second half of the reason, measured rather than felt.
+`letscube-web` deployed **242 times in the 30 days to 2026-09-20**, 238 distinct
+commits, median gap 28 minutes. Discord's stable channel gets a seven-day
+throttle because it is a stable channel; ours ships more often than their
+fastest one. That is also why our notice throttle is now an hour rather than
+their seven days — and, by coincidence rather than by design, an hour is also
+their poll interval.
+
+**This difference expires.** Queue item 35 of
+`docs/PRODUCTION_PRIORITY_TRACKER.md` is the standing rule that closes it: once
+a reload restores the conversation and rejoins the call, our click is as cheap
+as theirs and the automatic reload becomes an ordinary convenience rather than a
+compensation.
+
+**2. Our «in a call» is wider than theirs.** Discord's confirmation guards
+`RTC_CONNECTED` only. Ours also covers `joining` and `reconnecting`, and any
+live ring. `joining` is the state where a reload costs the most — the join is in
+flight and there is nothing to return to — and `reconnecting` is their
+`Resuming`, which under a reload is unrecoverable for us because we have no
+rejoin at all. A ring is somebody calling you right now. The narrower guard is
+right for a client that can rejoin; we cannot.
+
 
 ---
 
@@ -907,6 +1134,10 @@ Stated plainly, with what would settle each.
 | Whether Telegram's webapps ship an **in-page** push-to-talk | **UNESTABLISHED.** Only the global-key mechanism is proven | a content grep of both webapp repositories for the relevant call-settings code |
 | Whether Web K handles `requestPoll` and `userProfile` outside its render switch | **UNESTABLISHED.** Absent from the decisive file | a repository-wide content grep, which needs an authenticated GitHub token |
 | Whether the same inline keyboard **looks and reflows** the same across Telegram's clients | **UNESTABLISHED.** Button-type coverage is established; visual parity is not | screenshots of one bot's keyboard on all six. No repository read can supply this |
+| **How long Discord's server holds a voice state after a gateway session dies** — the number that actually bounds rejoin-after-reload, and the one the owner described as «5 минут» | **UNESTABLISHED.** The client imposes no limit on that path: the in-memory 5-minute gate is `null` after a reload, and the persisted 5 minutes only governs whether the *channel id* is remembered. The rejoin itself waits on the server re-announcing the voice state | observation against a live account — reload, wait N, see whether you are put back — or a first-party statement. No amount of bundle reading will close it |
+| Discord's **gateway resume window** (how long `RESUME` with a stale `seq` is accepted) | **UNESTABLISHED** from the bundle. Client-side it is unbounded, and `sessionId`/`seq` are heap-only, so a reload never resumes at all | the same observation, or Discord's own gateway documentation |
+| Whether Discord's **voice** websocket has a resume *window* rather than only a resume *state* | **PARTLY.** The `Resuming` state and the 1s–5s backoff are SHIPPED; no timeout constant bounds them in the bundle | a voice-gateway documentation read, or instrumented observation |
+| Whether Discord's localStorage **in-memory fallback** fires often enough in practice to degrade the 7-day throttle to per-session | **UNESTABLISHED.** The fallback class is SHIPPED and reachable; how often it is reached is not knowable from source | browser testing with site data blocked |
 
 Two things that **are** established about Discord's bots and are worth recording
 here because they bear on our bot work:

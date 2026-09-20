@@ -2,9 +2,10 @@ import { mkdirSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * What a person sees when a new web build is deployed under an open session (D-264).
+ * What happens when a new web build is deployed under an open session (D-264,
+ * D-282).
  *
- * Four contracts, and none of them is about a colour.
+ * Six contracts, and none of them is about a colour.
  *
  * **Reach.** The notice is `fixed`, and so is the chat header. On a phone that
  * header is the only way out of a conversation — rule 12 of
@@ -14,16 +15,28 @@ import { expect, test, type Page } from "@playwright/test";
  * button is the same defect as one laid out over it. The notice this replaced
  * covered three header controls at 390.
  *
- * **Silence.** Nothing reloads the session by itself. `selectedChatId` is
- * neither in the URL nor persisted, so a reload lands on the chat list; a
- * silent one would trade a visible interruption for an invisible loss.
+ * **An open conversation is never reloaded out from under anybody.**
+ * `selectedChatId` is neither in the URL nor persisted, so a reload lands on
+ * the chat list. That is why the tab below is hidden for well past the quiet
+ * window and still does not reload: the open conversation is the veto, and it
+ * is the only thing stopping it.
  *
- * **No question.** There is no dismiss, because there is nothing to postpone:
- * the build applies itself at the next launch either way. Neither Discord's
- * web client nor either Telegram web client offers one.
+ * **A tab nobody is using takes the build by itself.** No call, no conversation
+ * open, hidden for longer than the quiet window: the page reloads and says
+ * nothing, because there is nothing to say. This is the case the owner
+ * reported — he kept a tab open across a deploy and ran a two-commit-old bundle
+ * until he pressed F5.
+ *
+ * **And it will not do it twice.** A restart that does not take — mid-rollover,
+ * two replicas, a stale proxy — would otherwise loop in a background tab where
+ * nobody could see it.
+ *
+ * **No question.** There is no dismiss, because there is nothing to postpone.
+ * Neither Discord's web client nor either Telegram web client offers one.
  *
  * **The throttle.** A build that is not marked `required` is offered at most
- * once every seven days, which is what Discord's stable channel does.
+ * once an hour, which is our own deploy cadence; the measurement is in
+ * `artifacts/kub/src/lib/pwa/appUpdateNotice.ts`.
  *
  * Plus a photograph at the two release widths in both themes, because the owner
  * judges a visual change by looking at it.
@@ -43,6 +56,8 @@ const CATALOG = "https://api.letscube.ru/releases/v1/**";
 const UPDATE_READY_EVENT = "kub:sw-update-ready";
 const SHOWN_KEY = "letscube:app-update:last-shown";
 const FIXTURE_CLOCK = new Date("2026-09-03T18:00:00");
+/** `QUIET_HIDDEN_MS` is a minute; this is comfortably past it. */
+const PAST_QUIET_WINDOW_MS = 90_000;
 const OUT = process.env.KUB_UPDATE_NOTICE_OUT ?? "output/update-notice";
 const LABEL = process.env.KUB_UPDATE_NOTICE_LABEL ?? "after";
 
@@ -83,12 +98,43 @@ const trackLoads = () => {
   store.setItem(key, String(Number.isFinite(previous) ? previous + 1 : 1));
 };
 
-async function openFixtureChat(page: Page) {
+/**
+ * A settable `document.visibilityState`, because no browser automation can put
+ * a page in a background tab. The product reads the real API and the real
+ * event; only the answer is ours.
+ */
+const fakeVisibility = () => {
+  const target = window as unknown as { __kubHidden?: boolean };
+  target.__kubHidden = false;
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => (target.__kubHidden ? "hidden" : "visible"),
+  });
+  Object.defineProperty(document, "hidden", {
+    configurable: true,
+    get: () => Boolean(target.__kubHidden),
+  });
+};
+
+async function setHidden(page: Page, hidden: boolean) {
+  await page.evaluate((value) => {
+    (window as unknown as { __kubHidden?: boolean }).__kubHidden = value;
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, hidden);
+}
+
+type ClockMode = "fixed" | "controlled";
+
+async function openFixtureChat(page: Page, clockMode: ClockMode = "fixed") {
   // The fixture refuses to render a time later than the capture clock, because
-  // it would print a weekday where the product prints a time.
-  await page.clock.setFixedTime(FIXTURE_CLOCK);
+  // it would print a weekday where the product prints a time. `controlled` adds
+  // the ability to move that clock forward, which is the only way to reach a
+  // minute of being hidden inside a test.
+  if (clockMode === "fixed") await page.clock.setFixedTime(FIXTURE_CLOCK);
+  else await page.clock.install({ time: FIXTURE_CLOCK });
   await page.route(CATALOG, (route) => route.fulfill({ status: 404, body: "{}" }));
   await page.addInitScript(trackLoads);
+  await page.addInitScript(fakeVisibility);
   await page.addInitScript(
     ([key, fixture]) => {
       (window as unknown as Record<string, unknown>)[key as string] = fixture;
@@ -105,10 +151,44 @@ async function openFixtureChat(page: Page) {
     : false;
   if (!ready) {
     throw new Error(
-      "The DEV preview capture route did not report ready. Start the dev server with VITE_PUBLIC_PREVIEW_FIXTURE=1.",
+      "The DEV preview capture surface did not report ready. Start the dev server with VITE_PUBLIC_PREVIEW_FIXTURE=1.",
     );
   }
   await expect(page.getByTestId("chat-control-row")).toBeVisible();
+}
+
+/**
+ * Closes the conversation through the store the product itself reads.
+ *
+ * The capture surface has no chat list to press «back» into, so the selection
+ * is cleared directly — and the module handed over is proved to be the one the
+ * application is using before anything is done with it. A dev server that has
+ * taken a hot update hands a bare `import()` a *second* copy of the store, with
+ * none of the fixture's chats in it; that is silent, and it would turn this
+ * test into one that proves nothing. See CLAUDE.md section 5.
+ */
+async function closeConversation(page: Page) {
+  const state = await page.evaluate(async () => {
+    const module = (await import("/src/store/app.store.ts")) as {
+      useAppStore: {
+        getState: () => {
+          chats: unknown[];
+          selectedChatId: string | null;
+          setSelectedChatId: (id: string | null) => void;
+        };
+      };
+    };
+    const store = module.useAppStore.getState();
+    const before = { chats: store.chats.length, selected: store.selectedChatId };
+    store.setSelectedChatId(null);
+    return { before, after: module.useAppStore.getState().selectedChatId };
+  });
+  expect(
+    state.before.chats,
+    "the imported store holds none of the fixture's chats, so it is a second copy and this test would prove nothing",
+  ).toBeGreaterThan(0);
+  expect(state.before.selected, "the fixture was expected to open with a conversation").not.toBeNull();
+  expect(state.after).toBeNull();
 }
 
 async function stampTheme(page: Page, theme: "light" | "dark") {
@@ -130,8 +210,26 @@ async function announceUpdate(page: Page) {
   await page.waitForTimeout(600);
 }
 
-function loads(page: Page) {
-  return page.evaluate(() => Number(window.sessionStorage.getItem("__kubLoads") ?? "0"));
+/**
+ * `null` while the page is between documents.
+ *
+ * Reading this is how the reload is detected, so the read races the very
+ * navigation it is looking for: `page.evaluate` throws «Execution context was
+ * destroyed» exactly when the answer is about to change. A poll treats `null`
+ * as "not yet"; a flat assertion treats it as the failure it is, because
+ * nothing should have been navigating at all.
+ */
+function loads(page: Page): Promise<number | null> {
+  return page
+    .evaluate(() => Number(window.sessionStorage.getItem("__kubLoads") ?? "0"))
+    .catch(() => null);
+}
+
+/** The same count, where the page had better not be navigating at all. */
+async function loadCount(page: Page): Promise<number> {
+  const value = await loads(page);
+  expect(value, "the page was between documents when nothing should have navigated").not.toBeNull();
+  return value as number;
 }
 
 /**
@@ -200,19 +298,6 @@ test.describe("the update notice", () => {
     await expect(page.getByRole("button", { name: "Позже" })).toHaveCount(0);
   });
 
-  test("never reloads the session by itself", async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await openFixtureChat(page);
-    const before = await loads(page);
-    await announceUpdate(page);
-    await expect(page.getByTestId("app-update-notice")).toBeVisible();
-    // Long enough for any settle timer, quiet-moment timer or controller latch
-    // to have fired. A reload here would be a reload nobody asked for.
-    await page.waitForTimeout(6000);
-    expect(await loads(page), "the page reloaded itself while an update was pending").toBe(before);
-    await expect(page.getByTestId("app-update-notice")).toBeVisible();
-  });
-
   test("a routine build is not offered again inside the interval", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     // Seeded from the page's own clock, not from Node's. The fixture pins the
@@ -229,10 +314,97 @@ test.describe("the update notice", () => {
           // the module's, not this one's.
         }
       },
-      [SHOWN_KEY, FIXTURE_CLOCK.getTime() - 2 * 24 * 60 * 60 * 1000] as const,
+      [SHOWN_KEY, FIXTURE_CLOCK.getTime() - 30 * 60 * 1000] as const,
     );
     await openFixtureChat(page);
     await announceUpdate(page);
     await expect(page.getByTestId("app-update-notice")).toHaveCount(0);
+  });
+});
+
+test.describe("taking the build without asking", () => {
+  test("an open conversation is never reloaded out from under anybody", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixtureChat(page, "controlled");
+    const before = await loadCount(page);
+    await announceUpdate(page);
+    await expect(page.getByTestId("app-update-notice")).toBeVisible();
+
+    // Everything the quiet rule asks for except the one thing it will not
+    // trade: the tab is hidden, and stays hidden well past the quiet window.
+    // The conversation is the only veto left, so if it ever stops being one
+    // this test is what says so.
+    await setHidden(page, true);
+    await page.clock.runFor(PAST_QUIET_WINDOW_MS);
+    await page.waitForTimeout(500);
+
+    expect(await loadCount(page), "the page reloaded while a conversation was open").toBe(before);
+    await setHidden(page, false);
+    await expect(page.getByTestId("app-update-notice")).toBeVisible();
+  });
+
+  test("a tab nobody is using takes the build by itself", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixtureChat(page, "controlled");
+    const before = await loadCount(page);
+    await announceUpdate(page);
+    await closeConversation(page);
+
+    // The owner's own case: a session held open across a deploy. Before D-282
+    // this waited for an F5 that never came.
+    await setHidden(page, true);
+    await page.clock.runFor(PAST_QUIET_WINDOW_MS);
+
+    await expect
+      .poll(() => loads(page), { timeout: 15_000, message: "the tab never took the new build" })
+      .toBe(before + 1);
+  });
+
+  test("the quiet window starts when the last veto clears, not before", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixtureChat(page, "controlled");
+    const before = await loadCount(page);
+    await announceUpdate(page);
+
+    // Hidden for well past the window, but inside a conversation the whole
+    // time, so nothing may happen yet.
+    await setHidden(page, true);
+    await page.clock.runFor(PAST_QUIET_WINDOW_MS);
+    expect(await loadCount(page)).toBe(before);
+
+    // The conversation closes. The tab has been hidden for a minute and a half
+    // by the page's own clock — but it was *busy* for all of it, so the window
+    // has to start again now. Half a minute later it is still too early.
+    await closeConversation(page);
+    await page.clock.runFor(30_000);
+    expect(await loadCount(page), "the window was counted from before the veto cleared").toBe(before);
+
+    // And a minute after that, it is not.
+    await page.clock.runFor(60_000);
+    await expect
+      .poll(() => loads(page), { timeout: 15_000, message: "the tab never took the new build" })
+      .toBe(before + 1);
+  });
+
+  test("a tab that has just restarted itself does not restart again", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixtureChat(page, "controlled");
+    const before = await loadCount(page);
+    await announceUpdate(page);
+    await closeConversation(page);
+    await setHidden(page, true);
+    await page.clock.runFor(PAST_QUIET_WINDOW_MS);
+    await expect.poll(() => loads(page), { timeout: 15_000 }).toBe(before + 1);
+
+    // The page came back. If the deploy is mid-rollover the same bundle comes
+    // back with it and the page is pending again at once — which without the
+    // cooldown is a reload loop in a background tab, where nobody would see it.
+    await expect(page.locator(`[${READY}="true"]`)).toBeAttached();
+    await announceUpdate(page);
+    await closeConversation(page);
+    await setHidden(page, true);
+    await page.clock.runFor(PAST_QUIET_WINDOW_MS);
+    await page.waitForTimeout(500);
+    expect(await loadCount(page), "the tab restarted itself twice in a row").toBe(before + 1);
   });
 });

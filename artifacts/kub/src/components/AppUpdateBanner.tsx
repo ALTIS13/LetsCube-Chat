@@ -1,48 +1,62 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KubButton, KubIcon } from "@/components/kub";
-import { useVoiceCall } from "@/hooks/useVoiceCall";
+import { useVoiceCall, voiceCallSnapshot } from "@/hooks/useVoiceCall";
+import { voiceRingsSnapshot } from "@/hooks/useVoiceRing";
 import {
   KUB_SW_UPDATE_READY_EVENT,
   restartOntoWaitingBuild,
 } from "@/hooks/usePwa";
+import { useAppStore } from "@/store/app.store";
 import {
   APP_UPDATE_NOTICE_SHOWN_KEY,
+  APP_UPDATE_QUIET_RESTART_KEY,
   parseLastShownAt,
+  shouldRestartQuietly,
   shouldShowUpdateNotice,
   updateAction,
 } from "@/lib/pwa/appUpdateNotice";
 
 /**
- * The offer to take a new build now, and the only place the product makes it.
+ * A new build reaching a running session, and the two ways it can.
  *
- * `lib/pwa/appUpdateNotice.ts` carries the argument: the update applies itself
- * at the next launch, so this is an offer rather than a request; it has no
- * «Позже», because there is nothing to postpone; it is throttled the way
- * Discord's web client throttles a build that is not marked `required`; and
- * nothing here ever reloads on its own, because a reload costs the open
- * conversation and that is not ours to spend.
+ * `lib/pwa/appUpdateNotice.ts` carries the argument. In short: an update is a
+ * reload, so a tab held open across a deploy never takes one — which is the
+ * defect the owner reported, running a two-commit-old bundle while the new one
+ * was live. There are two answers and this component is both of them.
  *
- * What this replaced, and why, is D-264. The card was placed at
+ * **Quietly, where the reload costs nothing.** No call, no conversation open,
+ * and the tab either hidden or untouched for long enough. Then it reloads
+ * itself and says nothing, because there is nothing to say: the page comes back
+ * where it already was.
+ *
+ * **An offer, everywhere else.** The pill, throttled to one an hour — our own
+ * deploy cadence, not Discord's stable channel; the measurement is in the
+ * module. It has no «Позже», because there is nothing to postpone.
+ *
+ * What the pill replaced, and why, is D-264. The card was placed at
  * `top: calc(0.75rem + safe-top)` — over the chat header — and measured at 390
  * it covered **three** header controls: the back button, the title and the
  * menu, each of whose own centre hit-tested to the card. On a phone that header
  * is the only way out of a conversation. It now sits in the band the product
  * already floats notices in (`KubFeedbackViewport` uses the same offset), below
  * the chrome and over content, which is what `kub-glass-strong` is for.
- *
- * It was also older than the material: a hand-rolled `bg-[var(--kub-cyan)]`
- * button, a hand-mixed cyan wash behind a literal `↻` glyph, and a second copy
- * of copy for a «Соединение нестабильно» state the component returned `null`
- * before it could ever render. The controls are the shared ones now.
  */
 
 const CHECK_INTERVAL_MS = 5 * 60_000;
 
+/**
+ * How often the quiet conditions are re-read while a build is pending.
+ *
+ * They are read from snapshots rather than subscribed to, so this is the whole
+ * cost of watching them, and it only runs while there is something to apply.
+ */
+const QUIET_PROBE_INTERVAL_MS = 15_000;
+
 export function AppUpdateBanner() {
   const [pending, setPending] = useState(false);
-  const [showing, setShowing] = useState(false);
   const [waitingRegistration, setWaitingRegistration] = useState<ServiceWorkerRegistration | null>(null);
   const currentBundle = useMemo(() => getCurrentBundlePath(), []);
+  const stillness = useStillness();
 
   const checkForUpdate = useCallback(async () => {
     if (!currentBundle) return;
@@ -89,6 +103,76 @@ export function AppUpdateBanner() {
     return () => window.removeEventListener(KUB_SW_UPDATE_READY_EVENT, handleUpdateReady);
   }, []);
 
+  if (!pending) return null;
+  return <PendingUpdate registration={waitingRegistration} stillness={stillness} />;
+}
+
+/**
+ * What to do about a build that is waiting, decided once it is waiting.
+ *
+ * Split out so that a session with nothing pending — which is almost every
+ * session, almost all of the time — runs no probe, keeps no timer and
+ * subscribes to nothing.
+ */
+function PendingUpdate({
+  registration,
+  stillness,
+}: {
+  registration: ServiceWorkerRegistration | null;
+  stillness: Stillness;
+}) {
+  const [showing, setShowing] = useState(false);
+  const restarting = useRef(false);
+
+  // The quiet path, tried first and then again while it stays unavailable.
+  useEffect(() => {
+    const attempt = () => {
+      if (restarting.current) return;
+      const now = Date.now();
+      const call = voiceCallSnapshot();
+      const callBusy =
+        call.phase === "connected" ||
+        call.phase === "joining" ||
+        call.phase === "reconnecting" ||
+        voiceRingsSnapshot().length > 0;
+      const conversationOpen = useAppStore.getState().selectedChatId !== null;
+      // A tab that is doing something is not a still tab: while anything vetoes
+      // the restart, both clocks start again from now, so the window is
+      // measured from the moment the last of them cleared rather than from
+      // whenever the tab happened to go quiet. Without this, leaving a call in
+      // a hidden tab would be followed by an immediate reload.
+      if (callBusy || conversationOpen) stillness.busy(now);
+      const rest = stillness.read(now);
+      if (
+        !shouldRestartQuietly({
+          pending: true,
+          callBusy,
+          conversationOpen,
+          hiddenSince: rest.hiddenSince,
+          lastInteractionAt: rest.lastInteractionAt,
+          lastQuietRestartAt: parseLastShownAt(readStored(sessionStore, APP_UPDATE_QUIET_RESTART_KEY)),
+          now,
+        })
+      ) {
+        return;
+      }
+      restarting.current = true;
+      // Written before the reload, and to `sessionStorage`, so it belongs to
+      // this tab and survives the navigation. A restart that does not take —
+      // mid-rollover, two replicas, a stale proxy — must not become a loop.
+      writeStored(sessionStore, APP_UPDATE_QUIET_RESTART_KEY, String(now));
+      restartOntoWaitingBuild(registration);
+    };
+    attempt();
+    const timer = window.setInterval(attempt, QUIET_PROBE_INTERVAL_MS);
+    const onVisibility = () => attempt();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [registration, stillness]);
+
   // Decided once and latched, not recomputed per render. The moment the notice
   // is shown it records the time, and a second reading of that record would
   // then say "too soon" — so a plain derived value would put the notice on
@@ -96,28 +180,27 @@ export function AppUpdateBanner() {
   // do. `required` is always false: no web build can declare itself required
   // today, and the module comment says where that signal would come from.
   useEffect(() => {
-    if (!pending || showing) return;
+    if (showing || restarting.current) return;
     const allowed = shouldShowUpdateNotice({
-      pending,
+      pending: true,
       required: false,
-      lastShownAt: parseLastShownAt(readStored(APP_UPDATE_NOTICE_SHOWN_KEY)),
+      lastShownAt: parseLastShownAt(readStored(localStore, APP_UPDATE_NOTICE_SHOWN_KEY)),
       now: Date.now(),
     });
     if (!allowed) return;
     // The interval runs from the last time somebody was shown the notice, not
-    // from the last deploy, so a week of deploys costs one notice.
-    writeStored(APP_UPDATE_NOTICE_SHOWN_KEY, String(Date.now()));
+    // from the last deploy, so an hour of deploys costs one notice.
+    writeStored(localStore, APP_UPDATE_NOTICE_SHOWN_KEY, String(Date.now()));
     setShowing(true);
-  }, [pending, showing]);
+  }, [showing]);
 
   if (!showing) return null;
-  return <UpdateNotice registration={waitingRegistration} />;
+  return <UpdateNotice registration={registration} />;
 }
 
 /**
  * Split out so the call is only subscribed to while the offer is on screen.
- * `AppUpdateBanner` is mounted at the application root and renders nothing
- * almost all of the time; it should not also be a voice-state subscriber.
+ * Everything above this reads the call from a snapshot, which costs no render.
  */
 function UpdateNotice({ registration }: { registration: ServiceWorkerRegistration | null }) {
   const [acknowledged, setAcknowledged] = useState(false);
@@ -172,19 +255,89 @@ function UpdateNotice({ registration }: { registration: ServiceWorkerRegistratio
   );
 }
 
-function readStored(key: string): string | null {
+type Stillness = {
+  /** How long this tab has been hidden and untouched, as of `now`. */
+  read: (now: number) => { hiddenSince: number | null; lastInteractionAt: number };
+  /** Something is going on: start both clocks again. */
+  busy: (now: number) => void;
+};
+
+/**
+ * How long nobody has been using this tab.
+ *
+ * Refs and passive listeners, never state: this is mounted at the application
+ * root for the whole session and must not cost a render. A tab that is already
+ * hidden when the session starts counts as hidden from that moment rather than
+ * from whenever it actually went away — the conservative direction, since the
+ * only thing this is ever used to justify is reloading.
+ */
+function useStillness(): Stillness {
+  const hiddenSince = useRef<number | null>(null);
+  const lastInteractionAt = useRef(Date.now());
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    hiddenSince.current = document.visibilityState === "hidden" ? Date.now() : null;
+    const onVisibility = () => {
+      const now = Date.now();
+      hiddenSince.current = document.visibilityState === "hidden" ? now : null;
+      lastInteractionAt.current = now;
+    };
+    const onInteraction = () => {
+      lastInteractionAt.current = Date.now();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    for (const name of ["pointerdown", "keydown", "touchstart", "wheel"] as const) {
+      document.addEventListener(name, onInteraction, { passive: true, capture: true });
+    }
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      for (const name of ["pointerdown", "keydown", "touchstart", "wheel"] as const) {
+        document.removeEventListener(name, onInteraction, { capture: true });
+      }
+    };
+  }, []);
+
+  return useMemo<Stillness>(
+    () => ({
+      read: () => ({ hiddenSince: hiddenSince.current, lastInteractionAt: lastInteractionAt.current }),
+      busy: (now: number) => {
+        lastInteractionAt.current = now;
+        if (hiddenSince.current !== null) hiddenSince.current = now;
+      },
+    }),
+    [],
+  );
+}
+
+type Store = "local" | "session";
+const localStore: Store = "local";
+const sessionStore: Store = "session";
+
+function storage(store: Store): globalThis.Storage | null {
   try {
-    return window.localStorage.getItem(key);
+    return store === "local" ? window.localStorage : window.sessionStorage;
   } catch {
-    // A browser with site data blocked has no memory of the last notice, so it
-    // sees every one. That is the safe direction: the alternative is silence.
     return null;
   }
 }
 
-function writeStored(key: string, value: string): void {
+function readStored(store: Store, key: string): string | null {
   try {
-    window.localStorage.setItem(key, value);
+    return storage(store)?.getItem(key) ?? null;
+  } catch {
+    // A browser with site data blocked has no memory of the last notice, so it
+    // sees every one. That is the safe direction: the alternative is silence.
+    // It also has no memory of the last quiet restart — where the safe
+    // direction is the other way, which is why the loop guard is only ever the
+    // second line of defence behind the conditions themselves.
+    return null;
+  }
+}
+
+function writeStored(store: Store, key: string, value: string): void {
+  try {
+    storage(store)?.setItem(key, value);
   } catch {
     // Nothing to do: the throttle degrades to none, never to a hidden notice.
   }

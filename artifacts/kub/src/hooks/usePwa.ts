@@ -199,13 +199,15 @@ function dispatchUpdateReady(registration: ServiceWorkerRegistration) {
 }
 
 /**
- * Takes the waiting build now, at a person's own request.
+ * Takes the waiting build now.
  *
- * Only ever called from a press. Nothing in the product reloads a running
- * session on its own: `selectedChatId` is neither in the URL nor persisted, so
- * a reload lands on the chat list, and a silent one would trade a visible
- * interruption for an invisible loss. Discord's web client reloads only on a
- * click for the same reason. See `lib/pwa/appUpdateNotice.ts`.
+ * Called from a press, and from one other place: `AppUpdateBanner` reloads the
+ * session by itself where doing so costs nothing — no call, no conversation
+ * open, and the tab hidden or untouched for long enough. Those conditions are
+ * the whole argument, and they live in `lib/pwa/appUpdateNotice.ts`. Everywhere
+ * else this still waits for a press, because `selectedChatId` is neither in the
+ * URL nor persisted, so a reload lands on the chat list and a silent one would
+ * trade a visible interruption for an invisible loss.
  *
  * `skipWaiting` first, so the new worker owns the caches before the document is
  * replaced; the reload follows either on `controllerchange` or on a timer,
