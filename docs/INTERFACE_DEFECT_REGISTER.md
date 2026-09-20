@@ -20979,6 +20979,23 @@ Seventeen mutations watched go red, the first of them being the shipped rule
 itself: `input.level > MIC_NO_INPUT_FLOOR` → `input.level > 0` turns the new
 case red while everything else stays green.
 
+**Confirmed on the owner's hardware the same day, on the deployed build.** He
+joined a voice channel with his microphone's analogue dimmer at zero: the
+warning appeared after its ten seconds and went the moment he spoke. That is
+the whole rule — the run firing, and `heard` being terminal — and it is the one
+claim in this feature that only a person with a headset could settle. The
+assumption named as untested in the D-275 report was false; the assumption
+named as untested here was true.
+
+**And the instrument under it changed hours later — see D-278.**
+`lib/micLevel.ts` now reads `getFloatTimeDomainData`, so «one step of the
+instrument» stopped being an argument and `MIC_NO_INPUT_FLOOR` became
+`MIC_NO_INPUT_FLOOR_DB = -42`, derived. The *audio level* it trips at moved by
+0.14 dB, deliberately: the reproduction above was taken at the byte floor, and
+changing the instrument must not also change who gets warned. Everything
+measured in this entry stands; only the argument for the number is rewritten,
+and it is rewritten at the constant rather than here.
+
 **Both measurement scripts live under `output/`, which is gitignored**, so they
 will not survive a clean checkout — the tables above are the durable record and
 are why they are tables rather than a sentence saying «measured». Either script
@@ -20987,51 +21004,22 @@ drive known amplitudes through an `AnalyserNode` for the first, and known WAVs
 through `--use-file-for-fake-audio-capture` for the second.
 
 ---
-## D-278 `[ ]` The axis promises 70 dB and the instrument delivers 42
+## D-278 `[x]` The axis promised 70 dB, the instrument delivered 42, and the gate said «you are through» to a silent room
 
-**Not fixed. Measured, designed, and left for the owner**, because every honest
-fix changes behaviour that somebody is already relying on.
+**Fixed 2026-09-20 by changing the instrument rather than the axis**, which
+costs no stored-settings migration. The diagnosis below was measured before the
+fix, reproduced by the owner on his own hardware afterwards, and is stronger
+than the first version of this entry: the product was not merely failing to
+close a gate, it was affirmatively telling a silent person they were audible.
 
-`MIC_GATE_FLOOR_DB` is −70 and `micLevelPosition` is `1 − db/floor`. The
-instrument, measured in D-277, cannot report anything below −42.14 dBFS except
-exact zero. Three consequences, all arithmetic:
+### The instrument, and the 48 dB bucket
 
-1. **A dead microphone draws the bar at 40%.** Byte peak 1 → −42.14 dBFS →
-   position 0.398. The owner saw this and called it «что-то странное», which is
-   the correct reaction: a meter that rests at 40% is not a meter.
-2. **The bottom 39.8% of the threshold slider is unreachable.**
-   `micGateOpenAt(p)` first reaches one byte step at p = 0.3980, so every
-   position below that is cleared by any non-zero reading and means exactly the
-   same thing as every other position below it.
-3. **«По голосу» at its default cannot close the microphone at all**, which is
-   stronger than it first looked and is a functional defect rather than a
-   cosmetic one. The gate closes only when the level falls below
-   `micGateOpenAt(p)`; the quietest level the instrument can report is 1/128;
-   and `micGateOpenAt(p) > 1/128` only for **p > 0.398**. Every stored position
-   at or below that — the shipped default `MIC_GATE_THRESHOLD_DEFAULT` of 0.35
-   among them — leaves a gate that is mathematically incapable of closing.
-   Voice activation is inoperative for anybody who has not dragged the slider
-   past 40%.
-
-**Why a local fix is worse than none.** Clamping the bar to zero below one byte
-step makes the bar agree with the warning and immediately disagree with the
-**gate**: a byte-1 reading clears `micGateOpenAt(0.35)`, so the microphone would
-be publishing while the bar showed empty. Clamping `micGateOpenAt` instead
-leaves the handle drawable in a region the bar can never reach. The three
-instruments — bar, handle, gate — are one axis and have to move together.
-
-**Two ways out, and the second one was missed the first time round.** The
-first is to make the axis match the instrument: `MIC_GATE_FLOOR_DB` from −70 to
-about −42, one `MIC_LEVEL_AUDIBLE = 2 / 128` used by bar, gate and warning
-alike. It works, and it costs a stored-settings migration — a stored 0.35 means
-−45.5 dBFS today and would mean −27.4 dBFS after, a far stricter gate that
-could cut out a quiet speaker. That cost is what held this entry open.
-
-**The second is to change the instrument instead of the axis, and it costs
-nothing.** The dead zone is not a property of audio or of the axis; it is a
-property of reading an 8-bit API. The same `AnalyserNode` carries
-`getFloatTimeDomainData`, and the float column was sitting in D-277's own
-measurement the whole time, unread:
+`lib/micLevel.ts` read `getByteTimeDomainData`. The conversion is specified as
+`b = ⌊128(1 + x)⌋`, so any negative sample lands on 127 — one step below the
+midpoint — and every bipolar signal therefore reported at least one step.
+One step was also the **most** it reported for anything from −90.3 dBFS up to
+about −42.1. Known amplitudes through the same graph the product builds
+(`output/d272-measure-floor.mjs`, Chromium, re-run independently 2026-09-20):
 
 | true signal | byte peak → level | float peak |
 | --- | --- | --- |
@@ -21041,64 +21029,241 @@ measurement the whole time, unread:
 | −42 dBFS | 2 → 0.0156250 | 7.943e−3 |
 | −24 dBFS | 9 → 0.0703125 | 6.310e−2 |
 
-**The float path is exact at every level down to −90 dBFS.** Re-run
-independently on 2026-09-20 (`output/d272-measure-floor.mjs`, the last column).
+**The float column was in that script's own output from the first day and
+nobody had read it.** The same `AnalyserNode` carries
+`getFloatTimeDomainData`, which resolves the signal exactly at every level down
+to the 16-bit converter's last step. Same node, same 2048 window, same peak
+loop, four times the bytes copied out of a read that costs 6.6 µs.
 
-So `lib/micLevel.ts:154` reading `getFloatTimeDomainData` into a `Float32Array`
-instead of `getByteTimeDomainData` into a `Uint8Array` — same node, same 2048
-window, same peak loop, four times the bytes copied out of a read that costs
-6.6 µs — settles all three consequences at once **and changes no stored value's
-meaning**, because `MIC_GATE_FLOOR_DB` stays at −70 and every position goes on
-denoting the decibels it always denoted:
+### What the bucket cost, and the third item is the one that was buried
 
-- the bar rests near 0 on a dimmed capsule instead of at 40%, because −70 dBFS
-  now reads as −70 dBFS;
-- the bottom 39.8% of the slider becomes reachable, so the default 0.35
-  (−45.5 dBFS) starts gating for the first time;
-- **no migration**, which was the whole reason this entry stayed open.
+1. **A dimmed capsule drew the bar at 40%.** Byte 1 → −42.14 dBFS → position
+   0.398. The owner: «показывает что-то странное».
+2. **The bottom of the threshold slider was one position.** Two boundaries,
+   both exact, and the second is the wider one: silence **opens** a closed gate
+   wherever `1/128 ≥ micGateOpenAt(p)`, i.e. **p ≤ 0.39794**; and because the
+   hysteresis is 6 dB, silence **holds an opened gate open** wherever
+   `1/128 ≥ micGateCloseAt(p)`, i.e. **p ≤ 0.48395**. For anybody who had ever
+   spoken, nearly half the control meant one thing.
+3. **The product told a silent person they were being transmitted.** The
+   owner's slider sits at 38%. `micGateOpenAt(0.38)` is 0.00676 and his level
+   was 0.0078125, so `open` was true: `MicMeter` painted `--kub-cyan`, the
+   colour that means «you are through», over a microphone producing nothing —
+   and the bar was 40% wide against a handle at 38%, so it also read as
+   *comfortably* above the line. «Cannot close» understates this. It is
+   misinformation, not a missing feature.
 
-**What it does cost, stated rather than found later.** `MIC_NO_INPUT_FLOOR`
-loses its justification the moment the instrument changes: 1/128 is «one step of
-the instrument» only while the instrument counts bytes, and becomes a tuned
-−42.1 dBFS afterwards. It is still a defensible figure — 17 dB under
-conversational speech, 18 dB over a quiet room — but the argument has to be
-rewritten, and the module header now says so at the constant. And the gate will
-genuinely start closing for anyone in «По голосу» who has been relying on it
-never closing; that is the feature beginning to work, but it is a behaviour
-change and belongs in the same reviewed step.
+Measured end to end before the fix, through the product's own modules
+(`output/_d278-probe.mjs`): a 440 Hz tone at −60 dBFS — 15 dB under the default
+threshold — left the gate `open: true` after 1200 ms of it, three times its own
+400 ms tail.
+
+### The owner's reproduction, which is the shortest this defect will ever have
+
+On the deployed build, dimmer at zero, microphone test running, he dragged the
+threshold **from 39% to 40%**: the meter's **width did not change and its
+colour did**. That is `p ≤ 0.39794` → open on silence, `p > 0.39794` → closed,
+with `micLevelPosition(1/128)` constant at 40% either side. Prediction made
+from the arithmetic, then held on hardware.
+
+### The fix, and why it is free
+
+`lib/micLevel.ts:154` now reads `getFloatTimeDomainData` into a `Float32Array`
+and reports the peak magnitude. `MIC_GATE_FLOOR_DB` stays at −70 and every
+stored `micGateThreshold` goes on denoting the decibels it always denoted, so
+**there is no migration** — which is the whole reason this was the second way
+out rather than moving the axis to −42. Measured after, same script:
+
+| true signal | reads | bar | gate, seeded open by a syllable |
+| --- | --- | --- | --- |
+| −85 dBFS | 5.623e−5 | 0% | shut |
+| −70 dBFS | 3.162e−4 | 0% | shut |
+| −60 dBFS | 1.000e−3 | 14% | shut |
+| −50 dBFS | 3.162e−3 | 29% | open — correct: −51.5 is `micGateCloseAt(0.35)` |
+| −45 dBFS | 5.623e−3 | 36% | open |
+| −24 dBFS | 6.310e−2 | 66% | open |
+
+The owner's "«должен показывать 0 если реально звуков сейчас нет»" is the
+first row. Note what must **not** be expected of his capsule: his true level is
+somewhere in the old 48 dB bucket and nobody knows where, so his honest bar may
+be 0% or 14% or 28%. The defect was never that 42% is the wrong number — it was
+that 42% was the **only** number available below −42 dBFS, so a dead
+microphone, a dimmed one and a quiet room all painted the same bar.
+
+### What it cost, handled rather than discovered
+
+**`MIC_NO_INPUT_FLOOR` lost its justification the moment the instrument
+changed**, and the module header had said so in advance. «One step of the
+instrument» was an argument only while the instrument counted bytes. It is now
+`MIC_NO_INPUT_FLOOR_DB = -42` with `MIC_NO_INPUT_FLOOR` derived from it: the
+midpoint **in decibels** between the two populations the rule tells apart —
+speech near −25 dBFS (plus the +13 dB the default constraints add) and a
+suppressed room below −60. 17 dB of margin one way, 18 the other. It lands
+within 0.14 dB of where the byte floor sat, and that is deliberate: changing
+the instrument must not also change who gets warned, because only one of those
+can be observed at a time on real hardware. **D-277 is separately confirmed on
+that hardware** — dimmer at zero, the warning appeared after its ten seconds
+and went the moment he spoke — so the figure it was calibrated at is the figure
+that was kept.
+
+The other cost is real and is a behaviour change: **the gate will now start
+closing for people in «По голосу» who have been relying on it never closing.**
+That is the feature beginning to work.
+
+### Proof
+
+- `tests/e2e/mic-level-instrument.spec.ts` — new, and the only place in the
+  suite where the analyser runs for real: no `__letscubeMicLevel` stand-in, an
+  oscillator at a known level published through a
+  `MediaStreamAudioDestinationNode`. Three cases: a −60 dBFS room read as
+  −60 dBFS and the gate closing on it; three signals across the old bucket
+  painting three different bars; a voice still opening the gate.
+  **Red against the shipped instrument**, measured before the change — the
+  three signals came back `[{-85, 40%, 0.0078125}, {-60, 40%, 0.0078125},
+  {-50, 40%, 0.0078125}]`, which is the owner's photograph.
+- `tests/unit/mic-gate.test.mts` — both instruments as pure models
+  (`⌈128a⌉/128` against `a`, the first reproducing the measured table exactly),
+  the two boundaries above pinned as arithmetic, and a source read holding
+  which instrument is installed.
+- Twelve mutations watched go red, including `getFloatTimeDomainData` back to
+  `getByteTimeDomainData`, `onLevel(peak)` back to `onLevel(peak / 128)`,
+  `MIC_NO_INPUT_FLOOR` back to `1 / 128`, `MIC_NO_INPUT_FLOOR_DB` to −70 and to
+  0, and the shipped `level > 0`.
+
+### Two things worth carrying
+
+**A number that turns out to be the instrument's resolution looks exactly like
+a reading until somebody divides it.** `lib/micLevel.ts` carried a comment
+saying Chromium's fake capture device shows «a peak of 0.0078 most of the
+time». 0.0078 is 1/128. It was a measurement of the byte floor written down as
+a fact about the device — the same mistake as this defect, in an earlier and
+smaller form, sitting in the file the whole time. Re-measured through the float
+path: median 0.0013 (−57.5 dBFS), down to exact 0, with a spike to 1.0 about
+once a second.
+
+**A constant whose stated reason has stopped being true is worse than one with
+no reason at all**, because the next reader trusts the sentence. The header of
+`micNoInput.ts` had written down, before the fact, exactly what would
+invalidate its own floor. That paragraph is why this change cost one edit
+rather than an argument.
 
 ---
-## D-279 `[ ]` The live level bar is behind a mode nobody has selected
+## D-279 `[x]` The sensitivity control was behind a mode nobody has selected, and the bar that found it could not say «through»
 
-**Not fixed, deliberately.** The owner, looking for the sensitivity control:
-«не вижу этой самой живой полосы с уровнями громкости микрофона с
-соответствующей регулировкой чувствительности».
+**Fixed 2026-09-20, in two parts, after the first diagnosis in this entry was
+wrong about which control he could not see.**
 
-Two separate reasons he cannot see one, and they need different answers:
+The owner, twice: «не вижу этой самой живой полосы с уровнями громкости
+микрофона с соответствующей регулировкой чувствительности».
 
-1. **The calibration bar is behind the mode.**
-   `AudioSettingsSection.tsx` renders the threshold slider, its bar and
-   «Подобрать порог» behind `settings.micActivation === "voice"`. «Всегда» is
-   the default, so most people never see any of it.
-2. **The «Уровень» meter is behind a button.** It reads 0 until «Проверить
-   микрофон» is pressed, and it has to be — drawing a live level means holding
-   the microphone open, and a settings screen that turns somebody's microphone
-   on by itself is a worse defect than this one.
+### The correction, and it matters because it moves the fix
 
-**The recommendation, with the reasoning, since this should not move by
-reflex: the meter belongs outside the mode gate; the threshold stays inside
-it.** The meter answers «is my microphone working, and how loud am I» — a
-question every mode has, and precisely the question the D-277 warning raises, so
-a person told «микрофон не даёт звука» must have a bar to look at. The threshold
-answers «where should the gate open», which only «По голосу» has; drawing it in
-«Всегда» would be a control that changes nothing, which is the defect class this
-register is full of.
+This entry first said «the live level bar is behind a mode nobody has
+selected». **It is not, and never was.** `AudioSettingsSection.tsx` renders the
+«Уровень» group — its «Проверить микрофон» button and its `audio-level-meter` —
+outside every mode gate, at line 631, and the owner reached it: he photographed
+that bar running, with «Остановить» showing. What is behind
+`micActivation === "voice"` is the **threshold**: the slider, its own bar and
+«Подобрать порог», at lines 718–782. The two halves of his sentence are one
+request, and the half he was missing is the second.
 
-Discord shows both together always, but that is not a counter-argument: its
-sensitivity slider applies in its automatic mode too, and ours does not.
+The lesson is the ordinary one and it was nearly missed again: **a component
+read tells you what is gated; only a photograph tells you what a person
+reached.**
 
-**Do this after D-278, not before.** Moving the bar into «Всегда» before the
-axis is honest would put a bar that rests at 40% in front of every user instead
-of only those who chose «По голосу».
+### Part one — where the sensitivity control is, said in the group that lacks it
+
+`MIC_GATE_THRESHOLD_ELSEWHERE_NOTE`, drawn under the mode picker whenever the
+mode is not «По голосу»:
+
+> Чувствительность микрофона настраивается только в режиме «По голосу»: порог
+> и живая полоса уровня появляются там.
+
+**A line and not the control**, and that is the decision.
+`docs/operations/reference-clients.md` §8 sets out the four answers Discord
+gives to «this control cannot work here»; the one our register refuses is a
+control that is present and inert. A threshold slider drawn in «Всегда» is
+exactly that — a person could calibrate it carefully against a live bar and
+change nothing about who hears them, which is a worse lie than not drawing it.
+
+The word is his and not the label's. The control stays «Порог голоса»
+everywhere it is drawn, because the surface around it — «Подобрать порог», both
+hints — is built on that word. A person with Discord's «Входная
+чувствительность» in their head searches for «чувствительность», and this line's
+only job is to be found by that search.
+
+**Discord does the opposite and it is recorded rather than filed away.** Its
+sensitivity fieldset renders whenever the input profile is `CUSTOM` and is
+`disabled` outside voice-activity mode — a greyed, non-functional control, the
+sharpest counter-example §8's rule has. The new subsection in that document has
+the identifiers.
+
+### Part two — the bar could not say «through» in a way anybody reads
+
+Shown the colour change working after D-278, the owner: **«но требуется более
+явно разделение»**. He is not rejecting two colours; he is saying ours are not
+two colours. Measured: `--kub-muted` is hue 210° and `--kub-cyan` is 211°, so
+the switch changed a saturation and nothing else — **1.04° apart**, measured in
+the browser off the computed backgrounds. And it changed it about the *whole*
+bar at once, so nothing on screen ever marked *where* the line was: a person
+dragging the handle had to look up at another row and estimate its x.
+
+`MicMeter`, with a threshold, is now one object carrying three things:
+
+- **the scale**, two zones split at the threshold at 16% strength, so the
+  boundary exists in a silent room;
+- **the level in two parts** — `--kub-warn` up to the boundary, `--kub-cyan`
+  past it — so a voice growing louder is seen to *cross* it at exactly that x;
+- **the boundary itself**, a 2px rule painted in the track's own colour, so it
+  reads as a gap in the bar rather than as a mark on it.
+
+Amber against blue rather than Discord's warm against green, and that is not a
+palette convenience. `--kub-warn` is this material's one warm tone and is
+documented as tuned for a mark rather than a word — its light value was
+darkened specifically so an indicator clears 3:1. And amber/blue survives the
+common colour deficiencies where warm/green does not.
+
+`micGateThresholdHint` was rewritten to name the notch and the crossing rather
+than a colour, for the same reason.
+
+The `35ms` width transition is taken from Discord's own bundle
+(`transition: width 35ms ease`, build 615980) and it is the right number for a
+different reason than theirs: a reading arrives every `MIC_LEVEL_PERIOD_MS`, so
+a transition longer than 50 ms spends its whole life drawing a level the
+microphone never had. The smoothing this meter has is the analyser's 42.7 ms
+window; it does not need a second one.
+
+**What was deliberately not built.** Not a loudness→colour ramp
+(quiet/good/hot). Discord encodes loudness in colour nowhere on this screen —
+three meters, three mechanisms, zero such mappings, loudness always width — and
+its one gradient runs yellow→green, *quiet*→*loud*, the inverse of the
+broadcast convention, because the only question a VAD meter asks is whether you
+clear a gate. A green→red ramp here would answer a question this control is not
+asking, and its two extra boundaries would be invented rather than measured.
+Clipping is now representable for the first time (the float path can exceed
+1.0, the byte path could not) and is available if it is ever wanted.
+
+### Proof
+
+- `tests/e2e/audio-settings-meter.spec.ts` — «the level crosses a line that is
+  on screen, in two different hues»: the hue distance between the two fills,
+  the boundary's position against the threshold, the accent part unpainted
+  below it, and the notch still drawn at 0%. Five mutations watched go red,
+  the first being the two fills back to `--kub-muted`/`--kub-cyan`, which
+  measures **1.04°** and fails.
+- Photographed at 1440 and 390 in both themes, at rest, below the threshold and
+  above it: `output/audio/audio-after2-*`.
+
+### And one test-instrument defect found on the way
+
+`audio-settings-vocabulary.spec.ts` measured the reset row's height with
+`getBoundingClientRect()` while `.kub-settings-panel` was still running its
+entry animation — a `translateY(-4px) → 0`. A translate does not change a
+height, but a box measured at a fractional y has its two edges rounded to
+different subpixels, so the row reported 43.9998779, 44 and 44.0001220 on three
+consecutive runs while its `offsetHeight` was 44 every time. It had been green
+by luck; adding one row above it moved the y and it started failing. `openSound`
+now awaits the panel's **own** animations, which is deterministic and cannot
+hang on an unrelated infinite one.
 
 ---

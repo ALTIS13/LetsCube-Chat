@@ -144,12 +144,42 @@ async function holdLevel(page: Page, level: number) {
 async function paintedFraction(page: Page, testId: string): Promise<number> {
   return page.evaluate((id) => {
     const track = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
-    const fill = track?.firstElementChild as HTMLElement | null;
-    if (!track || !fill) return -1;
+    if (!track) return -1;
     const outer = track.getBoundingClientRect();
-    const inner = fill.getBoundingClientRect();
     if (outer.width <= 0 || outer.height <= 0) return -1;
-    return inner.width / outer.width;
+    // A gated meter draws the level in **two** parts either side of the
+    // threshold (D-279), so «how far has the bar got» is the right-hand edge
+    // of whichever part reaches furthest — not the first child, which is now
+    // the scale behind them.
+    const below = track.querySelector<HTMLElement>(`[data-testid="${id}-below"]`);
+    const above = track.querySelector<HTMLElement>(`[data-testid="${id}-above"]`);
+    if (below && above) {
+      const edge = Math.max(
+        above.getBoundingClientRect().width > 0 ? above.getBoundingClientRect().right : 0,
+        below.getBoundingClientRect().right,
+      );
+      return (edge - outer.left) / outer.width;
+    }
+    const fill = track.firstElementChild as HTMLElement | null;
+    if (!fill) return -1;
+    return fill.getBoundingClientRect().width / outer.width;
+  }, testId);
+}
+
+/** The hue of a painted background, 0–360, for comparing two of them. */
+async function fillHue(page: Page, testId: string): Promise<number> {
+  return page.evaluate((id) => {
+    const el = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+    if (!el) return -1;
+    const match = getComputedStyle(el).backgroundColor.match(/[\d.]+/g);
+    if (!match || match.length < 3) return -1;
+    const [r, g, b] = match.slice(0, 3).map((value) => Number(value) / 255);
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    if (max === min) return -1;
+    const d = max - min;
+    const hue = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return (hue * 60 + 360) % 360;
   }, testId);
 }
 
@@ -249,6 +279,102 @@ test.describe("the level meter is an instrument", () => {
     // At the threshold exactly, the bar's width is the handle's position.
     await pushLevel(page, 0.01778279410038923);
     await expect(gate).toHaveAttribute("aria-valuenow", "50");
+  });
+
+  /**
+   * **The separation, as the owner judges it.**
+   *
+   * He watched the old bar switch colour at the threshold and said «но
+   * требуется более явно разделение». The reason it did not read is
+   * measurable: `--kub-muted` is hue 210° and `--kub-cyan` is hue 211°, so the
+   * switch changed a saturation and nothing else, and it changed it about the
+   * **whole** bar — there was never a mark on screen saying where the line
+   * was. What is held here is both halves of the fix.
+   *
+   * Mutation, and it is the one this test exists for: the two fills back to
+   * `--kub-muted` and `--kub-cyan`. The hue distance falls to about 1° and the
+   * first assertion goes red.
+   */
+  test("the level crosses a line that is on screen, in two different hues", async ({ page }) => {
+    const panel = await openSound(page);
+    await panel.getByTestId("audio-mic-test").click();
+    await expect(panel.getByTestId("audio-self-monitor")).toBeEnabled();
+    await panel.getByTestId("mic-activation-picker").locator('[data-mic-activation="voice"]').click();
+    const gate = panel.getByTestId("mic-gate-level");
+    await expect(gate).toBeVisible();
+
+    // Over the threshold, so both parts are painted and both hues exist.
+    await pushLevel(page, 0.05);
+    await expect(gate).toHaveAttribute("data-open", "true");
+    const warm = await fillHue(page, "mic-gate-level-below");
+    const accent = await fillHue(page, "mic-gate-level-above");
+    expect(warm).toBeGreaterThanOrEqual(0);
+    expect(accent).toBeGreaterThanOrEqual(0);
+    const apart = Math.min(Math.abs(warm - accent), 360 - Math.abs(warm - accent));
+    expect(apart, `the two fills are ${warm.toFixed(0)}° and ${accent.toFixed(0)}° apart`).toBeGreaterThan(60);
+
+    // The boundary is the threshold's own position, measured off the boxes.
+    // Polled, and for the reason this file already records twice: the parts
+    // are animated into place, and a single read taken the instant
+    // `data-open` lands catches one of them on its way — measured 0.412
+    // against a settled 0.350 on the first run of this test.
+    await expect
+      .poll(async () =>
+        page.evaluate(() => {
+          const track = document.querySelector<HTMLElement>('[data-testid="mic-gate-level"]')!;
+          const below = document.querySelector<HTMLElement>('[data-testid="mic-gate-level-below"]')!;
+          const above = document.querySelector<HTMLElement>('[data-testid="mic-gate-level-above"]')!;
+          const notch = document.querySelector<HTMLElement>('[data-testid="mic-gate-level-notch"]')!;
+          const outer = track.getBoundingClientRect();
+          const at = (box: DOMRect, edge: "left" | "right") => (box[edge] - outer.left) / outer.width;
+          const parts = [
+            at(below.getBoundingClientRect(), "right"),
+            at(above.getBoundingClientRect(), "left"),
+            at(notch.getBoundingClientRect(), "right"),
+          ];
+          return parts.every((value) => Math.abs(value - 0.35) < 0.02)
+            ? "on the threshold"
+            : parts.map((value) => value.toFixed(3)).join(" / ");
+        }),
+      )
+      .toBe("on the threshold");
+    expect(
+      await page.evaluate(() =>
+        Number(document.querySelector<HTMLElement>('[data-testid="mic-gate-level"]')!.getAttribute("data-threshold")),
+      ),
+    ).toBe(35);
+
+    // Under the threshold, the accent part is not painted at all — «through»
+    // has to be a state the bar can fail to be in.
+    await pushLevel(page, 0.002);
+    await expect(gate).toHaveAttribute("data-open", "false");
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          () =>
+            document.querySelector<HTMLElement>('[data-testid="mic-gate-level-above"]')!.getBoundingClientRect()
+              .width,
+        ),
+      )
+      .toBeLessThan(1);
+
+    // And the line survives an empty room, which is the frame it exists for:
+    // a person dragging the handle in silence still has something to aim at.
+    await pushLevel(page, 0);
+    await expect(gate).toHaveAttribute("aria-valuenow", "0");
+    const atRest = await page.evaluate(() => {
+      const track = document.querySelector<HTMLElement>('[data-testid="mic-gate-level"]')!;
+      const notch = document.querySelector<HTMLElement>('[data-testid="mic-gate-level-notch"]')!;
+      const box = notch.getBoundingClientRect();
+      return {
+        width: box.width,
+        height: box.height,
+        at: (box.right - track.getBoundingClientRect().left) / track.getBoundingClientRect().width,
+      };
+    });
+    expect(atRest.width).toBeGreaterThan(0);
+    expect(atRest.height).toBeGreaterThan(0);
+    expect(Math.abs(atRest.at - 0.35)).toBeLessThan(0.02);
   });
 
   /**

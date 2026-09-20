@@ -64,6 +64,22 @@ async function openSound(page: Page) {
   await expect(panel).toBeVisible();
   await expect(page.getByTestId("audio-settings")).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
+  // **The panel is still moving when it becomes visible**, and several tests
+  // below measure boxes. `.kub-settings-panel` runs `kub-settings-panel-in`,
+  // a `translateY(-4px) → 0`, and a box measured mid-flight sits at a
+  // fractional y: measured 2026-09-20, `audio-reset` reported a height of
+  // 43.9998779, 44 and 44.0001220 on three consecutive runs of this file while
+  // its `offsetHeight` was 44 every time and the animation's `playState` was
+  // `running` every time. A translate does not change a height — Chromium is
+  // rounding the row's two edges to different subpixels — so «is this row 44px
+  // tall» was being asked of an instrument that could not answer it. Awaiting
+  // the panel's **own** animations is deterministic and cannot hang on an
+  // unrelated infinite one.
+  await page.evaluate(async () => {
+    const panel = document.querySelector('[data-testid="settings-section-audio"]');
+    if (!panel) return;
+    await Promise.all(panel.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
+  });
   return panel;
 }
 

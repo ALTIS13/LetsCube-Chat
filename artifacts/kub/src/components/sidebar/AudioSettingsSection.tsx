@@ -66,6 +66,7 @@ import {
   MIC_AUTO_THRESHOLD_LABEL,
   MIC_AUTO_THRESHOLD_MS,
   MIC_GATE_LEVEL_LABEL,
+  MIC_GATE_THRESHOLD_ELSEWHERE_NOTE,
   MIC_GATE_THRESHOLD_LABEL,
   MIC_TALK_KEY_LISTENING,
   MIC_TALK_KEY_ROW_LABEL,
@@ -74,6 +75,7 @@ import {
   micActivationHint,
   micAutoThresholdNote,
   micGateOpenAt,
+  micLevelPosition,
   micGateThresholdHint,
   micMeterPercent,
   micTalkKeyLabel,
@@ -714,6 +716,15 @@ export function AudioSettingsSection() {
           </div>
         </div>
         <AudioNote>{micActivationHint(settings.micActivation)}</AudioNote>
+        {/*
+          D-279, and the reason it is a sentence rather than the control: the
+          threshold is drawn only for «По голосу», and a slider that a person
+          could calibrate in «Всегда» against a live bar while it changed
+          nothing about who hears them is the defect class this register is
+          full of. The reasoning, and Discord's own four answers to «this
+          control cannot work here», are at the constant.
+        */}
+        {settings.micActivation !== "voice" && <AudioNote>{MIC_GATE_THRESHOLD_ELSEWHERE_NOTE}</AudioNote>}
 
         {settings.micActivation === "voice" && (
           <>
@@ -1272,10 +1283,43 @@ function ActivationSegment({
  * that much and a plain box does not; the reading that matters is the colour
  * rather than the alignment.
  *
- * With a `threshold`, accent while the gate would be open and muted while it
- * would not — the answer a person is looking for while dragging, and it is
- * `micGateOpenAt` making it rather than this component. Without one there is no
- * gate to be open, so the bar is simply the level.
+ * ## With a `threshold`: the line is drawn **inside** the bar
+ *
+ * D-279, second round. Until 2026-09-20 the whole bar was one colour that
+ * switched — `--kub-muted` below the threshold, `--kub-cyan` above it — and
+ * the owner, having watched it switch: «но требуется более явно разделение».
+ * He is right, and the reason is that those two are not two colours. They are
+ * two saturations of one blue-grey, so what the switch changed was how bright
+ * the bar was, not what it was saying; and it said it about the **whole** bar
+ * at once, so there was never anything on screen marking *where* the line is.
+ * A person dragging the handle had to look up at the slider, estimate its x,
+ * and compare it to a bar in another row.
+ *
+ * Discord solves this by having only one object: its sensitivity track *is*
+ * the coloured scale, warm to the left of the handle and green to the right,
+ * with the handle sitting on the boundary (photographed by the owner,
+ * 2026-09-20). We do not copy the object, because ours is not the same thing:
+ * their track is a scale and ours is a live meter, and how their track shows
+ * the live level could not be established from a still. What is taken is the
+ * **mechanic** — the boundary is visible inside the coloured object, always,
+ * rather than inferred by comparing two of them:
+ *
+ *  - a notch at the threshold's own position, drawn whatever the level is, so
+ *    the line exists on screen when the room is silent;
+ *  - the fill in two parts, `--kub-warn` up to the notch and `--kub-cyan`
+ *    past it, so a voice growing louder is seen to **cross** it at exactly
+ *    that x.
+ *
+ * Amber against blue rather than Discord's warm against green, and that is
+ * not a palette convenience. `--kub-warn` is this material's one warm tone and
+ * is documented as tuned for a mark rather than for a word — its light value
+ * was darkened specifically so an indicator clears 3:1. And amber/blue is the
+ * pair that survives the common colour deficiencies, where warm/green is the
+ * pair that does not: a control whose only state signal is red-green is unread
+ * by about one man in twelve.
+ *
+ * Without a `threshold` there is no line to cross, so the bar stays one accent
+ * fill and says only how loud.
  *
  * `transition-[width]` only when motion is wanted. See `micMeterPercent` for
  * the whole of that decision, including why the bar still moves.
@@ -1296,6 +1340,12 @@ function MicMeter({
   const width = micMeterPercent(level, reducedMotion);
   const gated = threshold !== undefined;
   const open = gated && level > 0 && level >= micGateOpenAt(threshold);
+  // The notch, on the meter's own axis rather than on the slider's: the same
+  // `micLevelPosition` mapping the width goes through, which is what makes the
+  // two comparable at all.
+  const line = gated ? Math.round(micLevelPosition(micGateOpenAt(threshold)) * 100) : 0;
+  const below = Math.min(width, line);
+  const above = Math.max(0, width - line);
   return (
     <div
       role="meter"
@@ -1305,19 +1355,80 @@ function MicMeter({
       aria-valuenow={width}
       data-testid={testId}
       data-open={gated ? (open ? "true" : "false") : undefined}
+      data-threshold={gated ? line : undefined}
       className={cn(
-        "h-2 min-w-0 w-full overflow-hidden rounded-full bg-[var(--kub-range-track)]",
+        "relative h-2 min-w-0 w-full overflow-hidden rounded-full bg-[var(--kub-range-track)]",
         gated && "mt-1",
       )}
     >
-      <div
-        className={cn(
-          "h-full rounded-full",
-          !reducedMotion && "transition-[width]",
-          gated && !open ? "bg-[var(--kub-muted)]" : "bg-[var(--kub-cyan)]",
-        )}
-        style={{ width: `${width}%` }}
-      />
+      {gated ? (
+        <>
+          {/*
+            The scale, which exists whatever the level is. Discord's answer to
+            «where is the line» is that its whole track is two colours split at
+            the handle, so the boundary is on screen in a silent room; these
+            two zones are that, at a sixth of the strength, so they read as the
+            ground the level is drawn on rather than as a reading of it.
+          */}
+          <div
+            aria-hidden="true"
+            className="absolute inset-y-0 left-0 bg-[color-mix(in_srgb,var(--kub-warn)_16%,transparent)]"
+            style={{ width: `${line}%` }}
+          />
+          <div
+            aria-hidden="true"
+            className="absolute inset-y-0 right-0 bg-[color-mix(in_srgb,var(--kub-cyan)_16%,transparent)]"
+            style={{ left: `${line}%` }}
+          />
+          {/*
+            And the level on top of it, in two parts. `35ms` rather than one of
+            the motion tokens, and it is the one number here taken from
+            Discord's own bundle (`transition:width 35ms ease`, build 615980):
+            a reading arrives every `MIC_LEVEL_PERIOD_MS`, so a transition
+            longer than 50ms spends its whole life drawing a level the
+            microphone never had. The smoothing this meter has is the
+            analyser's own 42.7ms window, and it does not need a second one.
+          */}
+          <div
+            data-testid={`${testId}-below`}
+            className={cn(
+              "absolute inset-y-0 left-0 bg-[var(--kub-warn)]",
+              !reducedMotion && "transition-[width] duration-[35ms] ease-out",
+            )}
+            style={{ width: `${below}%` }}
+          />
+          <div
+            data-testid={`${testId}-above`}
+            className={cn(
+              "absolute inset-y-0 bg-[var(--kub-cyan)]",
+              !reducedMotion && "transition-[width] duration-[35ms] ease-out",
+            )}
+            style={{ left: `${line}%`, width: `${above}%` }}
+          />
+          {/*
+            The boundary itself, painted in the track's own colour so it reads
+            as a **gap** in the bar rather than as a mark on it — the one thing
+            that cannot be mistaken for a reading. Inset rather than centred: a
+            2px rule centred on the boundary would put half of itself in the
+            accent zone, which is the one place it must not blur the edge it is
+            marking.
+          */}
+          <div
+            aria-hidden="true"
+            data-testid={`${testId}-notch`}
+            className="absolute inset-y-0 w-[2px] -translate-x-px bg-[var(--kub-range-track)]"
+            style={{ left: `${line}%` }}
+          />
+        </>
+      ) : (
+        <div
+          className={cn(
+            "h-full rounded-full bg-[var(--kub-cyan)]",
+            !reducedMotion && "transition-[width] duration-[35ms] ease-out",
+          )}
+          style={{ width: `${width}%` }}
+        />
+      )}
     </div>
   );
 }

@@ -241,6 +241,74 @@ There is a live server-side experiment named **`2026-08-audio-fidelity`**
 Krisp, noise suppression or echo cancellation is active. Dated by its own name
 to August 2026. Do not treat Discord's current audio parameters as settled.
 
+### The input-sensitivity indicator, read out of the panel itself
+
+Added 2026-09-20 for D-279. **SHIPPED**, same build 615980 as the rest of this
+section, out of chunk **922757** (`/assets/5195a9a856cce50d.js`, module 460773 —
+the whole Voice & Video settings page), its CSS `/assets/4c21cb1cd7c8ed01.css`,
+and the generic slider in `784585.cef71fb86f53b27c.css`.
+
+**There is no meter under the slider. The bar *is* the slider's track**, and
+there are two different indicators depending on «Automatically determine input
+sensitivity».
+
+| | Auto (`autoThreshold` on) | Manual (`autoThreshold` off) |
+| --- | --- | --- |
+| Shape | one block, constant full width | a two-zone track plus a level overlay |
+| Colour | `--primary-400` dark / `--primary-200` light, switching to `--green-230` on `speaking__0fc79` | left of the thumb `YELLOW_300` (`#f0b232`), right of it `GREEN_360` (`#23a55a`), both inline raw hex from `unsafe_rawColors` |
+| The live level | `aria-valuenow` is literally `100` or `0` — there is no intermediate value | a `fill__0fc79` div painted `var(--opacity-black-24)`, width only, darkening whichever zone it covers |
+| Threshold range | — | `[-100, 0]` dBFS, integer steps, rendered `${-((100-e)).toFixed(0)}dB`; the RPC schema pins it as `threshold: e.number().min(-100).max(0)`. Shipped default `-60`, `STUDIO` preset `-84` |
+
+**Four findings, and three of them change what a level meter should do.**
+
+**1. Discord encodes loudness in colour nowhere on this screen.** Three meters,
+three mechanisms, zero loudness→colour mappings. Where colour changes it
+encodes **gate state**; where position matters it encodes **the threshold**.
+Loudness is always width. There is no red anywhere, no clipping zone and no
+peak-hold marker: `RED`, `danger`, `clip` and `Peak` appear zero times in the
+input-sensitivity region of that chunk.
+
+**2. The gradient runs yellow → green, quiet → loud** — deliberately the
+inverse of the broadcast green→amber→red convention, in both the manual slider
+and the mic-test pill (`gradientStart: YELLOW_260`, `gradientEnd: GREEN_360`,
+module 152567). Louder is *safer*, because the only question this meter asks is
+whether you clear a gate. Anyone copying green→red into a VAD meter is encoding
+a question Discord is not asking.
+
+**3. Which indicator you meet depends on the surface, and web gets the worse
+one.** `ta()` in the main bundle: `autoThreshold: p.isPlatformEmbedded ||
+__OVERLAY__`. So a desktop user's default is the binary bar and a browser
+user's is the slider-plus-shadow. And `supports(AUTOMATIC_VAD)` is hard-false
+on web (see the table above), so the web client does not render the
+«Automatically determine input sensitivity» switch at all — a web user cannot
+reach the binary indicator even deliberately.
+
+**4. The timings are asymmetric and worth taking.** `transition: width 35ms
+ease` for the level — near-instant, it must track a voice — against
+`transition: background-color .2s linear` for the state colour, deliberately
+lagged so the gate does not strobe. The mic-test pill additionally quantises
+its fill to its 8px notch pitch (`8*Math.round(e/8)`), which hides jitter
+without lying about the value.
+
+**One thing not to copy.** In manual mode the live level is exposed to
+assistive technology **not at all**: the `role="slider"` carries
+`aria-valuenow` for the *threshold*, and the level overlay is a bare unlabelled
+`div`. Only the auto-mode indicator is a `role="meter"`, and it reports 0 or
+100.
+
+**And a second counter-example to section 8's rule, sharper than the device
+selector.** The sensitivity fieldset renders whenever the input profile is
+`CUSTOM` — `usePredicate: () => i1.Ay.isInputProfileCustom()` — and the mode is
+irrelevant to its *presence*. In push-to-talk it is rendered `disabled`: the
+switch is disabled, the slider takes `.disabled__4c059 { opacity: .6 }` and
+`cursor: not-allowed`, and the level fill's width is forced to `0`. So Discord
+**does** draw a greyed, non-functional control here. Ours (D-279) does not, and
+that is a decision rather than a coincidence: our threshold is inert in
+«Всегда» in a way a person could calibrate against a live bar without
+discovering, and a line naming «По голосу» is cheaper to be honest about than a
+disabled slider. Section 8's rule stands; this is the counter-example it has to
+survive, recorded rather than filed away.
+
 ---
 
 ## 5. Subject 2 — Layout and resizing
@@ -803,8 +871,16 @@ and wastes an hour. Fetch the main bundle and the ~300 chunks referenced from
 `app.html`; that is what a browser loads anyway.
 
 The chunk-URL builder `T.u` is a ternary chain of about 246 current entries
-followed by a fallback map; **the fallback map's hashes are stale and 404.**
-Only the ternary entries resolve.
+followed by a fallback map. This section used to say «the fallback map's hashes
+are stale and 404», and that was wrong about the mechanism — it cost one read
+and nearly a second. **The hashes are fine; the filename shape differs.** The
+ternary arm builds `"" + e + "." + hash + ".js"` and the fallback arm builds
+`"" + map[e] + ".js"` — **no chunk-id prefix**. So
+`/assets/518264.6f3937c74e05c1d1.js` is a 404 and
+`/assets/6f3937c74e05c1d1.js` is a 200. With that corrected all 4,861 JS and
+641 CSS fallback entries resolve; 890 of them were fetched on 2026-09-20 with
+no throttling trouble, and the voice-settings chunk — a fallback-only entry,
+which is why it had been unreachable — came down first try.
 
 `support.discord.com` and `discord.com/developers` sit behind Cloudflare and
 refuse scripted fetches; use a real browser. `discord.com/developers/docs/...`
@@ -819,7 +895,7 @@ Stated plainly, with what would settle each.
 
 | Question | Status | What would settle it |
 | --- | --- | --- |
-| Whether Discord's voice settings panel **hides** or **greys** each unsupported control | **UNESTABLISHED.** The capability gate is proven; the panel component lives in a lazy chunk I could not fetch before being rate-limited. The device-selector pattern in section 8 is a data point, not the whole panel | fetch the voice-settings chunk from an unthrottled connection, or look at the panel in a browser signed in to Discord |
+| Whether Discord's voice settings panel **hides** or **greys** each unsupported control | **PARTLY SETTLED 2026-09-20.** The chunk was fetched once the URL-shape error in section 12 was corrected. For the input-sensitivity fieldset the answer is **greys**: present whenever the input profile is `CUSTOM`, `disabled` outside voice-activity mode, and absent entirely under the `VOICE_ISOLATION` and `STUDIO` presets. Whether every other control in the panel does the same is still open | read the remaining `buildLayout` entries (`rq, rL, rM, rN, rZ, rB, rX, rY, rI`) in module 460773 of chunk 922757 |
 | The English label text for these settings in build 615980 | **UNESTABLISHED.** Strings are hash-keyed and live in per-feature locale chunks | same |
 | Whether a first-party announcement of the BOT-to-APP badge rename ever existed | **UNESTABLISHED, leaning strongly to no.** Absent from Discord's April and May 2024 patch notes and from the September 2024 apps launch post. The current label is OFFICIAL — Discord's own developer docs say apps «appear in servers with an `APP` tag» | the 2024 developer-changelog entries (the rendered page truncates at about August 2025), or an archived help-centre snapshot. The Internet Archive was offline on 2026-09-20 |
 | Where the APP badge appears per client — member list, DM list, profile popout, mention chips | **UNESTABLISHED.** Discord's first-party docs never enumerate it | a screenshot pass across the three clients. No amount of reading will close this one |

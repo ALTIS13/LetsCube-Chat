@@ -233,6 +233,14 @@ test.describe("under a running microphone", () => {
       await page.getByTestId("audio-mic-test").click();
       await expect(page.getByTestId("audio-self-monitor")).toBeEnabled();
 
+      // «Всегда» first, because it is the default and therefore the frame most
+      // people see. D-279: the threshold is not drawn here, and the line that
+      // says where it went is the whole of what this picture has to show.
+      await expect(picker.locator('[data-mic-activation="open"]')).toHaveAttribute("aria-checked", "true");
+      await group.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(400);
+      await group.screenshot({ path: `output/audio/audio-${tag}-gate-open.png` });
+
       await picker.locator('[data-mic-activation="voice"]').click();
       await expect(page.getByTestId("mic-gate-level")).toBeVisible();
       await group.scrollIntoViewIfNeeded();
@@ -312,7 +320,15 @@ test.describe("under a running microphone", () => {
       await page.getByTestId("mic-activation-picker").locator('[data-mic-activation="voice"]').click();
       await expect(page.getByTestId("mic-gate-level")).toBeVisible();
 
-      // The threshold with the level under it — the gate shut, the bar muted.
+      // At rest in «По голосу», which is the frame the notch exists for: the
+      // room is silent, the bar is empty, and the line still has to be on
+      // screen or a person dragging the handle has nothing to aim at.
+      await push(0);
+      await gate.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(400);
+      await gate.screenshot({ path: `output/audio/audio-${tag}-gate-rest.png` });
+
+      // The threshold with the level under it — the gate shut, the fill warm.
       await push(0.002);
       await gate.scrollIntoViewIfNeeded();
       await page.waitForTimeout(400);

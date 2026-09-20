@@ -25,74 +25,67 @@
  * tiny and non-zero, `heard` was set on the very first reading, and `heard` is
  * terminal by design.
  *
- * ## The instrument, and why it has only one number below −42 dBFS
+ * ## The instrument, and the 48 dB bucket it used to have
  *
- * The level this module is fed is `lib/micLevel.ts`'s peak: the largest
- * distance any sample in a 2048-sample window sits from the 8-bit midpoint of
- * `AnalyserNode.getByteTimeDomainData`, divided by 128. So the **only values it
- * can ever report are k/128**, and everything below turns on what that byte
- * conversion does with a small number.
+ * The level this module is fed is `lib/micLevel.ts`'s peak over a 2048-sample
+ * window, and until 2026-09-20 that module read `getByteTimeDomainData`. The
+ * conversion is specified as `b = ⌊128(1 + x)⌋`, so the rounding is asymmetric:
+ * a positive sample has to reach a whole step to move the byte at all, while
+ * **any** negative sample lands on 127, one step below the midpoint. Measured
+ * with a DC offset, which is the one signal that can tell that apart from a
+ * Chromium quirk — an oscillator cannot, every window of one containing both
+ * signs (`output/d277-byte-asymmetry.mjs`): +3.05e−5 reported 0 and −3.05e−5
+ * reported 1.
  *
- * Measured in Chromium 2026-09-20, driving known amplitudes through the same
- * graph the product builds (`output/d272-measure-floor.mjs`):
+ * Every real signal is bipolar, so every live capture reported at least one
+ * step, and one step was also the **most** it reported for anything from
+ * −90.3 dBFS up to about −42.1 dBFS. That is a single bucket 48 dB wide, and
+ * `level > 0` was satisfied by very nearly anything.
  *
- * | true signal | byte peak | level reported |
- * | --- | --- | --- |
- * | −90 dBFS (one 16-bit converter step) | 1 | 0.0078125 |
- * | −60 dBFS | 1 | 0.0078125 |
- * | −43 dBFS | 1 | 0.0078125 |
- * | −42 dBFS | 2 | 0.015625 |
- * | −36 dBFS | 3 | 0.0234375 |
- * | −24 dBFS | 9 | 0.0703125 |
+ * **The instrument was changed rather than the rule** — D-278, the same day.
+ * The same `AnalyserNode` carries `getFloatTimeDomainData`, which resolves the
+ * signal exactly at every level down to the 16-bit converter's last step; the
+ * table is in the header of `lib/micLevel.ts`, with the three defects the byte
+ * path was causing elsewhere. So the number arriving here is now the level,
+ * and the range below −42 dBFS — where a dimmed capsule lives — is a range
+ * this module can finally see into rather than a single value.
  *
- * **The conversion floors, and that is a fact about the specification rather
- * than about one browser.** `getByteTimeDomainData` is defined as
- * `b = ⌊128(1 + x)⌋`, so the rounding is asymmetric: a positive sample has to
- * reach a whole step to move the byte at all, while **any** negative sample,
- * however small, lands on 127 — one step below the midpoint.
+ * ## So the floor is a decision now, and has to be argued as one
  *
- * Measured on 2026-09-20 with a DC offset, which is the one signal that can
- * tell the two explanations apart (`output/d277-byte-asymmetry.mjs`); an
- * oscillator cannot, because every window of one contains both signs:
+ * It used to be `1 / 128`: one step of the instrument, the boundary between
+ * the bucket that carried no information and the first one that did. That
+ * argument died with the byte path — it was a resolution, and there is no
+ * resolution left to appeal to — so the value is chosen here, in decibels,
+ * with the two populations it has to tell apart stated beside it:
  *
- * | constant offset | raw byte | reported |
- * | --- | --- | --- |
- * | +3.05e−5 (one 16-bit step) | 128 | 0 |
- * | −3.05e−5 | 127 | 1 |
- * | +1/128 | 129 | 1 |
- * | −1/128 | 127 | 1 |
+ *  - conversational speech peaks at roughly **−25 dBFS** into a laptop
+ *    capture, and the product's default constraints add about **+13 dB** to it
+ *    (measured 2026-09-20: byte 9 raw, byte 40 processed);
+ *  - a quiet room under that same default noise suppression sits **below
+ *    −60 dBFS**, and the suppression pulls stationary noise *down* rather than
+ *    up — the −45 dBFS fixture dropped a step with the constraints on.
  *
- * Every real audio signal is bipolar, so every live capture reports at least
- * one step. `level > 0` was therefore satisfied by very nearly anything, and
- * the only way to read a true 0 is absolute digital silence on every sample —
- * in practice a disabled track or a suspended context.
+ * `MIC_NO_INPUT_FLOOR_DB` is **−42**, which is the midpoint of that gap in
+ * decibels: 17 dB of margin under a voice, 18 dB over a room. It is the point
+ * of most room for error on both sides, and it is deliberately the same audio
+ * level the byte floor happened to sit at (−42.14 dBFS), so that changing the
+ * instrument did not also quietly change who gets warned. The two questions
+ * are separable and were separated.
  *
- * The consequence that matters: **byte peak 1 is a single bucket 48 dB wide**,
- * spanning −90.3 dBFS up to about −42.1 dBFS. It does not mean «this quiet»;
- * it means «too quiet for this instrument to put a number on». And because the
- * cause is the specification's own formula, it is not a Chromium quirk to be
- * re-checked on Safari: every compliant implementation floors the same way.
- *
- * ## So the floor is the instrument's own resolution
- *
- * `MIC_NO_INPUT_FLOOR` is one byte step, and the test is `>` — a reading has to
- * reach **two** steps, which is louder than about −42.5 dBFS, to count as
- * sound. That is not a chosen number and cannot drift, because it is the
- * boundary between the bucket that carries no information and the first one
- * that does. Speech peaks at roughly −25 dBFS into a laptop capture, which is
- * byte peak 9 — nine times over the line.
- *
- * **And this is why the gate's threshold is not reused here**, which was the
- * obvious alternative. `micGateOpenAt(MIC_GATE_THRESHOLD_DEFAULT)` is 0.00531,
- * i.e. −45.5 dBFS — **below one byte step**, so a floor set from it would be
- * cleared by every non-zero reading and would reproduce exactly the defect
- * above. A decision the instrument cannot represent cannot be borrowed. The two
- * do share the axis, which is the part worth sharing: both are levels on
- * `micGateOpenAt`'s scale and both can be drawn on the same meter.
+ * **And this is still not the gate's threshold**, which remains the obvious
+ * alternative and is still wrong — for a different reason than before.
+ * `micGateOpenAt(MIC_GATE_THRESHOLD_DEFAULT)` is −45.5 dBFS, and it is a
+ * *stored, user-dragged* position: a warning whose trip point moves when
+ * somebody calibrates their gate would tell two people with working
+ * microphones different things about them. The gate asks «is this person
+ * talking», this asks «does this microphone work», and only the first is the
+ * person's to tune. The two do share the axis, which is the part worth
+ * sharing: both are levels on `micGateOpenAt`'s scale and both can be drawn on
+ * the same meter.
  *
  * ## What this costs, stated rather than discovered later
  *
- * A person who joins a call and makes **no sound above −42.5 dBFS for ten
+ * A person who joins a call and makes **no sound above −42 dBFS for ten
  * continuous seconds** is warned, even though their microphone works. That is
  * the trade this floor buys and it is the same trade Discord makes. One sound
  * anywhere in the call clears it permanently (`heard` is terminal), so it costs
@@ -174,38 +167,47 @@
 export const MIC_NO_INPUT_AFTER_MS = 10_000;
 
 /**
- * The quietest reading that counts as sound: one step of the instrument.
+ * The quietest reading that counts as sound, in dBFS.
  *
- * `lib/micLevel.ts` reports `peak / 128` out of `getByteTimeDomainData`, so the
- * only values that exist are k/128 and this is k = 1. The test against it is
- * **strictly greater**, so a reading has to reach k = 2 — louder than about
- * −42.5 dBFS — before the microphone is considered to have produced anything.
+ * **A number this module chooses, and the reason it says so in decibels.**
+ * Until 2026-09-20 the floor was `1 / 128` and its whole argument was that it
+ * was one step of the instrument — `lib/micLevel.ts` read
+ * `getByteTimeDomainData`, the only values that existed were k/128, and there
+ * was no smaller decision the instrument could represent. That module now
+ * reads `getFloatTimeDomainData` (D-278) and resolves the signal exactly, so
+ * there is no resolution left to appeal to: the same 1/128 would be a tuned
+ * −42.14 dBFS wearing a fraction's clothes, which is the one thing the old
+ * comment here said it must never become.
  *
- * Why here rather than a number of decibels: the whole argument for this value
- * is that it is the instrument's resolution, and the instrument counts bytes.
- * Written as a dB figure it would look like a choice somebody could tune, and
- * the next person would tune it.
+ * So: **−42 dBFS, the midpoint in decibels of the gap between the two things
+ * this rule exists to tell apart.** Conversational speech peaks near
+ * −25 dBFS into a laptop capture and the product's default constraints add
+ * about 13 dB to it; a quiet room under that same noise suppression sits below
+ * −60 dBFS, and the suppression pulls stationary noise further down rather
+ * than up. 17 dB of margin under a voice, 18 dB over a room, and the
+ * measurements behind both figures are in this module's header.
  *
- * The measurement behind it is in this module's header, and the scripts that
- * took it are `output/d272-measure-floor.mjs` and
- * `output/d277-byte-asymmetry.mjs`. The one line to remember: a signal at
- * −90 dBFS — one 16-bit converter step above absolute silence — already
- * reports k = 1, because the byte conversion floors and the negative half of
- * any signal therefore lands a step below the midpoint. So k = 1 is not a
- * level at all; it is a 48 dB bucket meaning «below the bottom of this scale».
+ * It lands within 0.14 dB of where the byte floor happened to sit, and that is
+ * on purpose rather than a coincidence: changing the instrument must not also
+ * change who gets warned, or the two would have to be told apart afterwards on
+ * real hardware, where only one of them can be observed at a time.
  *
- * **What would invalidate this value, said here because it does not look like
- * it can drift.** The argument is «one step of the instrument», and the
- * instrument is `getByteTimeDomainData`. The same `AnalyserNode` also offers
- * `getFloatTimeDomainData`, which in the same measurement resolved every level
- * down to −90 dBFS exactly. If `lib/micLevel.ts` ever reads the float path —
- * and D-278 is the case for doing so — then 1/128 stops being a resolution and
- * becomes −42.1 dBFS, a tuned number, which is precisely what the paragraph
- * above says this must not be. It would still be a defensible figure (17 dB
- * under conversational speech, 18 dB over a quiet room), but it would need
- * that justification written out instead of this one.
+ * **What would invalidate it**, since it no longer has a fact of the browser
+ * holding it up: a measurement of either population that moves. If speech into
+ * a real capture turns out to peak lower than −25, or a suppressed room higher
+ * than −60, this number moves with them — it is the midpoint of that gap and
+ * nothing else.
  */
-export const MIC_NO_INPUT_FLOOR = 1 / 128;
+export const MIC_NO_INPUT_FLOOR_DB = -42;
+
+/**
+ * The same figure as a peak amplitude, which is what a reading is.
+ *
+ * Derived rather than written out so the two can never disagree, and so the
+ * decibel figure above is the one a reader finds first. The test against it is
+ * **strictly greater**: a reading exactly at the floor is not sound.
+ */
+export const MIC_NO_INPUT_FLOOR = 10 ** (MIC_NO_INPUT_FLOOR_DB / 20);
 
 /**
  * How many readings above the floor it takes to call a microphone alive.

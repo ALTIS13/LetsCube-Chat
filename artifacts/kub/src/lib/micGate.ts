@@ -573,6 +573,34 @@ export function micActivationHint(activation: MicActivation): string {
   return "Микрофон открыт всё время, пока вы не выключите его в звонке.";
 }
 
+/**
+ * Where the sensitivity control is, said in the group that does not have it.
+ *
+ * D-279. The owner, twice, looking for it: «не вижу этой самой живой полосы с
+ * уровнями громкости микрофона с соответствующей регулировкой
+ * чувствительности». He had found the level meter — «Уровень» is outside the
+ * mode gate and he had it running — so what he could not find was the
+ * *threshold*, which is drawn only for «По голосу», and «Всегда» is the
+ * default.
+ *
+ * **Drawn as a line and not as the control**, which is the decision here.
+ * `docs/operations/reference-clients.md` §8 sets out the four answers Discord
+ * gives to «this control cannot work here», and the one it never gives is a
+ * control that is present and inert. Our threshold in «Всегда» would be
+ * exactly that: a slider a person could calibrate carefully, against a live
+ * bar, that changed nothing about who hears them — a worse lie than not
+ * drawing it. So the control stays inside its mode and the group says where
+ * it went, once, in the words he used.
+ *
+ * The word is his and not the label's. The control is «Порог голоса»
+ * everywhere it is drawn, because the whole surface around it — «Подобрать
+ * порог», both hints — is built on that word; but a person who has Discord's
+ * «Входная чувствительность» in their head searches for «чувствительность»,
+ * and this is the one line whose job is to be found by that search.
+ */
+export const MIC_GATE_THRESHOLD_ELSEWHERE_NOTE =
+  "Чувствительность микрофона настраивается только в режиме «По голосу»: порог и живая полоса уровня появляются там.";
+
 export const MIC_GATE_THRESHOLD_LABEL = "Порог голоса";
 export const MIC_GATE_LEVEL_LABEL = "Уровень микрофона относительно порога";
 
@@ -583,11 +611,17 @@ export const MIC_GATE_LEVEL_LABEL = "Уровень микрофона отно�
  * capture of its own: a person calibrating a threshold is already looking at
  * their own level, and a settings screen that opens the microphone by itself is
  * a settings screen that turns the light on when nobody asked.
+ *
+ * **It names the notch and not the colour**, which is a decision rather than
+ * brevity. The meter says «through» in hue, and a sentence that said «полоса
+ * становится синей» would be an instruction only some readers can follow —
+ * the whole reason that hue pair is amber against blue rather than Discord's
+ * warm against green. A landmark and a crossing are readable by everybody.
  */
 export function micGateThresholdHint(testing: boolean): string {
   return testing
-    ? "Полоса под ползунком светится, пока микрофон открыт. Говорите обычным голосом и поднимайте порог, пока не перестанет реагировать на тишину."
-    : `Полоса под ползунком — ваш уровень на той же шкале. Нажмите «${MIC_AUTO_THRESHOLD_LABEL}»: микрофон включится, и вы её увидите.`;
+    ? "Полоса под ползунком — ваш уровень, засечка на ней — порог. Пока полоса не дошла до засечки, вас не слышно: говорите обычным голосом и поднимайте порог, пока полоса не перестанет переходить засечку в тишине."
+    : `Полоса под ползунком — ваш уровень на той же шкале, засечка на ней — порог. Нажмите «${MIC_AUTO_THRESHOLD_LABEL}»: микрофон включится, и вы её увидите.`;
 }
 
 /**

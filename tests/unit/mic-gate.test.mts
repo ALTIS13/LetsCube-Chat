@@ -590,6 +590,150 @@ test("every mode says what it does, once, in its own words", () => {
   assert.match(micGateThresholdHint(false), new RegExp(MIC_AUTO_THRESHOLD_LABEL));
 });
 
+/* ── The instrument the axis is read through, and what it decided ─────────── */
+
+/**
+ * Two instruments, as arithmetic, and the gate under each.
+ *
+ * `lib/micLevel.ts` is a browser file and cannot be imported here; what *can*
+ * be held here is the consequence of which reading it takes, because that is
+ * pure. Both models below reproduce the measured table exactly
+ * (`output/d272-measure-floor.mjs`, Chromium, 2026-09-20) and the source read
+ * at the foot of this file says which one is installed.
+ */
+
+/**
+ * `getByteTimeDomainData`: `b = ⌊128(1 + x)⌋`, peak distance from 128, over
+ * 128. The negative half of any signal lands a step below the midpoint, so the
+ * peak distance for a bipolar amplitude `a` is `⌈128a⌉` — which gives 1 for
+ * everything from −90.3 dBFS up to −42.14, 2 at −42, 3 at −36, 9 at −24 and
+ * 17 at −18, each matching what was measured.
+ */
+const bytePath = (amplitude: number) => Math.ceil(128 * amplitude) / 128;
+
+/** `getFloatTimeDomainData`: the sample, which is the signal. */
+const floatPath = (amplitude: number) => amplitude;
+
+/** dBFS to a peak amplitude, so the cases below read as levels and not as digits. */
+const dbfs = (db: number) => 10 ** (db / 20);
+
+/**
+ * Walk the gate over a steady level, from a microphone that has just been
+ * spoken into.
+ *
+ * Seeded **open** on purpose: a gate that has never opened is trivially shut,
+ * and the question is whether a microphone that has been used goes quiet
+ * again. The walk outlasts `MIC_GATE_HOLD_MS` so «still open» means the rule
+ * and not the tail.
+ */
+function settle(level: number, threshold: number): boolean {
+  let state: MicGateState = nextMicGate(MIC_GATE_CLOSED, {
+    activation: "voice",
+    muted: false,
+    held: false,
+    level: 0.3,
+    threshold,
+    now: 0,
+  });
+  for (let now = 50; now <= MIC_GATE_HOLD_MS * 4; now += 50) {
+    state = nextMicGate(state, { activation: "voice", muted: false, held: false, level, threshold, now });
+  }
+  return state.open;
+}
+
+/** The same, from a microphone nobody has spoken into: does silence open it? */
+function opensFromSilence(level: number, threshold: number): boolean {
+  return nextMicGate(MIC_GATE_CLOSED, {
+    activation: "voice",
+    muted: false,
+    held: false,
+    level,
+    threshold,
+    now: 0,
+  }).open;
+}
+
+/**
+ * **D-278, as the arithmetic the owner was looking at.**
+ *
+ * His dimmer is at zero, his slider at 0.38, the microphone test running. On
+ * the byte instrument his capture reads 1/128 whatever it is really producing,
+ * `micGateOpenAt(0.38)` is 0.00676, and 0.0078125 ≥ 0.00676 — so the gate is
+ * **open**, `MicMeter` paints `--kub-cyan`, and the bar is 40% wide against a
+ * handle at 38%. The product was not merely failing to close a gate: it was
+ * telling a silent person, in colour and in width, that they were through it.
+ *
+ * Two boundaries, both exact, and the second is the wider one:
+ *
+ *  - silence **opens** a closed gate wherever `1/128 ≥ micGateOpenAt(p)`, i.e.
+ *    **p ≤ 0.39794** — the bottom 39.8% of the slider, every position in it
+ *    meaning the same thing;
+ *  - silence **holds an opened gate open** wherever `1/128 ≥ micGateCloseAt(p)`,
+ *    and the hysteresis is 6 dB, so that runs to **p ≤ 0.48395**. For anybody
+ *    who has ever spoken, nearly half the control was inert.
+ *
+ * And dragging across either boundary changed the bar's colour without moving
+ * its edge by a pixel, because `micMeterPercent` reads the level and the level
+ * could not move.
+ */
+test("on the byte instrument nearly half the threshold slider was one position", () => {
+  const silent = bytePath(dbfs(-85));
+  assert.equal(silent, 1 / 128, "the model no longer reproduces the measured byte floor");
+
+  // Silence opening a gate nobody has spoken into. 0.38 is the owner's own
+  // setting; 0.39 and 0.40 are the two sides of the first boundary.
+  assert.equal(opensFromSilence(silent, 0.38), true, "this is the defect: silence opened the gate");
+  assert.equal(opensFromSilence(silent, 0.39), true);
+  assert.equal(opensFromSilence(silent, 0.4), false);
+
+  // And the wider one: once a voice has opened it, the hysteresis holds it
+  // open on silence up to 0.484.
+  assert.equal(settle(silent, 0.4), true);
+  assert.equal(settle(silent, 0.48), true);
+  assert.equal(settle(silent, 0.49), false);
+
+  // The meter said nothing about any of it: one width, two colours.
+  assert.equal(micMeterPercent(silent, false), 40);
+});
+
+/**
+ * And the same capture through the instrument that is installed now.
+ *
+ * −85 dBFS rather than 0: a dead microphone reading exact silence was never
+ * the hard case. `micGateCloseAt` tends to `10 ** (-3.5) / 2` — −76 dBFS — as
+ * the position tends to 0, so a capture below that is shut out at **every**
+ * position a person can select. Position 0 is the documented exception and
+ * means «stop deciding for me».
+ *
+ * Mutation: `getFloatTimeDomainData` back to `getByteTimeDomainData` in
+ * `lib/micLevel.ts`. The source read below goes red, and so does
+ * `tests/e2e/mic-level-instrument.spec.ts`, which drives a real `AnalyserNode`
+ * rather than either model.
+ */
+test("on the float instrument a silent capture closes the gate at every position", () => {
+  const silent = floatPath(dbfs(-85));
+  for (let step = 1; step <= 100; step += 1) {
+    const position = step / 100;
+    assert.equal(settle(silent, position), false, `the gate stayed open at ${position}`);
+    assert.equal(opensFromSilence(silent, position), false, `silence opened the gate at ${position}`);
+  }
+  assert.equal(micMeterPercent(silent, false), 0, "«должен показывать 0 если реально звуков сейчас нет»");
+
+  // The axis is reachable rather than merely non-zero: three captures inside
+  // the old 48 dB bucket have to land on three different bars.
+  assert.deepEqual([-85, -60, -50].map((db) => micMeterPercent(floatPath(dbfs(db)), false)), [0, 14, 29]);
+  assert.deepEqual(
+    [-85, -60, -50].map((db) => micMeterPercent(bytePath(dbfs(db)), false)),
+    [40, 40, 40],
+    "the byte model no longer reproduces the bucket this test exists to record",
+  );
+
+  // A voice still opens it, or the assertions above are satisfied by an
+  // instrument that reports nothing at all.
+  assert.equal(opensFromSilence(floatPath(dbfs(-24)), MIC_GATE_THRESHOLD_DEFAULT), true);
+  assert.equal(settle(floatPath(dbfs(-24)), MIC_GATE_THRESHOLD_DEFAULT), true);
+});
+
 /* ── The instrument, read as source ───────────────────────────────────────── */
 
 /**
@@ -635,6 +779,25 @@ test("the analyser reads a clone, because the gate destroys the level it needs",
   // with nothing reading it.
   assert.match(levelSource, /clone\?\.stop\(\)/, "closing the level source leaves its own clone running");
   assert.match(levelSource, /context\?\.close\(\)/, "the AudioContext outlives the call, which is a battery defect");
+});
+
+test("the level is read through the float path, which is the whole of D-278", () => {
+  // `getByteTimeDomainData` is specified as `⌊128(1 + x)⌋`, so any negative
+  // sample lands a step below the midpoint and every bipolar signal from
+  // −90.3 dBFS up to −42.1 reported the same single byte. The two tests above
+  // are what that cost; this is the line that decides which of them describes
+  // the product.
+  assert.match(levelSource, /getFloatTimeDomainData\(samples\)/, "the level is back on the byte path");
+  assert.match(levelSource, /new Float32Array\(analyser\.fftSize\)/);
+  assert.ok(
+    !/getByteTimeDomainData/.test(levelSource),
+    "the byte path is being read again, and with it the 48 dB bucket under −42 dBFS",
+  );
+  // The peak is the sample's magnitude, not a distance from a midpoint the
+  // float path does not have. `Math.abs(sample - 128)` on floats would report
+  // about 128 for every reading, which `micLevelPosition` clamps to a full bar.
+  assert.ok(!/sample - 128/.test(levelSource), "a byte midpoint is being subtracted from a float sample");
+  assert.ok(!/peak \/ 128/.test(levelSource), "the float peak is still being divided by the byte scale");
 });
 
 test("the level is polled on a timer, not on a frame", () => {

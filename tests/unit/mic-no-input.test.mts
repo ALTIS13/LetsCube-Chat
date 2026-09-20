@@ -5,6 +5,7 @@ import {
   MIC_NO_INPUT_AFTER_MS,
   MIC_NO_INPUT_CLEAR,
   MIC_NO_INPUT_FLOOR,
+  MIC_NO_INPUT_FLOOR_DB,
   MIC_NO_INPUT_HEARD_READINGS,
   MIC_NO_INPUT_HINT,
   MIC_NO_INPUT_WARNING,
@@ -28,10 +29,16 @@ import {
  * What these tests do **not** reach, stated plainly rather than implied: no
  * real microphone is involved. The level they feed in is the number
  * `lib/micLevel.ts` produces from an `AnalyserNode`, and that whole path —
- * hardware, driver, `getUserMedia`, the analyser — is absent here. That a dead
- * microphone really reads exactly 0 and a live quiet room really does not is a
- * claim about the browser, and it is the one claim in this feature that only a
- * person with a headset can confirm.
+ * hardware, driver, `getUserMedia`, the analyser — is absent here.
+ * `tests/e2e/mic-level-instrument.spec.ts` reaches the analyser half of it
+ * with a known signal; the hardware half is still only reachable by a person
+ * with a headset.
+ *
+ * **That person has now checked it.** On 2026-09-20, on the deployed build,
+ * the owner joined a voice channel with his microphone's analogue dimmer at
+ * zero: the warning appeared after its ten seconds and went away the moment he
+ * spoke. So the floor and the three-reading rule are right for at least one
+ * real capsule, and `heard` is terminal in the way it was meant to be.
  */
 
 /** A capture that can be judged: the call is up, publishing, not muted. */
@@ -138,10 +145,13 @@ test("one sound answers the question for the life of the capture", () => {
  * so the capture still produces a tiny non-zero reading — and the shipped rule
  * was `level > 0`, which that reading satisfies.
  *
- * 1/128 is not «very quiet». It is the **only** value the instrument can report
- * for anything between −90.3 dBFS and about −42.5 dBFS, because
- * `getByteTimeDomainData` rounds up and one byte is the smallest step there is.
- * A signal one 16-bit converter step above absolute silence reports it.
+ * A dimmed capsule is **not** «very quiet» in a way the old instrument could
+ * describe: `lib/micLevel.ts` read `getByteTimeDomainData` until 2026-09-20,
+ * and 1/128 was the only value it could report for anything between −90.3 and
+ * about −42.1 dBFS. It reads `getFloatTimeDomainData` now (D-278), so the
+ * level below is what a capture at −60 dBFS genuinely produces — and the
+ * owner's photograph of the deployed build confirms his own dimmed capsule
+ * sits inside that range, the bar resting at the 42% only byte 1 can draw.
  *
  * Mutation, and it is the one that matters here: `input.level >
  * MIC_NO_INPUT_FLOOR` -> `input.level > 0`, which is the rule that shipped.
@@ -149,33 +159,49 @@ test("one sound answers the question for the life of the capture", () => {
  */
 test("a level that is persistently tiny but non-zero raises the warning", () => {
   const start = 8_000_000;
-  // **The literal 1/128, not `MIC_NO_INPUT_FLOOR`**, and the difference is not
-  // style. Written symbolically this test pins the *relationship* and not the
+  // **A literal, not `MIC_NO_INPUT_FLOOR`**, and the difference is not style.
+  // Written symbolically this test pins the *relationship* and not the
   // *value*: setting the constant to 0 left it green, measured on 2026-09-20,
-  // because the walk then fed zeros and still warned. 1/128 is what the
-  // instrument actually reports for a dimmed capsule — a fact about
-  // `getByteTimeDomainData`, not about this module — so it belongs here as a
-  // number the rule has to cope with rather than as a name the rule chooses.
-  const held = walk(MIC_NO_INPUT_CLEAR, start, MIC_NO_INPUT_AFTER_MS, 1 / 128);
+  // because the walk then fed zeros and still warned. 1e-3 is −60 dBFS, which
+  // is what a quiet room under this product's default noise suppression
+  // measures and what the float instrument now reports for one — a fact about
+  // the capture, not about this module.
+  const held = walk(MIC_NO_INPUT_CLEAR, start, MIC_NO_INPUT_AFTER_MS, 1e-3);
   assert.equal(held.heard, false, "a dimmed microphone must not count as heard");
   assert.equal(held.warned, true);
   // And the analyser is still wanted, because the question is still open.
   assert.equal(micNoInputNeedsLevel(true, held), true);
-
-  // The constant is that value, said once so a reader of the two tests above
-  // can see which side of the boundary each of them is on.
-  assert.equal(MIC_NO_INPUT_FLOOR, 1 / 128);
 });
 
-test("one step above the floor is sound, and the floor itself is not", () => {
+test("the floor is −42 dBFS, and it is a decision rather than a resolution", () => {
+  // **The value, pinned as a value**, because it stopped being derivable the
+  // day the instrument changed. It used to be one step of an 8-bit read and
+  // could not drift; it is now the midpoint in decibels between a voice
+  // (−25 dBFS) and a suppressed room (below −60), and a number chosen that way
+  // can be edited by anybody who does not know why it is there.
+  //
+  // Mutation: `MIC_NO_INPUT_FLOOR_DB` -70. Under it a −60 dBFS room counts as
+  // sound, the test above goes red, and the defect D-277 exists for is back.
+  assert.equal(MIC_NO_INPUT_FLOOR_DB, -42);
+  assert.ok(Math.abs(20 * Math.log10(MIC_NO_INPUT_FLOOR) - MIC_NO_INPUT_FLOOR_DB) < 1e-9);
+  // Within a seventh of a decibel of the byte floor it replaced, which is the
+  // point: changing the instrument must not also change who gets warned.
+  assert.ok(Math.abs(20 * Math.log10(MIC_NO_INPUT_FLOOR) - 20 * Math.log10(1 / 128)) < 0.2);
+});
+
+test("above the floor is sound, and the floor itself is not", () => {
   // The two sides of the boundary, so the assertion above cannot be satisfied
   // by a rule that simply stopped believing in sound.
   //
-  // Mutation: `>` -> `>=` on the floor. Under it the dimmed microphone counts
-  // as heard again and the test above goes red with this one.
+  // Mutation: `>` -> `>=` on the floor. Under it the floor itself counts as
+  // heard and the second line goes red.
   const start = 9_000_000;
-  assert.equal(speech(MIC_NO_INPUT_CLEAR, start, 2 / 128).heard, true);
+  // −36 dBFS: a syllable at the quiet end, comfortably over the line.
+  assert.equal(speech(MIC_NO_INPUT_CLEAR, start, 10 ** (-36 / 20)).heard, true);
   assert.equal(speech(MIC_NO_INPUT_CLEAR, start, MIC_NO_INPUT_FLOOR).heard, false);
+  // And one decibel under it is not, which is what makes the boundary a
+  // boundary rather than an order of magnitude.
+  assert.equal(speech(MIC_NO_INPUT_CLEAR, start, 10 ** (-43 / 20)).heard, false);
 });
 
 test("a click is not a syllable, and does not switch the warning off for the call", () => {
