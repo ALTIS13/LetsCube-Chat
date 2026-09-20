@@ -294,10 +294,14 @@ export const MIC_AUTO_THRESHOLD_MS = 2000;
  * The fewest readings an answer may be computed from.
  *
  * A guard rather than a schedule: the caller stops by the clock above, and this
- * refuses an answer when the level never really arrived — a capture that ended,
- * a browser that gave no `AudioContext`. Twenty is one second at the 50 ms the
- * level is read on, so a run that produced fewer than this did not measure a
- * room, and saying so is better than placing a threshold from four samples.
+ * refuses an answer when the level never really arrived — a browser that gave
+ * no `AudioContext`, a capture torn down under the run. Twenty is one second at
+ * the 50 ms the level is read on, so a run that produced fewer than this did
+ * not measure a room, and saying so is better than placing a threshold from
+ * four samples.
+ *
+ * **It is not the only reason to refuse, and until D-280 it was.** A run can
+ * arrive complete and still contain nothing; see `micAutoThresholdRefusal`.
  */
 export const MIC_AUTO_THRESHOLD_MIN_SAMPLES = 20;
 
@@ -326,6 +330,108 @@ export const MIC_AUTO_THRESHOLD_FLOOR_QUANTILE = 0.25;
 export const MIC_AUTO_THRESHOLD_MAX = 0.9;
 
 /**
+ * Why a run is not a measurement, or `null` when it is one.
+ *
+ * **The whole of D-280.** The owner pressed «Подобрать порог» with his
+ * microphone's analogue dimmer at zero and the control confidently set a
+ * threshold. It had only ever been able to refuse a run that was *short* —
+ * `MIC_AUTO_THRESHOLD_MIN_SAMPLES` — and had no way to say «the readings
+ * arrived and were nothing». Two seconds of a dead capture is forty readings,
+ * which is twice what that guard asks for.
+ *
+ * ## The rule, and why it is stated on the axis rather than in decibels
+ *
+ * `"silent"` is **not one reading in the whole run rose off the bottom of the
+ * control's own axis**. No new constant: `micLevelPosition` already carries
+ * `MIC_GATE_FLOOR_DB`, and the condition is exactly the one a person watches —
+ * the bar sat at 0% for two continuous seconds. The owner's own words for what
+ * the reference client does, and the sentence this rule is built from:
+ * «дискорд в такие моменты полоску никуда не двигает если нет реального шума
+ * или звука».
+ *
+ * It is also, exactly, the condition under which this function stops being a
+ * function of its input. Every position at 0 means the quarter-point is 0, so
+ * the answer is `MIC_AUTO_THRESHOLD_MARGIN_DB / -MIC_GATE_FLOOR_DB` — 0.14 —
+ * for a dead microphone, an ended track and a muted headset alike. Refusing
+ * where the output cannot depend on the input is the formal shape of «that was
+ * not a measurement», and it is why the rule needs no tuned number.
+ *
+ * ## What was measured before it was chosen
+ *
+ * Synthetic captures driven through the real constraint pipeline — Chromium's
+ * file-backed fake device, the product's default `ec`/`ns`/`agc`, read exactly
+ * as `lib/micLevel.ts` reads: float peak over 2048 samples, forty readings at
+ * 50 ms, which is this control's own run. `output/d280-measure-autothreshold.mjs`
+ * and `output/d280-measure-dead.mjs`, both gitignored, so the numbers are here:
+ *
+ * | capture | readings off the floor | p25 | shipped answer |
+ * | --- | --- | --- | --- |
+ * | digital silence | 0/40 | −inf | 0.14 |
+ * | track ended | 0/40 | −inf | 0.14 |
+ * | track disabled before the run (a mute) | 0/40 | −inf | 0.14 |
+ * | capsule dimmed to −85 dBFS | 0/40 | −93.1 dBFS | 0.14 |
+ * | quiet room, peak −70 dBFS | 2/40 | −87.1 dBFS | 0.14 |
+ * | quiet room, peak −65 dBFS | 12/40 | −83.3 dBFS | 0.14 |
+ * | ordinary room, peak −50 dBFS | 35/40 | −67.8 dBFS | 0.17 |
+ * | voice, peak −25 dBFS | 40/40 | −23.8 dBFS | 0.80 |
+ *
+ * The line falls between the fourth row and the fifth, and nothing a room
+ * produced is on the wrong side of it.
+ *
+ * ## The hypothesis this replaced, refuted in the wrong direction
+ *
+ * The lead's proposal was **variation**: a dead capture is flat, a real room
+ * fluctuates however quiet it is. Measured, it fails twice. In position units
+ * digital silence and a capsule dimmed to −85 dBFS both span exactly 0.0000 —
+ * both clamped at the floor — against 0.0206 for a quiet room at −70, which is
+ * not a separation anything could be set between. In raw decibels it inverts:
+ * the p90/p10 spread is **68.8 dB for the −85 dBFS capsule** and 19–28 dB for
+ * every real room, because two readings near the converter's last step differ
+ * by a huge ratio. «Refuse a flat run» would have refused the quiet room and
+ * accepted the dead capsule.
+ *
+ * ## And the larger rule that was rejected
+ *
+ * Refusing when the **quarter-point** is at the floor is the rule that would
+ * catch every run whose answer is that same 0.14 constant, which is tempting
+ * and wrong: the quiet-room fixtures at peak −65 and −60 have quarter-points at
+ * −83 and −78 dBFS, so it refuses them. Whether that is the fixture's
+ * modulation or a real room's is not answerable on a workstation with no
+ * microphone — and a rule whose correctness turns on an unmeasurable property
+ * of real rooms is not one to ship. This rule refuses nothing that produced a
+ * signal.
+ *
+ * ## What it deliberately does not do
+ *
+ * It does **not** reuse `MIC_NO_INPUT_FLOOR_DB = -42`. That constant answers
+ * «did this microphone produce a *sound*», judged against speech; this asks
+ * «what is this room's *noise floor*», and a quiet room with a good microphone
+ * lives at −60 to −70. A −42 refusal would refuse to calibrate for exactly the
+ * people who most want voice activation. The two questions share the axis and
+ * nothing else.
+ *
+ * And it does not refuse the owner's own capture. On the float instrument his
+ * dimmer at zero measures about −64 dBFS and the control answers 23%, which is
+ * a real noise floor honestly resolved — «теперь реально определяет только шум
+ * в реальном времени». A rule that refused that would be a second defect
+ * wearing the first one's clothes.
+ */
+export type MicAutoThresholdRefusal = "few" | "silent";
+
+export function micAutoThresholdRefusal(levels: readonly number[]): MicAutoThresholdRefusal | null {
+  const positions = levels.filter((level) => Number.isFinite(level)).map(micLevelPosition);
+  if (positions.length < MIC_AUTO_THRESHOLD_MIN_SAMPLES) return "few";
+  let loudest = 0;
+  for (const position of positions) if (position > loudest) loudest = position;
+  // `<= 0` and not `=== 0`: `micLevelPosition` is total and already clamps, so
+  // this is the same set — written as an inequality because what it means is
+  // «nothing reached the bottom of the axis», not «everything was exactly a
+  // particular float».
+  if (loudest <= 0) return "silent";
+  return null;
+}
+
+/**
  * A threshold position measured from a run of levels, or `null` for «that was
  * not a measurement».
  *
@@ -333,13 +439,18 @@ export const MIC_AUTO_THRESHOLD_MAX = 0.9;
  * function that answered `MIC_GATE_THRESHOLD_DEFAULT` when it had nothing would
  * be indistinguishable from one that had measured a room and found it to be
  * exactly average. The caller says «не удалось измерить» instead.
+ *
+ * **Which** «not a measurement» it was is `micAutoThresholdRefusal`, and this
+ * delegates to it rather than repeating the test, so the two can never
+ * disagree about a run — a surface that said «нет звука» over a threshold that
+ * had just been written would be worse than either message alone.
  */
 export function autoMicThreshold(levels: readonly number[]): number | null {
+  if (micAutoThresholdRefusal(levels) !== null) return null;
   const positions = levels
     .filter((level) => Number.isFinite(level))
     .map(micLevelPosition)
     .sort((a, b) => a - b);
-  if (positions.length < MIC_AUTO_THRESHOLD_MIN_SAMPLES) return null;
   const index = Math.min(
     positions.length - 1,
     Math.floor(positions.length * MIC_AUTO_THRESHOLD_FLOOR_QUANTILE),
@@ -639,11 +750,28 @@ export function micGateThresholdHint(testing: boolean): string {
  * So the control says what it does: it listens for two seconds and puts the
  * threshold where the measurement says it goes.
  */
-export type MicAutoThresholdState = "idle" | "listening" | "done" | "failed";
+export type MicAutoThresholdState = "idle" | "listening" | "done" | "failed" | "silent";
 
 export const MIC_AUTO_THRESHOLD_LABEL = "Подобрать порог";
 export const MIC_AUTO_THRESHOLD_BUSY_LABEL = "Слушаем…";
 
+/**
+ * Five states, and the last two are both refusals for different reasons.
+ *
+ * `failed` is «the level never arrived» — no `AudioContext`, a capture torn
+ * down under the run, fewer readings than `MIC_AUTO_THRESHOLD_MIN_SAMPLES`.
+ * Nothing about the microphone follows from it and the sentence says nothing
+ * about the microphone.
+ *
+ * `silent` is the D-280 refusal: the readings arrived, all forty of them, and
+ * not one moved the bar off zero. That **is** a statement about the microphone
+ * and it names the same three things to check that `MIC_NO_INPUT_HINT` names,
+ * deliberately in the same order — they are one question asked in two places,
+ * and a person who meets both should not have to notice they are the same.
+ *
+ * The one sentence this must not become is «не удалось измерить», which was
+ * the shipped copy for both and is true of one.
+ */
 export function micAutoThresholdNote(state: MicAutoThresholdState): string {
   if (state === "listening") {
     return "Помолчите: измеряем шум вашей комнаты. Займёт две секунды.";
@@ -651,11 +779,58 @@ export function micAutoThresholdNote(state: MicAutoThresholdState): string {
   if (state === "done") {
     return `Порог поставлен на ${MIC_AUTO_THRESHOLD_MARGIN_DB} дБ выше измеренного шума комнаты. Скажите что-нибудь: полоса должна загораться на голосе и гаснуть в тишине.`;
   }
-  if (state === "failed") {
-    return "Не удалось измерить: микрофон не дал уровень. Порог остался прежним.";
+  if (state === "silent") {
+    return "За две секунды микрофон не дал ни одного звука, поэтому измерять было нечего: порог остался прежним. Проверьте, не выключен ли он на гарнитуре, не приглушён ли в системе и тот ли это микрофон.";
   }
-  return `Слушает комнату две секунды и ставит порог на ${MIC_AUTO_THRESHOLD_MARGIN_DB} дБ выше её шума.`;
+  if (state === "failed") {
+    return "Не удалось измерить: уровень микрофона так и не пришёл. Порог остался прежним.";
+  }
+  return `Включит микрофон, послушает комнату две секунды и поставит порог на ${MIC_AUTO_THRESHOLD_MARGIN_DB} дБ выше её шума.`;
 }
+
+/**
+ * Whether the measurement has finished, in either direction.
+ *
+ * The three states in which the control has let go of the capture — and the
+ * capture is still open, which is what `MIC_AUTO_THRESHOLD_CAPTURE_NOTE` is
+ * for. Exported rather than written as a comparison at the call site so that
+ * adding a sixth state cannot quietly leave the sentence out of it.
+ */
+export function micAutoThresholdSettled(state: MicAutoThresholdState): boolean {
+  return state === "done" || state === "failed" || state === "silent";
+}
+
+/**
+ * That the microphone is on, said where it was switched on — D-281.
+ *
+ * The owner, twice: «но также активирует сверху функцию проверки». He pressed
+ * «Подобрать порог», the «Уровень» control two groups up flipped to
+ * «Остановить», and nothing told him either before or after. `lib/micLevel.ts`
+ * states the principle this breaks — «a settings screen that opens the
+ * microphone by itself is a settings screen that turns the light on when
+ * nobody asked» — and the comment beside this control in
+ * `AudioSettingsSection.tsx` was written to *defend* the opening, not the
+ * silence about it.
+ *
+ * **The capture stays, and the surface speaks.** The alternative was to close
+ * it again, and it loses more than it saves: `micAutoThresholdNote("done")`
+ * ends «Скажите что-нибудь: полоса должна загораться на голосе и гаснуть в
+ * тишине», which is the step that turns a number into a threshold somebody has
+ * *watched work*; and the whole threshold group is drawn around a live bar, so
+ * a control that measured and then killed the capture would leave
+ * `micGateThresholdHint(true)` describing a bar frozen at zero — which is
+ * D-279 again, the copy promising something the pixels do not show. What was
+ * wrong was never the capture. It was that it opened, and stayed open, without
+ * a word.
+ *
+ * So: the idle note above now says the microphone will come on, and this says
+ * it is on and where it goes off. The words «Остановить» and «Уровень» are the
+ * real label and the real caption from `lib/audioSettingsSurface.ts`, written
+ * out here because this module imports nothing;
+ * `tests/unit/mic-gate.test.mts` reads both modules and fails if they drift.
+ */
+export const MIC_AUTO_THRESHOLD_CAPTURE_NOTE =
+  "Микрофон сейчас включён — поэтому полоса живая. Выключить его: кнопка «Остановить» в группе «Уровень».";
 
 export const MIC_TALK_KEY_ROW_LABEL = "Клавиша для разговора";
 export const MIC_TALK_KEY_LISTENING = "Нажмите клавишу…";

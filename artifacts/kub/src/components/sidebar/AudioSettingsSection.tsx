@@ -63,6 +63,7 @@ import {
   MIC_ACTIVATION_SCOPE_NOTE,
   MIC_ACTIVATION_SEGMENTS,
   MIC_AUTO_THRESHOLD_BUSY_LABEL,
+  MIC_AUTO_THRESHOLD_CAPTURE_NOTE,
   MIC_AUTO_THRESHOLD_LABEL,
   MIC_AUTO_THRESHOLD_MS,
   MIC_GATE_LEVEL_LABEL,
@@ -74,6 +75,8 @@ import {
   autoMicThreshold,
   micActivationHint,
   micAutoThresholdNote,
+  micAutoThresholdRefusal,
+  micAutoThresholdSettled,
   micGateOpenAt,
   micLevelPosition,
   micGateThresholdHint,
@@ -352,7 +355,10 @@ export function AudioSettingsSection() {
     if (!run) return;
     const answer = autoMicThreshold(run.levels);
     if (answer === null) {
-      setAutoThreshold("failed");
+      // Which refusal it was, asked of the same module that refused, so the
+      // sentence and the decision cannot disagree. D-280: a run that arrived
+      // complete and contained nothing is not «не удалось измерить».
+      setAutoThreshold(micAutoThresholdRefusal(run.levels) === "silent" ? "silent" : "failed");
       return;
     }
     updateSettings({ micGateThreshold: answer });
@@ -757,6 +763,12 @@ export function AudioSettingsSection() {
               is the one the «Уровень» group starts, and this control starts it
               too when there is none — so the threshold can be set without
               knowing that a button two rows up is a prerequisite.
+
+              **That was half an answer.** Starting the capture is right;
+              doing it without a word is what the owner reported twice
+              (D-281). The idle note under this button now says the microphone
+              will come on, and `MIC_AUTO_THRESHOLD_CAPTURE_NOTE` below says it
+              is on and where it goes off.
             */}
             {/*
               An action row, the shape «Сбросить настройки звука» is drawn in
@@ -786,9 +798,18 @@ export function AudioSettingsSection() {
                 {autoThreshold === "listening" ? MIC_AUTO_THRESHOLD_BUSY_LABEL : MIC_AUTO_THRESHOLD_LABEL}
               </span>
             </button>
-            <AudioNote tone={autoThreshold === "failed" ? "danger" : "muted"}>
+            <AudioNote tone={autoThreshold === "failed" || autoThreshold === "silent" ? "danger" : "muted"}>
               {micAutoThresholdNote(autoThreshold)}
             </AudioNote>
+            {/*
+              D-281. The measurement leaves the capture open on purpose — the
+              «done» note asks the person to speak into it — and until now
+              nothing said so in either direction. The reasoning for keeping the
+              capture rather than closing it is at the constant.
+            */}
+            {testing && micAutoThresholdSettled(autoThreshold) && (
+              <AudioNote>{MIC_AUTO_THRESHOLD_CAPTURE_NOTE}</AudioNote>
+            )}
           </>
         )}
 

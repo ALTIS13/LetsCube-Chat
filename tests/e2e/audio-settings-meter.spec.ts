@@ -601,6 +601,168 @@ test.describe("the level meter is an instrument", () => {
   });
 
   /**
+   * A run that arrived complete and contained nothing — D-280.
+   *
+   * The distinction the test above cannot make. There the level source never
+   * answered at all and the safety timer ended it; here forty readings arrive,
+   * on time, and every one of them is silence. That is what a muted headset,
+   * an ended track and a capsule dimmed past the bottom of the axis all
+   * produce — measured through the real constraint pipeline on 2026-09-20,
+   * `output/d280-measure-dead.mjs` — and the shipped build answered it with a
+   * threshold of 0.14 and «Порог поставлен на 10 дБ выше измеренного шума
+   * комнаты», which is a sentence about a room nobody measured.
+   */
+  test("a measurement that heard only silence refuses, and says which refusal it is", async ({ page }) => {
+    const panel = await openSound(page);
+    await panel.getByTestId("mic-activation-picker").locator('[data-mic-activation="voice"]').click();
+    const slider = panel.locator('input[type="range"]').last();
+    await expect(slider).toHaveValue("0.35");
+    const button = panel.getByTestId("mic-auto-threshold");
+
+    await button.click();
+    await expect(button).toHaveAttribute("data-state", "listening");
+    await expect
+      .poll(async () => page.evaluate(() => window.__micProbe?.push !== null && window.__micProbe?.push !== undefined))
+      .toBe(true);
+    await holdLevel(page, 0);
+
+    await expect(button).toHaveAttribute("data-state", "silent", { timeout: 15_000 });
+    // 0.35 is the untouched default. 0.14 is what the shipped build wrote —
+    // the margin alone, with nothing of the room in it — so this assertion is
+    // the defect, and it is red against that build.
+    await expect(slider).toHaveValue("0.35");
+    await expect(panel.getByText(/не дал ни одного звука/)).toBeVisible();
+    // Not the other refusal's sentence: «не удалось измерить» is true when the
+    // level never arrived and says nothing about the microphone, and this run
+    // is the opposite case.
+    await expect(panel.getByText(/Не удалось измерить/)).toHaveCount(0);
+    await expect(panel.getByText(/Порог поставлен на 10 дБ выше/)).toHaveCount(0);
+  });
+
+  /**
+   * The refusal has to be **visible**, which a class name cannot say.
+   *
+   * `AudioNote tone="danger"` paints `--kub-danger-text` on the panel's own
+   * material, and the panel is translucent: what a token declares and what a
+   * reader gets are two different things, which is the whole of D-279 and rule
+   * 7 of `docs/operations/interface-material.md`. So the note is photographed
+   * and the painted text is read back — the darkest-against-ground pixel of
+   * the glyphs against the modal ground behind them — in both themes.
+   */
+  for (const theme of ["dark", "light"] as const) {
+    test(`the refusal is readable in the ${theme} theme`, async ({ page }) => {
+      const panel = await openSound(page, theme);
+      await panel.getByTestId("mic-activation-picker").locator('[data-mic-activation="voice"]').click();
+      const button = panel.getByTestId("mic-auto-threshold");
+      await button.click();
+      await expect
+        .poll(async () =>
+          page.evaluate(() => window.__micProbe?.push !== null && window.__micProbe?.push !== undefined),
+        )
+        .toBe(true);
+      await holdLevel(page, 0);
+      await expect(button).toHaveAttribute("data-state", "silent", { timeout: 15_000 });
+
+      const note = panel.getByText(/не дал ни одного звука/);
+      await expect(note).toBeVisible();
+      const shot = await note.screenshot();
+      const { data, info } = await sharp(shot).raw().toBuffer({ resolveWithObject: true });
+      const pixels: [number, number, number][] = [];
+      for (let i = 0; i < data.length; i += info.channels) {
+        pixels.push([data[i], data[i + 1], data[i + 2]]);
+      }
+      // The ground is the commonest colour in the box — a note is mostly
+      // padding — and the text is the pixel furthest from it in luminance.
+      // Antialiased edges are not expected to clear anything; the glyph core
+      // is what a reader reads.
+      const tally = new Map<string, number>();
+      for (const pixel of pixels) {
+        const key = pixel.join(",");
+        tally.set(key, (tally.get(key) ?? 0) + 1);
+      }
+      let groundKey = "";
+      let best = 0;
+      for (const [key, count] of tally) {
+        if (count > best) {
+          best = count;
+          groundKey = key;
+        }
+      }
+      const ground = groundKey.split(",").map(Number) as [number, number, number];
+      // The stroke **body**, not the best pixel in the box. A single outlier
+      // would pass any threshold, and at 12px most glyph pixels are partial
+      // coverage — so what is measured is the highest-contrast colour that
+      // covers at least half a percent of the note. Measured 2026-09-20: the
+      // answer is `--kub-danger-text` itself, 632 pixels of it at 1440 and
+      // 9602 at 390, which is the whole point — the material is translucent
+      // and a token's declared value is not what a reader gets (D-279).
+      const floorPixels = Math.max(1, Math.round(pixels.length * 0.005));
+      let text = ground;
+      let worst = 1;
+      for (const [key, count] of tally) {
+        if (count < floorPixels) continue;
+        const pixel = key.split(",").map(Number) as [number, number, number];
+        const ratio = contrastRatio(pixel, ground);
+        if (ratio > worst) {
+          worst = ratio;
+          text = pixel;
+        }
+      }
+      expect(
+        worst,
+        `the refusal is rgb(${text.join(",")}) on rgb(${ground.join(",")}) at ${worst.toFixed(2)}:1 in the ` +
+          `${theme} theme, measured over at least ${floorPixels} pixels. A refusal nobody reads is a ` +
+          `threshold silently left alone.`,
+      ).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+
+  /**
+   * The capture this control opens, announced — D-281.
+   *
+   * The owner, twice: «но также активирует сверху функцию проверки». His
+   * screenshot shows the «Уровень» control still reading «Остановить» after
+   * the measurement finished: the capture is open, he did not ask for it and
+   * nothing told him. Opening it is right — the comment beside the control
+   * says why, and `micAutoThresholdNote("done")` asks him to speak into it —
+   * so what is asserted here is the announcement, before and after, and that
+   * the capture really is still running when the sentence claims it is.
+   */
+  test("the measurement says it will turn the microphone on, and that it left it on", async ({ page }) => {
+    const panel = await openSound(page);
+    await panel.getByTestId("mic-activation-picker").locator('[data-mic-activation="voice"]').click();
+    const button = panel.getByTestId("mic-auto-threshold");
+    const micTest = panel.getByTestId("audio-mic-test");
+
+    // Before: nothing is open, the «Уровень» control offers to start, and the
+    // note under this button says pressing it will turn the microphone on.
+    expect(await page.evaluate(() => window.__micProbe?.opened ?? 0)).toBe(0);
+    await expect(micTest).toHaveText("Проверить микрофон");
+    await expect(panel.getByText(/Включит микрофон/)).toBeVisible();
+
+    await button.click();
+    await expect
+      .poll(async () => page.evaluate(() => window.__micProbe?.push !== null && window.__micProbe?.push !== undefined))
+      .toBe(true);
+    await holdLevel(page, 0.0025118864315095794);
+    await expect(button).toHaveAttribute("data-state", "done", { timeout: 15_000 });
+
+    // After: the capture is genuinely still open — this is the owner's
+    // screenshot, asserted — and now the screen says so and names the control
+    // that closes it, rather than leaving him to find a button two groups up.
+    expect(await page.evaluate(() => window.__micProbe?.closed ?? 0)).toBe(0);
+    await expect(micTest).toHaveText("Остановить");
+    const note = panel.getByText(/Микрофон сейчас включён/);
+    await expect(note).toBeVisible();
+    await expect(note).toContainText("Остановить");
+    await expect(note).toContainText("Уровень");
+
+    // And it is not a sentence that outlives the thing it describes.
+    await micTest.click();
+    await expect(note).toHaveCount(0);
+  });
+
+  /**
    * The three processing switches say what the **microphone** is doing, not
    * what the switch was left at.
    *

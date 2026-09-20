@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   MIC_ACTIVATION_DEFAULT,
   MIC_ACTIVATION_SEGMENTS,
+  MIC_AUTO_THRESHOLD_CAPTURE_NOTE,
   MIC_AUTO_THRESHOLD_LABEL,
   MIC_AUTO_THRESHOLD_MARGIN_DB,
   MIC_AUTO_THRESHOLD_MAX,
@@ -22,6 +23,8 @@ import {
   clampMicGateThreshold,
   micActivationHint,
   micAutoThresholdNote,
+  micAutoThresholdRefusal,
+  micAutoThresholdSettled,
   micControlWords,
   micGateCloseAt,
   micGateNeedsLevel,
@@ -42,6 +45,8 @@ import {
   type MicGateState,
 } from "../../artifacts/kub/src/lib/micGate.ts";
 import { normalizeAudioSettings } from "../../artifacts/kub/src/hooks/useAudioSettings.ts";
+import { AUDIO_GROUP_LEVEL, micTestLabel } from "../../artifacts/kub/src/lib/audioSettingsSurface.ts";
+import { MIC_NO_INPUT_FLOOR, MIC_NO_INPUT_FLOOR_DB } from "../../artifacts/kub/src/lib/micNoInput.ts";
 
 /**
  * How the microphone decides to be open, measured without a browser.
@@ -244,16 +249,22 @@ test("a measured threshold is one the slider can hold, and never «never closes�
   // 0.143. The clamp went and this assertion stayed, which is the right way
   // round — it pins the property rather than the mechanism, and it goes red if
   // the margin is ever taken away.
-  const silent = autoMicThreshold(Array.from({ length: 40 }, () => 0)) as number;
-  assert.ok(silent > 0, `silence measured ${silent}`);
-  assert.notEqual(micGateOpenAt(silent), 0, "a measured threshold turned the gate off");
+  // The run used to be silence. Since D-280 silence is **refused**, so the
+  // quietest thing that is still a measurement is a room one decibel above the
+  // floor of the axis — and it is the margin, not the refusal, that this
+  // assertion is about.
+  const quietest = autoMicThreshold(
+    Array.from({ length: 40 }, () => 10 ** ((MIC_GATE_FLOOR_DB + 1) / 20)),
+  ) as number;
+  assert.ok(quietest > 0, `the quietest measurable room measured ${quietest}`);
+  assert.notEqual(micGateOpenAt(quietest), 0, "a measured threshold turned the gate off");
   // A room so loud there is no headroom left is clamped rather than made
   // unusable.
   const loud = autoMicThreshold(Array.from({ length: 40 }, () => 0.9)) as number;
   assert.ok(loud <= MIC_AUTO_THRESHOLD_MAX, `a loud room measured ${loud}`);
   // And every answer lands on a step the slider can represent, or the handle
   // would sit somewhere a hand can never put it back.
-  for (const level of [0, 0.001, 0.01, 0.05, 0.2, 0.5, 0.9, 1]) {
+  for (const level of [0.001, 0.01, 0.05, 0.2, 0.5, 0.9, 1]) {
     const answer = autoMicThreshold(Array.from({ length: 40 }, () => level)) as number;
     // `answer * 100` is compared the other way round on purpose: 0.14 * 100 is
     // 14.000000000000002 in binary floating point, so the multiplication is the
@@ -263,10 +274,10 @@ test("a measured threshold is one the slider can hold, and never «never closes�
   }
 });
 
-test("the measurement says something different in each of its four states", () => {
-  const states: MicAutoThresholdState[] = ["idle", "listening", "done", "failed"];
+test("the measurement says something different in each of its five states", () => {
+  const states: MicAutoThresholdState[] = ["idle", "listening", "done", "failed", "silent"];
   const notes = states.map(micAutoThresholdNote);
-  assert.equal(new Set(notes).size, 4, "two states of the measurement say the same thing");
+  assert.equal(new Set(notes).size, 5, "two states of the measurement say the same thing");
   for (const note of notes) assert.ok(note.trim().length > 20);
   // The one that must not be mistaken for success.
   assert.match(micAutoThresholdNote("failed"), /Не удалось/);
@@ -279,7 +290,8 @@ test("nothing on this surface claims processing the product does not perform", (
   // not imply either, and they may not name a «движок» the product does not
   // ship.
   const words = [
-    ...(["idle", "listening", "done", "failed"] as MicAutoThresholdState[]).map(micAutoThresholdNote),
+    ...(["idle", "listening", "done", "failed", "silent"] as MicAutoThresholdState[]).map(micAutoThresholdNote),
+    MIC_AUTO_THRESHOLD_CAPTURE_NOTE,
     ...(["open", "voice", "ptt"] as MicActivation[]).map(micActivationHint),
     micGateThresholdHint(true),
     micGateThresholdHint(false),
@@ -287,6 +299,212 @@ test("nothing on this surface claims processing the product does not perform", (
   ].join(" ");
   assert.doesNotMatch(words, /krisp/i);
   assert.doesNotMatch(words, /шумоподавлени[ея] LETSCUBE|нейросет|ИИ-|AI-/i);
+});
+
+/* ── D-280: a run that contained nothing is not a measurement ─────────────── */
+
+/**
+ * A steady run of a known level, in the shape and the length the control
+ * collects: `MIC_AUTO_THRESHOLD_MS` at `MIC_LEVEL_PERIOD_MS`, which is forty.
+ */
+const runAt = (dbfs: number, count = 40) => Array.from({ length: count }, () => 10 ** (dbfs / 20));
+
+test("a capture that produced nothing is refused instead of being given a threshold", () => {
+  // The defect, in one line. The owner pressed «Подобрать порог» with his
+  // microphone's analogue dimmer at zero; the shipped function had no way to
+  // say «the readings arrived and were nothing» — only «there were too few of
+  // them» — and forty readings is twice what that guard asks for.
+  const silence = Array.from({ length: 40 }, () => 0);
+  assert.equal(micAutoThresholdRefusal(silence), "silent");
+  assert.equal(autoMicThreshold(silence), null);
+
+  // And what it answered before, which is the precise sense in which it was
+  // not a measurement: with every position clamped to 0 the quarter-point is 0
+  // and the answer is the margin alone — the same number for digital silence,
+  // for a muted headset and for an ended track. An output that cannot depend
+  // on its input is the formal shape of «that was not a measurement».
+  const marginOnly = Math.round((MIC_AUTO_THRESHOLD_MARGIN_DB / -MIC_GATE_FLOOR_DB) * 100) / 100;
+  assert.equal(marginOnly, 0.14);
+});
+
+test("every capture that produced nothing is refused, and no room is", () => {
+  // Measured on 2026-09-20 through the real constraint pipeline — Chromium's
+  // file-backed fake device, the product's default ec/ns/agc, read exactly as
+  // `lib/micLevel.ts` reads. The tables are in `micGate.ts` beside
+  // `micAutoThresholdRefusal`; the scripts are `output/d280-measure-*.mjs`,
+  // which are gitignored, which is why the numbers are written down.
+  const floor = 10 ** (MIC_GATE_FLOOR_DB / 20);
+  const nothing: [string, number[]][] = [
+    ["digital silence", Array.from({ length: 40 }, () => 0)],
+    // Measured: a clone disabled before the run reads exact 0 forty times out
+    // of forty. Disabling is what a mute is, and what the gate itself does.
+    ["a track disabled before the run", Array.from({ length: 40 }, () => 0)],
+    // Measured: readyState `ended`, forty exact zeros.
+    ["a track that has ended", Array.from({ length: 40 }, () => 0)],
+    // Measured: 0 of 40 readings off the floor, p25 −93.1 dBFS. A real signal,
+    // 15 dB below the bottom of the axis, which the control cannot see at all.
+    ["a capsule dimmed to −85 dBFS", runAt(-85)],
+    ["a run sitting exactly on the floor of the axis", Array.from({ length: 40 }, () => floor)],
+  ];
+  for (const [what, levels] of nothing) {
+    assert.equal(micAutoThresholdRefusal(levels), "silent", `${what} was taken for a measurement`);
+    assert.equal(autoMicThreshold(levels), null, `${what} was given a threshold`);
+  }
+
+  const rooms: [string, number[]][] = [
+    // The quiet-room fixture at peak −70 dBFS put 2 of 40 readings off the
+    // floor. This is the population the rule may not touch: the brief's own
+    // warning is that a quiet room with a good microphone reads −60 to −70,
+    // and refusing there would refuse the people who most want the feature.
+    ["a very quiet room at −69 dBFS", runAt(-69)],
+    ["the owner's dimmed capsule at −64 dBFS", runAt(-64)],
+    ["a quiet room at −60 dBFS", runAt(-60)],
+    ["an ordinary room at −50 dBFS", runAt(-50)],
+    ["a voice at −25 dBFS", runAt(-25)],
+  ];
+  for (const [what, levels] of rooms) {
+    assert.equal(micAutoThresholdRefusal(levels), null, `${what} was refused`);
+    assert.notEqual(autoMicThreshold(levels), null, `${what} was refused`);
+  }
+});
+
+test("the owner's own capture measures 23%, and the rule leaves it alone", () => {
+  // His dimmer at zero, on the float instrument, on the deployed build:
+  // «теперь реально определяет только шум в реальном времени - хорошо».
+  // Working backwards from 0.23: minus the 10/70 margin is 0.0871 of position,
+  // which is −63.9 dBFS — a real noise floor, honestly resolved, where the byte
+  // instrument crushed everything under −42 into one 40% reading.
+  //
+  // It is here as a test and not as a comment because it is the case a
+  // carelessly chosen rule would have broken: −64 dBFS is squarely inside the
+  // range a genuinely quiet room occupies, so no absolute floor can separate
+  // «dimmer at zero» from «quiet room», and 23% is the right answer for both.
+  assert.equal(autoMicThreshold(runAt(-64)), 0.23);
+  assert.equal(micAutoThresholdRefusal(runAt(-64)), null);
+});
+
+test("one reading off the floor is a measurement; none is not", () => {
+  // The rule is deliberately the **weakest** one that refuses a dead capture.
+  // The larger and more tempting rule — refuse when the *quarter-point* is at
+  // the floor, which catches every run whose answer is that same 0.14 constant
+  // — refuses the measured quiet rooms at peak −65 and −60, whose quarter
+  // points sit at −83 and −78 dBFS. Whether that is the fixture's modulation
+  // or a real room's cannot be settled on a workstation with no microphone,
+  // and a rule whose correctness turns on an unmeasurable property of real
+  // rooms is not one to ship.
+  const floor = 10 ** (MIC_GATE_FLOOR_DB / 20);
+  const dead = Array.from({ length: 40 }, () => floor);
+  assert.equal(micAutoThresholdRefusal(dead), "silent");
+
+  const barely = [...dead];
+  barely[17] = 10 ** ((MIC_GATE_FLOOR_DB + 1) / 20);
+  assert.equal(micAutoThresholdRefusal(barely), null, "a run that produced a signal was refused");
+  assert.notEqual(autoMicThreshold(barely), null);
+
+  // Stated against the axis rather than against a number, because that is what
+  // the rule is: the refusal reuses `micLevelPosition`, which already carries
+  // `MIC_GATE_FLOOR_DB`, and introduces no constant of its own. It is also
+  // exactly the condition a person watches — the bar at 0% for two seconds.
+  for (const level of dead) assert.equal(micLevelPosition(level), 0);
+  assert.ok(micLevelPosition(barely[17]) > 0);
+});
+
+test("the no-input floor is not borrowed for this, because it answers another question", () => {
+  // `MIC_NO_INPUT_FLOOR_DB` is −42 and asks «did this microphone produce a
+  // *sound*», judged against speech near −25 dBFS. This asks «what is this
+  // room's *noise floor*», and a quiet room with a good microphone lives at
+  // −60 to −70. Refusing at −42 would refuse to calibrate for exactly the
+  // people who most want voice activation — including the owner at −64.
+  assert.equal(MIC_NO_INPUT_FLOOR_DB, -42);
+  for (const dbfs of [-64, -60, -55, -50]) {
+    assert.equal(
+      micAutoThresholdRefusal(runAt(dbfs)),
+      null,
+      `a room at ${dbfs} dBFS, under the no-input floor, was refused a threshold`,
+    );
+  }
+  // The two do share the axis, which is the part worth sharing.
+  assert.ok(micLevelPosition(MIC_NO_INPUT_FLOOR) > 0);
+});
+
+test("the two refusals are told apart, and the threshold agrees with both", () => {
+  const short = Array.from({ length: MIC_AUTO_THRESHOLD_MIN_SAMPLES - 1 }, () => 0.01);
+  assert.equal(micAutoThresholdRefusal(short), "few");
+  assert.equal(micAutoThresholdRefusal([]), "few");
+  // Not-a-number readings are not readings: they are filtered before the count,
+  // so a run of them is «too few» and never «silent».
+  assert.equal(micAutoThresholdRefusal(Array.from({ length: 40 }, () => Number.NaN)), "few");
+  assert.equal(micAutoThresholdRefusal(Array.from({ length: 40 }, () => 0)), "silent");
+  assert.equal(micAutoThresholdRefusal(runAt(-50)), null);
+
+  // One decision, not two that could drift apart. A surface saying «нет звука»
+  // over a threshold that had just been written would be worse than either
+  // message on its own, which is why `autoMicThreshold` delegates rather than
+  // repeating the test.
+  const runs = [short, [], Array.from({ length: 40 }, () => 0), runAt(-85), runAt(-64), runAt(-50), runAt(-25)];
+  for (const levels of runs) {
+    assert.equal(
+      autoMicThreshold(levels) === null,
+      micAutoThresholdRefusal(levels) !== null,
+      "the threshold and the reason disagree about the same run",
+    );
+  }
+});
+
+test("«ничего не пришло» and «пришла тишина» stopped being one sentence", () => {
+  const silent = micAutoThresholdNote("silent");
+  const failed = micAutoThresholdNote("failed");
+  assert.notEqual(silent, failed);
+  // The shipped copy was «Не удалось измерить: микрофон не дал уровень» for
+  // both, and it is true of one. `failed` is «the level never arrived», which
+  // says nothing about the microphone; `silent` is a statement about the
+  // microphone and names the three things to check.
+  assert.doesNotMatch(silent, /Не удалось/);
+  assert.match(failed, /Не удалось/);
+  for (const check of [/гарнитур/i, /систем/i, /микрофон/i]) assert.match(silent, check);
+  // Neither may be mistaken for success: both say the old threshold stands.
+  for (const note of [silent, failed]) assert.match(note, /орог остался прежним/);
+});
+
+/* ── D-281: the capture it opens, said out loud ───────────────────────────── */
+
+test("the control says it is about to turn the microphone on", () => {
+  // The owner, twice: «но также активирует сверху функцию проверки». Pressing
+  // «Подобрать порог» starts the «Уровень» capture, which is right — the
+  // threshold must be settable without knowing that a button two groups up is
+  // a prerequisite — but it said so nowhere, before or after.
+  assert.match(
+    micAutoThresholdNote("idle"),
+    /икрофон/,
+    "the control still opens a capture without announcing it",
+  );
+  // And the hint above the button, which has always said it, still does.
+  assert.match(micGateThresholdHint(false), /микрофон включится/);
+});
+
+test("and says it left it on, naming a control that exists", () => {
+  // The capture stays open on purpose: `micAutoThresholdNote("done")` asks the
+  // person to speak into it, and a threshold nobody has watched work is a
+  // threshold nobody has set. What was wrong was the silence, not the capture.
+  assert.match(MIC_AUTO_THRESHOLD_CAPTURE_NOTE, /икрофон/);
+  // The words are written out in `micGate.ts`, which imports nothing, so this
+  // is the only thing standing between them and a rename. Both come from
+  // `lib/audioSettingsSurface.ts`, the module that actually labels the button.
+  assert.ok(
+    MIC_AUTO_THRESHOLD_CAPTURE_NOTE.includes(micTestLabel(true)),
+    `the note does not name «${micTestLabel(true)}», which is what the button says`,
+  );
+  assert.ok(
+    MIC_AUTO_THRESHOLD_CAPTURE_NOTE.includes(AUDIO_GROUP_LEVEL),
+    `the note does not name the «${AUDIO_GROUP_LEVEL}» group the button is in`,
+  );
+});
+
+test("every state that leaves the capture open is a state that says so", () => {
+  const states: MicAutoThresholdState[] = ["idle", "listening", "done", "failed", "silent"];
+  // `idle` has not opened anything yet and `listening` says «Помолчите…»,
+  // which is nobody's idea of a microphone being off.
+  assert.deepEqual(states.filter(micAutoThresholdSettled), ["done", "failed", "silent"]);
 });
 
 test("the default threshold sits between a quiet room and a speaking voice", () => {
