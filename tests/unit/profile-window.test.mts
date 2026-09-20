@@ -591,11 +591,53 @@ test("the person's card has one implementation, drawn by both of its containers"
 
   const overlay = readFileSync("artifacts/kub/src/components/profile/UserProfileOverlay.tsx", "utf8");
   assert.match(overlay, /from "@\/components\/chat\/MemberCard"/, "the overlay builds a card of its own");
-  // The overlay belongs to no chat, so it must not invent the chat-scoped
-  // facts the card can draw: a standing in a group, a join date, a role chip.
-  assert.match(overlay, /roleLabel=""/, "the overlay invents a standing for somebody");
-  assert.match(overlay, /joinedLabel=""/, "the overlay invents a join date");
+
+  // **This assertion changed on 2026-09-21 and the reason matters.** It used to
+  // require `roleLabel=""` and `joinedLabel=""` — the overlay belonged to no
+  // chat, so it could invent nothing. Measured at 1440, that was also why the
+  // two tiers were indistinguishable: the full card rendered 446 px and the
+  // compact summary 450, so escalating showed the reader nothing at all.
+  //
+  // Discord keys its profile on `(userId, guildId)` rather than on a person,
+  // and ours does now too. What must still never happen is the thing the old
+  // assertion was really protecting: the overlay **deciding** a standing for
+  // itself. So the rule is the same and its expression moved — the labels come
+  // from `lib/profileChatContext.ts`, which is pure and has its own tests, and
+  // answers nothing at all for a private conversation.
+  assert.doesNotMatch(
+    overlay,
+    /roleLabel=\{"[^"]+"\}|roleLabel="[^"]+"/,
+    "the overlay writes a standing of its own rather than reading the context",
+  );
+  assert.match(overlay, /profileChatContext/, "the overlay decides the chat-scoped facts itself");
+  assert.match(
+    overlay,
+    /roleLabel=\{context\.standing \? chatRoleLabel\(/,
+    "the standing no longer comes from the context",
+  );
+  assert.match(
+    overlay,
+    /joinedLabel=\{context\.joinedAt \? formatJoinedAt\(/,
+    "the join date no longer comes from the context",
+  );
+  // The group's role chips and the vocabulary for handing them out stay with
+  // the member list. One door per action.
   assert.match(overlay, /groupRoles=\{\[\]\}/, "the overlay invents group roles");
+  assert.match(overlay, /groupVocabulary=\{null\}/, "the overlay hands out roles");
+});
+
+test("the compact tier is a second view of the same person, not a second read", () => {
+  // The other half of what the consolidation comment protects, and the half
+  // §15.1 corrected this project on: Discord's popout and modal are different
+  // components (851588, 808261) and what stops them disagreeing is one store
+  // behind one gated fetch, not a shared root. A compact card with a
+  // `supabase` client of its own would be exactly the drift the consolidation
+  // was defending against, arriving through the door D-283 opened.
+  const compact = readFileSync("artifacts/kub/src/components/profile/UserProfileCompact.tsx", "utf8");
+  assert.doesNotMatch(compact, /createClient|from\("profiles"\)/, "the compact card reads for itself");
+  const overlay = readFileSync("artifacts/kub/src/components/profile/UserProfileOverlay.tsx", "utf8");
+  assert.doesNotMatch(overlay, /createClient|from\("profiles"\)/, "the overlay reads for itself");
+  assert.match(overlay, /useUserProfile/, "the overlay no longer reads through the shared store");
 });
 
 test("every action and confirmation the card carried is still on it", () => {

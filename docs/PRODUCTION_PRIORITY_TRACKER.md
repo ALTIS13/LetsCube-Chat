@@ -602,7 +602,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     either way, and the call bar is what states the microphone is live.
 
 
-36. `[ ]` The person behind the conversation: reaching a profile, the depth of
+36. `[~]` The person behind the conversation: reaching a profile, the depth of
     the row menu, and the two search surfaces. Asked for by the owner on
     2026-09-20 with fourteen Discord screenshots, and the reference is
     **Discord** by CLAUDE.md §7. Four things, and the first is a **regression
@@ -671,7 +671,9 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     the main bundle plus **4,321 chunks, 132 MB, zero failures**, and — new
     for this project — the 37 `en-US` locale chunks, which give 28,264
     key→string pairs and make every English label exact. That retires one row
-    of section 13. **The next step is renders, not code.**
+    of section 13. ~~**The next step is renders, not code.**~~ **Superseded 2026-09-21** by the
+    owner's standing instruction to decide without him; a is repaired (D-283)
+    and the two-tier design is built (D-292). See below.
 
     Four findings that change the plan rather than decorate it:
 
@@ -697,6 +699,46 @@ Use this queue before starting the next production-hardening turn. Do not repeat
       activity. Section 15.2 separates the mechanics from the model entry by
       entry. The one honest surprise is **«Заметка о человеке»**: private, per
       person, needs no friends graph, and we have never discussed it.
+
+    **The two-tier profile is built, 2026-09-21 — D-292.** The owner's standing
+    instruction of the same day («принимай решения на основе подхода
+    telegram/discord без моего вмешательства») turned the renders step into a
+    decision step, so this went to code rather than stopping at pictures. What
+    it decided, each traced to a measured behaviour:
+
+    - **The store came before the popout**, exactly as the finding above says
+      it must. `lib/profileCache.ts` plus `hooks/useUserProfile.ts` — one read
+      per person, an in-flight gate and Discord's own 60-second window, proved
+      end to end: escalating from the small card to the large one and reopening
+      inside the window put **no further `profiles` request** on the wire.
+    - **The tier is decided by the opener, not by size.** Discord's popout is
+      opened by faces and names met in passing; its modal directly by acts whose
+      whole subject is the person. So a message author's avatar — an anchor that
+      did nothing in this product at all — opens the summary, and «Открыть
+      профиль» and a person chosen in the search open the whole card.
+    - **A phone has one tier, MEASURED ON DEVICE.** Discord 345.9 on
+      `P212C6000159` opens a message author as a full-screen full-bleed page
+      with no popout on the way; §17.7 of `reference-clients.md` carries the
+      geometry. That is the **third** place mobile Discord contradicts its own
+      web bundle, and the pattern is now firm enough to state as a rule: a
+      shape read from the web bundle is a desktop shape until a phone says
+      otherwise.
+    - **The third surface is closed.** The search's «Мини-профиль» is deleted;
+      its copy control moved onto a leaf both cards share.
+    - **One list, «Общие группы»**, which is the only one of Discord's five with
+      an honest analogue here — and it costs no query, because it is a filter
+      over the chats the client already holds.
+
+    **The pixels changed the design, and that is the finding worth keeping.**
+    The first build rendered the summary at 450 px and the full card at 446 —
+    the summary taller than the thing it summarised — because outside a
+    conversation the full card had nothing of its own to say. It now carries
+    the place it was opened from, the way Discord keys its profile on
+    `(userId, guildId)`, and the relation is an assertion rather than a comment.
+
+    **b and c are untouched** and remain as §15.2 and §15.3 left them: the row
+    menu's depth, and the two searches. Item 38's badges draw these same chips
+    and still wait on it.
 
     Not established, and recorded as such: what Discord's DM **row** itself
     draws (this pass followed the menu, the profile and the searches; the

@@ -61,9 +61,11 @@ function classString(file, needle) {
 
 /** Everything that covers content it is not part of. [file, landmark] */
 const covers = [
-  // The mini-profile, dropped over the result list in both the palette and the
-  // sidebar column.
-  ["components/search/SearchShared.tsx", "absolute inset-0 z-10 flex flex-col"],
+  // The search's «Мини-профиль» stood here until 2026-09-21. It was the third
+  // profile surface `docs/operations/reference-clients.md` §15.1 found, and the
+  // two-tier work folded it into the two real ones; activating a person in the
+  // results now opens `UserProfileOverlay`, which is a `KubModal` and is
+  // covered by the modal's own material rules rather than by this list.
   // The cover over the captcha while the resend timer runs.
   ["components/auth/RegisterForm.tsx", "pointer-events-none absolute inset-0 flex items-center"],
   // The Windows critical-update card, over the whole shell.

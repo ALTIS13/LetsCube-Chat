@@ -357,7 +357,7 @@ const veiled = [
   ["components/chat/ChatInfoPanel.tsx", 19],
   // The member card, extracted from the panel above by D-283 so a profile can
   // be opened without entering a conversation. One hover, D-215's.
-  ["components/chat/MemberCard.tsx", 1],
+  ["components/chat/MemberCard.tsx", 2],
   // The card's standalone container. It draws the card and nothing of its own,
   // so it carries no hover — kept at zero so the leftover checks still run on
   // it, the way `SettingsModal.tsx` is.

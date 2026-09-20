@@ -3287,15 +3287,23 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
       </div>
       {/* The person, the fourth layer of the same card (D-168).
 
-          Built here rather than by importing `SearchProfilePreview`, and that
-          was a decision rather than an oversight. That sheet is the search's:
-          its back control is labelled «Назад к результатам», which is a lie in
-          a chat panel, and its `global-search-profile-back` id is pinned by the
-          search's own specs. Rewording it would edit a file this task does not
-          own to say something only this caller needs. What is reused is the
-          thing worth reusing — the flow it established, card first and
-          «Открыть чат» second, which is already how this product answers «a
-          person was activated». */}
+          **This is the full tier, drawn in a column**, which is Discord's
+          SIDEBAR presentation and the reason no escalation control belongs
+          here: there is nothing above it to escalate to. It is also why the
+          card keeps the chat-scoped facts — the standing, the join date, the
+          group's roles and the vocabulary for handing them out. The overlay
+          draws the same component and is told those facts by
+          `lib/profileChatContext.ts` only when the place it was opened from
+          has them to give.
+
+          `mutualChats` is deliberately not passed: the card here is already
+          inside one of the groups they share, and a list whose first entry is
+          the room you are standing in reads as a mistake.
+
+          The note that stood here explained why `SearchProfilePreview` was not
+          imported. That surface no longer exists — it was the third profile
+          card §15.1 found, and the two-tier work of 2026-09-21 folded it into
+          these two. */}
       <div
         className="kub-subview absolute inset-0 overflow-y-auto"
         data-state={view === "member" ? "current" : "ahead"}

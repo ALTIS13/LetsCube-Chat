@@ -9,7 +9,6 @@ import {
   parseSearchTypeSyntax,
   SearchEmptyState,
   SearchFilterChips,
-  SearchProfilePreview,
   SearchResultsList,
   SearchTypeFilters,
   useSearchResultActions,
@@ -46,13 +45,7 @@ export function SidebarSearchResults({ query }: { query: string }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const { canAccessTasks } = useTaskAccessGate({ enabled: trimmedQuery.length > 0 });
   const { isStaff, isAdmin, checking: roleChecking } = useRoleAccess();
-  const {
-    activateResult,
-    openingChat,
-    previewProfile,
-    setPreviewProfile,
-    openPreviewChat,
-  } = useSearchResultActions({ onAfterOpen: () => setSearchQuery("") });
+  const { activateResult } = useSearchResultActions({ onAfterOpen: () => setSearchQuery("") });
 
   // The type chosen by tapping a pill. `parseSearchTypeSyntax` takes it as the
   // seed for `filters.type` and lets a `type:` token in the text overwrite it,
@@ -257,16 +250,11 @@ export function SidebarSearchResults({ query }: { query: string }) {
         )}
       </div>
 
-      {previewProfile && currentUser && (
-        <SearchProfilePreview
-          profile={previewProfile}
-          currentUserId={currentUser.id}
-          opening={openingChat}
-          onBack={() => setPreviewProfile(null)}
-          onOpenChat={openPreviewChat}
-          compact
-        />
-      )}
+      {/* No profile sheet here any more. Activating a person opens the shared
+          profile overlay over the shell, and closing it leaves these results
+          exactly where they were — which is what «Назад к результатам» was for,
+          without a control that has to claim to know where the reader came
+          from. See `SearchShared.tsx` for what was deleted and why. */}
     </div>
   );
 }

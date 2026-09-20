@@ -136,8 +136,15 @@ export function memberListFailure(mapped: string | null | undefined): string {
 /** Owner first, then administrators, then everybody else. */
 const ROLE_RANK: Record<ChatMemberListRole, number> = { owner: 0, admin: 1, member: 2 };
 
-/** The name a person is sorted and listed under. */
-export function memberDisplayName(member: ChatMemberListEntry): string {
+/**
+ * The name a person is sorted and listed under.
+ *
+ * Takes the two fields it reads rather than a whole member entry: the compact
+ * profile card draws a `Profile`, which has no standing in any chat, and
+ * requiring `chat_role` here would have made it invent one. Every existing
+ * caller still satisfies this, `ChatMemberListEntry` included.
+ */
+export function memberDisplayName(member: Pick<ChatMemberListEntry, "full_name" | "username">): string {
   const full = member.full_name?.trim();
   if (full) return full;
   const username = member.username?.trim();

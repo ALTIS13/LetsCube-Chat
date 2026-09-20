@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { chatRoleColourOnChat, readChatRoleColour } from "@/lib/chatRolePalette";
 import type { ChatRole } from "@/lib/chatRoles";
 import { useAppStore } from "@/store/app.store";
+import { messageAuthorProfileTarget } from "@/lib/messageAuthorProfile";
 import { FormattedText, isLocationPreviewMessage } from "@/lib/formatText";
 import { KubIcon } from "@/components/kub";
 import { useChatMediaPlayback, VideoCircleProgressRing, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
@@ -890,6 +891,11 @@ export function MessageBubble({
   const currentUserId = useAppStore((state) => state.currentUser?.id);
   const actor = resolveMessageActor(message);
   const actorName = messageActorDisplayName(actor);
+  // Through a selector, for the reason above: the action, not the state, so
+  // nothing here re-renders when a profile opens somewhere else.
+  const openUserProfile = useAppStore((state) => state.openUserProfile);
+  const authorTarget = messageAuthorProfileTarget(actor);
+  const authorProfileUserId = authorTarget.kind === "person" ? authorTarget.userId : null;
   /**
    * The colour the author's name takes, or null (D-215).
    *
@@ -1352,7 +1358,26 @@ export function MessageBubble({
         {!isMe && (
           <div className="flex-shrink-0 self-end mb-1 w-8">
             {isLastInGroup && actor.kind !== "system" && (
-              <MessageActorAvatar actor={actor} size="sm" avatarVariant={senderAvatarVariant} />
+              // Discord's commonest way into a person, and ours drew it in a
+              // plain `div`. The press is a glance — the person is incidental
+              // to the message being read — so it opens the compact tier where
+              // there is room for one, and the full card on a phone; that is
+              // `resolveProfileTier`'s whole subject and it is decided there,
+              // not here. A face with nobody behind it stays a `div`, which is
+              // §8's rule rather than a disabled button.
+              authorProfileUserId ? (
+                <button
+                  type="button"
+                  data-testid="message-author-avatar"
+                  onClick={() => openUserProfile(authorProfileUserId, "glance", message.chat_id ?? null)}
+                  aria-label={`Профиль: ${actorName}`}
+                  className="block rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+                >
+                  <MessageActorAvatar actor={actor} size="sm" avatarVariant={senderAvatarVariant} />
+                </button>
+              ) : (
+                <MessageActorAvatar actor={actor} size="sm" avatarVariant={senderAvatarVariant} />
+              )
             )}
           </div>
         )}
@@ -1366,7 +1391,24 @@ export function MessageBubble({
           {!isMe && isFirstInGroup && actor.kind !== "system" && (
             <span className="ml-3 mb-0.5 inline-flex min-w-0 items-center gap-1.5 text-xs font-semibold text-[color:var(--kub-accent-text)]">
               <span
-                className="truncate"
+                className={cn("truncate", authorProfileUserId && "cursor-pointer hover:underline")}
+                // Two anchors, not one — Discord's popout is opened by the
+                // avatar and by the username as separate importers of the same
+                // wrapper, and the name is the half a reader reaches for when
+                // the avatar is absent because the message is not last in its
+                // group.
+                role={authorProfileUserId ? "button" : undefined}
+                tabIndex={authorProfileUserId ? 0 : undefined}
+                onClick={authorProfileUserId ? () => openUserProfile(authorProfileUserId, "glance", message.chat_id ?? null) : undefined}
+                onKeyDown={
+                  authorProfileUserId
+                    ? (event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        openUserProfile(authorProfileUserId, "glance", message.chat_id ?? null);
+                      }
+                    : undefined
+                }
                 data-message-author="true"
                 // Which tag decided the colour, for a spec that has to tell
                 // «coloured by a role» from «happens to look like one».

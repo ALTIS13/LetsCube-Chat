@@ -1,11 +1,10 @@
 "use client";
 
 import { BotTag } from "@/components/bots/BotTag";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { useLocation } from "wouter";
-import { KubButton, KubIcon } from "@/components/kub";
+import { KubIcon } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
-import { useCreateChat } from "@/hooks/useCreateChat";
 import { useAvatarMediaUrl } from "@/hooks/useMediaObjectUrl";
 import { EDGE_ARROW_CLASS, useEdgeScroll } from "@/hooks/useEdgeScroll";
 import type { GlobalSearchResult, GlobalSearchResultType } from "@/hooks/useGlobalSearch";
@@ -30,10 +29,8 @@ import {
 import { cn } from "@/lib/utils";
 import { LOCATION_RESULT_PATH, canOpenLocationResult } from "@/lib/searchResultAccess";
 import { useAppStore } from "@/store/app.store";
-import type { Profile } from "@/types/database";
 
 export type SearchTypeFilter = SearchEntityFilter;
-export type PreviewProfile = Pick<Profile, "id" | "full_name" | "username" | "avatar_url" | "role" | "bio" | "online_at">;
 
 export const SEARCH_FILTERS: { id: SearchTypeFilter; label: string }[] = [
   { id: "all", label: "Все" },
@@ -386,89 +383,22 @@ export function SearchFilterChips({
   );
 }
 
-export function SearchProfilePreview({
-  profile,
-  currentUserId,
-  opening,
-  onBack,
-  onOpenChat,
-  compact = false,
-}: {
-  profile: PreviewProfile;
-  currentUserId: string;
-  opening: boolean;
-  onBack: () => void;
-  onOpenChat: () => void | Promise<void>;
-  compact?: boolean;
-}) {
-  const username = profile.username ? `@${profile.username}` : "Без никнейма";
-  const [copiedUsername, setCopiedUsername] = useState(false);
-  const copyUsername = useCallback(async () => {
-    if (!profile.username) return;
-    try {
-      await navigator.clipboard?.writeText(`@${profile.username}`);
-      setCopiedUsername(true);
-      window.setTimeout(() => setCopiedUsername(false), 1600);
-    } catch {
-      showAppAlert("Не удалось скопировать никнейм.", "Копирование недоступно");
-    }
-  }, [profile.username]);
-  return (
-    // `-strong`: this sheet is dropped over the result list, which it is not
-    // part of, in both the palette and the sidebar column. It hosts nothing
-    // `fixed`, so it can wear the material on itself rather than on a layer.
-    <div className="kub-glass-strong absolute inset-0 z-10 flex flex-col">
-      <div className="flex items-center gap-2 border-b border-[color:var(--kub-border-color)] px-4 py-3">
-        <button
-          type="button"
-          data-testid="global-search-profile-back"
-          onClick={onBack}
-          className="rounded-lg p-2 text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)]"
-          aria-label="Назад к результатам"
-        >
-          <KubIcon name="back" size={17} />
-        </button>
-        <div className="min-w-0 text-sm font-semibold text-[color:var(--kub-text)]">Мини-профиль</div>
-      </div>
-      <div className={cn("flex flex-1 flex-col items-center justify-center px-5 py-6 text-center", compact && "justify-start pt-8")}>
-        <UserAvatar user={profile} size={compact ? "lg" : "xl"} />
-        <div className={cn("mt-4 max-w-full truncate font-bold text-[color:var(--kub-text)]", compact ? "text-lg" : "text-xl")}>
-          {profile.full_name?.trim() || username}
-        </div>
-        <div className="mt-1 inline-flex max-w-full items-center justify-center gap-1.5 text-sm text-[color:var(--kub-muted)]">
-          <span className="truncate">{username}</span>
-          {profile.username && (
-            <button
-              type="button"
-              data-testid="search-profile-copy-username"
-              onClick={() => void copyUsername()}
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition kub-raise-hover hover:text-[color:var(--kub-cyan)]"
-              aria-label="Скопировать никнейм"
-              title={copiedUsername ? "Никнейм скопирован" : "Скопировать никнейм"}
-            >
-              <KubIcon name={copiedUsername ? "check" : "copy"} size={14} />
-            </button>
-          )}
-        </div>
-        {profile.bio && (
-          <p className="mt-4 max-w-sm text-sm leading-relaxed text-[color:var(--kub-muted)]">{profile.bio}</p>
-        )}
-        <div className="mt-6 flex w-full max-w-xs flex-col gap-2 sm:flex-row sm:justify-center">
-          <KubButton
-            variant="primary"
-            fullWidth
-            disabled={profile.id === currentUserId}
-            loading={opening}
-            leftIcon={<KubIcon name="chatBubble" size={14} />}
-            onClick={() => void onOpenChat()}
-          >
-            Открыть чат
-          </KubButton>
-        </div>
-      </div>
-    </div>
-  );
-}
+/*
+ * `SearchProfilePreview` — «Мини-профиль» — was deleted here on 2026-09-21.
+ *
+ * It was the third surface this product drew for a person, and the one
+ * `docs/operations/reference-clients.md` §15.1 named as «the drift the
+ * consolidation feared, arriving from the one direction nobody was
+ * watching»: no badges, no presence, no escalation, and its fields taken
+ * from whatever the search row happened to carry rather than from a read of
+ * the person. Activating a person in the results now opens the profile
+ * overlay (`openUserProfile(id, "named")`), which reads the same store both
+ * real surfaces read.
+ *
+ * The one capability it had that neither of the others did — copying the
+ * никнейм — moved rather than went: `components/profile/ProfileUsernameLine.tsx`
+ * is now a shared leaf of both cards.
+ */
 
 function SearchResultIcon({ result, compact = false }: { result: GlobalSearchResult; compact?: boolean }) {
   // D-208. A bare `<img src={column}>`: the one avatar shape that does not
@@ -521,8 +451,7 @@ export function useSearchResultActions({ onAfterOpen }: { onAfterOpen?: () => vo
   const setMobileSection = useAppStore((s) => s.setMobileSection);
   const setSearchQuery = useAppStore((s) => s.setSearchQuery);
   const { isStaff, isAdmin, checking: roleChecking } = useRoleAccess();
-  const { openPrivateChat, loading: openingChat } = useCreateChat();
-  const [previewProfile, setPreviewProfile] = useState<PreviewProfile | null>(null);
+  const openUserProfile = useAppStore((s) => s.openUserProfile);
 
   const closeAfterOpen = useCallback(() => {
     onAfterOpen?.();
@@ -589,17 +518,25 @@ export function useSearchResultActions({ onAfterOpen }: { onAfterOpen?: () => vo
       }
 
       if (result.resultType === "user") {
-        setPreviewProfile(
-          result.profile ?? {
-            id: result.id,
-            full_name: result.title,
-            username: normalizeUsernameSubtitle(result.subtitle),
-            avatar_url: result.avatarUrl ?? null,
-            role: "user",
-            bio: result.snippet ?? null,
-            online_at: null,
-          },
-        );
+        // The third profile surface, closed (D-283's follow-up). This used to
+        // set `previewProfile` and draw «Мини-профиль» — a sheet over the
+        // results with no badges, no presence and no escalation, built from
+        // whatever fields the search row happened to carry. The assessment
+        // called it «the drift the consolidation feared, arriving from the one
+        // direction nobody was watching», and it was right: it was a third
+        // implementation of a person reading a fourth source.
+        //
+        // The opener is **named**, not a glance: a reader who typed a name and
+        // chose a person from a list has asked for that person, and Discord
+        // opens its full modal directly for every act of that kind — a route, a
+        // user link, a widget card — reserving the popout for a face met in
+        // passing (§15.1).
+        //
+        // The results are deliberately left standing underneath rather than
+        // closed. That is what the sheet's «Назад к результатам» was for, and a
+        // layer over them does it without a control that has to claim to know
+        // where the reader came from.
+        openUserProfile(result.id, "named");
         return;
       }
 
@@ -664,24 +601,9 @@ export function useSearchResultActions({ onAfterOpen }: { onAfterOpen?: () => vo
     ],
   );
 
-  const openPreviewChat = useCallback(async () => {
-    if (!previewProfile || !currentUser || previewProfile.id === currentUser.id) return;
-    const chatId = await openPrivateChat(previewProfile.id);
-    if (!chatId) {
-      showAppAlert("Не удалось открыть личный чат.", "Чат недоступен");
-      return;
-    }
-    setLocation("/");
-    closeAfterOpen();
-  }, [closeAfterOpen, currentUser, openPrivateChat, previewProfile, setLocation]);
-
   return {
     activateResult,
     currentUser,
-    openingChat,
-    previewProfile,
-    setPreviewProfile,
-    openPreviewChat,
   };
 }
 

@@ -22405,3 +22405,261 @@ header, not this defect's, and it was red only because nobody had run that
 project.
 
 ---
+
+## D-292 `[x]` The two-tier profile: a store first, a phone with one tier, and the third surface closed
+
+**Queue item 36's design half.** D-283 gave back the capability — a person opens
+without entering a conversation with them — and left the split to a design pass.
+This is that pass, built rather than proposed: the owner's standing instruction
+of 2026-09-21 is «принимай решения на основе подхода telegram/discord без моего
+вмешательства», so every decision below is traced to a measured behaviour of a
+reference client or to a stated reason for differing, and the derivation is
+beside the code.
+
+**Severity:** not a defect. A capability and a correction, filed here because
+the register is where this project keeps measurements.
+
+### The correction that set the order of the work
+
+`docs/operations/reference-clients.md` §15.1 had already overturned this
+project's assumption: Discord's popout and its full modal are **different
+components** — modules 851588 and 808261, sharing leaves and not a root — and
+what stops them disagreeing is neither the markup nor a shared parent. Both read
+one `UserProfileStore` (321191) through one fetch path (903209) with an
+in-flight gate and a **60-second** freshness window.
+
+Ours had none of it: `UserProfileOverlay` read `profiles` on every open and
+`ChatInfoPanel` read its own member list. So the store was built first, and the
+compact card only afterwards. Building the small surface first would have given
+the product two components over two queries — the exact drift the original
+consolidation was defending against, arriving through the door D-283 opened.
+
+- `lib/profileCache.ts` — the decision, pure, taking its clock as an argument.
+- `hooks/useUserProfile.ts` — the maps and the request, modelled on
+  `useProfileBadges`.
+
+One deliberate difference from Discord, and the reason: **a refusal is not an
+answer.** Row-level security gives «nobody may read this person» the same shape
+as «no such person», and `useProfileBadges` already paid for conflating a
+failure with a cached emptiness. A failed attempt is cached *with its own
+timestamp*, so the surface stops waiting and the next open after a minute asks
+again — neither a retry loop nor a permanent silence.
+
+### The tier rule, and the axis it is built on
+
+§15.1 enumerated, by reading the importers of Discord's popout wrapper (module
+342296), exactly which act opens which surface. The axis is not size. It is
+**whose subject the person is**:
+
+- a face or a name met in passing — a message author's avatar, a message
+  author's username, a member-list row, a voice participant, a mention chip —
+  opens the **popout**;
+- an act whose whole subject is that person — the `/users/:id` route, a user
+  link, a widget card — opens the **modal** directly, with no popout first.
+
+`lib/profileTier.ts` is that axis and nothing else. A `"glance"` opens the
+compact card; a `"named"` act opens the full one. So the chat list's «Открыть
+профиль» and a person chosen out of the search both open the whole card, and a
+message author's face opens the summary.
+
+The tier is derived from the **live viewport width on every render** rather than
+frozen at open time, so a window narrowed past the threshold while a compact
+card is standing becomes the full surface instead of a summary on a screen with
+no room for one.
+
+### The phone has one tier, and that was measured rather than assumed
+
+**MEASURED ON DEVICE — 2026-09-21**, `P212C6000159`, Discord 345.9, 1080x2400 at
+420 dpi. A message author's avatar opens the person **immediately as a
+full-screen, full-bleed page**: the banner spans the whole 411 dp, the ground is
+opaque (rgb(0,0,0) against the conversation's rgb(15,12,26) two taps earlier),
+the corners are square, there is no scrim, and **no popout is drawn on the way**.
+Its action row is two buttons of 184 dp at 16 dp margins. Recorded in full in
+`reference-clients.md` §17.7 — the third place mobile Discord contradicts its
+own web bundle, after settings and the bottom band.
+
+So below `PROFILE_COMPACT_MIN_WIDTH` (768, this product's `md`) every opener
+lands on the full card, and that card takes the whole phone. The compact tier is
+a thing you can have **beside** what you were reading; a phone has no beside.
+
+### The measurement that changed the design, found by looking at the pixels
+
+The first build was wrong, and only the rendered pixels said so. Measured at
+1440 against the fixture:
+
+| | compact | full |
+| --- | --- | --- |
+| first build | **450 px** | 446 px |
+| shipped | **397 px** | 468 px |
+
+The summary was **taller than the thing it summarised**, so escalating showed
+the reader nothing at all. Three measured corrections and one design change:
+
+- **The badge cap was carried over from the wrong container.** It started at one
+  standing and two medals, taken from `lib/profileBadges.ts`'s record of what
+  fitted a *member row*; the strip inside the card has **302 px** of usable
+  width and a chip is **99–100 px**, so three chips are ~312 px and wrap.
+  `PROFILE_COMPACT_BADGE_LIMITS` is one standing and one medal — two chips plus
+  the «+N», ~242 px, one line.
+- **The bio is clamped to two lines** (45 px against the full card's 68 px for
+  the same text). Discord treats exactly this difference as worth a control of
+  its own: «View Full Bio» (`YDiPq8`) in its popout's bio block opens the modal.
+- **The face is 64 px against 80 px**, which is Discord's own 80-over-300 popout
+  against 120-over-400 modal, to this product's scale.
+- **The card now carries the place it was opened from.** Discord's profile is
+  keyed on `(userId, guildId)`, not on a person — that is why its card can say
+  «this person's roles» without being a second implementation of one. Ours
+  carries the same pair: `lib/profileChatContext.ts` decides what may be said,
+  and a **private conversation reports nothing at all**, because whoever opens
+  one becomes its owner (the subject of
+  `20260911120000_private_chat_owner_delete_repair.sql`) and «Владелец» there is
+  an artefact of who pressed first, not a fact about a person. D-283 wrote that
+  refusal down; it is now a rule rather than a consequence of knowing no chat.
+
+The relation is now an assertion rather than a comment:
+`profile-two-tier.spec.ts` measures both cards and requires the summary to be
+under 0.92 of the full card's height. Its fixture gives the person a bio and
+badges on purpose — with an empty bio and no badges the two came to 304 px and
+313 px, and no honest contract could separate them, because a summary of a
+person with nothing to say **is** them.
+
+### «Общие группы» — the one list, and why it was affordable
+
+§15.1 recorded Discord's rule that tabs are only for the things that are lists,
+and refused four of its five by name: Board, Activity, Wishlist and Mutual
+Friends presuppose an activity feed, a wishlist, linked accounts and a friends
+graph. «Mutual Servers» was kept as the one with an honest analogue.
+
+`lib/profileMutualChats.ts` is that one, and it **asks the server for nothing**.
+`useChats` already selects `members:chat_members(user_id, role, joined_at, …)`
+onto every chat the account can read, so «which of my groups is this person also
+in» is a filter over state the client is holding anyway — no query, no policy,
+no privacy surface that did not already exist, and no possibility of revealing a
+group the reader is not in, because the list it filters **is** the reader's own
+list. The boundary that follows is stated in the module and must not be
+overstated: it is «общие группы **среди твоих**», complete only so far as the
+sidebar's list is, and never to be labelled as a server-side count.
+
+Five rows, with the remainder as «и ещё N». Five rows of 44 px plus 8 px gaps is
+252 px, which is a section on a 390-point screen without turning a person's card
+into a list of chats. It is drawn on the **full** card only — a section is a tab
+bar's honest form when there is one tab — and not inside `ChatInfoPanel`, where
+the card is already standing in one of the groups it would list.
+
+It is also what filled the phone. Before it, the full card's sheet left about
+890 px of empty ground below its one button: the whole lower half of the screen
+said nothing, because we had refused the lists that fill Discord's.
+
+### The third surface, closed
+
+`components/search/SearchShared.tsx` drew «Мини-профиль» — avatar, name,
+никнейм with a copy control, bio, «Открыть чат» — with no badges, no presence
+and no escalation, built from whatever fields the search result row happened to
+carry. §15.1 called it «the drift the consolidation feared, arriving from the
+one direction nobody was watching», and D-283 recorded it and left it standing.
+
+It is deleted (84 lines), and with it `PreviewProfile`, `previewProfile`,
+`setPreviewProfile` and `openPreviewChat`. Activating a person in the results
+opens the profile overlay, as a **named** act, so the whole card answers.
+
+Two things came with it rather than going with it:
+
+- **The copy control.** It was the one capability that surface had that neither
+  of the others did, so it moved to
+  `components/profile/ProfileUsernameLine.tsx`, a **leaf shared by both cards** —
+  which is the division Discord uses for everything its two surfaces both say.
+  Its test id is now `profile-copy-username`; `global-search.spec.ts` was
+  repointed, including its two label assertions.
+- **«Назад к результатам».** It is gone and nothing replaced it, because nothing
+  needs to: the overlay is a layer over the results rather than a sheet instead
+  of them, so closing it leaves them exactly where they were. That control had
+  to claim to know where the reader came from, which is the reason
+  `ChatInfoPanel` refused to import that sheet in the first place.
+
+### The opener that did not exist
+
+`MessageActorAvatar` sat in a plain `div` and the author's name in a plain
+`span`. Discord's two commonest ways into a person — the avatar and the
+username, as **two separate anchors** — did nothing here at all. Both are now
+pressable, `lib/messageAuthorProfile.ts` decides whose card they open, and a
+face with nobody behind it stays a plain element rather than becoming a disabled
+button (§8's rule): a bot (D-263 owns giving one a card), a deleted bot, a
+deleted person, a system message, an unresolvable actor. Your own messages open
+your own card, which is not a refusal — the card refuses «Открыть чат» and keeps
+everything else, exactly as `MemberCard` already states.
+
+Nothing was needed in the gesture layer. `MessageList`'s `onClickCapture`
+already stops the event in the capture phase for selection mode and for the
+suppressed click after a swipe or a long press, so neither anchor can fire
+during either.
+
+### Refused, with the reason
+
+- **A tab bar.** Tabs are for lists; we have one list, and a tab bar with one
+  tab is not a tab bar. If a second honest list ever exists, this is where it
+  goes.
+- **Board, Activity, Wishlist, Connections, Mutual Friends.** They presuppose
+  objects this product has not decided to have. Naming them as «missing» would
+  be the wrong reading; the right one is that we have not taken the decision.
+- **An overflow menu on the compact card to hide the escalation in**, which is
+  where Discord's popout puts it. We have no overflow menu there, and building
+  one to hide a single control behind would be less discoverable than the
+  placement Discord itself uses where there is no menu — the SIDEBAR
+  presentation's full-width secondary button, carrying the same string.
+- **The group's role chips and the vocabulary for handing them out, on the
+  overlay.** They need `useChatRoles` and they are a management affordance; one
+  door per action keeps them with the member list, which is the same full card
+  drawn by `ChatInfoPanel`.
+- **Moving the panel's member layer to the compact tier**, although Discord's
+  member-list row opens a popout. The panel is already a 380 px card, so a
+  popout out of it would be a card over a card; Discord's own answer for a
+  profile drawn *inside a column* is the SIDEBAR presentation — the full body
+  with an escalation — and ours is the full body with nothing above it to
+  escalate to.
+
+### Evidence
+
+- **Unit, 3783/3783** with 53 new cases across `profile-tier`, `profile-cache`,
+  `profile-chat-context`, `profile-mutual-chats` and `message-author-profile`.
+- **Mutation: 26 of 26 turn the suite red**, including every constant on a
+  literal — the 768 threshold and its `<`, the 60-second window and its `>=`,
+  the badge cap back to the value that wrapped, the five-row list limit, the
+  in-flight gate, the private-chat refusal, the bot refusal, and the `"glance"`
+  the bubble passes.
+- **Playwright 62/62 across 1440 and 390, no skips**, with the did-not-run
+  guard: `profile-two-tier.spec.ts` (7 cases), `profile-without-entering-chat`
+  (D-283's own, still green) and `chat-roles-reach` (the member card inside the
+  panel). **Two skips were turned into assertions** rather than left: at 390 the
+  escalation control must be *absent*, and the store must still serve a reopen
+  without refetching.
+- **The store, asserted end to end**: opening the compact card, escalating, and
+  closing and reopening inside the window put **no further `profiles` request**
+  on the wire.
+- **Three project guards updated, none weakened.** `entry-glass` lost the
+  mini-profile's row because the surface is gone; `shell-glass`'s veiled-hover
+  count for `MemberCard` went 1 → 2 for the mutual-chat rows; and
+  `profile-window.test.mts`'s «one implementation» case had required
+  `roleLabel=""` — it now requires that the overlay **reads** the labels from
+  `profileChatContext` and writes none of its own, which is the rule the old
+  assertion was really protecting.
+- **Renders**, 1440 and 390 in both themes, from
+  `tests/e2e/profile-two-tier-capture.spec.ts` into `output/profile-two-tier/`.
+  Every row fictional; no production screen.
+- **`tests/server` 144/144**; typecheck clean across the workspace; production
+  build proved by its own lines (`sw.js build 4bc44e0dec23e31a`, `built in
+  10.75s`).
+
+### What is still open
+
+- **A bot has no card** — D-263. Until it does, a bot's face is not a control.
+- **Item 38's badge history** draws on these same chips: real icons, and a
+  designed explanation instead of a native `title`. This work did not touch
+  `ProfileBadgeChip`.
+- **Presence** on the card is `online_at` only, which is item 37's subject; the
+  card already says nothing rather than «не в сети» when it cannot be read.
+- **Whether mobile Discord shares a store** between its profile and anything
+  else. Nothing on a phone exposes it.
+- **Item 36's b and c** — the row menu's depth and the two searches — are
+  untouched by this and remain as §15.2 and §15.3 left them.
+
+---

@@ -7,6 +7,7 @@ import { sameData, shareById } from '@/lib/structuralSharing'
 import type { Profile, ChatWithLastMessage, MessageWithSender } from '@/types/database'
 import { sameActorClientMessage } from '@/lib/messageActor'
 import { isHeartbeatOnlyProfileChange } from '@/lib/profileChange'
+import type { ProfileOpener } from '@/lib/profileTier'
 import {
   CHAT_MUTE_CACHE_KEY,
   CHAT_MUTE_OFF,
@@ -156,11 +157,41 @@ interface AppState {
    * state one of them owned would make the other two import it, which is how
    * this product ended up with two profile modals before.
    *
-   * It is deliberately NOT a chat id. Opening a person must not name a
-   * conversation, because naming one is what the regression did.
+   * **This is a person, never a conversation to open.** Naming one to *open*
+   * is what D-283 was: the entry called `onChatSelect` and the act had a
+   * consequence in somebody else's client. `profileOverlayChatId` below names a
+   * place too, and the difference is the whole point — it says where the card
+   * is being read **from**, so the card can say what is true there, and nothing
+   * in this slice ever selects it.
    */
   profileOverlayUserId: string | null
-  openUserProfile: (userId: string) => void
+  /**
+   * How the person was asked for, which is what decides the surface.
+   *
+   * The **opener** is stored and the tier is derived on every render by
+   * `resolveProfileTier`, rather than the other way round: a window narrowed
+   * past `PROFILE_COMPACT_MIN_WIDTH` while a compact card stands must become
+   * the full surface, and a tier frozen at open time cannot do that.
+   */
+  profileOverlayOpener: ProfileOpener
+  /**
+   * The place the person was opened from, or null.
+   *
+   * Discord's profile is keyed on `(userId, guildId)`, not on a person, and
+   * this is that second half: a group or a channel is where a standing and a
+   * join date are facts. A private conversation passes null — whoever opens
+   * one becomes its owner, so its «Владелец» is an artefact of who pressed
+   * first. `lib/profileChatContext.ts` owns the rule.
+   */
+  profileOverlayChatId: string | null
+  /** Whether «Полный профиль» has been pressed on the compact card. */
+  profileOverlayEscalated: boolean
+  openUserProfile: (userId: string, opener?: ProfileOpener, chatId?: string | null) => void
+  /**
+   * Discord's `view-profile` item, which is `POPOUT_CLOSE` followed by
+   * `openUserProfileModal` — one act, not two surfaces open at once.
+   */
+  escalateUserProfile: () => void
   closeUserProfile: () => void
 
   /**
@@ -508,10 +539,31 @@ export const useAppStore = create<AppState>((set, get) => ({
     )),
 
   profileOverlayUserId: null,
-  openUserProfile: (userId) =>
-    set((state) => (state.profileOverlayUserId === userId ? state : { profileOverlayUserId: userId })),
+  profileOverlayOpener: "named",
+  profileOverlayChatId: null,
+  profileOverlayEscalated: false,
+  openUserProfile: (userId, opener = "named", chatId = null) =>
+    set((state) =>
+      state.profileOverlayUserId === userId
+      && state.profileOverlayOpener === opener
+      && state.profileOverlayChatId === chatId
+      && !state.profileOverlayEscalated
+        ? state
+        : {
+            profileOverlayUserId: userId,
+            profileOverlayOpener: opener,
+            profileOverlayChatId: chatId,
+            profileOverlayEscalated: false,
+          },
+    ),
+  escalateUserProfile: () =>
+    set((state) => (state.profileOverlayEscalated ? state : { profileOverlayEscalated: true })),
   closeUserProfile: () =>
-    set((state) => (state.profileOverlayUserId === null ? state : { profileOverlayUserId: null })),
+    set((state) =>
+      state.profileOverlayUserId === null && !state.profileOverlayEscalated
+        ? state
+        : { profileOverlayUserId: null, profileOverlayChatId: null, profileOverlayEscalated: false },
+    ),
 
   chatSearch: null,
   openChatSearch: (chatId) =>

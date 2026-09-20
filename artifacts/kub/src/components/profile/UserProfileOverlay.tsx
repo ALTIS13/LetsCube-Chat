@@ -1,111 +1,106 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useCallback, useMemo } from "react";
 import { useAppStore } from "@/store/app.store";
 import { KubIcon, KubModal, KubNotice, KubStableSkeleton } from "@/components/kub";
 import { KUB_ICON_NAMES } from "@/components/kub/icons";
 import { MemberCard, type MemberRow } from "@/components/chat/MemberCard";
+import { UserProfileCompact } from "@/components/profile/UserProfileCompact";
 import { badgeStrip, projectProfileBadges, type BadgeStrip } from "@/lib/profileBadges";
+import {
+  PROFILE_COMPACT_BADGE_LIMITS,
+  profileFillsPhone,
+  resolveProfileTier,
+} from "@/lib/profileTier";
+import { profileChatContext } from "@/lib/profileChatContext";
+import { profileMutualChats } from "@/lib/profileMutualChats";
+import { safeOpenChat } from "@/lib/safeOpenChat";
+import { chatRoleLabel } from "@/lib/chatMemberRules";
+import { formatJoinedAt } from "@/lib/chatMemberList";
 import { useProfileBadges } from "@/hooks/useProfileBadges";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { useViewportWidth } from "@/hooks/useViewportWidth";
 import { getUserPresenceState } from "@/lib/presence";
 import { usePresenceNow } from "@/hooks/usePresenceNow";
 import { useCreateChat } from "@/hooks/useCreateChat";
 import { showAppAlert } from "@/lib/appDialogs";
-import { mapPgError } from "@/lib/errors";
-import { CHAT_OPEN_FAILED, PROFILE_UNAVAILABLE, plainFailure } from "@/lib/plainMessages";
-import type { Profile } from "@/types/database";
+import { CHAT_OPEN_FAILED } from "@/lib/plainMessages";
 
 /**
- * A person, opened from anywhere, without entering a conversation with them.
+ * A person, opened from anywhere, without entering a conversation with them —
+ * on two surfaces now, and one store under both.
  *
- * ## What this fixes
+ * ## What this fixed first (D-283)
  *
- * D-283, in the owner's words: «У нас пропала возможность открыть профиль
- * пользователя не заходя в ЛС с ним.» The chat list's «Открыть профиль» ran
+ * In the owner's words: «У нас пропала возможность открыть профиль пользователя
+ * не заходя в ЛС с ним.» The chat list's «Открыть профиль» ran
  * `onChatSelect(chat.id)` and then opened the information panel, so the label
  * promised a person and the action opened a conversation — and entering one
- * reports the other side's message read, which is a consequence the reader
- * never asked for. Measured before the repair at 1440 and 390: both viewports
- * sent `mark_chat_read_through`, the phone `mark_chat_delivered` besides.
+ * reports the other side's message read, a consequence the reader never asked
+ * for. Measured before the repair at 1440 and 390: both viewports sent
+ * `mark_chat_read_through`, the phone `mark_chat_delivered` besides.
  *
- * ## Why this is not a second profile implementation
+ * ## The two tiers, and why the store came before either of them
  *
- * Because it draws `MemberCard` — the same component the information panel's
- * fourth layer draws, extracted to its own file and otherwise untouched. The
- * comment that consolidated the two old profile modals was right: two
- * implementations drift. What it did not notice is that the surviving one
- * lived inside a conversation, so the capability went with the duplicate. One
- * component, two containers, is the shape that keeps both promises.
+ * `docs/operations/reference-clients.md` §15.1, read out of Discord stable
+ * 615980: the popout and the full modal are **different components** (851588
+ * and 808261) that share leaves and not a root, and the reason they never
+ * disagree is that both read one `UserProfileStore` through one fetch with an
+ * in-flight gate and a 60-second window. Ours is `lib/profileCache.ts` plus
+ * `hooks/useUserProfile.ts`, and it was written before `UserProfileCompact`
+ * existed for exactly that reason: a small surface beside the card without a
+ * shared read would be two components over two queries, which is the drift the
+ * original consolidation was defending against.
  *
- * ## What it deliberately is not, yet
+ * So this container owns **where** a person is drawn and nothing about how. The
+ * tier is `resolveProfileTier`, pure and tested; the bodies are the two cards;
+ * the data is the store.
  *
- * Discord's answer to this problem is **two** surfaces — a compact popout with
- * «Полный профиль» at the bottom, and a full modal with tabs — and they do not
- * drift because the small one is a summary of the large one with an explicit
- * escalation. That split is the right target and it is **not** built here: it
- * is a design the owner has to approve, and it belongs to queue item 36's
- * second half. This is the card we have, reachable from where it was not.
- * `docs/operations/reference-clients.md` carries what Discord actually does.
+ * ## The phone has one tier, measured rather than assumed
  *
- * ## The chat-scoped facts it cannot say, and does not invent
+ * `lib/profileTier.ts` carries the measurement: on `P212C6000159` a message
+ * avatar in Discord 345.9 opens the person as a full-screen, full-bleed page
+ * with no popout on the way. So below `PROFILE_COMPACT_MIN_WIDTH` every opener
+ * lands on the full card, and `profileFillsPhone` makes that card the sheet a
+ * phone draws rather than a small centred dialog.
  *
- * `roleLabel`, `joinedLabel`, the group's role chips and the vocabulary for
- * handing roles out are all facts about **a chat**. This overlay is open over
- * the shell and belongs to none, so it passes the empty answers the card
- * already draws nothing for. It does not guess a standing from the private
- * conversation the two people happen to share.
+ * ## The place, and the facts that belong to it
+ *
+ * Discord's profile is keyed on `(userId, guildId)`, not on a person, and that
+ * second half is what lets its card say «this person's roles» without being a
+ * second implementation of a person. Ours now carries the same pair:
+ * `profileOverlayChatId` says where the card is being read **from**, and
+ * `lib/profileChatContext.ts` decides what may be said there — a standing and
+ * a join date in a group or a channel, nothing at all in a private
+ * conversation, whose «Владелец» is an artefact of who opened it first.
+ *
+ * That was not cosmetic. Measured at 1440 on 2026-09-21, before the pair
+ * existed: the compact card rendered **450 px** tall and the full card **446**,
+ * so the summary was taller than the thing it summarised and escalating showed
+ * the reader nothing. The same measurement is now an assertion in
+ * `profile-two-tier.spec.ts`.
+ *
+ * Still not passed, and deliberately: the group's role **chips** and the
+ * vocabulary for handing them out. Those need `useChatRoles`, they are a
+ * management affordance, and one door per action puts them in the member list
+ * — which is the same full card, drawn by `ChatInfoPanel`, where that door
+ * already is.
  */
 export function UserProfileOverlay() {
   const userId = useAppStore((s) => s.profileOverlayUserId);
+  const opener = useAppStore((s) => s.profileOverlayOpener);
+  const contextChatId = useAppStore((s) => s.profileOverlayChatId);
+  const chats = useAppStore((s) => s.chats);
+  const escalated = useAppStore((s) => s.profileOverlayEscalated);
+  const escalate = useAppStore((s) => s.escalateUserProfile);
   const close = useAppStore((s) => s.closeUserProfile);
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
-  const supabase = createClient();
   const presenceNow = usePresenceNow();
+  const viewportWidth = useViewportWidth();
   const { openPrivateChat, loading: opening } = useCreateChat();
 
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
-
-  // The card is drawn from a fresh read rather than from the chat row that
-  // opened it. A row carries the profile it was last handed — `useChats`
-  // projects `other_user` and the realtime patch keeps it warm — but a person
-  // who changed their picture, name or никнейм while this list sat open would
-  // be drawn stale on the one surface that is entirely about them.
-  useEffect(() => {
-    if (!userId) {
-      setProfile(null);
-      setFailure(null);
-      return;
-    }
-    let cancelled = false;
-    setProfile(null);
-    setFailure(null);
-    void (async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .maybeSingle();
-      if (cancelled) return;
-      if (error) {
-        console.error("Profile overlay read error:", error);
-        setFailure(plainFailure(mapPgError(error), PROFILE_UNAVAILABLE));
-        return;
-      }
-      // A refusal and an absence are different facts (D-140's rule). An id
-      // nobody can read answers `null` with no error under row-level security,
-      // and «нет такого человека» would report that refusal as a fact.
-      if (!data) {
-        setFailure(PROFILE_UNAVAILABLE);
-        return;
-      }
-      setProfile(data as Profile);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [supabase, userId]);
+  const { profile, settled, failure } = useUserProfile(userId);
+  const tier = resolveProfileTier({ opener, escalated, viewportWidth });
 
   const badgeIds = useMemo(() => (userId ? [userId] : []), [userId]);
   const badges = useProfileBadges(badgeIds);
@@ -113,9 +108,15 @@ export function UserProfileOverlay() {
     if (!userId) return null;
     const rows = badges.rows.get(userId);
     if (!rows?.length) return null;
-    const built = badgeStrip(projectProfileBadges(rows, userId, { knownIcons: KUB_ICON_NAMES }));
+    // One of the three things that make a summary a summary: the compact card
+    // caps the strip, the full card does not. The other two are the clamped
+    // bio and the smaller face.
+    const built = badgeStrip(
+      projectProfileBadges(rows, userId, { knownIcons: KUB_ICON_NAMES }),
+      tier === "compact" ? { ...PROFILE_COMPACT_BADGE_LIMITS } : undefined,
+    );
     return built.shown.length ? built : null;
-  }, [badges.rows, userId]);
+  }, [badges.rows, tier, userId]);
 
   const openChat = useCallback(async () => {
     if (!userId) return;
@@ -127,10 +128,54 @@ export function UserProfileOverlay() {
     close();
   }, [close, openPrivateChat, userId]);
 
+  /**
+   * What this person is **here**, where «here» is the place the card was opened
+   * from. Discord keys its profile on `(userId, guildId)` for exactly this, and
+   * `lib/profileChatContext.ts` holds the rule — a group and a channel have
+   * real standings, a private conversation does not.
+   *
+   * It is read off the chat the store already holds, not fetched:
+   * `useChats` selects `members:chat_members(user_id, role, joined_at, …)`, so
+   * this costs nothing and cannot put a second query behind a second surface.
+   */
+  const context = useMemo(() => {
+    if (!contextChatId || !userId) return profileChatContext(null, null);
+    return profileChatContext(chats.find((row) => row.id === contextChatId) ?? null, userId);
+  }, [chats, contextChatId, userId]);
+
+  /**
+   * The groups and channels both people are in — the one list Discord's modal
+   * has that has an honest analogue here (§15.1 refused the other four by
+   * name), and the reason the full card is worth escalating to on a phone,
+   * where it is the whole screen.
+   *
+   * Filtered out of the chats the store already holds, so it asks the server
+   * for nothing and can show no group the reader is not in.
+   */
+  const mutual = useMemo(
+    () => profileMutualChats(chats, userId, currentUserId),
+    [chats, currentUserId, userId],
+  );
+
+  const openMutualChat = useCallback(
+    async (chatId: string) => {
+      const opened = await safeOpenChat(chatId, {
+        unavailableMessage: "Чат недоступен или был удалён.",
+        unavailableTitle: "Чат недоступен",
+      });
+      if (opened) close();
+    },
+    [close],
+  );
+
   const presence = profile ? getUserPresenceState(profile, presenceNow) : null;
-  // The card's own type, with the two chat facts it will not be told. They are
-  // the shape `MemberRow` requires and nothing here reads them back.
-  const member: MemberRow | null = profile ? { ...profile, chat_role: "member", joined_at: null } : null;
+  // The full card's own type. `chat_role` and `joined_at` are the shape it
+  // requires; what is actually drawn from them are the two labels below, which
+  // the context decides and which this card draws nothing for when empty.
+  const member: MemberRow | null = profile
+    ? { ...profile, chat_role: context.standing ?? "member", joined_at: context.joinedAt }
+    : null;
+  const isSelf = profile?.id === currentUserId;
 
   return (
     <KubModal
@@ -139,14 +184,19 @@ export function UserProfileOverlay() {
       title="Профиль"
       icon={<KubIcon name="profile" size={18} />}
       size="sm"
-      // A centred card at every width rather than a full-screen sheet. What is
-      // being answered is «кто это» — one short question — and a sheet that
-      // takes the whole phone for it reads as somewhere you have navigated to,
-      // which is the very thing this control must not do.
-      mobileSheet={false}
+      // The compact card is never drawn below `PROFILE_COMPACT_MIN_WIDTH`, so
+      // this only ever answers for the full one — and it answers «the whole
+      // phone», which is what Discord's own phone client does and what a
+      // surface you deliberately navigated to should be. The compact card keeps
+      // the centred shape for the opposite reason: it is a glance, and a sheet
+      // that takes the whole screen for one would read as somewhere you had
+      // gone.
+      mobileSheet={profileFillsPhone(tier)}
       contentClassName="px-0 py-0"
+      testId="user-profile-modal"
+      closeTestId="user-profile-close"
     >
-      <div data-testid="user-profile-overlay">
+      <div data-testid="user-profile-overlay" data-profile-surface={tier}>
         {failure && (
           <div className="px-4 py-5">
             <KubNotice tone="warn" title={failure}>
@@ -154,26 +204,44 @@ export function UserProfileOverlay() {
             </KubNotice>
           </div>
         )}
-        {!failure && !member && (
+        {!failure && !settled && (
           <div className="flex flex-col items-center gap-3 px-5 py-8" data-testid="user-profile-loading">
             <KubStableSkeleton width="96px" height="96px" rounded="full" />
             <KubStableSkeleton width="160px" height="18px" />
             <KubStableSkeleton width="110px" height="14px" />
           </div>
         )}
-        {!failure && member && (
+        {!failure && profile && tier === "compact" && (
+          <UserProfileCompact
+            profile={profile}
+            isSelf={isSelf}
+            presenceLabel={presence?.label ?? ""}
+            showOnlineDot={presence?.isOnline ?? false}
+            badges={strip}
+            opening={opening}
+            onOpenChat={() => void openChat()}
+            onEscalate={escalate}
+          />
+        )}
+        {!failure && member && tier === "full" && (
           <MemberCard
             member={member}
-            isSelf={member.id === currentUserId}
-            roleLabel=""
+            isSelf={isSelf}
+            // Said only where it is true. `chatRoleLabel` answers "" for an
+            // ordinary member, which the card already draws nothing for, so
+            // the line appears for an owner and an administrator and for
+            // nobody else.
+            roleLabel={context.standing ? chatRoleLabel(context.standing, context.channel ? "канала" : "группы") : ""}
             presenceLabel={presence?.label ?? ""}
-            joinedLabel=""
+            joinedLabel={context.joinedAt ? formatJoinedAt(context.joinedAt) : ""}
             showOnlineDot={presence?.isOnline ?? false}
             badges={strip}
             groupRoles={[]}
             groupVocabulary={null}
             onToggleGroupRole={() => {}}
             assigning={null}
+            mutualChats={mutual}
+            onOpenMutualChat={(chatId) => void openMutualChat(chatId)}
             opening={opening}
             onOpenChat={() => void openChat()}
           />

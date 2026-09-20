@@ -2290,8 +2290,11 @@ Discord's implementation higher «из-за большей кастомизац�
 
 ### 17.5 What this pass did not establish
 
-- **Discord's profile on a phone** — popout versus modal, and whether they share
-  a store. Item 36 still rests on the web reading.
+- ~~**Discord's profile on a phone** — popout versus modal, and whether they
+  share a store. Item 36 still rests on the web reading.~~ **Half of this was
+  measured on 2026-09-21; see 17.7.** There is no popout on a phone at all, so
+  the first half of the question dissolved rather than being answered. Whether a
+  store is shared there is still unestablished.
 - **How Discord's DM list marks a bot**, if it does.
 - **Ours on the same screen for anything but type.** Our row heights, viewer and
   attach flow were not measured on the device this pass; the comparisons in
@@ -2471,3 +2474,50 @@ than changed here.
   measured; only that its count is the whole chat's.
 - **Our own surfaces were not measured on the device this pass.** Everything
   about ours above is from the source and from the browser at 390 and 1440.
+
+### 17.7 The phone's profile, and the third divergence — MEASURED ON DEVICE, 2026-09-21
+
+17.5 listed «Discord's profile on a phone» as unestablished and said item 36's
+design rested on the web reading alone. It no longer does.
+
+**Device and method.** `P212C6000159`, Discord 345.9, 1080x2400 at 420 dpi
+(411 x 914 dp). `adb exec-out screencap` only — **no uiautomator**, per the rule
+this document records after a WebView handed message text to the accessibility
+tree. Captures were analysed in Python for band boundaries and edge colours and
+deleted; no content was recorded and none is repeated here. One tap was made
+inside a conversation (a message author's avatar) and the device was returned to
+its launcher afterwards.
+
+**What a face opens on a phone: the full profile, immediately.**
+
+- The surface is a **page, not a sheet and not a card**. Its banner spans
+  x = 0..1079 — the whole 411 dp, edge to edge — so there is no inset and no
+  rounded card corner; the ground at the left edge above the banner reads
+  rgb(6,5,9) and below it rgb(0,0,0), against the conversation's rgb(15,12,26)
+  two taps earlier, so the surface is opaque and the conversation is not behind
+  it. There is no scrim.
+- Geometry: chrome at about 76 dp from the top, banner top at 114–122 dp and
+  about 130 dp tall, the avatar overlapping below it, then the name, then a
+  **row of two buttons of 184 dp each** at 16 dp margins with a ~13 dp gutter,
+  about 40–45 dp tall, at roughly 415–455 dp down the page. Sections continue to
+  the bottom of a scrolling page.
+- **No popout is drawn on the way.** The press goes straight to the full
+  surface.
+
+**So mobile Discord has one profile tier, and that is the third place it
+contradicts its own web bundle** — after the settings shape and the bottom band,
+both in 17.1. The pattern is now firm enough to state as a rule for this
+project: a Discord shape read from the web bundle is a **desktop** shape until a
+phone has been checked, and the phone's answer is usually «one full-screen
+surface where the desktop had two».
+
+**What it decided in our design.** `artifacts/kub/src/lib/profileTier.ts`:
+below `PROFILE_COMPACT_MIN_WIDTH` (768, this product's `md`) every opener —
+a glance or a named act — lands on the full card, and that card is the phone's
+whole screen rather than a small centred dialog. The compact tier exists only
+where there is a *beside* for it to stand in.
+
+**Still not established, and not guessed at:** whether mobile Discord's profile
+and any other surface share a store the way the web client's popout and modal do
+(§15.1). Nothing on a phone exposes that, and our own store was built from the
+web reading, which is the half that was measurable.

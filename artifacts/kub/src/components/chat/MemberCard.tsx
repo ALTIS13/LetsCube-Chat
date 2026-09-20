@@ -17,15 +17,17 @@
  * the empty answers this card already draws nothing for.
  */
 
-import { UserAvatar } from "@/components/ui/ChatAvatar";
+import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
 import { KubBadge, KubButton, KubIcon } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { ChatRoleChip } from "./ChatRoleChip";
 import { DISABLED_SINK } from "@/lib/controlSurface";
 import type { ChatRole } from "@/lib/chatRoles";
 import { ProfileBadgeChip } from "@/components/profile/ProfileBadgeChip";
-import { formatUsername, memberDisplayName } from "@/lib/chatMemberList";
+import { ProfileUsernameLine } from "@/components/profile/ProfileUsernameLine";
+import { memberDisplayName } from "@/lib/chatMemberList";
 import type { BadgeStrip } from "@/lib/profileBadges";
+import type { MutualChats } from "@/lib/profileMutualChats";
 import type { Profile } from "@/types/database";
 
 /**
@@ -71,6 +73,8 @@ export function MemberCard({
   assigning,
   opening,
   onOpenChat,
+  mutualChats = null,
+  onOpenMutualChat,
 }: {
   member: MemberRow;
   isSelf: boolean;
@@ -99,22 +103,39 @@ export function MemberCard({
   assigning: string | null;
   opening: boolean;
   onOpenChat: () => void;
+  /**
+   * The groups and channels this person and the reader are both in.
+   *
+   * The one list Discord's profile modal has that has an honest analogue here
+   * — «Mutual Servers» — and the reason the full card is worth escalating to.
+   * Tabs are for lists and the body is for facts (§15.1), and with one list
+   * there is no tab bar to build: a section is a tab bar's honest form when
+   * there is one tab.
+   *
+   * Optional, and absent inside `ChatInfoPanel`: there the card is already
+   * inside one of the groups they share, and a list whose first entry is the
+   * room you are standing in reads as a mistake.
+   */
+  mutualChats?: MutualChats | null;
+  /** Opens one of them. Absent means the rows are not pressable. */
+  onOpenMutualChat?: (chatId: string) => void;
 }) {
   return (
     <div
       className="flex flex-col items-center px-5 py-6 text-center"
+      data-profile-tier="full"
       data-member-card-id={member.id}
     >
       <UserAvatar user={member} size="xl" showOnline={showOnlineDot} />
       <div className="mt-4 max-w-full text-lg font-bold text-[color:var(--kub-text)] [overflow-wrap:anywhere]">
         {memberDisplayName(member)}
       </div>
-      <div
-        className="mt-1 max-w-full truncate text-sm text-[color:var(--kub-muted)]"
-        data-testid="member-card-username"
-      >
-        {formatUsername(member.username)}
-      </div>
+      {/* The shared leaf, not a second spelling of the same line (D-283's
+          two-tier follow-up). The copy control came with it from the search's
+          «Мини-профиль», which this product no longer draws: folding that
+          surface into these two would otherwise have dropped the one thing it
+          could do that neither of them could. */}
+      <ProfileUsernameLine username={member.username} className="mt-1" />
       {roleLabel && (
         <div className="mt-2 text-sm font-semibold text-[color:var(--kub-accent-text)]">
           {roleLabel}
@@ -209,9 +230,44 @@ export function MemberCard({
         </div>
       )}
       {member.bio && (
-        <p className="mt-4 max-w-sm text-sm leading-relaxed text-[color:var(--kub-muted)] [overflow-wrap:anywhere]">
+        <p
+          className="mt-4 max-w-sm text-sm leading-relaxed text-[color:var(--kub-muted)] [overflow-wrap:anywhere]"
+          data-testid="member-card-bio"
+        >
           {member.bio}
         </p>
+      )}
+      {mutualChats && mutualChats.total > 0 && (
+        <div className="mt-5 w-full max-w-xs text-left" data-testid="member-card-mutual-chats">
+          <div className="px-1 pb-1.5 text-[12px] font-bold uppercase tracking-[0.16em] text-[color:var(--kub-muted)]">
+            Общие группы
+          </div>
+          <div className="flex flex-col gap-1">
+            {mutualChats.shown.map((row) => (
+              <button
+                key={row.id}
+                type="button"
+                data-testid="member-card-mutual-chat"
+                disabled={!onOpenMutualChat}
+                onClick={() => onOpenMutualChat?.(row.id)}
+                className={cn(
+                  "flex w-full min-w-0 items-center gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
+                  !onOpenMutualChat && DISABLED_SINK,
+                )}
+              >
+                <ChatAvatar chat={row as never} size="sm" />
+                <span className="min-w-0 flex-1 truncate text-sm text-[color:var(--kub-text)]">
+                  {row.name?.trim() || (row.type === "channel" ? "Канал" : "Группа")}
+                </span>
+              </button>
+            ))}
+          </div>
+          {mutualChats.hidden > 0 && (
+            <div className="px-1 pt-1.5 text-xs text-[color:var(--kub-muted)]" data-testid="member-card-mutual-more">
+              и ещё {mutualChats.hidden}
+            </div>
+          )}
+        </div>
       )}
       <div className="mt-6 w-full max-w-xs">
         <KubButton

@@ -132,12 +132,23 @@ test.describe("KUB global search", () => {
     await userResult.waitFor({ state: "visible", timeout: 5_000 }).catch(() => null);
     if (await userResult.isVisible().catch(() => false)) {
       await userResult.click();
-      const copyUsername = page.getByTestId("search-profile-copy-username");
+      // Repointed on 2026-09-21. Activating a person used to draw
+      // `SearchProfilePreview` — «Мини-профиль», the third profile surface —
+      // inside the results column, with its own «Назад к результатам». That
+      // surface is deleted: a person chosen out of a list is an act whose
+      // subject IS the person, so it opens the same full card every other
+      // named act opens, over the results rather than instead of them.
+      const profile = page.getByTestId("user-profile-overlay");
+      await expect(profile).toBeVisible();
+      await expect(profile).toHaveAttribute("data-profile-surface", "full");
+      // The copy control came with it, onto the card's shared username line.
+      const copyUsername = page.getByTestId("profile-copy-username");
       await expect(copyUsername).toBeVisible();
       await expect(copyUsername).toHaveAttribute("aria-label", "Скопировать никнейм");
       await expect(copyUsername).toHaveAttribute("title", "Скопировать никнейм");
       await expect(page.getByRole("button", { name: /^Скопировать$/ })).toHaveCount(0);
-      await page.getByTestId("global-search-profile-back").click();
+      await page.getByTestId("user-profile-close").click();
+      await expect(page.getByTestId("user-profile-overlay")).toHaveCount(0);
     }
 
     await input.fill("+7 (999) 123-45-67");
