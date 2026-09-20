@@ -63,7 +63,6 @@ import {
   MIC_ACTIVATION_SCOPE_NOTE,
   MIC_ACTIVATION_SEGMENTS,
   MIC_AUTO_THRESHOLD_BUSY_LABEL,
-  MIC_AUTO_THRESHOLD_CAPTURE_NOTE,
   MIC_AUTO_THRESHOLD_LABEL,
   MIC_AUTO_THRESHOLD_MS,
   MIC_GATE_LEVEL_LABEL,
@@ -76,7 +75,6 @@ import {
   micActivationHint,
   micAutoThresholdNote,
   micAutoThresholdRefusal,
-  micAutoThresholdSettled,
   micGateOpenAt,
   micLevelPosition,
   micGateThresholdHint,
@@ -764,11 +762,11 @@ export function AudioSettingsSection() {
               too when there is none — so the threshold can be set without
               knowing that a button two rows up is a prerequisite.
 
-              **That was half an answer.** Starting the capture is right;
-              doing it without a word is what the owner reported twice
-              (D-281). The idle note under this button now says the microphone
-              will come on, and `MIC_AUTO_THRESHOLD_CAPTURE_NOTE` below says it
-              is on and where it goes off.
+              It leaves the capture open afterwards, on purpose: the «done»
+              note asks the person to speak into it. A sentence saying so was
+              added on 2026-09-20 and removed the same day — the owner: «как бы
+              пользователь и так знает что его микрофон используется». The
+              reasoning is at `micAutoThresholdNote`.
             */}
             {/*
               An action row, the shape «Сбросить настройки звука» is drawn in
@@ -801,15 +799,6 @@ export function AudioSettingsSection() {
             <AudioNote tone={autoThreshold === "failed" || autoThreshold === "silent" ? "danger" : "muted"}>
               {micAutoThresholdNote(autoThreshold)}
             </AudioNote>
-            {/*
-              D-281. The measurement leaves the capture open on purpose — the
-              «done» note asks the person to speak into it — and until now
-              nothing said so in either direction. The reasoning for keeping the
-              capture rather than closing it is at the constant.
-            */}
-            {testing && micAutoThresholdSettled(autoThreshold) && (
-              <AudioNote>{MIC_AUTO_THRESHOLD_CAPTURE_NOTE}</AudioNote>
-            )}
           </>
         )}
 

@@ -785,52 +785,28 @@ export function micAutoThresholdNote(state: MicAutoThresholdState): string {
   if (state === "failed") {
     return "Не удалось измерить: уровень микрофона так и не пришёл. Порог остался прежним.";
   }
-  return `Включит микрофон, послушает комнату две секунды и поставит порог на ${MIC_AUTO_THRESHOLD_MARGIN_DB} дБ выше её шума.`;
+  return `Слушает комнату две секунды и ставит порог на ${MIC_AUTO_THRESHOLD_MARGIN_DB} дБ выше её шума.`;
 }
 
-/**
- * Whether the measurement has finished, in either direction.
- *
- * The three states in which the control has let go of the capture — and the
- * capture is still open, which is what `MIC_AUTO_THRESHOLD_CAPTURE_NOTE` is
- * for. Exported rather than written as a comparison at the call site so that
- * adding a sixth state cannot quietly leave the sentence out of it.
- */
-export function micAutoThresholdSettled(state: MicAutoThresholdState): boolean {
-  return state === "done" || state === "failed" || state === "silent";
-}
+
 
 /**
- * That the microphone is on, said where it was switched on — D-281.
+ * There is deliberately **no sentence here saying the microphone is on.**
  *
- * The owner, twice: «но также активирует сверху функцию проверки». He pressed
- * «Подобрать порог», the «Уровень» control two groups up flipped to
- * «Остановить», and nothing told him either before or after. `lib/micLevel.ts`
- * states the principle this breaks — «a settings screen that opens the
- * microphone by itself is a settings screen that turns the light on when
- * nobody asked» — and the comment beside this control in
- * `AudioSettingsSection.tsx` was written to *defend* the opening, not the
- * silence about it.
+ * One was written on 2026-09-20 (D-281) and removed the same day on the
+ * owner's word: «как бы пользователь и так знает что его микрофон
+ * используется, он ведь зашёл общаться в войсе». He is right, and the reading
+ * that produced it was mine: he had *observed* that this control starts the
+ * capture, and I filed the observation as a complaint. A sentence explaining
+ * what the reader already knows is not neutral — it is one more row to skip on
+ * a screen he had already called crowded.
  *
- * **The capture stays, and the surface speaks.** The alternative was to close
- * it again, and it loses more than it saves: `micAutoThresholdNote("done")`
- * ends «Скажите что-нибудь: полоса должна загораться на голосе и гаснуть в
- * тишине», which is the step that turns a number into a threshold somebody has
- * *watched work*; and the whole threshold group is drawn around a live bar, so
- * a control that measured and then killed the capture would leave
- * `micGateThresholdHint(true)` describing a bar frozen at zero — which is
- * D-279 again, the copy promising something the pixels do not show. What was
- * wrong was never the capture. It was that it opened, and stayed open, without
- * a word.
- *
- * So: the idle note above now says the microphone will come on, and this says
- * it is on and where it goes off. The words «Остановить» and «Уровень» are the
- * real label and the real caption from `lib/audioSettingsSurface.ts`, written
- * out here because this module imports nothing;
- * `tests/unit/mic-gate.test.mts` reads both modules and fails if they drift.
+ * The behaviour it described is unchanged and still deliberate. «Подобрать
+ * порог» opens the microphone and leaves it open, because
+ * `micAutoThresholdNote("done")` asks the person to speak into it, and a
+ * threshold nobody has watched work is a threshold nobody has set. It goes off
+ * where it always has: «Остановить», in the «Уровень» group above.
  */
-export const MIC_AUTO_THRESHOLD_CAPTURE_NOTE =
-  "Микрофон сейчас включён — поэтому полоса живая. Выключить его: кнопка «Остановить» в группе «Уровень».";
 
 export const MIC_TALK_KEY_ROW_LABEL = "Клавиша для разговора";
 export const MIC_TALK_KEY_LISTENING = "Нажмите клавишу…";

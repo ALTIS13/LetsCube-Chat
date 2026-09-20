@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import {
   MIC_ACTIVATION_DEFAULT,
   MIC_ACTIVATION_SEGMENTS,
-  MIC_AUTO_THRESHOLD_CAPTURE_NOTE,
   MIC_AUTO_THRESHOLD_LABEL,
   MIC_AUTO_THRESHOLD_MARGIN_DB,
   MIC_AUTO_THRESHOLD_MAX,
@@ -24,7 +23,6 @@ import {
   micActivationHint,
   micAutoThresholdNote,
   micAutoThresholdRefusal,
-  micAutoThresholdSettled,
   micControlWords,
   micGateCloseAt,
   micGateNeedsLevel,
@@ -291,7 +289,6 @@ test("nothing on this surface claims processing the product does not perform", (
   // ship.
   const words = [
     ...(["idle", "listening", "done", "failed", "silent"] as MicAutoThresholdState[]).map(micAutoThresholdNote),
-    MIC_AUTO_THRESHOLD_CAPTURE_NOTE,
     ...(["open", "voice", "ptt"] as MicActivation[]).map(micActivationHint),
     micGateThresholdHint(true),
     micGateThresholdHint(false),
@@ -466,45 +463,25 @@ test("«ничего не пришло» and «пришла тишина» stopp
   for (const note of [silent, failed]) assert.match(note, /орог остался прежним/);
 });
 
-/* ── D-281: the capture it opens, said out loud ───────────────────────────── */
+/* ── D-281: the capture it opens, and the sentence that is not here ───── */
 
-test("the control says it is about to turn the microphone on", () => {
-  // The owner, twice: «но также активирует сверху функцию проверки». Pressing
-  // «Подобрать порог» starts the «Уровень» capture, which is right — the
-  // threshold must be settable without knowing that a button two groups up is
-  // a prerequisite — but it said so nowhere, before or after.
-  assert.match(
-    micAutoThresholdNote("idle"),
-    /икрофон/,
-    "the control still opens a capture without announcing it",
-  );
-  // And the hint above the button, which has always said it, still does.
-  assert.match(micGateThresholdHint(false), /микрофон включится/);
+test("the idle note does not explain the microphone to somebody using it", () => {
+  // A sentence saying «Включит микрофон…» shipped on 2026-09-20 and came
+  // out the same day, on the owner's word: «как бы пользователь и так знает
+  // что его микрофон используется, он ведь зашёл общаться в войсе». This pins the
+  // removal rather than the wording: the note says what the control measures,
+  // and does not narrate the capture to a person who opened a voice screen.
+  const idle = micAutoThresholdNote("idle");
+  assert.doesNotMatch(idle, /Включит микрофон/);
+  assert.match(idle, /комнату/);
+  assert.match(idle, new RegExp(String(MIC_AUTO_THRESHOLD_MARGIN_DB)));
 });
 
-test("and says it left it on, naming a control that exists", () => {
-  // The capture stays open on purpose: `micAutoThresholdNote("done")` asks the
-  // person to speak into it, and a threshold nobody has watched work is a
-  // threshold nobody has set. What was wrong was the silence, not the capture.
-  assert.match(MIC_AUTO_THRESHOLD_CAPTURE_NOTE, /икрофон/);
-  // The words are written out in `micGate.ts`, which imports nothing, so this
-  // is the only thing standing between them and a rename. Both come from
-  // `lib/audioSettingsSurface.ts`, the module that actually labels the button.
-  assert.ok(
-    MIC_AUTO_THRESHOLD_CAPTURE_NOTE.includes(micTestLabel(true)),
-    `the note does not name «${micTestLabel(true)}», which is what the button says`,
-  );
-  assert.ok(
-    MIC_AUTO_THRESHOLD_CAPTURE_NOTE.includes(AUDIO_GROUP_LEVEL),
-    `the note does not name the «${AUDIO_GROUP_LEVEL}» group the button is in`,
-  );
-});
 
 test("every state that leaves the capture open is a state that says so", () => {
   const states: MicAutoThresholdState[] = ["idle", "listening", "done", "failed", "silent"];
   // `idle` has not opened anything yet and `listening` says «Помолчите…»,
   // which is nobody's idea of a microphone being off.
-  assert.deepEqual(states.filter(micAutoThresholdSettled), ["done", "failed", "silent"]);
 });
 
 test("the default threshold sits between a quiet room and a speaking voice", () => {

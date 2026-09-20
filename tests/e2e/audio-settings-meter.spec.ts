@@ -718,27 +718,27 @@ test.describe("the level meter is an instrument", () => {
   }
 
   /**
-   * The capture this control opens, announced — D-281.
+   * The measurement leaves the capture open, and that is the decision.
    *
-   * The owner, twice: «но также активирует сверху функцию проверки». His
-   * screenshot shows the «Уровень» control still reading «Остановить» after
-   * the measurement finished: the capture is open, he did not ask for it and
-   * nothing told him. Opening it is right — the comment beside the control
-   * says why, and `micAutoThresholdNote("done")` asks him to speak into it —
-   * so what is asserted here is the announcement, before and after, and that
-   * the capture really is still running when the sentence claims it is.
+   * The owner reported on 2026-09-20 that «Подобрать порог» also starts the
+   * «Уровень» capture. A pair of sentences announcing it shipped the same day
+   * and came out again on his word — «как бы пользователь и так знает что его
+   * микрофон используется, он ведь зашёл общаться в войсе» — so what is left
+   * to hold is the **behaviour**, which is deliberate and load-bearing:
+   * `micAutoThresholdNote("done")` asks him to speak into the capture, and the
+   * whole threshold group is drawn around a live bar, so a control that
+   * measured and then closed it would leave the hint describing a bar frozen
+   * at zero. Nothing here asserts copy; a test that pinned the sentences is
+   * what had to be rewritten when they went.
    */
-  test("the measurement says it will turn the microphone on, and that it left it on", async ({ page }) => {
+  test("the measurement opens the capture and leaves it open", async ({ page }) => {
     const panel = await openSound(page);
     await panel.getByTestId("mic-activation-picker").locator('[data-mic-activation="voice"]').click();
     const button = panel.getByTestId("mic-auto-threshold");
     const micTest = panel.getByTestId("audio-mic-test");
 
-    // Before: nothing is open, the «Уровень» control offers to start, and the
-    // note under this button says pressing it will turn the microphone on.
     expect(await page.evaluate(() => window.__micProbe?.opened ?? 0)).toBe(0);
     await expect(micTest).toHaveText("Проверить микрофон");
-    await expect(panel.getByText(/Включит микрофон/)).toBeVisible();
 
     await button.click();
     await expect
@@ -747,19 +747,16 @@ test.describe("the level meter is an instrument", () => {
     await holdLevel(page, 0.0025118864315095794);
     await expect(button).toHaveAttribute("data-state", "done", { timeout: 15_000 });
 
-    // After: the capture is genuinely still open — this is the owner's
-    // screenshot, asserted — and now the screen says so and names the control
-    // that closes it, rather than leaving him to find a button two groups up.
+    // The capture is genuinely still open — this is the owner's screenshot,
+    // asserted — and the «Уровень» control is the way out of it, where it has
+    // always been.
     expect(await page.evaluate(() => window.__micProbe?.closed ?? 0)).toBe(0);
     await expect(micTest).toHaveText("Остановить");
-    const note = panel.getByText(/Микрофон сейчас включён/);
-    await expect(note).toBeVisible();
-    await expect(note).toContainText("Остановить");
-    await expect(note).toContainText("Уровень");
 
-    // And it is not a sentence that outlives the thing it describes.
     await micTest.click();
-    await expect(note).toHaveCount(0);
+    await expect
+      .poll(async () => page.evaluate(() => window.__micProbe?.closed ?? 0))
+      .toBeGreaterThan(0);
   });
 
   /**
