@@ -523,6 +523,34 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     own deploy cadence, and a quiet restart for the one state where a reload
     already costs nothing.
 
+    **Second step taken the same day, and it is the one that unblocks the
+    rest:** the conversation now has an address — `/chat/<chatId>` and
+    `/chat/<chatId>/m/<messageId>`, Discord's shape minus a guild. The promise
+    is an equality rather than a behaviour, and it is what
+    `tests/e2e/chat-address.spec.ts` holds: **entering a conversation through
+    its URL lands exactly where entering it through a click lands** — the same
+    message at the top, the same unread divider, the same jump-to-bottom
+    control. Nothing in `MessageList` had to change for that; §11's entry rule
+    was already right and already covered, and all the address does is carry it
+    through a reload. The rule that keeps the URL and the store in step is
+    `lib/chatRoute.ts`, mutation-tested; the wiring is `hooks/useChatAddress.ts`.
+
+    **We are better than the reference here, not merely different**, and
+    section 9 of `docs/operations/reference-clients.md` states the reason beside
+    the observation: Discord's reading position is a client fact that dies with
+    the page — no unread-derived jump target exists anywhere in their main
+    bundle — so their cold boot lands at the bottom with a banner, while ours
+    comes back from the server and can land on the divider either way.
+
+    Still to do, in order: **the voice rejoin** (2B), and only then the
+    relaxation of D-282's two vetoes. The rejoin has one measurement owed before
+    any number is promised — `voiceReconciler.ts:40` already carries
+    `DEFAULT_STALE_MS = 5 * 60_000`, the owner's five minutes exactly, but that
+    file's own comment says the table is cosmetic and LiveKit's room state is
+    the authority. **How long LiveKit holds a participant after a drop has to be
+    measured before five minutes is said out loud**, because promising a window
+    the server does not hold is worse than promising none.
+
 
 36. `[ ]` The person behind the conversation: reaching a profile, the depth of
     the row menu, and the two search surfaces. Asked for by the owner on
