@@ -837,20 +837,26 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     discretion and may outlive its owner's presence while other people are in
     it. Emptiness is an input; ownership is the rule.
 
-    Three things the spec does not settle, written out because each fails only
-    later:
+    **The lifecycle is settled, and the two holes this entry listed are
+    closed by the owner's own rule (2026-09-20):** «если все выходят то канал
+    автоматически исчезает». So emptiness **is** the terminal condition, and
+    ownership governs only what happens while somebody is still inside:
 
-    - **The orphan.** The creator leaves, others stay, the creator never comes
-      back. A channel whose only closing condition is a person who is gone is a
-      channel that never closes.
-    - **The immortal.** «пока его создатель не захочет отключить» read literally
-      has no upper bound, and a group collects one of these per curious
-      visitor. Read Discord's own answer before inventing one.
-    - **What «управлять» contains** — rename, participant limit, lock, move
-      or remove somebody, hand ownership on. Each is a permission and our model
-      has none of them per channel. `voice_channels` grants are already unusual
-      (INSERT is table-level while UPDATE is per column), so this is a
-      data-model question and not a switch.
+    - the creator leaving does not end it while others remain;
+    - the creator keeps the rights in it and may close it deliberately;
+    - **everybody leaving ends it, whatever the creator wants.**
+
+    That answers the orphan (the creator who never returns cannot strand a
+    channel, because the last person out closes it) and the immortal (there is
+    no state in which a channel outlives its own emptiness). What is left of
+    the earlier correction still stands: emptiness is the *terminal* rule, not
+    the *only* rule — a channel with people in it survives its owner's absence,
+    which a plain «delete when empty» would not express on its own.
+
+    **What «управлять» contains is now visible** — see item 44, which
+    records Discord's channel settings from the owner's screenshots. The
+    permission model there is the one this feature needs, so 43 waits on 44
+    rather than inventing a smaller one.
 
     Why it is bigger than a feature: it is the first thing asked of this
     product's bots that **acts on voice**, and the bot platform today is a chat
@@ -863,6 +869,53 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     One measured fact that still holds: `auto_create: false`, so only our
     gateway can bring a room into being. A bot cannot conjure one; every
     created channel goes through the same door as every other.
+
+
+44. `[ ]` What a channel's own settings are, and the participant cap we are
+    shipping today. The owner sent Discord's channel screens on 2026-09-20
+    together with the rule for item 43, and one line of them is a live
+    divergence rather than a feature request.
+
+    **The divergence, first, because it is already in production.**
+    `livekit.yaml` carries `room.max_participants: 10`, so **every voice
+    channel in this product is capped at ten people**. The owner's statement is
+    «изначально количество участников в голосовом не ограничено», and Discord's own
+    control runs ∞…99 with the limit **off** by default. So the shipped value
+    is not a tuned capacity decision, it is a default nobody revisited, and it
+    contradicts the product's intent. Changing it is a one-line configuration
+    change **and a capacity question** — the SFU is capped at 2 cores and 1 GiB
+    (see D-262's measurement), and an unbounded room on that allocation is a
+    promise the host has not been asked to keep. Measure before lifting, and
+    lift deliberately rather than to infinity.
+
+    **The settings surface, from his screenshots.** Discord's channel has four
+    sections — Обзор, Права доступа, Приглашения, Интеграция — plus a
+    destructive «Удалить канал» standing apart from them. Обзор carries the
+    name, slow mode, content visibility, **bitrate (8–384 kbps, with a warning
+    above 64)**, video quality, the user limit and a region assignment.
+
+    **The permission model is the part that matters and it is the owner's own
+    sentence:** «распространяются права группы каналов (текстовых/голосовых)
+    либо личные права этого голосового». Discord draws exactly that: a
+    channel either **inherits its category's permissions or overrides them**,
+    with a banner saying which state it is in and a «Синхронизировать» button to
+    go back. Each permission is **three-state per role or member** — deny,
+    inherit, allow — not a checkbox, and that third state is the whole
+    mechanism: it is what lets a category's answer flow through.
+
+    Two consequences for us, both structural:
+
+    - **We have no category layer.** Groups have channels; there is nothing
+      between them for permissions to be inherited from. Either that layer gets
+      built or the inheritance has a different parent, and which one is a
+      decision, not a detail.
+    - **Three-state is not our shape.** Our grants are boolean-by-role, so
+      «inherit» has nowhere to live. This is the same data-model question item
+      43 ran into, and it is why 43 now waits on this entry.
+
+    Scope it against Discord, per CLAUDE.md §7, and sequence it after the
+    roles and permissions work of item 19, which owns the model it would
+    extend.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
