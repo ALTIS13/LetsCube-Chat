@@ -918,48 +918,68 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     extend.
 
 
-45. `[ ]` The micro-group: a conversation for a few people that is not a server.
-    Named by the owner on 2026-09-20, while we were deciding whether a private
-    chat's two-person voice cap should be lifted: «при подобной ситуации в
-    дискорде происходит создание микро-группы под 2+ человек которую владелец может
-    также снести по надобности, иногда удобнее чем заходить на сервер основной».
+45. `[ ]` The micro-group: a conversation for a few people that is not a
+    server. Named by the owner on 2026-09-20 while we were deciding whether a
+    private chat's two-person voice cap should be lifted, and **specified by
+    him the same evening**, which closed two of the three questions this entry
+    first listed.
 
-    **It settles a design question rather than adding a wish**, which is why it
-    is filed at once. Item 44 lifts the participant cap on **group** voice
-    channels while private chats stay at two, and the obvious objection is
-    «what if a third person is needed in a one-to-one call». Discord's answer
-    is not to widen the DM: it is to make a **group DM**, a distinct and
-    lighter object. So the rule for item 44 stands and gains a reason — a
-    private chat is two people by definition, and «one more person» is a
-    different object, not a bigger one.
+    **Why it exists, in his words:** «при подобной ситуации в дискорде
+    происходит создание микро-группы под 2+ человек… иногда удобнее чем заходить на
+    сервер основной». **It settles item 44's rule rather than adding a
+    wish**: a private chat is two people by definition, and «one more person»
+    is a different object, not a bigger one.
 
-    **What we have, read off production 2026-09-20:** 28 private chats, 15
-    groups, no `channel` rows. A group already carries voice channels, the
-    roles machinery, folders and invites — it is shaped like a server. There is
-    no third shape, so «the three of us, right now» costs somebody a full group
-    with everything that implies. (`chat_roles` is empty across the whole
-    database today, so the weight is in the concept rather than in anybody's
-    data yet, which makes this a cheap moment to add a lighter shape.)
+    **Decided by the owner, no longer open: it is a separate `chats.type`.**
+    His reason is the right one and worth keeping verbatim — «сервер в дискорде
+    именно что обладает огромным комбайном возможностей». A flag on a group would
+    be a group pretending, and the seams would show.
 
-    What has to be decided, and none of it is obvious:
+    **How it is born, and this is the whole design.** Not a «create group»
+    form. Two people are already talking in a private chat, one presses the
+    add-to-conversation control in the header, and the micro-group exists —
+    «почти бесшовно… буквально маленькая группа». So the gesture is the
+    feature; a micro-group that had to be assembled from a form would answer a
+    different need.
 
-    - **Is it a third `chats.type`, or a group with its machinery hidden?** A
-      new type touches every RLS policy and every place that branches on type;
-      a flag risks a «group that pretends» whose seams show later. Read how
-      Discord separates a group DM from a guild before choosing.
-    - **Who may delete it.** His word is «владелец», which for us is loaded:
-      migration `20260911120000` had to stop a private chat's owner deleting it
-      for both sides, because whoever opens a private chat becomes its owner.
-      A micro-group needs its deletion rule stated deliberately rather than
-      inherited from `Chat owners delete chat`.
-    - **What it does not get.** The point of the object is that it is lighter,
-      so the list of what it *lacks* — channels, roles, folders, invites — is
-      the specification, and writing it down is what stops it drifting into a
+    **What it looks like:** a private chat, plus a member list down the right
+    which can be hidden, as on a server. The **only** hierarchy is a small
+    crown on its creator. Its own message history and media. Removed as
+    quickly as it is made.
+
+    **The hard part, which the seamlessness hides.** The call is already
+    running in the private chat's own voice channel, capped at two *by
+    definition* (item 44). Promoting means a different chat with a different
+    voice channel — so either the live call migrates, or the two people are
+    momentarily dropped and rejoined. **A promotion that interrupts the
+    conversation it grew out of is not seamless and would be the defect that
+    kills the feature.** Establish what Discord actually does here before
+    designing it; this is the measurement this entry owes.
+
+    Two things still to settle:
+
+    - **Deletion.** «владелец может снести по надобности» and the crown says who
+      that is — but «snести» for everyone is exactly what migration
+      `20260911120000` had to stop a private chat's owner doing, since whoever
+      opens one becomes its owner. Here the creator is explicit and marked, so
+      the answer may legitimately differ; it has to be **stated**, with «delete
+      for all» and «leave» distinguished, not inherited from
+      `Chat owners delete chat`.
+    - **What it does not get.** The point is that it is lighter, so the list of
+      what it **lacks** — channels, roles, folders, invites, categories — is
+      the specification. Writing it down is what stops it drifting into a
       group.
 
-    Reference is Discord by CLAUDE.md §7. Sequence after item 44, whose rule it
-    justifies, and read it together with item 32 (calls in a private chat),
-    which is the other half of the same question.
+    **Production state, read 2026-09-20:** 28 private chats, 15 groups, no
+    `channel` rows; a group already carries voice channels, the roles
+    machinery, folders and invites. `chat_roles` is empty across the whole
+    database, so the weight is in the concept rather than in anybody's data —
+    which makes this a cheap moment to add a lighter shape and an expensive one
+    later.
+
+    Reference is Discord per CLAUDE.md §7. Sequence after item 44, whose rule
+    it justifies, and read with item 32 (calls in a private chat), which is the
+    other half of the same question.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
