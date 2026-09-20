@@ -1051,10 +1051,25 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     That is what makes item 32's ring shared rather than duplicated: one call
     mechanic serves the first two rows.
 
-    Still to settle: **what it does not get.** The point is that it is lighter,
-    so the list of what it **lacks** — channels, roles, folders, invite links,
-    categories — is the specification, and writing it down is what stops it
-    drifting into a server.
+    **What it does not get — settled, and this is the specification.** The
+    owner, closing the last open question: «по сути всего того что ты
+    перечислил и нет, всё что доступно я показал на скриншотах, максимум
+    доступный для редактирования — поменять название и аватарку».
+
+    So a групповой чат has **no** channels, **no** roles, **no** folders, **no**
+    invite links and **no** categories. Its entire settings surface is two
+    fields — name and avatar — behind «Редактировать группу». Anything not in
+    the screenshots is not in the object, and **this paragraph is the test**: a
+    change that adds a capability to this shape needs the owner's word, because
+    the lightness is the feature and it erodes one reasonable-looking patch at
+    a time.
+
+    **One distinction he drew that is worth keeping, because it stops this
+    paragraph being read too broadly.** Pinning a message, deleting one,
+    replying to one — «само-собой разумеющиеся вещи которые есть везде». The
+    specification is about the **container**, not about what a message affords
+    inside it. Message-level capabilities are universal and arrive with the
+    conversation; the list above is what the *object* lacks.
 
     **Production state, read 2026-09-20:** 28 private chats, 15 groups, no
     `channel` rows; a group already carries voice channels, the roles
