@@ -564,7 +564,30 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     after the room has lapsed. And the reaper's window is the one the client's
     must equal, in both directions.
 
-    **One product question is open and is not the agent's to answer**, because
+    **2B is built and proved, 2026-09-20.** The window is five minutes, the
+    product returns by itself for what it caused and offers one button for what
+    it did not, the microphone travels with the record and is in force before
+    the track is published, and the notice lives on `VoiceCallShell` so the call
+    bar is on screen wherever a return can happen. `lib/voiceResume.ts` carries
+    the rule and is mutation-tested 15/15; `tests/e2e/voice-resume.spec.ts`
+    proves the behaviour against the DEV transport seam, five of its six
+    behavioural cases red against the shipped code first. What we do and where
+    it departs from Discord — who never auto-joins voice on startup, because
+    their server re-announces a voice state ours does not keep — is in
+    `docs/operations/voice.md`.
+
+    **So the last step of item 35 is now unblocked**: D-282's two vetoes can be
+    reconsidered. Note what each is now worth. «No conversation open» is spent —
+    a reload restores the conversation and lands where a click lands, so it
+    protects nothing and should go. «Never while a call is connected» is **not**
+    spent by 2B and must not be traded on its strength: a return is «join
+    again», the room may have lapsed, the other side hears a departure and a
+    rejoin, and five minutes of grace is not the same promise as not
+    interrupting somebody mid-sentence. If it is relaxed at all it wants its own
+    argument and its own measurement, not this one's.
+
+    **The product question that was open is answered**, and the answer was the
+    owner's own sentence rather than a judgement call:
     it decides whether the product may switch on somebody's microphone without
     being asked — which is exactly D-281. Discord does not auto-join voice on
     startup: every `selectVoiceChannel` call site in its bundle is a user

@@ -228,6 +228,42 @@ prevent. The two are equal today by coincidence; the constants live in two
 different deployables and cannot be one constant, so each has to name the other,
 the way `RATE_LIMIT_RETENTION_MS` already names the gateway's window.
 
+### What we do with that freedom, and where it differs from Discord
+
+Built 2026-09-20 (`lib/voiceResume.ts`, `components/chat/VoiceResumeNotice.tsx`).
+A record of the live call — channel, chat, its name, the microphone's state and
+a timestamp — is kept in `localStorage` and refreshed every 60 seconds while the
+call is up. Hanging up forgets it; a drop does not. Within five minutes of the
+last heartbeat:
+
+- **the product returns by itself** when the *product* caused the interruption —
+  a transport that closed under a live page, or a reload the update path
+  performed;
+- **it offers one button** when something else did — a manual reload, a crashed
+  tab;
+- and past five minutes it does neither.
+
+**Discord does neither of the first two: nothing auto-joins voice on startup
+there.** Every `selectVoiceChannel` call site in their bundle is a user action,
+and what puts a Discord user back is their *server* re-announcing a voice state
+— which is exactly the thing ours does not keep, as the measurement above
+records. So this is a departure with a reason rather than an oversight: the
+mechanism that makes their client's restraint sufficient does not exist on our
+side, and the owner asked for the guarantee their arrangement gives him.
+
+The boundary is drawn where it is because it is the shape of his sentence: he
+named a drop and an update applied to him, and said nothing about pressing F5.
+Acting on that third case would switch on a microphone nobody asked to have
+switched on, which is D-281 with a larger blast radius. The mute therefore
+travels in the record and is in force **before** the track is published, and the
+notice is mounted on `VoiceCallShell` so the call bar — the thing that says a
+microphone is live — is on screen wherever a return can happen.
+
+*Owed:* a pointer to this section from
+`docs/operations/reference-clients.md` §9, where the per-client observations
+live. It was not written on 2026-09-20 because that file was under another
+agent's uncommitted edit and `git add` takes a file whole.
+
 ### What is not established
 
 Whether `livekit-server` v1.13.7 has a `departure_timeout` of its own and what
