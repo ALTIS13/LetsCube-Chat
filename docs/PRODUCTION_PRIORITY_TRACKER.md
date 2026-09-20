@@ -4224,6 +4224,91 @@ two things a line apart.
 
 Rollback is a fast-forward of `main` back to `4ac06e3`.
 
+## Decisions taken under the 2026-09-21 delegation
+
+The owner: «Принимай решения на основе подхода telegram/discord без моего
+вмешательства.» CLAUDE.md §7 records what that authorises and the three places
+it stops. These are the ones that were waiting on him.
+
+### HD is remembered — and this completes D-119 rather than overturning it
+
+The measurement (2026-09-20, Telegram 12.10.3 on the owner's A063): Telegram's
+HD is a binary **state** icon, SD↔HD, in the photo editor, and **the choice
+persists between sends**. We shipped the state and the wording yesterday
+(D-290) and deliberately did not persist it, because D-119 had removed a
+remembered quality.
+
+**Reading D-119 rather than its summary settles it the other way.** What it
+rejected was *being asked*: «what testers object to is not how many choices
+there are but that there is a choice at all», and the thing removed was a
+three-stop selector and a five-stop slider — objects Telegram does not have.
+**A remembered binary state is the opposite of a question**: you set it once and
+it stops asking. Not remembering is precisely what makes it a question on every
+send.
+
+So D-119's own principle argues for persistence, and the client it cites —
+«как в Telegram» — does persist. The decision stands: **persist the SD/HD
+state**, per device, and record in D-119 that its removal of a *remembered
+quality* referred to the multi-stop selector and not to this.
+
+What does **not** change: no quality question at send time, and «Файл» remains
+the separate, explicitly named uncompressed path.
+
+### Item 47 — structure for servers, a ready-made filter for the rest
+
+The survey answered the question this entry was opened on, and the answer is
+not «pick one of the two clients»:
+
+- **Discord's rail is real on a phone** — 72 dp, permanent, 48 dp per server,
+  thirteen visible and scrolling. It separates *kinds* by structure, so no
+  filter is needed for what it separates.
+- **Telegram already has type separation** — its folder editor carries five
+  toggles, «Боты» among them. The owner's complaint is therefore **not** that
+  the capability is missing. It is that it has to be **assembled by hand**: six
+  steps per folder, and he has six tabs built and still reports «шум из чатов».
+
+**So the failure being repaired is the assembly, not the absence**, and the
+answer takes one thing from each client:
+
+1. **Servers get their own rail**, as in Discord. §7 gives the shell to Discord,
+   and most of the noise then never forms — a server is the heaviest object and
+   it stops sharing a list with a person.
+2. **What remains — people, group chats and bots — gets a type filter that
+   already exists**, not a folder somebody must build. This is his «небольшая
+   капсула фильтрации по типу чатов», and it is Telegram's own capability with
+   its six steps removed.
+3. **Folders then stop carrying type** and become what they are elsewhere: a
+   personal grouping across types. Written down, or they will be asked to do
+   both jobs and do neither.
+
+Sequenced after item 45, whose three shapes are the categories this filters by;
+building the filter first would filter by a taxonomy that does not exist yet.
+
+### Two that the delegation deliberately does not cover
+
+CLAUDE.md §7 excludes decisions that lose or expose somebody's data. Both of
+these are that, so the reversible half is done and the question is stated
+rather than answered.
+
+**Photo retention.** The owner floated «может просто удалять фото, которым
+больше 8 месяцев». A finding from 2026-09-20 rules out the simple form of it:
+**deleting by age breaks forwards as they are built**, because `forward_message`
+copies variant rows pointing at *the same files* — so deleting an old photo
+deletes what somebody forwarded last week. And the number that would justify any
+policy does not exist: **nothing in this repository measures bucket growth.**
+The reversible half is therefore to measure it, and no policy is chosen until
+there is a number.
+
+**What a forward may reveal.** Naming the source is half-built and the half that
+shipped behaves correctly under RLS: the person who forwarded sees the name —
+the tester's own case — and a stranger in the target chat does not. Telegram's
+completion of this is a **denormalised** `fwd_from`, which by construction shows
+the name to everyone who can see the message, RLS or not. That is not a
+performance detail; it is a decision that a forward discloses its origin to the
+whole destination. Both reference clients do disclose it, so the reference does
+not decide it — the question is whether this product wants that, and it is the
+owner's.
+
 ## Completed Baseline - Do Not Rebuild Without A New Finding
 
 - `[x]` Self-host migration foundation: app, Supabase, Storage/media, mail delivery, and Coolify deployment moved to the server.
