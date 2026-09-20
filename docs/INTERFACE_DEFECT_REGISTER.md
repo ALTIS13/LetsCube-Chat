@@ -21309,6 +21309,251 @@ now awaits the panel's **own** animations, which is deterministic and cannot
 hang on an unrelated infinite one.
 
 ---
+## D-280 `[x]` «Подобрать порог» measured a microphone that was off and reported a room
+
+**Found by the owner on real hardware**, with his microphone's analogue dimmer
+turned fully to zero — producing no sound at all. The control set the threshold
+to **54%** and said «Порог поставлен на 10 дБ выше измеренного шума комнаты».
+
+The arithmetic is exact and was checked before anything was measured: on the
+byte instrument a silent capture reads 1/128, `micLevelPosition(1/128)` is
+0.39794, plus the 10/70 margin is 0.54080, which rounds to the 54% he
+photographed. His screenshot is of a pre-`e2d276c7` bundle — it still carries
+the old hint «Полоса под ползунком светится» — so the *number* is historical.
+
+**The defect is not.** On the float instrument the same silent capture measures
+position 0 and `autoMicThreshold` answers 0 + 10/70 = **14%**. A lower wrong
+number is still a threshold placed from a measurement that contained no signal.
+`autoMicThreshold` answered `null` only when it had fewer than
+`MIC_AUTO_THRESHOLD_MIN_SAMPLES` readings; it had no notion of «the readings
+arrived and were nothing», and two seconds of a dead capture is forty readings,
+twice what that guard asks for.
+
+**The consequence is worse than a wrong number.** Somebody calibrates with a
+muted or dimmed microphone, gets a threshold near the floor, then restores the
+microphone — and their real room noise now sits far above that threshold, so
+the gate never closes. The control's whole purpose is inverted, silently.
+
+The owner's words, and they name the reference: «дискорд в такие моменты
+полоску никуда не двигает если нет реального шума или звука».
+
+### What the owner's own capture reads now, which narrowed the fix
+
+Reloaded onto `0075becd` and re-tested with the dimmer still at zero, the
+control answers **23%**: 0.23 − 10/70 is 0.0871 of position, which is −63.9 dBFS
+(±0.4 dB for the rounding to hundredths). «теперь реально определяет только шум
+в реальном времени - хорошо».
+
+So his dimmed capsule does **not** read zero. It reads a real noise floor,
+honestly resolved, squarely inside the range a genuinely quiet room with a good
+microphone also occupies — and 23% is arguably the correct answer for it. No
+absolute floor can separate «dimmer at zero» from «quiet room», and the case
+that certainly must be refused is narrower than it first looked: a capture
+producing **nothing**.
+
+### The four populations, measured before the rule was chosen
+
+Synthetic captures driven through the real constraint pipeline — Chromium's
+file-backed fake device, the product's default `ec`/`ns`/`agc` — read exactly as
+`lib/micLevel.ts` reads after D-278: float peak over a 2048 window, forty
+readings at 50 ms, which is this control's own run.
+`output/d280-measure-autothreshold.mjs` and `output/d280-measure-dead.mjs`,
+2026-09-20. Room fixtures are peak-normalised and breathe (two slow modulations
+plus occasional transients), because a *uniform* noise fixture has an almost
+deterministic peak over a 2048-sample window and would answer the variation
+question by construction.
+
+| capture | readings off the axis floor | p25 | max | shipped answer |
+| --- | --- | --- | --- | --- |
+| digital silence | 0/40 | −inf | −inf | 0.14 |
+| track ended (`readyState` ended) | 0/40 | −inf | −inf | 0.14 |
+| track disabled before the run — a mute | 0/40 | −inf | −inf | 0.14 |
+| track disabled **mid**-run | 1/40 | −inf | −58.5 dBFS | 0.14 |
+| capsule dimmed to peak −85 dBFS | 0/40 | −93.1 dBFS | −73.2 dBFS | 0.14 |
+| capsule dimmed to peak −75 dBFS | 19/40 | −81.7 dBFS | −66.2 dBFS | 0.14 |
+| capsule dimmed to peak −60 dBFS | 30/40 | −61.9 dBFS | −49.7 dBFS | 0.26 |
+| quiet room, peak −70 dBFS | 2/40 | −87.1 dBFS | −68.6 dBFS | 0.14 |
+| quiet room, peak −65 dBFS | 12/40 | −83.3 dBFS | −64.0 dBFS | 0.14 |
+| quiet room, peak −60 dBFS | 18/40 | −78.2 dBFS | −57.3 dBFS | 0.14 |
+| ordinary room, peak −50 dBFS | 35/40 | −67.8 dBFS | −45.8 dBFS | 0.17 |
+| ordinary room, peak −45 dBFS | 37/40 | −63.4 dBFS | −40.3 dBFS | 0.24 |
+| voice, peak −25 dBFS | 40/40 | −23.8 dBFS | −13.5 dBFS | 0.80 |
+
+The one thing that separates the captures that produced nothing from every room
+is the **second column**: whether the axis could place a single reading.
+
+### The variation hypothesis, refuted — and in the wrong direction
+
+The standing proposal was that the discriminator is not absolute level but
+**variation**: a dead or dimmed capture is essentially flat, a real room
+fluctuates however quiet it is. It fails twice, and the second failure is the
+instructive one.
+
+*In position units it does not separate them.* Digital silence spans exactly
+0.0000 across the run; so does the capsule dimmed to −85 dBFS; so does a
+capsule dimmed to −70 with the constraints off. All three are flat because
+every reading is clamped at the floor of the axis. A quiet room at peak −70
+spans 0.0206. There is no value that can be set between those.
+
+*In raw decibels it inverts.* The p90/p10 spread is **68.8 dB for the −85 dBFS
+capsule** and 19–28 dB for every real room, because two readings near the
+16-bit converter's last step differ by an enormous ratio. A rule «refuse a flat
+run» would have refused the quiet room and accepted the dead capsule.
+
+The general shape is worth keeping: **a statistic computed after a clamp is a
+statistic about the clamp.** Variation in position units measures the floor,
+not the room, for exactly the inputs the rule exists to catch.
+
+### The rule
+
+`micAutoThresholdRefusal` now answers `"few"` or `"silent"` or `null`, and
+`autoMicThreshold` delegates to it rather than repeating the test, so the
+sentence on screen and the decision about the threshold cannot disagree about
+the same run.
+
+`"silent"` is **not one reading in the whole run rose off the bottom of the
+control's own axis.** It introduces **no constant**: `micLevelPosition` already
+carries `MIC_GATE_FLOOR_DB = -70`, and the condition is exactly the one a person
+watches — the bar at 0% for two continuous seconds, which is the owner's own
+sentence about the reference client.
+
+It is also, exactly, the condition under which the function stops being a
+function of its input: every position 0 makes the quarter-point 0, so the answer
+is `MIC_AUTO_THRESHOLD_MARGIN_DB / -MIC_GATE_FLOOR_DB` — 0.14 — for a dead
+microphone, an ended track and a muted headset alike. Refusing where the output
+cannot depend on the input is the formal shape of «that was not a measurement».
+
+**`MIC_NO_INPUT_FLOOR_DB = -42` was deliberately not reused**, and the two
+constants are now separated a second time. That one asks «did this microphone
+produce a *sound*», judged against speech peaking near −25 dBFS; this asks «what
+is this room's *noise floor*», and a quiet room with a good microphone lives at
+−60 to −70. A −42 refusal would refuse to calibrate for exactly the people who
+most want voice activation — the owner at −64 among them.
+
+**The larger rule that was rejected.** Refusing when the **quarter-point** sits
+at the floor would catch every run whose answer is that same 0.14 constant,
+which is the tidier statement. It refuses the measured quiet rooms at peak −65
+and −60, whose quarter-points are at −83 and −78 dBFS. Whether that is the
+fixture's modulation or a real room's cannot be settled on a workstation with no
+microphone, and a rule whose correctness turns on an unmeasurable property of
+real rooms is not one to ship. What shipped is the weakest rule that refuses a
+dead capture: it refuses nothing that produced a signal.
+
+### The copy, which had to be split
+
+The `failed` path and its sentence already existed — «Не удалось измерить:
+микрофон не дал уровень» — and reading correctly for both refusals was checked
+rather than assumed. It does not. «The level never arrived» is a statement about
+the browser and says nothing about the microphone; «forty readings arrived and
+all of them were silence» is a statement about the microphone and should name
+the three things to check. They are two sentences now, and `silent` names the
+same three checks as `MIC_NO_INPUT_HINT`, in the same order, because they are
+one question asked in two places.
+
+### Proof
+
+- `tests/unit/mic-gate.test.mts` — eight new cases: the silent run refused, the
+  whole measured table as two lists, the owner's −64 dBFS capture answering
+  0.23 and **not** refused, the boundary (one reading off the floor is a
+  measurement, none is not), the no-input floor explicitly not borrowed, the
+  two refusals told apart, the two functions agreeing on every run, and the
+  copy.
+- `tests/e2e/audio-settings-meter.spec.ts` — «a measurement that heard only
+  silence refuses, and says which refusal it is»: forty readings of 0 pushed
+  through the product's own level seam, `data-state` `silent`, the slider still
+  at its untouched 0.35 rather than the 0.14 the shipped build wrote, and
+  neither of the other two sentences on screen. **Measured red against the
+  shipped rule before it was made green**: with the refusal removed the state
+  came back `done`.
+- Nine mutations watched go red, the first of them the shipped rule itself
+  (`loudest <= 0` removed), plus `<= 0` → `< 0`, the −42 floor borrowed, the
+  quarter-point rule substituted for the loudest reading, `autoMicThreshold`
+  refusing on its own count again, and each of the three copy changes.
+
+**What could not be reached: there is no microphone on this workstation.** Every
+fixture above is synthetic and the dimmed-capsule rows are an *analogue* of the
+owner's hardware, not his hardware. What is settled on hardware is only what he
+reported: 54% before, 23% after, at a dimmer setting only he can produce.
+
+---
+
+## D-281 `[x]` The threshold control turned the microphone on and left it on, without a word
+
+**The owner, twice**, the second time after reloading onto the current build:
+«но также активирует сверху функцию проверки».
+
+What his screenshot shows, and what the second report added: after «Подобрать
+порог» finishes, the «УРОВЕНЬ» control at the top of the panel still reads
+**«Остановить»** — the capture it started is still running. He did not ask for
+it, he was not told it had started, and he was not told it was still going.
+
+**Surface:** `artifacts/kub/src/components/sidebar/AudioSettingsSection.tsx`,
+the «Подобрать порог» button and the notes around it; the capture is opened in
+`startAutoThreshold` by `setupMicTest` and nothing closes it.
+
+**The tension, resolved rather than cut.** Opening the capture is *right*, and
+the comment beside the control says why: the threshold used to need a button in
+another group pressed first, and a person who had not found it saw a bar that
+never moved. Keeping it open is also right — `micAutoThresholdNote("done")` ends
+«Скажите что-нибудь: полоса должна загораться на голосе и гаснуть в тишине»,
+which is the step that turns a number into a threshold somebody has *watched
+work*, and the whole threshold group is drawn around a live bar. A control that
+measured and then killed the capture would leave `micGateThresholdHint(true)`
+describing a bar frozen at zero, which is D-279 again — copy promising what the
+pixels do not show.
+
+**So the capture stays and the surface speaks.** `lib/micLevel.ts` states the
+principle that was broken — «a settings screen that opens the microphone by
+itself is a settings screen that turns the light on when nobody asked» — and the
+breach was never the opening. It was that it opened, and stayed open, without a
+word.
+
+- the idle note now reads «**Включит микрофон**, послушает комнату две секунды
+  и поставит порог…», so the button says what pressing it does before it is
+  pressed;
+- `MIC_AUTO_THRESHOLD_CAPTURE_NOTE` is drawn under it in every state where the
+  measurement has let go and the capture is still open — «Микрофон сейчас
+  включён — поэтому полоса живая. Выключить его: кнопка «Остановить» в группе
+  «Уровень».»
+
+The words «Остановить» and «Уровень» are the real label and the real caption
+from `lib/audioSettingsSurface.ts`. `lib/micGate.ts` imports nothing, so they
+are written out there and `tests/unit/mic-gate.test.mts` reads both modules and
+fails if either is renamed.
+
+**Half of it was already there and had not landed.** `micGateThresholdHint(false)`
+has always ended «Нажмите «Подобрать порог»: микрофон включится, и вы её
+увидите» — but it sits *above* the button, and it switches to the other branch
+the moment a capture exists, so after the measurement nothing on the screen said
+so at all. A sentence in the wrong row, that disappears exactly when it becomes
+true, is not an announcement.
+
+### Proof
+
+- `tests/e2e/audio-settings-meter.spec.ts` — «the measurement says it will turn
+  the microphone on, and that it left it on»: before the press the «Уровень»
+  control reads «Проверить микрофон», no source is open and the idle note names
+  the microphone; after it, `__micProbe.closed` is still 0 — the capture really
+  is running, which is the owner's screenshot asserted — the «Уровень» control
+  reads «Остановить», and the note names both. Pressing «Остановить» takes the
+  sentence away with the capture. Measured red with the note removed.
+- Photographed at 1440 and 390, both themes. The refusal's own pixels:
+  `--kub-danger-text` rgb(255,107,107) on rgb(25,38,56) at **5.50:1** dark and
+  rgb(193,27,27) on rgb(239,241,243) at **5.39:1** light, identical at both
+  widths, measured over the stroke body rather than the best pixel in the box —
+  632 fully covered pixels at 1440 and 9602 at 390. The spec pins it that way:
+  the highest-contrast colour covering at least half a percent of the note,
+  because a single outlier pixel passes any threshold and at 12px most glyph
+  pixels are partial coverage.
+
+**An earlier measurement of the same thing was wrong by 2.9×** and is recorded
+because the mistake is easy to repeat: reading the contrast off a *band of rows*
+cropped from the panel screenshot gave a modal glyph colour of rgb(189,141,125)
+at 2.55:1 in the light theme, because the band swept in neighbouring elements
+and their antialiasing. The element's own screenshot gives 5.39:1. **Crop to the
+element, not to the rows that look like it.**
+
+---
 
 ## D-282 `[x]` A tab held open across a deploy never took the new build, and the notice that would have said so was throttled to once a week
 
