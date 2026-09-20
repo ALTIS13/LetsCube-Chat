@@ -393,6 +393,13 @@ VITE_SUPABASE_ANON_KEY="$(cat "$CFG/.k")" pnpm.cmd --filter @workspace/kub run d
 - Port hygiene: check the port is free first (an orphaned Vite answers 200 with
   stale configuration), then confirm `/src/lib/supabase/client.ts` contains the
   expected host. A server that dies mid-run shows up as skips, not failures.
+  **With more than one agent in this worktree, a port collision is silent and
+  expensive.** Measured on 2026-09-20: an agent started a server on 5197 that
+  another already held, its own never bound, and its tests ran against the
+  other agent's server until that one died mid-run — an hour lost. Requiring
+  the child to **announce its own port** before it is trusted is the remedy the
+  unconfigured routing matrix already uses; do the same for any server a task
+  starts for itself, and pick a port nobody would reach for by habit.
 - A dev server that has taken hot updates is stale for every spec that imports
   a module by its URL. Once a module in the store's graph changed, Vite hands
   the application `app.store.ts?t=<timestamp>`, a bare
