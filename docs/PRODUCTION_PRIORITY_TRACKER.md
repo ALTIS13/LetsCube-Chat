@@ -543,13 +543,40 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     comes back from the server and can land on the divider either way.
 
     Still to do, in order: **the voice rejoin** (2B), and only then the
-    relaxation of D-282's two vetoes. The rejoin has one measurement owed before
-    any number is promised — `voiceReconciler.ts:40` already carries
-    `DEFAULT_STALE_MS = 5 * 60_000`, the owner's five minutes exactly, but that
-    file's own comment says the table is cosmetic and LiveKit's room state is
-    the authority. **How long LiveKit holds a participant after a drop has to be
-    measured before five minutes is said out loud**, because promising a window
-    the server does not hold is worse than promising none.
+    relaxation of D-282's two vetoes.
+
+    **The measurement 2B was waiting on is done, and it dissolved the blocker
+    rather than answering it.** Read read-only off production on 2026-09-20 and
+    written up in `docs/operations/voice.md` under «Coming back after a drop»:
+    LiveKit's deployed configuration sets **no participant retention of any
+    kind**, so there is no server-side window to measure and nothing that could
+    make «five minutes» a lie. The five minutes is a **product decision**, ours
+    to make, and `voiceReconciler.ts`'s `DEFAULT_STALE_MS` — which governs how
+    long everybody *else* still sees the person in the channel — already agrees
+    with it. That agreement is now stated at the constant rather than left to
+    coincidence, with the direction of each error spelled out.
+
+    Two things the same reading settled, which belong in the design rather than
+    in a surprise: `empty_timeout: 60` with `auto_create: false` means a person
+    who was **alone** loses the room a minute after dropping and cannot conjure
+    it back, so a return is **«join again», not «reconnect»** and goes through
+    the gateway's idempotent `CreateRoom` — which needs its own test, returning
+    after the room has lapsed. And the reaper's window is the one the client's
+    must equal, in both directions.
+
+    **One product question is open and is not the agent's to answer**, because
+    it decides whether the product may switch on somebody's microphone without
+    being asked — which is exactly D-281. Discord does not auto-join voice on
+    startup: every `selectVoiceChannel` call site in its bundle is a user
+    action, and what puts a Discord user back is their *server* re-announcing a
+    voice state we deliberately do not keep. So «guaranteed to come back» has to
+    be built by us and has a fork in it: **rejoin automatically, or offer a
+    one-press return.** The recommendation on file is to split it by cause —
+    the product rejoins by itself when the *product* caused the interruption (a
+    drop with the page alive, or an update it applied), and offers when the
+    person or the browser did (a manual reload, a crash), since only the first
+    two are interruptions nobody chose. The mute state travels with the record
+    either way, and the call bar is what states the microphone is live.
 
 
 36. `[ ]` The person behind the conversation: reaching a profile, the depth of

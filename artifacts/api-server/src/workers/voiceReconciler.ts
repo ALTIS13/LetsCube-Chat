@@ -36,7 +36,30 @@ import { logger } from "../lib/logger";
  * in requests; lengthening it makes the honest sentence in the proposal false.
  */
 const DEFAULT_TICK_MS = 30_000;
-/** Layer 4. A row not confirmed for five minutes was not there five minutes ago. */
+/**
+ * Layer 4. A row not confirmed for five minutes was not there five minutes ago.
+ *
+ * **This number is now half of a promise, and the other half lives in the
+ * client.** Queue item 35 of `docs/PRODUCTION_PRIORITY_TRACKER.md` puts
+ * somebody back into the channel they dropped out of, within a window; that
+ * window and this one govern the two sides of the same fact. This one decides
+ * how long *everybody else* still sees the person in the channel; the client's
+ * decides how long the person may come back to it.
+ *
+ * So they have to be equal, and the error is asymmetric in an instructive way.
+ * A client window **longer** than this returns somebody to a channel whose row
+ * was already reaped: they are back, and nobody outside the call can see them.
+ * A client window **shorter** leaves the row standing after the person has
+ * given up, which is the ghost this reaper exists to remove. Neither may drift
+ * alone.
+ *
+ * They cannot be one constant — different deployables — so each names the
+ * other, the way `RATE_LIMIT_RETENTION_MS` below already names the gateway's.
+ * What the server imposes on a return, measured rather than assumed, is in
+ * `docs/operations/voice.md` under «Coming back after a drop»: LiveKit retains
+ * no participant at all, so this five minutes is not a constraint the SFU hands
+ * us, it is a promise we chose.
+ */
 const DEFAULT_STALE_MS = 5 * 60_000;
 /** Webhook idempotency keys are worthless once no webhook can still be retried. */
 const DEFAULT_WEBHOOK_RETENTION_MS = 24 * 60 * 60_000;

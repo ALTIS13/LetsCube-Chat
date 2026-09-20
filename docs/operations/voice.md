@@ -169,6 +169,77 @@ reconciler sweeps at most 64 channels that have somebody in them per tick
 (`VOICE_RECONCILER_CHANNEL_LIMIT`), which is a bound on *occupied* rooms rather
 than on how many a group may have.
 
+## Coming back after a drop: what the server imposes, which is less than anybody assumed
+
+Measured read-only against production on 2026-09-20, because queue item 35 of
+`docs/PRODUCTION_PRIORITY_TRACKER.md` proposes putting somebody back in the
+channel they dropped out of, and the first question was how long the server
+holds their place. **It holds it for no time at all, and that is the useful
+answer: there is no server-imposed window to measure, so the window is entirely
+a product decision.** Written down because the next reader will otherwise assume
+a constraint exists and design around a ghost.
+
+### The three measurements
+
+**LiveKit keeps nobody.** `/srv/letscube/voice/livekit.yaml` on the host, the
+whole of its `room:` block:
+
+```yaml
+room:
+  auto_create: false
+  empty_timeout: 60
+  max_participants: 10
+```
+
+`grep -nE 'timeout|auto_create|departure'` over that file returns exactly those
+two timeout-ish keys and nothing else: **no departure or participant-retention
+setting is configured.** Running `livekit/livekit-server:v1.13.7`. A disconnect
+removes the participant and a return creates a new one, which is also the
+premise the reconciler is built on — it asks the SFU for a room's complete
+membership every tick precisely because the SFU is the side that *drops* people
+(`voiceReconciler.ts`, the note at the top of the file).
+
+**A room the last person left lasts sixty seconds.** `empty_timeout: 60`. And
+because `auto_create: false`, a client token cannot bring it back: only the
+gateway's `CreateRoom` can (`supabase/functions/voice-gateway/index.ts:394`,
+whose own comment at `:412` records that CreateRoom on an existing room returns
+that room, so it is idempotent).
+
+**The mirror everybody else reads is reaped at five minutes.**
+`voiceReconciler.ts` ticks every 30 s (`DEFAULT_TICK_MS`) and drops a row not
+confirmed for five minutes (`DEFAULT_STALE_MS`).
+
+### The two consequences that belong in a design rather than in a surprise
+
+**A return is «join again», not «reconnect».** If the person was alone when they
+dropped, the room is gone sixty seconds later and nothing on the client can
+conjure it. The return therefore goes through the ordinary join path — the
+gateway mints a token and calls `CreateRoom` — and anything built on top must
+not assume there is a live room to reattach to. The case is worth a test of its
+own: **return after the room has lapsed**, not only return while it is still up.
+
+**Whatever window the client chooses has to be the reaper's window.** They
+govern two halves of the same promise: the client's says whether *you* may come
+back, the reaper's says whether *everybody else* still sees you there. Longer on
+the client and somebody returns to a channel whose row was already dropped —
+they are back, and nobody outside the call can see it. Shorter and their row
+outlives their own intention to return, which is the ghost the reaper exists to
+prevent. The two are equal today by coincidence; the constants live in two
+different deployables and cannot be one constant, so each has to name the other,
+the way `RATE_LIMIT_RETENTION_MS` already names the gateway's window.
+
+### What is not established
+
+Whether `livekit-server` v1.13.7 has a `departure_timeout` of its own and what
+it defaults to when unset. The deployed configuration sets no such key, and the
+claim above — that no participant is retained — rests on that plus the
+reconciler's design premise, not on reading LiveKit's defaults. `--help` inside
+the container printed nothing matching, which means the probe was wrong rather
+than that the answer is no. What would settle it: LiveKit's released
+configuration reference for that exact tag, or a room inspected through the
+admin API a minute after its last participant dropped.
+
+
 ## Silencing and disconnecting somebody who is already inside
 
 Added 2026-09-18. **The gateway is four routes, not two.** It was `/token` and
