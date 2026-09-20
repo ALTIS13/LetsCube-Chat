@@ -516,6 +516,39 @@ produced, is the restoration principle: **where you were is state the product
 owns and restores** — the open conversation, the voice channel, and both across
 an update the product applied itself. See the tracker's queue for its status.
 
+### Deciding without asking
+
+Standing since 2026-09-21: **«Принимай решения на основе подхода
+telegram/discord без моего вмешательства.»** Design questions in this class are
+settled here, not queued for the owner.
+
+**What that authorises, and it is narrower than «decide».** The authority is the
+*derivation*. A choice traceable to a measured behaviour of the right reference
+client — or to a written reason why we deliberately differ from it — is covered.
+A choice made on taste is not, however reasonable it looks. So the reasoning is
+part of the deliverable: record it beside the code, with the measurement, the way
+the register already does.
+
+The corollary is that **«I could not establish what they do» is still a valid
+answer**, and it is a better one than inventing a mechanic and attributing it.
+Several of this project's worst hours went into fixing things that were adopted
+from a recollection rather than from a reading.
+
+**What it does not cover.** Delegation of design is not delegation of risk:
+
+- production database migrations and anything else §10 governs, which keeps its
+  backup-rehearse-apply-validate sequence whatever has been approved in
+  principle;
+- anything that loses or exposes somebody's data. A retention policy, what a
+  forward is allowed to reveal, what a profile shows to a stranger — these are
+  decisions about other people's information, and the reference clients'
+  behaviour is an input to them rather than the answer;
+- anything irreversible or outward-facing that the owner has not already asked
+  for.
+
+When one of those is reached, do the reversible part, state the question
+precisely, and carry on with everything that does not depend on it.
+
 ## 8. Live Infrastructure Map
 
 Use only the service subdomains; the apex `letscube.ru` belongs to another project
