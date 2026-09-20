@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useLocation } from "wouter";
 import { VoiceCallBar } from "@/components/chat/VoiceCallBar";
+import { VoiceResumeNotice } from "@/components/chat/VoiceResumeNotice";
 import { voiceShellBarNeeded } from "@/lib/voiceShellBar";
 
 /**
@@ -63,6 +64,13 @@ export function VoiceCallShell({ children }: { children: ReactNode }) {
         {needed && <VoiceCallBar placement="top" capsuleOnScreen={false} />}
       </div>
       <div className="min-h-0 flex-1 [--kub-app-height:100%]">{children}</div>
+      {/* Coming back to a call somebody was taken out of. Here, and not inside
+          `MainLayout`, for the same reason the bar above is: this wrapper is
+          constant across every authenticated route, so a return can never
+          happen on a screen where the bar that says «the microphone is live»
+          is not also mounted. It draws nothing unless there is an offer to
+          make, and the returning itself is silent. */}
+      <VoiceResumeNotice />
     </div>
   );
 }

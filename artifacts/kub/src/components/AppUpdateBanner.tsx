@@ -7,6 +7,7 @@ import {
   restartOntoWaitingBuild,
 } from "@/hooks/usePwa";
 import { useAppStore } from "@/store/app.store";
+import { markVoiceResumeInterrupted } from "@/lib/voiceResumeStorage";
 import {
   APP_UPDATE_NOTICE_SHOWN_KEY,
   APP_UPDATE_QUIET_RESTART_KEY,
@@ -161,6 +162,11 @@ function PendingUpdate({
       // this tab and survives the navigation. A restart that does not take —
       // mid-rollover, two replicas, a stale proxy — must not become a loop.
       writeStored(sessionStore, APP_UPDATE_QUIET_RESTART_KEY, String(now));
+      // The product is taking the page away, so the call it takes with it is
+      // the product's to put back (`lib/voiceResume.ts`). Nothing here can be
+      // in a call — `callBusy` is a veto — but the same line belongs on both
+      // restart paths, and the one below can.
+      markVoiceResumeInterrupted();
       restartOntoWaitingBuild(registration);
     };
     attempt();
@@ -213,6 +219,10 @@ function UpdateNotice({ registration }: { registration: ServiceWorkerRegistratio
       setAcknowledged(true);
       return;
     }
+    // «Всё равно», pressed with a call connected: this is the second of the two
+    // cases the owner named — «обновления которые происходят насильно» — and
+    // the reload is about to end a call he agreed to end, not to abandon.
+    markVoiceResumeInterrupted();
     restartOntoWaitingBuild(registration);
   };
 

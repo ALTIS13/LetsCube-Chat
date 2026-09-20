@@ -287,7 +287,22 @@ test("the perimeter count only ever shrinks", () => {
   // commit, and a ceiling taken down on its behalf would go red the moment it
   // was revised. Measured against HEAD for every file but the sound settings:
   // exactly 194.
-  assert.ok(total <= 194, `perimeters on the sheet-edge colour grew to ${total}; the ceiling is 194`);
+  //
+  // 195 since 2026-09-20, raised by argument rather than by arithmetic, and by
+  // exactly one: `components/chat/VoiceResumeNotice.tsx`, the offer to go back
+  // into a voice channel (queue item 35, 2B). It is a floating notice over
+  // content, which is the first thing rule 11 keeps a perimeter for — «the edge
+  // of a sheet, and of chrome pinned against a scroll area, which has to hold
+  // against arbitrary content passing under it».
+  //
+  // And it is the sheet-edge colour rather than `--glass-line` deliberately.
+  // The note at the foot of `interface-material.md` gives a floating *capsule*
+  // the glass rim, because a capsule is not a sheet; this is not a capsule but
+  // the second notice in the band `AppUpdateBanner` already floats one in, with
+  // the same material and the same class list. Two identical notices differing
+  // by one token is the inconsistency rule 11 exists against, so the choice is
+  // the one already counted here rather than a third vocabulary.
+  assert.ok(total <= 195, `perimeters on the sheet-edge colour grew to ${total}; the ceiling is 195`);
 });
 
 /**

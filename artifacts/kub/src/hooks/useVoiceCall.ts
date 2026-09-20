@@ -1214,6 +1214,16 @@ export interface VoiceJoinRequest {
   channelId: string;
   chatId: string;
   channelName: string;
+  /**
+   * Join with the microphone already self-muted.
+   *
+   * For a return the person did not press (`lib/voiceResume.ts`): somebody who
+   * dropped muted comes back muted, and the mute has to be in force **before**
+   * the track is published, for exactly the reason the gate is set before the
+   * join a few lines below — otherwise they are audible for the length of one
+   * event loop, in a room they did not choose to rejoin.
+   */
+  micMuted?: boolean;
 }
 
 /**
@@ -1244,6 +1254,7 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
     channelId: request.channelId,
     chatId: request.chatId,
     channelName: request.channelName,
+    micMuted: request.micMuted === true,
   });
 
   if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
@@ -1442,16 +1453,21 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
       // it. A call in «Рация» that published first and closed second would be
       // audible for the length of one event loop, which is the one moment
       // nobody is watching for.
+      const joinMuted = request.micMuted === true;
       gateSettings = readGateSettings();
       gate = nextMicGate(MIC_GATE_CLOSED, {
         activation: gateSettings.activation,
-        muted: false,
+        muted: joinMuted,
         held: false,
         level: 0,
         threshold: gateSettings.threshold,
         now: Date.now(),
       });
       await opened.setMicrophoneOpen(gate.open);
+      // Before the join, for the reason the comment above gives about the
+      // gate: a self-mute applied after publishing is a self-mute that was not
+      // in force for the first packets.
+      if (joinMuted) await opened.setMuted(true);
       await opened.join(outcome.grant.url, outcome.grant.token, microphone);
     }
   } catch {
@@ -1486,7 +1502,12 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
   // The journal stops here, so the report of a call that connected carries the
   // length of each step rather than the age of the call.
   settleJournal();
-  patch({ phase: "connected", canPublish: outcome.grant.canPublish, refusal: null });
+  patch({
+    phase: "connected",
+    canPublish: outcome.grant.canPublish,
+    refusal: null,
+    micMuted: request.micMuted === true,
+  });
   // The stored choice, reaching a call for the first time. After the patch, so
   // that a refusal lands on a capsule which already exists: a sentence about a
   // call has nowhere to appear while the capsule still says «Подключаемся…».
