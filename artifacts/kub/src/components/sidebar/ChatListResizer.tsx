@@ -9,6 +9,7 @@ import {
   CHAT_LIST_MIN_WIDTH,
   CHAT_LIST_REGION_CHROME,
   DESKTOP_CHAT_LIST_STORAGE_KEY,
+  chatListMaxWidth,
   chatListNarrowRatio,
   effectiveChatListWidth,
   liveChatListWidth,
@@ -91,6 +92,36 @@ const REGION_SELECTOR = "[data-kub-left-region]";
  */
 const SEAM_SELECTOR = "[data-kub-chat-list-seam]";
 
+/**
+ * The widest this window allows, asked of the window itself.
+ *
+ * `window.innerWidth` and **no shell check**, which is the whole reason the
+ * ceiling is a share rather than a constant per platform. A maximised Tauri
+ * window, a browser tab sharing a laptop screen with an editor, and the same
+ * tab full-screen on a 2560 monitor are three different numbers here and one
+ * rule — and `isDesktopShell()` would have told us which shell it is without
+ * telling us how wide it is, which is the only fact that matters.
+ *
+ * **`window.innerWidth` and not `document.documentElement.clientWidth`**, and
+ * that is not interchangeable — this is called on every pointer move. Measured
+ * on this page on 2026-09-20, 400 custom-property writes each followed by one
+ * read:
+ *
+ *   | read                                   | total |
+ *   | -------------------------------------- | ----- |
+ *   | nothing                                | 0.2ms |
+ *   | `window.innerWidth`                    | 0.3ms |
+ *   | `document.documentElement.clientWidth` | 462ms |
+ *
+ * The second is free; the third forces a layout per read, 1.16ms each. Both
+ * answer almost the same number, and one of them would have put D-268 straight
+ * back into the drag by another road.
+ */
+function ceiling(): number {
+  if (typeof window === "undefined") return CHAT_LIST_MAX_WIDTH;
+  return chatListMaxWidth(window.innerWidth);
+}
+
 function applyWidth(width: number) {
   if (typeof document === "undefined") return;
   const px = `${Math.round(width)}px`;
@@ -125,7 +156,7 @@ function writeStored(state: DesktopChatListState) {
 /** Puts the stored width on the page. Safe to call before anything is rendered. */
 export function applyStoredChatListState(): DesktopChatListState {
   const state = readStored();
-  applyWidth(effectiveChatListWidth(state));
+  applyWidth(effectiveChatListWidth(state, ceiling()));
   return state;
 }
 
@@ -147,21 +178,71 @@ export function ChatListResizer() {
    */
   const [collapsed, setCollapsed] = useState(() => readStored().collapsed);
 
+  /**
+   * What the handle reports: where it is, and how far it may go on this window.
+   *
+   * `aria-valuemax` moves with the window and it has to: a separator that
+   * announces 540 on a screen whose drag refuses anything past 359 is telling
+   * a screen reader a number the pointer cannot reach. Set here rather than in
+   * the class list for the reason `aria-valuenow` is — the JSX values are the
+   * frame before this runs, and nothing below this component re-renders.
+   */
+  const reportHandle = useCallback((state: DesktopChatListState) => {
+    const max = ceiling();
+    const handle = handleRef.current;
+    if (!handle) return;
+    handle.setAttribute("aria-valuenow", String(effectiveChatListWidth(state, max)));
+    handle.setAttribute("aria-valuemax", String(max));
+  }, []);
+
   useEffect(() => {
     const state = applyStoredChatListState();
     stateRef.current = state;
     setCollapsed(state.collapsed);
-    handleRef.current?.setAttribute("aria-valuenow", String(effectiveChatListWidth(state)));
-  }, []);
+    reportHandle(state);
 
-  const commit = useCallback((state: DesktopChatListState) => {
-    stateRef.current = state;
-    const width = effectiveChatListWidth(state);
-    applyWidth(width);
-    writeStored(state);
-    setCollapsed(state.collapsed);
-    handleRef.current?.setAttribute("aria-valuenow", String(width));
-  }, []);
+    /**
+     * A window that changed size re-draws the list, and **never writes it
+     * down.**
+     *
+     * That is the contract `effectiveChatListWidth` states: the stored width is
+     * a decision, this window is a fact about right now. Answering a resize
+     * with `writeStored` would mean opening the application once on a laptop
+     * was enough to lose a width chosen on a monitor, silently, with no
+     * gesture from the person at all.
+     *
+     * Coalesced into one frame, and written through `applyWidth` — three leaf
+     * writes on the region and the two seam boxes, never on
+     * `document.documentElement` (D-268). A drag of the window edge produces
+     * the same storm of events a drag of this handle does, and it must not cost
+     * more.
+     */
+    let frame = 0;
+    const onResize = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        applyWidth(effectiveChatListWidth(stateRef.current, ceiling()));
+        reportHandle(stateRef.current);
+      });
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [reportHandle]);
+
+  const commit = useCallback(
+    (state: DesktopChatListState) => {
+      stateRef.current = state;
+      applyWidth(effectiveChatListWidth(state, ceiling()));
+      writeStored(state);
+      setCollapsed(state.collapsed);
+      reportHandle(state);
+    },
+    [reportHandle],
+  );
 
   const onPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -192,7 +273,7 @@ export function ChatListResizer() {
     }
     // Continuous, through the band between the strip and the normal narrowest:
     // the ratio is what makes the row interpolate rather than snap.
-    applyWidth(liveChatListWidth(event.clientX - originRef.current));
+    applyWidth(liveChatListWidth(event.clientX - originRef.current, ceiling()));
   }, []);
 
   const endDrag = useCallback(
@@ -206,18 +287,19 @@ export function ChatListResizer() {
       // exactly where it was, so the double click that follows has something
       // to toggle.
       if (!movedRef.current) {
-        applyWidth(effectiveChatListWidth(stateRef.current));
+        applyWidth(effectiveChatListWidth(stateRef.current, ceiling()));
         return;
       }
-      commit(settleChatListState(event.clientX - originRef.current));
+      commit(settleChatListState(event.clientX - originRef.current, ceiling()));
     },
     [commit],
   );
 
   const nudge = useCallback(
     (delta: number) => {
-      const current = effectiveChatListWidth(stateRef.current);
-      commit(settleChatListState(current + delta));
+      const max = ceiling();
+      const current = effectiveChatListWidth(stateRef.current, max);
+      commit(settleChatListState(current + delta, max));
     },
     [commit],
   );

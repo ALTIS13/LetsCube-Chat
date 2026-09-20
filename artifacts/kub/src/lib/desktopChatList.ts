@@ -56,8 +56,68 @@ export const CHAT_LIST_REGION_CHROME = 73;
 /** Telegram's `columnMinimalWidthLeft`. */
 export const CHAT_LIST_MIN_WIDTH = 260;
 
-/** Telegram's `columnMaximalWidthLeft`. */
+/**
+ * Telegram's `columnMaximalWidthLeft`, and the widest this list may ever be on
+ * any screen. `chatListMaxWidth` is what a given window actually allows.
+ */
 export const CHAT_LIST_MAX_WIDTH = 540;
+
+/**
+ * The share of the window the whole left region — rail, list and the region's
+ * own hairline — may take at its widest.
+ *
+ * **0.3 is Discord's ceiling, divided by the width ours was measured wrong at:
+ * `432 / 1440`.** Read off the shipped client on 2026-09-20, from
+ * `discord.com/assets/web.<hash>.js` at `BUILD_NUMBER 615980` — the same bundle
+ * the desktop application's renderer downloads, so this is one number and not
+ * two that happen to agree:
+ *
+ *     E = (0, n1.A)({ minDimension: 264, maxDimension: 432, … })
+ *     …  "aria-valuemin": 264, "aria-valuemax": 432
+ *     …  case "Home": t = 264; case "End": t = 432
+ *     …  Number.isNaN(e) && (e = 375)      // the default, when nothing is stored
+ *
+ * `--custom-guild-sidebar-width` is that whole region: the channel list is
+ * `calc(var(--custom-guild-sidebar-width) - var(--custom-guild-list-width) - 1px)`
+ * and the guild rail is 76 (a 44pt avatar and 16 of padding each side), so
+ * Discord's list alone is 187…355 around a default of 298. Ours is the same
+ * shape — a rail of 72 and a hairline, `CHAT_LIST_REGION_CHROME`.
+ *
+ * **Discord's 432 is a hard constant and does not move with the window.** There
+ * is no viewport term anywhere in that path: no `innerWidth`, and not one
+ * `@media (width)` rule on the sidebar in its 3.4 MB of stylesheets. So this is
+ * the one place we deliberately do more than Discord does, and the reason is
+ * that a constant is only safe for the window Discord ships:
+ *
+ *  - Discord is a window with a floor under its width. We are also a browser
+ *    tab, which can be 900 points wide on a laptop beside another window, and
+ *    at 900 a 432 region is 48% of everything.
+ *  - Discord's region is the ONLY fixed column before its conversation. Ours is
+ *    followed by `ChannelRail`, 224 more points, in any group that has channels
+ *    — so the same region costs us 224 points more than it costs Discord.
+ *
+ * A share answers both without asking which shell it is running in, and that is
+ * why it is a share rather than a platform check: a maximised Tauri window on a
+ * 1920 monitor and a browser tab on the same monitor are the same number to
+ * this function, and `window.innerWidth` is already the truth in both.
+ *
+ * What it computes, with `CHAT_LIST_MAX_WIDTH` still the absolute ceiling:
+ *
+ *   | window | region allowed | list allowed |               |
+ *   | ------ | -------------- | ------------ | ------------- |
+ *   |   1024 |            333 |          260 | floored at the minimum |
+ *   |   1280 |            384 |          311 |               |
+ *   |   1440 |            432 |          359 | exactly Discord's |
+ *   |   1920 |            576 |          503 |               |
+ *   |   2133 |            613 |          540 | Telegram's ceiling reached |
+ *   |   2560 |            613 |          540 | unchanged from today |
+ *
+ * The last two rows are the half worth saying out loud: nobody on a large
+ * monitor loses a point of what they have today, and the 1440 defect (D-270,
+ * the conversation down to 603 points with the wallpaper composed on it) is
+ * answered where it is actually caused.
+ */
+export const CHAT_LIST_MAX_SHARE = 0.3;
 
 /**
  * What the list is before anyone drags it. 360 is the width the breakpoint
@@ -92,6 +152,23 @@ function clamp(value: number, low: number, high: number): number {
 }
 
 /**
+ * The widest this window allows the list to be: `CHAT_LIST_MAX_SHARE` of it,
+ * less the rail and the hairline, never below the normal narrowest and never
+ * above Telegram's ceiling.
+ *
+ * **An unreadable window is permissive, not restrictive**, and that asymmetry
+ * is deliberate. This is only ever used to clamp, and a `0` arriving from a
+ * server render or a detached document must not be allowed to cut somebody's
+ * stored 540 down to 260 — the width would be gone before the first paint that
+ * could have measured properly.
+ */
+export function chatListMaxWidth(viewportWidth: number): number {
+  if (!Number.isFinite(viewportWidth) || viewportWidth <= 0) return CHAT_LIST_MAX_WIDTH;
+  const region = Math.round(viewportWidth * CHAT_LIST_MAX_SHARE);
+  return clamp(region - CHAT_LIST_REGION_CHROME, CHAT_LIST_MIN_WIDTH, CHAT_LIST_MAX_WIDTH);
+}
+
+/**
  * How far along the way to a strip of avatars the list is: 0 at its normal
  * narrowest and 1 at the strip, interpolated in between.
  *
@@ -116,21 +193,27 @@ export function chatListNarrowRatio(width: number): number {
  * switch, and the ratio above exists so the band between 66 and 260 is a place
  * the list can actually be while the pointer is in it.
  */
-export function liveChatListWidth(requested: number): number {
+export function liveChatListWidth(
+  requested: number,
+  maxWidth: number = CHAT_LIST_MAX_WIDTH,
+): number {
   if (!Number.isFinite(requested)) return CHAT_LIST_DEFAULT_WIDTH;
-  return clamp(requested, CHAT_LIST_COLLAPSED_WIDTH, CHAT_LIST_MAX_WIDTH);
+  return clamp(requested, CHAT_LIST_COLLAPSED_WIDTH, maxWidth);
 }
 
 /**
  * Where the list comes to rest when the handle is let go: the strip, or a
  * normal width. The band between them is a place to pass through, not to stop.
  */
-export function settleChatListState(requested: number): DesktopChatListState {
+export function settleChatListState(
+  requested: number,
+  maxWidth: number = CHAT_LIST_MAX_WIDTH,
+): DesktopChatListState {
   if (!Number.isFinite(requested)) return { ...DESKTOP_CHAT_LIST_DEFAULT_STATE };
   if (requested < CHAT_LIST_COLLAPSE_BELOW) {
     return { width: CHAT_LIST_COLLAPSED_WIDTH, collapsed: true };
   }
-  return { width: clamp(requested, CHAT_LIST_MIN_WIDTH, CHAT_LIST_MAX_WIDTH), collapsed: false };
+  return { width: clamp(requested, CHAT_LIST_MIN_WIDTH, maxWidth), collapsed: false };
 }
 
 /**
@@ -140,13 +223,25 @@ export function settleChatListState(requested: number): DesktopChatListState {
  * a state whose flag is set renders as the strip whatever number sits beside
  * it, so the width the person chose before collapsing survives to be restored
  * when they open it again.
+ *
+ * **`maxWidth` clamps what is drawn and must never be written back.** The
+ * stored width is a decision the person made; this window is a fact about
+ * right now. Somebody who chose 540 on a docked monitor and then undocked to a
+ * 1280 laptop is drawn 311 and finds 540 again when they dock — which is the
+ * same rule `collapsed` follows one line above, applied to the other axis. The
+ * caller that breaks this is the one that answers a `resize` event by calling
+ * `writeStored`; it does not exist, and `ChatListResizer` says so where the
+ * listener is.
  */
-export function effectiveChatListWidth(state: DesktopChatListState): number {
+export function effectiveChatListWidth(
+  state: DesktopChatListState,
+  maxWidth: number = CHAT_LIST_MAX_WIDTH,
+): number {
   if (state.collapsed) return CHAT_LIST_COLLAPSED_WIDTH;
   return clamp(
     Number.isFinite(state.width) ? state.width : CHAT_LIST_DEFAULT_WIDTH,
     CHAT_LIST_MIN_WIDTH,
-    CHAT_LIST_MAX_WIDTH,
+    maxWidth,
   );
 }
 
@@ -161,6 +256,12 @@ export function toggleChatListCollapsed(state: DesktopChatListState): DesktopCha
  * Everything that is not a number in range or a boolean is the default rather
  * than an error: this comes out of `localStorage`, which another version of the
  * application wrote and a person can edit.
+ *
+ * **Bounded by `CHAT_LIST_MAX_WIDTH` and deliberately not by the window.** What
+ * is read here is what the person chose, on whatever screen they chose it on;
+ * the window's own ceiling belongs to `effectiveChatListWidth`, which draws.
+ * Clamping here would make opening the application once on a laptop enough to
+ * lose a width chosen on a monitor.
  */
 export function readDesktopChatListState(raw: unknown): DesktopChatListState {
   let parsed: unknown = raw;

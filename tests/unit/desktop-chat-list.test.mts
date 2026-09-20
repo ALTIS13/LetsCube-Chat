@@ -6,9 +6,12 @@ import {
   CHAT_LIST_COLLAPSED_WIDTH,
   CHAT_LIST_COLLAPSE_BELOW,
   CHAT_LIST_DEFAULT_WIDTH,
+  CHAT_LIST_MAX_SHARE,
   CHAT_LIST_MAX_WIDTH,
   CHAT_LIST_MIN_WIDTH,
+  CHAT_LIST_REGION_CHROME,
   FOLDER_RAIL_WIDTH,
+  chatListMaxWidth,
   chatListNarrowRatio,
   effectiveChatListWidth,
   liveChatListWidth,
@@ -184,4 +187,113 @@ test("what storage hands back is trusted only where it is a number and a boolean
   // that was once much wider cannot hand this one a 900px column.
   assert.equal(readDesktopChatListState('{"width":9000}').width, CHAT_LIST_MAX_WIDTH);
   assert.equal(readDesktopChatListState('{"width":10}').width, CHAT_LIST_MIN_WIDTH);
+});
+
+// ---------------------------------------------------------------------------
+// The ceiling the window sets (D-270)
+// ---------------------------------------------------------------------------
+
+/** The whole left region at a given window: the rail, the list and the hairline. */
+const region = (viewportWidth: number) => chatListMaxWidth(viewportWidth) + CHAT_LIST_REGION_CHROME;
+
+test("at 1440 the region stops exactly where Discord's does", () => {
+  // Read off the shipped web bundle on 2026-09-20, BUILD_NUMBER 615980:
+  //   (0, n1.A)({ minDimension: 264, maxDimension: 432, … })
+  //   "aria-valuemin": 264, "aria-valuemax": 432
+  // `--custom-guild-sidebar-width` is the whole region there too — its channel
+  // list is that value less the 76pt guild rail and a hairline — so 432 is the
+  // number to put beside ours, not its 355.
+  assert.equal(region(1440), 432, "Discord's maxDimension");
+  assert.equal(chatListMaxWidth(1440), 359);
+
+  // And the share is that number, not a coincidence beside it.
+  assert.equal(CHAT_LIST_MAX_SHARE, 432 / 1440);
+});
+
+test("the ceiling moves with the window, which is the half Discord does not do", () => {
+  // The mutation this exists for: replacing the share with Discord's own
+  // constant. Every one of these would then answer 359 and the owner's
+  // «адаптивно на разных разрешениях» would be gone with no test to say so.
+  assert.ok(
+    chatListMaxWidth(1280) < chatListMaxWidth(1440),
+    "a 1280 laptop must be allowed less than a 1440 screen",
+  );
+  assert.ok(
+    chatListMaxWidth(1440) < chatListMaxWidth(1920),
+    "a 1920 screen must be allowed more than a 1440 one",
+  );
+
+  assert.equal(region(1280), 384);
+  assert.equal(chatListMaxWidth(1280), 311);
+  assert.equal(region(1920), 576);
+  assert.equal(chatListMaxWidth(1920), 503);
+});
+
+test("nobody on a large monitor loses a point of what they have today", () => {
+  // Telegram's `columnMaximalWidthLeft` is still reachable, and reachable at a
+  // width people actually own: 2133 is a 21:9 at 1440p, 2560 a 1440p monitor.
+  assert.equal(chatListMaxWidth(2133), CHAT_LIST_MAX_WIDTH);
+  assert.equal(chatListMaxWidth(2560), CHAT_LIST_MAX_WIDTH);
+  assert.equal(chatListMaxWidth(3840), CHAT_LIST_MAX_WIDTH);
+});
+
+test("the ceiling never crosses the floor, at any window a screen can have", () => {
+  let previous = 0;
+  for (let width = 320; width <= 5120; width += 1) {
+    const max = chatListMaxWidth(width);
+    assert.ok(
+      max >= CHAT_LIST_MIN_WIDTH && max <= CHAT_LIST_MAX_WIDTH,
+      `a ${width}pt window allowed ${max}px`,
+    );
+    // Never narrower on a wider window: a handle whose range shrank as the
+    // window grew would be unexplainable to the person holding it.
+    assert.ok(max >= previous, `${width}pt allowed ${max} after ${previous}`);
+    previous = max;
+  }
+
+  // A small window is floored at the normal narrowest rather than below it —
+  // the strip of avatars is a fold, not a ceiling.
+  assert.equal(chatListMaxWidth(1024), CHAT_LIST_MIN_WIDTH);
+  assert.equal(chatListMaxWidth(800), CHAT_LIST_MIN_WIDTH);
+});
+
+test("a window it cannot read is permissive, never restrictive", () => {
+  // This is only ever used to clamp. A 0 from a detached document or a server
+  // render that cut a stored 540 down to 260 would destroy the width before
+  // the first paint that could have measured properly.
+  for (const unreadable of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.equal(chatListMaxWidth(unreadable), CHAT_LIST_MAX_WIDTH, `${String(unreadable)}`);
+  }
+});
+
+test("the ceiling clamps what is drawn and never what is stored", () => {
+  // The docked-laptop rule, and the one this whole design turns on. A width
+  // chosen on a monitor is a decision; a 1280 laptop is a fact about right now.
+  const chosen = { width: CHAT_LIST_MAX_WIDTH, collapsed: false };
+  assert.equal(effectiveChatListWidth(chosen, chatListMaxWidth(1280)), 311);
+  assert.equal(chosen.width, CHAT_LIST_MAX_WIDTH, "the state itself was rewritten");
+  assert.equal(effectiveChatListWidth(chosen, chatListMaxWidth(2560)), CHAT_LIST_MAX_WIDTH);
+
+  // Reading storage takes no window at all, so opening the application once on
+  // a laptop cannot be what loses the monitor's width.
+  assert.equal(readDesktopChatListState('{"width":540}').width, CHAT_LIST_MAX_WIDTH);
+});
+
+test("the drag and the keys obey the window's ceiling, and default to the absolute one", () => {
+  const narrow = chatListMaxWidth(1280); // 311
+
+  assert.equal(liveChatListWidth(4000, narrow), narrow);
+  assert.equal(liveChatListWidth(4000), CHAT_LIST_MAX_WIDTH);
+  // The strip is still reachable under a low ceiling: the fold is not a width.
+  assert.equal(liveChatListWidth(10, narrow), CHAT_LIST_COLLAPSED_WIDTH);
+
+  assert.deepEqual(settleChatListState(900, narrow), { width: narrow, collapsed: false });
+  assert.deepEqual(settleChatListState(900), { width: CHAT_LIST_MAX_WIDTH, collapsed: false });
+  assert.deepEqual(settleChatListState(100, narrow), {
+    width: CHAT_LIST_COLLAPSED_WIDTH,
+    collapsed: true,
+  });
+
+  assert.equal(effectiveChatListWidth({ width: 9000, collapsed: false }, narrow), narrow);
+  assert.equal(effectiveChatListWidth({ width: 9000, collapsed: false }), CHAT_LIST_MAX_WIDTH);
 });

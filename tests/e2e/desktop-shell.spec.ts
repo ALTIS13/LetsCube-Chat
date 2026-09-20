@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { chatListMaxWidth } from "../../artifacts/kub/src/lib/desktopChatList";
 import {
   FIXTURE_HOST,
   chat,
@@ -235,6 +236,37 @@ async function controlsInWindowButtons(page: Page) {
 }
 
 const isDesktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 768;
+
+/** The widest this project's viewport lets the list be (D-270). */
+const ceilingFor = (page: Page) => chatListMaxWidth(page.viewportSize()?.width ?? 0);
+
+/**
+ * The whole left region's ceiling, per release viewport, as literals.
+ *
+ * Deliberately **not** computed from `chatListMaxWidth`: the row for 1440 is
+ * Discord's own `maxDimension`, read off `discord.com/assets/web.<hash>.js` at
+ * `BUILD_NUMBER 615980` on 2026-09-20, and the point of writing it out is that
+ * a change to our formula has to come here and be argued against that number
+ * rather than quietly recomputing agreement with itself.
+ *
+ *  - 1440 → 432, exactly Discord's;
+ *  - 1920 → 576;
+ *  - 3840 → 613, which is what this product already allowed before D-270, so
+ *    the large monitor loses nothing.
+ */
+const REGION_CEILING = new Map<number, number>([
+  [1440, 432],
+  [1920, 576],
+  [3840, 613],
+]);
+
+/** The left region — rail, list and the region's own hairline — as drawn. */
+async function leftRegionWidth(page: Page) {
+  return page.evaluate(() => {
+    const region = document.querySelector<HTMLElement>("[data-kub-left-region]");
+    return region ? Number(region.getBoundingClientRect().width.toFixed(2)) : null;
+  });
+}
 
 async function listColumnWidth(page: Page) {
   return page.evaluate(() => {
@@ -587,9 +619,12 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     // The avatar is still there and still the thing you orient by.
     await expect(page.getByTestId("chat-list-item").first().locator("[data-chat-avatar]")).toBeVisible();
 
-    // And it comes back.
-    await dragListTo(page, 420);
-    expect(await listColumnWidth(page)).toBe(420);
+    // And it comes back. Not to a literal any more: since D-270 the widest a
+    // window allows is a share of it, so a number that is a normal width at
+    // 1920 is past the ceiling at 1440.
+    const wide = ceilingFor(page) - 20;
+    await dragListTo(page, wide);
+    expect(await listColumnWidth(page)).toBe(wide);
     expect(await narrowRatio(page)).toBe(0);
   });
 
@@ -597,10 +632,11 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     test.skip(!isDesktop(page), "there is nothing to drag on a phone");
     await boot(page);
 
-    await dragListTo(page, 460);
+    const wide = ceilingFor(page) - 20;
+    await dragListTo(page, wide);
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("chat-list-item")).toHaveCount(CHAT_COUNT);
-    expect(await listColumnWidth(page), "the dragged width was forgotten").toBe(460);
+    expect(await listColumnWidth(page), "the dragged width was forgotten").toBe(wide);
 
     // tdesktop#6409: Telegram remembers the width and forgets the collapsed
     // state. This is the half that has to keep working.
@@ -614,7 +650,96 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     // Opening it again restores the width it had before, not the default.
     await page.getByTestId("chat-list-resizer").dblclick();
     await page.waitForTimeout(150);
-    expect(await listColumnWidth(page)).toBe(460);
+    expect(await listColumnWidth(page)).toBe(wide);
+  });
+
+  /**
+   * D-270. The ceiling is a share of the window, and at 1440 it is Discord's.
+   *
+   * The complaint was «красивый задник в итоге задвигается»: the wallpaper is
+   * composed on the conversation's scroller, and at 1440 the old ceiling left
+   * the conversation 603 points — 42% of the window — so the composition lost
+   * 44% of its width. `CHAT_LIST_MAX_WIDTH` was 540, making the region 613,
+   * where Discord's whole left region stops at 432.
+   *
+   * The literals in `REGION_CEILING` are the contract. Replace the share with
+   * Discord's own constant and the 1920 and 3840 rows go red; drop the share
+   * altogether and the 1440 row does.
+   */
+  test("the widest the handle goes is a share of the window", async ({ page }) => {
+    test.skip(!isDesktop(page), "there is nothing to drag on a phone");
+    await boot(page);
+
+    const viewport = page.viewportSize()?.width ?? 0;
+    const expected = REGION_CEILING.get(viewport);
+    expect(expected, `no recorded ceiling for a ${viewport}pt viewport`).toBeDefined();
+
+    // Far past anything the window allows. Telegram's 540 is still the absolute
+    // ceiling, so at 3840 this settles there and at 1440 it settles well short.
+    //
+    // **Held first, released second, and that order is the whole assertion.**
+    // Clamping only on release was written, ran green, and was found by
+    // mutation: dropping the ceiling from the pointer-move path left every
+    // check here passing while the column visibly overran the window under the
+    // hand and sprang back when it was let go. The live width is the one a
+    // person actually sees.
+    await dragListTo(page, 900, { release: false });
+    expect(await leftRegionWidth(page), "the held column overran the window's share").toBe(expected);
+    await page.mouse.up();
+    await page.waitForTimeout(150);
+
+    expect(await leftRegionWidth(page), "the region went past the window's share").toBe(expected);
+    expect(await listColumnWidth(page)).toBe(ceilingFor(page));
+
+    // And the handle says so. A separator announcing 540 on a screen whose drag
+    // refuses anything past 359 tells a screen reader a number the pointer
+    // cannot reach.
+    await expect(page.getByTestId("chat-list-resizer")).toHaveAttribute(
+      "aria-valuemax",
+      String(ceilingFor(page)),
+    );
+    await expect(page.getByTestId("chat-list-resizer")).toHaveAttribute(
+      "aria-valuenow",
+      String(ceilingFor(page)),
+    );
+  });
+
+  /**
+   * The docked-laptop rule, in a browser.
+   *
+   * The stored width is a decision the person made; the window is a fact about
+   * right now. A resize that answered by writing storage would mean opening the
+   * application once on a narrow screen was enough to lose a width chosen on a
+   * wide one — silently, with no gesture from the person at all.
+   */
+  test("a narrower window redraws the list and never rewrites what was stored", async ({ page }) => {
+    test.skip(!isDesktop(page), "the handle is a computer's");
+    const viewport = page.viewportSize();
+    if (!viewport) throw new Error("no viewport");
+    await boot(page);
+
+    await dragListTo(page, 900);
+    const chosen = await listColumnWidth(page);
+    expect(chosen).toBe(ceilingFor(page));
+    const stored = () =>
+      page.evaluate(() => JSON.parse(localStorage.getItem("kub-desktop-chat-list") ?? "null"));
+    expect(await stored()).toEqual({ width: chosen, collapsed: false });
+
+    // A window too narrow for that width. 1100 × 0.3 is 330, less the rail and
+    // the hairline: the normal narrowest, 260.
+    await page.setViewportSize({ width: 1100, height: viewport.height });
+    await page.waitForTimeout(200);
+    expect(await listColumnWidth(page), "the list kept a width this window has no room for").toBe(260);
+    expect(await leftRegionWidth(page)).toBe(333);
+    expect(await stored(), "a window resize rewrote the stored width").toEqual({
+      width: chosen,
+      collapsed: false,
+    });
+
+    // Back to the screen it was chosen on, and the width is there.
+    await page.setViewportSize(viewport);
+    await page.waitForTimeout(200);
+    expect(await listColumnWidth(page), "the chosen width did not come back").toBe(chosen);
   });
 
   /**
@@ -638,8 +763,9 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     await boot(page);
 
     const fold = page.getByTestId("chat-list-fold");
-    await dragListTo(page, 440);
-    expect(await listColumnWidth(page)).toBe(440);
+    const wide = ceilingFor(page) - 40;
+    await dragListTo(page, wide);
+    expect(await listColumnWidth(page)).toBe(wide);
 
     // Folded by the control, not by a gesture nobody was told about.
     await fold.click();
@@ -657,7 +783,7 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     // Unfolded, to the width it had, not to the default.
     await fold.click();
     await page.waitForTimeout(200);
-    expect(await listColumnWidth(page), "the fold did not give the width back").toBe(440);
+    expect(await listColumnWidth(page), "the fold did not give the width back").toBe(wide);
     await expect(fold).toHaveAttribute("aria-expanded", "true");
     await expect(fold).toHaveAttribute("aria-label", "Свернуть список чатов");
   });
@@ -708,7 +834,10 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
   test("a drag writes the width on the region, never on the document", async ({ page }) => {
     test.skip(!isDesktop(page), "there is nothing to drag on a phone");
     await boot(page);
-    await dragListTo(page, 420);
+    // Under the window's ceiling, so this measures where the width is written
+    // and not whether it was clamped; D-270's own test asks the other question.
+    const dragged = ceilingFor(page) - 20;
+    await dragListTo(page, dragged);
 
     const where = await page.evaluate(() => {
       const read = (el: HTMLElement | null) =>
@@ -722,18 +851,21 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
       };
     });
 
-    expect(where.region?.width, "the region does not carry the dragged width").toBe("420px");
+    expect(where.region?.width, "the region does not carry the dragged width").toBe(`${dragged}px`);
     expect(where.region?.narrow, "the region does not carry the narrow ratio").toBe("0.0000");
     expect(where.root?.width, "the width is back on the document, and the drag pays for the whole tree").toBe("");
     expect(where.root?.narrow, "the ratio is back on the document").toBe("");
 
     // The handle and its fold stand beside the region and inherit nothing from
     // it, so each carries its own copy — that is what places them on the seam.
-    expect(where.seams, "a box on the seam has no width to place itself by").toEqual(["420px", "420px"]);
+    expect(where.seams, "a box on the seam has no width to place itself by").toEqual([
+      `${dragged}px`,
+      `${dragged}px`,
+    ]);
 
     // And the region is actually that wide, so the property is not merely being
     // written somewhere harmless.
-    expect(await listColumnWidth(page)).toBe(420);
+    expect(await listColumnWidth(page)).toBe(dragged);
   });
 
   test("the LETSCUBE mark is in the list's top row, and nowhere else", async ({ page }) => {
