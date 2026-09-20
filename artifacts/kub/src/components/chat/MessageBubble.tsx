@@ -1545,7 +1545,7 @@ export function MessageBubble({
                 data-message-text-flow="true"
                 data-message-meta-placement="inline"
                 className={cn(
-                  "flex w-full max-w-full min-w-0 items-baseline gap-2 text-sm leading-relaxed whitespace-pre-wrap text-[color:var(--kub-text)]",
+                  "flex w-full max-w-full min-w-0 items-baseline gap-2 kub-message-text whitespace-pre-wrap text-[color:var(--kub-text)]",
                   widthClasses.text
                 )}
               >
@@ -1563,7 +1563,7 @@ export function MessageBubble({
               <MeasuredTextWithMeta
                 content={message.content ?? ""}
                 textClassName={cn(
-                  "min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap text-[color:var(--kub-text)]",
+                  "min-w-0 max-w-full kub-message-text whitespace-pre-wrap text-[color:var(--kub-text)]",
                   widthClasses.text
                 )}
                 meta={hasReactions ? null : renderFooterContent()}
@@ -1578,7 +1578,7 @@ export function MessageBubble({
               <p
                 data-message-text-flow="true"
                 className={cn(
-                  "min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap text-[color:var(--kub-text)]",
+                  "min-w-0 max-w-full kub-message-text whitespace-pre-wrap text-[color:var(--kub-text)]",
                   widthClasses.text
                 )}
               >
@@ -1832,7 +1832,7 @@ function MediaWithCaption({ children, caption }: { children: ReactNode; caption:
     <div className="flex max-w-full flex-col gap-1.5">
       {children}
       {caption && (
-        <p className="min-w-0 max-w-full whitespace-pre-wrap text-sm leading-relaxed text-[color:var(--kub-text)]">
+        <p className="min-w-0 max-w-full whitespace-pre-wrap kub-message-text text-[color:var(--kub-text)]">
           <FormattedText content={caption} />
         </p>
       )}

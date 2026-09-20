@@ -46,12 +46,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="LETSCUBE" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Inter is ours now (D-287): no preconnect to Google's hosts, because
+         nothing is fetched from them. These two subsets are the ones this
+         product starts in, so their request leaves with the document rather
+         than when the stylesheet first needs them. The other two, latin-ext
+         and cyrillic-ext, load on demand from the same directory. -->
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/inter/inter-latin.woff2" crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/inter/inter-cyrillic.woff2" crossorigin />
     <script>
       // Pre-hydration theme apply. Kept byte-identical in meaning to
       // THEME_INIT_SCRIPT in src/lib/themeRuntime.ts; a parity test enforces it.

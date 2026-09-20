@@ -271,6 +271,7 @@ export type SettingsRowId =
   | "blocked"
   | "devices"
   | "theme"
+  | "message-text-size"
   | "audio"
   | "updates"
   | "admin";
@@ -324,6 +325,15 @@ export const SETTINGS_ROWS: readonly SettingsRowMeta[] = [
   // shares a letter with «Активные сеансы».
   { id: "devices", section: "privacy", label: "Активные сеансы", keywords: ["устройства", "устройство", "сеансы", "сессии", "вход", "звонки", "телефон", "компьютер", "devices", "sessions"] },
   { id: "theme", section: "application", label: "Тема", keywords: ["тёмная", "темная", "светлая", "dark", "light", "внешний вид", "оформление"] },
+  // «мелко» and «крупно» are the words somebody arrives with — the tester of
+  // 2026-09-20 wrote «мелко», not «размер текста» — and «шрифт» is what he
+  // guessed the cause was. All three have to find this row (D-287).
+  {
+    id: "message-text-size",
+    section: "application",
+    label: "Размер текста сообщений",
+    keywords: ["шрифт", "мелко", "мелкий", "крупно", "крупный", "больше", "текст", "размер", "font", "size", "читать", "зрение"],
+  },
   // «чувствительность» since 2026-09-20, and it is not decoration either: it is the
   // word the owner used for the voice-activation threshold, and this row was
   // findable by «усиление» — the control that does **not** reach a call — and

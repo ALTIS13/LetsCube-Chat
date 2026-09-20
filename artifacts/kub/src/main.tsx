@@ -3,12 +3,16 @@ import App from "./App";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { initMonitoring } from "@/lib/monitoring";
 import { applyDesktopShellAttribute } from "@/lib/platform/desktop";
+import { initMessageTextSize } from "@/hooks/useMessageTextSize";
 import "./index.css";
 
 initMonitoring();
 // Before the first render: the Windows shell's own buttons take the top 2rem of
 // the window, and every surface pinned to that edge reads it from CSS.
 applyDesktopShellAttribute();
+// And the reader's own message text size, before the first conversation paints,
+// so a chosen size is never a visible step up from the default (D-287).
+initMessageTextSize();
 
 const rootElement = document.getElementById("root")!;
 rootElement.dataset.kubBootId = createBootId();

@@ -1498,6 +1498,97 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     owner's Telegram, because the Web App shape cannot be seen before `/start`.
     Nothing else was sent, and it can be deleted.
 
+    ### The owner's corrections, and what shipped, 2026-09-20 (second pass)
+
+    **The right swipe is removed, and the measurement that justified it was
+    wrong in an instructive way.** «Вправо делать тогда не надо, в telegram это
+    позволяет выйти из чата.» The first pass measured that a rightward drag
+    moves a Telegram bubble by zero pixels and concluded the direction was
+    unclaimed. **The bubble does not move because the whole screen does** — a
+    rightward swipe there is back-to-the-list, reproduced three times out of
+    three from mid-screen on re-measurement. The probe asked «does the message
+    move» when the question was «is the gesture available»: an element that
+    does not react is not evidence that the gesture is free, because something
+    above it may be consuming the whole sequence. **Measure the outcome, not
+    the element you expected to react.** `1d24c95c` had already been deployed,
+    so this is a repair rather than a design change; `messageSwipe.ts` carries
+    the story. Forwarding keeps «Переслать» in the long-press menu, and the
+    `ForwardModal` fix stands — that complaint's cause was the source-chat
+    filter, never the gesture.
+
+    **Android owns both edges, which touches the swipe that was kept.** Read
+    off both of the owner's phones: `navigation_mode = 2` on each, and
+    `systemGestures` insets of **30dp on the left and 30dp on the right**
+    (78px at 420dpi; 60 of 720 on the Realme). So a leftward drag begun at the
+    right edge is the system's back — and that is the *reply* swipe. Neither
+    our shell nor Telegram asks for an exemption
+    (`mSystemGestureExclusion` empty for both when read), though
+    `setSystemGestureExclusionRects` exists and is reachable from Capacitor.
+    A row swipe now **refuses to begin inside either inset**: predictable beats
+    being torn away mid-drag. The strip costs about **18px a side**, because a
+    row spans 12–378 of a 390 viewport. In three-button navigation it costs
+    that for nothing, and only native can read `navigation_mode` — one
+    behaviour serves both until somebody wants the strip back.
+
+    **Not established, and said rather than glossed:** whether a drag begun in
+    the inset reaches our web layer at all. The Chrome probe failed its own
+    mid-screen control, so its negative means nothing; the APK probe was
+    abandoned because reading our own conversation through the accessibility
+    tree exposes message content. The refusal is belt-and-braces.
+
+    **(a) is decided and shipped.** «Шрифт 16 думаю будет хорошо, ползунок
+    также штука полезная.»
+
+    - **The body is 16px/26px**, from `--kub-message-text-size` and
+      `--kub-message-line-height` through one `.kub-message-text` class, so a
+      caption and a deleted placeholder move with the sentence.
+    - **A setting, «Размер текста сообщений», in Приложение beside Тема**,
+      range **13–22**, step 1, kept on the device like the theme. Not
+      Telegram's 12–30, and the reasons are in `lib/messageTextSize.ts`: below
+      13 our own `--text-xs` (13px) would outgrow the message body, and above
+      22 the composer's fixed 140px ceiling gives under four lines — which is
+      complaint (e) made worse by the fix for (a). The tester's «125%» lands
+      on 20, comfortably inside. Whoever widens it moves
+      `MAX_COMPOSER_HEIGHT_PX` in the same commit.
+
+    **What 16 moved, measured at four viewport/theme pairs rather than eyed.**
+    The bubble grows from 240px wide to 264 at 390 and 1440 alike, and from 37px
+    tall to 40; at the top of the range (22px) it is 295 at 390 and 338 at 1440,
+    50–64 tall. **No horizontal overflow at any size in either theme**, and the
+    scroller's height contract is untouched. The meta stays 13px throughout, as
+    Telegram's does.
+
+    **One thing it created, reported rather than fixed here.** The composer is
+    `text-base sm:text-sm`, so from 640px up it is **14px while the body is now
+    16** — the phone's asymmetry inverted onto the desktop. Telegram's slider
+    governs both; ours governs the message only. Making the composer follow the
+    same variable is a small change with a real risk attached — `MessageInput`
+    measures `scrollHeight` against a 44px resting height and a 140px ceiling,
+    and the recording row and dock sit on those numbers — so it is the next
+    decision rather than a quiet rider on this one.
+
+    **The face is bundled.** «Шрифт также стабилизируй.» `index.html` pulled
+    Inter from `fonts.googleapis.com` with `display=swap` and nothing was
+    shipped, in the APK as much as on the web — so the first paint was always
+    the fallback and a blocked network read the product in Roboto for good. It
+    is now `/fonts/inter/`: **four files, 174 KB, all four weights**, because
+    Google serves one *variable* woff2 per subset (verified by hashing the
+    sixteen its stylesheet names and finding four). Greek and Vietnamese are
+    not shipped. `font-display: swap` with the two starting subsets preloaded,
+    and the preconnects to Google's hosts are gone with the link. **This is for
+    reliability and privacy, not legibility** — the same day's measurement puts
+    Inter's x-height-to-em within 1% of Roboto's, so the face was never the
+    tester's problem. `tests/e2e/message-text-font.spec.ts` proves it with every
+    non-loopback host aborted, by width rather than by `fonts.check`, and proves
+    the variable weight axis with it.
+
+    Gates at this commit: typecheck clean across five packages, unit
+    **3696/3696**, `tests/server` **144/144**, the gesture, font, viewer,
+    render-stability and glass-layout specs **28/28** at 390, production build
+    proved by `sw.js build 776a235ce2424f6d` and `built in 9.04s`. Six mutations
+    of the gesture and one of the font are red; the settings-row count guard was
+    moved 16 → 17 deliberately, which is what it is for.
+
 
 47. `[ ]` Separating the kinds of conversation, so the list stops being
     noise. Asked for by the owner on 2026-09-20, and he framed it as something

@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { Fragment, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import type { Theme } from "@/hooks/useTheme";
 import { useLocation } from "wouter";
@@ -8,6 +9,12 @@ import { createClient } from "@/lib/supabase/client";
 import { publicMediaObjectUrl } from "@/lib/media/mediaUrl";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useTheme } from "@/hooks/useTheme";
+import { useMessageTextSize } from "@/hooks/useMessageTextSize";
+import {
+  MESSAGE_TEXT_SIZE_MAX_PX,
+  MESSAGE_TEXT_SIZE_MIN_PX,
+  messageTextSizeSummary,
+} from "@/lib/messageTextSize";
 import { usePrivacyPreferences } from "@/hooks/usePrivacyPreferences";
 import { useSessionDevices } from "@/hooks/useSessionDevices";
 import { usePush } from "@/hooks/usePush";
@@ -127,6 +134,7 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
   const { currentUser, setCurrentUser } = useAppStore();
   const supabase = createClient();
   const { theme, resolvedTheme, setTheme } = useTheme();
+  const { size: messageTextSize, setSize: setMessageTextSize } = useMessageTextSize();
   const privacy = usePrivacyPreferences();
   // The same store the chat surfaces read, so a block made from a conversation
   // is already in this list when settings is opened next.
@@ -795,6 +803,37 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
               </div>
             </SettingsRow>
           )}
+          {shows("message-text-size") && (
+            <SettingsRow
+              icon="chats"
+              iconTone="accent"
+              label="Размер текста сообщений"
+              value={messageTextSizeSummary(messageTextSize)}
+            >
+              <div className="flex shrink-0 items-center gap-2">
+                <span aria-hidden="true" className="text-[11px] text-[color:var(--kub-muted)]">А</span>
+                <input
+                  type="range"
+                  min={MESSAGE_TEXT_SIZE_MIN_PX}
+                  max={MESSAGE_TEXT_SIZE_MAX_PX}
+                  step={1}
+                  value={messageTextSize}
+                  aria-label="Размер текста сообщений"
+                  aria-valuetext={`${messageTextSize} px`}
+                  onChange={(event) => setMessageTextSize(Number(event.target.value))}
+                  className="kub-field kub-range h-8 w-32 sm:w-40"
+                  style={{
+                    "--kub-range-filled": `${Math.round(
+                      ((messageTextSize - MESSAGE_TEXT_SIZE_MIN_PX) /
+                        (MESSAGE_TEXT_SIZE_MAX_PX - MESSAGE_TEXT_SIZE_MIN_PX)) *
+                        100,
+                    )}%`,
+                  } as CSSProperties}
+                />
+                <span aria-hidden="true" className="text-[17px] leading-none text-[color:var(--kub-muted)]">А</span>
+              </div>
+            </SettingsRow>
+          )}
           {shows("audio") && (
             <DisclosureRow
               id="audio"
@@ -869,7 +908,7 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
       profile: ["name", "username", "bio", "phone", "decoration"].some((id) => shows(id as SettingsRowId)),
       notifications: ["push", "push-messages", "push-tasks", "push-invites"].some((id) => shows(id as SettingsRowId)),
       privacy: ["presence", "blocked", "devices"].some((id) => shows(id as SettingsRowId)),
-      application: ["theme", "audio", "updates"].some((id) => shows(id as SettingsRowId)),
+      application: ["theme", "message-text-size", "audio", "updates"].some((id) => shows(id as SettingsRowId)),
       service: shows("admin"),
     };
 

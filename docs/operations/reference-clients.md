@@ -2016,6 +2016,79 @@ left the direction alone: a swipe that begins inside the system's
 gesture-navigation edge is the operating system's back, not the app's. That
 falls on the right-hand gesture of a left-aligned bubble, and nothing in a web
 view can take it back.
+
+### 16.4 The correction — the right direction was never free
+
+**Written the same day, after the owner read the above: «вправо делать тогда
+не надо, в telegram это позволяет выйти из чата.» He is right, and the way the
+measurement went wrong is worth more than the conclusion it reached.**
+
+16.2 recorded that a rightward drag moves a Telegram bubble by **zero pixels**
+and inferred that the direction was unclaimed. The bubble does not move
+**because the whole screen does**: a rightward swipe in a Telegram conversation
+is back-to-the-list. Re-measured afterwards on the same device, by asking
+whether the composer was still on screen rather than whether the bubble had
+moved: **three times out of three from mid-screen**, and again from either
+edge, the conversation closed. (One row at a different height did not close it,
+twice, and that is unexplained — probably a horizontally-scrollable element
+under the finger. It does not change the answer.)
+
+**The lesson, and it belongs in the method section as much as here: the probe
+asked «does the message move» when the question was «is the gesture
+available».** An element that does not react to a gesture is not evidence that
+the gesture is free — something above it may be consuming the whole sequence.
+Measure the *outcome*, not the element you expected to react. This is the same
+shape as «an empty result means unknown», one layer up: the negative was real,
+and it was a negative about the wrong thing.
+
+### 16.5 Android's gesture navigation owns **both** edges — MEASURED, 2026-09-20
+
+Read off both of the owner's phones, because it changes the gesture that is
+being **kept**, not only the one that was removed:
+
+| | A063 (Nothing, 1080×2400 @ 420dpi) | RMX3830 (Realme) |
+| --- | --- | --- |
+| `navigation_mode` | `2` — gesture navigation | `2` — gesture navigation |
+| `systemGestures` inset, left | 78px = **30dp** | 60 of 720 = **30dp** |
+| `systemGestures` inset, right | 78px = **30dp** | 60 of 720 = **30dp** |
+| `mandatorySystemGestures`, bottom | 84px = 32dp | — |
+| `back_gesture_inset_scale_*` | `null` — not configured, so 30 is the platform's own | — |
+
+So the back gesture lives at **both** edges: a rightward drag begun at the left
+is back, and **a leftward drag begun at the right is also back** — and the
+leftward one is our reply swipe.
+
+**Neither app asks for an exemption.** `mSystemGestureExclusion` was empty with
+our shell in the foreground and empty with Telegram's, at the moments it was
+read. The mechanism exists —
+`View.setSystemGestureExclusionRects`, native, capped by Android at 200dp of
+vertical extent per edge — and is reachable from a Capacitor shell. We do not
+use it.
+
+**What we do instead, and why.** A row swipe **refuses to begin inside either
+inset** (`swipeMayStartAt` in `@/lib/messageSwipe`). Refusing is predictable;
+starting and being torn away mid-drag is the worst of both. The strip this
+costs is smaller than it sounds and was measured rather than assumed: at a
+390px viewport a message row spans **12 to 378**, so the overlap with the
+insets is about **18px on each side**. An earlier version of the test pressed
+at 382 — off the row entirely — and passed with the guard deleted; it is
+pinned at 20 and 368 now, with the control at 40.
+
+**Three-button navigation has no edge gestures at all**, and there the refusal
+costs that 18px strip for nothing. Only native code can read
+`navigation_mode` — the web layer has no standard signal, and
+`env(safe-area-inset-*)` does not carry it. One behaviour serves both until
+somebody wants the strip back badly enough to plumb it through the bridge.
+
+**UNESTABLISHED, and deliberately so:** whether a drag begun inside the inset
+reaches our web layer *at all*. The Chrome-side probe built for it failed its
+own mid-screen control — a known-good gesture did not fire either — so it
+cannot speak to the edge, and an instrument that cannot produce a positive
+proves nothing by a negative. The APK-side probe was abandoned for a different
+reason: reading our own conversation through the accessibility tree exposes
+message content, which this document's privacy rule does not allow. The
+refusal above is therefore belt-and-braces rather than a measured necessity,
+and it is cheap enough to keep either way.
 ---
 
 ## 17. Subject 9 — the phone survey: what the shell costs, and where a bot reaches
@@ -2225,3 +2298,29 @@ Discord's implementation higher «из-за большей кастомизац�
   17.2 are Telegram against Discord only.
 - **Telegram's composer growth ceiling**, which item 46 (e) needs: ours is 140px
   and the reference number was not taken.
+
+### 17.6 The face is now ours — 2026-09-20
+
+Recorded here because it is where the type measurement lives, and because the
+reason is **not** the one somebody will assume.
+
+Until this date `index.html` pulled Inter from `fonts.googleapis.com` with
+`display=swap` and **nothing was bundled**, in the APK's copy as much as on the
+web. So the first paint was always the fallback, a phone with a blocked or slow
+network read the product in Roboto indefinitely, and every client announced
+itself to a third-party host on every cold load. The tester's report of the same
+day opens with a dropped VPN, so **he may have been judging a face we did not
+ship**.
+
+It is now served from `/fonts/inter/`: **four files, 174 KB, for all four
+weights**. Google serves one *variable* woff2 per subset — verified by hashing
+the sixteen files its stylesheet points at and finding four distinct ones — so
+`font-weight: 100 900` is the honest declaration and the sixteen-file reading
+this project's first attempt produced was 695 KB of the same four files. Greek
+and Vietnamese are not shipped; those scripts fall back to the system face, as
+every script did before this change.
+
+**The reason is reliability and privacy, not legibility, and 16.1 is what keeps
+that honest**: Inter's x-height relative to its em is 0.544 against Roboto's
+0.548, a difference inside what the measurement can resolve. Swapping the face
+was never going to help the tester read anything. Somebody will ask.

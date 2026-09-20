@@ -39,7 +39,7 @@ test("an empty query is the whole screen, in the order the screen draws it", () 
     "name", "username", "bio", "phone", "decoration",
     "push", "push-messages", "push-tasks", "push-invites",
     "presence", "blocked", "devices",
-    "theme", "audio", "updates",
+    "theme", "message-text-size", "audio", "updates",
   ]);
   // Whitespace is not a query. A field holding only spaces must not empty the
   // screen it is meant to narrow.
@@ -187,9 +187,10 @@ test("the catalogue is not handed out for mutation", () => {
   const length = first.length;
   first.length = 0;
   assert.equal(matchSettingsRows("", EVERYONE).length, length);
-  // 16 since 2026-09-18: «Активные сеансы» joined the privacy section with it
-  // (slice F of the call proposal). The number is the point of this line — a
-  // row that vanishes is invisible — so it is moved deliberately rather than
-  // widened into a range.
-  assert.equal(SETTINGS_ROWS.length, 16);
+  // 16 since 2026-09-18, when «Активные сеансы» joined the privacy section
+  // (slice F of the call proposal); 17 since 2026-09-20, when «Размер текста
+  // сообщений» joined the application section (D-287). The number is the point
+  // of this line — a row that vanishes is invisible — so it is moved
+  // deliberately rather than widened into a range.
+  assert.equal(SETTINGS_ROWS.length, 17);
 });

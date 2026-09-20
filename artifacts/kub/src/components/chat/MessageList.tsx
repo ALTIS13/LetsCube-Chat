@@ -51,6 +51,7 @@ import { QUICK_REACTION } from "@/lib/messageReactions";
 import {
   swipeActionFor,
   swipeCommits,
+  swipeMayStartAt,
   swipeOffset,
   swipeProgress,
   type SwipeAction,
@@ -561,11 +562,6 @@ export function MessageList({
       setMenu(null);
       setMenuLift(0);
       handlersRef.current.onReply(message);
-    },
-    forward: (message) => {
-      setMenu(null);
-      setMenuLift(0);
-      handlersRef.current.onForward?.(message);
     },
     jumpToReply: (messageId) => handlersRef.current.onJumpToReply?.(messageId),
     reaction: (messageId, emoji) => handlersRef.current.onReaction(messageId, emoji),
@@ -1583,8 +1579,6 @@ function mediaMimeType(message: MessageWithSender): string | null {
 /** Everything a row can ask the list to do. One object for the life of the list. */
 interface MessageRowActions {
   reply: (message: MessageWithSender) => void;
-  /** The same «Переслать» the menu offers, reached by a swipe right (D-287). */
-  forward: (message: MessageWithSender) => void;
   jumpToReply: (messageId: string) => void;
   reaction: (messageId: string, emoji: string) => void;
   retrySend: (message: MessageWithSender) => void;
@@ -1665,10 +1659,9 @@ const MemoizedMessageBubble = React.memo(MessageBubble);
 
 /**
  * The touch gestures, in Telegram for Android's terms: a tap opens the menu, a
- * double tap puts ❤️, a long press selects, a swipe left replies — and, since
- * D-287, a swipe right forwards. The distances and the one place the right
- * half departs from Telegram, which has no such gesture at all, are in
- * `@/lib/messageSwipe`.
+ * double tap puts ❤️, a long press selects, a swipe left replies. The
+ * distances, and why there is no gesture in the other direction, are in
+ * `@/lib/messageSwipe`: rightward belongs to the platform's back.
  *
  * The tap waits out the double tap before opening anything, which is the price
  * of having both — Telegram pays it too. Timings come from the event's own
@@ -1698,6 +1691,8 @@ interface TouchGesture {
   x: number;
   y: number;
   moved: boolean;
+  /** Whether this finger went down clear of the platform's own gesture edges. */
+  maySwipe: boolean;
   /** Which way this finger committed itself, once it moved far enough to say. */
   swipe: SwipeAction | null;
   longPressed: boolean;
@@ -1741,10 +1736,6 @@ const MessageRow = React.memo(function MessageRow({
   const canSelect = !msg.deleted_at && !isSystemMessage;
   const isLocalSend = msg.id.startsWith("tmp:") || Boolean(msg.pending || msg.checking || msg.failed);
   const canReply = canSelect && !isLocalSend;
-  // Forwarding is the list's to offer — no `onForward`, no «Переслать» in the
-  // menu — so the gesture asks the same question the menu does rather than a
-  // laxer one of its own.
-  const canForward = canSelect && !isLocalSend && capabilities.forward;
   const hasGroupReadInfo = groupReadInfo !== null;
 
   // Once per message rather than once per render, so the bubble's memo sees the
@@ -1812,6 +1803,15 @@ const MessageRow = React.memo(function MessageRow({
       x: event.clientX,
       y: event.clientY,
       moved: false,
+      // Decided once, where the finger went down: a drag that begins inside
+      // the platform's gesture inset is the system's back, and a row that
+      // starts following it only to be torn away is worse than one that never
+      // moves. `window.innerWidth` is the layout viewport, which is what the
+      // inset is measured against.
+      maySwipe: swipeMayStartAt(
+        event.clientX,
+        typeof window === "undefined" ? 0 : window.innerWidth,
+      ),
       swipe: null,
       longPressed: false,
       content: isContentControl(event.target),
@@ -1840,12 +1840,12 @@ const MessageRow = React.memo(function MessageRow({
       gesture.moved = true;
       clearLongPress();
     }
-    if (selectionMode || gesture.longPressed) return;
+    if (selectionMode || gesture.longPressed || !gesture.maySwipe) return;
     // Clearly horizontal, and in a direction this message offers. The row lets
     // the browser keep vertical panning (`touch-action: pan-y`), so a scroll
     // never reaches here as a swipe.
     if (!gesture.swipe) {
-      const started = swipeActionFor(dx, dy, { reply: canReply, forward: canForward });
+      const started = swipeActionFor(dx, dy, { reply: canReply });
       if (started) {
         gesture.swipe = started;
         try {
@@ -1855,7 +1855,7 @@ const MessageRow = React.memo(function MessageRow({
         }
       }
     }
-    if (gesture.swipe) moveSwipe(swipeOffset(dx, gesture.swipe), true);
+    if (gesture.swipe) moveSwipe(swipeOffset(dx), true);
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -1864,14 +1864,12 @@ const MessageRow = React.memo(function MessageRow({
     gestureRef.current = null;
     clearLongPress();
     if (gesture.swipe) {
-      const acts = swipeCommits(swipeRef.current, gesture.swipe);
-      const action = gesture.swipe;
+      const acts = swipeCommits(swipeRef.current);
       moveSwipe(0, false);
       suppressClickRef.current = true;
       if (acts) {
         navigator.vibrate?.(8);
-        if (action === "reply") actions.reply(msg);
-        else actions.forward(msg);
+        actions.reply(msg);
       }
       return;
     }
@@ -2087,11 +2085,9 @@ const MessageRow = React.memo(function MessageRow({
             />
           </div>
           {/*
-            The arrow the gesture reveals, on the side the row is leaving: a
-            reply arrow at the right for a row going left, a forward arrow at
-            the left for a row going right. It is the only thing that says the
-            gesture exists, so it grows with the finger and is at full size
-            exactly when letting go would act.
+            The arrow the gesture reveals, on the side the row is leaving. It
+            is the only thing that says the gesture exists, so it grows with
+            the finger and is at full size exactly when letting go would act.
           */}
           {swipe.dx < 0 && (
             <span
@@ -2101,16 +2097,6 @@ const MessageRow = React.memo(function MessageRow({
               style={{ opacity: progress, transform: `translateY(-50%) scale(${0.6 + 0.4 * progress})` }}
             >
               <KubIcon name="reply" size={18} />
-            </span>
-          )}
-          {swipe.dx > 0 && (
-            <span
-              aria-hidden="true"
-              data-message-swipe-forward="true"
-              className="pointer-events-none absolute left-2 top-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--kub-cyan)_22%,transparent)] text-[color:var(--kub-cyan)]"
-              style={{ opacity: progress, transform: `translateY(-50%) scale(${0.6 + 0.4 * progress})` }}
-            >
-              <KubIcon name="forward" size={18} />
             </span>
           )}
         </div>
