@@ -459,6 +459,154 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     approved motion plan
     `docs/superpowers/plans/2026-08-30-shared-motion-feedback.md` is the
     response half's existing vehicle; do not build a second one beside it.
+35. `[~]` Standing: **«where you were» is state the product owns and
+    restores.** Asked for by the owner on 2026-09-20, as the principle behind
+    the update complaint rather than as a feature of it: «В этом и смысл что
+    требуется перенять даже подобные механики либо придумать им более красивую
+    реализацию если таковые уже есть в открытом доступе или у тебя на уме. В
+    дискорде условно я чётко знаю что даже в случае обрыва от канала я
+    гарантировано вернусь в него по возврату связи в течении 5 минут, также с
+    обновлениями которые в случае если происходят насильно то возвращают сразу
+    в голосовой где я и был или в чат где я и был.»
+
+    The rule, in one sentence: a person's place in the product — the
+    conversation they had open and their position in it, the voice channel they
+    were in — survives a reload, an update the product applied itself, and a
+    connection drop; and **where it cannot survive, the product does not take
+    the action that would end it.** The second half is the part that binds
+    today. `artifacts/kub/src/lib/pwa/appUpdateNotice.ts` refuses a quiet
+    restart while a call is connected and while a conversation is open, and
+    both vetoes exist for exactly one reason: the matching restoration does not
+    exist yet. They are placeholders for it, not policy.
+
+    What is measured, as of 2026-09-20, so the gap is a fact rather than an
+    impression. `selectedChatId` is declared at
+    `artifacts/kub/src/store/app.store.ts:39`, initialised `null` at `:262`,
+    never persisted and never in a route — `App.tsx` mounts the whole messenger
+    at `/` and has no chat route — so **every reload lands on the chat list**.
+    The voice room dies with the document: `hooks/useVoiceCall.ts` and
+    `lib/voiceConnectionHealth.ts` carry LiveKit's in-page reconnect, nothing in
+    that path writes to storage, and there is **no rejoin-after-reload of any
+    kind**. Against that, the server already knows who is in which voice
+    channel — `useVoicePresence`, `useVoiceElsewhere`, `useVoiceModeration` and
+    `useServerChannels` all read that presence — so the restoration can be built
+    from state that already exists rather than from state that has to be
+    invented.
+
+    Three restorations, in the order in which they unblock each other: **the
+    conversation's address**, which is what makes a reload cheap and therefore
+    what makes silent updating possible at all; **the voice rejoin**, with a
+    stated window and a designed end to it, because a window needs an end and
+    what happens one second past it has to be chosen rather than fallen into;
+    and then **the relaxation of the update vetoes** that the first two earn.
+    The order is not negotiable: do not weaken «never while a call is
+    connected» before the rejoin exists and is proved against a real drop.
+
+    Each restoration has to preserve the chat-entry contracts of CLAUDE.md
+    section 11 — no unread opens at the bottom, unread opens at the first
+    unread, search and notification jumps land on the exact message, a history
+    prepend keeps the reader's anchor — because restoring *the chat* while
+    losing *the position* is half a promise, and half a promise reads as a
+    defect rather than as a feature.
+
+    Reference: **Discord**, under the allocation of CLAUDE.md section 7.
+    Updates, reconnection and restoring where you were are none of Telegram's
+    three areas, so where the two disagree Discord's answer is taken unless
+    ours is argued to be better. What each client actually does belongs in
+    `docs/operations/reference-clients.md` section 9, dated and
+    confidence-labelled and read from a shipped client rather than recalled;
+    where ours differs deliberately the reason goes there beside the
+    observation, and a preference is not a reason.
+
+    First step taken, 2026-09-20: D-282 in
+    `docs/INTERFACE_DEFECT_REGISTER.md` — the notice throttle re-set from our
+    own deploy cadence, and a quiet restart for the one state where a reload
+    already costs nothing.
+
+
+36. `[ ]` The person behind the conversation: reaching a profile, the depth of
+    the row menu, and the two search surfaces. Asked for by the owner on
+    2026-09-20 with fourteen Discord screenshots, and the reference is
+    **Discord** by CLAUDE.md §7. Four things, and the first is a **regression
+    already located**, not a wish.
+
+    **a. «У нас пропала возможность открыть профиль пользователя не заходя в
+    ЛС с ним.»** Confirmed in the source before this was written:
+    `ChatList.tsx:362` offers «Открыть профиль», and its `run` is
+    `selectAndOpenPanel("info")`, which calls `onChatSelect(chat.id)` and then
+    opens the info panel — so the only way to a profile is *through* the
+    conversation. The label promises a profile and the action opens a chat.
+    The comment above it records why: two profile surfaces were consolidated
+    into one «so the two routes cannot drift apart again». The intent was
+    sound; the lost capability was not noticed. **Discord's answer is that two
+    surfaces are correct** — a compact popout with a «Полный профиль» button
+    and the full modal — and they do not drift because the small one is a
+    summary of the large one with an explicit escalation, not a second
+    implementation of it.
+
+    **b. «Глубина функционала не соответствует.»** Discord's DM-row context
+    menu in his screenshot carries: пометить как прочитанное, закрепить,
+    профиль, начать звонок, добавить заметку (видна только вам), добавить
+    никнейм друга, закрыть ЛС, приложения, пригласить на сервер, удалить из
+    друзей, игнорировать, заблокировать, заглушить. Ours carries eight, and
+    the overlap is partial. Do not copy the list — several entries name
+    concepts we do not have (friends, servers, notes). Work out which of them
+    are mechanics worth having and which are Discord's own model, and say which
+    is which.
+
+    **c. «Функция поиска удобно показывает что можно сделать и даёт выбрать
+    нужную функцию нажатием.»** Discord's in-chat search opens a filter menu —
+    от конкретного пользователя, поиск определённого типа данных (ссылку,
+    вложение или файл), упоминания, больше фильтров — each a click rather than
+    a syntax somebody has to know. **«Глобальный поиск исполнен немного иначе
+    чем в Telegram, но тем не менее интересно»**: the quick switcher («Куда
+    отправимся?») lists ПРЕДЫДУЩИЕ КАНАЛЫ and УПОМИНАНИЯ, and teaches its own
+    prefixes in a footer hint. He asks for ideas to be taken from it, not for
+    a copy.
+
+    **d.** The chat list itself he judges good — «исполнен также удобно» — with
+    one loss he names: it does not show last messages the way Telegram's does.
+    Ours does. Keep that; it is a place we are already ahead.
+
+    Run it the way items 25 and 28 were run, because he has twice asked not to
+    have work rebuilt after each iteration: assessment against the shipped
+    client first, recorded in `docs/operations/reference-clients.md` with dates
+    and confidence, then renders for his approval, then code. Point **a** is
+    the exception — it is a located regression and may be repaired on its own,
+    ahead of the rest.
+
+37. `[ ]` Presence, idleness and the AFK channel — and the false positives that
+    make or break it. Asked for by the owner on 2026-09-20, in the same message
+    as item 35 but a different system, and he flagged the hard part himself.
+
+    What he wants, in his words: statuses that change **in realtime**; a
+    desktop client that counts presence from real use — «если у него запущено
+    приложение на windows, то только при движении мышью учитывает онлайн»; and
+    somebody who falls asleep in a voice channel counted as «Не активен» and
+    **moved to the voice channel designated as the AFK channel in the
+    group/server settings**.
+
+    **«Эту систему также надо корректно продумать чтобы не было ложных
+    срабатываний»** — and he gave the exact failure to avoid: a person watching
+    a stream is not moving the mouse and **is not idle**, and Discord knows it
+    because it counts the activity, not the input. So the design question is
+    what counts as activity here, and the answer is not «input events». A call
+    in which somebody is listening, a video playing, an upload running, a
+    person reading a long conversation — each has to be decided deliberately,
+    and every wrong answer either exiles somebody mid-conversation or never
+    fires at all.
+
+    Also in the screenshots and part of the same system: the status menu is
+    В сети / Неактивен / Не беспокоить / Невидимый, and **«Неактивен» carries
+    a duration** — 15 минут, 1 час, 8 часов, 24 часа, 3 дня, навсегда. A
+    manual status with an expiry is a different mechanic from an automatic one
+    and both exist side by side; work out how they interact before building
+    either.
+
+    This touches voice presence, which already exists server-side
+    (`useVoicePresence.ts`, `useVoiceElsewhere.ts`) and is the same state the
+    restoration principle needs, so sequence it with that work rather than
+    beside it.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
