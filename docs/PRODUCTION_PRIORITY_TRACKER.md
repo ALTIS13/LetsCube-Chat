@@ -724,6 +724,73 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 
     Sequence it after item 36, whose profile work draws these same chips.
 
+
+39. `[ ]` The settings overlay's shape, applied to every other full surface.
+    Asked for by the owner on 2026-09-20, right after he reported the settings
+    screen rendering «криво» inside a narrowed chat list: «такой же подход как
+    к настройкам по возможности к остальным местам примени, страница ботов,
+    админка и т.д». His own condition is the acceptance test and it is not
+    optional: «обязательно проверь что все функции корректно помещаются и
+    отображаются удобно для пользователя на маленьком и большом разрешении».
+
+    Wait for the settings overlay itself to land, then follow it — one
+    container used by all of them, not three that look alike. The surfaces to
+    audit are the bots page, the admin layout and the tasks page. The
+    measurement discipline is the same: photograph each at the narrow end and
+    the wide end, both themes, and show what wraps, clips or collapses, rather
+    than declaring it fits.
+
+40. `[ ]` The bottom bar: three things, not two that duplicate each other.
+    The owner, 2026-09-20: «кнопка мой профиль и настройки по сути дублируют
+    друг друга, тогда лучше перенять подход к интерфейсу от discord». Discord
+    is the reference by CLAUDE.md §7, and he supplied the screenshots.
+
+    Discord's bar carries **three separate affordances**, which is why nothing
+    there duplicates:
+
+    | zone | what it opens |
+    | --- | --- |
+    | the avatar and the name | its own menu — edit profile, status with its durations, account switching |
+    | microphone and headphones | quick toggles, in place, with their own chevrons for device choice |
+    | the gear | the full settings |
+
+    So the duplication goes away by **splitting**, not by deleting one of ours:
+    pressing «в район никнейма» must open a menu of its own rather than a
+    second door into settings. His words: «редактирование профиля уже при
+    нажатии в район никнейма, либо аватарки (в общем до кнопок настройки
+    звука), после чего как раз появляется подобное меню в котором можно
+    перейти в редактор профиля».
+
+    Two things already exist and must be joined rather than rebuilt: the status
+    menu with durations is part of item 37, and the profile editor is item 36's
+    second half. The quick audio toggles are the genuinely new piece, and they
+    are the reason the bar is worth the work — a mute that needs a settings
+    screen is a mute nobody reaches mid-call.
+
+41. `[ ]` A list of sections where Discord keeps Библиотека, Магазин and
+    Задания. The owner, 2026-09-20: «ботов и т.п можно перенести в место
+    подобное тому что на скриншоте 3». Today the bots page is its own route
+    reached from elsewhere; his point is that the product has a natural home
+    for surfaces of that kind and is not using it. Decide what belongs there
+    besides bots — tasks is the obvious candidate — and note that this is also
+    where item 39's surfaces end up being reached from, so the two should be
+    designed together.
+
+42. `[ ]` The update notice moves to the window's own controls. The owner,
+    2026-09-20: «уведомление об обновлении красиво убрать вправо-вверх рядом с
+    кнопками действия с окном (пример с пк версии)», with a screenshot of
+    Discord's desktop client where «Помощь» and the download arrow sit beside
+    minimise, maximise and close.
+
+    This closes his older complaint that the notice «визуально выглядит
+    чужеродно» — not because the notice is ugly, but because it had no home.
+    Beside the window controls is a home, and it is one the desktop shell
+    already draws (`--kub-window-caption` exists). Note the shells differ here:
+    a browser tab has no window controls of ours, so the web and the desktop
+    answers cannot be identical — say what each gets. D-282's throttle and its
+    quiet-restart rule are unaffected; this is where the offer is drawn, not
+    when it is made.
+
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
 `main` `17a1c47` to `245e4d9`, 32 commits, on the owner's standing permission to deploy without him.
