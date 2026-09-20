@@ -3647,6 +3647,75 @@ Keep checking:
 
 ## Priority 2 - RLS And Security Audit
 
+### 2026-09-20 — `20260920130000_a_group_voice_channel_has_no_seat_limit.sql`, applied
+
+**Applied to production at 08:02Z**, in the documented order, with nobody in a
+call (`sum(participant_count) = 0`, SFU at 0.26% of 2 cores).
+
+**It closes a hole, and that was not what it was written for.** The task was the
+owner's «изначально ограничения быть не должно». What the measurement found on the
+way is that the two seats of a **private** chat were not protected at all:
+`authenticated` holds column UPDATE on `max_participants`
+(`has_column_privilege` → `t`), `admins manage voice channels` is FOR ALL and
+permissive, the table carried **no trigger**, and whoever opens a private chat
+becomes its owner. One PATCH through PostgREST raised a one-to-one call to 20
+seats and the gateway then admitted a third person. Verified independently
+before the apply, not taken from the report.
+
+Widening the CHECK to 99 would have widened that hole, so the guard is in the
+same transaction.
+
+| | before | after |
+| --- | --- | --- |
+| CHECK | `>= 2 AND <= 20` | `= 0 OR (>= 2 AND <= 99)` |
+| default | `10` | `0` (unlimited) |
+| group rows | 3 @ 10 | 3 @ 0 |
+| private rows | 2 @ 2 | 2 @ 2 |
+| triggers | **0** | 1 |
+
+**Proved after the apply, rolled back both times:** raising a private channel to
+20 raises «a private chat holds two people by definition; a third belongs in a
+group, not in a wider private chat»; setting a group channel to 50 succeeds.
+The column grant is deliberately unchanged — the trigger is the guard, because
+a column REVOKE against a table-level grant is a silent no-op here (see the
+register).
+
+**The other two halves, without which the database alone would lie.** A stored
+`0` is a proto3 zero, indistinguishable from an absent field, so the SFU
+substitutes its config default: with the old `livekit.yaml` the product would
+have reported «no limit» while silently refusing an eleventh person.
+
+1. Gateway `supabase/functions/voice-gateway/{index.ts,seatLimit.mjs}` copied to
+   `/srv/letscube/platform/supabase-docker/volumes/functions/voice-gateway`,
+   md5 verified equal to the repository's on both files; previous directory kept
+   as `voice-gateway.before-seat-limit.20260920T080059Z` (index.ts md5
+   `e651f6fe…`). `supabase-edge-functions` restarted — start time moved
+   2026-09-18T07:08:20Z → 2026-09-20T08:01:15Z.
+2. `/srv/letscube/voice/livekit.yaml` `room.max_participants` 10 → 0; backup
+   `livekit.yaml.before-seat-limit.20260920T080128Z`, sha256 of both read equal
+   before the edit (`e091e9f6…`). SFU restarted with `docker restart` rather
+   than `compose up -d` — the latter answers «Running» and never re-reads the
+   file, which this document already records as a trap. Start time moved
+   2026-09-19T20:52:49Z → 2026-09-20T08:01:53Z, TURN back up, v1.13.7.
+3. The migration, as above.
+
+Backup taken first and verified: `pre-20260920130000-seat-limit-20260920T080225Z.sql`,
+1,407,932 bytes, sha256 `e39cdce3…`, containing `CREATE TABLE public.voice_channels`
+and the old `max_participants >= 2` constraint — so it is a backup of the state
+that was changed rather than of some other one. Migration sha256
+`8dc85a82…`, byte-identical on the host before it ran. Applied as
+`supabase_admin`; `postgres` does not own everything this touches.
+
+**Rollback runs the list backwards**, and the reason is in the migration header:
+taking the database back alone leaves rows naming 10 against a config whose
+fallback is now 0.
+
+**Not measured, and stated as not measured:** media load above ten publishers in
+one room. The capacity figure in this document is arithmetic over slice 1's real
+measurement (10 publishers = 18.58% of 2 cores), not a new one; one
+`livekit-cli load-test --audio-publishers 20` would settle it.
+
+
 Status: `[x]` baseline complete. Keep as regression guard.
 
 Goal: authenticated users can only read/write rows, objects and RPC effects allowed by membership, role, location and task permissions.
