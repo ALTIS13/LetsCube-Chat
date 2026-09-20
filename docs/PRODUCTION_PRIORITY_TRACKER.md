@@ -616,6 +616,42 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     the exception — it is a located regression and may be repaired on its own,
     ahead of the rest.
 
+    **The assessment is written, 2026-09-20 — section 15 of
+    `docs/operations/reference-clients.md`.** Read off Discord stable 615980:
+    the main bundle plus **4,321 chunks, 132 MB, zero failures**, and — new
+    for this project — the 37 `en-US` locale chunks, which give 28,264
+    key→string pairs and make every English label exact. That retires one row
+    of section 13. **The next step is renders, not code.**
+
+    Four findings that change the plan rather than decorate it:
+
+    - **Discord's two profile surfaces do not stay honest because of a shared
+      component — they share none. They share a store.** Popout and modal are
+      different trees over one `UserProfileStore` and one fetch path with an
+      in-flight gate and a 60-second freshness window. So **our two-tier design
+      owes a profile store before it owes a popout**: building the small
+      surface first would give us two components over two queries, which is
+      the drift the consolidation was defending against.
+    - **Discord's own search has our defect.** Twelve filters parse,
+      **nine** are offered, and `linkFrom:` / `fileType:` / `fileName:` are
+      reachable only by typing — the same shape
+      `tests/unit/search-type-filters.test.mjs` exists for. Ours is worse in
+      one place and identical in kind: the in-chat search **already parses**
+      `from:`, `has:`, `before:`, `after:` and offers none of them, and the
+      phone's bar has no chips, no hint and no menu at all.
+    - **«Пометить как прочитанное» is the cheapest entry on the page.**
+      `mark_chat_read_through` exists, the row draws an unread badge, and no
+      menu entry writes it. Discord leads its DM menu with exactly this.
+    - **Most of what makes Discord's menu long is conditional**, and a third
+      of it presupposes objects we have not decided to have — friends, servers,
+      activity. Section 15.2 separates the mechanics from the model entry by
+      entry. The one honest surprise is **«Заметка о человеке»**: private, per
+      person, needs no friends graph, and we have never discussed it.
+
+    Not established, and recorded as such: what Discord's DM **row** itself
+    draws (this pass followed the menu, the profile and the searches; the
+    owner's screenshots are the evidence for d, not a bundle read).
+
 37. `[ ]` Presence, idleness and the AFK channel — and the false positives that
     make or break it. Asked for by the owner on 2026-09-20, in the same message
     as item 35 but a different system, and he flagged the hard part himself.

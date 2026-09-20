@@ -1213,7 +1213,7 @@ Stated plainly, with what would settle each.
 | Question | Status | What would settle it |
 | --- | --- | --- |
 | Whether Discord's voice settings panel **hides** or **greys** each unsupported control | **PARTLY SETTLED 2026-09-20.** The chunk was fetched once the URL-shape error in section 12 was corrected. For the input-sensitivity fieldset the answer is **greys**: present whenever the input profile is `CUSTOM`, `disabled` outside voice-activity mode, and absent entirely under the `VOICE_ISOLATION` and `STUDIO` presets. Whether every other control in the panel does the same is still open | read the remaining `buildLayout` entries (`rq, rL, rM, rN, rZ, rB, rX, rY, rI`) in module 460773 of chunk 922757 |
-| The English label text for these settings in build 615980 | **UNESTABLISHED.** Strings are hash-keyed and live in per-feature locale chunks | same |
+| The English label text for these settings in build 615980 | **SETTLED 2026-09-20 — the method, at least.** Strings are hash-keyed, and the hashes resolve: `n(121312)`/`n(422411)` map locale to chunk, 37 `"en-US"` loaders exist, and fetching all of them yields **28,264 key→string pairs**. Every English label in section 15 came from there. The voice-settings fieldset's own labels were not looked up in this pass, so that one remains open — but it is now a lookup rather than a limitation | read the keys out of the settings chunk against the string table; section 15.6 |
 | Whether a first-party announcement of the BOT-to-APP badge rename ever existed | **UNESTABLISHED, leaning strongly to no.** Absent from Discord's April and May 2024 patch notes and from the September 2024 apps launch post. The current label is OFFICIAL — Discord's own developer docs say apps «appear in servers with an `APP` tag» | the 2024 developer-changelog entries (the rendered page truncates at about August 2025), or an archived help-centre snapshot. The Internet Archive was offline on 2026-09-20 |
 | Where the APP badge appears per client — member list, DM list, profile popout, mention chips | **UNESTABLISHED.** Discord's first-party docs never enumerate it | a screenshot pass across the three clients. No amount of reading will close this one |
 | Whether Components V2 has any **general** mobile limitation | **UNESTABLISHED.** The one citable report is scoped to *forwarded* messages | a first-party statement; none exists |
@@ -1271,3 +1271,520 @@ here because they bear on our bot work:
 6. A control that cannot work here is **absent** here. Discord's own third
    option — keep it and point at the client that can — is available to us and is
    a product decision, not a default.
+
+---
+
+## 15. Subject 7 — the person behind the conversation, the row menu, and the two searches
+
+Queue item 36. The owner asked for four things on 2026-09-20 with fourteen
+Discord screenshots, and the reference is Discord by section 7.
+
+**Provenance for everything marked SHIPPED here.** Read 2026-09-20 from
+`discord.com/app`, stable, `BUILD_NUMBER 615980`, `VERSION_HASH
+2ae1bc1225ba4bf504c4d700814c349182721466`, main bundle
+`/assets/web.d793fc00a2d44795.js` (12,082,177 bytes). The chunk map from `T.u`
+resolves **5,108 ids** (247 ternary + 4,861 fallback); **4,321 chunks were
+fetched, 132 MB, zero HTTP failures**, at parallelism 6. Module numbers below
+are webpack module ids in that build and can be looked up again.
+
+**The locale chunks were read, so English labels below are exact.**
+`n(121312)`/`n(422411)` map locales to chunks; 37 `"en-US"` loaders exist, the
+main one chunk `1868` (1.42 MB). All 37 give **28,264 key→string pairs**. This
+**retires section 13's row** «The English label text for these settings in
+build 615980 — UNESTABLISHED. Strings are hash-keyed and live in per-feature
+locale chunks». They are hash-keyed, and the hashes resolve.
+
+Ours, below, is read out of this worktree at `00b8e86e` and is SHIPPED in the
+same sense.
+
+---
+
+### 15.1 The profile: two surfaces, and the thing that actually keeps them honest
+
+**Discord has two, and a third and a fourth. SHIPPED.** Module **518477** is the
+shared vocabulary, and `R7` is the enum the whole family is parameterised on:
+
+```js
+R7 = {POPOUT, MODAL, MODAL_V2, SIDEBAR, ACCOUNT_POPOUT, ACTION_SHEET, YOU_SCREEN, EMBED}
+RP = {FEATURED, USER_INFO, BOT_INFO, ACTIVITY, MUTUALS, MUTUAL_GUILDS,
+      MUTUAL_FRIENDS, BOT_DATA_ACCESS, WIDGETS, WISHLIST, MAIN}
+```
+
+Module **207634** is one table keyed by it — POPOUT draws an 80px avatar over a
+300×105 banner, MODAL 120 over 600×210, MODAL_V2 120 over 400×140, SIDEBAR 80
+over 340×120 — and each presentation passes its own tag into the same three
+hooks (`layout`, the locations hook, `themeType`).
+
+**But the bodies are different components**: popout **851588**, human modal
+**808261** (MODAL_V2), bot and restricted modals **577593**, sidebar a component
+in chunk 192461. They share the leaf components — bio, roles, connections, note,
+the overflow menu — not a root.
+
+**So the answer to «why do they not drift» is not the one this project assumed,
+and the correction is the single most useful thing in this subject.** They do
+not drift because of the **store**, not because of the component. Popout and
+modal both read `(0,O.Ay)(userId, guildId)` (module 999291 → `UserProfileStore`,
+module **321191**), and both reach one fetch path (module **903209**) which
+refuses to ask twice:
+
+```js
+if(""===e||c.A.isFetchingProfile(e,f))return Promise.resolve();
+…C=Date.now()-(N?.fetchEndedAt??0)>=6e4;
+…if(!b&&!M)return Promise.resolve();
+```
+
+In flight → no-op. Cached, fresher than **60 seconds**, and no newly-requested
+field missing → no-op. The popout is a **view of the same rows**, and a
+component that drew something else would be drawing it from the same data.
+
+**The one seam, and it is a real one.** The two sides request different fields:
+the popout asks `withMutualFriends` (the list), the modal asks
+`withMutualFriendsCount` (the number). So escalating popout→modal *can* refetch
+for a field the popout never wanted. Discord accepts that; it is the price of
+the small surface being genuinely smaller.
+
+**The escalation control. SHIPPED.** String key `+Xp3hq` = **"View Full
+Profile"**. In the popout it is an item inside the overflow («…») menu — not a
+button at the bottom — module 984545, `id:"view-profile"`, and its action is:
+
+```js
+function K(e){ k?.(); W.dispatch($.jej.POPOUT_CLOSE);
+  (0,m.openUserProfileModal)({sourceAnalyticsLocations:V, hideRestrictedProfile:!0, ...M, ...e}) }
+```
+
+Close the popout, then open the modal. It is suppressed in the game overlay
+(`disableUserProfileLink = __OVERLAY__`). The **sidebar** presentation carries
+the same string as a real full-width secondary button. The **modal** does not
+carry it at all — its overflow slot (module **722868**) offers «View Main
+Profile» / «View Per-server Profile» with the subtext «AKA {displayName}»
+instead. There is also a separate **"View Full Bio"** (`YDiPq8`) in the popout's
+bio block that opens the modal.
+
+`UserProfileModalManager` (module 403777) is a Flux store keyed
+`` `USER_PROFILE_MODAL_KEY:${userId}:${guildId??""}` ``, and the modal is
+`openModalLazy` behind **660** chunks where the popout body needs 350 — the
+small surface is genuinely cheaper to open.
+
+**The modal's tabs. SHIPPED**, built inside 808261 for humans:
+
+1. **Board** (`laViwx`, `RP.WIDGETS`) — conditional
+2. **Activity** (`chq59f`) — unconditional
+3. **Wishlist** (`7lZ31J`) — self, or another and visible
+4. **N Mutual Friends** — another user only
+5. **N Mutual Servers** — another user only
+
+**There is no «user info» tab.** Bio, roles, connections and the note render in
+the body, and the tabs are only for the things that are lists. Bots get
+`[Bio, N Mutual Servers, Data Access]`. With streamer mode on the whole tab area
+is replaced by «Streamer Mode Enabled».
+
+**Where a popout can be opened from. SHIPPED**, by reading the importers of
+wrapper module 342296 — ten in the main bundle, about twenty-two more in chunks:
+a message author's avatar and username (two separate anchors), the author of a
+replied-to message, an interaction's user and its **target** user, a guild
+member-list row, a thread member list, a role-settings member row, **a voice or
+call participant — popout only when there is exactly one participant**, an
+inline `<@id>` mention chip, an avatar facepile, and small 24px avatar buttons.
+
+The **modal** is opened directly, without a popout, by: the `/users/:id` route,
+a `discord.com/users/<id>` link clicked inside a message, activity-member rows,
+a friend-request notification, and widget cards (which pass `tabSection` and a
+`scrollTarget`, so a card opens the modal *on the right tab, scrolled to the
+right block*).
+
+Two behaviours in the message renderer worth stealing the thinking from:
+**shift-clicking a username inserts a mention instead of opening anything**, and
+a blocked or spam message draws a placeholder card rather than an author you can
+press.
+
+**UNESTABLISHED:** «bite size» / `bitesize` as a Discord concept — **zero**
+matches across the 12 MB main bundle and 132 MB of chunks. So are the
+identifiers `UserProfilePopout`, `ProfilePopout`, `UserProfileSections` and
+`viewFullProfile`; the real names are `R7` and `RP` in 518477, and
+`USER_PROFILE_POPOUT` exists only as the analytics string «user profile popout».
+
+#### Ours, and what this changes about the plan
+
+D-283 restored the capability by extracting `MemberCard` and giving it a second
+container. What this read corrects is the **reason** that is safe. The D-283
+entry says the two surfaces «do not drift because the small one is a summary of
+the large one» — that is the *shape*; the **mechanism** is that both read one
+store through one gated fetch. Ours does not have that yet: the overlay reads
+`profiles` fresh on every open, and the panel reads its own member list. Two
+reads of the same row, no shared cache, no in-flight gate.
+
+**So the two-tier design, when it is written, owes a store before it owes a
+component.** Building a compact popout beside the card without one would give us
+two components reading two queries — which is exactly the drift the
+consolidation was defending against, arriving through the door we just opened.
+
+What is worth taking, in order, and each is a mechanic rather than an object:
+
+1. **One profile store with an in-flight gate and a freshness window.** Discord
+   uses 60 seconds. Everything else here depends on it.
+2. **The small surface as a different component reading the same rows**, not a
+   parameterised root. Discord proves the split is maintainable when the data is
+   shared; it does not claim the markup should be.
+3. **The escalation as one explicit control** that closes the small surface and
+   opens the large one. Discord hides it in the overflow menu on the popout and
+   promotes it to a full-width button on the sidebar — the same string, placed
+   by how much room there is. At 390 that argues for the button.
+4. **Tabs only for lists.** Bio, roles and the note belong in the body; the
+   tabs are Mutual Friends and Mutual Servers, which are lists, plus the
+   activity surfaces. Our card already stacks the group's roles above LETSCUBE's
+   badges in the body, which is the same instinct.
+5. **A card opened from a specific place may open on a specific tab, scrolled
+   to a specific block.** That is what `tabSection` + `scrollTarget` is for and
+   it is cheap.
+
+Refused, with the reason: **Board, Wishlist, Connections and Mutual Friends
+presuppose objects we do not have** — an activity feed, a wishlist, linked
+external accounts and a friends graph. «Mutual servers» has an honest analogue
+— groups and channels in common — and that one is worth having.
+
+---
+
+### 15.2 «Глубина функционала не соответствует»: the row menu
+
+**Discord's DM row menu, in shipped order. SHIPPED**, module **385913** (chunk
+439778) for a 1:1 DM, `navId:"user-context"`, `aria-label:"User Settings
+Actions"`. Right-click and the kebab share one handler (module 715069) and
+differ only in the impression name. Group DMs get module **4027**
+(`navId:"gdm-context"`). Each has a second variant for the **Favorites**
+pseudo-server, `guildId === "373"` (module 349828).
+
+Separated into Discord's own groups:
+
+1. **Mark As Read** / **Mark Unread**
+2. **Pin** / **Unpin**; **Add to Favorites**
+3. *(stage items, null in a DM)*
+4. **Open in New Tab**; then for non-bots **Profile**, **Start a Call**, **Ring
+   to Call** / **Stop Ringing**, **Add Note** / **Edit Note**, **Add / Change
+   Friend Nickname**, **Watch Stream**; then **Close DM**
+5. *(User Volume — gated off for a sidebar row)*
+6. **Join** / **Invite to Join** / **Invite to Listen Along** / **Ask to Join**,
+   when the person has a joinable activity
+7. **Frequently Used Commands**, **View Verification Code**, **Invite to
+   Server** (a submenu of eligible servers), **Add Friend** / **Remove Friend**,
+   **Add Game Friend**, **Remove Game Friend**, **Ignore** / **Unignore**,
+   **Block** / **Unblock**
+8. **Mute Conversation** / **Unmute Conversation**, submenu *For 15 Minutes /
+   For 1 Hour / For 3 Hours / For 8 Hours / For 24 Hours / Until I turn it back
+   on*
+9. **Remove from Favorites**, `color:"danger"`
+10. Six safety-warning items, every one suffixed **«(Experimental)»**
+11. **Copy User ID**, **Copy Channel ID** — **developer mode only**:
+    `if(__OVERLAY__||!(_||E)||!d.p5||null==t)return null`
+
+**The most transferable fact in this list is not an entry.** It is how much of
+it is conditional: `isNonUserBot()`, `isManaged()`, self, the friend / blocked /
+ignored relationship, developer mode, `hidePersonalInformation` (streamer mode),
+whether the person has a joinable activity, and staff-only flags. The long menu
+in a screenshot is the maximum, not the norm — and Discord puts its own
+developer affordance behind a setting rather than in front of everybody.
+
+#### Ours, and the separation the owner asked for
+
+Ours, read at `00b8e86e`. Right click, a 520 ms long press, or the `ContextMenu`
+key from a focused row; same list, two containers.
+
+| conversation | entries, in order |
+| --- | --- |
+| private, a person | Открыть · Открыть профиль · Поиск в чате · Закрепить/Открепить · *(Переместить выше/ниже — pinned only)* · Отключить уведомления *(one row; five while the durations are open)* · **Очистить историю у себя** · **Удалить чат у себя** |
+| private, a bot | the same, minus «Открыть профиль» (D-283) |
+| «Избранное» | Открыть · **Очистить избранное у себя** — two |
+| group / channel | Открыть · Информация о группе/канале · Поиск в чате · Закрепить · *(moves)* · уведомления · **Очистить историю у себя** · **Покинуть** or **Удалить** |
+
+**Mechanics we are missing and already have the machinery for:**
+
+- **«Пометить как прочитанное».** `mark_chat_read` and
+  `mark_chat_read_through` exist and are called from inside a conversation; the
+  row draws an unread badge to 99+; **no menu entry writes it**. Discord leads
+  its menu with this one, and it is the single cheapest entry on this page.
+  Its opposite — «Отметить непрочитанным» — is a product decision, because it
+  needs a watermark the row can be drawn from rather than a write.
+- **«Позвонить».** Voice exists and the conversation's header carries the
+  control; the row does not. Discord separates **Start a Call** from **Ring to
+  Call**, which is worth copying only if our ring is separable; it is one action
+  today.
+- **«Заблокировать» / «Пожаловаться».** `user_blocks` exists and is reachable
+  from the contact card. Discord puts it on the row.
+- **«Пригласить в группу».** Our analogue of «Invite to Server», and the
+  machinery is `GroupInviteModal`. A submenu of eligible groups is the shape.
+- **«Открыть в новой вкладке».** Newly meaningful: a conversation has an
+  address as of `054bf8ee`, so this is now a link rather than a wish.
+
+**Discord's object model, not a gap in ours** — and this is the distinction the
+owner asked for in point b:
+
+- **Add / Remove from Favorites** is the `"373"` pseudo-server. We have folders,
+  and section 7 makes **Telegram** the reference for folders, so ours is already
+  answered by a different and deliberate model. Not a missing entry.
+- **Add Friend, Remove Friend, Friend Nickname, Add Game Friend** presuppose a
+  **friends graph**. We have none. «Мы не добавили пункт меню» is the wrong
+  reading; the right one is «мы не приняли решение о модели друзей».
+- **Watch Stream, Join, Invite to Listen Along, Ask to Join** presuppose an
+  **activity and presence model**. That is queue item 37's subject, not this
+  one, and it should be decided there.
+- **Frequently Used Commands** is the bot model; D-263 owns it.
+- **View Verification Code** is Discord's own account plumbing.
+- **Copy User ID** is a developer affordance — and Discord agrees: it is behind
+  developer mode. Refused, as D-266 already refused it.
+- **Speak on Stage / Invite to Speak** — no stages.
+
+**One entry that is a real product decision rather than either:** **Add Note**,
+a private annotation about a person, visible only to you. It needs no friends
+graph, no servers and no activity. It is the one entry in Discord's menu that we
+could have, do not, and have never discussed. Recorded here as a decision to
+take, not a gap to close.
+
+---
+
+### 15.3 «Поиск удобно показывает что можно сделать»: two searches
+
+#### Discord's in-chat search. SHIPPED
+
+**Twelve filters parse; nine are offered; three are unreachable.** The grammar
+is module **304578**, and the filter words are *localised strings* rather than
+literals (`B(e)=e+":"`, `V(e)=RegExp(e+":","i")`):
+
+| token | en-US | answers | API key |
+| --- | --- | --- | --- |
+| FROM | `from:` | snowflake, `@me`, `name#0000`, `[a-z0-9_.]{2,32}` | `author_id` |
+| MENTIONS | `mentions:` | same | `mentions` |
+| HAS | `has:` | image, video, link, file, embed, sound, poll, sticker, forward | `has` |
+| IN | `in:` | a channel | `channel_id` |
+| BEFORE | `before:` | `YYYY-MM-DD` \| `YYYY-MM` \| `YYYY` \| a word | → `max_id` |
+| ON | `on:` or `during:` | same | → a snowflake range |
+| AFTER | `after:` | same | → `min_id` |
+| PINNED | `pinned:` | `true` \| `false` | `pinned` |
+| AUTHOR_TYPE | `authorType:` | user, bot, webhook | `author_type` |
+| LINK_FROM | `linkFrom:` | a host | `link_hostname` |
+| FILE_TYPE | `fileType:` | an extension | `attachment_extension` |
+| FILE_NAME | `fileName:` | a name | `attachment_filename` |
+
+Date shortcuts `today, yesterday, week, month, year`; a leading `-` negates an
+answer; unmatched text falls into `content`. The eligibility list (module 5990)
+is exactly nine in this order — from, in, has, mentions, on, before, after,
+authorType, pinned — with `from`/`mentions` dropped under
+`hidePersonalInformation`. **`linkFrom`, `fileType` and `fileName` are never in
+it.** They parse if typed and nothing offers them.
+
+**That is our own defect, in Discord.** It is the shape
+`tests/unit/search-type-filters.test.mjs` was written for — a capability that
+exists, is correct, and has no consumer. Worth knowing before we treat Discord's
+search as finished.
+
+**The bar is one Slate rich-text input**, `role="combobox"`,
+`aria-autocomplete="list"`, max **512** characters (module 742788). Parsed
+tokens are **decorated in place** (module 494606 paints FILTER and ANSWER leaves
+with different classes), so the filters read as chips *inside* the field rather
+than beside it, and backspacing inside a token deletes the whole token.
+
+**Clicking a filter inserts its prefix and does not search. SHIPPED**, module
+**618989**:
+
+```js
+onSelect(r){ … t({query:`${i} `, performSearch:!1, replace:!1}) }
+```
+
+The popout on an empty focused field is **four rows and an escape hatch**:
+
+- **From a specific user** — `from:`, sublabel *user*
+- **Sent in a specific channel** — `in:`, *channel*
+- **Includes a specific type of data** — `has:`, *link, embed or file*
+- **Mentions a specific user** — `mentions:`, *user*
+- **More filters** (`diOL4i`), sublabel **«dates, author type, and more»** — or
+  **Add search filters** (`M1tf+7`) when nothing else shows — which opens a
+  **modal**, not a longer list
+- a **History** group: the last five queries from `localStorage`, with a trash
+  control *Clear Search History*, suppressed under `hidePersonalInformation`
+- in a DM, a leading **Find in {channelName}** row that inserts `in:<channel>`
+
+**The Filters modal** (module 561965, modalKey `"search-filters-modal"`): title
+**Filters**, *Cancel* / **Apply Filters**, a **Clear Filters (N)** counting
+active values, and fields in order **From** (multi-select, «Sent by any of the
+selected users»), **In**, **Has**, **Mentions**, **Date** (a repeatable row of
+before/during/after with a calendar, **at most four**, earliest 2015-05-15),
+**Author Type**, **Pinned**. Applying writes a query string into the same bar.
+
+**Completions exist and are asymmetric. SHIPPED**, `SearchAutocompleteStore`
+(module 692986), three modes. With the cursor **inside** a filter token: one
+group of up to **10**. With the cursor **outside** one: up to **3 each**, and
+only for `from`, `in` and `mentions` — and **nothing at all until something is
+typed**. `from`/`mentions` list people (with `@me` hoisted when the typed text
+prefixes «me»); `in` lists channels with the current one hoisted; `has` and
+`authorType` list their fixed sets; the date filters show a calendar; `pinned:`
+offers literally `true` and `false`.
+
+#### Discord's quick switcher. SHIPPED
+
+**Five prefixes, and no sixth.** Module **926140**:
+
+```js
+AT = {USER:"@", TEXT_CHANNEL:"#", VOICE_CHANNEL:"!", GUILD:"*", GAME_PROFILE:"$"}
+if(t===AT.USER && e.charAt(1)===AT.USER) return [e.slice(2), rD.USER_GLOBAL];
+```
+
+`@@` widens users to everybody. **There is no `>` prefix in this build** — the
+map has exactly five entries and the strip regex is generated from them; nothing
+resembling a sixth exists in 144 MB. The footer protip (`BGHbLb`) names all
+five and links a help-centre article; a **second, stale** string (`qHKbUw`)
+still says «Characters like @, #, !, and * will narrow Quick Switcher results»
+and has never been updated for `$`. In prefix mode the list gets a mode header —
+«Searching Text Channels», «Searching Servers», and so on.
+
+**The empty-query list is four sections, not one. SHIPPED**, module 174768, in
+this order: **Previous Channels** (from a persisted history, iterated from index
+1 so the current channel is skipped, permission-filtered) · **Drafts**
+(`getRecentlyEditedDrafts`, filtered to channels you can still post in) ·
+**Mentions** (`getMentionChannelIds()`, iterated **backwards** so the newest is
+first) · **Unread Channels** (unread, unmuted, parent-unmuted, plus joined
+unread threads).
+
+Then the truncation, which is the detail worth keeping:
+
+```js
+let u = r.length>0 ? 3 : 7;
+if(s.length>u) s.splice(u);
+```
+
+**Previous Channels shows seven when it is the only section and three when
+anything else is present.** Headers are their own row type and arrow-key
+navigation skips them.
+
+**Scoring. SHIPPED**, module **802842** — a five-step quality ladder multiplied
+by a real frecency booster:
+
+```js
+exact 10 · prefix 7 · contains 5 · all-tokens-present 3 · fuzzy 1 · none 0
+score = 1000 * quality * booster
+booster = 1 + frecency/maxFrecency,  + .2 for a friend,  + .1 for somebody you have a DM with
+```
+
+so the booster lives in `[1, 2.3]`, invalidated on frecency, relationship and
+private-channel version changes, with a locale tie-break.
+
+Two things the bytes say that a screenshot would not, recorded because a later
+reader will otherwise re-derive them:
+
+- **`_applicationResults` is computed and never merged.** `updateAllResults`
+  spreads eight arrays and applications is not one of them — verified
+  byte-exact. Applications are queried, clamped, cleared and counted, and can
+  reach the list only through the empty-query branch under a `queryMode` no
+  prefix maps to. Dead or nearly dead **in the bundle**; whether a user ever
+  sees it is **UNESTABLISHED** without a live client.
+- **The result limit is fixed by the first search of a session.** `i = i ?? new
+  d.Ay(…, null!=n?100:5, …)` is memoised, so the 100-or-5 chosen by the first
+  query's mode sticks until the switcher is destroyed.
+
+#### Ours
+
+- **In-chat search already parses the grammar and offers none of it.**
+  `useChatMessageSearch` calls `parseAdvancedSearchQuery(query, "message")`, so
+  `from:@anna has:image after:2026-09-01` works inside a conversation today.
+  `ChatSearchPanel` renders `SearchFilterChips`, which **returns `null` when
+  `parsed.chips.length === 0`** — it *removes* what somebody typed and offers
+  nothing. The phone's `ChatSearchBar` is a bare field with the placeholder
+  «Поиск в чате…»: no chips, no hint, no menu. **The mechanism is wired and the
+  affordance does not exist**, which is precisely the owner's complaint.
+- **Our grammar** (`lib/searchQuery.ts`) has six filters — `type:`, `from:`,
+  `in:`, `has:` (file, link, image, video, audio), `before:`, `after:` — with
+  quoted values and an alias table. Against Discord's twelve we are missing
+  `mentions:`, `on:`/`during:`, `pinned:` and `authorType:`; the last two map
+  onto things we have (pinned messages, and bots).
+- **Global search** has the nine type pills with counts, sections, an active
+  index, a dismissible syntax hint, and **Ctrl/Cmd+K** to focus and clear the
+  field from `md` up. **On an empty query it shows nothing but the pills and the
+  «ПОИСК» heading** — `showEmpty` requires `parsed.query.length > 0`. No recent
+  conversations, no unread, no mentions.
+
+**What to take, separated from what it presupposes:**
+
+1. **The empty-focus filter popout, and click-inserts-prefix-without-searching.**
+   Four rows, each naming what it does in a sentence with the syntax as the
+   sublabel. This is the whole of the owner's «даёт выбрать нужную функцию
+   нажатием», it teaches the grammar we already have, and it needs no new
+   backend.
+2. **Completions for `from:` and `in:`** — people and chats we already list.
+   Discord's asymmetry is worth copying too: nothing until something is typed,
+   so an empty field is an offer and not a dump.
+3. **A «Ещё фильтры» surface.** Discord's is a modal with seven fields, a
+   «Clear Filters (N)» counter and a repeatable date row capped at four. At 390
+   ours would be a sheet.
+4. **The quick switcher's empty state**, which is the honest answer to «Куда
+   отправимся?»: recent conversations, then unread, then mentions, with the
+   current one skipped and headers the keyboard steps over. **Drafts is a
+   section we could have and do not** — we keep composer drafts.
+5. **The frecency booster** as a mechanic — a usage score times a match-quality
+   ladder — rather than pure recency. The relationship bonuses (+0.2 friend,
+   +0.1 DM partner) need a friends graph for the first and are free for the
+   second.
+6. **The prefix vocabulary as a taught thing.** Ours has no prefixes at all;
+   the type pills do that job by pressing. Whether to add prefixes is a real
+   choice, and Discord's own stale help string is an argument for keeping the
+   vocabulary small: five prefixes and one of them was still undocumented in
+   its own hint when this was read.
+
+**Refused, with the reason:** `$` game profiles (no games), `*` servers (our
+folders are Telegram's model, per section 7), Listen Along and activity rows
+(item 37), and Discord's search **History** group **pending a decision** — it is
+five past queries in `localStorage`, which is a privacy choice on a shared
+computer, and Discord itself suppresses it under streamer mode.
+
+---
+
+### 15.4 The chat list, where we are ahead
+
+The owner judged this one favourably — «исполнен также удобно» — and named the
+one thing Discord's DM list lacks that Telegram's has, and that ours has:
+**the last message on the row.**
+
+Ours draws, per row: an avatar with an online dot, the name, **the last message
+prefixed with its sender's display name**, its time, an unread badge to 99+, a
+mute glyph, a group read-receipt mark, a voice-presence mark, and — for pinned
+rows — the whole row as a drag grip.
+
+**Discord's DM row content was not established from the bundle** and is recorded
+as the owner's observation rather than as a read: this pass followed the menu,
+the profile and the two searches, and the row's own markup was not traced.
+**UNESTABLISHED** from the bundle; the screenshots are the evidence.
+
+**The rule that follows, and it binds the rest of item 36:** whatever is adopted
+from Discord's status and presence presentation must not cost the row its last
+message. That line is the reason the list reads as a conversation list rather
+than a contact list, and it is the one place in this subject where the argument
+runs the other way.
+
+---
+
+### 15.5 What could not be established
+
+| Question | Status | What would settle it |
+| --- | --- | --- |
+| A «bite size» / bitesize profile concept in Discord | **UNESTABLISHED.** Zero matches in 144 MB | nothing in the client; it is not a shipped identifier |
+| Whether Discord's dead `_applicationResults` path is ever visible | **UNESTABLISHED** | a live client; no read will close it |
+| Whether the «(Experimental)» safety-warning DM items render for ordinary accounts | **UNESTABLISHED.** The labels are shipped; the gate was not traced | a live account, or the flag's definition |
+| What Discord's DM list row itself draws | **UNESTABLISHED from the bundle** | trace the row component, or take the owner's screenshots as COMMUNITY |
+| First-party documentation for any of the above | **not attempted** | Cloudflare refuses scripted fetches; section 12 |
+
+---
+
+### 15.6 Two corrections to section 12's method
+
+Both were paid for during this read.
+
+1. **Chunk ids that appear in `n.e()` but are missing from the `u` map are
+   *initial* chunks**, which webpack excludes from that map on purpose. They are
+   listed in `app.html`. About thirty were chased as stale before this was
+   worked out. `.js.map` is a 404 — the SPA shell — so there are no sourcemaps.
+2. **The locale chunks are readable and worth reading first.**
+   `n(121312)`/`n(422411)` map locale → chunk; 37 `"en-US"` loaders yield 28,264
+   key→string pairs. Every hash-keyed label in this section came from there.
+   Without it a reader is guessing at `+Xp3hq` and `diOL4i`.
+
+And one repeat of a mistake this project has already recorded: **analysis
+scripts written through a Bash heredoc lose backslash escapes** (a module-header
+regex silently matched nothing, twice). Write them with a file, and pass
+`MSYS2_ARG_CONV_EXCL='*'` when a string key like `/AXYnE` goes through argv, or
+Git Bash turns it into a path under the Git installation.
