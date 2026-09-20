@@ -4299,15 +4299,45 @@ policy does not exist: **nothing in this repository measures bucket growth.**
 The reversible half is therefore to measure it, and no policy is chosen until
 there is a number.
 
-**What a forward may reveal.** Naming the source is half-built and the half that
-shipped behaves correctly under RLS: the person who forwarded sees the name —
-the tester's own case — and a stranger in the target chat does not. Telegram's
-completion of this is a **denormalised** `fwd_from`, which by construction shows
-the name to everyone who can see the message, RLS or not. That is not a
-performance detail; it is a decision that a forward discloses its origin to the
-whole destination. Both reference clients do disclose it, so the reference does
-not decide it — the question is whether this product wants that, and it is the
-owner's.
+**What a forward may reveal — settled by the owner the same day, and settled
+better than either option offered him.** This entry had presented a choice
+between disclosing the origin to everyone (Telegram's denormalised `fwd_from`)
+and leaving it to RLS, where the forwarder sees the name and a stranger in the
+destination does not. He corrected the premise:
+
+> «У телеграма скрытие имени при пересылке завязано на настройках приватности,
+> т.е. изначально все видят изначального отправителя пересылаемого сообщения.»
+
+**So the reference does decide it, and the decisive part is who holds the
+control.** Telegram discloses by default and gives the opt-out to the **person
+being disclosed** — the original sender, once, in their own privacy settings —
+not to the reader's permissions.
+
+That exposes what was wrong with the RLS half we shipped, which had looked
+correct: under it the same forward shows a name to one reader and not to
+another, and **nobody chose that**. It is an artefact of who happens to have
+access, not a decision by the person whose name it is. A privacy property that
+varies by the viewer's access without the subject's involvement is not a
+privacy property.
+
+**The design, therefore:**
+
+- the origin is **denormalised at forward time** and shown to everyone who can
+  see the message, as in Telegram — so the name no longer flickers by reader;
+- what is written is decided by the **original sender's own setting**, read at
+  the moment of forwarding. Opted out, the forward carries the «hidden» form
+  instead of the name, and carries it permanently: a copy cannot be un-hidden
+  later by a change of setting, and must not be, or the setting would be
+  retroactive in the wrong direction;
+- the setting belongs in «Конфиденциальность», beside «Статус в сети» and
+  «Заблокированные», which is where a person already goes to decide what others
+  learn about them.
+
+**One thing this does not get to decide for itself.** The column lands in
+`public.messages`, so CLAUDE.md §10 governs the apply: backup, rehearse, one
+transaction with a self-check that raises rather than committing half, and a
+rollback in the header. The behaviour is authorised; the migration still earns
+its sequence.
 
 ## Completed Baseline - Do Not Rebuild Without A New Finding
 
