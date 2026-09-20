@@ -483,6 +483,39 @@ Do not expose bot tokens, owner IDs, or service credentials in reports.
 - Browser is the universal fallback. PWA install UI is for iPhone/iPad only.
 - Do not restore Electron; Windows uses Tauri and EXE installer distribution.
 
+### Which client is the reference, and where each one wins
+
+Standing direction from the owner, restated on 2026-09-20 and to be applied
+without asking again: **adopt the reference clients' mechanics, or better
+them** — «требуется перенять даже подобные механики либо придумать им более
+красивую реализацию». Never relabel our own structure and call it adopted.
+
+**The default is Discord**, for functions, details and interaction design. The
+owner's reason is plain: «в плане функций и мелочей больше к discord, так как
+telegram для наших задач не настолько удобен».
+
+**Telegram is the reference for three areas**, named by him in the same message:
+
+| area | reference | note |
+| --- | --- | --- |
+| chat with media viewing | **Telegram** | |
+| folders | **Telegram** | |
+| bots | **Telegram**, contested | he adds that Discord's «очень хороша из-за большей кастомизации и удобства их реализации», so weigh both and say which you took |
+
+Two consequences worth stating, because both have already been got wrong here:
+
+- «Adopt the mechanic» means finding out what the client actually does, dated
+  and confidence-labelled in `docs/operations/reference-clients.md`, before
+  designing. Reading the shipped bundle works and has been done; a recollection
+  of the product is not a reference.
+- The owner explicitly permits **bettering** the reference. A claim that ours is
+  better must carry its reason in that document — a preference is not a reason.
+
+The clearest statement of what «adopt the mechanic» is for, and the rule it
+produced, is the restoration principle: **where you were is state the product
+owns and restores** — the open conversation, the voice channel, and both across
+an update the product applied itself. See the tracker's queue for its status.
+
 ## 8. Live Infrastructure Map
 
 Use only the service subdomains; the apex `letscube.ru` belongs to another project

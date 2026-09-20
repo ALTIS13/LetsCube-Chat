@@ -424,6 +424,42 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 31. `[ ]` The interface's accumulated "особенности", recorded as a class by the owner on 2026-09-18 with a screenshot of «Обновления»: «также в задачи добавь на потом исправление подобных "особенностей" интерфейса». The full measurement is D-222 in `docs/INTERFACE_DEFECT_REGISTER.md`; what belongs here is the shape of the work and why it is not a polish pass. Two independent halves. **A viewport breakpoint deciding a layout inside a container the owner drags** — the chat-list column is 260 to 540 points wide by hand and persisted, so no `@media` width predicts it, and every `sm:` inside it reads «wide» at any desktop size; 19 occurrences over 11 lines in 5 components survive classification out of 491 live matches, which is 3.9% and essentially one screen. **`rounded-full` on a box whose text can wrap** — a pill is a pill only while it is one line high, and above that the radius clamps to half the height; ~15 sites plus two primitives (`KubBadge`, `KubFilterChip`) out of 266, and this half needs no narrow container at all. The proof that a different breakpoint number cannot fix the first half: the same three components render in both the narrow column (from `md` up) and a viewport sheet (below `md`), so at 700 points `sm:` is true and the three-column form is right, and at 1440 `sm:` is equally true and it is wrong — one breakpoint, one state, two required answers. Container queries compile natively on the installed Tailwind 4.2.1 and the spellings are recorded, with the trap that `sm:` is 640 points while `@sm:` is 384; where a decision has consequences in JavaScript the project already has the pattern, twice and with tests, in `paneFitsProfileColumn` and `paneFitsChannelRail`. Order: tier 1 (the settings screen), then the two primitives, then tier 2. Every tier-1 line needs pixels at both column extremes and in the sheet below `md`, because that dual case is the whole reason a threshold change is not the answer.
 32. `[~]` Calls in a private chat, and the record each one leaves in the conversation. Asked for by the owner on 2026-09-18: «в лс между людьми также учти немаловажную часть как уведомления о звонках в чате по аналогии с telegram/discord (с отображением того успешный ли это звонок или пропущенный, сколько он длился в случае если был успешный)». **It is a slice rather than an addition, and the reason is measured rather than assumed: one-to-one calls do not exist, so the record cannot come first.** Two facts checked against the code before this was written. The **interface** refuses voice outside a group — `lib/voiceChannel.ts:230`, `voiceChannelRowOffer` answers `not_a_group` for every other chat type. The **gateway does not check the chat type at all** — `voice-gateway/index.ts` reads the channel row, then the caller's `chat_members.role`, then `is_muted`, so a `voice_channels` row on a private chat would mint a token happily. So the transport and the server are already type-agnostic, and what is missing is the **interaction**: a group channel is a place you join, while a one-to-one call is somebody *ringing* you, and nothing in this system tells the other person that somebody is calling. Five things have to exist that do not: a ring that reaches the other person in the three states they can be in (application in front, in a background tab, closed); accept and decline; **missed**, which is the state the owner named and which the group mechanism cannot express — the service message of D-229 keys on `participant_count` crossing zero, and a call that rang and was not answered never reaches occupancy above one person; a duration measured from the answer rather than from the room's creation, noting that `docs/operations/voice.md` records that **asking for a token creates the room**, so the caller makes a room before anybody answers; and the in-chat record itself, carrying an outcome (answered, missed, declined, cancelled by the caller) and, when answered, how long it lasted. D-229's trigger is the obvious precedent for where the record lives and is the first thing to read, but its mechanism does not transfer to «missed». A feasibility measurement was run in parallel the same day and its answer belongs in the proposal before any of this is built — the crux is whether a ring can arrive fast enough in each of those three states, and on the installed iPhone app, where section 1.5 of the voice proposal records that iOS suspends the page in the background. The proposal goes in `docs/proposals/`, the way the voice work itself did, and the owner sees it before code.
 
+
+33. `[ ]` Documents and the rest of what a message can carry, opened **in the
+    chat** the way other media already is. Asked for by the owner on
+    2026-09-20: «просмотр документов и т.п вещей сразу в чате, на примере
+    других медиа». The reference for this one is **Telegram** — it is one of
+    the three areas the owner named where Telegram wins (CLAUDE.md §7), and its
+    in-chat document, PDF and file handling is the thing to measure ours
+    against before designing. Note what already exists rather than rebuilding
+    it: media preview and variant processing are in the completed baseline, so
+    the question is what a document does *differently* from an image — how much
+    can be shown without downloading, what happens to a format the browser
+    cannot render, and what the three shells do differently, because a desktop
+    application opening a file is not a browser tab doing it. Start from an
+    assessment against Telegram, then renders for approval, then code, the way
+    items 25 and 28 were run — the owner has twice asked not to have work
+    rebuilt after each iteration.
+
+34. `[ ]` Standing: the interface's intuitiveness and its response to the
+    person using it, and the interface bugs found along the way. Asked for by
+    the owner on 2026-09-20: «улучшение интуитивности и отклика интерфейса для
+    пользователя, исправление багов интерфейса если таковые найдутся». This is
+    deliberately **standing** rather than a stage with an end, and it does not
+    replace queue item 18, whose discipline it inherits: a change needs a
+    recorded defect or an explicit design decision, and nothing is polished by
+    eye. `docs/INTERFACE_DEFECT_REGISTER.md` is where a defect is recorded and
+    is already the product of item 18; the addition here is that **response**
+    is a first-class subject alongside appearance — what a control does the
+    instant it is pressed, whether an action that takes time says so, and
+    whether what a surface claims matches what it does. Three of the day's own
+    findings are the shape to look for: copy describing a landmark the pixels
+    did not show, a control whose colours differed by one degree of hue, and a
+    settings screen that opened somebody's microphone without saying so. The
+    approved motion plan
+    `docs/superpowers/plans/2026-08-30-shared-motion-feedback.md` is the
+    response half's existing vehicle; do not build a second one beside it.
+
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
 `main` `17a1c47` to `245e4d9`, 32 commits, on the owner's standing permission to deploy without him.
