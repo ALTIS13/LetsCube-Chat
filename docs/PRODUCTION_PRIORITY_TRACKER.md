@@ -988,10 +988,73 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     distinction in the policy, because the two look identical in the schema and
     are opposite in intent.
 
+    **The two words, decided by the owner 2026-09-20:** «давай тогда логически
+    разделим эти два понятия, основные группы большие будут также
+    серверами, а эти микро чаты уже групповыми чатами». The heavy object is a
+    **сервер**, the light one a **групповой чат**.
+
+    **There is no name collision — an earlier draft of this entry claimed one
+    and the owner was right to ask why.** «Почему занято, если у нас две
+    разные сущности». The strings that draft pointed at — «Удалить групповой
+    чат», «Роли группы» — belong to the **heavy** object and simply become
+    «Удалить сервер» and «Роли сервера». That is a reassignment, not a
+    conflict.
+
+    **What actually survives from that measurement is smaller and still worth
+    knowing.** 83 user-facing strings in 26 files contain «групп…», and they do
+    not agree with each other: the heavy object is called «группа» in some
+    places and «групповой чат» in others. So two things follow. The rename
+    reaches more places than a search for one word would suggest — both
+    spellings have to be found. And the light object should not arrive before
+    the rename, or for a while two different things would answer to one word;
+    shipping them together is equally fine. **That is a sequencing note, not a
+    blocker.**
+
+    The rename's hazards, none of them typing:
+
+    - **Internal names must not differ by a suffix.** `chats.type` is `group`
+      today for the heavy thing, and a light `group_chat` beside a heavy
+      `group` is a bug factory: every reader has to remember which is which,
+      and a mistyped filter silently selects the wrong population. CLAUDE.md
+      §7 allows the schema and the label to diverge where changing an
+      identifier breaks contracts — use that allowance deliberately and state
+      it once, rather than inventing near-identical type names.
+    - **«Группа» is not always this concept.** «Группа каналов», «группа
+      настроек», invitation groups and notification grouping all use the
+      word for something else. The 83 hits are a set to read, not a list to
+      rewrite.
+    - **Russian declines.** «группу / группы / группе / группой» each becomes a
+      different «сервер…» ending, and `grep -i` does not fold Cyrillic here —
+      count in node with `toLocaleLowerCase("ru-RU")`, as the register records.
+
+    **The full surface, from the owner's screenshots.** The header carries five
+    controls: начать голосовой звонок, начать видеозвонок, закреплённые
+    сообщения, пригласить в групповой чат, скрыть список участников. The member
+    list is «Участники — N» with a crown on the creator and nothing else
+    distinguishing anybody. The name defaults to the participants' own names
+    («fanatik55777, Dogmaruz») and is editable with an avatar through
+    «Редактировать группу». The chat-list row carries «N участника». History
+    records service messages: «X добавляет Y в группу», «X начал звонок
+    продолжительностью 3 часа».
+
+    **The structural fact hiding in that list: a group chat has a *call*, not a
+    voice channel.** «Начать голосовой звонок» and a history line naming a
+    *duration* are the private chat's mechanic, not the server's persistent
+    channel. The three shapes then line up cleanly:
+
+    | | people | voice | hierarchy |
+    | --- | --- | --- | --- |
+    | личный чат | 2 by definition | a call | none |
+    | групповой чат | 2+ | a call | a crown |
+    | сервер | many | channels | roles, categories, permissions |
+
+    That is what makes item 32's ring shared rather than duplicated: one call
+    mechanic serves the first two rows.
+
     Still to settle: **what it does not get.** The point is that it is lighter,
-    so the list of what it **lacks** — channels, roles, folders, invites,
+    so the list of what it **lacks** — channels, roles, folders, invite links,
     categories — is the specification, and writing it down is what stops it
-    drifting into a group.
+    drifting into a server.
 
     **Production state, read 2026-09-20:** 28 private chats, 15 groups, no
     `channel` rows; a group already carries voice channels, the roles
