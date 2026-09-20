@@ -1433,6 +1433,71 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     conversation's own viewer passing no `sequence`, **(c)** HD, **(e)**
     whether 140px is the right ceiling, **(h)** the forwarded-from name.
 
+    ### The survey the device also bought, 2026-09-20
+
+    The owner asked for a wider comparison while the phone was connected —
+    «пусть и остальные места проверит» — and for Discord to be included, since
+    every Discord finding this project has made so far came from reading the
+    **web** bundle. Full record in section 17 of
+    `docs/operations/reference-clients.md`. The parts that touch decisions
+    already taken:
+
+    - **Mobile Discord's settings are a plain full-screen scrolling list** —
+      56 dp rows, a back arrow, drill-down, no rail and no inset overlay. The
+      web client's overlay-with-a-rail, which we followed for D-285, is a shape
+      Discord itself abandons at phone width. D-285 was about a narrow *desktop*
+      window and stands; what is new is that there is a width below which the
+      reference stops using it, and we have not written ours down.
+    - **Item 40's three zones become two on a phone.** Discord's bottom band is
+      avatar/name/status at the left and a single badged notifications button at
+      the right; **the gear is not in it** — the avatar opens a full-screen «Вы»
+      sheet whose own bottom row carries «Настройки». A voice connection is a
+      separate full-width strip above the band, so the audio controls live with
+      the call rather than with the identity.
+    - **The update notice has no mobile form at all.** Both apps update through
+      Google Play; section 9's two-layer problem does not exist there. Recorded
+      as «nothing to measure» rather than forced into an answer.
+    - **Discord's profile on a phone was not established**, so item 36 still
+      rests on the web reading alone.
+
+    ### The bot menu button, measured — a bot-platform finding, not a chat one
+
+    The owner pointed at the control at the bottom left of a bot's composer.
+    Measured on Telegram's own published demo bots rather than in any personal
+    conversation, so nothing of his was read:
+
+    - **Three shapes live in that one slot, and each costs the composer a
+      different amount.** An ordinary chat's text field is 252 dp wide. A
+      «Команды бота» icon — 44 dp, and to the *right* of the field — takes it to
+      204 dp. A «Меню бота» with the default label takes it to 165 dp. A «Меню
+      бота» carrying the bot's own label takes it to **125 dp**: **a bot with a
+      Web App halves what you can type.**
+    - **What it opens is a full-screen web view inside Telegram** — a
+      108 dp client-drawn header with the bot's name and the way out, and a
+      WebView of 1080 × 2054 px under it. **The conversation is not underneath**;
+      it is replaced.
+    - **Consent is the client's, asked once**, in a 977 × 497 px dialog naming
+      the bot and what it receives, before the surface opens at all.
+    - **The bot decides the button exists**, through the Bot API. An ordinary
+      chat has nothing in that position, and a bot that has never been started
+      replaces the whole composer with one «Запустить бота» button.
+
+    Against ours: D-263 says a sent `/command` is inert text and a bot's profile
+    answers nothing, so we have **none of the three shapes** — not even the
+    44 dp commands icon, which costs the composer least and answers D-263's
+    first complaint directly. On reach, Telegram's Web App is far larger (a
+    whole hosted application) and Discord's components are far cheaper (drawn by
+    the client from a fixed vocabulary, never leaving the message). §7 leaves
+    bots contested on purpose; the staged reading is that Discord's in-message
+    components are the reachable next step and Telegram's Web App is a platform
+    decision for the owner. **Findings only — nothing here was built.**
+
+    Two side effects of the pass, recorded so nobody hunts them: Telegram's text
+    size slider was moved to both ends and **restored to 16**, verified by
+    reading the label back; and a chat with `@DurgerKingBot` now exists in the
+    owner's Telegram, because the Web App shape cannot be seen before `/start`.
+    Nothing else was sent, and it can be deleted.
+
 
 47. `[ ]` Separating the kinds of conversation, so the list stops being
     noise. Asked for by the owner on 2026-09-20, and he framed it as something
@@ -1488,6 +1553,43 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     после того как проверишь telegram/discord на телефоне» — and both answers
     are on that device: Telegram's folder-and-filter row at the top of the
     chat list, and Discord's rail. Measure both, then decide.
+
+    **The survey reported, 2026-09-20.** Measurements in section 17 of
+    `docs/operations/reference-clients.md`. Three things change the question:
+
+    - **Discord's rail is real on a phone** — 72 dp wide, permanently on the
+      left of the whole shell, one 48 dp avatar per server, thirteen visible
+      and scrolling past that. So it is a **separation of kinds, not a cure for
+      volume**: servers can never enter the direct-message list, but the rail
+      itself is already a scrolling column of identical circles. What it buys
+      is **one gesture** between categories, always in the same place.
+    - **Telegram already has type separation, and the complaint is that it is
+      manual.** Its folder editor carries a «Типы чатов» block of five
+      switches — Контакты, Не контакты, Группы, Каналы, **Боты** — so «боты
+      отдельно» is expressible there today. It costs six steps per folder and
+      the result is indistinguishable afterwards from any other tab. The owner
+      already has six tabs and still says «шум из чатов», which is the actual
+      finding: the capsule he wants is not missing from Telegram, it is
+      **opt-in** in Telegram.
+    - **A bot gets the same row as a person** in Telegram's chat list — no
+      badge, no section. Only the conversation reveals it, by the shape of its
+      composer. Ours behaves the same way, which is why they mix in.
+
+    **The trade, for the owner to settle, because §7 does not.** Structure
+    (Discord) makes the separation free, permanent and already implied by item
+    45's three shapes — a server would not be in the chat list at all — at
+    72 dp of width forever, and it does nothing about volume *within* people
+    and groups. A filter capsule (his own proposal) costs nothing at rest,
+    keeps one place to look, and is the only one of the two that separates
+    people from groups from bots. **His own sentence asks for both**, and the
+    reading that follows the measurement is: servers become structural through
+    item 45; people, groups and bots stay in one list; the capsule goes there.
+    Folders then stop carrying type at all and become a personal grouping
+    across types — which has to be said in the product or they will be asked to
+    do both jobs and do neither.
+
+    Still unestablished and worth one more pass before building: how Discord's
+    DM list marks a bot, if it does.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
