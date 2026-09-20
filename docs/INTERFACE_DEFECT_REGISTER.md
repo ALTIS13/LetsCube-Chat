@@ -22662,4 +22662,137 @@ during either.
 - **Item 36's b and c** — the row menu's depth and the two searches — are
   untouched by this and remain as §15.2 and §15.3 left them.
 
+
+### The compact tier was a centred modal, and that was an oversight — corrected 2026-09-21
+
+**Raised on review of the first commit (`e10d708a`), against the rendered
+pixels rather than the code.** The compact tier was drawn in a `KubModal`:
+centred on the screen, over a scrim, with a title and a ✕. Discord's popout is
+anchored to what you pressed.
+
+**It was the first of the two possibilities, not the second.** There was no
+reason beside it because there was no decision — `KubModal` was the path of
+least resistance and the report did not name the divergence, which under the
+standing delegation is the part that was actually wrong. A divergence from the
+reference needs a written reason; this one had none to write.
+
+**Why it matters more here than almost anywhere else.** The compact tier exists
+for the glance: somebody is reading, a name goes past, they want a second of
+context and to carry on reading. A centred card takes the eye to the middle of
+the screen and hands it back to a conversation that has meanwhile left
+attention, and a scrim dims the very thing they were reading. **Anchoring is
+what makes the cheap tier cheap** — it is not decoration, it is the mechanism.
+
+#### What it is now
+
+- `components/profile/UserProfilePopout.tsx` — no scrim, no focus trap, no
+  title bar, drawn beside the face.
+- `lib/messageMenuPlacement.ts` gained **`placeBeside`**, and it is a different
+  question from the `placeAnchored` that was already there. `placeAnchored`
+  centres a popover on its anchor and opens above or below — right for a
+  reaction bar over a message, a wide anchor and a short popover. Centring a
+  320-point card on a **32-point avatar** at the left edge of the conversation
+  puts three quarters of it over the chat-list column, so the card straddles
+  the divider and points at nothing. `placeBeside` opens to the right of the
+  anchor, flips left when the right will not hold the **card** (not merely the
+  anchor — that distinction survived a mutation until a case was written for
+  it), and aligns the card's top with the face, clamped so a row near the
+  bottom of the screen lifts the card rather than pushing it off.
+- **The store carries the box.** `profileOverlayAnchor` is the trigger's
+  rectangle in viewport coordinates, measured at the moment of the press —
+  `MessageBubble` calls `getBoundingClientRect()` in the handler rather than
+  holding a rectangle in state, because the list scrolls and a rectangle from a
+  second ago points at the wrong row. Unlike the other overlay fields it is
+  **always replaced, never compared**: the same person opened from a second
+  face is a different box.
+- **A glance with nothing to point at opens the full card instead.**
+  `resolveProfileTier` takes `anchored`, and the reason is the one above: a
+  compact card with no anchor would be a centred dialog wearing a summary —
+  smaller than the full card and no quicker to read, the worst of both. Nothing
+  anywhere draws a popout in the middle of the screen.
+
+#### The dismissal moved with the tier, as it had to
+
+An anchored popout dismisses on the things that mean «I have moved on», and a
+centred modal's ✕ and backdrop are not among them. Four doors: **a press
+outside it, Escape, a scroll, a resize.** The scroll is the sharpest — the card
+is anchored to a box that has just moved, so staying open would leave it
+pointing at nothing.
+
+Two of the four are heard in the **capture** phase, and both for a measured
+reason. A scroll inside the message list does not bubble to `window`, so a
+bubbling listener never hears the one scroll that actually moves the anchor.
+And the outside press is captured so that the first press after opening
+dismisses the card without also acting on whatever is under it.
+
+**Every door goes through one `requestClose`**, which is the register's own rule
+from the settings screen (D-136, «Every door of both forms goes through one
+`requestClose` on the screen itself»): a guard written into one container leaves
+the others exactly as they were. There is nothing to guard here yet — the popout
+holds no unsaved state — and that is precisely why the single door was built
+now, while it costs a prop.
+
+#### `AnchoredLayer` moved rather than being written twice
+
+The primitive already existed, privately, inside `MessageReactions.tsx`: a
+surface rendered invisibly, measured, then placed — so its real size decides
+where it fits rather than a guess, which matters for exactly the people who have
+the most to show. CLAUDE.md's standing rule is that a good existing solution
+beats writing one, and D-236 is what happens when a shared thing lives in one
+place. It is now `components/ui/AnchoredLayer.tsx`, exporting `AnchoredLayer`
+(centred, above/below) and `BesideLayer` (beside, right/left) over one internal
+component. Two components rather than one with a `mode` flag, because each hands
+its child a different word for where it ended up and a single prop would force
+every consumer to narrow a case it can never see.
+
+#### Evidence for the correction
+
+- **Measured, not eyeballed**: `profile-two-tier.spec.ts` asks for the popout's
+  box and the face's box and asserts the card starts to the **right** of the
+  face with its top level with it (within 4 px), that the chat list's box is
+  **identical** before and after opening, and that nothing covers the shell
+  beside the popout — by asking `elementFromPoint` what is actually on top,
+  which is the only honest way to ask.
+- **All four doors, end to end.** The scroll case needed the fixture to seed 40
+  messages, and then to scroll **upwards**: a conversation opens anchored to its
+  newest message, so a downward wheel moves nothing, fires no scroll event, and
+  the assertion would have been green against a popout that never listened. The
+  first version of it was exactly that, and the first fix delivered the wheel
+  **inside** the card.
+- **Mutation: 40 of 40 red** over the whole feature, the placement arithmetic
+  and the four doors included. Four survived the first pass and every one was a
+  weak guard rather than a product gap — an import line surviving a swapped
+  component, and a `removeEventListener` keeping a string alive after its
+  `addEventListener` was deleted. Both are the «source scan that stays green
+  while the contract regresses» failure this register already names, and both
+  are now written as the usage rather than the identifier.
+- **The reactions surfaces still place themselves**: `message-reaction-rpc` and
+  `emoji-touch-targets`, 8/8 across 1440 and 390, which is what proves the move
+  of `AnchoredLayer` changed nothing.
+- Unit **3793/3793**; `tests/server` 144/144; typecheck clean across five
+  packages; build proved by its own lines (`sw.js build 157e0319baaaf8ea`,
+  `built in 17.86s`); the profile e2e 24/24 with no skips.
+- **Renders re-taken**, 1440 and 390 in both themes, into
+  `output/profile-two-tier/`.
+
+#### Two escapes worth recording, both the same escape
+
+Two mutation scripts and one guard in this session were broken by a backslash
+decoded one layer too early: a `\b` that arrived as a **backspace byte** inside
+a regex — so `/<BesideLayer\x08/` matched nothing and the guard failed against
+correct code — and a `\n` that became a real newline inside a JavaScript string
+literal. The project's memory already carries the rule (keep backslash escapes
+out of tool inputs; write a file and verify the bytes). The mutation list is now
+JSON data read by the script rather than literals written through a shell, and
+every test file this work touched was scanned for stray control bytes.
+
+#### The mobile-store question is nearly moot, and saying so is the answer
+
+The entry above left «whether mobile Discord shares a store between its profile
+and anything else» unestablished, and that is still the honest state. But it
+should not be read as an open gap blocking anything: **a phone has one profile
+surface**, so there is nothing for a store to hold together there beyond the
+caching it already does. The question only has force where two surfaces can
+disagree, and on a phone there are not two.
+
 ---

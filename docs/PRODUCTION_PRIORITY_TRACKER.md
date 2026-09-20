@@ -736,6 +736,19 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     the place it was opened from, the way Discord keys its profile on
     `(userId, guildId)`, and the relation is an assertion rather than a comment.
 
+    **Corrected on review the same day, and the correction is the more useful
+    half.** The compact tier shipped as a **centred modal**, which is not what
+    Discord does and — worse under this delegation — was not named as a
+    divergence, because it was not a decision. Discord's popout is anchored to
+    what you pressed: the conversation neither moves nor dims, and that is the
+    whole reason the small tier is cheaper than the large one. It is now a
+    popout beside the face, with `placeBeside` arithmetic, and its dismissal
+    moved with it — an outside press, Escape, a scroll, a resize, every one
+    through a single `requestClose`. A glance with nothing to point at opens
+    the full card instead of a summary in mid-screen. Recorded in D-292 and in
+    §15.1, which had described *what* the two surfaces are and never said where
+    the small one stands.
+
     **b and c are untouched** and remain as §15.2 and §15.3 left them: the row
     menu's depth, and the two searches. Item 38's badges draw these same chips
     and still wait on it.

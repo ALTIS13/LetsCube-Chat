@@ -38,6 +38,23 @@ test("a face pressed in passing opens the small surface where there is room", ()
   );
 });
 
+test("a glance with nothing to point at opens the full surface instead", () => {
+  // The small tier is a popout **beside what you pressed**; that is the whole
+  // of what makes it cheap, because the conversation neither moves nor dims.
+  // A compact card with no anchor would be a centred dialog wearing a summary
+  // — smaller than the full card and no quicker to read, which is the worst of
+  // both. The first build of this was exactly that, by oversight rather than
+  // by decision.
+  assert.equal(
+    resolveProfileTier({ opener: "glance", escalated: false, viewportWidth: DESKTOP, anchored: false }),
+    "full",
+  );
+  assert.equal(
+    resolveProfileTier({ opener: "glance", escalated: false, viewportWidth: DESKTOP, anchored: true }),
+    "compact",
+  );
+});
+
 test("an act that asked for the person opens the whole thing", () => {
   // The chat list's «Открыть профиль» and a person chosen out of the search are
   // both this. Discord opens its modal directly for every act of the kind — a
@@ -137,10 +154,14 @@ const LEAF = readFileSync(
   "utf8",
 );
 
+/** A source with its block and line comments removed. */
+function withoutComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+}
+
 /** Every `data-testid="…"` literal in a source, comments stripped first. */
 function testIds(source: string): Set<string> {
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-  return new Set([...code.matchAll(/data-testid="([^"]+)"/g)].map((match) => match[1]));
+  return new Set([...withoutComments(source).matchAll(/data-testid="([^"]+)"/g)].map((match) => match[1]));
 }
 
 /** The escalation, which is the one block the small surface may own alone. */
@@ -174,6 +195,76 @@ test("the bio is clamped on the small surface and whole on the large one", () =>
   // own — «View Full Bio» (`YDiPq8`) in the popout's bio block opens the modal.
   assert.ok(COMPACT.includes("line-clamp-2"));
   assert.ok(!FULL.includes("line-clamp"));
+});
+
+/**
+ * Comments stripped before every scan below.
+ *
+ * The first version of these guards read the popout's own doc comment — which
+ * explains that the surface **used to be** a `KubModal` — as evidence that it
+ * still is. The register carries that trap already («a grep that matched a
+ * comment»), and the fix is the one `testIds` above uses.
+ */
+const POPOUT = withoutComments(
+  readFileSync(
+    new URL("../../artifacts/kub/src/components/profile/UserProfilePopout.tsx", import.meta.url),
+    "utf8",
+  ),
+);
+const OVERLAY = readFileSync(
+  new URL("../../artifacts/kub/src/components/profile/UserProfileOverlay.tsx", import.meta.url),
+  "utf8",
+);
+
+test("the small surface is a popout beside its trigger, not a centred dialog", () => {
+  // The divergence the first build did not name. Discord's popout is anchored
+  // to what you pressed; a centred card takes the eye to the middle of the
+  // screen and hands it back to a conversation that has left attention.
+  // The **usage**, not the identifier: an import line survives a swapped
+  // component and kept this guard green when the element became `AnchoredLayer`.
+  assert.match(POPOUT, /<BesideLayer[^A-Za-z]/, "the popout no longer places itself beside its anchor");
+  assert.doesNotMatch(POPOUT, /<AnchoredLayer[^A-Za-z]/, "the popout places itself above or below again");
+  assert.ok(!POPOUT.includes("KubModal"), "the popout is a modal again");
+  // No scrim: the conversation stays lit. A backdrop would dim the very thing
+  // the reader was looking at, which is what the glance is for.
+  assert.ok(!/bg-black|backdrop|scrim/i.test(POPOUT), "the popout dims the conversation");
+  // And the container really is chosen by tier.
+  assert.match(OVERLAY, /tier === "compact" && anchor/, "the overlay no longer picks a container by tier");
+});
+
+test("every door of the popout goes through one requestClose", () => {
+  // The register's own rule, from the settings screen: a guard written into one
+  // container leaves the others exactly as they were. There is nothing to guard
+  // here yet, which is why the single door is cheap to build now.
+  const doors = (POPOUT.match(/requestClose\(\)/g) ?? []).length;
+  assert.ok(doors >= 3, `expected every door to call requestClose, found ${doors}`);
+  // Escape, an outside press, a scroll and a resize — the four that mean «I
+  // have moved on». The scroll is the sharpest: the card is anchored to a box
+  // that has just moved.
+  // **`addEventListener`, not the bare name.** Removing an `addEventListener`
+  // line leaves its `removeEventListener` behind, so a guard that only looked
+  // for the string stayed green with the door welded shut — two of the four
+  // survived a mutation pass that way before this line was written.
+  for (const door of ["keydown", "pointerdown", "scroll", "resize"]) {
+    assert.match(
+      POPOUT,
+      new RegExp(`addEventListener\\("${door}"`),
+      `the popout does not dismiss on ${door}`,
+    );
+  }
+  // Nothing may call the prop directly and step around the one door.
+  const direct = (POPOUT.match(/onClose\(\)/g) ?? []).length;
+  assert.equal(direct, 1, "a door calls onClose directly instead of requestClose");
+});
+
+test("the scroll and the outside press are heard in the capture phase", () => {
+  // A scroll inside the message list does not bubble to `window`, so a
+  // bubbling listener never hears the one scroll that actually moves the
+  // anchor. The press is captured for the opposite reason: without it the
+  // first press after opening both dismisses the card and acts on what is
+  // under it.
+  assert.match(POPOUT, /addEventListener\("scroll", onScroll, true\)/);
+  assert.match(POPOUT, /addEventListener\("pointerdown", onPointerDown, true\)/);
 });
 
 test("the small surface does not hand out group roles", () => {

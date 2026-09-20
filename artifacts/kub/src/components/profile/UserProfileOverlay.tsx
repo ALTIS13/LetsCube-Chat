@@ -6,6 +6,7 @@ import { KubIcon, KubModal, KubNotice, KubStableSkeleton } from "@/components/ku
 import { KUB_ICON_NAMES } from "@/components/kub/icons";
 import { MemberCard, type MemberRow } from "@/components/chat/MemberCard";
 import { UserProfileCompact } from "@/components/profile/UserProfileCompact";
+import { UserProfilePopout } from "@/components/profile/UserProfilePopout";
 import { badgeStrip, projectProfileBadges, type BadgeStrip } from "@/lib/profileBadges";
 import {
   PROFILE_COMPACT_BADGE_LIMITS,
@@ -90,6 +91,7 @@ export function UserProfileOverlay() {
   const userId = useAppStore((s) => s.profileOverlayUserId);
   const opener = useAppStore((s) => s.profileOverlayOpener);
   const contextChatId = useAppStore((s) => s.profileOverlayChatId);
+  const anchor = useAppStore((s) => s.profileOverlayAnchor);
   const chats = useAppStore((s) => s.chats);
   const escalated = useAppStore((s) => s.profileOverlayEscalated);
   const escalate = useAppStore((s) => s.escalateUserProfile);
@@ -100,7 +102,15 @@ export function UserProfileOverlay() {
   const { openPrivateChat, loading: opening } = useCreateChat();
 
   const { profile, settled, failure } = useUserProfile(userId);
-  const tier = resolveProfileTier({ opener, escalated, viewportWidth });
+  const tier = resolveProfileTier({
+    opener,
+    escalated,
+    viewportWidth,
+    // A glance with nothing to point at opens the full surface instead of a
+    // centred summary. See `profileTier.ts` for why that is the honest
+    // fallback rather than a missing feature.
+    anchored: anchor !== null,
+  });
 
   const badgeIds = useMemo(() => (userId ? [userId] : []), [userId]);
   const badges = useProfileBadges(badgeIds);
@@ -177,6 +187,80 @@ export function UserProfileOverlay() {
     : null;
   const isSelf = profile?.id === currentUserId;
 
+  const surface = (
+    <div data-testid="user-profile-overlay" data-profile-surface={tier}>
+      {failure && (
+        <div className="px-4 py-5">
+          <KubNotice tone="warn" title={failure}>
+            Попробуйте ещё раз.
+          </KubNotice>
+        </div>
+      )}
+      {!failure && !settled && (
+        <div className="flex flex-col items-center gap-3 px-5 py-8" data-testid="user-profile-loading">
+          <KubStableSkeleton width="96px" height="96px" rounded="full" />
+          <KubStableSkeleton width="160px" height="18px" />
+          <KubStableSkeleton width="110px" height="14px" />
+        </div>
+      )}
+      {!failure && profile && tier === "compact" && (
+        <UserProfileCompact
+          profile={profile}
+          isSelf={isSelf}
+          presenceLabel={presence?.label ?? ""}
+          showOnlineDot={presence?.isOnline ?? false}
+          badges={strip}
+          opening={opening}
+          onOpenChat={() => void openChat()}
+          onEscalate={escalate}
+        />
+      )}
+      {!failure && member && tier === "full" && (
+        <MemberCard
+          member={member}
+          isSelf={isSelf}
+          // Said only where it is true. `chatRoleLabel` answers "" for an
+          // ordinary member, which the card already draws nothing for, so
+          // the line appears for an owner and an administrator and for
+          // nobody else.
+          roleLabel={context.standing ? chatRoleLabel(context.standing, context.channel ? "канала" : "группы") : ""}
+          presenceLabel={presence?.label ?? ""}
+          joinedLabel={context.joinedAt ? formatJoinedAt(context.joinedAt) : ""}
+          showOnlineDot={presence?.isOnline ?? false}
+          badges={strip}
+          groupRoles={[]}
+          groupVocabulary={null}
+          onToggleGroupRole={() => {}}
+          assigning={null}
+          mutualChats={mutual}
+          onOpenMutualChat={(chatId) => void openMutualChat(chatId)}
+          opening={opening}
+          onOpenChat={() => void openChat()}
+        />
+      )}
+    </div>
+  );
+
+  // Two containers, chosen by tier, and the choice is the whole of what this
+  // correction is about.
+  //
+  // **Compact → a popout beside the face.** Discord's is anchored to what you
+  // pressed: the conversation stays lit, stays where it was, and the reader's
+  // eye does not leave the message. The first build of this drew it centred in
+  // a modal, which is smaller than the full card and no quicker to read — the
+  // worst of both — and that was an oversight rather than a decision.
+  //
+  // **Full → the modal.** It is a place you deliberately went to, so a scrim, a
+  // title and a ✕ are right, and on a phone it takes the whole screen, which is
+  // what Discord's own phone client does (measured, §17.7).
+  if (userId && tier === "compact" && anchor) {
+    return (
+      <UserProfilePopout anchor={anchor} onClose={close}>
+        {surface}
+      </UserProfilePopout>
+    );
+  }
+
   return (
     <KubModal
       open={Boolean(userId)}
@@ -184,69 +268,15 @@ export function UserProfileOverlay() {
       title="Профиль"
       icon={<KubIcon name="profile" size={18} />}
       size="sm"
-      // The compact card is never drawn below `PROFILE_COMPACT_MIN_WIDTH`, so
-      // this only ever answers for the full one — and it answers «the whole
-      // phone», which is what Discord's own phone client does and what a
-      // surface you deliberately navigated to should be. The compact card keeps
-      // the centred shape for the opposite reason: it is a glance, and a sheet
-      // that takes the whole screen for one would read as somewhere you had
-      // gone.
+      // Only ever answers for the full tier now: the compact one has its own
+      // container above. «The whole phone» is what Discord's phone client does
+      // for a profile and what a surface you navigated to should be.
       mobileSheet={profileFillsPhone(tier)}
       contentClassName="px-0 py-0"
       testId="user-profile-modal"
       closeTestId="user-profile-close"
     >
-      <div data-testid="user-profile-overlay" data-profile-surface={tier}>
-        {failure && (
-          <div className="px-4 py-5">
-            <KubNotice tone="warn" title={failure}>
-              Попробуйте ещё раз.
-            </KubNotice>
-          </div>
-        )}
-        {!failure && !settled && (
-          <div className="flex flex-col items-center gap-3 px-5 py-8" data-testid="user-profile-loading">
-            <KubStableSkeleton width="96px" height="96px" rounded="full" />
-            <KubStableSkeleton width="160px" height="18px" />
-            <KubStableSkeleton width="110px" height="14px" />
-          </div>
-        )}
-        {!failure && profile && tier === "compact" && (
-          <UserProfileCompact
-            profile={profile}
-            isSelf={isSelf}
-            presenceLabel={presence?.label ?? ""}
-            showOnlineDot={presence?.isOnline ?? false}
-            badges={strip}
-            opening={opening}
-            onOpenChat={() => void openChat()}
-            onEscalate={escalate}
-          />
-        )}
-        {!failure && member && tier === "full" && (
-          <MemberCard
-            member={member}
-            isSelf={isSelf}
-            // Said only where it is true. `chatRoleLabel` answers "" for an
-            // ordinary member, which the card already draws nothing for, so
-            // the line appears for an owner and an administrator and for
-            // nobody else.
-            roleLabel={context.standing ? chatRoleLabel(context.standing, context.channel ? "канала" : "группы") : ""}
-            presenceLabel={presence?.label ?? ""}
-            joinedLabel={context.joinedAt ? formatJoinedAt(context.joinedAt) : ""}
-            showOnlineDot={presence?.isOnline ?? false}
-            badges={strip}
-            groupRoles={[]}
-            groupVocabulary={null}
-            onToggleGroupRole={() => {}}
-            assigning={null}
-            mutualChats={mutual}
-            onOpenMutualChat={(chatId) => void openMutualChat(chatId)}
-            opening={opening}
-            onOpenChat={() => void openChat()}
-          />
-        )}
-      </div>
+      {surface}
     </KubModal>
   );
 }

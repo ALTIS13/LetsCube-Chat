@@ -15,7 +15,8 @@ import { createPortal } from "react-dom";
 import { KubIcon } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { FOCUS_RING, PRESS_SINK } from "@/lib/controlSurface";
-import { placeAnchored, type BoxEdges } from "@/lib/messageMenuPlacement";
+import { type BoxEdges } from "@/lib/messageMenuPlacement";
+import { AnchoredLayer } from "@/components/ui/AnchoredLayer";
 import { QUICK_REACTION, reactionCountLabel, type ReactionGroup } from "@/lib/messageReactions";
 import { readSafeAreaInsets } from "@/lib/safeArea";
 import { cn } from "@/lib/utils";
@@ -43,63 +44,15 @@ function edgesOf(element: Element): BoxEdges {
   return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right };
 }
 
-/**
- * A popover laid out once invisibly, measured, and then placed beside its
- * anchor — so its real size decides whether it fits above, not a guess.
+/*
+ * `AnchoredLayer` moved to `components/ui/AnchoredLayer.tsx` on 2026-09-21.
+ *
+ * It was private here and had one consumer; the profile popout needs the
+ * same primitive, and a thing that should be shared existing in exactly one
+ * place is how D-236 happened. Nothing about its behaviour changed in the
+ * move — it gained a second placement mode, and this file keeps asking for
+ * the one it always used.
  */
-function AnchoredLayer({
-  anchor,
-  prefer,
-  className,
-  children,
-  layerRef,
-  ...rest
-}: {
-  anchor: BoxEdges;
-  prefer: "above" | "below";
-  className: string;
-  children: (side: "above" | "below") => ReactNode;
-  layerRef?: React.MutableRefObject<HTMLDivElement | null>;
-} & Omit<React.HTMLAttributes<HTMLDivElement>, "children" | "className">) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [placement, setPlacement] = useState<{ top: number; left: number; side: "above" | "below" } | null>(null);
-
-  useLayoutEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    const rect = node.getBoundingClientRect();
-    setPlacement(
-      placeAnchored({
-        viewport: { width: window.innerWidth, height: window.innerHeight },
-        safe: readSafeAreaInsets(),
-        anchor,
-        size: { width: rect.width, height: rect.height },
-        prefer,
-      }),
-    );
-  }, [anchor, prefer]);
-
-  if (typeof document === "undefined") return null;
-  return createPortal(
-    <div
-      {...rest}
-      ref={(node) => {
-        ref.current = node;
-        if (layerRef) layerRef.current = node;
-      }}
-      className={className}
-      style={{
-        position: "fixed",
-        top: placement?.top ?? 0,
-        left: placement?.left ?? 0,
-        visibility: placement ? "visible" : "hidden",
-      }}
-    >
-      {children(placement?.side ?? prefer)}
-    </div>,
-    document.body,
-  );
-}
 
 /**
  * A 24px face for the lists of who reacted. `UserAvatar` has no size that

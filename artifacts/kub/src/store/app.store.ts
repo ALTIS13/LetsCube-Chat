@@ -7,7 +7,7 @@ import { sameData, shareById } from '@/lib/structuralSharing'
 import type { Profile, ChatWithLastMessage, MessageWithSender } from '@/types/database'
 import { sameActorClientMessage } from '@/lib/messageActor'
 import { isHeartbeatOnlyProfileChange } from '@/lib/profileChange'
-import type { ProfileOpener } from '@/lib/profileTier'
+import type { ProfileAnchor, ProfileOpener } from '@/lib/profileTier'
 import {
   CHAT_MUTE_CACHE_KEY,
   CHAT_MUTE_OFF,
@@ -184,9 +184,25 @@ interface AppState {
    * first. `lib/profileChatContext.ts` owns the rule.
    */
   profileOverlayChatId: string | null
+  /**
+   * The box the person was opened from, in viewport coordinates, or null.
+   *
+   * Discord's popout is **beside what you pressed** — the conversation does not
+   * move and the reader's eye does not leave the message. That is the property
+   * that makes the small tier cheap, and a centred card does not have it.
+   * `placeBeside` turns this box into a position; `null` means the caller had
+   * no element to point at, and the surface falls back to the centred dialog
+   * rather than pointing at the top-left corner.
+   */
+  profileOverlayAnchor: ProfileAnchor | null
   /** Whether «Полный профиль» has been pressed on the compact card. */
   profileOverlayEscalated: boolean
-  openUserProfile: (userId: string, opener?: ProfileOpener, chatId?: string | null) => void
+  openUserProfile: (
+    userId: string,
+    opener?: ProfileOpener,
+    chatId?: string | null,
+    anchor?: ProfileAnchor | null,
+  ) => void
   /**
    * Discord's `view-profile` item, which is `POPOUT_CLOSE` followed by
    * `openUserProfileModal` — one act, not two surfaces open at once.
@@ -541,28 +557,31 @@ export const useAppStore = create<AppState>((set, get) => ({
   profileOverlayUserId: null,
   profileOverlayOpener: "named",
   profileOverlayChatId: null,
+  profileOverlayAnchor: null,
   profileOverlayEscalated: false,
-  openUserProfile: (userId, opener = "named", chatId = null) =>
-    set((state) =>
-      state.profileOverlayUserId === userId
-      && state.profileOverlayOpener === opener
-      && state.profileOverlayChatId === chatId
-      && !state.profileOverlayEscalated
-        ? state
-        : {
-            profileOverlayUserId: userId,
-            profileOverlayOpener: opener,
-            profileOverlayChatId: chatId,
-            profileOverlayEscalated: false,
-          },
-    ),
+  openUserProfile: (userId, opener = "named", chatId = null, anchor = null) =>
+    set(() => ({
+      profileOverlayUserId: userId,
+      profileOverlayOpener: opener,
+      profileOverlayChatId: chatId,
+      // Always replaced, never compared: the same person opened from a second
+      // face is a different box, and the old short-circuit would have left the
+      // popout pointing at the row the reader had already scrolled past.
+      profileOverlayAnchor: anchor,
+      profileOverlayEscalated: false,
+    })),
   escalateUserProfile: () =>
     set((state) => (state.profileOverlayEscalated ? state : { profileOverlayEscalated: true })),
   closeUserProfile: () =>
     set((state) =>
       state.profileOverlayUserId === null && !state.profileOverlayEscalated
         ? state
-        : { profileOverlayUserId: null, profileOverlayChatId: null, profileOverlayEscalated: false },
+        : {
+            profileOverlayUserId: null,
+            profileOverlayChatId: null,
+            profileOverlayAnchor: null,
+            profileOverlayEscalated: false,
+          },
     ),
 
   chatSearch: null,

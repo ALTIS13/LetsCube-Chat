@@ -13,7 +13,12 @@ import {
   selectionCountLabel,
   type MessageActionContext,
 } from "../../artifacts/kub/src/lib/messageActions.ts";
-import { placeAnchored, placeAtPoint, placePhoneMenu } from "../../artifacts/kub/src/lib/messageMenuPlacement.ts";
+import {
+  placeAnchored,
+  placeAtPoint,
+  placeBeside,
+  placePhoneMenu,
+} from "../../artifacts/kub/src/lib/messageMenuPlacement.ts";
 
 /**
  * The owner's menus, 2026-09-11, pinned as lists rather than read out of JSX:
@@ -267,6 +272,96 @@ test("a popover opens where it was asked to, and on the other side when it does 
   });
   assert.equal(nearTop.side, "below");
   assert.equal(nearTop.top, 74);
+});
+
+/**
+ * `placeBeside`, the profile popout's arithmetic.
+ *
+ * A different question from `placeAnchored`'s, and the reason is measured: a
+ * 320-point card centred on a 32-point avatar at the left edge of the
+ * conversation puts three quarters of itself over the chat-list column, so it
+ * straddles the divider and points at nothing. Discord's popout is beside the
+ * face, which is the property that makes the small tier cheap — the reader
+ * glances sideways and the conversation has not moved.
+ */
+test("a card opens beside its anchor, and flips when that side will not hold it", () => {
+  const screen = { width: 1440, height: 900 };
+  const size = { width: 320, height: 400 };
+  // An avatar at the left edge of the conversation pane: the card opens to its
+  // right, top-aligned with the face.
+  const roomy = placeBeside({
+    viewport: screen,
+    safe: none,
+    anchor: { top: 300, bottom: 332, left: 700, right: 732 },
+    size,
+  });
+  assert.deepEqual(roomy, { top: 300, left: 740, side: "right" });
+
+  // An avatar near the right edge: there is no room on the right, so it flips.
+  const tight = placeBeside({
+    viewport: screen,
+    safe: none,
+    anchor: { top: 300, bottom: 332, left: 1300, right: 1332 },
+    size,
+  });
+  assert.equal(tight.side, "left");
+  assert.equal(tight.left, 1300 - 8 - 320);
+});
+
+test("the room on the right is measured against the card's end, not the anchor's", () => {
+  // An anchor that fits with room to spare, and a card that does not: 1440 - 12
+  // margin - 320 card = 1108 is the last left edge a card may take, and the
+  // anchor's right edge at 1100 is inside that — but the card would start at
+  // 1108 + gap. Asking «does the anchor fit» rather than «does the card fit»
+  // answers «right» and puts eight points of it off the screen.
+  const placed = placeBeside({
+    viewport: { width: 1440, height: 900 },
+    safe: none,
+    anchor: { top: 300, bottom: 332, left: 1072, right: 1104 },
+    size: { width: 320, height: 400 },
+  });
+  assert.equal(placed.side, "left");
+});
+
+test("a card with room on neither side is clamped rather than hidden", () => {
+  // A window narrower than the card plus its margins. The card stays on the
+  // screen: a popout half off it cannot be read at all, which is the same
+  // trade `placePhoneMenu` makes for a message taller than the screen.
+  const screen = { width: 360, height: 900 };
+  const placed = placeBeside({
+    viewport: screen,
+    safe: none,
+    anchor: { top: 300, bottom: 332, left: 100, right: 132 },
+    size: { width: 320, height: 400 },
+  });
+  assert.equal(placed.left, 360 - 12 - 320);
+  assert.ok(placed.left >= 12);
+});
+
+test("a face near the bottom lifts the card instead of pushing it off", () => {
+  const screen = { width: 1440, height: 900 };
+  const placed = placeBeside({
+    viewport: screen,
+    safe: none,
+    anchor: { top: 820, bottom: 852, left: 700, right: 732 },
+    size: { width: 320, height: 400 },
+  });
+  // Top-aligning would put its foot at 1220 on a 900-point screen.
+  assert.equal(placed.top, 900 - 8 - 400);
+});
+
+test("the unsafe edges are margins here too, as rule 13 requires", () => {
+  // Placed by hand from a measured box, so the insets arrive as numbers and are
+  // added to every margin rather than inherited through layout.
+  const placed = placeBeside({
+    viewport: { width: 1440, height: 900 },
+    safe: { top: 0, right: 200, bottom: 0, left: 0 },
+    anchor: { top: 300, bottom: 332, left: 1100, right: 1132 },
+    size: { width: 320, height: 400 },
+  });
+  // 1440 - 200 (unsafe) - 12 (margin) - 320 = 908, which is left of the anchor,
+  // so the right side does not fit and it flips.
+  assert.equal(placed.side, "left");
 });
 
 /**

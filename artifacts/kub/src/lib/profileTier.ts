@@ -53,6 +53,21 @@
 /** What kind of act asked for the person. */
 export type ProfileOpener = "glance" | "named";
 
+/**
+ * The box the person was opened from, in viewport coordinates.
+ *
+ * The same shape `lib/messageMenuPlacement.ts` calls `BoxEdges`, restated here
+ * rather than imported so the store's slice does not depend on a chat module
+ * for a rectangle. It is a plain measurement and both files mean the same four
+ * numbers by it.
+ */
+export interface ProfileAnchor {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
 /** Which surface answers. */
 export type ProfileTier = "compact" | "full";
 
@@ -93,15 +108,29 @@ export function resolveProfileTier({
   opener,
   escalated,
   viewportWidth,
+  anchored = true,
 }: {
   opener: ProfileOpener;
   /** Whether the reader has pressed «Полный профиль». */
   escalated: boolean;
   viewportWidth: number;
+  /**
+   * Whether the caller supplied a box to point at.
+   *
+   * A popout is **beside the thing you pressed**; that is the whole of what
+   * makes the small tier cheap, because the conversation does not move and the
+   * reader's eye does not leave the message. A compact card with nothing to
+   * point at would be a centred dialog wearing a summary — smaller than the
+   * full card and no faster to read, which is the worst of both. So a glance
+   * with no anchor opens the full surface instead, and nothing anywhere draws a
+   * popout in the middle of the screen.
+   */
+  anchored?: boolean;
 }): ProfileTier {
   if (escalated) return "full";
   if (opener === "named") return "full";
   if (viewportWidth < PROFILE_COMPACT_MIN_WIDTH) return "full";
+  if (!anchored) return "full";
   return "compact";
 }
 

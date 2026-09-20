@@ -897,6 +897,28 @@ export function MessageBubble({
   const authorTarget = messageAuthorProfileTarget(actor);
   const authorProfileUserId = authorTarget.kind === "person" ? authorTarget.userId : null;
   /**
+   * The face or the name, and the box it occupies right now.
+   *
+   * The box is what makes the popout a popout: it opens **beside** the thing
+   * that was pressed, so the conversation neither moves nor dims and the
+   * reader's eye does not leave the message. Measured at the moment of the
+   * press rather than held in state — the list scrolls, and a rectangle from
+   * a second ago points at the wrong row.
+   */
+  const openAuthorProfile = useCallback(
+    (trigger: HTMLElement) => {
+      if (!authorProfileUserId) return;
+      const box = trigger.getBoundingClientRect();
+      openUserProfile(authorProfileUserId, "glance", message.chat_id ?? null, {
+        top: box.top,
+        bottom: box.bottom,
+        left: box.left,
+        right: box.right,
+      });
+    },
+    [authorProfileUserId, message.chat_id, openUserProfile],
+  );
+  /**
    * The colour the author's name takes, or null (D-215).
    *
    * Discord's mechanic read literally: in a server's message list a name is
@@ -1369,7 +1391,7 @@ export function MessageBubble({
                 <button
                   type="button"
                   data-testid="message-author-avatar"
-                  onClick={() => openUserProfile(authorProfileUserId, "glance", message.chat_id ?? null)}
+                  onClick={(event) => openAuthorProfile(event.currentTarget)}
                   aria-label={`Профиль: ${actorName}`}
                   className="block rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
                 >
@@ -1399,13 +1421,13 @@ export function MessageBubble({
                 // group.
                 role={authorProfileUserId ? "button" : undefined}
                 tabIndex={authorProfileUserId ? 0 : undefined}
-                onClick={authorProfileUserId ? () => openUserProfile(authorProfileUserId, "glance", message.chat_id ?? null) : undefined}
+                onClick={authorProfileUserId ? (event) => openAuthorProfile(event.currentTarget) : undefined}
                 onKeyDown={
                   authorProfileUserId
                     ? (event) => {
                         if (event.key !== "Enter" && event.key !== " ") return;
                         event.preventDefault();
-                        openUserProfile(authorProfileUserId, "glance", message.chat_id ?? null);
+                        openAuthorProfile(event.currentTarget);
                       }
                     : undefined
                 }

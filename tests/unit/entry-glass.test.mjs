@@ -61,6 +61,11 @@ function classString(file, needle) {
 
 /** Everything that covers content it is not part of. [file, landmark] */
 const covers = [
+  // The profile popout, laid over the conversation it is not part of. It took
+  // the mini-profile's place in this list on the same day the mini-profile left
+  // it — a surface that covers content is a surface that covers content,
+  // whatever opened it.
+  ["components/profile/UserProfilePopout.tsx", "z-[75] w-80"],
   // The search's «Мини-профиль» stood here until 2026-09-21. It was the third
   // profile surface `docs/operations/reference-clients.md` §15.1 found, and the
   // two-tier work folded it into the two real ones; activating a person in the

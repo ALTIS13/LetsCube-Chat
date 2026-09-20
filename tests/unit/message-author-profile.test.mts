@@ -89,16 +89,24 @@ test("the bubble asks this module and opens the profile as a glance", () => {
   assert.ok(BUBBLE.includes("messageAuthorProfileTarget"));
   // «glance», because the person is incidental to the message being read. The
   // surface that answers is `resolveProfileTier`'s business, not the bubble's.
-  const openers = [
-    ...BUBBLE.matchAll(/openUserProfile\(authorProfileUserId,\s*"([a-z]+)",\s*message\.chat_id/g),
-  ].map((match) => match[1]);
-  // Three call sites for two anchors: the avatar's click, and the name's click
-  // and its Enter/Space. Every one of them is the same kind of act.
-  assert.equal(openers.length, 3);
-  assert.deepEqual([...new Set(openers)], ["glance"]);
-  // And they really are two separate anchors, as Discord's two importers are.
+  assert.match(BUBBLE, /openUserProfile\(authorProfileUserId, "glance",/);
+  // Two anchors, as Discord's two importers are, and both go through the one
+  // helper that measures the box.
+  const calls = (BUBBLE.match(/openAuthorProfile\(event\.currentTarget\)/g) ?? []).length;
+  assert.equal(calls, 3, "the avatar's click, and the name's click and its Enter/Space");
   assert.ok(BUBBLE.includes('data-testid="message-author-avatar"'));
   assert.ok(BUBBLE.includes('data-message-author="true"'));
+});
+
+test("the bubble measures the box the popout will stand beside", () => {
+  // The correction of 2026-09-21: the small tier is a popout **beside what you
+  // pressed**, and the box is what makes that possible. Measured at the moment
+  // of the press rather than held in state — the list scrolls, and a rectangle
+  // from a second ago points at the wrong row.
+  assert.match(BUBBLE, /trigger\.getBoundingClientRect\(\)/);
+  for (const edge of ["top", "bottom", "left", "right"]) {
+    assert.match(BUBBLE, new RegExp(`${edge}: box\.${edge}`), `the anchor drops ${edge}`);
+  }
 });
 
 test("the bubble hands over the place it was read from", () => {

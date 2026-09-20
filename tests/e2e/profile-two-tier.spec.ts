@@ -63,7 +63,16 @@ const CHAT_ANNA = "42222222-2222-4222-8222-000000000002";
 
 const IN_GROUP = "Макет главной готов, посмотрите";
 
-function seed(): { chats: Row[]; memberships: Row[]; messages: Row[] } {
+/**
+ * `filler` adds enough of her messages to make the conversation scroll.
+ *
+ * Only the dismissal test asks for it, and it asks because a scroll that never
+ * happens proves nothing: with one message the list has nowhere to go, and the
+ * test would have passed against a popout that ignored scrolling entirely.
+ * Consecutive messages from one author draw one avatar between them
+ * (`isLastInGroup`), so the face the other tests count is still the only one.
+ */
+function seed(filler = 0): { chats: Row[]; memberships: Row[]; messages: Row[] } {
   return {
     chats: [
       chat(CHAT_TEAM, "group", "Команда проекта", AT),
@@ -76,16 +85,25 @@ function seed(): { chats: Row[]; memberships: Row[]; messages: Row[] } {
       membership(CHAT_ANNA, ANNA, "member", AT),
     ],
     messages: [
+      ...Array.from({ length: filler }, (_, at) =>
+        message(
+          `45555555-5555-4555-8555-1000000000${String(at).padStart(2, "0")}`,
+          CHAT_TEAM,
+          ANNA,
+          `Строка ${at + 1}`,
+          new Date(Date.parse("2026-09-20T08:00:00.000Z") + at * 60_000).toISOString(),
+        ),
+      ),
       message("45555555-5555-4555-8555-000000000001", CHAT_TEAM, ANNA, IN_GROUP, "2026-09-20T09:30:00.000Z"),
     ],
   };
 }
 
-async function boot(page: Page) {
+async function boot(page: Page, filler = 0) {
   return openFixture(page, {
     me: ME,
     people: [ANNA],
-    ...seed(),
+    ...seed(filler),
     rpc: (name, body) => {
       if (name === "search_chat_messages") return missingFunction(name);
       if (name === "profile_badges") return { body: BADGES };
@@ -328,6 +346,112 @@ test.describe("the person behind the conversation, on two surfaces", () => {
     // And the two facts the place supplies, which are the reason the full card
     // has anything of its own to say outside a conversation.
     await expect(page.getByTestId("member-card-joined")).toBeVisible();
+  });
+
+  test("the summary stands beside the face, and the conversation neither moves nor dims", async ({ page }) => {
+    // The correction of 2026-09-21. The first build drew this tier centred in a
+    // modal, which is not what Discord does and — more to the point — takes the
+    // reader's eye to the middle of the screen for the one interaction whose
+    // whole value is that it does not.
+    if (isPhone(page)) {
+      await boot(page);
+      await openGroup(page);
+      await page.getByTestId("message-author-avatar").first().click();
+      // A phone has no compact tier, so it has no popout either.
+      await expect(page.getByTestId("user-profile-popout")).toHaveCount(0);
+      await expect(page.getByTestId("user-profile-modal")).toBeVisible();
+      return;
+    }
+
+    await boot(page);
+    await openGroup(page);
+
+    const face = page.getByTestId("message-author-avatar").first();
+    const faceBox = await face.boundingBox();
+    const listBefore = await page.getByTestId("chat-list-scroller").boundingBox();
+    await face.click();
+
+    const popout = page.getByTestId("user-profile-popout");
+    await expect(popout).toBeVisible();
+    await page.waitForTimeout(250);
+    const box = await popout.boundingBox();
+
+    // **Beside**, measured rather than eyeballed: it starts to the right of the
+    // face and its top is level with it. `placeBeside` owns the arithmetic and
+    // is unit-tested; this is the proof that the real surface uses it.
+    expect(box!.x, "the popout must stand to the right of the face").toBeGreaterThan(
+      faceBox!.x + faceBox!.width,
+    );
+    expect(
+      Math.abs(box!.y - faceBox!.y),
+      "the popout's top must be level with the face it belongs to",
+    ).toBeLessThan(4);
+
+    // **The conversation has not moved.** A centred dialog with a scrim gives
+    // the eye back to a screen that has changed under it.
+    const listAfter = await page.getByTestId("chat-list-scroller").boundingBox();
+    expect(listAfter).toEqual(listBefore);
+
+    // **And it is not dimmed.** No full-screen backdrop is drawn over the shell
+    // — measured by asking what is actually on top at a point far from the
+    // popout, which is the only honest way to ask.
+    const onTop = await page.evaluate(() => {
+      const element = document.elementFromPoint(40, 400);
+      return element?.closest("[data-testid]")?.getAttribute("data-testid") ?? element?.tagName ?? null;
+    });
+    expect(onTop, "something is covering the shell beside the popout").not.toBe("user-profile-popout");
+  });
+
+  test("the popout goes away on the things that mean the reader has moved on", async ({ page }) => {
+    if (isPhone(page)) {
+      // The full card on a phone is a sheet with its own ✕, covered elsewhere.
+      test.info().annotations.push({ type: "note", description: "no popout below md" });
+      await boot(page);
+      await openGroup(page);
+      await page.getByTestId("message-author-avatar").first().click();
+      await expect(page.getByTestId("user-profile-popout")).toHaveCount(0);
+      await page.getByTestId("user-profile-close").click();
+      await expect(page.getByTestId("user-profile-overlay")).toHaveCount(0);
+      return;
+    }
+
+    // Enough of her messages that the conversation can actually scroll — see
+    // `seed`. A wheel over a list with nowhere to go fires no scroll event, and
+    // the assertion below would have passed against a popout that never
+    // listened for one.
+    await boot(page, 40);
+    await openGroup(page);
+    const face = page.getByTestId("message-author-avatar").first();
+    const popout = page.getByTestId("user-profile-popout");
+
+    // A press outside it.
+    await face.click();
+    await expect(popout).toBeVisible();
+    await page.mouse.click(40, 700);
+    await expect(popout).toHaveCount(0);
+
+    // Escape.
+    await face.click();
+    await expect(popout).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(popout).toHaveCount(0);
+
+    // A scroll of the conversation, which is the sharpest of the four: the card
+    // is anchored to a box that has just moved, so staying open would leave it
+    // pointing at nothing. It is also the one a bubbling listener would miss,
+    // because a scroll inside the message list never reaches `window`.
+    await face.click();
+    await expect(popout).toBeVisible();
+    // Over the conversation and clear of the card: the popout stands at roughly
+    // x 740..1060, and a wheel delivered inside it scrolls the card rather than
+    // the list, which is how the first version of this test failed.
+    const over = await popout.boundingBox();
+    await page.mouse.move(over!.x + over!.width + 200, 400);
+    // **Upwards.** A conversation opens anchored to its newest message, so a
+    // downward wheel moves nothing and fires no scroll event — the first
+    // version of this assertion was green against a list that never scrolled.
+    await page.mouse.wheel(0, -400);
+    await expect(popout).toHaveCount(0);
   });
 
   test("a person chosen in the search opens the card, not a third surface", async ({ page }) => {

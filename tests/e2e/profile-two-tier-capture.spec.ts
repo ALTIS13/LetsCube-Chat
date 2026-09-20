@@ -111,6 +111,12 @@ for (const theme of ["dark", "light"] as const) {
       isPhone(page) ? "full" : "compact",
     );
     await expect(overlay.getByTestId("member-card-badges")).toBeVisible();
+    if (!isPhone(page)) {
+      // The correction of 2026-09-21: the summary is a popout beside the face,
+      // not a centred dialog. Photographed with the conversation still lit
+      // behind it, which is the property the anchoring exists for.
+      await expect(page.getByTestId("user-profile-popout")).toBeVisible();
+    }
     await page.waitForTimeout(350);
     await shot(page, isPhone(page) ? "phone-single-tier" : "compact", theme);
 

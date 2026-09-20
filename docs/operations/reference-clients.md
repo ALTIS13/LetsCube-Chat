@@ -1474,6 +1474,41 @@ identifiers `UserProfilePopout`, `ProfilePopout`, `UserProfileSections` and
 `viewFullProfile`; the real names are `R7` and `RP` in 518477, and
 `USER_PROFILE_POPOUT` exists only as the analytics string «user profile popout».
 
+#### The popout is **anchored**, and that is a mechanism rather than a style
+
+Recorded on 2026-09-21, after the first build of our two-tier profile drew the
+small surface as a centred modal and a review against the rendered pixels caught
+it. Worth stating plainly here, because the reading above describes *what* the
+two surfaces are and never said *where* the small one stands.
+
+Discord's popout appears beside the thing you pressed — an avatar, a username, a
+mention chip. The conversation behind it is neither moved nor dimmed, and the
+message the reader was in the middle of stays lit. That is not decoration:
+**it is the entire reason the small tier is cheaper than the large one.** The
+popout exists for the glance — a name goes past, a second of context is wanted,
+and reading continues — and a centred card takes the eye to the middle of the
+screen and hands it back to a conversation that has left attention. A surface
+that costs the reader their place is not a cheap surface, whatever it contains.
+
+Two consequences follow, and both are now ours:
+
+1. **Dismissal follows placement.** An anchored popout goes away on a press
+   outside it, on Escape, and on a scroll — the last one sharpest, because the
+   card is anchored to a box that has just moved. A centred modal's ✕ and
+   backdrop are not the same set, and a tier that moves has to take its
+   dismissal with it.
+2. **A popout with nothing to point at is not a popout.** Where no anchor can be
+   supplied, the honest answer is the full surface, not a summary in the middle
+   of the screen.
+
+**UNESTABLISHED, and cheap to establish if it ever matters:** Discord's exact
+alignment — whether the popout's top is level with the avatar, centred on it, or
+merely clamped — was not read out of the bundle. Ours top-aligns, and the reason
+is stated where the arithmetic lives (`lib/messageMenuPlacement.ts`): an
+avatar's height is the thing about a message row that varies least, so aligning
+the tops keeps the card in the same place for every row it is opened from. If a
+later read contradicts it, that is a number to change rather than a shape.
+
 #### Ours, and what this changes about the plan
 
 D-283 restored the capability by extracting `MemberCard` and giving it a second
@@ -1496,15 +1531,18 @@ What is worth taking, in order, and each is a mechanic rather than an object:
 2. **The small surface as a different component reading the same rows**, not a
    parameterised root. Discord proves the split is maintainable when the data is
    shared; it does not claim the markup should be.
-3. **The escalation as one explicit control** that closes the small surface and
+3. **The small surface is anchored to what opened it**, and its dismissal
+   follows from that — see the section above, which the first pass of this
+   reading omitted and a render caught.
+4. **The escalation as one explicit control** that closes the small surface and
    opens the large one. Discord hides it in the overflow menu on the popout and
    promotes it to a full-width button on the sidebar — the same string, placed
    by how much room there is. At 390 that argues for the button.
-4. **Tabs only for lists.** Bio, roles and the note belong in the body; the
+5. **Tabs only for lists.** Bio, roles and the note belong in the body; the
    tabs are Mutual Friends and Mutual Servers, which are lists, plus the
    activity surfaces. Our card already stacks the group's roles above LETSCUBE's
    badges in the body, which is the same instinct.
-5. **A card opened from a specific place may open on a specific tab, scrolled
+6. **A card opened from a specific place may open on a specific tab, scrolled
    to a specific block.** That is what `tabSection` + `scrollTarget` is for and
    it is cheap.
 
