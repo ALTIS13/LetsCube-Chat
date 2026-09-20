@@ -21309,3 +21309,212 @@ now awaits the panel's **own** animations, which is deterministic and cannot
 hang on an unrelated infinite one.
 
 ---
+
+## D-282 `[x]` A tab held open across a deploy never took the new build, and the notice that would have said so was throttled to once a week
+
+**Severity:** high. It is the whole point of deploying: the owner was running a
+bundle two commits old while the new one was live and verified in production,
+and only got it by pressing F5. Everyone who keeps the application open has the
+same experience, and there is nothing on screen to tell them.
+
+**Surface:** `artifacts/kub/src/lib/pwa/appUpdateNotice.ts` and
+`artifacts/kub/src/components/AppUpdateBanner.tsx`. The browser and the
+installed PWA. The Windows updater is a different mechanism on a different
+surface and is untouched; D-264's «Which surface this is» still holds.
+
+**Reported by the owner on 2026-09-20:** «чтобы пользователю не надо было делать
+F5 чтобы новый функционал заработал, либо пусть сам обновляется в случае выхода
+новой версии», with the habit that produces it: «Я почти всегда с открытой
+вкладкой и в войсе сижу для тестов». It is the second half of the complaint he
+filed as D-264 — «либо сделать это автоматически корректно как это делает
+discord/telegram» — which D-264 answered only for the notice's appearance.
+
+### The mechanism, because the module's own header had it wrong
+
+`appUpdateNotice.ts` opened by saying the update applies itself: the next launch
+fetches `index.html` from the network, the worker's navigation handler is
+network-first, and the waiting worker hands over on the spot. Every clause of
+that is true and every clause of it is about a **launch**.
+
+`skipWaiting` changes which service worker controls the page. The JavaScript
+already parsed into the document is untouched and goes on running until a
+navigation. So **an update is a reload**, and a tab that is never reloaded never
+takes one. For somebody who keeps one tab open for days there is no next launch,
+and the deploy never arrives. The header described a mechanism that works for
+everybody except the person who uses the product most.
+
+### The throttle was set from the wrong channel, and the measurement says by how much
+
+The notice was gated to once every seven days, taken from Discord's **stable**
+channel. The same paragraph recorded that Discord uses one day on ptb and
+canary — that is, Discord sets the throttle from how often the channel ships,
+and we had copied the number belonging to the channel least like ours.
+
+Measured from Coolify's own deployment records on the production host
+(`coolify-db`, `application_deployment_queues`, `application_id = 1`,
+`status = 'finished'`), `letscube-web`, 2026-08-21 to 2026-09-20:
+
+| | |
+| --- | --- |
+| successful deploys | **242**, of 238 distinct commits |
+| median gap between two | **28 minutes** |
+| mean gap | 179 minutes |
+| p90 gap | 182 minutes |
+| **longest quiet stretch** | **101 hours** (2026-09-06 → 2026-09-11) |
+| days with at least one deploy | 21 of 30 |
+
+A seven-day throttle is longer than the longest silence this project has ever
+had. In the measured window **one notice would have covered all 242 deploys**.
+That is not a throttle, it is silence.
+
+It is now **one hour**: above the median gap, so a burst of deploys still costs
+one notice rather than one each, and far below any session this product sees, so
+a build cannot stay pending for longer than an hour without being mentioned.
+Deliberately shorter than the one day Discord gives its fastest channel, because
+ours ships faster than that channel does.
+
+### And where the reload costs nothing, nobody is asked at all
+
+The reason nothing reloaded on its own was real and is still true:
+`selectedChatId` lives only in `store/app.store.ts`, is neither in the URL nor
+persisted, so a reload lands on the chat list. `shouldRestartQuietly` is
+therefore narrow by construction — it fires only where the reload would put the
+page **where it already is**:
+
+- `pending` — a newer build is actually deployed;
+- **not in a call** — no `joining`, `connected` or `reconnecting` phase and no
+  live ring. This veto has no override anywhere in the module. The owner sits in
+  a voice channel for hours and there is no rejoin after a reload;
+- **no conversation open** — the reload lands on the chat list, so it is free
+  exactly when the page is already there;
+- **not restarted recently** — a 30-minute per-tab cooldown in `sessionStorage`;
+- and **hidden for a minute, or untouched for ten**.
+
+While any veto holds, both clocks start again from that moment, so the window is
+measured from when the last of them cleared. Without that, leaving a call in a
+hidden tab would be followed by an immediate reload.
+
+### One condition was considered and deliberately left out
+
+An "unsent composer draft" veto was specified and is **not** implemented,
+because it could not be reached. The draft is written to `localStorage` per chat
+and read back when the composer mounts
+(`components/chat/MessageInput.tsx:334`, `:344`), so the text survives a reload;
+the composer only exists inside an open conversation, which is already a veto;
+and typing is interaction, so the idle clock already covers somebody mid-word.
+A draft left in some chat three weeks ago would have blocked every quiet update
+for ever while protecting nothing. **A condition that cannot decide anything is
+worse than a missing one — it reads as a guarantee.**
+
+### Which shells a quiet restart can reach, checked rather than assumed
+
+Two of the three, and the reason is where each shell's document comes from.
+
+- **Browser and installed PWA** — the case this is for.
+- **Windows (Tauri)** — yes, and deliberately. `tauri.conf.json` sets
+  `frontendDist: "../ui"`, but `windows-tauri/ui/` holds only `startup.html`,
+  its overlay and a logo; `src-tauri/src/lib.rs` then navigates the main window
+  to `https://app.letscube.ru/`. So the running document is the deployed web
+  build, the poll compares it against the deployed `index.html`, and a reload
+  of that WebView is the same operation as a reload of a tab. Section 9 of
+  `docs/operations/reference-clients.md` establishes the same thing about the
+  shell; D-264's line about this shell booting a bundled document describes
+  `frontendDist` rather than what the window ends up showing.
+- **Android (Capacitor)** — no. `capacitor.config.ts` sets
+  `webDir: "artifacts/kub/dist/public"` and no `server.url`, so the WebView
+  boots the bundle inside the APK and the poll compares that document with
+  itself. It can never go pending, and `usePwaServiceWorker` unregisters every
+  worker there anyway. An APK takes its update from the release catalogue.
+
+### Evidence
+
+**The failing case was made to fail first.** Against the shipped rule, the
+owner's own case — a session open across a deploy — answers `false`:
+
+```
+ROUTINE_NOTICE_INTERVAL_MS = 604800000 ms = 168 hours
+ok    28 minutes later (the median gap between two production deploys): told about the new build = false (wanted false)
+FAIL  2 hours later: told about the new build = false (wanted true)
+FAIL  a day later: told about the new build = false (wanted true)
+FAIL  four days later (the longest quiet stretch ever recorded): told about the new build = false (wanted true)
+```
+
+and against the new rule all four pass. The same ceremony was run end to end:
+with the shipped `AppUpdateBanner.tsx` and `appUpdateNotice.ts` restored on disk
+and the dev server restarted onto them (proved by the served module: 0
+occurrences of `shouldRestartQuietly`, 1 of the control string
+`app-update-notice`), `tests/e2e/app-update-notice.spec.ts` reports **8 passed,
+2 failed** — «a tab nobody is using takes the build by itself» fails with «the
+tab never took the new build». With the fix, **11 passed**.
+
+**Every constant and every veto is mutation-tested.** 17 mutations of
+`appUpdateNotice.ts`, all of which turn `tests/unit/app-update-notice.test.mts`
+red: the interval put back to 7 days and to 1 day; each of the three quiet
+windows moved; `>=` to `>` on all four boundaries; each of the four vetoes
+deleted; `||` to `&&` between the hidden and idle clauses; and the sign dropped
+from each of the three clock-direction guards (`now - x` to `Math.abs(now - x)`),
+which is what proves that a clock gone backwards keeps the tab still rather than
+making it look long-abandoned.
+
+**The one rule that lives in the component rather than the module is mutated
+too.** While any veto holds, `AppUpdateBanner` restarts both clocks
+(`stillness.busy(now)`), so the window is counted from when the last veto
+cleared. Deleting that one line and restarting the dev server onto the mutant
+(proved by the served module: 0 occurrences of `stillness.busy`, 2 of the
+control `shouldRestartQuietly`) turns «the quiet window starts when the last
+veto clears, not before» red — the tab reloads the instant the conversation is
+closed, having counted a minute and a half of being hidden that it spent busy.
+
+**Gates, 2026-09-20.** Typecheck clean on all five packages. Unit suite
+3609/3609. `tests/server` 144/144 after `@workspace/api-server` was rebuilt.
+`tests/e2e/public-home-routing.spec.ts` 15/15, both matrices, because the quiet
+restart is a new reason for the page to navigate. `tests/e2e/app-update-notice.spec.ts`
+11/11. Production build confirmed by its own output: `sw.js build
+7bd999ffd45232a4`, `built in 8.50s` — and re-run after a comment-only edit it
+answered with the *same* build id, which is the content digest of
+`serviceWorkerBuild.ts` doing exactly what it exists for: prose does not push
+every browser through an update.
+
+**Photographed** at 1440 and 390 in both themes,
+`output/update-notice-d282/phase1-*.png`. The notice itself did not change in
+D-282 — D-264 rebuilt it on the shared material and it still reads as part of
+the product — so the owner's other complaint about this surface, «визуально
+выглядит чужеродно из за старого интерфейса», is **stale**. One observation
+recorded rather than changed: at 1440 the pill is centred on the window rather
+than on the conversation column, which is the same band and the same centring
+`KubFeedbackViewport` uses, so it is the house convention rather than a defect
+of this notice.
+
+### Two things the reference read corrected along the way
+
+Discord's shipped bundle was read again for this (build `615980`, 2026-09-20)
+and two statements this project had been carrying turned out to be wrong; both
+are now fixed in section 9 of `docs/operations/reference-clients.md`.
+
+- **Discord web's update poll is hourly, not five-minutely.** The `5` in that
+  code is a cache-buster bucket on the version request, not a frequency.
+- **The voice confirmation's body was quoted truncated.** It ends «…leave
+  briefly. **You're probably going to update anyway but, you know, just warning
+  you.**», and its guard is `RTC_CONNECTED` alone rather than «in a voice
+  channel». Ours is deliberately wider — `joining` and `reconnecting` and a live
+  ring — and the reason is recorded beside the observation.
+
+And one that matters more than either: **Discord web never reloads itself.** Not
+on idle, not when hidden, not even for a build the server marks `required` —
+`required` skips the throttle and nothing else. So the quiet restart here is a
+**departure** from the reference rather than an adoption of it, and section 9
+carries the argument: their click is cheap because their URL addresses the
+channel and their voice channel survives five minutes of `localStorage`; ours
+costs the conversation and the call, which is why nobody was clicking it. The
+departure expires when queue item 35 makes our click as cheap as theirs.
+
+### What this does not fix
+
+The two vetoes are placeholders. A reload still lands on the chat list and still
+ends a call, so a person in a conversation or in a voice channel is still asked
+rather than served. That is queue item 35 of
+`docs/PRODUCTION_PRIORITY_TRACKER.md` — «where you were» is state the product
+owns and restores — and the vetoes here may only be widened after the matching
+restoration exists and has been proved.
+
+---
