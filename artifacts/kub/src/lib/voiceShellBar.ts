@@ -33,23 +33,34 @@
  * down to say what the column already says in place.
  *
  * So the rule is narrow and stated once: a location whose own layout mounts the
- * bar is exempt, and every other location gets the shell's. Adding a future
- * page that docks a bar of its own is one entry in `VOICE_BAR_SELF_MOUNTED`.
+ * bar is exempt, and every other location gets the shell's.
  *
- * This module imports nothing, so `node --test` can load it — the same reason
- * `lib/voiceCallBar.ts` states at its own head.
+ * ## The exempt set is «wherever `MainLayout` renders», not a list of paths
+ *
+ * It was the single path `/`, held in a `VOICE_BAR_SELF_MOUNTED` array, and
+ * that was right for exactly as long as the messenger answered at one location.
+ * Queue item 35 gave a conversation an address, so `MainLayout` now renders at
+ * `/chat/<id>` and `/chat/<id>/m/<id>` as well — and for one revision this rule
+ * still said «one path», which drew the shell's band over a messenger that
+ * already had one. The duplicate the head above refuses, reintroduced by a
+ * change somewhere else entirely.
+ *
+ * The lesson is why this now **asks** `lib/chatRoute.ts` instead of keeping a
+ * copy: a list of paths in a second file is a fact about the router that the
+ * router does not know it owns, and it goes stale silently the next time the
+ * route table moves. There is one answer to «is this the messenger» and it
+ * lives where the address rule lives.
+ *
+ * `chatRoute` imports nothing either, so `node --test` still loads this module
+ * directly — the same reason `lib/voiceCallBar.ts` states at its own head. The
+ * import is relative for that reason: `@/` is Vite's alias and Node does not
+ * resolve it.
  */
 
-/**
- * Locations whose own layout already mounts `VoiceCallBar`.
- *
- * Exactly one today: `/` is `MainLayout`, which mounts it twice — the column's
- * foot through `Sidebar` and the phone's top band — with CSS choosing between
- * them. Matched whole, never by prefix: `/tasks` is not a sub-page of the
- * messenger, it is a different route with a layout of its own, and a prefix
- * test against `/` matches every path there is.
- */
-export const VOICE_BAR_SELF_MOUNTED: readonly string[] = ["/"];
+// The extension is required: Node's ESM resolver does not guess one, and this
+// module is loaded straight from disk by `node --test`. `lib/voiceChannel.ts`
+// imports `./voiceElsewhere.ts` the same way and for the same reason.
+import { isMessengerRoute } from "./chatRoute.ts";
 
 /**
  * The path part of a location, as the exempt list spells paths.
@@ -77,8 +88,11 @@ export function voiceShellBarPath(location: string): string {
  * Whether the application shell must draw the call bar at this location.
  *
  * True everywhere the page does not draw one for itself — which is every
- * authenticated route but the messenger.
+ * authenticated route but the messenger, and the messenger is the chat list
+ * and every conversation address. Never a prefix test: `isMessengerRoute` is
+ * strict, so `/chatz<uuid>` and `/chat/not-a-uuid` render `NotFound`, mount no
+ * bar of their own, and get the shell's.
  */
 export function voiceShellBarNeeded(location: string): boolean {
-  return !VOICE_BAR_SELF_MOUNTED.includes(voiceShellBarPath(location));
+  return !isMessengerRoute(voiceShellBarPath(location));
 }

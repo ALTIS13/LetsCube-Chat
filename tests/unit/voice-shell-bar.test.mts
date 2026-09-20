@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  VOICE_BAR_SELF_MOUNTED,
   voiceShellBarNeeded,
   voiceShellBarPath,
 } from "../../artifacts/kub/src/lib/voiceShellBar.ts";
@@ -23,8 +22,31 @@ import {
  *    is the state before the change.
  */
 
+const CHAT = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
+const MESSAGE = "550e8400-e29b-41d4-a716-446655440000";
+
 test("the messenger carries its own bar, so the shell draws none", () => {
   assert.equal(voiceShellBarNeeded("/"), false);
+});
+
+test("a conversation carries its own bar too, because it is the messenger", () => {
+  // Queue item 35 gave a conversation an address, so `MainLayout` — which
+  // mounts the bar twice — now renders at `/chat/<id>` as well as at `/`. The
+  // exempt set stopped being «one path» that day, and a rule that still says
+  // one path draws the shell's band over a messenger that already has one:
+  // the exact duplicate the module's own head refuses.
+  assert.equal(voiceShellBarNeeded(`/chat/${CHAT}`), false);
+  assert.equal(voiceShellBarNeeded(`/chat/${CHAT}/m/${MESSAGE}`), false);
+  assert.equal(voiceShellBarNeeded(`/chat/${CHAT}?from=push`), false);
+});
+
+test("a path that only looks like a conversation still needs the shell's bar", () => {
+  // These render `NotFound`, which mounts no bar of its own. The strictness is
+  // `lib/chatRoute.ts`'s and is pinned there; what matters here is that this
+  // rule asks it rather than guessing from a prefix.
+  for (const location of [`/chatz${CHAT}`, "/chat", "/chat/not-a-uuid", `/chat/${CHAT}/m`]) {
+    assert.equal(voiceShellBarNeeded(location), true, location);
+  }
 });
 
 test("every other authenticated route needs the shell's bar", () => {
@@ -52,13 +74,16 @@ test("a location nothing routes to still gets the bar", () => {
   assert.equal(voiceShellBarNeeded("/tasks/deeper/still"), true);
 });
 
-test("`/` is matched whole, never as a prefix", () => {
+test("the messenger is matched exactly, never as a prefix", () => {
   // The mistake this pins: `location.startsWith("/")` is true of every path
   // there is, so a prefix test would exempt the entire application and restore
-  // the defect while reading as a fix.
+  // the defect while reading as a fix. And the opposite mistake, which is the
+  // one that actually happened: a hand-kept list of exempt paths, correct on
+  // the day it was written and stale the next time the route table moved.
   assert.equal(voiceShellBarNeeded("/tasks"), true);
-  assert.ok(VOICE_BAR_SELF_MOUNTED.includes("/"));
-  assert.equal(VOICE_BAR_SELF_MOUNTED.length, 1);
+  assert.equal(voiceShellBarNeeded("/chat"), true);
+  assert.equal(voiceShellBarNeeded("/"), false);
+  assert.equal(voiceShellBarNeeded(`/chat/${CHAT}`), false);
 });
 
 test("a query or a hash does not move a page off the exempt list", () => {
