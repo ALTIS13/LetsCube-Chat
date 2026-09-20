@@ -608,6 +608,45 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     restoration principle needs, so sequence it with that work rather than
     beside it.
 
+
+38. `[ ]` Badges: real icons, and the history a badge carries. Asked for by the
+    owner on 2026-09-20 and called by him «скорее визуальная придирка, которую
+    можно исправить позже» — so it is filed at that weight. What raises it
+    above pure decoration is that he used it to draw a distinction, and the
+    distinction turns out to be **already correct in our model**, which is
+    worth recording so nobody "fixes" it.
+
+    **His distinction:** roles live on a server/group, are created by whoever
+    runs it, carry the permissions that apply *there*; badges are worn
+    everywhere and carry history — «условно купил подписку с такого числа,
+    админ приложения или т.п».
+
+    **What the code already does**, read before this was written.
+    `ProfileBadgeChip.tsx` states the same split in its own words — `ChatRoleChip`
+    answers «кто он здесь» and the badge strip answers «кто он вообще», and the
+    colour on the word is deliberately reserved for the group's role so the two
+    rows can be told apart at a glance. Per-group roles with their own names and
+    colours exist: `chat_roles.colour` with eight allowed values in
+    `lib/chatRolePalette.ts`. Global badges exist as `ProfileBadgeRow`
+    (`user_id, kind, key, title, detail, icon, colour, rank`) with
+    `kind: "global_role" | "achievement"`. So the model is his model.
+
+    **What is actually missing is exactly the two things he named:**
+    - **No real icons.** `resolveBadgeIcon` maps a badge onto the product's own
+      `KubIcon` set and renders *nothing* when the build lacks the name a row
+      asked for. Discord's badges are small purpose-drawn coloured marks. His
+      suggestion — «можем их генерировать сами нужного размера» — is the
+      sensible route and should be weighed against a hand-drawn set.
+    - **The explanation is a browser tooltip.** `ProfileBadgeChip.tsx:75` is
+      `title={badge.detail ?? undefined}` — the native one, which cannot be
+      styled, is slow to appear and does not exist on touch. Discord shows a
+      designed card: the badge large, its name, and **since when** («СЕРЕБРО
+      NITRO — Подписчик с 12.05.26»). `detail` is free text, so a date can be
+      written into it but nothing holds it as a field; decide whether history
+      deserves a column before writing dates into prose.
+
+    Sequence it after item 36, whose profile work draws these same chips.
+
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
 `main` `17a1c47` to `245e4d9`, 32 commits, on the owner's standing permission to deploy without him.
