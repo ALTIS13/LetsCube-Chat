@@ -7,7 +7,7 @@ import { useAppStore } from "@/store/app.store";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
 import { KubIcon, KubModal } from "@/components/kub";
 import type { MessageWithSender } from "@/types/database";
-import { forwardDraftTitle } from "@/lib/messageActions";
+import { forwardDraftTitle, forwardTargets } from "@/lib/messageActions";
 import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
 
 interface ForwardModalProps {
@@ -34,14 +34,13 @@ export function ForwardModal({ messages, onClose, onForward }: ForwardModalProps
   const chats = useAppStore((state) => state.chats);
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
-  const sourceChatId = messages[0]?.chat_id;
 
-  const filtered = useMemo(() => {
-    const pool = chats.filter((c) => c.id !== sourceChatId);
-    if (!query.trim()) return pool;
-    const q = query.toLowerCase();
-    return pool.filter((c) => (c.name ?? "").toLowerCase().includes(q));
-  }, [chats, query, sourceChatId]);
+  // D-287. This list used to have `.filter((c) => c.id !== sourceChatId)` on
+  // the front of it, and in a private conversation the chat *with* the person
+  // you are talking to is the source — so the one person a message could not
+  // be forwarded to was them: «И даже переслать тебе он не даёт. Только другим
+  // людям.» Do not put it back; `forwardTargets` carries the reason.
+  const filtered = useMemo(() => forwardTargets(chats, query), [chats, query]);
 
   const handlePick = async (id: string) => {
     setBusyId(id);
@@ -84,7 +83,7 @@ export function ForwardModal({ messages, onClose, onForward }: ForwardModalProps
         />
       </div>
 
-      <div className="max-h-72 overflow-y-auto -mx-4 px-1 py-1">
+      <div data-forward-picker="true" className="max-h-72 overflow-y-auto -mx-4 px-1 py-1">
         {filtered.length === 0 ? (
           <p className="text-center text-sm py-8 text-[color:var(--kub-muted)]">Чаты не найдены</p>
         ) : (

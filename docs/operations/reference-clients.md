@@ -1859,3 +1859,160 @@ scripts written through a Bash heredoc lose backslash escapes** (a module-header
 regex silently matched nothing, twice). Write them with a file, and pass
 `MSYS2_ARG_CONV_EXCL='*'` when a string key like `/AXYnE` goes through argv, or
 Git Bash turns it into a path under the Git installation.
+---
+
+## 16. Subject 8 — the type, and the gesture on a message row
+
+**The first reading in this document taken off a physical device rather than a
+bundle.** The owner connected an Android phone over ADB on 2026-09-20 and
+authorised going anywhere in his account. Everything here is marked **MEASURED
+ON DEVICE — 2026-09-20**, which is a stronger mark than SHIPPED for a question
+about rendered pixels and about what a finger does, and a weaker one for
+anything about code paths that were not exercised.
+
+The device, because every number below is in its units:
+
+| | |
+| --- | --- |
+| model | `A063` (Nothing Phone 1, `Spacewar`), Android 15 |
+| screen | 1080 × 2400, density **420**, so **1 dp = 2.625 device px** |
+| system font scale | **0.92** — below default, which matters and is picked up again below |
+| Telegram | **12.10.3** (`70892`) |
+| Discord | **345.9** stable |
+| ours | `com.kub.messenger` **0.1.5** (build 6) |
+| Chrome / WebView | 153.0.8010.49 / 151.0.7922.199 |
+
+**The privacy rule this was run under.** Access was authorised; exposure was
+not. Telegram's «Настройки чатов» carries a *synthetic* message preview and the
+size slider, and that is where the type was measured — it holds nobody's data.
+The gesture had to be measured in a real conversation, and was measured
+structurally: the accessibility tree filtered to labels already expected, and
+single horizontal **scanlines** off the screen, which show where a bubble
+begins and ends but cannot carry a sentence. No frame of a conversation was
+written to disk, and none is reproduced anywhere.
+
+### 16.1 The type — MEASURED ON DEVICE, 2026-09-20
+
+The tester said «мелко» four times and guessed at the cause: «либо сам формат
+шрифта такой». That is four different repairs — face, size, weight, contrast —
+so all four were measured rather than one assumed.
+
+**Telegram, at its default setting, dark theme.** The setting reads **16** and
+the slider's range is **12 to 30**, established by dragging it to each end and
+reading the value back, then restoring it to 16 and verifying the label. That
+is **75% to 187.5%** of the default, so the tester's «125%» (= 20) sits
+comfortably inside what Telegram offers. Telegram sizes this text in **dp, not
+sp**: at font scale 0.92 the rendered em is 16 × 2.625 = 42 device px, which is
+what the ink measures, so the system accessibility setting does not reach it.
+
+**Ink, measured on the rendered pixels of both apps on the same screen, same
+theme, same threshold**, using the flat-topped `н` for x-height and a round
+capital for cap height:
+
+| | Telegram (Roboto 16dp) | ours (Inter 14px) | ours ÷ theirs |
+| --- | --- | --- | --- |
+| em | 42.0 device px | 36.75 device px | 87.5% |
+| x-height (`н`) | **23 px** | **20 px** | **87.0%** |
+| cap height | 32 px | 26 px | 81.3% |
+| x-height ÷ em | 0.548 | 0.544 | **99.3%** |
+
+**So the face is not the defect, and that is the finding.** Inter's x-height
+relative to its em is within 1% of Roboto's as these two engines actually
+render them, which is inside the ±1px the measurement can resolve. Adopting
+Telegram's face — the tester's own first proposal — would move the readable
+height of a line by about nothing. The 13% is the nominal size and only that.
+
+**Nor is contrast**, which was the fourth candidate. Ours is the better of the
+two in dark (13.92:1 against Telegram's 13.19:1) and is 18.94:1 in light; the
+time beside a message is 7.55:1 in light and 8.19:1 in dark. Weight is 400 on
+both sides.
+
+**The face does load, and that was proved rather than assumed.** `Inter` is
+fetched from `fonts.googleapis.com` by `index.html`, in the APK's bundled copy
+as much as on the web, and `document.fonts.check` answers `true` for a family
+that never arrived — the trap this register already carries. It was proved by
+laying «Знаешь, который час?» out at 16px with the page's own stack (174.59px)
+and again with `Inter` struck out of it (166.55px), which is exactly the width
+`Roboto` gives. Different widths, so Inter is the face in use. The corollary is
+worth keeping: **the face is a network dependency**. With the font host
+unreachable — and the tester's own report opens with a VPN dropping — the
+product renders in Roboto, one size down, and `display=swap` means the first
+paint is Roboto anyway.
+
+**What we read and what we type disagree, on the same screen.** The message
+body is `text-sm leading-relaxed` = 14px/22.75px; the composer is
+`text-base sm:text-sm`, which on a phone is **16px/24px**. Confirmed on the
+device through its own Chrome against the DEV preview fixture: body 14px,
+composer 16px, both Inter 400, `devicePixelRatio` 2.625, `text-size-adjust`
+100%. So what he types is 14% larger than what he reads — and 16px is, to the
+pixel, Telegram's default for *both*.
+
+**Ours: no text-size setting of any kind.** Telegram's slider is 12–30.
+
+### 16.2 The gesture on a message row — MEASURED ON DEVICE, 2026-09-20
+
+The owner's instruction was «это по аналогии с телеграммом сделай действиями
+влево/вправо по сообщению». The measurement says the analogy is half real, and
+the half that is not is worth stating plainly rather than relabelling.
+
+**Swipe left is reply. Swipe right does nothing at all.** Under a slow, stepped
+drag that provably works in the other direction, a right-hand drag of 300
+device px moved the bubble by **zero pixels** and produced no panel, no sheet
+and no menu; a fast `input swipe` in that direction did nothing either. There
+is no forward gesture in Telegram Android to copy.
+
+The left gesture, in device px and in dp:
+
+| | device px | dp |
+| --- | --- | --- |
+| slop before the row moves | ~70 | **~27** |
+| travel after the slop | 1:1 with the finger | 1:1 |
+| maximum travel | 210 | **80** |
+| fires between | 120 (no) and 130 (yes) | **46 → 50** |
+
+It fires **during** the drag, not on release, and the row springs back under
+the finger. While the finger is down a circular backdrop about 66 device px
+(25 dp) across, with a white arrow in it, is drawn in the row's free margin,
+vertically centred. A gesture abandoned below the distance does nothing at all.
+On commit a reply panel 123 px (47 dp) tall appears above the composer and the
+keyboard opens. The same gesture works on a media message.
+
+**Against ours, before D-287 changed anything:** our reply swipe started at 12,
+travelled to 64 and fired at 48 — in CSS px, which on this device are dp.
+**Our commit distance was already Telegram's** (48 against 46–50, measured
+independently). We start sooner and travel less far. What we had no equivalent
+of is the right-hand direction, because Telegram has none either.
+
+**Method note, because it changes what the numbers mean.** Each
+`adb shell input motionevent` costs 150–300 ms, so these drags took seconds.
+They are therefore distance measurements under a slow drag; a fast flick may
+commit on velocity and was not separable with this instrument. Since Telegram
+commits mid-drag on distance, distance is the governing rule either way. One
+drag was slow enough that Telegram read it as a long press and opened the
+context menu instead — which is itself a useful reminder that these two
+gestures share a beginning.
+
+### 16.3 Where ours now differs on purpose
+
+D-287 adds a right-hand gesture that Telegram does not have, which CLAUDE.md §7
+permits as bettering the reference so long as the difference is written down
+rather than claimed as adoption. Three deliberate divergences, each with a
+reason rather than a preference:
+
+1. **Right is forward.** Ours, not Telegram's. Forwarding was the other thing
+   the tester could not reach on a photo, and a photo is where a long press
+   does not help, because its opener is a `<button>` and the tap belongs to the
+   viewer.
+2. **The row starts moving at 12dp, not 27.** The arrow is the only thing that
+   tells anybody the gesture exists, and a row that does not move until 27dp
+   announces it late.
+3. **The action fires on release, not mid-drag.** Telegram can fire early
+   because its only outcome is a reply bar, which is cheap to undo. Our right
+   half opens a modal, and a modal appearing under a finger that is still
+   moving is the wrong kind of surprise.
+
+**One thing neither client can have**, and it is the likeliest reason Telegram
+left the direction alone: a swipe that begins inside the system's
+gesture-navigation edge is the operating system's back, not the app's. That
+falls on the right-hand gesture of a left-aligned bubble, and nothing in a web
+view can take it back.

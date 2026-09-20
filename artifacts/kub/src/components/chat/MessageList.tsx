@@ -49,6 +49,13 @@ import { copyImageToClipboard, mediaDownloadName, saveMediaAs } from "@/lib/mess
 import { ensureMessageMediaUrl } from "@/lib/media/mediaUrl";
 import { QUICK_REACTION } from "@/lib/messageReactions";
 import {
+  swipeActionFor,
+  swipeCommits,
+  swipeOffset,
+  swipeProgress,
+  type SwipeAction,
+} from "@/lib/messageSwipe";
+import {
   RECENT_REACTIONS_EVENT,
   quickReactionRow,
   readStoredRecentReactions,
@@ -554,6 +561,11 @@ export function MessageList({
       setMenu(null);
       setMenuLift(0);
       handlersRef.current.onReply(message);
+    },
+    forward: (message) => {
+      setMenu(null);
+      setMenuLift(0);
+      handlersRef.current.onForward?.(message);
     },
     jumpToReply: (messageId) => handlersRef.current.onJumpToReply?.(messageId),
     reaction: (messageId, emoji) => handlersRef.current.onReaction(messageId, emoji),
@@ -1571,6 +1583,8 @@ function mediaMimeType(message: MessageWithSender): string | null {
 /** Everything a row can ask the list to do. One object for the life of the list. */
 interface MessageRowActions {
   reply: (message: MessageWithSender) => void;
+  /** The same «Переслать» the menu offers, reached by a swipe right (D-287). */
+  forward: (message: MessageWithSender) => void;
   jumpToReply: (messageId: string) => void;
   reaction: (messageId: string, emoji: string) => void;
   retrySend: (message: MessageWithSender) => void;
@@ -1651,7 +1665,10 @@ const MemoizedMessageBubble = React.memo(MessageBubble);
 
 /**
  * The touch gestures, in Telegram for Android's terms: a tap opens the menu, a
- * double tap puts ❤️, a long press selects, a swipe left replies.
+ * double tap puts ❤️, a long press selects, a swipe left replies — and, since
+ * D-287, a swipe right forwards. The distances and the one place the right
+ * half departs from Telegram, which has no such gesture at all, are in
+ * `@/lib/messageSwipe`.
  *
  * The tap waits out the double tap before opening anything, which is the price
  * of having both — Telegram pays it too. Timings come from the event's own
@@ -1663,9 +1680,6 @@ const LONG_PRESS_MS = 420;
 const DOUBLE_TAP_MS = 300;
 const DOUBLE_TAP_SLOP = 32;
 const MOVE_TOLERANCE = 10;
-const SWIPE_START = 12;
-const SWIPE_MAX = 64;
-const SWIPE_TRIGGER = 48;
 /** A context menu this soon after a touch is the long press's, not a right click. */
 const TOUCH_CONTEXT_MENU_MS = 1500;
 
@@ -1684,7 +1698,8 @@ interface TouchGesture {
   x: number;
   y: number;
   moved: boolean;
-  swiping: boolean;
+  /** Which way this finger committed itself, once it moved far enough to say. */
+  swipe: SwipeAction | null;
   longPressed: boolean;
   content: boolean;
 }
@@ -1726,6 +1741,10 @@ const MessageRow = React.memo(function MessageRow({
   const canSelect = !msg.deleted_at && !isSystemMessage;
   const isLocalSend = msg.id.startsWith("tmp:") || Boolean(msg.pending || msg.checking || msg.failed);
   const canReply = canSelect && !isLocalSend;
+  // Forwarding is the list's to offer — no `onForward`, no «Переслать» in the
+  // menu — so the gesture asks the same question the menu does rather than a
+  // laxer one of its own.
+  const canForward = canSelect && !isLocalSend && capabilities.forward;
   const hasGroupReadInfo = groupReadInfo !== null;
 
   // Once per message rather than once per render, so the bubble's memo sees the
@@ -1793,7 +1812,7 @@ const MessageRow = React.memo(function MessageRow({
       x: event.clientX,
       y: event.clientY,
       moved: false,
-      swiping: false,
+      swipe: null,
       longPressed: false,
       content: isContentControl(event.target),
     };
@@ -1802,7 +1821,7 @@ const MessageRow = React.memo(function MessageRow({
     longPressTimerRef.current = window.setTimeout(() => {
       longPressTimerRef.current = null;
       const gesture = gestureRef.current;
-      if (!gesture || gesture.moved || gesture.swiping) return;
+      if (!gesture || gesture.moved || gesture.swipe) return;
       gesture.longPressed = true;
       suppressClickRef.current = true;
       clearTap();
@@ -1821,19 +1840,22 @@ const MessageRow = React.memo(function MessageRow({
       gesture.moved = true;
       clearLongPress();
     }
-    if (selectionMode || !canReply || gesture.longPressed) return;
-    // Horizontal and to the left, clearly more than it is vertical. The row
-    // lets the browser keep vertical panning (`touch-action: pan-y`), so a
-    // scroll never reaches here as a swipe.
-    if (!gesture.swiping && dx < -SWIPE_START && Math.abs(dx) > Math.abs(dy) * 1.4) {
-      gesture.swiping = true;
-      try {
-        event.currentTarget.setPointerCapture(event.pointerId);
-      } catch {
-        // A pointer that has already gone cannot be captured; the swipe still ends on pointerup.
+    if (selectionMode || gesture.longPressed) return;
+    // Clearly horizontal, and in a direction this message offers. The row lets
+    // the browser keep vertical panning (`touch-action: pan-y`), so a scroll
+    // never reaches here as a swipe.
+    if (!gesture.swipe) {
+      const started = swipeActionFor(dx, dy, { reply: canReply, forward: canForward });
+      if (started) {
+        gesture.swipe = started;
+        try {
+          event.currentTarget.setPointerCapture(event.pointerId);
+        } catch {
+          // A pointer that has already gone cannot be captured; the swipe still ends on pointerup.
+        }
       }
     }
-    if (gesture.swiping) moveSwipe(Math.max(-SWIPE_MAX, Math.min(0, dx + SWIPE_START)), true);
+    if (gesture.swipe) moveSwipe(swipeOffset(dx, gesture.swipe), true);
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -1841,13 +1863,15 @@ const MessageRow = React.memo(function MessageRow({
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     gestureRef.current = null;
     clearLongPress();
-    if (gesture.swiping) {
-      const reached = swipeRef.current <= -SWIPE_TRIGGER;
+    if (gesture.swipe) {
+      const acts = swipeCommits(swipeRef.current, gesture.swipe);
+      const action = gesture.swipe;
       moveSwipe(0, false);
       suppressClickRef.current = true;
-      if (reached) {
+      if (acts) {
         navigator.vibrate?.(8);
-        actions.reply(msg);
+        if (action === "reply") actions.reply(msg);
+        else actions.forward(msg);
       }
       return;
     }
@@ -1892,7 +1916,7 @@ const MessageRow = React.memo(function MessageRow({
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     gestureRef.current = null;
     clearLongPress();
-    if (gesture.swiping) moveSwipe(0, false);
+    if (gesture.swipe) moveSwipe(0, false);
   };
 
   // `touchend` follows `pointerup`, and cancelling it is what stops the browser
@@ -1939,7 +1963,7 @@ const MessageRow = React.memo(function MessageRow({
     }
   };
 
-  const swipeProgress = Math.min(1, -swipe.dx / SWIPE_TRIGGER);
+  const progress = swipeProgress(swipe.dx);
   const selectable = selectionMode && canSelect;
 
   return (
@@ -2062,14 +2086,31 @@ const MessageRow = React.memo(function MessageRow({
               onOpenGroupReadReceipts={handlers.onOpenGroupReadReceipts}
             />
           </div>
+          {/*
+            The arrow the gesture reveals, on the side the row is leaving: a
+            reply arrow at the right for a row going left, a forward arrow at
+            the left for a row going right. It is the only thing that says the
+            gesture exists, so it grows with the finger and is at full size
+            exactly when letting go would act.
+          */}
           {swipe.dx < 0 && (
             <span
               aria-hidden="true"
               data-message-swipe-reply="true"
               className="pointer-events-none absolute right-2 top-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--kub-cyan)_22%,transparent)] text-[color:var(--kub-cyan)]"
-              style={{ opacity: swipeProgress, transform: `translateY(-50%) scale(${0.6 + 0.4 * swipeProgress})` }}
+              style={{ opacity: progress, transform: `translateY(-50%) scale(${0.6 + 0.4 * progress})` }}
             >
               <KubIcon name="reply" size={18} />
+            </span>
+          )}
+          {swipe.dx > 0 && (
+            <span
+              aria-hidden="true"
+              data-message-swipe-forward="true"
+              className="pointer-events-none absolute left-2 top-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--kub-cyan)_22%,transparent)] text-[color:var(--kub-cyan)]"
+              style={{ opacity: progress, transform: `translateY(-50%) scale(${0.6 + 0.4 * progress})` }}
+            >
+              <KubIcon name="forward" size={18} />
             </span>
           )}
         </div>

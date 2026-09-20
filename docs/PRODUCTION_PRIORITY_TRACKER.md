@@ -1339,6 +1339,100 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     are old-bundle artefacts. **(d) first**, because it loses somebody's words
     without saying so.
 
+    ### The device pass, 2026-09-20: (a) measured, and (f) built
+
+    The owner's Android phone was connected over ADB with Telegram, Discord and
+    `com.kub.messenger` on it. The full record, with the device's units and the
+    method, is section 16 of `docs/operations/reference-clients.md`. Note the
+    installed build there is **0.1.5**, not the 0.1.7 the triage established as
+    Android stable — that is the owner's own phone, not the tester's.
+
+    **(a) is a size defect and nothing else. The face is exonerated by
+    measurement, and so is contrast.** Rendered on one screen, one theme, one
+    threshold: Telegram's message text has an x-height of **23 device px** and
+    ours **20**, which is 87%. But relative to its own em, Inter's x-height is
+    **0.544** against Roboto's **0.548** — within 1%, inside what the
+    measurement can resolve. So adopting «шрифт как в телеграме», the tester's
+    own first proposal, would change the readable height of a line by about
+    nothing; the whole 13% is the nominal size, 14px against Telegram's 16dp.
+    Contrast is ours to keep: 13.92:1 in dark against Telegram's 13.19:1, and
+    18.94:1 in light. Weight is 400 on both sides. Inter really is the face in
+    use — proved by laying the same string out with and without it, not by
+    `fonts.check`, which answers true for a family that never loaded.
+
+    Three findings come with it, and each is its own decision for the owner:
+
+    - **What we type is larger than what we read.** The body is 14px; the
+      composer is `text-base sm:text-sm`, so 16px on a phone. 16px is also
+      Telegram's default for *both*. That asymmetry is the likeliest reading of
+      «поле тесное» in (e), where the field itself turned out not to be broken.
+    - **Telegram's slider runs 12 to 30 — 75% to 187.5% — and we have no text
+      size setting at all.** The tester's «125%» is 20 on that scale, well
+      inside it. Read off the device by dragging the slider to each end and
+      restoring it to 16.
+    - **The face is a network dependency.** `Inter` is fetched from
+      `fonts.googleapis.com`, in the APK's bundled `index.html` as much as on
+      the web, and `display=swap` means the first paint is Roboto regardless.
+      A phone whose VPN has dropped — which is how the tester's own report
+      opens — reads the product in Roboto.
+
+    **What to do about (a) is put to the owner as two halves, not one.**
+    Measurement says both are warranted and neither substitutes for the other:
+
+    1. **Move the default.** 14px → 15px closes about half the gap to Telegram
+       and 16px closes all of it, at the cost of about one word per line. 16px
+       would also make the body agree with the composer, which is the second
+       finding above.
+    2. **Add a text-size setting.** «Слепой» outdoors in daylight is an
+       accessibility defect, not a taste disagreement, and no single default
+       answers it. Telegram's range is the reference; a smaller one — say 13 to
+       20 — would already cover the tester. This is also item 21's «(6) text
+       size» from the previous wave, so it is the second person to ask.
+
+    A third thing is worth knowing before either is chosen: **the system font
+    scale does not reach our text.** This device is set to 0.92 and our WebView
+    rendered 14px as 14px. Telegram is the same — it sizes in dp — so this is
+    not a divergence from the reference, but it does mean a reader who has
+    already enlarged everything on their phone gets no help from us.
+
+    **(f) is fixed, and it took two repairs because it had two causes.**
+    Committed as D-287.
+
+    - **The gesture.** Reply and forward are now a swipe left and a swipe
+      right on the message row, beside the long-press menu rather than instead
+      of it, so D-071 stands. A swipe is what reaches a photo at all: the tap
+      there belongs to the viewer, because the opener is a `<button>` and
+      `isContentControl` discards the tap that would have opened the menu.
+      **Telegram has no right-hand gesture** — measured, not recalled: a
+      300px drag right moves its bubble by zero pixels — so that half is ours,
+      and `artifacts/kub/src/lib/messageSwipe.ts` says so rather than claiming
+      it was adopted. Our commit distance, 48, turned out to be Telegram's
+      already (it fires between 46 and 50dp).
+    - **The forward target.** `ForwardModal` filtered the source chat out of
+      its own list, and in a private conversation the chat *with* that person
+      is the source — so the one person a message could not be forwarded to
+      was the person it was about: «И даже переслать тебе он не даёт. Только
+      другим людям.» The filter is gone and `forwardTargets` carries the
+      reason so nobody puts it back.
+
+    The boundary with (b) is deliberate and tested: a swipe on a **message
+    row** and a swipe inside an **open viewer** are different surfaces, because
+    the viewer is a layer that catches the finger before the row can see it.
+    The test that says so goes red the moment the viewer stops catching it.
+
+    Gates: typecheck clean across all five packages, unit **3689/3689**,
+    `tests/server` **144/144**, `message-touch-gestures` 7/7 and the media
+    viewer, hover and render-stability neighbours 14/15 at 390 and 1440 — the
+    one failure is `message-hover-actions`, a sign-in spec run against the
+    fixture host where no account exists, so that check went unrun rather than
+    passed. Production build proved by `sw.js build a2ecd376e5a7c1b2` and
+    `built in 9.07s`. Eight mutations of the swipe constants and seven of the
+    product are red, all written against literals.
+
+    Still open from the eight: **(a)'s two decisions above**, **(b)** the
+    conversation's own viewer passing no `sequence`, **(c)** HD, **(e)**
+    whether 140px is the right ceiling, **(h)** the forwarded-from name.
+
 
 47. `[ ]` Separating the kinds of conversation, so the list stops being
     noise. Asked for by the owner on 2026-09-20, and he framed it as something

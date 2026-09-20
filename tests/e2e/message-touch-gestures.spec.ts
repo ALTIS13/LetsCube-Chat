@@ -3,7 +3,16 @@ import { expect, test, type CDPSession, type Locator, type Page } from "@playwri
 /**
  * A message under a finger, from the owner's Telegram decisions of 2026-09-11
  * (D-071): one tap opens the menu, a double tap puts ❤️, and a second double
- * tap takes it off again — one reaction per person.
+ * tap takes it off again — one reaction per person. D-287 adds the horizontal
+ * half decided on 2026-09-20: a swipe left replies, a swipe right forwards,
+ * beside the long-press menu rather than instead of it.
+ *
+ * The swipe is why a photo is in this fixture. A tap on a photo belongs to the
+ * viewer — the opener is a `<button>`, so `isContentControl` discards the tap
+ * that would have opened the menu — and that is exactly what the tester of
+ * 2026-09-20 met: «Нельзя зажать месседж и выбрать ответить.» A horizontal
+ * swipe does not compete with that tap, which is the whole reason the gesture
+ * is the answer to it.
  *
  * The double tap is pinned where it failed: the last message of a conversation
  * held at its bottom. The reaction grows that bubble by a row of chips, and the
@@ -24,6 +33,17 @@ const CAPTURE_PATH = "/__qa/public-preview";
 const WINDOW_KEY = "__letscubePublicPreviewFixture";
 const READY = "data-public-preview-ready";
 const LAST = "Тогда отправляю на согласование";
+const PHOTO_CAPTION = "Схема второго этажа";
+
+/** A picture the fixture will accept: a `data:image/` address and nothing else. */
+function testCard(hue: number): string {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">` +
+    `<rect width="1200" height="900" fill="hsl(${hue} 45% 24%)"/>` +
+    `<circle cx="600" cy="450" r="200" fill="none" stroke="white" stroke-width="12"/>` +
+    `</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
 
 const FIXTURE = {
   currentUser: { name: "Максим", username: "maksim" },
@@ -47,6 +67,21 @@ const FIXTURE = {
     { sender: "Аня", text: "Кнопки вижу, выглядит аккуратно.", time: "09:34", own: false },
     { sender: "Борис", text: "Согласен, можно отправлять.", time: "09:37", own: false },
     { sender: "Аня", text: LAST, time: "09:40", own: false },
+  ],
+};
+
+/** The same conversation with the reader's own photo last, for the (f) case. */
+const PHOTO_FIXTURE = {
+  ...FIXTURE,
+  messages: [
+    ...FIXTURE.messages,
+    {
+      sender: "Максим",
+      text: PHOTO_CAPTION,
+      time: "09:42",
+      own: true,
+      image: { url: testCard(205), width: 1200, height: 900 },
+    },
   ],
 };
 
@@ -94,9 +129,118 @@ test.describe("a message under a finger", () => {
     await expect(page.locator("[data-action-menu]")).toBeVisible();
     await expect(bubble.locator("[data-reaction-chip]")).toHaveCount(0);
   });
+
+  test("a swipe left replies, and shows the arrow that says so before it does", async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "the drag goes through Chromium's own input pipeline");
+    await openFixture(page);
+    const row = page.locator("[data-message-id]").filter({ hasText: LAST }).last();
+    const cdp = await page.context().newCDPSession(page);
+    const start = await textPoint(row);
+
+    await drag(page, cdp, start, -70, { release: false });
+    await expect(row.locator("[data-message-swipe-reply]"), "nothing told the finger the gesture exists").toBeVisible();
+    await expect(row.locator("[data-message-swipe-forward]"), "the wrong arrow came out").toHaveCount(0);
+    await release(page, cdp);
+
+    await expect(page.locator(REPLY_BAR), "a swipe left did not reply").toBeVisible();
+    await expect(page.locator(FORWARD_PICKER), "a reply opened the forward picker").toHaveCount(0);
+  });
+
+  test("a swipe right forwards, and offers the conversation the message came from", async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "the drag goes through Chromium's own input pipeline");
+    await openFixture(page);
+    const row = page.locator("[data-message-id]").filter({ hasText: LAST }).last();
+    const cdp = await page.context().newCDPSession(page);
+    const start = await textPoint(row);
+
+    await drag(page, cdp, start, 70, { release: false });
+    await expect(row.locator("[data-message-swipe-forward]"), "nothing told the finger the gesture exists").toBeVisible();
+    await expect(row.locator("[data-message-swipe-reply]"), "the wrong arrow came out").toHaveCount(0);
+    await release(page, cdp);
+
+    const picker = page.locator(FORWARD_PICKER);
+    await expect(picker, "a swipe right did not open the forward picker").toBeVisible();
+    // The other half of D-287, in the tester's own words: the picker filtered
+    // the source chat out of its own list, and in a private conversation the
+    // chat with that person IS the source -- so the one person a message could
+    // not be forwarded to was the person it was about.
+    await expect(
+      picker.getByText(FIXTURE.activeChat.name, { exact: true }),
+      "the picker still refuses the conversation the message came from",
+    ).toBeVisible();
+    await expect(page.locator(REPLY_BAR), "a forward opened a reply").toHaveCount(0);
+  });
+
+  test("a swipe that stops short does nothing, in either direction", async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "the drag goes through Chromium's own input pipeline");
+    await openFixture(page);
+    const row = page.locator("[data-message-id]").filter({ hasText: LAST }).last();
+    const cdp = await page.context().newCDPSession(page);
+    const start = await textPoint(row);
+
+    // 12 of the 40 are spent starting the gesture, so the row travels 28 -- short of the 48 that acts.
+    await drag(page, cdp, start, -40);
+    await drag(page, cdp, start, 40);
+    await expect(page.locator(REPLY_BAR)).toHaveCount(0);
+    await expect(page.locator(FORWARD_PICKER)).toHaveCount(0);
+    await expect(row.locator("[data-message-swipe-reply]")).toHaveCount(0);
+    await expect(row.locator("[data-message-swipe-forward]")).toHaveCount(0);
+  });
+
+  test("on a photo, where the tap belongs to the viewer, both swipes still reach the actions", async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "the drag goes through Chromium's own input pipeline");
+    await openFixture(page, PHOTO_FIXTURE, PHOTO_CAPTION);
+    const row = page.locator("[data-message-id]").filter({ hasText: PHOTO_CAPTION }).last();
+    const cdp = await page.context().newCDPSession(page);
+
+    const box = await row.locator("img").first().boundingBox();
+    expect(box, "the photo has no box").not.toBeNull();
+    const onPhoto = { x: Math.round(box!.x + box!.width / 2), y: Math.round(box!.y + box!.height / 2) };
+
+    // The premise, and the tester's complaint: a tap there opens the viewer,
+    // so the menu a tap would have opened is never scheduled.
+    await page.touchscreen.tap(onPhoto.x, onPhoto.y);
+    await expect(page.locator(VIEWER), "a tap on the photo did not open the viewer").toBeVisible();
+    await expect(page.locator("[data-action-menu]"), "a tap on the photo opened the menu too").toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(page.locator(VIEWER)).toHaveCount(0);
+
+    await drag(page, cdp, onPhoto, -70);
+    await expect(page.locator(REPLY_BAR), "a swipe on a photo could not reply").toBeVisible();
+    await page.locator('[data-testid="composer-reply-cancel"]').click();
+
+    await drag(page, cdp, onPhoto, 70);
+    await expect(page.locator(FORWARD_PICKER), "a swipe on a photo could not forward").toBeVisible();
+  });
+
+  test("inside the open viewer, left and right belong to the pictures and reach no message", async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "the drag goes through Chromium's own input pipeline");
+    await openFixture(page, PHOTO_FIXTURE, PHOTO_CAPTION);
+    const row = page.locator("[data-message-id]").filter({ hasText: PHOTO_CAPTION }).last();
+    const cdp = await page.context().newCDPSession(page);
+    const box = await row.locator("img").first().boundingBox();
+    expect(box, "the photo has no box").not.toBeNull();
+    await page.touchscreen.tap(Math.round(box!.x + box!.width / 2), Math.round(box!.y + box!.height / 2));
+
+    const viewer = page.locator(VIEWER);
+    await expect(viewer).toBeVisible();
+    const frame = await viewer.boundingBox();
+    expect(frame, "the viewer has no box").not.toBeNull();
+    const middle = { x: Math.round(frame!.x + frame!.width / 2), y: Math.round(frame!.y + frame!.height / 2) };
+
+    // The boundary this test exists for. A swipe on a message row and a swipe
+    // inside an open viewer are different surfaces: the viewer is a layer over
+    // the conversation, so the row never sees this finger. That is what lets
+    // the viewer keep left and right for moving between pictures while the row
+    // uses the same two directions for reply and forward.
+    await drag(page, cdp, middle, -160);
+    await drag(page, cdp, middle, 160);
+    await expect(page.locator(REPLY_BAR), "a swipe in the viewer replied to a message").toHaveCount(0);
+    await expect(page.locator(FORWARD_PICKER), "a swipe in the viewer forwarded a message").toHaveCount(0);
+  });
 });
 
-async function openFixture(page: Page) {
+async function openFixture(page: Page, fixture: unknown = FIXTURE, lastText: string = LAST) {
   // The fixture refuses a message stamped later than "now", so the clock is
   // pinned exactly as the sibling fixture specs pin it.
   await page.clock.setFixedTime(new Date("2026-09-03T18:00:00"));
@@ -104,7 +248,7 @@ async function openFixture(page: Page) {
     ([key, fixture]) => {
       (window as unknown as Record<string, unknown>)[key as string] = fixture;
     },
-    [WINDOW_KEY, FIXTURE] as const,
+    [WINDOW_KEY, fixture] as const,
   );
   const response = await page.goto(CAPTURE_PATH, { waitUntil: "domcontentloaded" }).catch(() => null);
   const ready = response
@@ -121,7 +265,7 @@ async function openFixture(page: Page) {
       "The DEV preview capture route did not report ready. Start the dev server with VITE_PUBLIC_PREVIEW_FIXTURE=1.",
     );
   }
-  await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: LAST })).toBeVisible();
+  await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: lastText })).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
   // The conversation's entry settles over several frames; a tap lands after it.
   await page.waitForTimeout(1_000);
@@ -146,4 +290,42 @@ async function doubleTap(page: Page, cdp: CDPSession, point: { x: number; y: num
   await page.waitForTimeout(60);
   await touch("touchStart");
   await touch("touchEnd");
+}
+
+/** The reply bar above the composer, the forward picker's list, and the viewer. */
+const REPLY_BAR = '[data-testid="composer-reply-preview"]';
+const FORWARD_PICKER = '[data-forward-picker="true"]';
+const VIEWER = '[data-testid="media-viewer-stage"]';
+
+/**
+ * A finger that presses, drags horizontally in steps, and lets go.
+ *
+ * The steps matter: a single jump from press to release is not a drag at all,
+ * and the row would never see the movement that starts the gesture.
+ */
+async function drag(
+  page: Page,
+  cdp: CDPSession,
+  from: { x: number; y: number },
+  dx: number,
+  options: { release?: boolean } = {},
+) {
+  const move = (x: number, type: "touchStart" | "touchMove") =>
+    cdp.send("Input.dispatchTouchEvent", {
+      type,
+      touchPoints: [{ x, y: from.y, id: 1, radiusX: 4, radiusY: 4, force: 1 }],
+    });
+  await move(from.x, "touchStart");
+  const steps = 10;
+  for (let i = 1; i <= steps; i += 1) {
+    await move(Math.round(from.x + (dx * i) / steps), "touchMove");
+    await page.waitForTimeout(16);
+  }
+  if (options.release === false) return;
+  await release(page, cdp);
+}
+
+async function release(page: Page, cdp: CDPSession) {
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await page.waitForTimeout(300);
 }

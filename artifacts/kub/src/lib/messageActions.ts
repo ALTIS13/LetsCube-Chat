@@ -193,6 +193,33 @@ export function deleteDialogOption(input: {
 }
 
 /** «Переслать сообщение», «Переслать 2 сообщения», «Переслать 5 сообщений». */
+/** A chat the forward picker can offer, as little of it as the decision needs. */
+export interface ForwardTarget {
+  id: string;
+  name: string | null;
+}
+
+/**
+ * Which chats the forward picker lists for what has been typed into its search.
+ *
+ * It narrows by the search and by nothing else — in particular it does not
+ * take the conversation the message came from out of the list, which is the
+ * D-287 repair. The picker excluded it until 2026-09-20, and in a private
+ * conversation the chat *with* the person you are talking to is the source, so
+ * the one person a message could never be forwarded to was them: «И даже
+ * переслать тебе он не даёт. Только другим людям.» Telegram offers the current
+ * chat like any other, and `ChatWindow` already handles the case — the forward
+ * draft simply appears above the composer that is already open.
+ *
+ * A chat with no name matches no search. It is still offered while the search
+ * is empty, because it is a real chat; there is just nothing in it to match.
+ */
+export function forwardTargets<T extends ForwardTarget>(chats: readonly T[], query: string): T[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [...chats];
+  return chats.filter((chat) => (chat.name ?? "").toLowerCase().includes(needle));
+}
+
 export function forwardDraftTitle(count: number): string {
   if (count <= 1) return "Переслать сообщение";
   return `Переслать ${count} ${selectRussianPluralForm(count, MESSAGES)}`;

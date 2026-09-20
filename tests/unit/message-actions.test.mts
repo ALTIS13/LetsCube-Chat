@@ -7,6 +7,7 @@ import {
   deleteDialogTitle,
   desktopMessageActions,
   forwardDraftTitle,
+  forwardTargets,
   messageActionKind,
   phoneMessageActions,
   selectionCountLabel,
@@ -266,4 +267,43 @@ test("a popover opens where it was asked to, and on the other side when it does 
   });
   assert.equal(nearTop.side, "below");
   assert.equal(nearTop.top, 74);
+});
+
+/**
+ * D-287, the tester of 2026-09-20: «И даже переслать тебе он не даёт. Только
+ * другим людям.» The picker filtered the source chat out of its own list, and
+ * in a private conversation the chat *with* the person you are talking to is
+ * the source — so the one person a message could never be forwarded to was
+ * them. Telegram offers the current chat like any other; so does this now.
+ *
+ * The exclusion lived in the component, so what this function can be asked is
+ * only whether it invents one of its own. That it does not is the point: the
+ * picker hands it every chat there is, and the list it gets back is narrowed
+ * by the search and by nothing else. The conversation actually appearing in
+ * the rendered picker is held by `message-touch-gestures.spec.ts`.
+ */
+test("the picker's list is narrowed by the search and by nothing else", () => {
+  const chats = [
+    { id: "source", name: "Аня" },
+    { id: "other", name: "Борис" },
+    { id: "group", name: "Команда проекта" },
+    { id: "nameless", name: null },
+  ];
+  assert.deepEqual(
+    forwardTargets(chats, "").map((chat) => chat.id),
+    ["source", "other", "group", "nameless"],
+  );
+  assert.deepEqual(forwardTargets(chats, "  ").map((chat) => chat.id), ["source", "other", "group", "nameless"]);
+});
+
+test("the search matches a name whatever its case, and a chat with no name matches nothing", () => {
+  const chats = [
+    { id: "source", name: "Аня" },
+    { id: "other", name: "Борис" },
+    { id: "group", name: "Команда проекта" },
+    { id: "nameless", name: null },
+  ];
+  assert.deepEqual(forwardTargets(chats, "ан").map((chat) => chat.id), ["source", "group"]);
+  assert.deepEqual(forwardTargets(chats, "АНЯ").map((chat) => chat.id), ["source"]);
+  assert.deepEqual(forwardTargets(chats, "зз"), []);
 });

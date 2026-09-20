@@ -1314,7 +1314,10 @@ export function MessageInput({
         )}
 
         {!isEditing && replyTo && (
-          <div className="flex items-center gap-2 rounded-xl px-3 py-2 mb-2 bg-[var(--kub-raised)] border-l-2 border-[color:var(--kub-cyan)]">
+          <div
+            data-testid="composer-reply-preview"
+            className="flex items-center gap-2 rounded-xl px-3 py-2 mb-2 bg-[var(--kub-raised)] border-l-2 border-[color:var(--kub-cyan)]"
+          >
             <KubIcon name="reply" size={13} tone="accent" className="flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="text-xs font-semibold text-[color:var(--kub-accent-text)]">
@@ -1324,6 +1327,7 @@ export function MessageInput({
             </div>
             <button
               onClick={onCancelReply}
+              data-testid="composer-reply-cancel"
               aria-label="Отменить ответ"
               className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg kub-raise-hover flex-shrink-0 text-[color:var(--kub-muted)]"
             >
