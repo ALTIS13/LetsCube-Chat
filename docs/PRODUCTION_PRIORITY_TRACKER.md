@@ -446,6 +446,8 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     No signed candidate or production activation. Next: Task 5 operational gates,
     then staged schema/candidate and physical QA. Immediate
     wake recovery, aggregate capacity and retention are explicit activation gates.
+    Implementation `9d059c4a` is pushed and web-deployed: exact healthy image,
+    previous-replica retirement and public entry/control markers verified.
     See the
     [staged implementation plan](superpowers/plans/2026-09-21-android-call-delivery.md) and
     [Task 2 evidence](operations/2026-09-21-android-call-delivery.md) and

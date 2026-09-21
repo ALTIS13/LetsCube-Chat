@@ -20,6 +20,10 @@ Tracker 32-D1 Task 4 source/debug complete, independent review approved.
   D-222 remains open; no unrelated CSS or weakened expectation was included.
 - No SQL/Edge activation, real FCM sends, personal-phone install, release signing,
   version bump or catalog publication. Task 5 retains operational and physical gates.
+- Web implementation `9d059c4a` deployed: exact healthy image, old replica gone;
+  public `index-CYPDJM8O.js` has both the new revalidation marker and brand control.
+  Entry/CSS and five public routes return 200. Known rolling asset mismatch was
+  reobserved during overlap and resolved after retirement; not fixed in this batch.
 
 ## 2026-09-21 - Disabled Android Call Dispatcher
 

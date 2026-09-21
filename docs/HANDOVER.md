@@ -136,7 +136,9 @@ whole deployment** — no bot has registered a command yet.
 coordinator owns the Task 5 operational/release/physical gates next. Independent
 review approved; 4021 unit tests, 76 browser cases, ten Android runtime cases and
 a separate process-death OS-expiry check pass. No signed candidate or production
-call activation yet. [Task 4 report](operations/2026-09-21-android-call-native.md)
+call activation yet. Implementation `9d059c4a` is pushed; actual web image,
+health, old-replica retirement and public content markers verified.
+[Task 4 report](operations/2026-09-21-android-call-native.md)
 is the durable resume evidence. Tracker 49, D-284 and the
 D-088 address-subscription regression are verified and deployed in `804101f5`
 (runtime commit `dc59ea28`). This includes outgoing ring updates after public

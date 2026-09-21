@@ -714,6 +714,12 @@ passed. This remains a deployment asset-continuity risk, not a new call-shell
 defect; see `docs/operations/2026-09-21-voice-continuation.md` for the verified
 post-deploy baseline. No production data was captured.
 
+**Reobserved again during `9d059c4a` on 2026-09-21:** two document-to-JavaScript
+probes received 404 while old/new healthy replicas overlapped. Once the old
+replica retired, the exact new entry, CSS and five public routes returned 200.
+This batch does not fix deployment asset continuity; evidence is in
+`docs/operations/2026-09-21-android-call-native.md`.
+
 # Fix batch 5, 2026-09-02 — D-008 closed
 
 **Fixed.** The single-line condition is gone from `canInline`. Whether the meta

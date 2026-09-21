@@ -171,6 +171,23 @@ separately authorized signed candidate. Apply each owner-specific migration only
 after a verified backup and raising transaction checks; deploy Edge separately,
 keep both dispatch gates off, and activate narrowly only after physical checks.
 
+## Web Deployment Evidence
+
+Implementation commit `9d059c4afda1594254c074d498a792651a92b63c` was pushed to
+`main`. Coolify completed its ordinary web auto-deploy; the running container's
+image matched that full commit, was healthy, and the previous `7e0a9bcc` replica
+was absent. Before deployment, public `index-Chr49y24.js` contained the LETSCUBE
+positive control but not `revalidateConsumedAction`. Afterwards,
+`index-CYPDJM8O.js` contained both. Its stylesheet and `/`, `/privacy`, `/support`,
+`/login`, `/register` returned 200. No authenticated production content was read.
+
+During the overlap of old/new replicas, two document-to-entry probes returned
+404 for the referenced JavaScript. This repeats the already recorded asset
+continuity risk; it resolved after replica retirement, not because of a code
+repair in this batch. It remains open, alongside the unrelated D-222 stress
+layout case. These HTTP/content checks are deployment evidence, not physical
+Android delivery or a signed native release. No Edge or database rollout occurred.
+
 Primary references: [Capacitor data-only delivery](https://capacitorjs.com/docs/apis/push-notifications),
 [Firebase Android receipt](https://firebase.google.com/docs/cloud-messaging/android/receive-messages),
 [Android 8 notification timeout](https://developer.android.com/about/versions/oreo/android-8.0),
