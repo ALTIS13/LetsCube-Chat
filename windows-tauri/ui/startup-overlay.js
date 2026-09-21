@@ -1,5 +1,6 @@
 (() => {
   if (window.location.origin !== __LETSCUBE_PRODUCTION_ORIGIN__) return;
+  if (window.top !== window) return;
 
   const eventName = __LETSCUBE_STARTUP_EVENT__;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -7,7 +8,9 @@
   const minimumVisibleDuration = 2_200;
   const successHoldDuration = 900;
   const completionKey = "letscube:startup-overlay-complete";
-  if (window.sessionStorage.getItem(completionKey) === "1") return;
+  try {
+    if (window.sessionStorage.getItem(completionKey) === "1") return;
+  } catch { /* Storage is optional; it is not a readiness signal. */ }
   const historyKey = "__letscubeStartupOverlayHistory";
   const history = [];
   Object.defineProperty(window, historyKey, {
@@ -16,6 +19,19 @@
     writable: false,
     value: history,
   });
+  let suppressed = false;
+  let abortOverlay = () => { suppressed = true; };
+  const onBootFailed = () => {
+    if (document.documentElement.dataset.kubBootState === "failed") abortOverlay();
+  };
+  window.addEventListener("letscube:boot-failed", onBootFailed);
+  window.addEventListener("letscube:native-navigation", () => abortOverlay());
+  // A missing receipt or native callback must not indefinitely hide web retry.
+  // This removes an obstruction only; it never invents successful progress.
+  const readinessDeadline = window.setTimeout(() => abortOverlay(), 30_000);
+  let latestSnapshot = null;
+  let applySnapshot = (snapshot) => { latestSnapshot = snapshot; };
+  window.addEventListener(eventName, (event) => applySnapshot(event.detail));
 
   /* Same rule and same shape as startup.js: a SHA-256 or nothing, shown as the
    * leading four bytes with an ellipsis that says it is a prefix. This scene
@@ -33,6 +49,10 @@
   };
 
   const mount = () => {
+    if (suppressed || document.documentElement.dataset.kubBootState === "failed") {
+      window.clearTimeout(readinessDeadline);
+      return;
+    }
     if (!document.body || document.querySelector('[data-testid="production-startup-overlay"]')) return;
     const host = document.createElement("div");
     host.dataset.testid = "production-startup-overlay";
@@ -55,6 +75,13 @@
     const successText = "Рабочее пространство готово";
     const mountedAt = performance.now();
     let removalStarted = false;
+    abortOverlay = () => {
+      if (suppressed) return;
+      suppressed = true;
+      host.remove();
+      window.clearTimeout(readinessDeadline);
+      history.push(Object.freeze({ removed: true, connected: false }));
+    };
 
     const renderIdentity = (node, label, lines, note) => {
       node.querySelector("[data-fingerprint-label]").textContent = label;
@@ -109,10 +136,12 @@
       successHoldDuration,
     }));
 
-    window.addEventListener(eventName, (event) => {
-      const snapshot = event.detail;
+    applySnapshot = (snapshot) => {
+      if (suppressed) return;
       if (!snapshot || typeof snapshot.stage !== "string" || typeof snapshot.connected !== "boolean") return;
-      const connected = snapshot.stage === "complete" && snapshot.connected === true;
+      const receipt = window.__letscubeReadiness?.();
+      const connected = snapshot.stage === "complete" && snapshot.connected === true
+        && receipt?.state === "ready" && receipt.documentId === snapshot.documentId;
       host.dataset.stage = snapshot.stage;
       host.dataset.connected = String(connected);
       host.dataset.verdict = connected
@@ -140,18 +169,28 @@
 
       if (!connected || removalStarted) return;
       removalStarted = true;
-      window.sessionStorage.setItem(completionKey, "1");
+      window.clearTimeout(readinessDeadline);
       const elapsed = performance.now() - mountedAt;
       const holdDuration = Math.max(minimumVisibleDuration - elapsed, successHoldDuration, 0);
+      const stillReady = () => {
+        const current = window.__letscubeReadiness?.();
+        return current?.state === "ready" && current.documentId === snapshot.documentId;
+      };
       window.setTimeout(() => {
+        if (suppressed) return;
+        if (!stillReady()) { abortOverlay(); return; }
         requestAnimationFrame(() => host.classList.add("is-fading"));
         window.setTimeout(() => {
+          if (suppressed) return;
+          if (!stillReady()) { abortOverlay(); return; }
           host.remove();
+          try { window.sessionStorage.setItem(completionKey, "1"); } catch { /* Optional. */ }
           history.push(Object.freeze({ removed: true }));
           window.dispatchEvent(new CustomEvent("letscube://startup-overlay-removed"));
         }, fadeDuration);
       }, holdDuration);
-    });
+    };
+    if (latestSnapshot) applySnapshot(latestSnapshot);
   };
 
   if (document.readyState === "loading") {

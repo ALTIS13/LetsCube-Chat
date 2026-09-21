@@ -1,5 +1,28 @@
 # QA Results
 
+## 2026-09-22 - Pre-React Recovery And Current-Document Readiness
+
+D-298 web/source repair; actual native lifecycle and new signed artifacts remain
+open. [Contract, checkpoint and limits](operations/2026-09-22-boot-recovery.md).
+
+- Baseline four expected failures after healthy guest controls; explicit retry,
+  session/URL retention, stalled entry, late commit, runtime exception and offline
+  recovery now pass: development 14/14 and built Chromium/WebKit 14/14.
+- Independent web-controller tests 33/33, including 15 in-memory mutants. Native
+  listener-before-HTML ordering reproduced and fixed, four combined-script probes.
+- Settings/chat-glass/Escape regression 42/42; full unit 4068 pass, zero failures,
+  one existing jq-1.7.1 skip. Typecheck, focused Biome and diff checks pass.
+- Windows targeted JS 50/50; offline Cargo 82 pass, four existing live-registry
+  tests ignored. Three guard mutations caught; no installed native-client proof.
+- Final independent native review clear: 17 browser, nine actual Rust-model and
+  four late-commit/retry cases, with reviewed fingerprints unchanged.
+- Production-mode fixture build `3fb8dcc84de14632`, 10.04s. Dummy localhost
+  public connection values, no preview flag; not a native distributable. Existing
+  chunk-size/source-map/mixed-import and MSVC linker warnings remain.
+- Guest recovery pixels inspected at 1440/390, both themes. No authenticated
+  screenshots, real account writes, SQL, native install or release publication.
+  Existing liquid-glass material unchanged.
+
 ## 2026-09-21 - Interface Stability Without A Material Redesign
 
 D-296/D-297 source and browser QA complete, independently reviewed.

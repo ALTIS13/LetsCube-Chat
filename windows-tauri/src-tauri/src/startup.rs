@@ -10,6 +10,7 @@ pub enum StartupStage {
     UpdateCheck,
     ProductionNavigation,
     WorkspaceReady,
+    WorkspaceUnconfirmed,
     Complete,
     RecoverableError,
     CriticalUpdateRequired,
@@ -20,6 +21,7 @@ pub enum StartupStage {
 pub enum StartupErrorCode {
     Network,
     TlsOrigin,
+    AppBoot,
     /// The chain validated and the origin matched, but the leaf certificate is
     /// not the one recorded on an earlier connection. Deliberately distinct
     /// from `TlsOrigin`: that one means the connection was never trusted and
@@ -47,6 +49,8 @@ pub struct StartupSnapshot {
     pub stage: StartupStage,
     pub connected: bool,
     pub error_code: Option<StartupErrorCode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub document_id: Option<String>,
     /// Omitted entirely when the shell has nothing measured to report, so a
     /// build that never reaches the TLS stage emits exactly the payload it
     /// emitted before this field existed.
@@ -70,6 +74,7 @@ pub struct StartupState {
     /// successful connection records the certificate it actually served, so a
     /// later change asks again.
     accepted_peer: Option<String>,
+    document_id: Option<String>,
 }
 
 impl StartupState {
@@ -79,6 +84,7 @@ impl StartupState {
             error_code: None,
             peer: None,
             accepted_peer: None,
+            document_id: None,
         }
     }
 
@@ -169,6 +175,54 @@ impl StartupState {
         Ok(())
     }
 
+    /// A reload must earn readiness again, but cannot bypass preflight or a
+    /// certificate/update gate. Keep the measured peer across document loads.
+    pub fn begin_workspace_document(&mut self) -> bool {
+        if !matches!(
+            self.stage,
+            StartupStage::ProductionNavigation
+                | StartupStage::WorkspaceReady
+                | StartupStage::WorkspaceUnconfirmed
+                | StartupStage::Complete
+        ) && !(self.stage == StartupStage::RecoverableError
+            && self.error_code == Some(StartupErrorCode::AppBoot))
+        {
+            return false;
+        }
+        self.stage = StartupStage::ProductionNavigation;
+        self.error_code = None;
+        self.document_id = None;
+        true
+    }
+
+    pub fn acknowledge_workspace(&mut self, document_id: String) -> bool {
+        // A delayed entry can commit after the web watchdog exposed retry.
+        // Only AppBoot is recoverable here; TLS/network/update gates are not.
+        if self.stage == StartupStage::RecoverableError
+            && self.error_code == Some(StartupErrorCode::AppBoot)
+        {
+            self.begin_workspace_document();
+        }
+        if self.transition(StartupStage::WorkspaceReady).is_err() {
+            return false;
+        }
+        self.document_id = Some(document_id);
+        self.transition(StartupStage::Complete).is_ok()
+    }
+
+    /// A bounded observation window expiring says nothing about whether the
+    /// web app will commit later. Do not label a usable late app as failed.
+    pub fn expire_workspace_readiness(&mut self) {
+        if self.stage == StartupStage::ProductionNavigation
+            || (self.stage == StartupStage::RecoverableError
+                && self.error_code == Some(StartupErrorCode::AppBoot))
+        {
+            self.stage = StartupStage::WorkspaceUnconfirmed;
+            self.error_code = None;
+            self.document_id = None;
+        }
+    }
+
     pub fn require_critical_update(
         &mut self,
         channel: UpdateChannel,
@@ -220,6 +274,7 @@ impl StartupState {
             stage: self.stage,
             connected: self.stage == StartupStage::Complete,
             error_code: self.error_code,
+            document_id: self.document_id.clone(),
             peer: self.peer.clone(),
         }
     }
@@ -235,6 +290,101 @@ impl Default for StartupState {
 mod tests {
     use super::*;
     use crate::updater::UpdateChannel;
+
+    #[test]
+    fn document_readiness_never_bypasses_preflight_or_security_failures() {
+        for stage in [
+            StartupStage::Boot,
+            StartupStage::NetworkCheck,
+            StartupStage::TlsOriginCheck,
+            StartupStage::UpdateCheck,
+            StartupStage::CriticalUpdateRequired,
+        ] {
+            let mut state = StartupState::new();
+            state.stage = stage;
+            assert!(!state.begin_workspace_document());
+            assert!(!state.acknowledge_workspace("fixture".into()));
+            assert!(!state.snapshot().connected);
+        }
+        for error in [
+            StartupErrorCode::Network,
+            StartupErrorCode::TlsOrigin,
+            StartupErrorCode::PeerChanged,
+        ] {
+            let mut state = StartupState::new();
+            state.fail(error).unwrap();
+            assert!(!state.begin_workspace_document());
+            assert!(!state.acknowledge_workspace("fixture".into()));
+        }
+    }
+
+    #[test]
+    fn reload_and_boot_retry_must_earn_a_new_receipt_without_changing_the_peer() {
+        use crate::readiness::{DocumentAck, DocumentState, Readiness};
+        let mut state = StartupState::new();
+        for stage in [
+            StartupStage::NetworkCheck,
+            StartupStage::TlsOriginCheck,
+            StartupStage::UpdateCheck,
+            StartupStage::ProductionNavigation,
+        ] {
+            state.transition(stage).unwrap();
+        }
+        state.set_peer(identity("measured-peer", None));
+        let mut gate = Readiness::default();
+        let first = gate.start();
+        gate.page_finished();
+        assert_eq!(state.snapshot().stage, StartupStage::ProductionNavigation);
+        assert!(!state.snapshot().connected);
+        let ack = DocumentAck {
+            document_id: "00000000-0000-4000-8000-000000000001".into(),
+            state: DocumentState::Ready,
+            loaded: true,
+        };
+        assert_eq!(gate.observe(first, &ack), Some(DocumentState::Ready));
+        assert!(state.acknowledge_workspace(ack.document_id.clone()));
+        assert!(state.snapshot().connected);
+        assert_eq!(
+            state.snapshot().document_id.as_deref(),
+            Some("00000000-0000-4000-8000-000000000001")
+        );
+        gate.invalidate();
+        assert!(state.begin_workspace_document());
+        assert!(!state.snapshot().connected);
+        assert_eq!(state.snapshot().document_id, None);
+        assert_eq!(gate.observe(first, &ack), None);
+        state.fail(StartupErrorCode::AppBoot).unwrap();
+        assert!(state.acknowledge_workspace("00000000-0000-4000-8000-000000000002".into()));
+        assert_eq!(state.snapshot().stage, StartupStage::Complete);
+        assert_eq!(state.peer().unwrap().observed_sha256, "measured-peer");
+    }
+
+    #[test]
+    fn deadline_is_unconfirmed_not_app_failure_and_late_ack_cannot_invent_native_success() {
+        use crate::readiness::{DocumentAck, DocumentState, Readiness};
+        let mut state = StartupState::new();
+        state.stage = StartupStage::ProductionNavigation;
+        let mut gate = Readiness::default();
+        let generation = gate.start();
+        gate.page_finished();
+        state.fail(StartupErrorCode::AppBoot).unwrap();
+        assert!(gate.expire(generation));
+        state.expire_workspace_readiness();
+        assert_eq!(state.snapshot().stage, StartupStage::WorkspaceUnconfirmed);
+        assert_eq!(state.snapshot().error_code, None);
+        assert!(!state.snapshot().connected);
+        assert_eq!(
+            gate.observe(generation, &DocumentAck {
+                document_id: "00000000-0000-4000-8000-000000000001".into(),
+                state: DocumentState::Ready,
+                loaded: true,
+            }),
+            None
+        );
+        assert!(!state.acknowledge_workspace("late".into()));
+        assert!(state.begin_workspace_document());
+        assert_eq!(state.snapshot().stage, StartupStage::ProductionNavigation);
+    }
 
     #[test]
     fn startup_only_reaches_connected_after_every_real_stage() {

@@ -131,17 +131,24 @@ whole deployment** — no bot has registered a command yet.
 
 ## 4. Where to start
 
-**Active checkpoint, 2026-09-21 (Codex):** owner Codex, main checkout
-`D:\CodexProjects\LetsCube-Chat`, interface-stability repair on `01d18dd0`.
-The owner's latest priority is disappearing/misaligned UI without changing
-Claude's liquid-glass material. D-296 settings resize/draft/modal-order failures
-and D-297 async profile placement are repaired and independently reviewed.
-Final settings matrix 24/24, anchored-layer matrix 28/28, full unit 4035 pass
-with one existing jq skip; build and typecheck pass. Web publication follows the
-normal image/content verification path; consult the actual image when resuming.
-Next: D-298 pre-React recovery and actual isolated native lifecycle QA. Physical
-all-platform stability and updated signed Android artifacts are not yet proved.
-[Current evidence and remaining platform gaps](operations/2026-09-21-interface-stability.md).
+**Active checkpoint, 2026-09-22 (Codex):** owner Codex, main checkout
+`D:\CodexProjects\LetsCube-Chat`, D-298 recovery batch on `0813bd05`.
+Pre-React failures now expose an explicit same-URL retry without clearing sessions
+or drafts. Current-document Windows readiness no longer treats document load as
+React readiness; native failure/deadline cannot cover web recovery indefinitely.
+Liquid-glass material is unchanged. Web matrix 14/14 in both development and built
+artifacts; settings/chat/Escape regression 42/42; full unit 4068 pass, one existing
+jq skip; Windows JS 50/50 and offline Rust 82 pass, four existing ignored tests.
+Typecheck and production-mode build pass. Web publication uses exact running-image
+and before/after content proof; consult the actual image when resuming.
+Next: isolated actual WebView2/Android lifecycle fault injection, then separately
+authorized native candidate/release. No signed EXE/APK issued by this source batch;
+Android still embeds its older bundle. Physical all-platform stability is not proved.
+[Current evidence and remaining platform gaps](operations/2026-09-22-boot-recovery.md).
+
+D-296 settings resize/draft/modal-order and D-297 async profile placement were
+published in `0813bd05`; their valid evidence remains in the
+[preceding report](operations/2026-09-21-interface-stability.md).
 
 **Previous checkpoint, complete:** Task 5 Step 1 from `0e2e0535`.
 Fresh full SQL backup restored offline; four owner-specific migrations applied,

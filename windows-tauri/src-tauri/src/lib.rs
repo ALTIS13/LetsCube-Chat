@@ -1,4 +1,5 @@
 pub mod autostart;
+mod readiness;
 pub mod startup;
 pub mod storage;
 pub mod updater;
@@ -7,9 +8,10 @@ use std::borrow::Cow;
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
-use std::time::Duration;
+use std::sync::{Condvar, Mutex};
+use std::time::{Duration, Instant};
 
+use readiness::{DocumentAck, DocumentState, Readiness};
 use serde::Deserialize;
 use startup::{PeerIdentity, StartupErrorCode, StartupSnapshot, StartupStage, StartupState};
 use tauri::menu::{Menu, MenuItem};
@@ -59,6 +61,7 @@ static LAUNCH_STARTS_HIDDEN: AtomicBool = AtomicBool::new(false);
 static QA_OFFLINE_FAILURE_EMITTED: AtomicBool = AtomicBool::new(false);
 
 struct StartupController(Mutex<StartupState>);
+struct ReadinessController(Mutex<Readiness>, Condvar);
 
 struct PendingNotificationRoute(Mutex<Option<String>>);
 
@@ -115,7 +118,7 @@ fn is_local_startup_url(url: &Url) -> bool {
     url.as_str() == BUNDLED_STARTUP_URL
 }
 
-fn require_production_main(window: &WebviewWindow) -> Result<(), &'static str> {
+fn require_production_main<R: Runtime>(window: &WebviewWindow<R>) -> Result<(), &'static str> {
     if window.label() != "main"
         || window
             .url()
@@ -592,9 +595,13 @@ fn production_overlay_script() -> String {
 
 fn initialization_script() -> String {
     format!(
-        "{}\n{}\n{}",
+        "{}\n{}\n{}\n{}",
         startup_runtime_script(),
         desktop_bridge_script(),
+        include_str!("../../ui/app-readiness.js").replace(
+            "__LETSCUBE_PRODUCTION_ORIGIN__",
+            &serde_json::to_string(PRODUCTION_ORIGIN).expect("production origin serializes"),
+        ),
         production_overlay_script()
     )
 }
@@ -1082,7 +1089,9 @@ fn emit_startup_snapshot<R: Runtime>(app: &AppHandle<R>) {
         serde_json::to_string(&snapshot),
     ) {
         let _ = main.eval(format!(
-            "window.dispatchEvent(new CustomEvent({STARTUP_EVENT:?}, {{ detail: {payload} }}));"
+            "(() => {{ const snapshot = {payload}; const receipt = window.__letscubeReadiness?.();
+             if (snapshot.connected && (receipt?.state !== 'ready' || receipt.documentId !== snapshot.documentId)) return;
+             window.dispatchEvent(new CustomEvent({STARTUP_EVENT:?}, {{ detail: snapshot }})); }})();"
         ));
     }
 }
@@ -1156,6 +1165,138 @@ fn classify_request_error(error: &reqwest::Error) -> StartupErrorCode {
     } else {
         StartupErrorCode::Network
     }
+}
+
+fn invalidate_workspace<R: Runtime>(app: &AppHandle<R>) {
+    let controller = app.state::<ReadinessController>();
+    let document_id = if let Ok(mut gate) = controller.0.lock() {
+        let document_id = gate.document_id().map(str::to_owned);
+        gate.invalidate();
+        controller.1.notify_all();
+        MAIN_READY.store(false, Ordering::Release);
+        if let Ok(mut state) = app.state::<StartupController>().0.lock() {
+            state.begin_workspace_document();
+        }
+        document_id
+    } else {
+        None
+    };
+    // The guarded eval may run after the next document was created. Seal only
+    // the previous receipt, including a navigation that preserves its DOM.
+    if let (Some(document_id), Some(main)) = (document_id, app.get_webview_window("main")) {
+        let document_id = serde_json::to_string(&document_id).expect("document id serializes");
+        let _ = main.eval(format!(
+            "if (window.__letscubeReadiness?.().documentId === {document_id})
+             window.dispatchEvent(new CustomEvent('letscube:native-navigation'));"
+        ));
+    }
+}
+
+fn watch_workspace_document<R: Runtime>(window: WebviewWindow<R>) {
+    let app = window.app_handle();
+    let generation = {
+        let controller = app.state::<ReadinessController>();
+        let Ok(mut gate) = controller.0.lock() else {
+            return;
+        };
+        let controller = app.state::<StartupController>();
+        let Ok(mut state) = controller.0.lock() else {
+            return;
+        };
+        if !state.begin_workspace_document() {
+            return;
+        }
+        MAIN_READY.store(false, Ordering::Release);
+        gate.start()
+    };
+    // No renderer command or new capability: native reads a bounded, per-document
+    // receipt. Never block the UI thread waiting for ExecuteScript's callback.
+    std::thread::spawn(move || {
+        let app = window.app_handle();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while Instant::now() < deadline {
+            if !app
+                .state::<ReadinessController>()
+                .0
+                .lock()
+                .ok()
+                .is_some_and(|gate| gate.is_current(generation))
+            {
+                return;
+            }
+            if require_production_main(&window).is_err() {
+                return;
+            }
+            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+            let script = format!(
+                "(() => {{ if (window.top !== window || location.origin !== {PRODUCTION_ORIGIN:?}) return null;
+                 return window.__letscubeReadiness?.() ?? null; }})()"
+            );
+            if window
+                .eval_with_callback(script, move |value| {
+                    let _ = sender.try_send(value);
+                })
+                .is_err()
+            {
+                break;
+            }
+            let ack = receiver
+                .recv_timeout(Duration::from_millis(500))
+                .ok()
+                .and_then(|value| serde_json::from_str::<DocumentAck>(&value).ok());
+            if require_production_main(&window).is_err() {
+                return;
+            }
+            if let Some(ack) = ack {
+                let controller = app.state::<ReadinessController>();
+                let Ok(mut gate) = controller.0.lock() else {
+                    return;
+                };
+                if let Some(result) = gate.observe(generation, &ack) {
+                    let controller = app.state::<StartupController>();
+                    let Ok(mut state) = controller.0.lock() else {
+                        return;
+                    };
+                    if result == DocumentState::Ready {
+                        MAIN_READY.store(
+                            state.acknowledge_workspace(ack.document_id),
+                            Ordering::Release,
+                        );
+                    } else {
+                        let _ = state.fail(StartupErrorCode::AppBoot);
+                    }
+                    PREFLIGHT_RUNNING.store(false, Ordering::Release);
+                    let settled = !gate.is_current(generation);
+                    drop(state);
+                    drop(gate);
+                    emit_startup_snapshot(app);
+                    if settled {
+                        return;
+                    }
+                }
+            }
+            let controller = app.state::<ReadinessController>();
+            let Ok(gate) = controller.0.lock() else {
+                return;
+            };
+            if !gate.is_current(generation) {
+                return;
+            }
+            drop(controller.1.wait_timeout(gate, Duration::from_millis(100)));
+        }
+        let controller = app.state::<ReadinessController>();
+        let Ok(mut gate) = controller.0.lock() else {
+            return;
+        };
+        if gate.expire(generation) {
+            if let Ok(mut state) = app.state::<StartupController>().0.lock() {
+                state.expire_workspace_readiness();
+            }
+            PREFLIGHT_RUNNING.store(false, Ordering::Release);
+            drop(gate);
+            emit_startup_snapshot(app);
+        }
+    });
 }
 
 async fn run_preflight<R: Runtime>(app: AppHandle<R>) {
@@ -1353,6 +1494,7 @@ fn build_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     builder
         .on_navigation(move |url| {
             if is_local_startup_url(url) || is_allowed_navigation(url) {
+                invalidate_workspace(&navigation_handle);
                 true
             } else {
                 if is_safe_external_url(url) {
@@ -1373,21 +1515,27 @@ fn build_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         })
         .on_page_load(|window, payload| {
             let app = window.app_handle();
-            if payload.event() != PageLoadEvent::Finished {
-                return;
-            }
             if is_local_startup_url(payload.url()) {
-                emit_startup_snapshot(app);
+                if payload.event() == PageLoadEvent::Finished {
+                    emit_startup_snapshot(app);
+                }
                 return;
             }
-            if !is_allowed_navigation(payload.url()) {
+            if !is_allowed_navigation(payload.url()) || require_production_main(&window).is_err() {
                 return;
             }
-            if transition_startup(app, StartupStage::WorkspaceReady)
-                && transition_startup(app, StartupStage::Complete)
-            {
-                MAIN_READY.store(true, Ordering::Release);
-                PREFLIGHT_RUNNING.store(false, Ordering::Release);
+            match payload.event() {
+                PageLoadEvent::Started => watch_workspace_document(window.clone()),
+                PageLoadEvent::Finished => {
+                    let controller = app.state::<ReadinessController>();
+                    if let Ok(mut gate) = controller.0.lock() {
+                        gate.page_finished();
+                        controller.1.notify_all();
+                    }
+                    // Publish the measured certificate while React is still
+                    // pending. Finished itself never acknowledges a workspace.
+                    emit_startup_snapshot(app);
+                }
             }
         })
         .build()?;
@@ -1857,6 +2005,10 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(StartupController(Mutex::new(StartupState::new())))
+        .manage(ReadinessController(
+            Mutex::new(Readiness::default()),
+            Condvar::new(),
+        ))
         .manage(PendingNotificationRoute(Mutex::new(None)))
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if let Some(route) = notification_route_from_args(&args) {

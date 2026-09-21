@@ -1,4 +1,5 @@
 import { createRoot } from "react-dom/client";
+import { useEffect, type ReactNode } from "react";
 import App from "./App";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { initMonitoring } from "@/lib/monitoring";
@@ -18,10 +19,22 @@ const rootElement = document.getElementById("root")!;
 rootElement.dataset.kubBootId = createBootId();
 
 createRoot(rootElement).render(
-  <AppErrorBoundary>
-    <App />
-  </AppErrorBoundary>,
+  <BootReady>
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
+  </BootReady>,
 );
+
+// A loaded document/module is not a rendered app. A caught error's recovery
+// surface also counts as rendered; an import failure never reaches this effect.
+function BootReady({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    rootElement.dataset.kubAppReady = "true";
+    window.dispatchEvent(new CustomEvent("letscube:app-rendered"));
+  }, []);
+  return children;
+}
 
 function createBootId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {

@@ -497,9 +497,13 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     response half's existing vehicle; do not build a second one beside it.
     **2026-09-21 continuation:** the owner prioritised disappearing UI while
     preserving Claude's liquid glass. D-296 settings lifecycle and D-297 async
-    profile placement passed implementation/review and browser QA; D-298 pre-React recovery
-    is the next distinct issue. Browser fixtures are not a native device matrix.
-    [Current repair checkpoint and platform limits](operations/2026-09-21-interface-stability.md).
+    profile placement were published in `0813bd05`.
+    **2026-09-22 continuation:** D-298 pre-React retry and Windows current-document
+    acknowledgement implemented. Built/development browser matrices each 14/14,
+    interface regression 42/42; Windows JS 50/50 and Rust 82 pass, four ignored.
+    Next is isolated actual native lifecycle proof, not another visual redesign.
+    No signed native artifact issued; browser fixtures are not a device matrix.
+    [Current repair checkpoint and platform limits](operations/2026-09-22-boot-recovery.md).
 35. `[~]` Standing: **«where you were» is state the product owns and
     restores.** Asked for by the owner on 2026-09-20, as the principle behind
     the update complaint rather than as a feature of it: «В этом и смысл что

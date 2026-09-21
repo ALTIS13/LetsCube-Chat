@@ -98,6 +98,91 @@
   </head>
   <body class="antialiased h-full overflow-hidden">
     <div id="root"></div>
+    <!-- This surface and its controller must not depend on the module/CSS they rescue. -->
+    <style id="kub-boot-style">
+      #kub-boot-recovery {
+        --boot-bg: #050B18;
+        --boot-text: #F5F7FB;
+        --boot-muted: #8FA9C4;
+        --boot-accent: #4d8bd0;
+        --boot-button-text: #050B18;
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        box-sizing: border-box;
+        display: flex;
+        overflow: auto;
+        padding: max(32px, var(--kub-safe-top, 64px)) max(24px, var(--kub-safe-right, 64px)) max(32px, var(--kub-safe-bottom, 64px)) max(24px, var(--kub-safe-left, 64px));
+        background: var(--kub-bg, var(--boot-bg));
+        color: var(--kub-text, var(--boot-text));
+        font: 16px/1.5 Inter, system-ui, sans-serif;
+        letter-spacing: 0;
+      }
+      html.light #kub-boot-recovery { --boot-bg: #E9EFF6; --boot-text: #07111F; --boot-muted: #52677D; --boot-accent: #2d6fac; --boot-button-text: #fff; }
+      #kub-boot-recovery .boot-content { width: 100%; max-width: 400px; margin: auto; text-align: center; overflow-wrap: anywhere; }
+      #kub-boot-recovery img { display: block; width: 56px; height: 56px; margin: 0 auto 24px; }
+      #kub-boot-recovery h1 { font: inherit; font-size: 24px; line-height: 1.3; font-weight: 650; margin: 0 0 12px; }
+      #kub-boot-recovery p { color: var(--kub-muted, var(--boot-muted)); margin: 0 0 24px; }
+      #kub-boot-recovery button { box-sizing: border-box; min-height: 44px; max-width: 100%; padding: 10px 20px; border: 1px solid transparent; border-radius: 8px; background: var(--kub-cyan, var(--boot-accent)); color: var(--boot-button-text); font: inherit; font-weight: 600; cursor: pointer; }
+      #kub-boot-recovery button:focus-visible { outline: 2px solid var(--kub-text, var(--boot-text)); outline-offset: 4px; }
+      #kub-boot-recovery button[hidden] { display: none; }
+    </style>
+    <section id="kub-boot-recovery" aria-labelledby="kub-boot-title">
+      <div class="boot-content">
+        <img src="/icons/icon-192.png" alt="" width="56" height="56" />
+        <div role="status" aria-live="polite">
+          <h1 id="kub-boot-title">Загружаем LETSCUBE</h1>
+          <p id="kub-boot-message">Подготавливаем приложение…</p>
+        </div>
+        <button id="kub-boot-retry" type="button" hidden>Повторить загрузку</button>
+        <noscript><p>Для работы LETSCUBE включите JavaScript в настройках браузера.</p></noscript>
+      </div>
+    </section>
+    <script id="kub-boot-controller">
+      (function () {
+        var root = document.documentElement;
+        var surface = document.getElementById("kub-boot-recovery");
+        var retry = document.getElementById("kub-boot-retry");
+        var finished = false;
+        root.dataset.kubBootState = "loading";
+        var timer = window.setTimeout(failed, 12000);
+
+        function failed() {
+          if (finished) return;
+          window.clearTimeout(timer);
+          root.dataset.kubBootState = "failed";
+          document.getElementById("kub-boot-title").textContent = "Не удалось загрузить LETSCUBE";
+          document.getElementById("kub-boot-message").textContent = navigator.onLine === false
+            ? "Нет подключения к сети. Подключитесь к интернету и повторите загрузку."
+            : "Проверьте подключение к интернету и повторите загрузку.";
+          retry.hidden = false;
+          window.dispatchEvent(new CustomEvent("letscube:boot-failed"));
+        }
+        function error(event) {
+          if (event.target === window || (event.target && event.target.tagName === "SCRIPT" && event.target.type === "module")) failed();
+        }
+        function ready() {
+          var app = document.getElementById("root");
+          if (!app || app.dataset.kubAppReady !== "true" || !app.childElementCount) return;
+          finished = true;
+          window.clearTimeout(timer);
+          window.removeEventListener("error", error, true);
+          window.removeEventListener("unhandledrejection", failed);
+          window.removeEventListener("letscube:app-rendered", ready);
+          root.dataset.kubBootState = "ready";
+          surface.remove();
+          document.getElementById("kub-boot-style").remove();
+        }
+        retry.addEventListener("click", function () {
+          // Keep auth callbacks, chat/message routes, sessions and drafts intact.
+          retry.disabled = true;
+          window.location.reload();
+        });
+        window.addEventListener("error", error, true);
+        window.addEventListener("unhandledrejection", failed);
+        window.addEventListener("letscube:app-rendered", ready);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -23409,7 +23409,7 @@ Regression: `tests/e2e/anchored-layer-resize-stability.spec.ts` covers the real
 cold profile and both shared layer variants: 28/28; independent runtime review
 10/10. Native artifact parity remains separate. See the current report for gates.
 
-## D-298 `[ ]` A failure before React mounts leaves no recovery controls
+## D-298 `[~]` A failure before React mounts leaves no recovery controls
 
 2026-09-21, owner Codex. Current-source synthetic Chromium reproduction in
 8/8 width/theme cases: abort the entry module after a successful guest control,
@@ -23417,10 +23417,25 @@ document load completes with empty root and no controls; releasing the fault
 and externally reloading restores login. This is a browser finding, not proof
 of an observed failure in an installed native client.
 
-Native source risk: Tauri treats PageLoadEvent::Finished as workspace readiness
+Baseline native source risk: Tauri treats PageLoadEvent::Finished as workspace readiness
 without a rendered-app acknowledgement. Android embeds its bundle, so a failed
 remote entry download is not an equivalent physical trigger there. Follow-up:
 bounded pre-React recovery/retry, successful boot and same-session retry controls,
 then actual isolated WebView2/Android lifecycle fault injection. Preserve the
 existing connection material and never claim document load proves application
 readiness. Not fixed by D-296/D-297; no native release issued in this batch.
+
+2026-09-22 source repair: dependency-free HTML recovery with explicit same-URL
+retry, immediate script-failure feedback and a 12-second stalled-entry deadline.
+A late React commit removes it; authenticated state, drafts and callback/route
+parameters are retained. Built and development Chromium/WebKit each 14/14, both
+themes at 1440/390; small offline/CSS-absent recovery also covered. Independent
+controller suite 33/33 includes 15 mutations.
+
+Windows source requires a current-document rendered-root receipt plus Finished
+and loaded, with stale-navigation rejection and bounded 30-second observation.
+The overlay releases recovery without inventing success. An app committing after
+the native deadline remains usable; native status honestly stays unconfirmed.
+JS 50/50, Rust 82 pass/four existing ignored. Actual WebView2/Android lifecycle
+fault injection and native release parity remain open, hence `[~]`, not `[x]`.
+[Implementation and evidence limits](operations/2026-09-22-boot-recovery.md).
