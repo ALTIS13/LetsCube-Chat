@@ -168,6 +168,11 @@
 
 ### Task 4: Build the Signed Android Native Candidate
 
+Source/debug checkpoint, 2026-09-21: native receipt and session binding are complete,
+independently reviewed and verified. A signed candidate is NOT built.
+Version/signing/publication remain Task 5's explicit release gate.
+[Current evidence](../../operations/2026-09-21-android-call-native.md).
+
 **Files:**
 - Create: `android/app/src/main/java/com/kub/messenger/VoiceCallMessagingService.java`
 - Create: `android/app/src/main/java/com/kub/messenger/VoiceCallNotificationContract.java`
@@ -182,19 +187,24 @@
 - Consumes: protocol version 1 data-only ring/cancel events.
 - Produces: an importance-4 `calls` channel, deterministic per-ring notification identity, local absolute-expiry timer, cancel handling, and safe internal chat routing.
 
-- [ ] **Step 1: Characterize Capacitor delegation and write failing native contract tests**
+- [x] **Step 1: Characterize Capacitor delegation and write failing native contract tests**
 
   Replace the plugin manifest's `MESSAGING_EVENT` service with the LETSCUBE service. Delegate non-voice messages and token refresh to Capacitor unchanged. Reject malformed, stale, future-start, self-recipient, recipient-user mismatch, recipient-session mismatch, or unsupported events before notification creation. Tests cover cancel-before-ring and reordered duplicate delivery: a cancel writes a per-ring tombstone retained until absolute expiry, a late ring with that key stays suppressed, an older cancel cannot remove a newer ring in the same channel, and repeated ring/cancel events are idempotent.
 
-- [ ] **Step 2: Implement immediate local handling**
+- [x] **Step 2: Implement immediate local handling**
 
   Display the call notification from payload data only, without network fetches. Ring and cancel resolve the same deterministic notification id; a new start time in the same channel resolves a different id. Tombstones and active notifications are keyed by the full ring generation, not only channel. The local timer removes the card and tombstone at `expires_at` even when cancel is late or absent.
 
-- [ ] **Step 3: Bind push registration to the current server session**
+  API 26+ OS timeout removes an already posted card after process death; API 34
+  two-process instrumentation proved this independently of the app timer.
+  Private tombstones expire logically at the deadline and are lazily pruned on
+  next access when the process is absent. API 24-25 capability stays disabled.
+
+- [x] **Step 3: Bind push registration to the current server session**
 
   Registration uses the exact eight-argument overload and sends `p_voice_call_protocol: 1`; the server still derives and validates the session claim. After authenticated login/session refresh, write the returned verified `{ recipient_id, recipient_session_id }` binding to native-private storage before call events become eligible; replace it atomically when the account/session changes and clear it on logout, auth invalidation, and local account removal. Re-register on authenticated resume so an upgraded legacy device becomes eligible without token exposure or local raw-token storage. Native receipt compares both payload UUIDs with this binding before displaying anything.
 
-- [ ] **Step 4: Keep full-screen presentation out of the first activation**
+- [x] **Step 4: Keep full-screen presentation out of the first activation**
 
   The first candidate uses a high-importance heads-up call notification. `USE_FULL_SCREEN_INTENT` is not added until store eligibility and Android policy acceptance are separately demonstrated; this does not block killed-process notification delivery.
 

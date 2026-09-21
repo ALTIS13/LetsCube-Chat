@@ -8,9 +8,12 @@ against.
 
 ## Client Runtime Boundary, 2026-09-21
 
-One configured-root auth observer now survives public navigation. Its context
-contains user identity and loading state only; voice services must not create
-another auth subscription or infer identity from a stale profile row.
+The configured-root voice-transport auth observer survives public navigation.
+Its context contains user identity and loading state only; transport consumers
+use this context rather than inferring identity from a stale profile row.
+Separately, the Android-only native registration owner observes the exact auth
+session UUID and verified RPC response. Its lifecycle also spans public/auth
+routes; it never grants transport or microphone authority.
 
 The active call keeps mute, leave and return-to-chat controls on public pages.
 Outgoing answer/cancel signalling remains subscribed there. Fresh public/auth
@@ -22,9 +25,12 @@ generation fences delayed ring/answer/stop and join continuations, so they canno
 operate as the next signed-in person.
 
 This does not implement a fresh incoming ring on every public route, or closed
-Android delivery. The latter has an unused data-only payload contract and a
-[staged plan](../superpowers/plans/2026-09-21-android-call-delivery.md), not an
-active FCM dispatcher. [Verification and rollout evidence](2026-09-21-voice-continuation.md).
+Android delivery in production. The payload, schema proposals, disabled dispatcher
+and native receipt/session-binding source are complete, not activated. Native
+debug instrumentation proves receipt and OS-card expiry, not real FCM transport.
+[Staged plan](../superpowers/plans/2026-09-21-android-call-delivery.md),
+[Task 4 evidence and remaining gates](2026-09-21-android-call-native.md),
+[transport rollout evidence](2026-09-21-voice-continuation.md).
 
 ## The shape of it
 

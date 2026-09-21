@@ -17,6 +17,8 @@ import {
 } from "@/hooks/useVoiceRing";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { useIncomingRingGate } from "@/hooks/useSessionDevices";
+import { useNativeForegroundRing } from "@/hooks/useNativeVoiceCalls";
+import { nativeForegroundRingKey } from "@/lib/platform/nativeVoiceContract";
 import { useCallSoundPriming, useVoiceRingSound } from "@/hooks/useCallSound";
 import { cn } from "@/lib/utils";
 
@@ -149,6 +151,10 @@ export function VoiceCallRing() {
   }, [channelId, startedAt]);
 
   const view = voiceRingView({ pick, who, busy });
+  useNativeForegroundRing(
+    nativeForegroundRingKey(channelId, startedAt, view.visible && view.direction === "incoming"),
+    selfId,
+  );
 
   /**
    * The sound, driven by the ring's own state.

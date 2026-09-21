@@ -1,5 +1,26 @@
 # QA Results
 
+## 2026-09-21 - Android Call Native Receipt And Session Binding
+
+Tracker 32-D1 Task 4 source/debug complete, independent review approved.
+[Detailed evidence, review fixes and limits](operations/2026-09-21-android-call-native.md).
+
+- Final unit suite 4021/4021, no skips; native client focused 86/86 with 16
+  behavioral mutations; browser voice-ring 76/76 on 1440/390 and both themes.
+- Java state 38/38, standalone state/mutation harness 39/39 and 16 killed mutants;
+  actual API 34 runtime 10/10. Separate two-process test proves OS expiry while
+  the app process is absent, not FCM delivery after process death.
+- Actual Edge payload to compiled Java parser: 27 wire cases. `safeOpenChat`
+  account-race regression 9/9, with five guard-removal mutations killed.
+- Typecheck, web build, Android sync/debug/test builds and diff check pass.
+  Final web build `eb115acc102a060e`, 10.13s; APK index/entry byte-equal to it,
+  six Firebase initialization resource names present; no secret values exposed.
+- Session-device suite: 25 pass, two desktop-only checks skipped on mobile, one
+  forced-260px title clipping failure reproduced on unchanged baseline `7e0a9bcc`.
+  D-222 remains open; no unrelated CSS or weakened expectation was included.
+- No SQL/Edge activation, real FCM sends, personal-phone install, release signing,
+  version bump or catalog publication. Task 5 retains operational and physical gates.
+
 ## 2026-09-21 - Disabled Android Call Dispatcher
 
 Tracker 32-D1 Task 3 passed independent spec/quality review. SQL remains a proposal,

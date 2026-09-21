@@ -12,6 +12,7 @@ import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { usePushForegroundSession } from "@/hooks/usePushForegroundSession";
 import { useBanState } from "@/hooks/useBanState";
 import { usePushNotificationNavigation } from "@/hooks/usePush";
+import { useNativeVoiceCalls } from "@/hooks/useNativeVoiceCalls";
 import { isNativeApp, supportsBrowserPush } from "@/lib/platform/capabilities";
 import { isDesktopShell } from "@/lib/platform/desktop";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
@@ -539,6 +540,7 @@ function PublicRoutes() {
  */
 function ConfiguredRootRoutes({ location }: { location: string }) {
   const auth = useUser();
+  useNativeVoiceCalls();
   const initialLocation = useRef(location);
   const bootEligibility = useRef<"pending" | "allowed" | "denied">("pending");
   const bootClaimed = useRef(false);

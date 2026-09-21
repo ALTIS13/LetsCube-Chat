@@ -12,6 +12,8 @@ const UNAVAILABLE_CHAT_MESSAGE = "Чат удалён или больше нед
 type OpenChatOptions = {
   unavailableMessage?: string;
   unavailableTitle?: string;
+  /** An action may expire or belong to a replaced auth session while RLS is checked. */
+  canCommit?: () => boolean;
 };
 
 export async function safeOpenChat(
@@ -20,10 +22,13 @@ export async function safeOpenChat(
 ): Promise<boolean> {
   const normalizedChatId = chatId?.trim();
   if (!normalizedChatId) return false;
+  if (options.canCommit?.() === false) return false;
 
   const state = useAppStore.getState();
   const currentUserId = state.currentUser?.id;
   const hasChatInStore = state.chats.some((chat) => chat.id === normalizedChatId);
+  const stillCurrent = () =>
+    useAppStore.getState().currentUser?.id === currentUserId && options.canCommit?.() !== false;
 
   if (!currentUserId) {
     handleUnavailableChat(normalizedChatId, options);
@@ -31,6 +36,7 @@ export async function safeOpenChat(
   }
 
   const canAccess = await canAccessChat(normalizedChatId, currentUserId);
+  if (!stillCurrent()) return false;
   if (canAccess === false) {
     handleUnavailableChat(normalizedChatId, options);
     return false;
@@ -45,6 +51,7 @@ export async function safeOpenChat(
 
   if (!hasChatInStore) {
     const hydrated = await hydrateChatSummary(normalizedChatId, currentUserId);
+    if (!stillCurrent()) return false;
     if (hydrated) {
       const latestState = useAppStore.getState();
       latestState.setChats(
@@ -58,6 +65,7 @@ export async function safeOpenChat(
     }
   }
 
+  if (!stillCurrent()) return false;
   useAppStore.getState().setSelectedChatId(normalizedChatId);
   return true;
 }

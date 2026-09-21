@@ -439,13 +439,18 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     291 server and 89 focused push tests, actual PG17/PostgREST/Edge integration,
     forced registration/claim races and exact rollback. Nothing is currently
     unavailable. Realme is authorized but has microG and an old APK without Firebase
-    resources, with notifications denied; it is not delivery proof. Next: Task 4
-    native handler/binding, then staged schema/candidate and physical QA. Immediate
+    resources, with notifications denied; it is not delivery proof. Task 4 source/debug
+    is now complete and independently reviewed: session-bound native receipt,
+    cancellation/expiry and guarded tap routing, 4021 unit tests, 76 browser cases,
+    ten actual emulator runtime cases and separate process-death OS-expiry proof.
+    No signed candidate or production activation. Next: Task 5 operational gates,
+    then staged schema/candidate and physical QA. Immediate
     wake recovery, aggregate capacity and retention are explicit activation gates.
     See the
     [staged implementation plan](superpowers/plans/2026-09-21-android-call-delivery.md) and
     [Task 2 evidence](operations/2026-09-21-android-call-delivery.md) and
-    [Task 3 evidence](operations/2026-09-21-android-call-dispatch.md).
+    [Task 3 evidence](operations/2026-09-21-android-call-dispatch.md) and
+    [Task 4 evidence](operations/2026-09-21-android-call-native.md).
 
 33. `[ ]` Documents and the rest of what a message can carry, opened **in the
     chat** the way other media already is. Asked for by the owner on

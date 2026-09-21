@@ -296,13 +296,14 @@ test("push says whether it works here, not what the build is missing", () => {
   assert.match(read("lib/platform/capabilities.ts"), /return ANDROID_PUSH_UNAVAILABLE;/u);
   const native = read("lib/platform/nativePush.ts");
   assert.match(native, /return ANDROID_PUSH_UNAVAILABLE;/u);
-  assert.match(native, /console\.error\("native push setup error:", text\)/u);
+  assert.match(native, /console\.error\("native push setup failed"\)/u);
+  assert.doesNotMatch(native, /console\.(?:error|warn|log)\([^;\n]*\b(?:text|error|payload|token)\s*[,)]/u);
   assert.match(native, /message: PUSH_ENABLE_FAILED/u);
 
   const push = read("hooks/usePush.ts");
   assert.match(push, /setMessage\(PUSH_UNAVAILABLE\)/u);
   assert.match(push, /setMessage\(BROWSER_PUSH_UNAVAILABLE\)/u);
-  assert.match(push, /message: PUSH_UNAVAILABLE/u);
+  assert.doesNotMatch(push, /console\.(?:error|warn|log)\([^;\n]*register_push_device[^;\n]*,\s*error\)/u);
   // The statuses are untouched: they are how the row and the rest of the hook
   // know what happened, and only the words were the defect.
   assert.match(push, /setStatus\("migration_missing"\)/u);

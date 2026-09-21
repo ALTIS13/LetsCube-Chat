@@ -1,5 +1,16 @@
 # Native Push Plan
 
+## Android Calls Checkpoint, 2026-09-21
+
+Ordinary message/task/system push and transient call delivery have separate
+owners. The new session-bound call receiver, cancellation/expiry and guarded tap
+bridge passed source/debug review and isolated Android runtime checks. It is NOT
+in a signed release and its backend dispatch is NOT activated. No current call
+delivery success can be inferred from the historical ordinary-push results below.
+[Current evidence and Task 5 gates](../operations/2026-09-21-android-call-native.md).
+
+## Existing Ordinary Push Foundation
+
 LETSCUBE has a browser/PWA push foundation and an Android FCM delivery
 foundation:
 

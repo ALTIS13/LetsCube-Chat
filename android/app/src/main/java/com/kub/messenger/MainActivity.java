@@ -1,5 +1,6 @@
 package com.kub.messenger;
 
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.webkit.WebSettings;
@@ -12,6 +13,12 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(VoiceCallsPlugin.class);
+        Intent intent = getIntent();
+        if (VoiceCallRuntime.isVoiceIntent(intent)) {
+            VoiceCallRuntime.get(this).captureIntent(intent);
+            setIntent(new Intent(this, MainActivity.class).setAction(Intent.ACTION_MAIN));
+        }
         super.onCreate(savedInstanceState);
         refuseAlgorithmicDarkening();
         markNightModeInUserAgent();
@@ -76,12 +83,31 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onResume() {
+        VoiceCallRuntime.get(this).setResumed(true);
         super.onResume();
         // Published here as well as at creation: the script evaluated during
         // `onCreate` runs against whatever document exists at that moment, and
         // Capacitor then loads the app over it, taking the value with it. By
         // `onResume` the page is the app's own.
         publishNightMode();
+    }
+
+    @Override
+    public void onPause() {
+        VoiceCallRuntime.get(this).setResumed(false);
+        super.onPause();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        if (VoiceCallRuntime.isVoiceIntent(intent)) {
+            VoiceCallRuntime.get(this).captureIntent(intent);
+            Intent safe = new Intent(this, MainActivity.class).setAction(Intent.ACTION_MAIN);
+            setIntent(safe);
+            super.onNewIntent(safe);
+            return;
+        }
+        super.onNewIntent(intent);
     }
 
     @Override

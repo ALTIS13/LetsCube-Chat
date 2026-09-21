@@ -2,6 +2,8 @@ import { PushNotifications } from "@capacitor/push-notifications";
 import { isNativeAndroid } from "./capabilities";
 import { ANDROID_PUSH_UNAVAILABLE, PUSH_ENABLE_FAILED } from "../plainMessages";
 import { parseMessageNotificationProjection } from "../messageNotificationProjection";
+import { isReservedNativeVoiceData } from "./nativeVoiceContract";
+import { waitForNativePushRegistration } from "./nativePushRegistration";
 
 export type NativePushResultStatus =
   | "native_unavailable"
@@ -22,8 +24,6 @@ export type NativePushTokenRegistration = (token: string) => Promise<NativePushR
 export type NativePushTokenUnregister = (token: string) => Promise<void>;
 
 type PushNotificationsPlugin = typeof PushNotifications;
-type PluginListenerHandle = Awaited<ReturnType<PushNotificationsPlugin["addListener"]>>;
-
 const NATIVE_PUSH_TIMEOUT_MS = 20_000;
 
 /** D-132 (F2): see the note on `nativePushPendingMessage` in `capabilities.ts`. */
@@ -60,6 +60,7 @@ export async function getNativePushPermissionStatus(): Promise<NativePushResult>
 
 export async function enableNativeAndroidPush(
   registerToken: NativePushTokenRegistration,
+  requestPermission = true,
 ): Promise<NativePushResult> {
   if (!isNativeAndroid()) {
     return { status: "native_unavailable", message: "Native push доступен только в Android-приложении." };
@@ -73,7 +74,7 @@ export async function enableNativeAndroidPush(
     await ensureAndroidNotificationChannels(push);
 
     let permission = await push.checkPermissions();
-    if (permission.receive !== "granted") {
+    if (permission.receive !== "granted" && requestPermission) {
       permission = await push.requestPermissions();
     }
 
@@ -81,7 +82,11 @@ export async function enableNativeAndroidPush(
       return { status: "native_denied", message: nativePushPermissionHelp() };
     }
 
-    return await waitForRegistration(push, registerToken);
+    return await waitForNativePushRegistration(push, registerToken, {
+      schedule: (callback) => window.setTimeout(callback, NATIVE_PUSH_TIMEOUT_MS),
+      cancel: (id) => window.clearTimeout(id),
+      onError: mapNativePushSetupError,
+    });
   } catch (error) {
     return mapNativePushSetupError(error);
   }
@@ -90,6 +95,7 @@ export async function enableNativeAndroidPush(
 export async function disableNativeAndroidPush(
   token: string | null,
   unregisterToken: NativePushTokenUnregister,
+  canCommit: () => boolean = () => true,
 ): Promise<NativePushResult> {
   if (!isNativeAndroid()) {
     return { status: "native_unavailable", message: "Native push доступен только в Android-приложении." };
@@ -100,7 +106,9 @@ export async function disableNativeAndroidPush(
 
   try {
     const push = PushNotifications;
+    if (!canCommit()) return { status: "native_inactive", message: "" };
     if (token) await unregisterToken(token);
+    if (!canCommit()) return { status: "native_inactive", message: "" };
     await push.unregister();
     return { status: "native_inactive", message: "Push-уведомления Android выключены для этого устройства." };
   } catch (error) {
@@ -171,60 +179,9 @@ async function ensureAndroidNotificationChannels(push: PushNotificationsPlugin):
   }
 }
 
-async function waitForRegistration(
-  push: PushNotificationsPlugin,
-  registerToken: NativePushTokenRegistration,
-): Promise<NativePushResult> {
-  let registrationHandle: PluginListenerHandle | null = null;
-  let errorHandle: PluginListenerHandle | null = null;
-
-  return new Promise<NativePushResult>((resolve) => {
-    let settled = false;
-    const finish = (result: NativePushResult) => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeoutId);
-      void registrationHandle?.remove();
-      void errorHandle?.remove();
-      resolve(result);
-    };
-
-    const timeoutId = window.setTimeout(() => {
-      // D-132 (F2): «Проверьте настройку Firebase/FCM» asked the reader to check
-      // something they cannot see, on a device where they could not act on the
-      // answer. The state is what it is — registration did not finish — and the
-      // log carries the rest.
-      console.error("native push registration timed out after", NATIVE_PUSH_TIMEOUT_MS, "ms");
-      finish({ status: "native_setup_missing", message: PUSH_ENABLE_FAILED });
-    }, NATIVE_PUSH_TIMEOUT_MS);
-
-    Promise.all([
-      push.addListener("registration", async (token) => {
-        try {
-          const backendResult = await registerToken(token.value);
-          finish(backendResult ?? {
-            status: "native_active",
-            message: "Push-уведомления Android включены для этого устройства.",
-          });
-        } catch (error) {
-          finish(mapNativePushSetupError(error));
-        }
-      }),
-      push.addListener("registrationError", (error) => {
-        finish(mapNativePushSetupError(error));
-      }),
-    ])
-      .then(([registration, registrationError]) => {
-        registrationHandle = registration;
-        errorHandle = registrationError;
-        return push.register();
-      })
-      .catch((error) => finish(mapNativePushSetupError(error)));
-  });
-}
-
 function getNotificationTarget(data: unknown): string | null {
   if (!data || typeof data !== "object") return null;
+  if (isReservedNativeVoiceData(data)) return null;
   const payload = data as Record<string, unknown>;
   const messageProjection = parseMessageNotificationProjection(payload);
   if (messageProjection) return messageProjection.route;
@@ -252,13 +209,13 @@ function getNotificationTarget(data: unknown): string | null {
  * matching on it is the only way to tell a missing delivery configuration from
  * a refused permission, so the matching stays. What changed is that the text
  * itself no longer travels to the screen: the caller gets the status and a
- * sentence about the situation, and `console.error` keeps the original for
- * whoever can act on it.
+ * sentence about the situation. Provider text is never logged: it may carry a
+ * registration token or a payload.
  */
 function mapNativePushSetupError(error: unknown): NativePushResult {
   const text = getErrorText(error);
   const lower = text.toLowerCase();
-  if (text) console.error("native push setup error:", text);
+  console.error("native push setup failed");
   if (
     lower.includes("firebase") ||
     lower.includes("fcm") ||

@@ -14896,6 +14896,16 @@ the muting direction and, as above, not in the other.
 
 ## D-222 `[~]` A viewport breakpoint deciding a layout that lives in a column the owner drags
 
+**2026-09-21 narrow-measure follow-up (Codex):** `session-devices.spec.ts:400`
+still fails at a forced 260px settings measure on both the current Android-call
+branch and an isolated archive of `7e0a9bcc`. `SessionDevicesSection`'s unknown
+device title has `truncate`: two nested 16px padding layers and the row's 12px
+padding leave 172px, while self-hosted Inter needs 173.80px. A DOM-only
+`white-space: normal` counterfactual removes clipping without switch overflow.
+Normal 560px desktop settings and the 390px mobile sheet are not clipped. This
+is an existing stress-width case, not a Task 4 regression; no CSS/test expectation
+was changed. [Measured scope](operations/2026-09-21-android-call-native.md).
+
 **Severity:** medium, and cosmetic in the sense that nothing breaks — but it is
 the first thing the owner saw when they opened «Обновления», and what they saw
 was text wrapped four lines deep inside a `rounded-full` pill, which renders as

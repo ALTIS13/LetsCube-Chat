@@ -11,13 +11,14 @@ import { BROWSER_PUSH_UNAVAILABLE, PUSH_UNAVAILABLE } from "@/lib/plainMessages"
 import { isDesktopApp } from "@/lib/platform/desktop";
 import { registerDesktopNotificationNavigationListener } from "@/lib/platform/desktopNotifications";
 import {
-  disableNativeAndroidPush,
-  enableNativeAndroidPush,
   getNativePushPermissionStatus,
   registerNativePushNavigationListeners,
   type NativePushResult,
 } from "@/lib/platform/nativePush";
-import { getBuildMetadata } from "@/lib/monitoring";
+import {
+  disableNativeVoicePush, enableNativeVoicePush, isCurrentNativeVoiceContext,
+  nativeVoiceContext, nativeVoicePushSnapshot, subscribeNativeVoicePush,
+} from "@/lib/platform/nativeVoiceCalls";
 import {
   applicationServerKeyMatches,
   browserSubscriptionRecord,
@@ -26,7 +27,6 @@ import {
 import { createDeferredPushTargetHandler } from "@/lib/pushNavigationQueue";
 import {
   persistPushPreferenceState,
-  shouldRestoreNativePushRegistration,
   type PushPreferenceState,
 } from "@/lib/pushPreferences";
 import { useAppStore } from "@/store/app.store";
@@ -69,8 +69,6 @@ export function usePush() {
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [loadingPreferences, setLoadingPreferences] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const nativeTokenRef = useRef<string | null>(null);
-  const nativeRegistrationAttemptedUserRef = useRef<string | null>(null);
   const browserReconcileInFlightRef = useRef(false);
   const browserLastReconciledAtRef = useRef(0);
 
@@ -123,8 +121,9 @@ export function usePush() {
       setStatus("native_unavailable");
       setMessage(nativePushPendingMessage());
       void getNativePushPermissionStatus().then((result) => {
-        setStatus(normalizeNativeStatus(result));
-        setMessage(result.message);
+        const latest = nativeVoicePushSnapshot() ?? result;
+        setStatus(normalizeNativeStatus(latest));
+        setMessage(latest.message);
       });
       return;
     }
@@ -160,6 +159,18 @@ export function usePush() {
   useEffect(() => {
     void loadPreferences();
   }, [loadPreferences]);
+
+  useEffect(() => {
+    if (!isNativeAndroid()) return;
+    const update = () => {
+      const result = nativeVoicePushSnapshot();
+      if (!result) return;
+      setStatus(normalizeNativeStatus(result));
+      setMessage(result.message);
+    };
+    update();
+    return subscribeNativeVoicePush(update);
+  }, []);
 
   const reconcileBrowserSubscription = useCallback(async (force = false) => {
     if (!userId || !preferencesLoaded || isNativeApp() || !supportsBrowserPush() || !VAPID_PUBLIC) return;
@@ -253,51 +264,24 @@ export function usePush() {
     };
   }, [reconcileBrowserSubscription]);
 
-  useEffect(() => {
-    if (!shouldRestoreNativePushRegistration({
-      nativeAndroid: isNativeAndroid(),
-      userId,
-      loadingPreferences,
-      pushEnabled: preferences.push_enabled,
-      attemptedUserId: nativeRegistrationAttemptedUserRef.current,
-    })) return;
-
-    nativeRegistrationAttemptedUserRef.current = userId;
-    let active = true;
-    setStatus("native_unavailable");
-    setMessage("Восстанавливаем Android push...");
-    void enableNativeAndroidPush(async (token) => {
-      nativeTokenRef.current = token;
-      return registerNativeDeviceToken(supabase, token);
-    }).then((result) => {
-      if (!active) return;
-      setStatus(normalizeNativeStatus(result));
-      setMessage(result.message);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [loadingPreferences, preferences.push_enabled, supabase, userId]);
-
   const enable = useCallback(async () => {
-    if (!userId) return;
     if (isNativeAndroid()) {
-      nativeRegistrationAttemptedUserRef.current = userId;
       setStatus("native_unavailable");
       setMessage("Регистрируем Android push...");
-      const result = await enableNativeAndroidPush(async (token) => {
-        nativeTokenRef.current = token;
-        return registerNativeDeviceToken(supabase, token);
-      });
+      const operation = enableNativeVoicePush();
+      const owner = nativeVoiceContext();
+      const result = await operation;
+      if (!isCurrentNativeVoiceContext(owner)) return;
       if (result.status === "native_active") {
         const preferenceError = await persistPushPreferenceState(
           supabase as unknown as Parameters<typeof persistPushPreferenceState>[0],
-          userId,
+          owner!.recipientId,
           preferences,
           true,
         );
+        if (!isCurrentNativeVoiceContext(owner)) return;
         if (preferenceError) {
+          void disableNativeVoicePush();
           if (looksLikeSchemaMissing(preferenceError)) markMigrationMissing();
           else {
             setStatus("native_unavailable");
@@ -313,6 +297,7 @@ export function usePush() {
       }
       return;
     }
+    if (!userId) return;
     if (isNativeApp()) {
       setStatus("native_unavailable");
       setMessage(nativePushPendingMessage());
@@ -404,18 +389,19 @@ export function usePush() {
   const disable = useCallback(async () => {
     try {
       if (isNativeAndroid()) {
-        const result = await disableNativeAndroidPush(nativeTokenRef.current, async (token) => {
-          await unregisterNativeDeviceToken(supabase, token);
-        });
-        nativeTokenRef.current = null;
-        const preferenceError = userId
+        const operation = disableNativeVoicePush();
+        const owner = nativeVoiceContext();
+        const result = await operation;
+        if (!isCurrentNativeVoiceContext(owner)) return;
+        const preferenceError = owner
           ? await persistPushPreferenceState(
               supabase as unknown as Parameters<typeof persistPushPreferenceState>[0],
-              userId,
+              owner.recipientId,
               preferences,
               false,
             )
           : null;
+        if (!isCurrentNativeVoiceContext(owner)) return;
         setStatus(normalizeNativeStatus(result));
         if (preferenceError) {
           if (looksLikeSchemaMissing(preferenceError)) markMigrationMissing();
@@ -615,61 +601,8 @@ function looksLikeSchemaMissing(error: unknown): boolean {
 
 function normalizeNativeStatus(result: NativePushResult): PushStatus {
   if (result.status === "native_active") return "active";
+  if (result.status === "native_inactive") return "inactive";
   if (result.status === "native_denied") return "denied";
   if (result.status === "migration_missing") return "migration_missing";
   return "native_unavailable";
-}
-
-async function registerNativeDeviceToken(
-  supabase: ReturnType<typeof createClient>,
-  token: string,
-): Promise<NativePushResult | null> {
-  const tokenHash = await sha256Hex(token).catch(() => null);
-  const metadata = getBuildMetadata();
-  const { error } = await (supabase as unknown as {
-    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ error: unknown }>;
-  }).rpc("register_push_device", {
-    p_platform: "android",
-    p_provider: "fcm",
-    p_token: token,
-    p_token_hash: tokenHash,
-    p_device_id: null,
-    p_device_model: getDeviceModel(),
-    p_app_version: metadata.version,
-  });
-
-  if (error) {
-    if (looksLikeSchemaMissing(error)) {
-      // D-132 (F2): this named two database objects to the owner of an Android
-      // phone. The cause goes to the log beside the call that produced it.
-      console.error("register_push_device is not available on this deployment:", error);
-      return { status: "migration_missing", message: PUSH_UNAVAILABLE };
-    }
-    return { status: "native_error", message: mapPgError(error) };
-  }
-
-  return null;
-}
-
-async function unregisterNativeDeviceToken(
-  supabase: ReturnType<typeof createClient>,
-  token: string,
-): Promise<void> {
-  await (supabase as unknown as {
-    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ error: unknown }>;
-  }).rpc("unregister_push_device", {
-    p_provider: "fcm",
-    p_token: token,
-  });
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const bytes = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function getDeviceModel(): string | null {
-  if (typeof navigator === "undefined") return null;
-  return navigator.userAgent || null;
 }

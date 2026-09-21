@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { showActionFeedback } from "@/lib/actionFeedback";
+import { isNativeAndroid } from "@/lib/platform/capabilities";
+import {
+  isCurrentNativeVoiceSession, nativeVoiceContext, noteNativeCallsAllowed,
+  type NativeVoiceContext,
+} from "@/lib/platform/nativeVoiceCalls";
 import {
   CALLS_GATE_WAIT_MS,
   classifySessionDeviceError,
@@ -95,6 +100,14 @@ interface GateSnapshot {
 let held: GateSnapshot = { allowed: true, checkedAt: null };
 const listeners = new Set<() => void>();
 let inFlight: Promise<boolean> | null = null;
+let gateRevision = 0;
+
+export function resetNativeSessionCallsGate(): void {
+  ++gateRevision;
+  inFlight = null;
+  held = { allowed: true, checkedAt: null };
+  for (const listener of listeners) listener();
+}
 
 function publish(allowed: boolean, checkedAt: number): void {
   if (held.allowed === allowed && held.checkedAt === checkedAt) return;
@@ -124,11 +137,14 @@ const gateSnapshot = () => held;
  */
 export function refreshCallsAllowedHere(): Promise<boolean> {
   if (inFlight) return inFlight;
+  const revision = gateRevision;
+  const owner = nativeVoiceContext();
+  const current = () => revision === gateRevision && (!isNativeAndroid() || isCurrentNativeVoiceSession(owner));
   let settled = false;
   const deadline =
     typeof setTimeout === "function"
       ? setTimeout(() => {
-          if (settled) return;
+          if (settled || !current()) return;
           // The answer is still in the air. Ring, and let the real answer
           // correct it when it lands — which it will, into the same store.
           publish(true, Date.now());
@@ -138,8 +154,11 @@ export function refreshCallsAllowedHere(): Promise<boolean> {
   const settle = (value: boolean): boolean => {
     settled = true;
     if (deadline !== null) clearTimeout(deadline);
-    publish(value, Date.now());
-    inFlight = null;
+    if (current()) {
+      publish(value, Date.now());
+      noteNativeCallsAllowed(value, owner);
+    }
+    if (revision === gateRevision) inFlight = null;
     return value;
   };
 
@@ -161,8 +180,12 @@ export function refreshCallsAllowedHere(): Promise<boolean> {
  * current row carries `calls_enabled`, and a switch flipped on this very
  * device. Neither is a guess: both are the same column the gate reads.
  */
-export function noteCallsAllowedHere(allowed: boolean): void {
+export function noteCallsAllowedHere(allowed: boolean, owner: NativeVoiceContext | null = nativeVoiceContext()): void {
+  if (isNativeAndroid() && !isCurrentNativeVoiceSession(owner)) return;
+  ++gateRevision;
+  inFlight = null;
   publish(allowed, Date.now());
+  noteNativeCallsAllowed(allowed, owner);
 }
 
 /** Read once, outside React, for a probe or a decision that is not a render. */
@@ -259,8 +282,10 @@ export function useSessionDevices(input: { readonly enabled: boolean }): Session
   const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set());
 
   const refresh = useCallback(async () => {
+    const owner = nativeVoiceContext();
     setLoading(true);
     const { data, error: failure } = await looseClient().rpc<unknown>("session_devices_list", {});
+    if (isNativeAndroid() && !isCurrentNativeVoiceSession(owner)) return;
     setLoading(false);
     if (failure) {
       setFailed(true);
@@ -275,7 +300,7 @@ export function useSessionDevices(input: { readonly enabled: boolean }): Session
     // also a free answer to «may this device ring». One less request, and one
     // that cannot disagree with the list the person is looking at.
     const current = rows.find((row) => row.isCurrent);
-    if (current) noteCallsAllowedHere(current.callsEnabled);
+    if (current) noteCallsAllowedHere(current.callsEnabled, owner);
   }, []);
 
   useEffect(() => {
@@ -285,18 +310,21 @@ export function useSessionDevices(input: { readonly enabled: boolean }): Session
 
   const setCalls = useCallback(
     async (sessionId: string, nextEnabled: boolean) => {
+      const owner = nativeVoiceContext();
+      if (isNativeAndroid() && !isCurrentNativeVoiceSession(owner)) return;
       const before = devices;
       setPending((current) => new Set(current).add(sessionId));
       setDevices((current) =>
         current.map((row) => (row.sessionId === sessionId ? { ...row, callsEnabled: nextEnabled } : row)),
       );
       const wasCurrent = before.some((row) => row.sessionId === sessionId && row.isCurrent);
-      if (wasCurrent) noteCallsAllowedHere(nextEnabled);
+      if (wasCurrent) noteCallsAllowedHere(nextEnabled, owner);
 
       const { error: failure } = await looseClient().rpc<unknown>("session_device_set_calls", {
         p_session_id: sessionId,
         p_enabled: nextEnabled,
       });
+      if (isNativeAndroid() && !isCurrentNativeVoiceSession(owner)) return;
       setPending((current) => {
         const next = new Set(current);
         next.delete(sessionId);
@@ -310,7 +338,7 @@ export function useSessionDevices(input: { readonly enabled: boolean }): Session
       setDevices(before);
       if (wasCurrent) {
         const original = before.find((row) => row.sessionId === sessionId);
-        noteCallsAllowedHere(original?.callsEnabled ?? true);
+        noteCallsAllowedHere(original?.callsEnabled ?? true, owner);
       }
       showActionFeedback({
         kind: "error",
