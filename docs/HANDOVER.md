@@ -248,6 +248,32 @@ What this project used, and what you will need to check you actually have:
   server that signs in carries the production configuration, so a spec that sends
   a message writes into production.
 
+**Where to work, and where not to.** Two checkouts are current, both at the tip
+of `main` as of the handover:
+
+- `D:\CodexProjects\LetsCube-Chat` — the primary checkout, branch `main`. **It had
+  been 786 commits behind, frozen at 2026-08-30 with the old computer-club
+  `AGENTS.md`**, and was fast-forwarded on 2026-09-21 as part of this handover.
+  If you ever find it behind again, `git merge --ff-only origin/main` there,
+  after checking it is clean.
+- `D:\CodexProjects\LetsCube-Chat\.worktrees\bot-platform` — branch
+  `integration/message-actions`, where this project's recent work happened.
+
+**Everything under `.claude\worktrees\` is left over from earlier agent runs and
+is not current work** — do not start in one of them. Measured at handover: 35
+worktree branches besides the two above; **15 are fully contained in `main`**
+and can be removed; **20 carry commits that `main` does not**, most notably
+`feat/attach-sheet` (21 commits ahead) and `design/attach-sheet-2` (13). Many of
+the `design/*` and `measure/*` branches are renders made for the owner to choose
+between, and a rejected option is expected to stay unmerged — but that has not
+been checked branch by branch, so **none of the 20 has been judged dead.** Their
+removal is the owner's call; if you are asked to tidy them, read each branch's
+commits against `main` first and report what, if anything, would be lost.
+
+Three older worktrees under `.worktrees\` are named for work that shipped
+(`android-release-*`, `preview-backfill`, `registration-lifecycle-cleanup`); the
+same rule applies.
+
 **Secrets never appear in output, commits, screenshots or reports.** Private
 material is under `D:\CodexProjects\LetsCube-Chat\.ops-private\` — read only the
 one file a task needs. `service_role` never reaches a client bundle. RLS is never
