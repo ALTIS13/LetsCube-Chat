@@ -971,7 +971,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     created channel goes through the same door as every other.
 
 
-44. `[ ]` What a channel's own settings are, and the participant cap we are
+44. `[~]` What a channel's own settings are, and the participant cap we are
     shipping today. The owner sent Discord's channel screens on 2026-09-20
     together with the rule for item 43, and one line of them is a live
     divergence rather than a feature request.
@@ -1311,7 +1311,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     other half of the same question.
 
 
-46. `[ ]` Tester's report, 2026-09-20, all of it from a phone. Eight items,
+46. `[~]` Tester's report, 2026-09-20, all of it from a phone. Eight items,
     kept in his words where paraphrase would soften them. **Triage opens with
     one question: which build was he on.** Android stable `0.1.4` was cut
     before the interface rework, and on the previous wave (item 21) that single
@@ -2088,6 +2088,63 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     is a Web App or a forced reply and Discord's is a modal; neither was
     measured on the device this pass, because the pass's budget went to the
     floor. It needs §7's measurement before it is designed.
+
+
+49. `[ ]` Public routes draw no call bar, and that is no longer theoretical.
+    **Recovered 2026-09-21:** this was discussed before a context compaction and
+    never written down, and was then cited to an agent as «already open in the
+    register» — it was not. Found by searching the files, not by recollection.
+
+    `VoiceCallShell` wraps the authenticated routes and draws the call bar there.
+    The public routes — `/support`, `/privacy`, `/download`, `/bots/docs` — are
+    outside it. So a person in a call who follows a link to one of them keeps
+    talking with **nothing on screen saying the microphone is live**, and no way
+    to mute or leave without navigating back.
+
+    It became reachable in practice when a support-ticket notification started
+    navigating client-side to `/support`, and it became **load-bearing** with the
+    voice resume of item 35: a return the product performs silently must still be
+    visible, and the call bar is what makes it visible. Measure what a person in a
+    call actually sees on each public route before choosing between mounting the
+    shell there and leaving the call when the route has no shell — the second is
+    honest but surprising, and neither is free.
+
+50. `[ ]` Whether a call record can be deleted — an open question to the owner.
+    **Recovered 2026-09-21** with item 49, same reason.
+
+    The owner said on 2026-09-20: «удаление записи о звонке также сделай как у
+    Discord». The question put back to him was whether «like Discord» means the
+    record is **not deletable**, and an asymmetry was flagged with it: in a
+    private chat the record is shared history of two people, so either one
+    deleting it for both is the private-chat-owner problem that migration
+    `20260911120000` already had to close. **He has not answered.**
+
+    Under the delegation of 2026-09-21 (CLAUDE.md §7, «Deciding without asking»)
+    this is decidable here once Discord's behaviour is **measured** — it has not
+    been; nothing in `reference-clients.md` records what Discord does with a call
+    record. Measure it on the owner's Android device before deciding, and note
+    that «delete for me» and «delete for both» are separate answers that may both
+    be right.
+
+51. `[ ]` Re-verdict the reference-clients claims that do not name a client.
+    **Recovered 2026-09-21** with items 49 and 50, same reason, and recorded
+    honestly as incompletely remembered.
+
+    Once the project established that Discord's web and desktop clients are one
+    bundle while its Android app is a different program (see the tracker entry
+    and `docs/operations/working-lessons.md`), a review found that **five claims
+    already written into `docs/operations/reference-clients.md` change verdict
+    once the client is named** — D-071's among them — and that **five
+    capabilities had been written off «on browser grounds»**, i.e. as impossible
+    for a web app, when the owner has said plainly «мы не только веб-приложение,
+    настольное должно быть настольным». The Windows shell is Tauri and the phone
+    is Capacitor; «a browser cannot do this» is not a reason in either.
+
+    **The specific ten were not written down and are not reconstructable from the
+    repository.** Rather than invent them, re-derive the list: walk
+    `reference-clients.md` and mark every claim that says «Discord» or
+    «Telegram» without saying *which client and build*, and every «cannot» whose
+    reason is the browser. Re-verdict each against the shell it actually ships in.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

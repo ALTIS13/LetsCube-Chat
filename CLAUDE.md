@@ -1,5 +1,13 @@
 # LETSCUBE Project Handoff For Claude
 
+> **2026-09-21 — read `docs/HANDOVER.md` first.** It is the current state of the
+> project and supersedes §1 «Current Stop Point» and §2 «Deployment baseline»
+> below, both of which describe early September. Everything else in this file —
+> §5 on running servers and suites, §7 on reference clients and deciding without
+> asking, §9–§10 on secrets and database safety, §15 on deploying — is current
+> and applies to any agent, Claude or not. The lessons that used to live only in
+> one agent's private memory are now in `docs/operations/working-lessons.md`.
+
 Last updated: 2026-09-01 (Europe/Moscow), revised the same day after an
 independent verification pass against the live checkout.
 
@@ -7,6 +15,11 @@ This file is the current operational handoff for Claude. Read it before changing
 code, infrastructure, database objects, release metadata, or product copy.
 
 ## 1. Current Stop Point
+
+> **Stale.** This section describes 2026-09-01, when the public-home plan was the
+> current work. Since mid-September the work has followed the owner's messenger
+> priorities, and the public-home plan is parked (tracker item 17). The current
+> stop point and what to do next are in `docs/HANDOVER.md`.
 
 The user explicitly paused implementation so the current context could be written
 down. Do not silently skip ahead or repeat already completed work.
@@ -97,6 +110,9 @@ owner's explicit instruction, after the whole set was validated at that exact
 commit. This paragraph replaced one saying the commits were intentionally
 unpushed; anything left elsewhere in this file that still says so describes the
 state before that date.
+
+> **Stale.** The figures below are from early September. Read the running
+> image tag off the container for the current state; `docs/HANDOVER.md` §2 says how.
 
 Deployment baseline:
 
