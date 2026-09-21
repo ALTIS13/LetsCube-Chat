@@ -22,6 +22,9 @@ open. [Contract, checkpoint and limits](operations/2026-09-22-boot-recovery.md).
 - Guest recovery pixels inspected at 1440/390, both themes. No authenticated
   screenshots, real account writes, SQL, native install or release publication.
   Existing liquid-glass material unchanged.
+- Published source `f1bbd60b`: exact healthy web image, old replica retired,
+  before/after HTML/entry markers confirmed. Actual public guest recovery 4/4
+  at 1440/390 in both themes, without login or production screenshots.
 
 ## 2026-09-21 - Interface Stability Without A Material Redesign
 

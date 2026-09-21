@@ -139,8 +139,10 @@ React readiness; native failure/deadline cannot cover web recovery indefinitely.
 Liquid-glass material is unchanged. Web matrix 14/14 in both development and built
 artifacts; settings/chat/Escape regression 42/42; full unit 4068 pass, one existing
 jq skip; Windows JS 50/50 and offline Rust 82 pass, four existing ignored tests.
-Typecheck and production-mode build pass. Web publication uses exact running-image
-and before/after content proof; consult the actual image when resuming.
+Typecheck and production-mode build pass. Runtime source `f1bbd60b` was published:
+one healthy exact image, old replica retired, before/after asset markers confirmed,
+live guest recovery 4/4 at 1440/390 in both themes. Consult the actual image when
+resuming; subsequent documentation-only commits may advance its tag.
 Next: isolated actual WebView2/Android lifecycle fault injection, then separately
 authorized native candidate/release. No signed EXE/APK issued by this source batch;
 Android still embeds its older bundle. Physical all-platform stability is not proved.

@@ -26,13 +26,15 @@ push dispatch changes, native signing/publication, installation or identity chan
 - [x] Final independent native review: no actionable findings within the bounded
   contract. Reviewer reran 17 browser cases, nine actual Rust-model cases and four
   real-script late-commit/retry scenarios; final six file fingerprints matched.
-- [ ] Web publication and actual image/content proof (post-push gate).
+- [x] Web source `f1bbd60b60c09c2b054ba5270e94502163dc873f` published and verified:
+  one healthy target image, previous replica retired; actual guest recovery 4/4.
 
 Two agents have non-overlapping scopes: Windows native source/tests; independent
 inline-controller unit tests/review. Coordinator owns HTML, React acknowledgement,
-browser regressions, integration and documentation. Next action: web publication
-with exact-image and content proof. No external
-blocker for this source batch; actual native lifecycle remains a separate step.
+browser regressions, integration and documentation. This web/source batch is
+complete. Next action: isolated actual WebView2/Android lifecycle fault injection,
+without installing over personal release clients. Native signing/publication
+remains separate and requires the owner's word for that release.
 
 Current gates: typecheck exit 0; settings/chat-glass/Escape regression 42/42;
 full unit 4068 pass, no failures, one existing jq-1.7.1 skip. Production-mode
@@ -78,14 +80,22 @@ appearance/success pacing, but yields immediately to web failure/retry.
 
 ## Publication Proof
 
-Before publication, the live guest HTML/entry returned HTTP200 with all three new
-markers absent (controller, recovery surface, committed-root acknowledgement).
-After pushing the reviewed source: require one healthy web container with the
-exact commit image, retirement of the previous replica, the three markers present,
-and a public guest healthy -> blocked entry -> retry -> ready check at 1440/390
-in both themes. No login, captured production pixels, or private writes.
-Sanitized working evidence is under `output/pre-react-recovery/`; do not infer a
-successful deployment from this plan or from the webhook alone.
+Verified at 00:58 MSK on 2026-09-22 (21:58 UTC on September 21):
+
+- Before: live guest HTML/entry HTTP200, all three new markers absent (controller,
+  recovery surface, committed-root acknowledgement); entry `index-ckj0jKdj.js`.
+- After: one healthy web image tagged exactly
+  `f1bbd60b60c09c2b054ba5270e94502163dc873f`, previous replica retired.
+  Live HTML/JS HTTP200, all three markers present, entry `index-C2_qsO11.js`.
+- Public guest healthy -> blocked entry -> retry -> ready: 4/4 at 1440/390,
+  both themes; actual root ready, recovery gone, no horizontal overflow.
+  No login, captured production pixels, or private writes.
+
+Sanitized working evidence is under `output/pre-react-recovery/`:
+`deployment-proof.log`, `public-before.json`, `public-after.json`,
+`public-guest.log`. The following documentation-only commit does not alter tested
+runtime source; compare current runtime/image when resuming rather than assuming
+this historical SHA is still the tip.
 
 ## Evidence Boundaries
 
