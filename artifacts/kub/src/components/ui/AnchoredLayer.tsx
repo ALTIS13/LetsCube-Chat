@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type HTMLAttributes, type MutableRefObject, type ReactNode } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type HTMLAttributes, type MutableRefObject, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { placeAnchored, placeBeside, type BoxEdges } from "@/lib/messageMenuPlacement";
 import { readSafeAreaInsets } from "@/lib/safeArea";
@@ -82,21 +82,40 @@ function PlacedLayer<Side extends string>({
   useLayoutEffect(() => {
     const node = ref.current;
     if (!node) return;
-    const rect = node.getBoundingClientRect();
-    setPlacement(
-      place({
+    let frame: number | null = null;
+    const measure = () => {
+      const next = place({
         viewport: { width: window.innerWidth, height: window.innerHeight },
         safe: readSafeAreaInsets(),
         anchor,
         avoid,
-        size: { width: rect.width, height: rect.height },
-      }),
-    );
-    // `place` is rebuilt on every render of the thin wrappers below, so it is
-    // deliberately not a dependency: including it would re-measure on every
-    // render and the measurement itself sets state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anchor, avoid]);
+        // Entry transforms must not shrink the measured layout box.
+        size: { width: node.offsetWidth, height: node.offsetHeight },
+      });
+      setPlacement((current) =>
+        current?.top === next.top && current.left === next.left && current.side === next.side
+          ? current
+          : next,
+      );
+    };
+    const scheduleMeasure = () => {
+      if (frame !== null) return;
+      // Keep placement writes out of ResizeObserver delivery and coalesce bursts.
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        measure();
+      });
+    };
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleMeasure);
+    observer?.observe(node, { box: "border-box" });
+    window.addEventListener("resize", scheduleMeasure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", scheduleMeasure);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, [anchor, avoid, place]);
 
   if (typeof document === "undefined") return null;
   return createPortal(
@@ -125,11 +144,15 @@ export function AnchoredLayer({
   prefer = "below",
   ...props
 }: LayerProps<"above" | "below"> & { prefer?: "above" | "below" }) {
+  const place = useCallback(
+    (input: Omit<Parameters<typeof placeAnchored>[0], "prefer">) => placeAnchored({ ...input, prefer }),
+    [prefer],
+  );
   return (
     <PlacedLayer
       {...props}
       fallbackSide={prefer}
-      place={(input) => placeAnchored({ ...input, prefer })}
+      place={place}
     />
   );
 }
@@ -139,5 +162,5 @@ export function AnchoredLayer({
  * does not, and below or above it when neither side is free.
  */
 export function BesideLayer(props: LayerProps<"right" | "left" | "below" | "above">) {
-  return <PlacedLayer {...props} fallbackSide="right" place={(input) => placeBeside(input)} />;
+  return <PlacedLayer {...props} fallbackSide="right" place={placeBeside} />;
 }

@@ -19,7 +19,7 @@ Read in this order:
    replaces them;
 5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–51) and the
    decisions log;
-6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, D-001…D-293, with its
+6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-298, with its
    measurement. Search it before filing anything.
 
 ---
@@ -132,7 +132,18 @@ whole deployment** — no bot has registered a command yet.
 ## 4. Where to start
 
 **Active checkpoint, 2026-09-21 (Codex):** owner Codex, main checkout
-`D:\CodexProjects\LetsCube-Chat`, Task 5 Step 1 from `0e2e0535`.
+`D:\CodexProjects\LetsCube-Chat`, interface-stability repair on `01d18dd0`.
+The owner's latest priority is disappearing/misaligned UI without changing
+Claude's liquid-glass material. D-296 settings resize/draft/modal-order failures
+and D-297 async profile placement are repaired and independently reviewed.
+Final settings matrix 24/24, anchored-layer matrix 28/28, full unit 4035 pass
+with one existing jq skip; build and typecheck pass. Web publication follows the
+normal image/content verification path; consult the actual image when resuming.
+Next: D-298 pre-React recovery and actual isolated native lifecycle QA. Physical
+all-platform stability and updated signed Android artifacts are not yet proved.
+[Current evidence and remaining platform gaps](operations/2026-09-21-interface-stability.md).
+
+**Previous checkpoint, complete:** Task 5 Step 1 from `0e2e0535`.
 Fresh full SQL backup restored offline; four owner-specific migrations applied,
 reviewed Edge separately deployed. Production catalog and disabled HTTP checks
 pass. Both dispatch gates remain off and both new jobs inactive. No signed

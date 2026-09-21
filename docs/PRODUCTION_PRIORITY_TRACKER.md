@@ -477,7 +477,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     items 25 and 28 were run — the owner has twice asked not to have work
     rebuilt after each iteration.
 
-34. `[ ]` Standing: the interface's intuitiveness and its response to the
+34. `[~]` Standing: the interface's intuitiveness and its response to the
     person using it, and the interface bugs found along the way. Asked for by
     the owner on 2026-09-20: «улучшение интуитивности и отклика интерфейса для
     пользователя, исправление багов интерфейса если таковые найдутся». This is
@@ -495,6 +495,11 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     approved motion plan
     `docs/superpowers/plans/2026-08-30-shared-motion-feedback.md` is the
     response half's existing vehicle; do not build a second one beside it.
+    **2026-09-21 continuation:** the owner prioritised disappearing UI while
+    preserving Claude's liquid glass. D-296 settings lifecycle and D-297 async
+    profile placement passed implementation/review and browser QA; D-298 pre-React recovery
+    is the next distinct issue. Browser fixtures are not a native device matrix.
+    [Current repair checkpoint and platform limits](operations/2026-09-21-interface-stability.md).
 35. `[~]` Standing: **«where you were» is state the product owns and
     restores.** Asked for by the owner on 2026-09-20, as the principle behind
     the update complaint rather than as a feature of it: «В этом и смысл что

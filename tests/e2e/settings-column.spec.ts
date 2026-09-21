@@ -287,8 +287,8 @@ test.describe("settings is a surface over the application, not a state of the li
     // And no overlay, which is not merely hidden here: below `md` the column is
     // `display:none` rather than unmounted, so a second form mounted there
     // would be a second live copy of the settings state behind the sheet. The
-    // gate is `useIsMobile()` at both mount sites in `Sidebar`, and this is
-    // what holds it — drop the `!isPhone` and this goes red.
+    // single SettingsSurface chooses one presentation while keeping its draft
+    // alive across a resize; mounting both presentations would fail this check.
     await expect(page.getByTestId("settings-overlay")).toHaveCount(0);
     await expect(page.getByTestId("settings-search-input")).toHaveCount(0);
   });

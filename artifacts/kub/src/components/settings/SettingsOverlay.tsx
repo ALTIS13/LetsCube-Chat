@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { KubButton, KubIcon, KubModal, type KubIconName } from "@/components/kub";
-import { SettingsErrorNotice, useSettingsScreen } from "@/components/settings/SettingsScreen";
+import { SettingsErrorNotice, type SettingsScreen } from "@/components/settings/SettingsScreen";
 import {
   SETTINGS_SECTION_TITLES,
   settingsSearchResult,
@@ -20,10 +20,10 @@ import {
   settingsRailVisible,
 } from "@/lib/settingsSurface";
 import { cn } from "@/lib/utils";
-import { useAppStore } from "@/store/app.store";
 
 /**
- * Settings as a surface over the application, from `md` (D-285).
+ * Settings as an overlay from `md` (D-285), a sheet below it. Both layouts keep
+ * the same modal and field nodes alive across a viewport change.
  *
  * The owner asked for Discord's approach by name, and gave the two doors he
  * expects: «Закрыть настройки в дискорде я могу просто кликнув по крестику
@@ -50,14 +50,15 @@ import { useAppStore } from "@/store/app.store";
  * No material of its own (rule 1): `KubModal` paints `kub-glass-strong` and the
  * dim, and the two columns inside are rules on one sheet, not two panes.
  */
-export function SettingsOverlay() {
-  const closeSettings = useAppStore((s) => s.closeSettings);
+export function SettingsOverlay({ screen, isPhone }: { screen: SettingsScreen; isPhone: boolean }) {
   const [query, setQuery] = useState("");
-  const screen = useSettingsScreen({ onClose: closeSettings });
 
-  const leave = useCallback(() => void screen.requestClose(), [screen]);
+  // A layout update must not re-register this modal above an open confirmation.
+  const requestCloseRef = useRef(screen.requestClose);
+  useLayoutEffect(() => { requestCloseRef.current = screen.requestClose; }, [screen.requestClose]);
+  const leave = useCallback(() => void requestCloseRef.current(), []);
 
-  const filtering = query.trim().length > 0;
+  const filtering = !isPhone && query.trim().length > 0;
   // The engine stays `lib/settingsRows.ts`, reached directly by
   // `tests/unit/settings-search.test.mts`. This decides how a result looks and
   // never what matches — the split the column made, kept.
@@ -125,7 +126,8 @@ export function SettingsOverlay() {
 
   if (!screen.ready) return null;
 
-  const railWidth = railVisible ? SETTINGS_RAIL_WIDTH : 0;
+  const showRail = !isPhone && railVisible;
+  const railWidth = showRail ? SETTINGS_RAIL_WIDTH : 0;
 
   return (
     <KubModal
@@ -134,38 +136,41 @@ export function SettingsOverlay() {
       title="Настройки"
       icon={<KubIcon name="settings" size={16} />}
       size="xl"
-      mobileSheet={false}
+      mobileSheet={isPhone}
       scrollBody={false}
       contentClassName="p-0"
-      className="sm:max-w-none"
+      className={isPhone ? undefined : "sm:max-w-none"}
       // Built from the constants rather than beside them, so moving one moves
       // the rendered box and `settings-overlay.spec.ts` sees it.
-      style={{
+      style={isPhone ? undefined : {
         width: `min(${SETTINGS_OVERLAY_MAX_WIDTH}px, calc(100vw - ${2 * SETTINGS_OVERLAY_GUTTER_X}px))`,
         height: `min(${SETTINGS_OVERLAY_MAX_HEIGHT}px, calc(100vh - ${2 * SETTINGS_OVERLAY_GUTTER_Y}px))`,
         maxHeight: "none",
       }}
       panelRef={panelRef}
-      testId="settings-overlay"
+      testId={isPhone ? undefined : "settings-overlay"}
       // D-136 walks the doors by name, and the ✕ the owner asked for is this
       // one — «крестик справа сверху». The column's had the same id, so the
       // spec's desktop door list keeps working and gains the dim beside it.
-      closeTestId="settings-close"
+      closeTestId={isPhone ? undefined : "settings-close"}
       footer={
-        <KubButton
-          onClick={() => void screen.save()}
-          disabled={screen.saving}
-          loading={screen.saving}
-          variant={screen.saved ? "secondary" : "primary"}
-          size="sm"
-          leftIcon={!screen.saving ? <KubIcon name="check" size={13} /> : undefined}
-        >
-          {screen.saved ? "Сохранено" : "Сохранить"}
-        </KubButton>
+        <>
+          {isPhone && <KubButton variant="ghost" onClick={leave}>Закрыть</KubButton>}
+          <KubButton
+            onClick={() => void screen.save()}
+            disabled={screen.saving}
+            loading={screen.saving}
+            variant={screen.saved ? "secondary" : "primary"}
+            size={isPhone ? undefined : "sm"}
+            leftIcon={!screen.saving ? <KubIcon name="check" size={13} /> : undefined}
+          >
+            {screen.saved ? "Сохранено" : "Сохранить"}
+          </KubButton>
+        </>
       }
     >
       <div className="flex h-full min-h-0 w-full">
-        {railVisible && (
+        {showRail && (
           <nav
             data-testid="settings-rail"
             aria-label="Разделы настроек"
@@ -227,7 +232,7 @@ export function SettingsOverlay() {
         )}
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {!railVisible && (
+          {!isPhone && !railVisible && (
             <div className="flex-shrink-0 border-b border-[color:var(--kub-rule)] p-3">
               <SettingsSearchField
                 query={query}
@@ -251,7 +256,7 @@ export function SettingsOverlay() {
             ref={scrollRef}
             onScroll={syncActive}
             data-testid="settings-scroll"
-            className="min-h-0 flex-1 overflow-y-auto pb-6"
+            className={cn("min-h-0 flex-1 overflow-y-auto", isPhone ? "pb-4" : "pb-6")}
           >
             {/* The measure, and the reason it is a variable rather than a class:
                 `SettingsGroup` reads it, the phone sheet and any narrower pane
@@ -261,7 +266,7 @@ export function SettingsOverlay() {
             <div
               data-testid="settings-measure"
               className="mx-auto w-full"
-              style={MEASURE_STYLE}
+              style={isPhone ? undefined : MEASURE_STYLE}
             >
               {!filtering && screen.identity}
               <SettingsErrorNotice error={screen.error} />

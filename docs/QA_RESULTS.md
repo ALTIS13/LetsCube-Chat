@@ -1,5 +1,26 @@
 # QA Results
 
+## 2026-09-21 - Interface Stability Without A Material Redesign
+
+D-296/D-297 source and browser QA complete, independently reviewed.
+[Causes, reproduction, gates and platform limits](operations/2026-09-21-interface-stability.md).
+
+- Settings retain the same modal/field tree on resize: profile and nested drafts,
+  selection/focus, topmost confirmations, and phone-tab continuity. Final 24/24
+  Chromium/WebKit, both themes, explicit 360 through 1440 widths.
+- Cold profile placement observes async size; 28/28 new browser checks, 22/22
+  existing profile/reaction boundaries, independent review 10/10; RPC regression 8/8.
+- Existing settings geometry/exit matrix: 62 pass, 31 declared platform-specific
+  skips. Earlier unchanged chat-glass/Escape baseline: 27/27.
+- Full unit: 4035 pass, 0 fail, one existing jq-1.7.1 skip. Typecheck, focused
+  Biome, build and diff check pass. Fixture build `fa42929566a7efb1`, 11.30s.
+- Exact settings/profile pixels viewed at 1440/390 in both themes. No glass CSS
+  redesign, production captures, private account writes, SQL, native installation
+  or release publication. Native all-platform proof remains open; Realme carries
+  the older 0.1.3/build4, not the checkout under test.
+- D-298 pre-React startup failure recovery is recorded and remains next, not
+  silently claimed fixed by layout changes.
+
 ## 2026-09-21 - Disabled Android Call Server Rollout
 
 Task 5 Step 1 completed on production from `0e2e0535`.

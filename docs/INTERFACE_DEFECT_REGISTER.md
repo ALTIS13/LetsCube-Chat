@@ -23374,3 +23374,53 @@ is a desktop-only constraint and it cost the phone nothing.
   whole and the card stands beside them.
 
 ---
+
+## D-296 `[x]` Resizing settings discards the form and can hide its confirmation
+
+2026-09-21, owner Codex. Reproduced against `01d18dd0`: crossing 768px
+replaces the settings component, resetting a typed name to the stored name.
+Opening the phone's Profile tab then widening to 844px removes settings entirely.
+Both themes fail; this is not a change to the liquid-glass material.
+
+The first repair preserved only the outer hook. Independent review rejected it:
+phone/storage drafts and focus still vanished, and resizing with the discard
+confirmation open recreated settings above that confirmation. Final approach:
+one persistent modal and field tree, responsive layout props only, with a stable
+close callback that reads the latest draft without re-registering the modal layer.
+
+Regression: `tests/e2e/settings-resize-stability.spec.ts`; explicit 360, 390,
+412, 767, 768, 844 and 1440 widths, both themes, actual intercepted save payload,
+phone-tab continuity, nested drafts, selection, confirmation hit-testing and
+Escape. Fixture writes only; no actual phone code or storage relocation requested.
+Source/browser verification complete: 24/24 in Chromium/WebKit, both themes.
+Native artifact parity remains separate. [Current report](operations/2026-09-21-interface-stability.md).
+
+## D-297 `[x]` A cold profile popout grows below the viewport after loading
+
+2026-09-21, owner Codex. Chromium/WebKit, both themes, 1440x900: the real
+profile card grows from 216px to 361.5px while keeping top=676, clipping 137.5px
+including its actions. A cached reopening fits, hiding the first-open defect.
+
+`PlacedLayer` measured only when anchor/avoid props changed. It now observes
+border-box size and viewport resize, measures the untransformed layout box,
+coalesces callbacks and cancels observation/queued frames on cleanup. Existing
+anchor/avoid arithmetic, profile content, glass and focus behavior remain intact.
+Regression: `tests/e2e/anchored-layer-resize-stability.spec.ts` covers the real
+cold profile and both shared layer variants: 28/28; independent runtime review
+10/10. Native artifact parity remains separate. See the current report for gates.
+
+## D-298 `[ ]` A failure before React mounts leaves no recovery controls
+
+2026-09-21, owner Codex. Current-source synthetic Chromium reproduction in
+8/8 width/theme cases: abort the entry module after a successful guest control,
+document load completes with empty root and no controls; releasing the fault
+and externally reloading restores login. This is a browser finding, not proof
+of an observed failure in an installed native client.
+
+Native source risk: Tauri treats PageLoadEvent::Finished as workspace readiness
+without a rendered-app acknowledgement. Android embeds its bundle, so a failed
+remote entry download is not an equivalent physical trigger there. Follow-up:
+bounded pre-React recovery/retry, successful boot and same-session retry controls,
+then actual isolated WebView2/Android lifecycle fault injection. Preserve the
+existing connection material and never claim document load proves application
+readiness. Not fixed by D-296/D-297; no native release issued in this batch.

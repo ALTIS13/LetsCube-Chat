@@ -14,8 +14,7 @@ import { ChatList } from "./ChatList";
 import { NewChatModal } from "./NewChatModal";
 import { NewGroupModal } from "./NewGroupModal";
 import { FolderEditModal } from "./FolderEditModal";
-import { SettingsModal } from "./SettingsModal";
-import { SettingsOverlay } from "@/components/settings/SettingsOverlay";
+import { SettingsSurface } from "@/components/settings/SettingsSurface";
 import { openSavedMessagesChat } from "@/lib/savedMessages";
 import { SidebarSearchResults } from "@/components/search/SidebarSearchResults";
 import { ChatSearchPanel } from "@/components/search/ChatSearchPanel";
@@ -121,8 +120,7 @@ export function Sidebar() {
   const settingsOpen = useAppStore((s) => s.settingsOpen);
   const closeSettingsPanel = useAppStore((s) => s.closeSettings);
   const openSettingsPanel = useAppStore((s) => s.openSettings);
-  const settingsOverlayOpen = !isPhone && settingsOpen;
-  const settingsSheetOpen = isPhone && (settingsOpen || mobileSection === "profile");
+  const settingsVisible = settingsOpen || mobileSection === "profile";
 
   const closeSettingsSheet = () => {
     closeSettingsPanel();
@@ -310,10 +308,8 @@ export function Sidebar() {
       {showNewGroup && (
         <NewGroupModal onClose={() => setShowNewGroup(false)} onRefetch={refetch} />
       )}
-      {/* Below `md` only. From `md` the same screen is the overlay below, and
-          mounting both would run two copies of the settings state side by side. */}
-      {settingsSheetOpen && <SettingsModal onClose={closeSettingsSheet} />}
-      {settingsOverlayOpen && <SettingsOverlay />}
+      {/* Resizing changes the presentation, never the lifetime of the draft. */}
+      {settingsVisible && <SettingsSurface onClose={closeSettingsSheet} />}
 
       {/* `Ui::LayerWidget`, not a column and not a dropdown: it costs no width
           while it is closed, which is the whole of «удобно в боковом списке

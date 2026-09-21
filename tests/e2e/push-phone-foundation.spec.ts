@@ -115,7 +115,7 @@ test.describe("LETSCUBE push and phone production foundation", () => {
 
   test("profile usernames reserve admin-looking handles for real admins", async () => {
     const profileValidationSource = readFileSync(resolve("artifacts/kub/src/lib/profileValidation.ts"), "utf8");
-    const settingsSource = readFileSync(resolve("artifacts/kub/src/components/sidebar/SettingsModal.tsx"), "utf8");
+    const settingsSource = readFileSync(resolve("artifacts/kub/src/components/settings/SettingsScreen.tsx"), "utf8");
     const errorsSource = readFileSync(resolve("artifacts/kub/src/lib/errors.ts"), "utf8");
     const migrationSource = readFileSync(
       resolve(".migration-backup/supabase/migrations/20260622_reserved_profile_usernames.sql"),
