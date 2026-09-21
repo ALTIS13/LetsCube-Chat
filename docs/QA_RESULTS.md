@@ -1,5 +1,26 @@
 # QA Results
 
+## 2026-09-21 - Public Call Controls, Auth Lifetime and Address Render Cost
+
+Current batch: tracker 49, D-284, D-088 follow-up, Android 32-D1 contract only.
+Detailed RED/GREEN evidence, failed intermediate runs, deliberate skips and
+production proof are maintained in
+[the continuation report](operations/2026-09-21-voice-continuation.md).
+
+Final source gates: typecheck exit 0; build `sw.js cc5ad7397bebc83c`, 8.94s;
+unit 3862 passed, one known jq-dependent skip. Signed-in roles/tasks: 12 passed,
+captures disabled and mutations disabled. Address/event-cost fixtures: 27 passed,
+one deliberate mobile skip. Public-routing gate: 21 passed, 21 intentionally
+skipped on the second requested project (the spec selects its own routing
+project). Voice matrix: 182 passed, then the four outdated loading fixtures were
+corrected and passed on rerun, with no further production-code changes. Installed
+Chrome isolated fixtures: five passed. Production image `804101f5` is healthy;
+new entry/CSS markers and five public routes were verified after the old replica
+was retired. Exact image, assets and transient rolling-asset caveat are in the report.
+
+Android device authorization is confirmed, but no APK was installed or signed;
+no real call/FCM send or production SQL was part of this batch.
+
 ## 2026-09-13 - A hint that ate the tap, and a guard that was green while the defect was alive
 
 The signed-in contract that an agent had changed but could not run was run here, with credentials it did not

@@ -6,6 +6,26 @@ built yet. Slice 1's throwaway probe is gone; this replaces it.
 any of this was built, including the webhook table that the gateway is written
 against.
 
+## Client Runtime Boundary, 2026-09-21
+
+One configured-root auth observer now survives public navigation. Its context
+contains user identity and loading state only; voice services must not create
+another auth subscription or infer identity from a stale profile row.
+
+The active call keeps mute, leave and return-to-chat controls on public pages.
+Outgoing answer/cancel signalling remains subscribed there. Fresh public/auth
+visits do not restore a microphone. Saved resume records require an owner;
+legacy records without one are intentionally ignored. In-page retry requires a
+call observed alive in this runtime and preserves the original bounded window.
+Logout/account change releases the microphone and transport locally. An auth
+generation fences delayed ring/answer/stop and join continuations, so they cannot
+operate as the next signed-in person.
+
+This does not implement a fresh incoming ring on every public route, or closed
+Android delivery. The latter has an unused data-only payload contract and a
+[staged plan](../superpowers/plans/2026-09-21-android-call-delivery.md), not an
+active FCM dispatcher. [Verification and rollout evidence](2026-09-21-voice-continuation.md).
+
 ## The shape of it
 
 ```

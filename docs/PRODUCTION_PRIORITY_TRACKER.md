@@ -425,6 +425,18 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 32. `[~]` Calls in a private chat, and the record each one leaves in the conversation. Asked for by the owner on 2026-09-18: «в лс между людьми также учти немаловажную часть как уведомления о звонках в чате по аналогии с telegram/discord (с отображением того успешный ли это звонок или пропущенный, сколько он длился в случае если был успешный)». **It is a slice rather than an addition, and the reason is measured rather than assumed: one-to-one calls do not exist, so the record cannot come first.** Two facts checked against the code before this was written. The **interface** refuses voice outside a group — `lib/voiceChannel.ts:230`, `voiceChannelRowOffer` answers `not_a_group` for every other chat type. The **gateway does not check the chat type at all** — `voice-gateway/index.ts` reads the channel row, then the caller's `chat_members.role`, then `is_muted`, so a `voice_channels` row on a private chat would mint a token happily. So the transport and the server are already type-agnostic, and what is missing is the **interaction**: a group channel is a place you join, while a one-to-one call is somebody *ringing* you, and nothing in this system tells the other person that somebody is calling. Five things have to exist that do not: a ring that reaches the other person in the three states they can be in (application in front, in a background tab, closed); accept and decline; **missed**, which is the state the owner named and which the group mechanism cannot express — the service message of D-229 keys on `participant_count` crossing zero, and a call that rang and was not answered never reaches occupancy above one person; a duration measured from the answer rather than from the room's creation, noting that `docs/operations/voice.md` records that **asking for a token creates the room**, so the caller makes a room before anybody answers; and the in-chat record itself, carrying an outcome (answered, missed, declined, cancelled by the caller) and, when answered, how long it lasted. D-229's trigger is the obvious precedent for where the record lives and is the first thing to read, but its mechanism does not transfer to «missed». A feasibility measurement was run in parallel the same day and its answer belongs in the proposal before any of this is built — the crux is whether a ring can arrive fast enough in each of those three states, and on the installed iPhone app, where section 1.5 of the voice proposal records that iOS suspends the page in the background. The proposal goes in `docs/proposals/`, the way the voice work itself did, and the owner sees it before code.
 
 
+    **Current status, 2026-09-21 (supersedes the historical diagnosis above):**
+    A/B/C/D2/E/F/G already exist. Read-only production checks confirmed ring
+    columns, Realtime publication, ring/answer/stop RPCs, session preferences and
+    a healthy missed-call sweep. Do not recreate them. Closed Android remains
+    absent: no transient ring outbox, no push-token/session binding, no native
+    call/cancel handler. 32-D1's pure data-only payload contract and ten tests
+    are implemented without connecting the dispatcher. Next: owner-specific
+    session-binding/outbox migration rehearsals, then native candidate and
+    physical QA before activation. See the
+    [staged implementation plan](superpowers/plans/2026-09-21-android-call-delivery.md) and
+    [current evidence](operations/2026-09-21-voice-continuation.md).
+
 33. `[ ]` Documents and the rest of what a message can carry, opened **in the
     chat** the way other media already is. Asked for by the owner on
     2026-09-20: «просмотр документов и т.п вещей сразу в чате, на примере
@@ -2090,12 +2102,18 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     floor. It needs §7's measurement before it is designed.
 
 
-49. `[ ]` Public routes draw no call bar, and that is no longer theoretical.
+49. `[x]` Public-route call controls, repaired 2026-09-21.
+    **2026-09-21:** deployed fixes and browser regressions cover the shared shell,
+    mute/leave, saved call state, return to the exact conversation, slow auth
+    loading, auth identity loss/change and Windows caption. Final ring-subscription
+    checks passed; production `804101f5` is healthy with new public entry assets
+    and the previous entry absent. [Evidence](operations/2026-09-21-voice-continuation.md).
     **Recovered 2026-09-21:** this was discussed before a context compaction and
     never written down, and was then cited to an agent as «already open in the
     register» — it was not. Found by searching the files, not by recollection.
 
-    `VoiceCallShell` wraps the authenticated routes and draws the call bar there.
+    **Original diagnosis, superseded by the repair above:** `VoiceCallShell`
+    wrapped the authenticated routes and drew the call bar there.
     The public routes — `/support`, `/privacy`, `/download`, `/bots/docs` — are
     outside it. So a person in a call who follows a link to one of them keeps
     talking with **nothing on screen saying the microphone is live**, and no way

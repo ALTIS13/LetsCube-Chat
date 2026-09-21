@@ -54,7 +54,10 @@ Gateway; LiveKit for voice; a support-mail bridge. Everything runs on one host,
 
 ---
 
-## 2. Live state, 2026-09-21
+## 2. Handover baseline, 2026-09-21
+
+The following is Claude's snapshot before the continuation. For work since that
+snapshot, use the active checkpoint in section 4 and its linked report.
 
 - `main` and the working branch `integration/message-actions` are level. The web
   container runs the tip of `main` — read it off the container, never from this
@@ -128,24 +131,35 @@ whole deployment** — no bot has registered a command yet.
 
 ## 4. Where to start
 
+**Active checkpoint, 2026-09-21 (Codex):** owner Codex, main checkout
+`D:\CodexProjects\LetsCube-Chat`, base `6cc44205`. Tracker 49, D-284 and the
+D-088 address-subscription regression are verified and deployed in `804101f5`
+(runtime commit `dc59ea28`). This includes outgoing ring updates after public
+navigation, Windows caption, auth-bound transport/resume and late-RPC guards.
+Tracker 32-D1 Task 1's pure Android call payload is committed but unused by dispatch.
+Next is Task 2 session-binding/outbox rehearsal, then the staged schema/native rollout,
+not a reimplementation of foreground ringing. No database, native-release or live
+dispatcher changes in this batch. Evidence and remaining gates:
+[`2026-09-21-voice-continuation.md`](operations/2026-09-21-voice-continuation.md).
+
 In this order, and the order is not arbitrary — several of these are a chain.
 
-**First, two defects in shipped work.**
+**Completed repair batch; do not repeat it.**
 
-1. **Tracker item 49 — public routes draw no call bar.** `/support`, `/privacy`,
-   `/download` and `/bots/docs` sit outside `VoiceCallShell`, so a person in a call
-   who opens one keeps talking with nothing on screen saying the microphone is
-   live. It became load-bearing with the voice resume above. Measure what each
-   route shows first.
-2. **D-284 — a one-to-one call can be told the room is at maximum.** The gateway's
-   refusal wording treats a private chat's two-person definition as a capacity.
+1. **Tracker item 49 — public-route call controls.** Closed: current-source
+   browser matrix, independent review and production image/content proof passed.
+2. **D-284 — private-call refusal wording.** Deployed: the private start and
+   answer paths now say «Разговор уже идёт.»; shared group wording is unchanged.
 
 **Then the chain the owner specified in detail.** Read the tracker entries in
 full; each carries his own words and the measurements behind the decisions.
 
-3. **Item 32 — calls in a private chat, and the ring.** Nothing tells another
-   person that somebody is calling, in the three states they can be in (app in
-   front, background tab, closed). This is the prerequisite for item 45.
+3. **Item 32 — finish delivery, do not rebuild the call.** Foreground ringing,
+   accept/decline/cancel, call history, missed sweep and session call preferences
+   already exist in source and production. Remaining: measured multi-client
+   delivery, background OS notification and closed Android call delivery. Start
+   with Task 2 of the Android plan: Task 1's bounded payload contract is complete.
+   Source tests are not physical proof.
 4. **Item 45 — the group chat.** A separate `chats.type`, born from a live private
    call by one «add to conversation» press; the two already talking are rejoined
    and the third person is **rung** (so it needs item 32). Its whole settings

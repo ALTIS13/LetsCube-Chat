@@ -707,6 +707,13 @@ with the previous replica's assets. Recorded rather than acted on — it is
 transient and self-correcting, but worth knowing before reading a 404 as an
 outage.
 
+**Reobserved 2026-09-21:** during `804101f5`'s rolling replacement, two bounded
+probes fetched the old entry document and received 404 for its referenced CSS.
+After the previous replica was retired, the same probe and five public routes
+passed. This remains a deployment asset-continuity risk, not a new call-shell
+defect; see `docs/operations/2026-09-21-voice-continuation.md` for the verified
+post-deploy baseline. No production data was captured.
+
 # Fix batch 5, 2026-09-02 — D-008 closed
 
 **Fixed.** The single-line condition is gone from `canInline`. Whether the meta
@@ -5621,6 +5628,16 @@ insets. Mutations of the focus point, the pan limit, the double tap, a passive
 wheel listener and the stage clip each fail.
 
 ## D-088 `[x]` The chat list refetched and rendered whole on every message, receipt and focus
+
+**Follow-up, 2026-09-21:** the address synchronizer had reintroduced parent
+renders by subscribing `MainLayout` to the whole chat array. A message in B
+rendered the open conversation A on the untouched `6cc44205` baseline as well as
+the call-continuation branch. `useChatAddress` now subscribes only to its pending
+address's idle/known/missing/waiting result. Targeted 1440/390 checks changed from
+RED to zero conversation/row renders with no chat-data fetch; the existing event
+and route matrices finished 27 passed, one intentional mobile direct-switch
+skip (covered by leave/reopen). Detailed evidence is in
+[the continuation report](operations/2026-09-21-voice-continuation.md).
 
 **Severity:** medium. Every signed-in session, on every message in any chat.
 Testers' complaint 12, 2026-09-11.
@@ -22016,7 +22033,14 @@ restoration exists and has been proved.
 
 ---
 
-## D-284 `[ ]` A one-to-one call can be told the room is at maximum participants
+## D-284 `[x]` A one-to-one call can be told the room is at maximum participants
+
+**Fixed 2026-09-21 (Codex):** preserve the gateway `refusalCode` and render
+`channel_full` as «Разговор уже идёт.» only in the private start/answer paths.
+Both browser cases failed with the old group sentence, then passed with the
+private sentence; existing successful start/answer and the group wording are
+preserved. See [verification](operations/2026-09-21-voice-continuation.md).
+The following is the original diagnosis.
 
 **Severity:** low on reach, high on what it says about the product. Nobody is
 blocked by it; the sentence is simply about a capacity that is really a
