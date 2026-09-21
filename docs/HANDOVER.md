@@ -132,14 +132,17 @@ whole deployment** — no bot has registered a command yet.
 ## 4. Where to start
 
 **Active checkpoint, 2026-09-21 (Codex):** owner Codex, main checkout
-`D:\CodexProjects\LetsCube-Chat`, Task 4 source/debug complete from `7e0a9bcc`;
-coordinator owns the Task 5 operational/release/physical gates next. Independent
-review approved; 4021 unit tests, 76 browser cases, ten Android runtime cases and
-a separate process-death OS-expiry check pass. No signed candidate or production
-call activation yet. Implementation `9d059c4a` is pushed; actual web image,
-health, old-replica retirement and public content markers verified.
-[Task 4 report](operations/2026-09-21-android-call-native.md)
-is the durable resume evidence. Tracker 49, D-284 and the
+`D:\CodexProjects\LetsCube-Chat`, Task 5 operational source/proposal from `ae841b93`.
+Operational proposal and isolated PG/PostgREST/Edge/cron recovery, concurrency,
+retention and exact rollback checks are complete. Server 334/334; unit 4035 pass,
+one existing jq skip. Next: fresh-backup controlled schema/Edge rollout with
+gates off, then separately authorized signed candidate and physical matrix.
+No production SQL/Edge rollout, signed candidate or phone installation.
+[Task 5 resume/evidence](operations/2026-09-21-android-call-operations.md).
+Task 4 source/debug is complete and deployed in `9d059c4a`; its browser, native
+receipt and process-death OS-expiry evidence remains valid and separate from
+real FCM delivery. [Task 4 report](operations/2026-09-21-android-call-native.md).
+Tracker 49, D-284 and the
 D-088 address-subscription regression are verified and deployed in `804101f5`
 (runtime commit `dc59ea28`). This includes outgoing ring updates after public
 navigation, Windows caption, auth-bound transport/resume and late-RPC guards.
@@ -154,13 +157,15 @@ Realme has Android 15/microG, LETSCUBE 0.1.3/build 4, notification permission de
 and no Firebase init resources in its installed APK (prior read-only inventory;
 not remeasured in Task 4). Native handler and binding source are now complete;
 next is the separately gated candidate/schema/physical rollout.
-Task 5 must also close immediate-wake recovery, capacity and retention checks;
-minute polling alone cannot meet 45 seconds. No production SQL/Edge activation or
+Task 5's operational proposal now covers five-second recovery, aggregate capacity,
+health and bounded retention, with real isolated runtime proof. Minute polling
+alone is not a deadline guarantee. No production SQL/Edge activation or
 native installation in this batch. Evidence and remaining gates:
 [`2026-09-21-voice-continuation.md`](operations/2026-09-21-voice-continuation.md).
 Completed Task 2 evidence: [Android session/outbox rehearsal](operations/2026-09-21-android-call-delivery.md).
 Completed Task 3 evidence: [Disabled call dispatcher](operations/2026-09-21-android-call-dispatch.md).
 Completed Task 4 evidence: [Native receipt and session binding](operations/2026-09-21-android-call-native.md).
+Completed Task 5 operational evidence: [Recovery, capacity and retention](operations/2026-09-21-android-call-operations.md).
 
 In this order, and the order is not arbitrary — several of these are a chain.
 
@@ -179,7 +184,8 @@ full; each carries his own words and the measurements behind the decisions.
    already exist in source and production. Remaining: measured multi-client
    delivery, background OS notification and closed Android call delivery. Start
    with Task 5 of the Android plan: payload, schema, disabled-dispatcher rehearsals
-   and native source/debug checks are complete; production schema/Edge are still unchanged.
+   and native source/debug checks, operational recovery/capacity/retention are
+   complete as source and isolated QA; production schema/Edge are still unchanged.
    Source tests are not physical proof.
 4. **Item 45 — the group chat.** A separate `chats.type`, born from a live private
    call by one «add to conversation» press; the two already talking are rejoined

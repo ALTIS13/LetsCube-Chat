@@ -32,6 +32,12 @@ debug instrumentation proves receipt and OS-card expiry, not real FCM transport.
 [Task 4 evidence and remaining gates](2026-09-21-android-call-native.md),
 [transport rollout evidence](2026-09-21-voice-continuation.md).
 
+Task 5's recovery/capacity/retention operational proposal is also verified on an
+isolated pinned PG/net/cron/PostgREST/Edge runtime, not installed in production.
+Both new jobs install inactive and both dispatch gates remain off. Thirty seconds
+is a stale-slot threshold, not an unconditional maximum under held locks; ring
+expiry remains 45s. [Operational evidence and rollout order](2026-09-21-android-call-operations.md).
+
 ## The shape of it
 
 ```

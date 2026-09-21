@@ -219,7 +219,7 @@ Version/signing/publication remain Task 5's explicit release gate.
 **Interfaces:**
 - Produces: measured foreground/background/screen-off/killed behavior and a controlled activation or rollback decision.
 
-- [ ] **Operational prerequisites before enabling either gate**
+- [x] **Operational prerequisites: source and isolated rehearsal before enabling either gate**
 
   Establish observable immediate-wake failure/recovery within the original
   45-second lifetime, bounded handling when multiple drains or more than 20
@@ -228,10 +228,22 @@ Version/signing/publication remain Task 5's explicit release gate.
   aggregate capacity and queue age without tokens/payloads. Do not call delivery
   production-ready while these or native receipt checks are unproven.
 
+  Completed as disabled proposal, 2026-09-21: five-second recovery, fixed four
+  wake slots, global 16-lease cap, aggregate health and strict 24h/500+500 retention.
+  Real pinned PG/net/cron/PostgREST/Edge proves 80 targets, immediate 503 recovery,
+  no sends after expiry, delayed-commit admission, forced cleanup race with a
+  single-guard mutant, and exact rollback. Both new jobs install inactive.
+  Stale 30s is a reclamation threshold plus next-tick latency; locked queued work
+  retains capacity rather than being replaced. Not a hard lifetime/SLA promise.
+  [Task 5 operational evidence](../../operations/2026-09-21-android-call-operations.md).
+  Manual files: `supabase/migration-proposals/20260921153256_android_voice_push_operations*.sql`
+  with byte-identical `.migration-backup` copies, outside automatic CLI discovery.
+
 - [ ] **Step 1: Apply owner-specific schema only after backup and rehearsals pass**
 
   Apply the binding migration as `postgres`, then outbox and dispatcher migrations
-  as `supabase_admin`, each once in its own transaction with raising self-checks.
+  and operations proposals as `supabase_admin`, each once in its own transaction
+  with raising self-checks. Keep recovery/cleanup cron jobs inactive as well.
   Deploy the reviewed Edge code separately with both gates disabled. Verify actual
   runtime code, roles and gate state; a web Git push does not deploy this Edge code.
 

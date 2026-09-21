@@ -1,5 +1,25 @@
 # QA Results
 
+## 2026-09-21 - Android Call Recovery, Capacity And Retention
+
+Tracker 32-D1 Task 5 operational source/proposal and isolated QA complete.
+[Evidence, hashes and remaining rollout gates](operations/2026-09-21-android-call-operations.md).
+
+- SQL 43/43 with 16 mutations; server 334/334 after API build; focused push 85/85;
+  full unit 4035 pass, 0 fail, 1 existing jq 1.7.1 skip. Five capacity mutations and
+  one actual PG fresh-snapshot cleanup mutant also killed.
+- Actual overlapping SQL claims: baseline 80, fixed 16. Pinned PG/net/cron/Edge:
+  80 targets accepted in 38.504s; first HTTP503 recovered 4 targets in 8.335s; outage past 45s
+  produced 0 sends, including after recovery. These are synthetic provider results.
+- Delayed 31s commit plus 12s HTTP hold retains the same four requests, tick 0,
+  no replacement enqueue. Real row/advisory locks, FK KEY SHARE and a child
+  committed between cleanup selection/locking preserve data. Exact rollback passes.
+- All three owned isolated containers removed. Production call schema still
+  absent, generic minute push unchanged. No Edge deployment, real FCM sends,
+  personal-phone install, native signing/version bump or publication.
+- Task 4 UI/native evidence reused for unchanged sources; physical delivery and
+  activation remain open. Manual proposals stay outside CLI migration discovery.
+
 ## 2026-09-21 - Android Call Native Receipt And Session Binding
 
 Tracker 32-D1 Task 4 source/debug complete, independent review approved.

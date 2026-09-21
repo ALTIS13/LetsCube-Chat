@@ -9,6 +9,11 @@ in a signed release and its backend dispatch is NOT activated. No current call
 delivery success can be inferred from the historical ordinary-push results below.
 [Current evidence and Task 5 gates](../operations/2026-09-21-android-call-native.md).
 
+Task 5 operational prerequisites are complete as disabled proposals and isolated
+runtime checks: five-second wake recovery, aggregate admission/health and bounded
+retention. [Evidence and controlled rollout order](../operations/2026-09-21-android-call-operations.md).
+Production schema/Edge, signed candidate and physical FCM delivery remain separate.
+
 ## Existing Ordinary Push Foundation
 
 LETSCUBE has a browser/PWA push foundation and an Android FCM delivery

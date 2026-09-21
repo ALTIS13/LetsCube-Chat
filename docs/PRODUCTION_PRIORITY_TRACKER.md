@@ -443,16 +443,20 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     is now complete and independently reviewed: session-bound native receipt,
     cancellation/expiry and guarded tap routing, 4021 unit tests, 76 browser cases,
     ten actual emulator runtime cases and separate process-death OS-expiry proof.
-    No signed candidate or production activation. Next: Task 5 operational gates,
-    then staged schema/candidate and physical QA. Immediate
-    wake recovery, aggregate capacity and retention are explicit activation gates.
+    No signed candidate or production activation. Task 5 operational source and
+    isolated QA are complete: five-second recovery, four HTTP slots/global 16
+    leases, aggregate health, bounded retention, real transaction races and exact
+    rollback. Server 334/334; unit 4035 pass and one existing jq skip. Next: staged
+    schema/Edge rollout with gates and new jobs off, then the separately
+    authorized candidate and physical QA. No source result proves FCM receipt.
     Implementation `9d059c4a` is pushed and web-deployed: exact healthy image,
     previous-replica retirement and public entry/control markers verified.
     See the
     [staged implementation plan](superpowers/plans/2026-09-21-android-call-delivery.md) and
     [Task 2 evidence](operations/2026-09-21-android-call-delivery.md) and
     [Task 3 evidence](operations/2026-09-21-android-call-dispatch.md) and
-    [Task 4 evidence](operations/2026-09-21-android-call-native.md).
+    [Task 4 evidence](operations/2026-09-21-android-call-native.md) and
+    [Task 5 operations](operations/2026-09-21-android-call-operations.md).
 
 33. `[ ]` Documents and the rest of what a message can carry, opened **in the
     chat** the way other media already is. Asked for by the owner on
