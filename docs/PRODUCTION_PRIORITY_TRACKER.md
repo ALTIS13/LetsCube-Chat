@@ -429,13 +429,16 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     A/B/C/D2/E/F/G already exist. Read-only production checks confirmed ring
     columns, Realtime publication, ring/answer/stop RPCs, session preferences and
     a healthy missed-call sweep. Do not recreate them. Closed Android remains
-    absent: no transient ring outbox, no push-token/session binding, no native
+    absent in production: no transient ring outbox, no push-token/session binding, no native
     call/cancel handler. 32-D1's pure data-only payload contract and ten tests
-    are implemented without connecting the dispatcher. Next: owner-specific
-    session-binding/outbox migration rehearsals, then native candidate and
+    are implemented without connecting the dispatcher. Task 2's session binding
+    and ring/cancel outbox proposals are now independently reviewed and verified
+    on an isolated full-schema PG17 copy, including PostgREST compatibility,
+    forced concurrent RPCs and exact rollback. They are NOT applied in production.
+    Next: Task 3 disabled dispatcher, then staged schema apply, native candidate and
     physical QA before activation. See the
     [staged implementation plan](superpowers/plans/2026-09-21-android-call-delivery.md) and
-    [current evidence](operations/2026-09-21-voice-continuation.md).
+    [Task 2 evidence](operations/2026-09-21-android-call-delivery.md).
 
 33. `[ ]` Documents and the rest of what a message can carry, opened **in the
     chat** the way other media already is. Asked for by the owner on

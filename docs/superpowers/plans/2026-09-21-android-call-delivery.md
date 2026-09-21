@@ -98,31 +98,35 @@
 - Create: `tests/server/voice-ring-push-db.test.mjs`
 
 **Interfaces:**
-- Produces: server-derived `user_push_devices.session_id` and an RLS-closed `voice_ring_push_outbox` with idempotent ring/cancel events.
+- Produces: server-derived `user_push_devices.session_id` and an RLS-closed logical outbox implemented as `voice_ring_push_events` plus `voice_ring_push_devices`, with idempotent ring/cancel events and separate device attempts.
 
-- [ ] **Step 1: Capture and verify a fresh pre-change schema backup**
+- [x] **Step 1: Capture and verify a fresh pre-change schema backup**
 
   Record its path, size, SHA-256, target database identity, actual PostgreSQL server version, and restore readability. Check existing migration filenames before each `supabase migration new` call and fail rather than overwrite or reuse a colliding stem. Discover the installed CLI syntax with `pnpm.cmd exec supabase migration new --help`; do not hand-author timestamps. Do not proceed if the backup is not demonstrably the before-state.
 
-- [ ] **Step 2: Write failing PGlite contract tests**
+- [x] **Step 2: Write failing PGlite contract tests**
 
   Assert that registration derives `session_id` from JWT rather than an RPC argument; legacy unbound devices are ineligible for call delivery; a stale session cannot receive after another account uses the same installation; callers never become recipients; ring insertion is unique by recipient/session/channel/start/event; answer, decline, caller cancel, replacement, and missed sweep create or expose a matching cancel state; all tables have RLS and no `anon`/`authenticated` table grants.
 
-- [ ] **Step 3: Rehearse the postgres-owned binding migration**
+- [x] **Step 3: Rehearse the postgres-owned binding migration**
 
   Add nullable `session_id uuid references auth.sessions(id) on delete set null` and nullable `voice_call_protocol smallint check (voice_call_protocol = 1)` to `user_push_devices`. Registration never accepts a client-supplied session UUID: it reads the JWT `session_id`, verifies the live `auth.sessions` row belongs to `auth.uid()`, and rebinds the token on every refresh. Preserve the current seven-argument `register_push_device(text, text, text, text, text, text, text)` as an exact compatibility wrapper returning `void`. Add a distinct eight-argument overload whose `p_voice_call_protocol smallint` argument is required at the SQL signature level (the value may be `1` or null), require all other nullable arguments to be passed explicitly, and return exactly one verified `(recipient_id uuid, recipient_session_id uuid)` row to the authenticated adapter. Both wrappers forward to one non-exposed core implementation with explicit casts; the seven-argument wrapper calls the core with `null::smallint` and discards its result. Do not add defaults to the eight-argument overload: seven-argument and omitted-argument calls must remain unambiguous. Capture `pg_get_function_identity_arguments`, result types, privileges, owner, defaults, and representative old/new named calls in rehearsal tests before replacement. Generic push remains eligible when either binding field is null; voice push is fail-closed unless the device is session-bound and advertises protocol 1.
 
-- [ ] **Step 4: Rehearse the supabase_admin-owned outbox migration**
+- [x] **Step 4: Rehearse the supabase_admin-owned outbox migration**
 
-  Create `voice_ring_push_outbox` with recipient user, recipient session, chat, channel, caller, event, ring start, expiry, claim lease, attempts, per-device outcome, terminal state, and timestamps. Amend the existing voice RPC/sweep transaction paths to insert idempotent ring/cancel events derived from locked server rows. The dispatcher must revalidate the session and `calls_enabled` at claim/send time. Do not copy names, bodies, media, routes, or tokens into SQL.
+  Create the logical outbox using `voice_ring_push_events` (recipient/session/chat/channel/caller/generation/event/expiry/state) and `voice_ring_push_devices` (captured device id/lease/attempts/outcome/timestamps). Narrow private row triggers amend the existing voice RPC/sweep transactions without replacing their bodies. The dispatcher must revalidate the session and `calls_enabled` at claim/send time. Do not copy names, bodies, media, routes, or tokens into SQL.
 
-- [ ] **Step 5: Mutation-check both rehearsals**
+- [x] **Step 5: Mutation-check both rehearsals**
 
   Removing caller exclusion, session ownership validation, expiry ceiling, terminal cancellation, RLS, revoke, unique idempotency, or owner assertion must make the corresponding rehearsal fail.
 
-- [ ] **Step 6: Stop before production apply**
+- [x] **Step 6: Stop before production apply**
 
   Review the two owner-specific migrations and their rollbacks. Applying them is a separate controlled action after this task passes.
+
+  Completed 2026-09-21: 235 server tests, 18 mutations, independent review,
+  real-owner PG17 full-schema round trips, real PostgREST and forced concurrency.
+  [Evidence and remaining gates](../../operations/2026-09-21-android-call-delivery.md).
 
 ### Task 3: Connect a Trusted, Immediate Dispatcher Behind a Disabled Gate
 
@@ -134,7 +138,7 @@
 - Modify: the Task 2 supabase_admin migration and rehearsal before either is applied.
 
 **Interfaces:**
-- Consumes: claimed authoritative `voice_ring_push_outbox` rows and session-bound, enabled Android/FCM devices.
+- Consumes: claimed `voice_ring_push_events` / `voice_ring_push_devices` rows and freshly revalidated session-bound, enabled Android/FCM devices.
 - Produces: one FCM HTTP v1 send attempt per eligible device and a terminal/retry outbox transition without exposing the token.
 
 - [ ] **Step 1: Add failing dispatcher tests**

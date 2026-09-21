@@ -1,5 +1,21 @@
 # QA Results
 
+## 2026-09-21 - Android Call Session/Outbox Foundation
+
+Tracker 32-D1 Task 2 is verified as a proposal, not activated delivery.
+[Detailed evidence](operations/2026-09-21-android-call-delivery.md): 235/235
+server tests, 18/18 payload/FCM/ownership tests, 18 meaningful mutations and
+independent review with 41 focused checks. All commands exited 0 on the final
+tree. A live-ACL mismatch was found and fixed in the isolated rehearsal.
+
+The full before-schema backup restored into identical PG17.6; both migrations
+and their rehearsals passed under the actual object-owner roles. PostgREST
+v14.12 passed 5 baseline, 12 migrated and 5 post-rollback cases. Four forced
+concurrency scenarios and combined registration/ring/account-rebind passed.
+Two rollback cycles restored original function metadata and removed every
+fixture. No production SQL, real FCM send, native build/install or customer
+data mutation was performed. Dispatcher and physical Android QA remain next.
+
 ## 2026-09-21 - Public Call Controls, Auth Lifetime and Address Render Cost
 
 Current batch: tracker 49, D-284, D-088 follow-up, Android 32-D1 contract only.
