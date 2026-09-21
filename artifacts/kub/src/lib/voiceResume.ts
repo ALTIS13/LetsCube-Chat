@@ -89,6 +89,8 @@ export const VOICE_RESUME_KEY = "letscube:voice:resume";
 export type VoiceResumeCause = "interrupted" | "unplanned";
 
 export type VoiceResumeRecord = {
+  /** The authenticated account that owned the call when this record was made. */
+  userId: string;
   channelId: string;
   chatId: string;
   channelName: string;
@@ -120,7 +122,10 @@ export function parseVoiceResumeRecord(raw: string | null): VoiceResumeRecord | 
   }
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
-  const { channelId, chatId, channelName, micMuted, at, cause } = record;
+  const { userId, channelId, chatId, channelName, micMuted, at, cause } = record;
+  // Legacy records had no owner. Treating one as transferable could open the
+  // previous account's microphone after a different person signs in.
+  if (typeof userId !== "string" || userId.trim() === "") return null;
   if (typeof channelId !== "string" || channelId === "") return null;
   if (typeof chatId !== "string" || chatId === "") return null;
   if (typeof channelName !== "string") return null;
@@ -128,6 +133,7 @@ export function parseVoiceResumeRecord(raw: string | null): VoiceResumeRecord | 
   if (!Number.isSafeInteger(at) || (at as number) <= 0) return null;
   if (typeof cause !== "string" || !CAUSES.includes(cause as VoiceResumeCause)) return null;
   return {
+    userId,
     channelId,
     chatId,
     channelName,
@@ -153,11 +159,14 @@ export function serializeVoiceResumeRecord(record: VoiceResumeRecord): string {
 export function decideVoiceResume({
   record,
   now,
+  userId,
 }: {
   record: VoiceResumeRecord | null;
   now: number;
+  userId: string | null;
 }): VoiceResumeDecision {
   if (!record) return { kind: "none" };
+  if (!userId || record.userId !== userId) return { kind: "none" };
   if (record.at > now) return { kind: "none" };
   if (now - record.at >= VOICE_RESUME_WINDOW_MS) return { kind: "none" };
   return record.cause === "interrupted" ? { kind: "return", record } : { kind: "offer", record };

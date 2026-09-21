@@ -24,7 +24,7 @@ test.describe("KUB role visibility", () => {
     await openSidebarMenuItem(page, "Задачи");
     await expect(page).toHaveURL(/\/tasks/);
     await expectTasksPageVisible(page);
-    await expect(page.getByRole("button", { name: /Новая задача|Создать задачу/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^(Новая|Новая задача|Создать задачу)$/ })).toHaveCount(0);
     await expect(page.getByText("Показать удалённые")).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: /Удалить выбранные|Удалить задачу/ }),
@@ -44,7 +44,7 @@ test.describe("KUB role visibility", () => {
     await expect(page).toHaveURL(/\/tasks/);
     await expectTasksPageVisible(page);
     await expect(
-      page.getByRole("button", { name: /Новая задача|Создать задачу/ }).first(),
+      page.getByRole("button", { name: /^(Новая|Новая задача|Создать задачу)$/ }).first(),
     ).toBeVisible();
 
     if (await isSidebarMenuItemVisible(page, "Админ-панель")) {
@@ -106,7 +106,7 @@ async function ensureSidebarVisible(page: Page) {
 
 async function openSidebarMenu(page: Page) {
   await ensureSidebarVisible(page);
-  const existingMenu = page.locator('[role="menu"][data-kub-menu="true"]').first();
+  const existingMenu = page.locator('[data-testid="side-menu-layer"], [role="menu"][data-kub-menu="true"]').first();
   if (await existingMenu.isVisible().catch(() => false)) return existingMenu;
   await page.getByRole("button", { name: "Меню" }).first().click();
   await expect(existingMenu).toBeVisible();
@@ -115,7 +115,7 @@ async function openSidebarMenu(page: Page) {
 
 async function expectSidebarMenuItem(page: Page, label: string, visible: boolean) {
   const menu = await openSidebarMenu(page);
-  const item = menu.getByRole("button", { name: label });
+  const item = menu.getByRole("button", { name: label === "Админ-панель" ? /^(Управление|Админ-панель)$/ : label, exact: true });
   if (visible) {
     await expect(item).toBeVisible();
   } else {
@@ -126,7 +126,7 @@ async function expectSidebarMenuItem(page: Page, label: string, visible: boolean
 
 async function isSidebarMenuItemVisible(page: Page, label: string) {
   const menu = await openSidebarMenu(page);
-  const item = menu.getByRole("button", { name: label });
+  const item = menu.getByRole("button", { name: label === "Админ-панель" ? /^(Управление|Админ-панель)$/ : label, exact: true });
   const visible = await item.isVisible().catch(() => false);
   await page.keyboard.press("Escape");
   return visible;
@@ -134,7 +134,7 @@ async function isSidebarMenuItemVisible(page: Page, label: string) {
 
 async function openSidebarMenuItem(page: Page, label: string) {
   const menu = await openSidebarMenu(page);
-  await menu.getByRole("button", { name: label }).click();
+  await menu.getByRole("button", { name: label === "Админ-панель" ? /^(Управление|Админ-панель)$/ : label, exact: true }).click();
 }
 
 async function expectTasksPageVisible(page: Page) {

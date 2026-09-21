@@ -530,12 +530,14 @@ export function classifyVoiceRingError(error: unknown): VoiceRingRefusal {
  * alternative, «звонок завершён», would be wrong exactly when the call is still
  * running in the person's other hand.
  */
-export function voiceRingRefusalText(code: VoiceRingRefusal): string {
+export function voiceRingRefusalText(code: VoiceRingRefusal | "channel_full"): string {
   switch (code) {
     case "already_ringing":
       return "Звонок уже идёт.";
     case "already_in_call":
       return "В этом чате уже разговаривают.";
+    case "channel_full":
+      return "Разговор уже идёт.";
     case "not_a_private_chat":
       return "Звонки доступны только в личных чатах.";
     case "not_a_member":
@@ -560,4 +562,19 @@ export function voiceRingRefusalText(code: VoiceRingRefusal): string {
     default:
       return "Не удалось позвонить.";
   }
+}
+
+/**
+ * Resolve a failed join in the context of a one-to-one ring.
+ *
+ * Only the gateway's room-capacity reason changes meaning here. Group voice
+ * keeps its gateway wording; every other private-call failure keeps the
+ * already-rendered fallback from the call store.
+ */
+export function voiceRingJoinRefusalText(call: {
+  refusalCode: string | null;
+  refusal: string | null;
+}): string {
+  if (call.refusalCode === "channel_full") return voiceRingRefusalText("channel_full");
+  return call.refusal ?? voiceRingRefusalText("unknown");
 }

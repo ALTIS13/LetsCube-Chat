@@ -6,13 +6,14 @@ import {
   classifyVoiceRingError,
   pickVoiceRing,
   voiceRingEndedTheCall,
+  voiceRingJoinRefusalText,
   voiceRingRefusalText,
   voiceRingState,
   type VoiceRingPick,
   type VoiceRingRow,
   type VoiceRingStopReason,
 } from "@/lib/voiceRing";
-import { joinVoiceChannel, leaveVoiceCall, voiceCallSnapshot } from "@/hooks/useVoiceCall";
+import { joinVoiceChannel, leaveVoiceCall, voiceAuthGenerationSnapshot, voiceAuthOwnsViewer, voiceCallSnapshot } from "@/hooks/useVoiceCall";
 
 /**
  * The ring, and the one place it lives.
@@ -144,7 +145,7 @@ function expired(ring: VoiceRingRow): void {
   const key = `${ring.channelId}@${ring.startedAt}`;
   if (expiryHandled.has(key)) return;
   expiryHandled.add(key);
-  if (ring.caller !== viewerId) return;
+  if (ring.caller !== viewerId || !voiceAuthOwnsViewer(viewerId)) return;
   void stopRing(ring.channelId, "missed");
   if (voiceCallSnapshot().channelId === ring.channelId) void leaveVoiceCall();
 }
@@ -275,12 +276,19 @@ function refuse(error: unknown): VoiceRingOutcome {
   return { ok: false, refusal: voiceRingRefusalText(classifyVoiceRingError(error)) };
 }
 
+function authChanged(): VoiceRingOutcome {
+  return { ok: false, refusal: voiceRingRefusalText("not_authenticated") };
+}
+
 /** `voice_call_stop`, which is idempotent: stopping an idle room is not an error. */
 async function stopRing(channelId: string, reason: VoiceRingStopReason): Promise<VoiceRingOutcome> {
+  const auth = voiceAuthGenerationSnapshot();
+  if (!voiceAuthOwnsViewer(viewerId)) return authChanged();
   const { error } = await looseClient().rpc<unknown>("voice_call_stop", {
     p_channel_id: channelId,
     p_reason: reason,
   });
+  if (auth !== voiceAuthGenerationSnapshot()) return authChanged();
   if (error) return refuse(error);
   if (seed?.row.channelId === channelId) seed = null;
   answeredLocally.delete(channelId);
@@ -309,14 +317,18 @@ export async function startVoiceRing(input: {
   /** The other person, as this reader's own list names them. */
   who: string;
 }): Promise<VoiceRingOutcome> {
+  const auth = voiceAuthGenerationSnapshot();
+  const caller = viewerId;
+  if (!voiceAuthOwnsViewer(caller)) return authChanged();
   const { data, error } = await looseClient().rpc<unknown>("voice_call_ring", {
     p_chat_id: input.chatId,
   });
+  if (auth !== voiceAuthGenerationSnapshot()) return authChanged();
   if (error) return refuse(error);
   const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
   const channelId = typeof row?.channel_id === "string" ? row.channel_id : null;
   const startedAt = typeof row?.ring_started_at === "string" ? Date.parse(row.ring_started_at) : NaN;
-  if (!channelId || !viewerId || !Number.isFinite(startedAt)) {
+  if (!channelId || !caller || !Number.isFinite(startedAt)) {
     return { ok: false, refusal: voiceRingRefusalText("unknown") };
   }
 
@@ -325,7 +337,7 @@ export async function startVoiceRing(input: {
       channelId,
       chatId: input.chatId,
       name: input.who,
-      caller: viewerId,
+      caller,
       startedAt,
       answeredAt: null,
       participantCount: 0,
@@ -336,6 +348,7 @@ export async function startVoiceRing(input: {
   recompute();
 
   await joinVoiceChannel({ channelId, chatId: input.chatId, channelName: input.who });
+  if (auth !== voiceAuthGenerationSnapshot()) return authChanged();
   const call = voiceCallSnapshot();
   if (call.phase === "failed" && call.channelId === channelId) {
     // The microphone was refused, or the gateway was. The ring has to go with
@@ -343,7 +356,7 @@ export async function startVoiceRing(input: {
     // devices ringing at a call nobody could take.
     oneToOneChannelId = null;
     await stopRing(channelId, "cancelled");
-    return { ok: false, refusal: call.refusal ?? voiceRingRefusalText("unknown") };
+    return { ok: false, refusal: voiceRingJoinRefusalText(call) };
   }
   return { ok: true };
 }
@@ -359,9 +372,12 @@ export async function startVoiceRing(input: {
  * was taken elsewhere rather than that something went wrong.
  */
 export async function answerVoiceRing(ring: VoiceRingRow, who: string): Promise<VoiceRingOutcome> {
+  const auth = voiceAuthGenerationSnapshot();
+  if (!voiceAuthOwnsViewer(viewerId)) return authChanged();
   const { error } = await looseClient().rpc<unknown>("voice_call_answer", {
     p_channel_id: ring.channelId,
   });
+  if (auth !== voiceAuthGenerationSnapshot()) return authChanged();
   if (error) return refuse(error);
   oneToOneChannelId = ring.channelId;
   // The row now says `answered`; this device knows it a round trip before the
@@ -370,6 +386,7 @@ export async function answerVoiceRing(ring: VoiceRingRow, who: string): Promise<
   answeredLocally.set(ring.channelId, Date.now());
   recompute();
   await joinVoiceChannel({ channelId: ring.channelId, chatId: ring.chatId, channelName: who });
+  if (auth !== voiceAuthGenerationSnapshot()) return authChanged();
   const call = voiceCallSnapshot();
   if (call.phase === "failed" && call.channelId === ring.channelId) {
     oneToOneChannelId = null;
@@ -378,7 +395,7 @@ export async function answerVoiceRing(ring: VoiceRingRow, who: string): Promise<
     // reason is discarded today; spelling it truthfully is what makes slice B a
     // change to one function body rather than to every call site.
     await stopRing(ring.channelId, "answered");
-    return { ok: false, refusal: call.refusal ?? voiceRingRefusalText("unknown") };
+    return { ok: false, refusal: voiceRingJoinRefusalText(call) };
   }
   return { ok: true };
 }
@@ -390,8 +407,10 @@ export function declineVoiceRing(ring: VoiceRingRow): Promise<VoiceRingOutcome> 
 
 /** Cancel, from the caller's side: clear the ring and leave the room it was waiting in. */
 export async function cancelVoiceRing(ring: VoiceRingRow): Promise<VoiceRingOutcome> {
+  const auth = voiceAuthGenerationSnapshot();
   oneToOneChannelId = null;
   const outcome = await stopRing(ring.channelId, "cancelled");
+  if (auth !== voiceAuthGenerationSnapshot()) return authChanged();
   if (voiceCallSnapshot().channelId === ring.channelId) await leaveVoiceCall();
   return outcome;
 }
@@ -406,9 +425,11 @@ export async function cancelVoiceRing(ring: VoiceRingRow): Promise<VoiceRingOutc
  * people would be refused with `already_ringing`.
  */
 export async function endVoiceCall(): Promise<void> {
+  const auth = voiceAuthGenerationSnapshot();
   const channelId = voiceCallSnapshot().channelId;
   const ringing = channelId !== null && channelId === oneToOneChannelId;
   oneToOneChannelId = null;
   if (ringing && channelId) await stopRing(channelId, "answered");
+  if (auth !== voiceAuthGenerationSnapshot()) return;
   await leaveVoiceCall();
 }

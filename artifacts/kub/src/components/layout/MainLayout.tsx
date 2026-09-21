@@ -10,6 +10,7 @@ import { VoiceElsewhereBar } from "@/components/chat/VoiceElsewhereBar";
 import { VoiceCallRing } from "@/components/chat/VoiceCallRing";
 import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { BottomNav } from "./BottomNav";
+import { useMessengerVoiceSurface } from "./VoiceCallShell";
 import { DesktopUpdatePill } from "@/components/desktop/DesktopUpdatePill";
 import { UserProfileOverlay } from "@/components/profile/UserProfileOverlay";
 import { BotProfileOverlay } from "@/components/profile/BotProfileOverlay";
@@ -28,6 +29,7 @@ import { cn } from "@/lib/utils";
  * On md+ the sidebar and the chat pane sit side-by-side and BottomNav is hidden.
  */
 export function MainLayout() {
+  useMessengerVoiceSurface();
   const selectedChatId = useAppStore((s) => s.selectedChatId);
   const setSelectedChatId = useAppStore((s) => s.setSelectedChatId);
   const setShowSidebar = useAppStore((s) => s.setShowSidebar);

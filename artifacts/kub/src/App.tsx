@@ -1,11 +1,12 @@
 import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect, useState, lazy, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { RegisterForm } from "@/components/auth/RegisterForm";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { VoiceCallShell } from "@/components/layout/VoiceCallShell";
+import { VoiceResumeNotice, VoiceResumeRuntimeController } from "@/components/chat/VoiceResumeNotice";
 import { useUser } from "@/hooks/useUser";
 import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { usePushForegroundSession } from "@/hooks/usePushForegroundSession";
@@ -45,6 +46,7 @@ import { isAuthRoute, isPublicRoute } from "@/lib/publicRoutes";
 import { isMessengerRoute } from "@/lib/chatRoute";
 import { decideRootExperience } from "@/lib/publicHomeRouting";
 import { DesktopWindowChrome } from "@/components/layout/DesktopWindowChrome";
+import { AuthRuntimeProvider } from "@/lib/authRuntime";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -267,7 +269,7 @@ function LoadingScreen({
     return () => window.clearTimeout(timer);
   }, [error]);
   return (
-    <div className="min-h-screen flex items-center justify-center kub-grid-bg">
+    <div className="h-app overflow-y-auto flex items-center justify-center kub-grid-bg">
       <div className="flex max-w-sm flex-col items-center gap-4 px-5 text-center">
         <KubLogo size={56} withGlow />
         <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] font-semibold text-[color:var(--kub-accent-text)]">
@@ -357,8 +359,16 @@ function useElapsedWhile(active: boolean, delay: number): boolean {
   return elapsed;
 }
 
-function AppRoutes() {
-  const { user, loading, loadingError, retry, signOut } = useUser();
+type UserRuntime = ReturnType<typeof useUser>;
+
+function AppRoutes({
+  auth,
+  claimVoiceBootResume,
+}: {
+  auth: UserRuntime;
+  claimVoiceBootResume: () => boolean;
+}) {
+  const { user, loading, loadingError, retry, signOut } = auth;
   const userId = user?.id ?? null;
   const [location] = useLocation();
   const banState = useBanState();
@@ -410,7 +420,6 @@ function AppRoutes() {
     if (rootExperience === "loading") {
       return (
         <>
-          <DesktopWindowChrome />
           <LoadingScreen error={loadingError} onRetry={retry} onSignOut={user ? signOut : undefined} />
         </>
       );
@@ -429,7 +438,6 @@ function AppRoutes() {
   if (bootBlocked && !(authRoute && authRouteReleased)) {
     return (
       <>
-        <DesktopWindowChrome />
         <LoadingScreen error={loadingError} onRetry={retry} onSignOut={user ? signOut : undefined} />
       </>
     );
@@ -449,7 +457,6 @@ function AppRoutes() {
   if (user && banState.banned && banState.ban) {
     return (
       <>
-        <DesktopWindowChrome />
         <BannedScreen ban={banState.ban} />
       </>
     );
@@ -460,21 +467,16 @@ function AppRoutes() {
       {/* The support desk travels with the person instead of sending them to a
           route: a question is usually about what is on screen right now. */}
       {user && <SupportWindow />}
-      {/* Every surface, the messenger included, since 2026-09-12. The
-          messenger used to draw a second title bar of its own in `AppTopBar`
-          and this one was suppressed under it; removing that bar leaves one
-          window chrome for the whole product, which is what D-016 wanted in
-          the first place. */}
-      <DesktopWindowChrome />
-      {/* The running call, on every screen that does not carry it already.
-          `MainLayout` mounts the bar twice for the messenger — the chat list's
-          foot on a computer, a band across the top on a phone — and until
-          2026-09-19 those were the only two mounts in the product, so walking
-          into «Задачи», «Мои боты» or the admin pages during a call left the
-          microphone open with nothing on screen saying so. The rule about
-          which locations need this one is `lib/voiceShellBar.ts`. */}
-      <VoiceCallShell>
-        {/* The messenger is outside the `Switch` on purpose. It answers at two
+      {/* Resume remains behind the session/ban gates. Public pages can control
+          a running call, but opening one must not start a saved microphone. */}
+      {user && (
+        <VoiceResumeNotice
+          key={user.id}
+          userId={user.id}
+          claimBootResume={claimVoiceBootResume}
+        />
+      )}
+      {/* The messenger is outside the `Switch` on purpose. It answers at two
             kinds of location — the chat list at `/` and every conversation at
             `/chat/<id>` — and a `Switch` would hold those in two sibling
             `Route`s, so moving between them would swap which child is rendered
@@ -482,20 +484,19 @@ function AppRoutes() {
             chat opened. `lib/chatRoute.ts` decides what counts as the
             messenger; a near match is not one and falls through to `NotFound`
             below, exactly as an unknown path always has. */}
-        {isMessengerRoute(location) ? (
-          <MainLayout />
-        ) : (
-          <Switch>
-            <Route path="/login" component={LoginForm} />
-            <Route path="/register" component={RegisterForm} />
-            <Route path="/admin/:rest*" component={AdminLayout} />
-            <Route path="/admin" component={AdminLayout} />
-            <Route path="/tasks" component={TasksPage} />
-            <Route path="/bots" component={BotsPage} />
-            <Route component={NotFound} />
-          </Switch>
-        )}
-      </VoiceCallShell>
+      {isMessengerRoute(location) ? (
+        <MainLayout />
+      ) : (
+        <Switch>
+          <Route path="/login" component={LoginForm} />
+          <Route path="/register" component={RegisterForm} />
+          <Route path="/admin/:rest*" component={AdminLayout} />
+          <Route path="/admin" component={AdminLayout} />
+          <Route path="/tasks" component={TasksPage} />
+          <Route path="/bots" component={BotsPage} />
+          <Route component={NotFound} />
+        </Switch>
+      )}
     </>
   );
 }
@@ -519,34 +520,84 @@ const PublicPreviewCapturePage =
     ? lazy(() => import("@/pages/public/PublicPreviewCapturePage"))
     : null;
 
+function PublicRoutes() {
+  return (
+    <Switch>
+      <Route path="/bots/docs" component={BotDocsPage} />
+      <Route path="/download" component={DownloadPage} />
+      <Route path="/privacy" component={PrivacyPage} />
+      <Route path="/support" component={SupportPage} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+/**
+ * Own the configured application's single auth observer across every route.
+ * Public pages need the same identity as transport shutdown and live-call
+ * retry, but must not create a second session read or subscription.
+ */
+function ConfiguredRootRoutes({ location }: { location: string }) {
+  const auth = useUser();
+  const initialLocation = useRef(location);
+  const bootEligibility = useRef<"pending" | "allowed" | "denied">("pending");
+  const bootClaimed = useRef(false);
+
+  if (!auth.loading && bootEligibility.current === "pending") {
+    const initialRouteCanResume =
+      !isPublicRoute(initialLocation.current) && !isAuthRoute(initialLocation.current);
+    bootEligibility.current = auth.user && initialRouteCanResume ? "allowed" : "denied";
+  }
+
+  const claimVoiceBootResume = useCallback(() => {
+    if (bootEligibility.current !== "allowed" || bootClaimed.current) return false;
+    bootClaimed.current = true;
+    return true;
+  }, []);
+  const authSnapshot = useMemo(
+    () => ({ userId: auth.user?.id ?? null, loading: auth.loading }),
+    [auth.user?.id, auth.loading],
+  );
+
+  return (
+    <AuthRuntimeProvider snapshot={authSnapshot}>
+      <VoiceResumeRuntimeController />
+      <VoiceCallShell>
+        {isPublicRoute(location) ? (
+          <PublicRoutes />
+        ) : (
+          <AppRoutes auth={auth} claimVoiceBootResume={claimVoiceBootResume} />
+        )}
+      </VoiceCallShell>
+    </AuthRuntimeProvider>
+  );
+}
+
 function RootRoutes() {
   const [location] = useLocation();
 
   if (PublicPreviewCapturePage && location === PUBLIC_PREVIEW_CAPTURE_PATH) {
     return (
-      <Suspense fallback={null}>
-        <PublicPreviewCapturePage />
-      </Suspense>
+      <VoiceCallShell>
+        <Suspense fallback={null}>
+          <PublicPreviewCapturePage />
+        </Suspense>
+      </VoiceCallShell>
     );
   }
 
-  if (isPublicRoute(location)) {
-    return (
-      <Switch>
-        <Route path="/bots/docs" component={BotDocsPage} />
-        <Route path="/download" component={DownloadPage} />
-        <Route path="/privacy" component={PrivacyPage} />
-        <Route path="/support" component={SupportPage} />
-        <Route component={NotFound} />
-      </Switch>
-    );
-  }
-
+  // Fixed public pages remain usable without deployment configuration. They
+  // stay outside the configured auth observer, so no createClient call can
+  // turn a policy or support document into a runtime-config error.
   if (!isSupabaseConfigured()) {
-    return <RuntimeConfigurationScreen />;
+    return (
+      <VoiceCallShell>
+        {isPublicRoute(location) ? <PublicRoutes /> : <RuntimeConfigurationScreen />}
+      </VoiceCallShell>
+    );
   }
 
-  return <AppRoutes />;
+  return <ConfiguredRootRoutes location={location} />;
 }
 
 function AndroidAppLinkListener() {
@@ -568,6 +619,7 @@ function App() {
             often navigates. */}
         <KubFeedbackViewport />
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+          <DesktopWindowChrome />
           <AndroidAppLinkListener />
           <RootRoutes />
         </WouterRouter>

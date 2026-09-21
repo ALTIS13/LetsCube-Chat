@@ -64,10 +64,9 @@ export function Sidebar() {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
 
   // Who has somebody talking in them, read once for the whole list (slice 3).
-  // Mounted here because this is the one component guaranteed to exist while a
-  // chat list is on screen; it renders nothing, and every row takes its own
-  // answer through `useChatVoicePresence`. Gated on there being a session at
-  // all, so a signed-out shell opens no channel.
+  // Shared with VoicePresenceRuntime during a call: leaving this sidebar does
+  // not unsubscribe signalling, and overlapping consumers open only one channel.
+  // Every row still reads its own answer through `useChatVoicePresence`.
   // The id rather than a flag since 2026-09-18: the same read now carries the
   // ring, and the store behind it has to know who is reading before it may
   // decide that a ring which ran out was this person's to write off.

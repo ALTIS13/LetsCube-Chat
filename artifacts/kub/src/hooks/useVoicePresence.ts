@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { subscribeByTable } from "@/lib/realtimeTableChannels";
@@ -90,33 +90,45 @@ export function voicePresenceSnapshot(): ReadonlyMap<string, ChatVoicePresence> 
   return byChat;
 }
 
-/**
- * The reader for the whole list, mounted once.
- *
- * Mounted by `Sidebar`, which is the one component guaranteed to exist while a
- * chat list is on screen. It renders nothing and returns nothing: every reader
- * takes its answer through `useChatVoicePresence`, so this hook's own render is
- * the only one a call anywhere costs the list.
- */
-export function useVoicePresenceReader(userId: string | null): void {
+interface PresenceReader {
+  userId: string;
+  consumers: number;
+  dispose(): void;
+}
+
+let reader: PresenceReader | null = null;
+
+function clearReaderState() {
+  // Remove expiry authority before clearing rings: an identity boundary must
+  // never send a missed/cancelled RPC on the previous person's behalf.
+  setVoiceRingViewer(null);
+  publish(new Map());
+  // This is not a query snapshot. Invalidate even a seed created this same ms.
+  publishVoiceRings([], Number.POSITIVE_INFINITY);
+}
+
+/** One subscription and one in-flight read shared by the sidebar and live call. */
+function openReader(userId: string): PresenceReader {
   const supabase = createClient();
-  const enabled = userId !== null;
+  const controller = new AbortController();
+  let disposed = false;
   // One in-flight read at a time. A burst of events — somebody joining a room
   // with four people in it produces four — would otherwise start four reads
   // whose answers can arrive out of order, and the last to land wins rather
   // than the newest.
-  const running = useRef(false);
-  const again = useRef(false);
+  let running = false;
+  let again = false;
 
-  const refresh = useCallback(async () => {
-    if (running.current) {
-      again.current = true;
+  const refresh = async () => {
+    if (disposed) return;
+    if (running) {
+      again = true;
       return;
     }
-    running.current = true;
+    running = true;
     try {
       for (;;) {
-        again.current = false;
+        again = false;
         /**
          * Somebody in the room, **or** a ring on it — and the second half is
          * the single most important line in slice A of the one-to-one calls.
@@ -144,7 +156,11 @@ export function useVoicePresenceReader(userId: string | null): void {
             "id,chat_id,name,participant_count,archived,ring_started_at,ring_caller,ring_answered_at",
           )
           .or("participant_count.gt.0,ring_started_at.not.is.null")
-          .eq("archived", false);
+          .eq("archived", false)
+          .abortSignal(controller.signal);
+        // Even a response already received when abort runs belongs to the old
+        // reader. It must not republish after logout, user change or unmount.
+        if (disposed) return;
         // A refused read is not «nobody is talking». The held answer stays, and
         // the mark stays with it, because a list that quietly stops mentioning
         // calls is the defect this exists to fix rather than a safe default.
@@ -155,41 +171,57 @@ export function useVoicePresenceReader(userId: string | null): void {
           publish(chatVoicePresence(readVoicePresenceRows(data, Date.now())));
           publishVoiceRings(readVoiceRingRows(data), readStartedAt);
         }
-        if (!again.current) break;
+        if (!again) break;
       }
+    } catch {
+      // Transport failure preserves the last answer, like a refused read.
     } finally {
-      running.current = false;
+      running = false;
     }
-  }, [supabase]);
+  };
 
-  // Who is reading, handed to the ring store: it has to know whose ring ran out
-  // before it may write `missed`, and only the caller's own device does that.
-  useEffect(() => {
-    setVoiceRingViewer(userId);
-  }, [userId]);
+  setVoiceRingViewer(userId);
+  const opened = subscribeByTable<(payload: unknown) => void, RealtimeChannel>(
+    supabase.realtime,
+    "voice-presence",
+    [{ event: "*", schema: "public", table: "voice_channels", handler: () => void refresh() }],
+  );
+  void refresh();
 
-  useEffect(() => {
-    if (!enabled) return;
-    void refresh();
-    const opened = subscribeByTable<(payload: unknown) => void, RealtimeChannel>(
-      supabase.realtime,
-      "voice-presence",
-      [{ event: "*", schema: "public", table: "voice_channels", handler: () => void refresh() }],
-    );
-    return () => {
+  const onVisible = () => {
+    if (document.visibilityState === "visible") void refresh();
+  };
+  document.addEventListener("visibilitychange", onVisible);
+
+  return {
+    userId,
+    consumers: 0,
+    dispose() {
+      disposed = true;
+      controller.abort();
+      document.removeEventListener("visibilitychange", onVisible);
       for (const entry of opened) void supabase.removeChannel(entry.channel);
-    };
-  }, [enabled, refresh, supabase]);
+    },
+  };
+}
 
-  // The list is not the only thing that can be stale: a tab asleep for an hour
-  // wakes with whatever the last event left. Realtime reconnects on its own and
-  // replays nothing, so the answer is re-read on return rather than trusted.
+/** Hold the reader while a chat list or an authenticated active call needs it. */
+export function useVoicePresenceReader(userId: string | null): void {
   useEffect(() => {
-    if (!enabled) return;
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void refresh();
+    if (!userId) return;
+    if (!reader || reader.userId !== userId) {
+      reader?.dispose();
+      clearReaderState();
+      reader = openReader(userId);
+    }
+    const held = reader;
+    held.consumers += 1;
+    return () => {
+      held.consumers -= 1;
+      if (held.consumers !== 0 || reader !== held) return;
+      held.dispose();
+      reader = null;
+      clearReaderState();
     };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [enabled, refresh]);
+  }, [userId]);
 }

@@ -101,7 +101,7 @@ for (const [file, needle, expected] of panels) {
  * own; the defect is only visible in what is *behind* them.
  */
 test("pages/public/PublicPageShell.tsx lets the page ambient through", () => {
-  const classes = classString("pages/public/PublicPageShell.tsx", "h-dvh overflow-x-hidden overflow-y-auto");
+  const classes = classString("pages/public/PublicPageShell.tsx", "overflow-x-hidden overflow-y-auto");
   assert.doesNotMatch(
     classes,
     /\bbg-\[(?:color:)?var\(--kub-(bg|chat-bg|surface)/,

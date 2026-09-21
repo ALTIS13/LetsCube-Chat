@@ -37,6 +37,9 @@ import { RealtimeFixture } from "./helpers/realtime-fixture";
  */
 
 test.use({
+  screenshot: "off",
+  trace: "off",
+  video: "off",
   launchOptions: {
     // A real audio track, without a microphone and without a prompt — the two
     // switches `voice-call.spec.ts` uses for the same reason.
@@ -59,6 +62,7 @@ const CHAT_TEAM = "22222222-2222-4222-8222-000000000012";
 const ROOM = "33333333-3333-4333-8333-000000000011";
 const LINE = "Привет, посмотри смету";
 const TEAM_LINE = "Макет главной готов";
+const fixtureModuleUrls = new WeakMap<Page, Map<string, string>>();
 const GRANT = {
   ok: true,
   url: "wss://voice.letscube.ru",
@@ -99,6 +103,8 @@ interface Seed {
   room?: Partial<RoomRow>;
   /** Refuse `voice_call_ring` with this body, as PostgREST would. */
   ringRefusal?: { status: number; body: unknown };
+  /** Refuse the gateway token mint after ring/answer has succeeded. */
+  gatewayRefusal?: { status: number; body: unknown };
   /**
    * What `voice_calls_allowed_here` answers — slice F's gate.
    *
@@ -115,7 +121,7 @@ interface Harness {
   /** Push the row at every subscription, the way an UPDATE on it really would. */
   push(): void;
   rpcCalls: { name: string; body: Row }[];
-  probe(): Promise<{ joins: number; left: number }>;
+  probe(): Promise<{ joins: number; left: number; muted: boolean[] }>;
   /**
    * Slice F's gate, kept out of `rpcCalls` on purpose: three tests above assert
    * the whole of that array, and a question this client asks before it draws a
@@ -134,7 +140,7 @@ interface Harness {
  */
 async function installSeam(page: Page) {
   await page.addInitScript(() => {
-    const held = { joins: 0, left: 0 };
+    const held = { joins: 0, left: 0, muted: [] as boolean[] };
     (window as unknown as Record<string, unknown>).__ringProbe = held;
     (window as unknown as Record<string, unknown>).__letscubeVoiceRoom = (events: {
       onParticipants(participants: unknown[]): void;
@@ -143,7 +149,7 @@ async function installSeam(page: Page) {
         held.joins += 1;
         events.onParticipants([]);
       },
-      async setMuted() {},
+      async setMuted(muted: boolean) { held.muted.push(muted); },
       async setMicrophoneOpen() {},
       async setDeafened() {},
       async setParticipantVolume() {},
@@ -170,6 +176,14 @@ async function installSeam(page: Page) {
 }
 
 async function open(page: Page, seed: Seed = {}): Promise<Harness> {
+  const modules = new Map<string, string>();
+  fixtureModuleUrls.set(page, modules);
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (["/src/hooks/useVoicePresence.ts", "/src/hooks/useVoiceRing.ts", "/src/store/app.store.ts"].includes(path)) {
+      modules.set(path, request.url());
+    }
+  });
   const realtime = new RealtimeFixture();
   await realtime.install(page);
   await installSeam(page);
@@ -304,9 +318,14 @@ async function open(page: Page, seed: Seed = {}): Promise<Harness> {
   await page.route(/\/rest\/v1\/voice_participants/, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
-  await page.route("**/functions/v1/voice-gateway/token", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(GRANT) }),
-  );
+  await page.route("**/functions/v1/voice-gateway/token", (route) => {
+    const response = seed.gatewayRefusal ?? { status: 200, body: GRANT };
+    return route.fulfill({
+      status: response.status,
+      contentType: "application/json",
+      body: JSON.stringify(response.body),
+    });
+  });
 
   /**
    * `voice_calls_allowed_here`, asked before an incoming call is drawn.
@@ -341,9 +360,9 @@ async function open(page: Page, seed: Seed = {}): Promise<Harness> {
     rpcCalls,
     probe: () =>
       page.evaluate(() => {
-        const held = (window as unknown as { __ringProbe?: { joins: number; left: number } })
+        const held = (window as unknown as { __ringProbe?: { joins: number; left: number; muted: boolean[] } })
           .__ringProbe;
-        return { joins: held?.joins ?? 0, left: held?.left ?? 0 };
+        return { joins: held?.joins ?? 0, left: held?.left ?? 0, muted: held?.muted ?? [] };
       }),
   };
 }
@@ -471,6 +490,218 @@ test("pressing «Позвонить» rings, joins, and says who is being called
   await expect(page.getByTestId("chat-header-call")).toHaveCount(0);
 });
 
+test("outgoing ring remains controllable after SPA navigation to privacy", async ({ page }) => {
+  const harness = await open(page);
+  await openChat(page, "Анна Смирнова", LINE);
+  await page.getByTestId("chat-header-call").click();
+  await expect(card(page)).toBeVisible();
+  await expect.poll(async () => (await harness.probe()).joins).toBe(1);
+  await page.evaluate(() => {
+    window.history.pushState({}, "", "/privacy");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await expect(page).toHaveURL(/\/privacy$/);
+  await expect(card(page)).toHaveCount(0);
+  const bar = page.getByTestId("voice-call-bar");
+  await expect(bar).toBeVisible();
+  await expect(page.getByTestId("voice-call-bar-state")).toHaveText("Звоним…");
+  await page.getByTestId("voice-call-bar-mute").click();
+  await expect.poll(async () => (await harness.probe()).muted.at(-1)).toBe(true);
+  await expect(page.getByTestId("voice-call-bar-mute")).toHaveAttribute("data-muted", "true");
+  await expect(page.getByTestId("voice-call-bar-leave")).toHaveText("Отменить");
+  await page.getByTestId("voice-call-bar-leave").click();
+  await expect.poll(async () => (await harness.probe()).left).toBe(1);
+  await expect.poll(() => harness.rpcCalls.map((call) => call.name)).toEqual([
+    "voice_call_ring", "voice_call_stop",
+  ]);
+  expect(harness.rpcCalls[1].body).toEqual({ p_channel_id: ROOM, p_reason: "cancelled" });
+  await expect(bar).toHaveCount(0);
+});
+
+test.describe("public-route ring lifecycle", () => {
+  function loadedModule(page: Page, path: string) {
+    const url = fixtureModuleUrls.get(page)?.get(path);
+    if (!url) throw new Error(`Fixture module not loaded: ${path}`);
+    return url;
+  }
+
+  async function heldPresence(page: Page) {
+    return page.evaluate(async ([presencePath, ringPath]) => {
+      // Use the module actually loaded by Vite (including its HMR timestamp),
+      // not a second module instance with an independent empty store.
+      const { voicePresenceSnapshot } = await import(/* @vite-ignore */ presencePath);
+      const { voiceRingsSnapshot } = await import(/* @vite-ignore */ ringPath);
+      return { chats: voicePresenceSnapshot().size, rings: voiceRingsSnapshot().length };
+    }, [loadedModule(page, "/src/hooks/useVoicePresence.ts"), loadedModule(page, "/src/hooks/useVoiceRing.ts")]);
+  }
+
+  async function changeFixtureUser(page: Page, user: Row | null) {
+    return page.evaluate(async ({ path, next }) => {
+      const { useAppStore } = await import(/* @vite-ignore */ path);
+      const previous = useAppStore.getState().currentUser?.id;
+      useAppStore.getState().setCurrentUser(next);
+      return previous;
+    }, { path: loadedModule(page, "/src/store/app.store.ts"), next: user });
+  }
+
+  test("a same-user route handoff retains one reader and the waiting call", async ({ page }) => {
+    const harness = await open(page);
+    await openChat(page, "Анна Смирнова", LINE);
+    const chatUrl = page.url();
+    await page.getByTestId("chat-header-call").click();
+    await expect.poll(async () => (await harness.probe()).joins).toBe(1);
+    await page.evaluate(() => history.pushState(null, "", "/privacy"));
+    await expect(page.getByTestId("voice-call-bar-state")).toHaveText("Звоним…");
+    await page.evaluate((url) => history.pushState(null, "", url), chatUrl);
+    await expect(card(page)).toBeVisible();
+    await expect(page.getByTestId("voice-ring-detail")).toHaveText("Звоним…");
+    expect(harness.realtime.joinCount("voice-presence")).toBe(1);
+    expect((await harness.probe()).left).toBe(0);
+    expect(harness.rpcCalls.map((call) => call.name)).toEqual(["voice_call_ring"]);
+    await page.getByTestId("voice-ring-cancel").click();
+    await expect.poll(async () => (await harness.probe()).left).toBe(1);
+    expect(harness.rpcCalls.at(-1)?.body).toEqual({ p_channel_id: ROOM, p_reason: "cancelled" });
+  });
+
+  test("logout clears a waiting ring without inventing an end reason", async ({ page }) => {
+    await page.clock.install();
+    const harness = await open(page);
+    await openChat(page, "Анна Смирнова", LINE);
+    await page.getByTestId("chat-header-call").click();
+    await expect.poll(async () => (await harness.probe()).joins).toBe(1);
+    await page.evaluate(() => history.pushState(null, "", "/privacy"));
+    await expect(page.getByTestId("voice-call-bar-state")).toHaveText("Звоним…");
+    await expect.poll(() => heldPresence(page)).toEqual({ chats: 0, rings: 1 });
+    expect(await changeFixtureUser(page, null)).toBe(ME.id);
+    await expect.poll(() => heldPresence(page)).toEqual({ chats: 0, rings: 0 });
+    await expect.poll(() => harness.realtime.isJoined("voice-presence")).toBe(false);
+    await page.clock.fastForward(46_000);
+    expect(await heldPresence(page)).toEqual({ chats: 0, rings: 0 });
+    expect(harness.rpcCalls.map((call) => call.name)).toEqual(["voice_call_ring"]);
+    expect((await harness.probe()).left).toBe(1);
+  });
+
+  test("a remote answer reaches privacy and survives the ringing deadline", async ({ page }) => {
+    await page.clock.install();
+    const harness = await open(page);
+    await openChat(page, "Анна Смирнова", LINE);
+    await page.getByTestId("chat-header-call").click();
+    await expect.poll(async () => (await harness.probe()).joins).toBe(1);
+    await page.evaluate(() => history.pushState(null, "", "/privacy"));
+    await expect(page.getByTestId("public-scroll-root")).toBeVisible();
+    const state = page.getByTestId("voice-call-bar-state");
+    await expect(state).toHaveText("Звоним…");
+
+    harness.room.ring_answered_at = new Date().toISOString();
+    harness.room.participant_count = 2;
+    harness.push();
+    await expect(state).toHaveText("Вы в разговоре");
+    expect(harness.realtime.joinCount("voice-presence")).toBe(1);
+
+    await page.clock.fastForward(46_000);
+    expect(await page.evaluate(() => Date.now())).toBeGreaterThan(Date.parse(harness.room.ring_started_at!) + 45_000);
+    await expect(state).toHaveText("Вы в разговоре");
+    expect((await harness.probe()).left).toBe(0);
+    expect(harness.rpcCalls.map((call) => call.name)).toEqual(["voice_call_ring"]);
+
+    await page.getByTestId("voice-call-bar-leave").click();
+    await expect.poll(async () => (await harness.probe()).left).toBe(1);
+    await expect.poll(() => harness.realtime.isJoined("voice-presence")).toBe(false);
+  });
+
+  test("a remote cancellation or decline reaches privacy and leaves the transport", async ({ page }) => {
+    const harness = await open(page);
+    await openChat(page, "Анна Смирнова", LINE);
+    await page.getByTestId("chat-header-call").click();
+    await expect.poll(async () => (await harness.probe()).joins).toBe(1);
+    await page.evaluate(() => history.pushState(null, "", "/privacy"));
+    await expect(page.getByTestId("public-scroll-root")).toBeVisible();
+    await expect(page.getByTestId("voice-call-bar-state")).toHaveText("Звоним…");
+
+    // Both server operations clear the same ring columns; no reason is broadcast.
+    harness.room.ring_started_at = null;
+    harness.room.ring_caller = null;
+    harness.room.ring_answered_at = null;
+    harness.room.participant_count = 0;
+    harness.push();
+    await expect.poll(async () => (await harness.probe()).left).toBe(1);
+    await expect(page.getByTestId("voice-call-bar")).toHaveCount(0);
+    await expect.poll(() => harness.realtime.isJoined("voice-presence")).toBe(false);
+    expect(harness.rpcCalls.map((call) => call.name)).toEqual(["voice_call_ring"]);
+  });
+
+  for (const nextUser of [null, PETR]) {
+    test(`an already received answer cannot republish after ${nextUser ? "user change" : "logout"}`, async ({ page }) => {
+      const harness = await open(page);
+      await openChat(page, "Анна Смирнова", LINE);
+      await page.getByTestId("chat-header-call").click();
+      await expect.poll(async () => (await harness.probe()).joins).toBe(1);
+      await page.evaluate(() => history.pushState(null, "", "/privacy"));
+      await expect(page.getByTestId("public-scroll-root")).toBeVisible();
+      harness.room.ring_answered_at = new Date().toISOString();
+      harness.room.participant_count = 2;
+      harness.push();
+      await expect.poll(() => heldPresence(page)).toEqual({ chats: 1, rings: 1 });
+
+      await page.evaluate(() => {
+        const original = window.fetch.bind(window);
+        const held = { waiting: false, release: () => {} };
+        (window as unknown as Record<string, unknown>).__voiceReadDelay = held;
+        window.fetch = async (input, init) => {
+          const response = await original(input, init);
+          const url = new URL(input instanceof Request ? input.url : String(input));
+          if (!held.waiting && url.pathname.endsWith("/voice_channels") && url.searchParams.has("or")) {
+            // The bytes are already received: aborting fetch cannot retract them.
+            const body = await response.text();
+            const gate = new Promise<void>((resolve) => { held.release = resolve; });
+            held.waiting = true;
+            response.text = async () => { await gate; return body; };
+          }
+          return response;
+        };
+      });
+      harness.room.ring_answered_at = new Date().toISOString();
+      harness.room.participant_count = 3;
+      harness.push();
+      await expect.poll(() => page.evaluate(() =>
+        (window as unknown as { __voiceReadDelay: { waiting: boolean } }).__voiceReadDelay.waiting,
+      )).toBe(true);
+
+      harness.room.ring_started_at = null;
+      harness.room.ring_caller = null;
+      harness.room.ring_answered_at = null;
+      harness.room.participant_count = 0;
+      const previousUser = await changeFixtureUser(page, nextUser);
+      expect(previousUser).toBe(ME.id);
+      await expect.poll(() => harness.realtime.isJoined("voice-presence")).toBe(false);
+      await expect.poll(() => heldPresence(page)).toEqual({ chats: 0, rings: 0 });
+
+      await page.evaluate(async () => {
+        (window as unknown as { __voiceReadDelay: { release(): void } }).__voiceReadDelay.release();
+        // Drain the parsing/publishing continuation after releasing the body.
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      });
+      expect(await heldPresence(page)).toEqual({ chats: 0, rings: 0 });
+      expect(harness.rpcCalls.map((call) => call.name)).toEqual(["voice_call_ring"]);
+    });
+  }
+});
+
+test("channel_full on start describes an existing private conversation", async ({ page }) => {
+  const harness = await open(page, {
+    gatewayRefusal: { status: 409, body: { ok: false, error: "channel_full" } },
+  });
+  await openChat(page, "Анна Смирнова", LINE);
+  await page.getByTestId("chat-header-call").click();
+
+  await expect.poll(() => harness.rpcCalls.map((call) => call.name)).toEqual([
+    "voice_call_ring",
+    "voice_call_stop",
+  ]);
+  await expect(page.getByRole("alert")).toHaveText("Разговор уже идёт.");
+  await expect(page.getByText("В голосовом чате уже максимум участников.")).toHaveCount(0);
+});
+
 test("«Отменить» clears the ring and leaves the room it was waiting in", async ({ page }) => {
   const harness = await open(page);
   await openChat(page, "Анна Смирнова", LINE);
@@ -555,6 +786,27 @@ test("«Ответить» accepts, joins, and hands the call to the bar", async
   await expect.poll(async () => (await harness.probe()).joins, { timeout: 10_000 }).toBe(1);
   await expect(page.getByTestId("voice-call-bar")).toBeVisible();
   await expect(page.getByTestId("voice-call-bar-room")).toHaveText("Анна Смирнова");
+});
+
+test("channel_full on answer describes an existing private conversation", async ({ page }) => {
+  const harness = await open(page, {
+    room: {
+      ring_started_at: new Date().toISOString(),
+      ring_caller: ANNA.id,
+      participant_count: 1,
+    },
+    gatewayRefusal: { status: 409, body: { ok: false, error: "channel_full" } },
+  });
+  await boot(page, harness);
+  await expect(card(page)).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId("voice-ring-answer").click();
+
+  await expect.poll(() => harness.rpcCalls.map((call) => call.name)).toEqual([
+    "voice_call_answer",
+    "voice_call_stop",
+  ]);
+  await expect(page.getByRole("alert")).toHaveText("Разговор уже идёт.");
+  await expect(page.getByText("В голосовом чате уже максимум участников.")).toHaveCount(0);
 });
 
 test("«Отклонить» stops the ring without joining anything", async ({ page }) => {

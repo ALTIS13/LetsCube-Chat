@@ -98,7 +98,7 @@ function toRem(value) {
   return 0;
 }
 
-/** The one declaration of `CAPTION` in each of the two rules that set it. */
+/** Root reservations and the local reset beneath an already inset call bar. */
 function captionRules(text = cssSource) {
   const holders = parseRules(text).filter((rule) => new RegExp(`${CAPTION}\\s*:`).test(rule.body));
   return holders.map((rule) => ({
@@ -129,8 +129,8 @@ test("the caption is zero everywhere and the strip's height on the Windows shell
   const rules = captionRules();
   assert.equal(
     rules.length,
-    2,
-    `${CAPTION} is declared ${rules.length} times; it is a default and one shell's override, and nothing else`,
+    3,
+    `${CAPTION} requires the root default, Windows override and call-content reset`,
   );
 
   const [base, windows] = rules;
@@ -146,6 +146,8 @@ test("the caption is zero everywhere and the strip's height on the Windows shell
   );
   assert.equal(windows.at.length, 0, "the Windows override sits under a condition");
   assert.ok(toRem(windows.value) > 0, `the Windows override is "${windows.value}", which reserves nothing`);
+  assert.deepEqual(rules[2].selectors, [".kub-voice-call-shell:has(> .kub-voice-call-shell-band > .kub-voice-call-bar) > .kub-voice-call-shell-content"]);
+  assert.equal(rules[2].value, "0px");
 });
 
 test("the reservation is exactly the strip the window chrome draws", () => {
@@ -319,5 +321,5 @@ test("the reservation guarantee fails when a surface goes back to the hardware's
 
 test("the caption guarantee fails when the Windows override is dropped", () => {
   const broken = mutate(cssSource, ':root[data-desktop-shell="windows"] {\n  --kub-window-caption: 2rem;\n}', "");
-  assert.equal(captionRules(broken).length, 1, "the override was removed and the token still reports two rules");
+  assert.equal(captionRules(broken).length, 2, "the override was removed but the rule count did not change");
 });

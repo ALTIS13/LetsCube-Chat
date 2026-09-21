@@ -1,6 +1,7 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { expect, test, type Page, type Route } from "@playwright/test";
 
@@ -55,14 +56,6 @@ const UNCONFIGURED_NAVIGATION_TIMEOUT_MS = 60_000;
 const STOP_GRACE_MS = 10_000;
 const TRANSCRIPT_CHUNK_LIMIT = 200;
 const ANSI_PATTERN = /\u001B\[[0-9;]*m/g;
-
-// Every env file Vite loads for its default development mode.
-const VITE_ENV_FILE_NAMES = [
-  ".env",
-  ".env.local",
-  ".env.development",
-  ".env.development.local",
-] as const;
 
 // Every public Supabase name the client accepts, so none of them can leak in
 // from the shell that starts the configured server.
@@ -615,30 +608,23 @@ async function assertUnconfiguredPortIsFree(): Promise<void> {
 function spawnUnconfiguredDevServer(cwd: string): UnconfiguredDevServer {
   const workspace = path.join(cwd, "artifacts", "kub");
 
-  // Vite reads env files from its own root, which would put back the
-  // configuration this matrix removes from the process environment.
-  const strayEnvFile = VITE_ENV_FILE_NAMES.find((name) => existsSync(path.join(workspace, name)));
-  if (strayEnvFile) {
-    throw new Error(
-      `${path.join(workspace, strayEnvFile)} would re-supply Supabase configuration to the unconfigured ` +
-        "matrix. Remove it before running this suite.",
-    );
+  // Use the installed Vite API with the same config, but explicitly disable
+  // env-file loading. Local credentials must neither configure this matrix nor
+  // be moved/deleted to run it. Bind only on loopback, in a directly owned child.
+  const viteEntry = path.join(workspace, "node_modules", "vite", "dist", "node", "index.js");
+  if (!existsSync(viteEntry)) {
+    throw new Error(`Vite is not installed for @workspace/kub at ${viteEntry}. Run the workspace install first.`);
   }
-
-  // The `dev` script of `@workspace/kub` is `vite --config vite.config.ts --host
-  // 0.0.0.0`, so this runs the same binary against the same config. Going
-  // through `pnpm.cmd` would need a Windows shell, which Node deprecates when
-  // arguments are passed and which adds a process layer between this test and
-  // Vite. The one deliberate difference is the bind address: an unconfigured
-  // build should not be reachable off this machine.
-  const viteBin = path.join(workspace, "node_modules", "vite", "bin", "vite.js");
-  if (!existsSync(viteBin)) {
-    throw new Error(`Vite is not installed for @workspace/kub at ${viteBin}. Run the workspace install first.`);
-  }
+  const bootstrap = `
+    const { createServer } = await import(${JSON.stringify(pathToFileURL(viteEntry).href)});
+    const server = await createServer({ configFile: "vite.config.ts", envFile: false, server: { host: "127.0.0.1" } });
+    await server.listen();
+    server.printUrls();
+  `;
 
   const child = spawn(
     process.execPath,
-    [viteBin, "--config", "vite.config.ts", "--host", "127.0.0.1"],
+    ["--input-type=module", "-e", bootstrap],
     {
       cwd: workspace,
       env: unconfiguredEnvironment(),

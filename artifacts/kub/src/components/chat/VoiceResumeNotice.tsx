@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KubButton, KubIcon } from "@/components/kub";
 import { joinVoiceChannel, useVoiceCall } from "@/hooks/useVoiceCall";
+import { useAuthRuntime } from "@/lib/authRuntime";
 import {
   VOICE_RESUME_HEARTBEAT_MS,
   VOICE_RESUME_WINDOW_MS,
@@ -19,11 +20,9 @@ import { clearVoiceResume, readVoiceResume, writeVoiceResume } from "@/lib/voice
  * his sentence rather than a compromise with it. What is in this file is the
  * wiring, and four things the rule cannot know.
  *
- * **The record is read before anything can clear it.** `decideVoiceResume` runs
- * in a `useState` initialiser, during the first render, because the effect that
- * forgets a deliberately-left call would otherwise wipe the record at boot —
- * `idle` is both «they hung up» and «nothing has happened yet», and the two are
- * only distinguishable by when they are read.
+ * **Boot and hang-up are distinct.** `VoiceResumeRecordSync` forgets a record
+ * only on a transition to idle, not an idle mount. The authenticated notice
+ * reads once; returning from a public page with a live call is not a new boot.
  *
  * **A drop keeps the record; a hang-up forgets it.** That needs no branch. A
  * refusal at join time — a declined microphone, a full room — never reached
@@ -54,17 +53,36 @@ import { clearVoiceResume, readVoiceResume, writeVoiceResume } from "@/lib/voice
  */
 const RETRY_AT_MS = [1_000, 5_000, 15_000, 45_000, 120_000, 240_000] as const;
 
-export function VoiceResumeNotice() {
+export function VoiceResumeNotice({
+  userId,
+  claimBootResume,
+}: {
+  userId: string;
+  claimBootResume: () => boolean;
+}) {
+  const authRuntime = useAuthRuntime();
   const call = useVoiceCall();
   const [offer, setOffer] = useState<VoiceResumeRecord | null>(null);
   const acted = useRef(false);
 
   // Read once, during the first render, before any effect below can forget it.
-  const [boot] = useState(() =>
-    decideVoiceResume({ record: readVoiceResume(), now: Date.now() }),
-  );
+  const [boot] = useState(() => decideVoiceResume({
+    record: call.phase === "idle" || call.phase === "failed" ? readVoiceResume() : null,
+    now: Date.now(),
+    userId,
+  }));
 
   const returnToCall = useCallback((record: VoiceResumeRecord) => {
+    // The offer may have been rendered for the previous account immediately
+    // before an auth event. Refuse before clear/capture, independently of the
+    // transport generation guard that protects work already in flight.
+    if (
+      authRuntime.loading ||
+      authRuntime.userId !== userId ||
+      record.userId !== authRuntime.userId
+    ) {
+      return;
+    }
     // Cleared before the attempt, not after: a join that fails must not leave a
     // record that tries again on the next boot, and the same reasoning as the
     // quiet restart's cooldown in `appUpdateNotice.ts`. If the join succeeds the
@@ -76,65 +94,21 @@ export function VoiceResumeNotice() {
       channelName: record.channelName,
       micMuted: record.micMuted,
     });
-  }, []);
+  }, [authRuntime.loading, authRuntime.userId, userId]);
 
   // The boot decision, acted on once.
   useEffect(() => {
     if (acted.current) return;
     acted.current = true;
+    // This one-shot decision is deliberately made in the guarded effect, not
+    // the state initializer: React StrictMode may invoke lazy initializers
+    // twice and must not spend the configured root's claim on a discarded run.
+    if (!claimBootResume()) return;
     if (boot.kind === "return") returnToCall(boot.record);
     else if (boot.kind === "offer") setOffer(boot.record);
-  }, [boot, returnToCall]);
+  }, [boot, claimBootResume, returnToCall]);
 
-  // While the call is up, the record is what it would take to rebuild it.
   const live = call.phase === "connected" || call.phase === "reconnecting";
-  const { channelId, chatId, channelName, micMuted } = call;
-  useEffect(() => {
-    if (!live || !channelId || !chatId) return undefined;
-    const write = () => {
-      writeVoiceResume({
-        channelId,
-        chatId,
-        channelName: channelName ?? "",
-        micMuted,
-        at: Date.now(),
-        // What the product has not taken away is, as far as this record knows,
-        // still the person's own. `AppUpdateBanner` upgrades it the moment the
-        // product decides to reload the page.
-        cause: "unplanned",
-      });
-    };
-    write();
-    const timer = window.setInterval(write, VOICE_RESUME_HEARTBEAT_MS);
-    return () => window.clearInterval(timer);
-  }, [live, channelId, chatId, channelName, micMuted]);
-
-  // Hanging up forgets. `idle` after the first render is a decision somebody
-  // made; `idle` at boot was already read above.
-  useEffect(() => {
-    if (call.phase === "idle" && acted.current) clearVoiceResume();
-  }, [call.phase]);
-
-  // A call that closed under its own transport, retried while the window holds.
-  const dropped = call.phase === "failed";
-  useEffect(() => {
-    if (!dropped) return undefined;
-    const record = readVoiceResume();
-    if (!record) return undefined;
-    if (decideVoiceResume({ record, now: Date.now() }).kind === "none") return undefined;
-    const timers = RETRY_AT_MS.map((delay) =>
-      window.setTimeout(() => {
-        // Re-read every time: the person may have hung up, joined somewhere
-        // else, or let the window close since this timer was set.
-        const current = readVoiceResume();
-        if (!current) return;
-        if (decideVoiceResume({ record: current, now: Date.now() }).kind === "none") return;
-        if (typeof navigator !== "undefined" && navigator.onLine === false) return;
-        returnToCall(current);
-      }, delay),
-    );
-    return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [dropped, returnToCall]);
 
   // An offer is spent by pressing it, and it is gone once the window closes
   // under it — a button that returns nobody is worse than no button.
@@ -199,4 +173,135 @@ export function VoiceResumeNotice() {
       </KubButton>
     </div>
   );
+}
+
+type RuntimeCall = {
+  userId: string;
+  channelId: string;
+  chatId: string;
+};
+
+/**
+ * Retry only a call this mounted runtime observed alive.
+ *
+ * It deliberately has no boot path: a stored record on a public page is not
+ * authority to capture a microphone. Keeping this controller above the route
+ * split lets the same live call recover after `/privacy` replaces AppRoutes.
+ */
+export function VoiceResumeRuntimeController() {
+  const { userId, loading } = useAuthRuntime();
+  const { phase, channelId, chatId } = useVoiceCall();
+  const activeCall = useRef<RuntimeCall | null>(null);
+  const retryStartedAt = useRef<number | null>(null);
+  const retryIndex = useRef(0);
+  const live = phase === "connected" || phase === "reconnecting";
+
+  useEffect(() => {
+    if (loading || !userId) {
+      activeCall.current = null;
+      retryStartedAt.current = null;
+      retryIndex.current = 0;
+      return;
+    }
+    if (live && channelId && chatId) {
+      activeCall.current = { userId, channelId, chatId };
+      retryStartedAt.current = null;
+      retryIndex.current = 0;
+      return;
+    }
+    if (phase === "idle") {
+      activeCall.current = null;
+      retryStartedAt.current = null;
+      retryIndex.current = 0;
+    }
+  }, [loading, userId, live, phase, channelId, chatId]);
+
+  useEffect(() => {
+    if (phase !== "failed" || loading || !userId) return undefined;
+    const observed = activeCall.current;
+    if (!observed || observed.userId !== userId) return undefined;
+
+    const saved = readVoiceResume();
+    const decision = decideVoiceResume({ record: saved, now: Date.now(), userId });
+    if (decision.kind === "none") return undefined;
+    if (decision.record.channelId !== observed.channelId || decision.record.chatId !== observed.chatId) {
+      return undefined;
+    }
+
+    retryStartedAt.current ??= Date.now();
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const scheduleNext = () => {
+      const index = retryIndex.current;
+      if (index >= RETRY_AT_MS.length || retryStartedAt.current === null) return;
+      const target = retryStartedAt.current + RETRY_AT_MS[index];
+      timer = window.setTimeout(() => {
+        if (cancelled) return;
+        retryIndex.current = index + 1;
+        if (typeof navigator !== "undefined" && navigator.onLine === false) {
+          scheduleNext();
+          return;
+        }
+
+        const current = readVoiceResume();
+        const currentDecision = decideVoiceResume({ record: current, now: Date.now(), userId });
+        if (currentDecision.kind === "none") return;
+        if (
+          currentDecision.record.channelId !== observed.channelId ||
+          currentDecision.record.chatId !== observed.chatId
+        ) {
+          return;
+        }
+        void joinVoiceChannel({
+          channelId: currentDecision.record.channelId,
+          chatId: currentDecision.record.chatId,
+          channelName: currentDecision.record.channelName,
+          micMuted: currentDecision.record.micMuted,
+        }).finally(() => {
+          // A very fast refusal can publish `joining` and `failed` in one
+          // React batch. Then `phase` appears unchanged and the effect does not
+          // rerun, so continue the same schedule here. A rendered transition,
+          // successful join or identity change cleans the effect first.
+          if (!cancelled) scheduleNext();
+        });
+      }, Math.max(0, target - Date.now()));
+    };
+
+    scheduleNext();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [phase, loading, userId]);
+
+  return null;
+}
+
+/** Persist the current call on every route without ever starting a microphone. */
+export function VoiceResumeRecordSync() {
+  const { userId, loading } = useAuthRuntime();
+  const { phase, channelId, chatId, channelName, micMuted } = useVoiceCall();
+  const previousPhase = useRef(phase);
+  const live = phase === "connected" || phase === "reconnecting";
+
+  useEffect(() => {
+    if (loading || !userId || !live || !channelId || !chatId) return;
+    const write = () => writeVoiceResume({
+      userId, channelId, chatId, channelName: channelName ?? "", micMuted,
+      at: Date.now(), cause: "unplanned",
+    });
+    write();
+    const timer = window.setInterval(write, VOICE_RESUME_HEARTBEAT_MS);
+    return () => window.clearInterval(timer);
+  }, [loading, userId, live, channelId, chatId, channelName, micMuted]);
+
+  useEffect(() => {
+    // A real hang-up clears the record; idle at first render must not consume
+    // a saved call before the authenticated resume gate can inspect it.
+    if (phase === "idle" && previousPhase.current !== "idle") clearVoiceResume();
+    previousPhase.current = phase;
+  }, [phase]);
+
+  return null;
 }

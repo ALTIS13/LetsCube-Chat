@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { voiceGatewayRefusalText } from "../../artifacts/kub/src/lib/voiceGateway.ts";
 import {
   VOICE_RING_TTL_SECONDS,
   classifyVoiceRingError,
@@ -9,6 +10,7 @@ import {
   voiceCallOffer,
   voiceRingEndedTheCall,
   voiceRingIsWaiting,
+  voiceRingJoinRefusalText,
   voiceRingRefusalText,
   voiceRingState,
   voiceRingView,
@@ -437,4 +439,21 @@ test("every refusal has a sentence of its own, and none of them is a code", () =
   // The one worth naming: two devices ring, one answers, the other's press
   // arrives late. That is §4a working, not an error, and the sentence says so.
   assert.equal(voiceRingRefusalText("not_ringing"), "Уже ответили на другом устройстве.");
+});
+
+test("channel_full keeps group wording but becomes a private-call fact in the ring", () => {
+  const groupText = voiceGatewayRefusalText("channel_full");
+  const privateText = voiceRingJoinRefusalText({ refusalCode: "channel_full", refusal: groupText });
+
+  assert.equal(groupText, "В голосовом чате уже максимум участников.");
+  assert.equal(privateText, "Разговор уже идёт.");
+  assert.doesNotMatch(privateText, /участник|мест/iu);
+  assert.equal(
+    voiceRingJoinRefusalText({
+      refusalCode: "network",
+      refusal: "Нет связи с сервером, проверьте подключение.",
+    }),
+    "Нет связи с сервером, проверьте подключение.",
+    "only channel_full receives private-call wording",
+  );
 });

@@ -452,6 +452,211 @@ test("the shell draws no second band in the messenger", async ({ page, browserNa
   ).toHaveCount(0);
 });
 
+for (const theme of ["dark", "light"] as const) {
+  test(`public routes keep the running microphone reachable, ${theme}`, async ({ page, browserName }, info) => {
+    needsWebRtc(browserName);
+    await open(page, { theme });
+    await join(page);
+    await goToBots(page);
+    for (const path of ["/bots/docs", "/privacy", "/support", "/download"]) {
+      // Same SPA navigation used by a notification targeting /support.
+      // The documentation link itself opens a separate tab, not this journey.
+      await page.evaluate((url) => window.history.pushState(null, "", url), path);
+      await expect(page).toHaveURL(new RegExp(`${path}$`));
+      const publicPage = page.getByTestId("public-scroll-root");
+      await expect(publicPage).toBeVisible();
+      await expect(bar(page)).toHaveCount(1);
+      await expect(bar(page).getByTestId("voice-call-bar-state")).toHaveText("Вы в разговоре");
+      await bar(page).getByTestId("voice-call-bar-mute").click();
+      await expect(bar(page).getByTestId("voice-call-bar-state")).toHaveText("Микрофон выключен");
+      await expect.poll(() => page.evaluate(() => window.__shellProbe?.muted.at(-1))).toBe(true);
+      await expect.poll(() => page.evaluate(() => {
+        const raw = localStorage.getItem("letscube:voice:resume");
+        return raw ? JSON.parse(raw).micMuted : null;
+      })).toBe(true);
+
+      const layout = await publicPage.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        const band = document.querySelector('[data-testid="voice-call-bar"]')!.getBoundingClientRect();
+        return { top: box.top, bottom: box.bottom, barBottom: band.bottom, viewport: innerHeight };
+      });
+      expect(layout.top).toBeCloseTo(layout.barBottom, 0);
+      expect(layout.bottom).toBeCloseTo(layout.viewport, 0);
+      // Scrolling a long document must not take the microphone control away.
+      await publicPage.evaluate((node) => { node.scrollTop = node.scrollHeight; });
+      await expect(bar(page).getByTestId("voice-call-bar-mute")).toBeInViewport();
+      await expect(publicPage.locator("footer")).toBeInViewport();
+      await publicPage.evaluate((node) => { node.scrollTop = 0; });
+      await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme);
+      await page.screenshot({ path: `output/voice-shell-bar/${info.project.name}-${theme}-${path.replaceAll("/", "-")}.png` });
+      await bar(page).getByTestId("voice-call-bar-mute").click();
+    }
+
+    await expect.poll(() => page.evaluate(() => window.__shellProbe?.left)).toBe(0);
+    await bar(page).getByTestId("voice-call-bar-leave").click();
+    await expect.poll(() => page.evaluate(() => window.__shellProbe?.left)).toBe(1);
+    await expect(bar(page)).toHaveCount(0);
+    const after = await page.getByTestId("public-scroll-root").boundingBox();
+    expect(after!.y).toBe(0);
+    expect(after!.height).toBe(page.viewportSize()!.height);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("letscube:voice:resume"))).toBeNull();
+  });
+}
+
+test("the public call bar returns to the conversation without restarting it", async ({ page, browserName }) => {
+  needsWebRtc(browserName);
+  await open(page);
+  await join(page);
+  await page.evaluate(() => window.history.pushState(null, "", "/privacy"));
+  await expect(bar(page)).toHaveCount(1);
+  await bar(page).getByTestId("voice-call-bar-open").click();
+  await expect(page).toHaveURL(new RegExp(`/chat/${CHAT_TEAM}$`));
+  await expect(action(page)).toHaveText("Выйти");
+  await expect(bar(page)).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.__shellProbe?.left)).toBe(0);
+  await action(page).click();
+  await expect(page.getByTestId("voice-resume-offer")).toHaveCount(0);
+});
+
+for (const destination of [`/chat/${CHAT_TEAM}`, "/tasks"]) {
+  test(`a loading ${destination} keeps call controls and fits the remaining viewport`, async ({ page, browserName }) => {
+    needsWebRtc(browserName);
+    const modules = new Map<string, string>();
+    page.on("request", (request) => {
+      const path = new URL(request.url()).pathname;
+      if (["/src/lib/supabase/client.ts", "/src/store/app.store.ts"].includes(path)) {
+        modules.set(path, request.url());
+      }
+    });
+    await open(page);
+    await join(page);
+    await page.evaluate(() => history.pushState(null, "", "/privacy"));
+    await expect(bar(page)).toBeVisible();
+    let release!: () => void;
+    let profileReads = 0;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    await page.route("**/rest/v1/profiles**", async (route) => {
+      const request = route.request();
+      const query = new URL(request.url()).searchParams;
+      if (request.method() !== "GET" || query.get("id") !== `eq.${ME.id}` || query.get("select") !== "*") {
+        await route.fallback();
+        return;
+      }
+      profileReads += 1;
+      await gate;
+      await route.fallback();
+    });
+    try {
+      await page.evaluate((path) => history.pushState(null, "", path), destination);
+      const loading = page.locator(".kub-grid-bg").filter({ hasText: "Загрузка" });
+      // Navigation now retains the root observer: it must not reload a profile.
+      if (destination.startsWith("/chat/")) await expect(action(page)).toHaveText("Выйти");
+      else await expect(bar(page)).toBeVisible();
+      await expect(loading).toHaveCount(0);
+      expect(profileReads).toBe(0);
+
+      // Exercise a real auth/profile loading transition separately, with the
+      // same account and a blocked fixture response, not a second useUser mount.
+      const client = modules.get("/src/lib/supabase/client.ts");
+      const store = modules.get("/src/store/app.store.ts");
+      expect(client && store).toBeTruthy();
+      await page.evaluate(async ({ client, store, userId }) => {
+        const { createClient } = await import(/* @vite-ignore */ client!);
+        const { useAppStore } = await import(/* @vite-ignore */ store!);
+        useAppStore.getState().setCurrentUser(null);
+        const encode = (value: unknown) => btoa(JSON.stringify(value)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+        const token = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ sub: userId, exp: Math.floor(Date.now() / 1000) + 3600 })}.fixture`;
+        const result = await createClient().auth.setSession({ access_token: token, refresh_token: "fixture-refresh" });
+        if (result.error) throw new Error("Fixture profile refresh failed");
+      }, { client, store, userId: ME.id });
+      await expect.poll(() => profileReads).toBe(1);
+      await expect(loading).toBeVisible();
+      await expect(bar(page)).toHaveCount(1);
+      await bar(page).getByTestId("voice-call-bar-mute").click();
+      await expect(bar(page).getByTestId("voice-call-bar-state")).toHaveText("Микрофон выключен");
+      const bounds = await loading.boundingBox();
+      const band = await bar(page).boundingBox();
+      expect(bounds!.y).toBeCloseTo(band!.y + band!.height, 0);
+      expect(bounds!.y + bounds!.height).toBeCloseTo(page.viewportSize()!.height, 0);
+    } finally {
+      release();
+    }
+    await expect(page.getByText("Загрузка", { exact: true })).toHaveCount(0);
+    if (destination.startsWith("/chat/")) {
+      await expect(action(page)).toHaveText("Выйти");
+      await expect(bar(page)).toHaveCount(0);
+    } else {
+      await expect(bar(page)).toHaveCount(1);
+    }
+  });
+}
+
+for (const theme of ["dark", "light"] as const) {
+  test(`Windows caption never covers call controls on public pages, ${theme}`, async ({ page, browserName }, info) => {
+    needsWebRtc(browserName);
+    await page.addInitScript(() => {
+      const quiet = async () => undefined;
+      window.letscubeDesktop = {
+        platform: "windows", version: "0.2.14", build: 18,
+        isMaximized: async () => false, minimize: quiet, toggleMaximize: quiet,
+        closeToTray: quiet, startDragging: quiet,
+        isMainForeground: async () => true, notify: async () => false,
+      } as unknown as NonNullable<Window["letscubeDesktop"]>;
+    });
+    await open(page, { theme });
+    await expect(page.locator("html")).toHaveAttribute("data-desktop-shell", "windows");
+    await join(page);
+    await goToBots(page);
+    const chrome = page.getByTestId("desktop-window-chrome");
+    const control = bar(page).getByTestId("voice-call-bar-mute");
+    const caption = await chrome.boundingBox();
+    const mic = await control.boundingBox();
+    expect(mic!.y).toBeGreaterThanOrEqual(caption!.y + caption!.height);
+    await control.click();
+    for (const path of ["/privacy", "/support", "/download", "/bots/docs"]) {
+      await page.evaluate((url) => history.pushState(null, "", url), path);
+      await expect(chrome).toHaveCount(1);
+      await expect(chrome).toBeVisible();
+      await expect(control).toBeVisible();
+      // Locator.click checks that another element does not intercept the target.
+      await control.click();
+      const layout = await page.getByTestId("public-scroll-root").boundingBox();
+      expect(layout!.y + layout!.height).toBeCloseTo(page.viewportSize()!.height, 0);
+    }
+    await page.screenshot({ path: `output/voice-shell-bar/${info.project.name}-windows-${theme}.png` });
+    await bar(page).getByTestId("voice-call-bar-leave").click();
+    await expect(bar(page)).toHaveCount(0);
+    await expect(chrome).toHaveCount(1);
+    const headerLink = page.getByRole("navigation", { name: "Публичные страницы" }).getByRole("link", { name: "Войти" });
+    expect((await headerLink.boundingBox())!.y).toBeGreaterThanOrEqual(caption!.height);
+    expect((await page.getByTestId("public-scroll-root").boundingBox())!.y).toBe(0);
+  });
+}
+
+test("a public page never restores a microphone from a saved call", async ({ page, browserName }) => {
+  needsWebRtc(browserName);
+  await open(page);
+  await page.addInitScript(({ channelId, chatId }) => {
+    localStorage.removeItem("kub-auth");
+    localStorage.setItem("letscube:voice:resume", JSON.stringify({
+      channelId, chatId, channelName: "Общий голос", micMuted: false,
+      at: Date.now(), cause: "interrupted",
+    }));
+  }, { channelId: CHANNEL_ID, chatId: CHAT_TEAM });
+  let joins = 0;
+  await page.route("**/functions/v1/voice-gateway/token", (route) => {
+    joins += 1;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(GRANT) });
+  });
+  for (const path of ["/privacy", "/support", "/download", "/bots/docs"]) {
+    await page.goto(path);
+    await expect(page.getByTestId("public-scroll-root")).toBeVisible();
+    await expect(bar(page)).toHaveCount(0);
+    await expect(page.getByTestId("voice-resume-offer")).toHaveCount(0);
+  }
+  expect(joins).toBe(0);
+});
+
 /**
  * The photographs. Three states, because they are the three a person is in:
  * the call running, the microphone off, and the connection reporting a fault.
@@ -496,3 +701,356 @@ for (const theme of ["dark", "light"] as const) {
     });
   }
 }
+
+// Auth boundaries use fake microphone tracks and a transport probe, never captures.
+const authBoundaryTest = test.extend({
+  screenshot: "off",
+  trace: "off",
+  video: "off",
+  launchOptions: {
+    args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--mute-audio"],
+  },
+});
+
+authBoundaryTest.describe("voice auth boundary", () => {
+  type Delay = "none" | "microphone" | "token" | "transport" | "leave";
+
+  async function prepare(page: Page, delay: Delay = "none") {
+    const modules = new Map<string, string>();
+    page.on("request", (request) => {
+      const path = new URL(request.url()).pathname;
+      if (["/src/hooks/useVoiceCall.ts", "/src/hooks/useVoiceRing.ts", "/src/lib/supabase/client.ts", "/src/store/app.store.ts"].includes(path)) {
+        modules.set(path, request.url());
+      }
+    });
+    await open(page);
+    const urls = {
+      call: modules.get("/src/hooks/useVoiceCall.ts")!,
+      ring: modules.get("/src/hooks/useVoiceRing.ts")!,
+      client: modules.get("/src/lib/supabase/client.ts")!,
+      store: modules.get("/src/store/app.store.ts")!,
+    };
+    expect(Object.values(urls).every(Boolean)).toBe(true);
+    const rpcReasons: unknown[] = [];
+    await page.route("**/rest/v1/rpc/voice_call_stop", (route) => {
+      rpcReasons.push(route.request().postDataJSON()?.p_reason);
+      return route.fulfill({ status: 200, contentType: "application/json", body: '"idle"' });
+    });
+    await page.route("**/rest/v1/rpc/voice_call_ring", (route) => route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify([{ channel_id: CHANNEL_ID, ring_started_at: new Date().toISOString() }]),
+    }));
+
+    await page.evaluate(({ delayed, urls }) => {
+      const probe = {
+        tracks: [] as MediaStreamTrack[], joins: 0, left: 0, connected: false,
+        waiting: false, release: () => {}, done: false, completed: 0, foreignResumeWrites: 0,
+      };
+      (window as unknown as Record<string, unknown>).__authVoiceProbe = probe;
+      const wait = () => new Promise<void>((resolve) => {
+        probe.waiting = true;
+        probe.release = resolve;
+      });
+      const capture = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = async (constraints) => {
+        const stream = await capture(constraints);
+        probe.tracks.push(...stream.getTracks());
+        if (delayed === "microphone") await wait();
+        return stream;
+      };
+      const factory = window.__letscubeVoiceRoom!;
+      window.__letscubeVoiceRoom = (events) => {
+        const transport = factory(events);
+        return {
+          ...transport,
+          async join(...args: Parameters<typeof transport.join>) {
+            probe.joins += 1;
+            probe.connected = true;
+            if (delayed === "transport") await wait();
+            await transport.join(...args);
+            probe.connected = true;
+          },
+          async leave() {
+            probe.left += 1;
+            probe.connected = false;
+            if (delayed === "leave" && !probe.waiting) await wait();
+            await transport.leave();
+          },
+        };
+      };
+      if (delayed === "token") {
+        const fetch = window.fetch.bind(window);
+        window.fetch = async (input, init) => {
+          const response = await fetch(input, init);
+          const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
+          if (path.endsWith("/voice-gateway/token") && !probe.waiting) {
+            const body = await response.text();
+            response.json = async () => { await wait(); return JSON.parse(body); };
+          }
+          return response;
+        };
+      }
+      const setItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (key === "letscube:voice:resume" && JSON.parse(value).userId !== "11111111-1111-4111-8111-000000000001") {
+          probe.foreignResumeWrites += 1;
+        }
+        setItem.call(this, key, value);
+      };
+      (window as unknown as Record<string, unknown>).__authVoiceUrls = urls;
+    }, { delayed: delay, urls });
+    return { urls, rpcReasons };
+  }
+
+  async function probe(page: Page) {
+    return page.evaluate(async () => {
+      const { call } = (window as unknown as { __authVoiceUrls: { call: string } }).__authVoiceUrls;
+      const { voiceCallSnapshot } = await import(/* @vite-ignore */ call);
+      const state = (window as unknown as { __authVoiceProbe: {
+        tracks: MediaStreamTrack[]; joins: number; left: number; connected: boolean; waiting: boolean; done: boolean;
+        completed: number; foreignResumeWrites: number;
+      } }).__authVoiceProbe;
+      return {
+        phase: voiceCallSnapshot().phase, acquiredTracks: state.tracks.length,
+        liveTracks: state.tracks.filter((track) => track.readyState === "live").length,
+        joins: state.joins, left: state.left, connected: state.connected, waiting: state.waiting, done: state.done,
+        completed: state.completed, foreignResumeWrites: state.foreignResumeWrites,
+        resumeUserId: JSON.parse(localStorage.getItem("letscube:voice:resume") ?? "null")?.userId ?? null,
+      };
+    });
+  }
+
+  async function authEvent(page: Page, kind: "logout" | "switch" | "same-user" | "initial-unknown") {
+    if (kind === "switch" || kind === "same-user") {
+      const user = kind === "switch" ? ANNA : ME;
+      await page.route("**/auth/v1/user", (route) => route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ ...user, aud: "authenticated", role: "authenticated", app_metadata: {}, user_metadata: {} }),
+      }));
+      await page.route("**/rest/v1/profiles**", (route) => {
+        if (new URL(route.request().url()).searchParams.get("id") !== `eq.${user.id}`) return route.fallback();
+        const single = route.request().headers().accept?.includes("application/vnd.pgrst.object");
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(single ? user : [user]) });
+      });
+    }
+    await page.evaluate(async ({ event, other, self }) => {
+      const { client } = (window as unknown as { __authVoiceUrls: { client: string } }).__authVoiceUrls;
+      const { createClient } = await import(/* @vite-ignore */ client);
+      const auth = createClient().auth;
+      if (event === "logout") {
+        const result = await auth.signOut();
+        if (result.error) throw new Error("Fixture signout failed");
+      } else if (event === "initial-unknown") {
+        // SDK event seam: no local cached session is not an explicit signout.
+        await auth._notifyAllSubscribers("INITIAL_SESSION", null);
+      } else {
+        const id = event === "switch" ? other : self;
+        const encode = (value: unknown) => btoa(JSON.stringify(value)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+        const token = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ sub: id, exp: Math.floor(Date.now() / 1000) + 3600 })}.fixture`;
+        const result = await auth.setSession({ access_token: token, refresh_token: "fixture-refresh" });
+        if (result.error) throw new Error("Fixture identity change failed");
+      }
+    }, { event: kind, other: ANNA.id, self: ME.id });
+  }
+
+  async function start(page: Page, kind: "group" | "private") {
+    await page.evaluate(async ({ kind, channelId, chatId }) => {
+      const urls = (window as unknown as { __authVoiceUrls: { call: string; ring: string } }).__authVoiceUrls;
+      const { joinVoiceChannel } = await import(/* @vite-ignore */ urls.call);
+      const { startVoiceRing } = await import(/* @vite-ignore */ urls.ring);
+      const pending = kind === "private"
+        ? startVoiceRing({ chatId, who: "Fixture caller" })
+        : joinVoiceChannel({ channelId, chatId, channelName: "Общий голос" });
+      void pending.finally(() => {
+        const probe = (window as unknown as { __authVoiceProbe: { done: boolean; completed: number } }).__authVoiceProbe;
+        probe.done = true;
+        probe.completed += 1;
+      });
+    }, { kind, channelId: CHANNEL_ID, chatId: CHAT_TEAM });
+  }
+
+  for (const event of ["logout", "switch"] as const) {
+    authBoundaryTest(`a group call releases transport and microphone on ${event} from privacy`, async ({ page }) => {
+      const { rpcReasons } = await prepare(page);
+      await join(page);
+      await expect.poll(async () => (await probe(page)).liveTracks).toBe(1);
+      await expect.poll(async () => (await probe(page)).resumeUserId).toBe(ME.id);
+      await page.evaluate(() => history.pushState(null, "", "/privacy"));
+      await expect(page.getByTestId("public-scroll-root")).toBeVisible();
+      await authEvent(page, event);
+      await expect.poll(async () => (await probe(page)).phase, { timeout: 2000 }).toBe("idle");
+      expect(await probe(page)).toMatchObject({ liveTracks: 0, connected: false, left: 1, resumeUserId: null, foreignResumeWrites: 0 });
+      expect(await page.evaluate(() => localStorage.getItem("letscube:voice:resume"))).toBeNull();
+      expect(rpcReasons).toEqual([]);
+    });
+  }
+
+  for (const kind of ["group", "private"] as const) {
+    for (const delay of ["microphone", "token", "transport"] as const) {
+      authBoundaryTest(`a pending ${kind} ${delay} cannot revive after auth invalidation`, async ({ page }) => {
+        const { rpcReasons } = await prepare(page, delay);
+        await start(page, kind);
+        await expect.poll(async () => (await probe(page)).waiting).toBe(true);
+        await page.evaluate(() => history.pushState(null, "", "/privacy"));
+        await expect(page.getByTestId("public-scroll-root")).toBeVisible();
+        await authEvent(page, kind === "private" ? "switch" : "logout");
+        await expect.poll(async () => (await probe(page)).phase, { timeout: 2000 }).toBe("idle");
+        if (delay === "transport") expect((await probe(page)).connected).toBe(false);
+        if (delay !== "microphone") expect((await probe(page)).liveTracks).toBe(0);
+        await page.evaluate(() => {
+          (window as unknown as { __authVoiceProbe: { release(): void } }).__authVoiceProbe.release();
+        });
+        await expect.poll(async () => (await probe(page)).done).toBe(true);
+        expect(await probe(page)).toMatchObject({ phase: "idle", liveTracks: 0, connected: false, resumeUserId: null });
+        expect(await page.evaluate(() => localStorage.getItem("letscube:voice:resume"))).toBeNull();
+        expect(rpcReasons).toEqual([]);
+      });
+    }
+  }
+
+  authBoundaryTest("same-user refresh and route navigation keep the group microphone", async ({ page }) => {
+    await prepare(page);
+    await join(page);
+    await page.evaluate(() => history.pushState(null, "", "/privacy"));
+    await expect(page.getByTestId("public-scroll-root")).toBeVisible();
+    await authEvent(page, "same-user");
+    await page.evaluate(() => history.pushState(null, "", "/support"));
+    await expect(page.getByTestId("public-scroll-root")).toBeVisible();
+    expect(await probe(page)).toMatchObject({ phase: "connected", liveTracks: 1, connected: true, left: 0 });
+  });
+
+  authBoundaryTest("unresolved auth is not an explicit logout", async ({ page }) => {
+    const { urls } = await prepare(page);
+    await join(page);
+    await page.evaluate(async (url) => {
+      const { observeVoiceCallAuth } = await import(/* @vite-ignore */ url);
+      observeVoiceCallAuth({ userId: null, loading: true });
+    }, urls.call);
+    expect(await probe(page)).toMatchObject({ phase: "connected", liveTracks: 1, connected: true, left: 0, resumeUserId: ME.id });
+  });
+
+  authBoundaryTest("terminal auth shutdown clears resume before returning", async ({ page }) => {
+    const { urls } = await prepare(page);
+    await join(page);
+    await expect.poll(async () => (await probe(page)).resumeUserId).toBe(ME.id);
+    const afterBoundary = await page.evaluate(async ({ url, userId }) => {
+      const { observeVoiceCallAuth, voiceCallSnapshot } = await import(/* @vite-ignore */ url);
+      observeVoiceCallAuth({ userId, loading: true });
+      // Same stack: no React effect or transport completion may be required.
+      return { phase: voiceCallSnapshot().phase, retained: localStorage.getItem("letscube:voice:resume") !== null };
+    }, { url: urls.call, userId: ANNA.id });
+    expect(afterBoundary).toEqual({ phase: "idle", retained: false });
+  });
+
+  authBoundaryTest("an old token continuation cannot stop the new identity's microphone", async ({ page }) => {
+    const { rpcReasons } = await prepare(page, "token");
+    await start(page, "group");
+    await expect.poll(async () => (await probe(page)).waiting).toBe(true);
+    await page.evaluate(() => history.pushState(null, "", "/privacy"));
+    await authEvent(page, "switch");
+    await expect.poll(async () => (await probe(page)).phase).toBe("idle");
+    await start(page, "group");
+    await expect.poll(async () => (await probe(page)).phase).toBe("connected");
+    expect((await probe(page)).liveTracks).toBe(1);
+    await page.evaluate(() => {
+      (window as unknown as { __authVoiceProbe: { release(): void } }).__authVoiceProbe.release();
+    });
+    await expect.poll(async () => (await probe(page)).completed).toBe(2);
+    expect(await probe(page)).toMatchObject({ phase: "connected", liveTracks: 1, connected: true, left: 0 });
+    expect(rpcReasons).toEqual([]);
+  });
+
+  authBoundaryTest("a replacement join cannot acquire a microphone after identity changed during leave", async ({ page }) => {
+    const { rpcReasons } = await prepare(page, "leave");
+    await start(page, "group");
+    await expect.poll(async () => (await probe(page)).phase).toBe("connected");
+    await start(page, "group");
+    await expect.poll(async () => (await probe(page)).waiting).toBe(true);
+    await page.evaluate(() => history.pushState(null, "", "/privacy"));
+    await authEvent(page, "switch");
+    await page.evaluate(() => {
+      (window as unknown as { __authVoiceProbe: { release(): void } }).__authVoiceProbe.release();
+    });
+    await expect.poll(async () => (await probe(page)).completed).toBe(2);
+    expect(await probe(page)).toMatchObject({ phase: "idle", acquiredTracks: 1, liveTracks: 0, joins: 1, connected: false, resumeUserId: null });
+    expect(rpcReasons).toEqual([]);
+  });
+
+  for (const rpc of ["voice_call_ring", "voice_call_answer"] as const) {
+    authBoundaryTest(`a delayed ${rpc} cannot start a call under another identity`, async ({ page }) => {
+      const { urls, rpcReasons } = await prepare(page);
+      let waiting = false;
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      await page.route(`**/rest/v1/rpc/${rpc}`, async (route) => {
+        waiting = true;
+        await gate;
+        await route.fulfill({
+          status: 200, contentType: "application/json",
+          body: JSON.stringify(rpc === "voice_call_ring"
+            ? [{ channel_id: CHANNEL_ID, ring_started_at: new Date().toISOString() }]
+            : new Date().toISOString()),
+        });
+      });
+      if (rpc === "voice_call_ring") {
+        await start(page, "private");
+      } else {
+        await page.evaluate(async ({ ring, channelId, chatId, caller }) => {
+          const { answerVoiceRing } = await import(/* @vite-ignore */ ring);
+          void answerVoiceRing({ channelId, chatId, name: "Звонок", caller, startedAt: Date.now(), answeredAt: null, participantCount: 1 }, "Fixture caller")
+            .finally(() => { (window as unknown as { __authVoiceProbe: { done: boolean } }).__authVoiceProbe.done = true; });
+        }, { ring: urls.ring, channelId: CHANNEL_ID, chatId: CHAT_TEAM, caller: ANNA.id });
+      }
+      await expect.poll(() => waiting).toBe(true);
+      await authEvent(page, "switch");
+      await expect.poll(() => page.evaluate(async (url) => {
+        const { useAppStore } = await import(/* @vite-ignore */ url);
+        return useAppStore.getState().currentUser?.id;
+      }, urls.store)).toBe(ANNA.id);
+      await expect(page.getByTestId("desktop-app-shell")).toBeVisible();
+      release();
+      await expect.poll(async () => (await probe(page)).done).toBe(true);
+      expect(await probe(page)).toMatchObject({ phase: "idle", joins: 0, acquiredTracks: 0, liveTracks: 0, connected: false });
+      expect(rpcReasons).toEqual([]);
+    });
+  }
+
+  authBoundaryTest("an old cancel response cannot erase the new identity's ring or transport", async ({ page }) => {
+    const { urls } = await prepare(page);
+    await start(page, "private");
+    await expect.poll(async () => (await probe(page)).phase).toBe("connected");
+    let waiting = false;
+    let release!: () => void;
+    const reasons: unknown[] = [];
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    await page.route("**/rest/v1/rpc/voice_call_stop", async (route) => {
+      reasons.push(route.request().postDataJSON()?.p_reason);
+      waiting = true;
+      await gate;
+      await route.fulfill({ status: 200, contentType: "application/json", body: '"idle"' });
+    });
+    await page.evaluate(async (url) => {
+      const { cancelVoiceRing, voiceRingsSnapshot } = await import(/* @vite-ignore */ url);
+      const ring = voiceRingsSnapshot()[0];
+      if (!ring) throw new Error("Fixture caller ring missing");
+      void cancelVoiceRing(ring).finally(() => { (window as unknown as Record<string, unknown>).__oldCancelDone = true; });
+    }, urls.ring);
+    await expect.poll(() => waiting).toBe(true);
+    await authEvent(page, "switch");
+    await expect.poll(() => page.evaluate(async (url) => {
+      const { useAppStore } = await import(/* @vite-ignore */ url);
+      return useAppStore.getState().currentUser?.id;
+    }, urls.store)).toBe(ANNA.id);
+    await expect.poll(async () => (await probe(page)).phase).toBe("idle");
+    await start(page, "private");
+    await expect.poll(async () => (await probe(page)).phase).toBe("connected");
+    release();
+    await expect.poll(() => page.evaluate(() => (window as unknown as Record<string, unknown>).__oldCancelDone)).toBe(true);
+    expect(await probe(page)).toMatchObject({ phase: "connected", liveTracks: 1, connected: true });
+    expect(await page.evaluate(async (url) => {
+      const { voiceRingsSnapshot } = await import(/* @vite-ignore */ url);
+      return voiceRingsSnapshot().map((row: { caller: string }) => row.caller);
+    }, urls.ring)).toEqual([ANNA.id]);
+    expect(reasons).toEqual(["cancelled"]);
+  });
+});

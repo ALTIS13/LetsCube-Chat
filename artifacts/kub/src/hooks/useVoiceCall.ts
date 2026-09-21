@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { createClient, getSupabasePublicUrl, getSupabasePublishableKey } from "@/lib/supabase/client";
+import { createClient, getSupabasePublicUrl, getSupabasePublishableKey, isSupabaseConfigured } from "@/lib/supabase/client";
 import {
   AUDIO_SETTINGS_EVENT,
   AUDIO_SETTINGS_STORAGE_KEY,
@@ -40,6 +40,7 @@ import {
   voiceGatewayRefusalText,
   voiceTokenEndpoint,
   voiceTokenRequestBody,
+  type VoiceGatewayRefusalCode,
   type VoiceTokenOutcome,
 } from "@/lib/voiceGateway";
 import {
@@ -56,6 +57,8 @@ import {
   type VoiceJoinStage,
 } from "@/lib/voiceJoinProgress";
 import { loadVoiceRoom, type VoiceRoom } from "@/hooks/voiceRoom";
+import type { AuthRuntimeSnapshot } from "@/lib/authRuntime";
+import { clearVoiceResume } from "@/lib/voiceResumeStorage";
 
 /**
  * The call, and the one place it lives.
@@ -173,6 +176,8 @@ export interface VoiceCallState {
   noInputWarning: boolean;
   /** A Russian sentence when the last attempt was refused; null otherwise. */
   refusal: string | null;
+  /** The gateway reason behind `refusal`, retained for context-specific wording. */
+  refusalCode: VoiceGatewayRefusalCode | null;
 }
 
 const IDLE: VoiceCallState = {
@@ -199,6 +204,7 @@ const IDLE: VoiceCallState = {
   // exists.
   noInputWarning: false,
   refusal: null,
+  refusalCode: null,
 };
 
 let state: VoiceCallState = IDLE;
@@ -248,6 +254,33 @@ let speakers: readonly string[] = [];
  */
 let generation = 0;
 let room: VoiceRoom | null = null;
+let joiningRoom: VoiceRoom | null = null;
+let callOwnerId: string | null = null;
+let authIdentity: string | null | undefined;
+let authGeneration = 0;
+
+/** Fences requests that begin while the transport is still idle. */
+export function voiceAuthGenerationSnapshot(): number {
+  return authGeneration;
+}
+
+export function voiceAuthOwnsViewer(userId: string | null): boolean {
+  return userId !== null && authIdentity === userId;
+}
+
+/** The configured root is the only auth observer, including on public routes. */
+export function observeVoiceCallAuth({ userId, loading }: AuthRuntimeSnapshot): void {
+  if (loading && userId === null) return;
+  if (authIdentity !== userId) authGeneration += 1;
+  authIdentity = userId;
+  if (state.phase !== "joining" && state.phase !== "connected" && state.phase !== "reconnecting") return;
+  if (userId === null || (callOwnerId !== null && callOwnerId !== userId)) {
+    // Local shutdown only: never send ring-stop RPCs under the next identity.
+    void leaveVoiceCall();
+  } else {
+    callOwnerId = userId;
+  }
+}
 
 /* ── Which step of the join is running, and how long each one took ────────
  *
@@ -702,14 +735,18 @@ export async function resumeVoiceAudio(): Promise<void> {
 
 function stopCapture() {
   if (!capture) return;
-  for (const track of capture.getTracks()) {
+  stopStream(capture);
+}
+
+function stopStream(stream: MediaStream) {
+  for (const track of stream.getTracks()) {
     try {
       track.stop();
     } catch {
       /* a track already ended is not an error worth surfacing */
     }
   }
-  capture = null;
+  if (capture === stream) capture = null;
 }
 
 /* ── Where the call's audio comes out ──────────────────────────────────────
@@ -1143,12 +1180,12 @@ export function holdVoiceTalk(down: boolean): void {
  * and falling back to the default microphone is better than telling somebody
  * their microphone is missing when it is only a different one.
  */
-async function captureMicrophone(): Promise<MediaStream> {
+async function captureMicrophone(mine: number): Promise<MediaStream> {
   const constraints = buildAudioTrackConstraints(getAudioSettings());
   try {
     return await navigator.mediaDevices.getUserMedia({ audio: constraints });
   } catch (error) {
-    if (error instanceof Error && error.name === "OverconstrainedError") {
+    if (mine === generation && error instanceof Error && error.name === "OverconstrainedError") {
       return navigator.mediaDevices.getUserMedia({ audio: true });
     }
     throw error;
@@ -1163,7 +1200,7 @@ async function captureMicrophone(): Promise<MediaStream> {
  * it. A `fetch` that throws is reported as status 0, which is this client's
  * convention for «nothing answered» — see `readVoiceTokenResponse`.
  */
-async function requestVoiceToken(channelId: string): Promise<{
+async function requestVoiceToken(channelId: string, mine: number): Promise<{
   outcome: VoiceTokenOutcome;
   /**
    * The identity the gateway mints this token with, taken from the session this
@@ -1177,7 +1214,10 @@ async function requestVoiceToken(channelId: string): Promise<{
   const { data } = await supabase.auth.getSession();
   const accessToken = data.session?.access_token;
   const userId = data.session?.user?.id ?? null;
-  if (!accessToken) return { outcome: { ok: false, code: "unauthenticated" }, selfUserId: userId };
+  if (!accessToken || mine !== generation || (callOwnerId !== null && userId !== callOwnerId)) {
+    return { outcome: { ok: false, code: "unauthenticated" }, selfUserId: userId };
+  }
+  callOwnerId = userId;
   const answer = (outcome: VoiceTokenOutcome) => ({ outcome, selfUserId: userId });
   try {
     const response = await fetch(voiceTokenEndpoint(getSupabasePublicUrl()), {
@@ -1196,7 +1236,7 @@ async function requestVoiceToken(channelId: string): Promise<{
   }
 }
 
-function fail(refusal: string) {
+function fail(refusal: string, refusalCode: VoiceGatewayRefusalCode | null = null) {
   // Before anything else, so the last stage’s duration is the length of the
   // attempt rather than the length of the tidying that follows it.
   settleJournal();
@@ -1205,9 +1245,19 @@ function fail(refusal: string) {
   forgetMicrophoneGate();
   forgetSpeakers();
   room = null;
+  joiningRoom = null;
+  callOwnerId = null;
   mutedBeforeDeafened = false;
   selfUserId = null;
-  publish({ ...IDLE, phase: "failed", channelId: state.channelId, chatId: state.chatId, channelName: state.channelName, refusal });
+  publish({
+    ...IDLE,
+    phase: "failed",
+    channelId: state.channelId,
+    chatId: state.chatId,
+    channelName: state.channelName,
+    refusal,
+    refusalCode,
+  });
 }
 
 export interface VoiceJoinRequest {
@@ -1237,7 +1287,13 @@ export interface VoiceJoinRequest {
  */
 export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void> {
   if (state.phase === "joining") return;
-  if (room) await leaveVoiceCall();
+  const requestedAuth = authGeneration;
+  const requestedOwnerId = callOwnerId ?? authIdentity;
+  if (room) {
+    const leftGeneration = generation + 1;
+    await leaveVoiceCall();
+    if (generation !== leftGeneration || authGeneration !== requestedAuth) return;
+  }
 
   const mine = ++generation;
   forgetSpeakers();
@@ -1257,6 +1313,12 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
     micMuted: request.micMuted === true,
   });
 
+  callOwnerId = requestedOwnerId ?? null;
+  if (!isSupabaseConfigured() || authIdentity === null) {
+    await leaveVoiceCall();
+    return;
+  }
+
   if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
     fail(microphoneRefusalText("unsupported"));
     return;
@@ -1264,7 +1326,7 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
 
   let stream: MediaStream;
   try {
-    stream = await captureMicrophone();
+    stream = await captureMicrophone(mine);
   } catch (error) {
     if (mine !== generation) return;
     const code = classifyMicrophoneError(error);
@@ -1283,9 +1345,13 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
   capture = stream;
 
   enterStage("token");
-  const { outcome, selfUserId: identity } = await requestVoiceToken(request.channelId);
+  const { outcome, selfUserId: identity } = await requestVoiceToken(request.channelId, mine);
   if (mine !== generation) {
-    stopCapture();
+    stopStream(stream);
+    return;
+  }
+  if (identity === null || (callOwnerId !== null && identity !== callOwnerId)) {
+    await leaveVoiceCall();
     return;
   }
   // Before the first roster can arrive, which is inside `opened.join` below.
@@ -1294,7 +1360,7 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
   // this stay a roster of somebody else's room and lose the arrival.
   selfUserId = identity;
   if (!outcome.ok) {
-    fail(voiceGatewayRefusalText(outcome.code));
+    fail(voiceGatewayRefusalText(outcome.code), outcome.code);
     return;
   }
 
@@ -1412,6 +1478,8 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
         forgetMicrophoneGate();
         forgetSpeakers();
         room = null;
+        joiningRoom = null;
+        callOwnerId = null;
         selfUserId = null;
         publish({ ...IDLE, phase: "failed", refusal: "Звонок прерван." });
       },
@@ -1420,15 +1488,16 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
     // The SDK's chunk failed to load — an offline reload, or a deploy that
     // removed the hashed file while the tab stayed open. The sentence is the
     // stage’s own, from the one place every stage’s sentence lives.
-    fail(voiceJoinFailureText("runtime"));
+    if (mine === generation) fail(voiceJoinFailureText("runtime"));
     return;
   }
 
   if (mine !== generation) {
-    stopCapture();
+    stopStream(stream);
     void opened.leave().catch(() => undefined);
     return;
   }
+  joiningRoom = opened;
 
   const [microphone] = stream.getAudioTracks();
   if (!microphone) {
@@ -1464,10 +1533,20 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
         now: Date.now(),
       });
       await opened.setMicrophoneOpen(gate.open);
+      if (mine !== generation) {
+        stopStream(stream);
+        void opened.leave().catch(() => undefined);
+        return;
+      }
       // Before the join, for the reason the comment above gives about the
       // gate: a self-mute applied after publishing is a self-mute that was not
       // in force for the first packets.
       if (joinMuted) await opened.setMuted(true);
+      if (mine !== generation) {
+        stopStream(stream);
+        void opened.leave().catch(() => undefined);
+        return;
+      }
       await opened.join(outcome.grant.url, outcome.grant.token, microphone);
     }
   } catch {
@@ -1493,12 +1572,13 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
   }
 
   if (mine !== generation) {
-    stopCapture();
+    stopStream(stream);
     void opened.leave().catch(() => undefined);
     return;
   }
 
   room = opened;
+  joiningRoom = null;
   // The journal stops here, so the report of a call that connected carries the
   // length of each step rather than the age of the call.
   settleJournal();
@@ -1527,8 +1607,9 @@ export async function leaveVoiceCall(): Promise<void> {
   // says how long it had been running rather than how long ago the call was.
   settleJournal();
   generation += 1;
-  const open = room;
+  const open = room ?? joiningRoom;
   room = null;
+  joiningRoom = null;
   stopCapture();
   forgetOutputDevice();
   forgetMicrophoneGate();
@@ -1536,7 +1617,10 @@ export async function leaveVoiceCall(): Promise<void> {
   // After the publish below the driver has already answered the departure; this
   // only stops a stale identity being read into the next call's first roster.
   selfUserId = null;
+  // Terminal teardown must not leave a saved call until a later React effect.
+  clearVoiceResume();
   publish(IDLE);
+  callOwnerId = null;
   if (open) await open.leave().catch(() => undefined);
 }
 

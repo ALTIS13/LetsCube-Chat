@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { useAppStore } from "@/store/app.store";
 import {
@@ -12,13 +13,14 @@ import {
   useVoiceSpeechRevoked,
   useVoiceTalkHeld,
 } from "@/hooks/useVoiceCall";
-import { endVoiceCall, useVoiceRings } from "@/hooks/useVoiceRing";
+import { cancelVoiceRing, endVoiceCall, useVoiceRings } from "@/hooks/useVoiceRing";
 import { voiceRingIsWaiting } from "@/lib/voiceRing";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { CAPSULE_CONTROL_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING_INSET } from "@/lib/controlSurface";
 import { micControlWords } from "@/lib/micGate";
 import { voiceCallBarState } from "@/lib/voiceCallBar";
+import { chatAddressPath, isMessengerRoute } from "@/lib/chatRoute";
 import { cn } from "@/lib/utils";
 import { VoiceConnectionPanel } from "./VoiceConnectionPanel";
 
@@ -85,11 +87,14 @@ export function VoiceCallBar({
    * one tap away in `BottomNav`.
    */
   capsuleOnScreen = true,
+  ringSurfaceOnScreen = true,
 }: {
   placement: "column" | "top";
   capsuleOnScreen?: boolean;
+  ringSurfaceOnScreen?: boolean;
 }) {
   const call = useVoiceCall();
+  const [location, navigate] = useLocation();
   const selectedChatId = useAppStore((state) => state.selectedChatId);
   const setSelectedChatId = useAppStore((state) => state.setSelectedChatId);
   // A scalar selector, so a change anywhere else in the chat list does not
@@ -173,6 +178,7 @@ export function VoiceCallBar({
     selectedChatId,
     capsuleHere,
     ringing,
+    ringSurfaceOnScreen,
     micMuted: call.micMuted,
     deafened: call.deafened,
     speechRevoked,
@@ -205,7 +211,9 @@ export function VoiceCallBar({
         <button
           type="button"
           onClick={() => {
-            if (view.openChatId) setSelectedChatId(view.openChatId);
+            if (!view.openChatId) return;
+            setSelectedChatId(view.openChatId);
+            if (!isMessengerRoute(location)) navigate(chatAddressPath(view.openChatId));
           }}
           disabled={!view.openChatId}
           className={cn(
@@ -510,14 +518,18 @@ export function VoiceCallBar({
               // ring — which is what ends the call for the other side and what
               // stops the next «Позвонить» between those two people coming back
               // `already_ringing`.
-              onClick={() => void endVoiceCall()}
+              onClick={() => {
+                const waiting = ringing ? rings.find((ring) => ring.channelId === call.channelId) : null;
+                if (waiting) void cancelVoiceRing(waiting);
+                else void endVoiceCall();
+              }}
               className="group/capsule relative h-8 shrink-0 rounded-full px-3"
-              title="Выйти из разговора"
+              title={ringing ? "Отменить вызов" : "Выйти из разговора"}
               data-testid="voice-call-bar-leave"
             >
               <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />
               <span className="relative text-xs font-semibold whitespace-nowrap text-[color:var(--kub-danger-text)]">
-                Выйти
+                {ringing ? "Отменить" : "Выйти"}
               </span>
             </button>
           </div>

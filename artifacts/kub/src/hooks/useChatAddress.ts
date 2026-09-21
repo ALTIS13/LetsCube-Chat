@@ -52,9 +52,15 @@ export function useChatAddress(): void {
   const [location, navigate] = useLocation();
   const selectedChatId = useAppStore((state) => state.selectedChatId);
   const setSelectedChatId = useAppStore((state) => state.setSelectedChatId);
-  const chats = useAppStore((state) => state.chats);
   const agreed = useRef<ChatAddressState | null>(null);
   const [unverifiedChatId, setUnverifiedChatId] = useState<string | null>(null);
+  // A preview or receipt in another chat cannot change address validation.
+  // Subscribe to that answer, not the list that would rerender MainLayout.
+  const chatVerification = useAppStore((state) => {
+    if (!unverifiedChatId) return "idle";
+    if (state.chats.some((chat) => chat.id === unverifiedChatId)) return "known";
+    return state.chats.length > 0 ? "missing" : "waiting";
+  });
 
   useEffect(() => {
     const next: ChatAddressState = { location, selectedChatId };
@@ -100,11 +106,11 @@ export function useChatAddress(): void {
   // asked — which is also the only path that can tell somebody the chat is gone.
   useEffect(() => {
     if (!unverifiedChatId) return undefined;
-    if (chats.some((chat) => chat.id === unverifiedChatId)) {
+    if (chatVerification === "known") {
       setUnverifiedChatId(null);
       return undefined;
     }
-    if (chats.length > 0) {
+    if (chatVerification === "missing") {
       const chatId = unverifiedChatId;
       setUnverifiedChatId(null);
       void safeOpenChat(chatId);
@@ -116,5 +122,5 @@ export function useChatAddress(): void {
       void safeOpenChat(chatId);
     }, VERIFY_FALLBACK_MS);
     return () => window.clearTimeout(timer);
-  }, [chats, unverifiedChatId]);
+  }, [chatVerification, unverifiedChatId]);
 }

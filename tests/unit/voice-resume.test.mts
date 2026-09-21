@@ -35,9 +35,12 @@ const MINUTE = 60 * 1000;
 const NOW = Date.UTC(2026, 8, 20, 12, 0, 0);
 const CHANNEL = "33333333-3333-4333-8333-000000000001";
 const CHAT = "22222222-2222-4222-8222-000000000001";
+const USER = "11111111-1111-4111-8111-000000000001";
+const OTHER_USER = "11111111-1111-4111-8111-000000000002";
 
 function record(overrides: Partial<VoiceResumeRecord> = {}): VoiceResumeRecord {
   return {
+    userId: USER,
     channelId: CHANNEL,
     chatId: CHAT,
     channelName: "Общий",
@@ -65,19 +68,25 @@ test("the window is five minutes, and the heartbeat bounds how stale it can be",
 });
 
 test("nothing to come back to is not a decision", () => {
-  assert.deepEqual(decideVoiceResume({ record: null, now: NOW }), { kind: "none" });
+  assert.deepEqual(decideVoiceResume({ record: null, now: NOW, userId: USER }), { kind: "none" });
 });
 
 test("what the product took away, the product puts back", () => {
   const taken = record({ cause: "interrupted" });
-  assert.deepEqual(decideVoiceResume({ record: taken, now: NOW }), { kind: "return", record: taken });
+  assert.deepEqual(decideVoiceResume({ record: taken, now: NOW, userId: USER }), { kind: "return", record: taken });
 });
 
 test("what the product did not take away is offered, never taken", () => {
   // A manual reload, or a crashed tab. He never asked for this case, and acting
   // on it would switch on a microphone nobody asked to have switched on.
   const own = record({ cause: "unplanned" });
-  assert.deepEqual(decideVoiceResume({ record: own, now: NOW }), { kind: "offer", record: own });
+  assert.deepEqual(decideVoiceResume({ record: own, now: NOW, userId: USER }), { kind: "offer", record: own });
+});
+
+test("a saved call belongs only to the authenticated account that created it", () => {
+  const saved = record();
+  assert.deepEqual(decideVoiceResume({ record: saved, now: NOW, userId: OTHER_USER }), { kind: "none" });
+  assert.deepEqual(decideVoiceResume({ record: saved, now: NOW, userId: null }), { kind: "none" });
 });
 
 test("the window closes at five minutes, from both sides", () => {
@@ -91,7 +100,7 @@ test("the window closes at five minutes, from both sides", () => {
   ];
   for (const [elapsed, expected] of cases) {
     assert.equal(
-      decideVoiceResume({ record: record({ at: NOW - elapsed }), now: NOW }).kind,
+      decideVoiceResume({ record: record({ at: NOW - elapsed }), now: NOW, userId: USER }).kind,
       expected,
       `${elapsed}ms after the call was last up`,
     );
@@ -100,11 +109,11 @@ test("the window closes at five minutes, from both sides", () => {
 
 test("the window closes on an offer exactly as it closes on a return", () => {
   assert.equal(
-    decideVoiceResume({ record: record({ cause: "unplanned", at: NOW - 5 * MINUTE }), now: NOW }).kind,
+    decideVoiceResume({ record: record({ cause: "unplanned", at: NOW - 5 * MINUTE }), now: NOW, userId: USER }).kind,
     "none",
   );
   assert.equal(
-    decideVoiceResume({ record: record({ cause: "unplanned", at: NOW - 5 * MINUTE + 1 }), now: NOW }).kind,
+    decideVoiceResume({ record: record({ cause: "unplanned", at: NOW - 5 * MINUTE + 1 }), now: NOW, userId: USER }).kind,
     "offer",
   );
 });
@@ -114,20 +123,20 @@ test("a clock that has gone backwards returns nobody", () => {
   // stored time in the future must not silence the product, here it must not
   // be read as «the call was up a moment ago» and open a microphone.
   assert.deepEqual(
-    decideVoiceResume({ record: record({ at: NOW + MINUTE }), now: NOW }),
+    decideVoiceResume({ record: record({ at: NOW + MINUTE }), now: NOW, userId: USER }),
     { kind: "none" },
   );
   assert.deepEqual(
-    decideVoiceResume({ record: record({ cause: "unplanned", at: NOW + 60 * MINUTE }), now: NOW }),
+    decideVoiceResume({ record: record({ cause: "unplanned", at: NOW + 60 * MINUTE }), now: NOW, userId: USER }),
     { kind: "none" },
   );
 });
 
 test("the microphone travels with the record, both ways", () => {
-  const muted = decideVoiceResume({ record: record({ micMuted: true }), now: NOW });
+  const muted = decideVoiceResume({ record: record({ micMuted: true }), now: NOW, userId: USER });
   assert.equal(muted.kind, "return");
   assert.equal(muted.kind === "return" && muted.record.micMuted, true);
-  const live = decideVoiceResume({ record: record({ micMuted: false }), now: NOW });
+  const live = decideVoiceResume({ record: record({ micMuted: false }), now: NOW, userId: USER });
   assert.equal(live.kind === "return" && live.record.micMuted, false);
 });
 
@@ -146,12 +155,14 @@ test("only a complete record counts as one", () => {
   assert.equal(parseVoiceResumeRecord("[]"), null);
   // Each field missing in turn. A record half-read is a call half-rejoined, and
   // the fields are exactly what `joinVoiceChannel` is handed.
-  for (const field of ["channelId", "chatId", "channelName", "micMuted", "at", "cause"] as const) {
+  for (const field of ["userId", "channelId", "chatId", "channelName", "micMuted", "at", "cause"] as const) {
     const { [field]: _dropped, ...rest } = complete;
     assert.equal(parseVoiceResumeRecord(JSON.stringify(rest)), null, `missing ${field}`);
   }
   // And each field present but of the wrong shape.
   const wrong: Array<[string, unknown]> = [
+    ["userId", null],
+    ["userId", ""],
     ["channelId", 1],
     ["channelId", ""],
     ["chatId", null],

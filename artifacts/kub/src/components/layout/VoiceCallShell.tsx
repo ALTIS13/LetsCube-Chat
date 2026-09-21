@@ -1,10 +1,22 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { createContext, useContext, useLayoutEffect, useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { VoiceCallBar } from "@/components/chat/VoiceCallBar";
-import { VoiceResumeNotice } from "@/components/chat/VoiceResumeNotice";
+import { VoiceResumeRecordSync } from "@/components/chat/VoiceResumeNotice";
 import { voiceShellBarNeeded } from "@/lib/voiceShellBar";
+import { VoicePresenceRuntime } from "./VoicePresenceRuntime";
+
+const MessengerVoiceSurface = createContext<((mounted: boolean) => void) | null>(null);
+
+/** A route may be /chat while its session is still loading and no chat is drawn. */
+export function useMessengerVoiceSurface() {
+  const report = useContext(MessengerVoiceSurface);
+  useLayoutEffect(() => {
+    report?.(true);
+    return () => report?.(false);
+  }, [report]);
+}
 
 /**
  * The running call, on the screens that are not the messenger.
@@ -15,7 +27,7 @@ import { voiceShellBarNeeded } from "@/lib/voiceShellBar";
  *
  * ## The room is taken from the page, not held in front of it
  *
- * Every page inside this wrapper sizes itself with `h-app`, which is
+ * Each full-height page inside this wrapper sizes itself with `h-app`, which is
  * `height: var(--kub-app-height)` — the whole viewport. A band drawn over such
  * a page covers its last row; a band drawn above it makes the document one bar
  * taller than the screen and pushes that row off the bottom instead. Both are
@@ -51,26 +63,28 @@ import { voiceShellBarNeeded } from "@/lib/voiceShellBar";
  */
 export function VoiceCallShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
-  const needed = voiceShellBarNeeded(location);
+  const [messengerMounted, setMessengerMounted] = useState(false);
+  const needed = voiceShellBarNeeded(location) || !messengerMounted;
 
   return (
-    <div className="flex h-app flex-col" data-testid="voice-call-shell">
+    <div className="kub-voice-call-shell flex h-app flex-col" data-testid="voice-call-shell">
       {/* Zero-height when there is no call, and zero-height when the route
           draws its own bar — an empty `shrink-0` box lays out as nothing. */}
       {/* `capsuleOnScreen={false}`: there is no conversation pane on these
           pages, so the rule must not stand the bar down because the chat the
           call is in happens to be the one still selected in the store. */}
-      <div className="shrink-0 px-safe" data-testid="voice-call-shell-band">
-        {needed && <VoiceCallBar placement="top" capsuleOnScreen={false} />}
+      <div className="kub-voice-call-shell-band shrink-0 px-safe" data-testid="voice-call-shell-band">
+        {needed && <VoiceCallBar placement="top" capsuleOnScreen={false} ringSurfaceOnScreen={false} />}
       </div>
-      <div className="min-h-0 flex-1 [--kub-app-height:100%]">{children}</div>
-      {/* Coming back to a call somebody was taken out of. Here, and not inside
-          `MainLayout`, for the same reason the bar above is: this wrapper is
-          constant across every authenticated route, so a return can never
-          happen on a screen where the bar that says «the microphone is live»
-          is not also mounted. It draws nothing unless there is an offer to
-          make, and the returning itself is silent. */}
-      <VoiceResumeNotice />
+      <div className="kub-voice-call-shell-content min-h-0 flex-1 [--kub-app-height:100%]">
+        <MessengerVoiceSurface.Provider value={setMessengerMounted}>
+          {children}
+        </MessengerVoiceSurface.Provider>
+      </div>
+      {/* AppRoutes owns voice resume behind its auth gates. This shell only
+          displays the current call, including on unauthenticated routes. */}
+      <VoiceResumeRecordSync />
+      <VoicePresenceRuntime />
     </div>
   );
 }

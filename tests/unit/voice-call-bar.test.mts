@@ -38,6 +38,7 @@ function input(over: Partial<VoiceCallBarInput> = {}): VoiceCallBarInput {
     // are at the foot of this file.
     capsuleHere: true,
     ringing: false,
+    ringSurfaceOnScreen: true,
     micMuted: false,
     deafened: false,
     speechRevoked: false,
@@ -54,6 +55,14 @@ test("no call, no bar — and «no call» is three different states", () => {
   // channel it knows — and a bar following somebody around the application to
   // report a failure they already saw is noise.
   assert.equal(voiceCallBarState(input({ phase: "failed" })).visible, false);
+});
+
+test("ringing outside the messenger keeps microphone controls without claiming an answered call", () => {
+  const waiting = voiceCallBarState(input({ ringing: true, ringSurfaceOnScreen: false, capsuleHere: false }));
+  assert.equal(waiting.visible, true);
+  assert.equal(waiting.controls, true);
+  assert.equal(waiting.detail, "Звоним…");
+  assert.equal(voiceCallBarState(input({ ringing: true, ringSurfaceOnScreen: false, micMuted: true })).detail, "Микрофон выключен");
 });
 
 test("the bar stands down in the conversation that owns the call, and nowhere else", () => {
@@ -209,7 +218,7 @@ test("a one-to-one call keeps its bar in its own conversation, because nothing e
   assert.equal(voiceCallBarState(input({ selectedChatId: OTHER_CHAT, capsuleHere: true })).visible, true);
 });
 
-test("a call still ringing at the other end gets no bar anywhere", () => {
+test("a call still ringing yields to the messenger's ringing surface", () => {
   // The caller joins the room the moment they press, so that an answer lands on
   // a connection that is already up. That makes `phase` `joining` and then
   // `connected` while the other person's telephone is still ringing, and left

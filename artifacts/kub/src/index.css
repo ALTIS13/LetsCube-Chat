@@ -350,6 +350,18 @@ html[data-ios-standalone] {
   --kub-window-caption: 2rem;
 }
 
+/* Only a rendered call bar owns the window's top edge. Its page must not
+   reserve the caption twice; an empty band leaves the page's inset intact. */
+@layer components {
+  .kub-voice-call-shell-band:has(> .kub-voice-call-bar) {
+    padding-top: var(--kub-window-caption);
+  }
+
+  .kub-voice-call-shell:has(> .kub-voice-call-shell-band > .kub-voice-call-bar) > .kub-voice-call-shell-content {
+    --kub-window-caption: 0px;
+  }
+}
+
 .dark {
   --brand-blue: #427fc2;
   --brand-magenta: #ed1e7a;

@@ -86,6 +86,8 @@ export interface VoiceCallBarInput {
    * standing down, which is the same rule as the capsule's, one state earlier.
    */
   readonly ringing: boolean;
+  /** Only yield to the ringing surface when it is actually mounted. */
+  readonly ringSurfaceOnScreen: boolean;
   readonly micMuted: boolean;
   readonly deafened: boolean;
   /** A moderator took the microphone away (D-221). */
@@ -150,8 +152,7 @@ export function voiceCallBarState(input: VoiceCallBarInput): VoiceCallBarView {
   const { phase, channelId, chatId } = input;
   if (channelId === null) return HIDDEN;
   if (phase !== "joining" && phase !== "connected" && phase !== "reconnecting") return HIDDEN;
-  // A call that is still ringing is `VoiceCallRing`'s to speak for, everywhere.
-  if (input.ringing) return HIDDEN;
+  if (input.ringing && input.ringSurfaceOnScreen) return HIDDEN;
   // The capsule is already in that conversation, with these same controls over
   // this same state — where there is one. A private chat has none, so a
   // one-to-one call keeps its bar in its own conversation as well.
@@ -231,7 +232,7 @@ export function voiceCallBarState(input: VoiceCallBarInput): VoiceCallBarView {
         ? "Вы не слышите разговор"
         : input.micMuted
           ? "Микрофон выключен"
-          : "Вы в разговоре",
+          : input.ringing ? "Звоним…" : "Вы в разговоре",
     // `danger` only for the one state somebody else caused. Muting and
     // deafening are this person's own choices and the controls already show
     // them; painting a chosen state as a problem would be the interface

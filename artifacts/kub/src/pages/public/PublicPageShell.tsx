@@ -23,7 +23,7 @@ export function PublicPageShell({ children, scrollRootRef }: PublicPageShellProp
       //
       // `px-safe` keeps every section off the notch when a phone is held
       // sideways; a guest opening the installed iPhone app lands here.
-      className="h-dvh overflow-x-hidden overflow-y-auto px-safe text-[color:var(--kub-text)]"
+      className="h-app overflow-x-hidden overflow-y-auto px-safe text-[color:var(--kub-text)]"
     >
       {/* The material, not a hand-rolled 95% fill under a `backdrop-blur`: one
           declaration for every frosted surface in the product, so the public
@@ -32,7 +32,7 @@ export function PublicPageShell({ children, scrollRootRef }: PublicPageShellProp
 
           It is the top of the screen, so the status bar's inset is padded out
           of it and the links start below the Dynamic Island. */}
-      <header className="public-page-print-hide kub-glass sticky top-0 z-30 border-b border-[color:var(--kub-border-color)] pt-safe">
+      <header className="public-page-print-hide kub-glass sticky top-0 z-30 border-b border-[color:var(--kub-border-color)] pt-window-top">
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
           <Link
             href="/"
