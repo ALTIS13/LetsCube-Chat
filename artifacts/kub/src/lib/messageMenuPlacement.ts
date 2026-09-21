@@ -173,54 +173,105 @@ export function placeAnchored(input: AnchoredInput): { top: number; left: number
 export interface BesideInput {
   viewport: Viewport;
   safe: Insets;
+  /** What the card belongs to — a face. Decides the vertical position. */
   anchor: BoxEdges;
   size: { width: number; height: number };
+  /**
+   * What the card must not cover — the drawn part of the anchor's own row.
+   *
+   * Decides the **horizontal** position, where `anchor` decides the vertical.
+   * Absent, the anchor plays both parts, which is what this function did until
+   * 2026-09-21 and is the whole of the defect it had.
+   */
+  avoid?: BoxEdges;
   gap?: number;
 }
 
 /**
- * A card **beside** the thing that opened it, which is a different question
- * from `placeAnchored`'s.
+ * A card **beside** the thing that opened it, clear of the row it lives in.
+ *
+ * ## The question this answers, and how it differs from `placeAnchored`
  *
  * `placeAnchored` centres a popover on its anchor and opens it above or below.
  * That is right for a reaction bar over a message — the anchor is wide and the
  * popover is short. It is wrong for a profile opened from a 32-point face at
- * the left edge of the conversation: centring a 320-point card on a 32-point
- * avatar puts three quarters of it over the chat-list column, so the card
- * straddles the divider and points at nothing.
+ * the left edge of the conversation: centring a 320-point card on it puts three
+ * quarters of it over the chat-list column.
  *
- * Discord's popout is beside the avatar, and that is the property that makes
- * the small tier cheap: the reader glances sideways and the conversation has
- * not moved. So this opens to the **right** of the anchor, flips to its left
- * when the right will not hold it, and aligns the card's top with the anchor's
- * — clamped, so a face near the bottom of the screen lifts the card rather
- * than pushing it off.
+ * ## The correction of 2026-09-21, and the measurement behind it
  *
- * `side` is returned for the caller that wants to point a tail at the anchor;
- * nothing is obliged to use it.
+ * The first version opened beside the **anchor**, which is exactly what Discord
+ * configures — read out of stable 615980, chunk 67878: the message author's
+ * avatar passes `targetElementRef` = the avatar `<img>` and `position:"right"`,
+ * and the popout component (module 922016) derives `align:"top"` from that
+ * position, with `spacing: 8`, `autoInvert: true` and
+ * `nudgeAlignIntoViewport: true`. Right of the face, top-aligned, eight points,
+ * flip, clamp — the same four things this function does.
+ *
+ * **And it covered the message anyway**, because copying the configuration is
+ * not copying the outcome. Measured at 1440 against the fixture: the avatar at
+ * x 672..704, the bubble at **710..1044**, and the card landing at 712..1032 —
+ * over 320 of the bubble's 334 points. The card took away precisely the context
+ * the small tier exists to preserve.
+ *
+ * **The structural difference from the reference, which is why the same
+ * configuration lands differently.** Discord's messages are full-width text
+ * rows: the row *is* the column, so there is no space beside a row and its
+ * popout necessarily overlaps one. Ours are **bubbles capped at about half the
+ * pane** — the same measurement shows 380 points of empty conversation to the
+ * right of that bubble, more than the 328 a card and its gap need. We have a
+ * beside that Discord has not got, so not using it would be copying a
+ * constraint instead of a decision.
+ *
+ * The precedent is in this very file: `placeAtPoint` already takes `avoid`, so
+ * that a menu opening upwards «stops above the message rather than above the
+ * pointer, so it never lies over the very message it acts on». This is that
+ * idea on the other axis.
+ *
+ * ## The order it tries
+ *
+ * Right of the row, then left of it, then below it, then above it — and the
+ * vertical position for the two sideways cases comes from the **anchor**, so
+ * the card still reads as belonging to that face rather than to the row.
  */
-export function placeBeside(input: BesideInput): { top: number; left: number; side: "right" | "left" } {
+export function placeBeside(
+  input: BesideInput,
+): { top: number; left: number; side: "right" | "left" | "below" | "above" } {
   const { viewport, safe, anchor, size } = input;
   const gap = input.gap ?? 8;
+  // What must stay visible. Without one, the face plays both parts — which is
+  // the shape this function had before the row was passed in.
+  const avoid = input.avoid ?? anchor;
   const minLeft = safe.left + HORIZONTAL_MARGIN;
   const maxLeft = viewport.width - safe.right - HORIZONTAL_MARGIN - size.width;
   const minTop = safe.top + VERTICAL_MARGIN;
   const maxTop = viewport.height - safe.bottom - VERTICAL_MARGIN - size.height;
 
-  const rightLeft = anchor.right + gap;
-  const leftLeft = anchor.left - gap - size.width;
-  // Room on the right is measured against where the card would actually end,
-  // not against the anchor: a card wider than the space left is not «fitting
-  // on the right» merely because the anchor is.
+  const rightLeft = avoid.right + gap;
+  const leftLeft = avoid.left - gap - size.width;
+  // Room is measured against where the card would actually end, not against the
+  // row: a card wider than the space left is not «fitting on the right» merely
+  // because the row is.
   const fitsRight = rightLeft <= maxLeft;
   const fitsLeft = leftLeft >= minLeft;
-  const side: "right" | "left" = fitsRight || !fitsLeft ? "right" : "left";
-  const left = clamp(side === "right" ? rightLeft : leftLeft, minLeft, maxLeft);
 
-  // Top-aligned with the face rather than centred on it. A centred card moves
-  // as the anchor's height changes, and an avatar's height is the one thing
-  // about a message row that varies least — so aligning the tops keeps the
-  // card in the same place for every row it is opened from.
-  const top = clamp(anchor.top, minTop, maxTop);
-  return { top: Math.round(top), left: Math.round(left), side };
+  if (fitsRight || fitsLeft) {
+    const side = fitsRight ? "right" : "left";
+    const left = clamp(side === "right" ? rightLeft : leftLeft, minLeft, maxLeft);
+    // Top-aligned with the **face** rather than centred on it. A centred card
+    // moves as the anchor's height changes, and an avatar's height is the one
+    // thing about a message row that varies least — so aligning the tops keeps
+    // the card in the same place for every row it is opened from.
+    return { top: Math.round(clamp(anchor.top, minTop, maxTop)), left: Math.round(left), side };
+  }
+
+  // Neither side is free — a narrow window, or a very wide message. Then the
+  // honest answer is vertical, which is what every other anchored menu in this
+  // product does: below the row where that fits, above it where it does not,
+  // and aligned to the face's own x so it still points at somebody.
+  const belowTop = avoid.bottom + gap;
+  const aboveTop = avoid.top - gap - size.height;
+  const side = belowTop <= maxTop || aboveTop < minTop ? "below" : "above";
+  const top = clamp(side === "below" ? belowTop : aboveTop, minTop, maxTop);
+  return { top: Math.round(top), left: Math.round(clamp(anchor.left, minLeft, maxLeft)), side };
 }

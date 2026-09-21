@@ -933,15 +933,34 @@ export function MessageBubble({
       if (authorTarget.kind === "none") return;
       const box = trigger.getBoundingClientRect();
       const anchor = { top: box.top, bottom: box.bottom, left: box.left, right: box.right };
+      // **And the box the card must not cover**, which is a different box.
+      //
+      // Opening beside the face alone is what Discord configures, and at 1440
+      // it put the card over 320 of the bubble's 334 points — the message
+      // whose author had just been pressed. Discord's rows are full-width text
+      // and have no beside; ours are bubbles with room to their right, so the
+      // card opens beside the **row** and takes only its vertical position
+      // from the face. The union of the two, because the avatar hangs below a
+      // short bubble and neither alone is the drawn row.
+      const rowNode = trigger.closest("[data-message-row]");
+      const bubbleBox = rowNode?.querySelector('[data-message-bubble="true"]')?.getBoundingClientRect();
+      const row = bubbleBox
+        ? {
+            top: Math.min(box.top, bubbleBox.top),
+            bottom: Math.max(box.bottom, bubbleBox.bottom),
+            left: Math.min(box.left, bubbleBox.left),
+            right: Math.max(box.right, bubbleBox.right),
+          }
+        : anchor;
       // «glance» in both arms: the subject is incidental to the message being
       // read, which is the axis `profileTier.ts` says decides the surface. The
       // bot's card carries the row the message already holds, so it paints a
       // name rather than a skeleton while its own read is out.
       if (authorTarget.kind === "person") {
-        openUserProfile(authorTarget.userId, "glance", message.chat_id ?? null, anchor);
+        openUserProfile(authorTarget.userId, "glance", message.chat_id ?? null, anchor, row);
         return;
       }
-      openBotProfile(authorTarget.botId, authorTarget.bot, "glance", message.chat_id ?? null, anchor);
+      openBotProfile(authorTarget.botId, authorTarget.bot, "glance", message.chat_id ?? null, anchor, row);
     },
     [authorTarget, message.chat_id, openBotProfile, openUserProfile],
   );
@@ -1396,6 +1415,9 @@ export function MessageBubble({
       )}
 
       <div
+        // Named so the profile popout can find the drawn row it must not
+        // cover — the avatar and the bubble together.
+        data-message-row="true"
         className={cn(
           "flex gap-1.5 mb-0.5 group relative",
           isEntering && !entranceSettled && "msg-appear",

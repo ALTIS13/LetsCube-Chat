@@ -52,6 +52,8 @@ export function BotProfileOverlay() {
   const chatId = useAppStore((s) => s.botProfileChatId);
   const opener = useAppStore((s) => s.botProfileOpener);
   const anchor = useAppStore((s) => s.botProfileAnchor);
+  // The row the card must not cover, as the person's card reads it.
+  const anchorRow = useAppStore((s) => s.botProfileRow);
   const chats = useAppStore((s) => s.chats);
   const close = useAppStore((s) => s.closeBotProfile);
   const requestComposerDraft = useAppStore((s) => s.requestComposerDraft);
@@ -120,7 +122,7 @@ export function BotProfileOverlay() {
 
   if (botId && tier === "compact" && anchor) {
     return (
-      <UserProfilePopout anchor={anchor} onClose={close}>
+      <UserProfilePopout anchor={anchor} row={anchorRow} onClose={close}>
         {surface}
       </UserProfilePopout>
     );

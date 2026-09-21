@@ -749,6 +749,19 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     §15.1, which had described *what* the two surfaces are and never said where
     the small one stands.
 
+    **And corrected once more the same day, on a defect only a screenshot
+    shows.** The anchored popout landed **on the message row whose author had
+    just been pressed** — person and bot alike, and worse than the centred
+    version in the one respect that matters, because it hid the thing the
+    reader was looking at. The placement was then read out of the bundle rather
+    than assumed: Discord targets the avatar with `position:"right"` and
+    `align:"top"`, exactly what we had — and it overlaps its own rows too,
+    because its messages are full-width text and the row *is* the column. Ours
+    are bubbles with 380 measured points of free conversation to their right,
+    so the card now opens beside the **row**. The lesson is filed in §15.1 as
+    the general form: **a reference client's configuration is evidence about
+    its mechanism, not about its result.**
+
     **b and c are untouched** and remain as §15.2 and §15.3 left them: the row
     menu's depth, and the two searches. Item 38's badges draw these same chips
     and still wait on it.

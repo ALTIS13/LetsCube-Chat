@@ -1501,13 +1501,38 @@ Two consequences follow, and both are now ours:
    supplied, the honest answer is the full surface, not a summary in the middle
    of the screen.
 
-**UNESTABLISHED, and cheap to establish if it ever matters:** Discord's exact
-alignment — whether the popout's top is level with the avatar, centred on it, or
-merely clamped — was not read out of the bundle. Ours top-aligns, and the reason
-is stated where the arithmetic lives (`lib/messageMenuPlacement.ts`): an
-avatar's height is the thing about a message row that varies least, so aligning
-the tops keeps the card in the same place for every row it is opened from. If a
-later read contradicts it, that is a number to change rather than a shape.
+**Established on 2026-09-21, and it was the note above that prompted the
+reading.** Chunk **67878**, the message header, opens the author's popout with
+`targetElementRef` and `avatarImgRef` set to the same ref — so **the target is
+the avatar `<img>`** — and `position: "right"`. Module **922016** is the popout
+component and supplies the rest by default: `align` is derived from the
+position, and `"right"` yields **`"top"`**, with `spacing: 8`,
+`autoInvert: true` and `nudgeAlignIntoViewport: true`.
+
+So: right of the face, top-aligned, eight points, flip, clamp. Our
+`placeBeside` had already arrived at all five independently, which is a useful
+confirmation of the mechanism — and a trap, because **copying the configuration
+is not copying the outcome.**
+
+**The structural difference that makes the same configuration land differently,
+and it is the most transferable thing in this subject.** Discord's messages are
+**full-width text rows**: the row *is* the column, so there is no space beside a
+row and its popout necessarily overlaps one. Ours are **bubbles capped at about
+half the pane** — measured at 1440, a bubble from 710 to 1044 with **380 points
+of empty conversation to its right**. We have a beside that Discord has not got.
+
+Following its configuration put our card over 320 of that bubble's 334 points:
+the message whose author had just been pressed, which is precisely the context
+the glance exists to preserve. Ours therefore opens beside the **row** rather
+than beside the face, taking only its vertical position from the face, and falls
+back to below or above the row where neither side is free. That is a deliberate
+divergence and this paragraph is its reason.
+
+**The general form, worth carrying to the next subject:** a reference client's
+configuration is evidence about its mechanism, not about its result. Where the
+two products' layouts differ in a way the configuration does not mention, the
+same settings produce a different outcome, and copying them faithfully is how
+you ship a defect with a citation attached.
 
 #### Ours, and what this changes about the plan
 

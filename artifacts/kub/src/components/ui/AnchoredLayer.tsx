@@ -43,6 +43,15 @@ import { readSafeAreaInsets } from "@/lib/safeArea";
 
 type LayerProps<Side> = {
   anchor: BoxEdges;
+  /**
+   * A box the surface must not cover — read only by `BesideLayer`.
+   *
+   * The anchor says what the surface belongs to; this says what it would be
+   * hiding. For a profile popout they are the face and the message row, and
+   * keeping them apart is what stopped the card landing on the message whose
+   * author had just been pressed.
+   */
+  avoid?: BoxEdges;
   className: string;
   children: (side: Side) => ReactNode;
   layerRef?: MutableRefObject<HTMLDivElement | null>;
@@ -50,6 +59,7 @@ type LayerProps<Side> = {
 
 function PlacedLayer<Side extends string>({
   anchor,
+  avoid,
   className,
   children,
   layerRef,
@@ -61,6 +71,7 @@ function PlacedLayer<Side extends string>({
     viewport: { width: number; height: number };
     safe: ReturnType<typeof readSafeAreaInsets>;
     anchor: BoxEdges;
+    avoid?: BoxEdges;
     size: { width: number; height: number };
   }) => { top: number; left: number; side: Side };
   fallbackSide: Side;
@@ -77,6 +88,7 @@ function PlacedLayer<Side extends string>({
         viewport: { width: window.innerWidth, height: window.innerHeight },
         safe: readSafeAreaInsets(),
         anchor,
+        avoid,
         size: { width: rect.width, height: rect.height },
       }),
     );
@@ -84,7 +96,7 @@ function PlacedLayer<Side extends string>({
     // deliberately not a dependency: including it would re-measure on every
     // render and the measurement itself sets state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anchor]);
+  }, [anchor, avoid]);
 
   if (typeof document === "undefined") return null;
   return createPortal(
@@ -122,7 +134,10 @@ export function AnchoredLayer({
   );
 }
 
-/** Beside the anchor: to its right where that fits, to its left where it does not. */
-export function BesideLayer(props: LayerProps<"right" | "left">) {
+/**
+ * Beside the anchor's row: to its right where that fits, to its left where it
+ * does not, and below or above it when neither side is free.
+ */
+export function BesideLayer(props: LayerProps<"right" | "left" | "below" | "above">) {
   return <PlacedLayer {...props} fallbackSide="right" place={(input) => placeBeside(input)} />;
 }

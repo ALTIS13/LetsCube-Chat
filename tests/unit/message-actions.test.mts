@@ -284,43 +284,142 @@ test("a popover opens where it was asked to, and on the other side when it does 
  * face, which is the property that makes the small tier cheap — the reader
  * glances sideways and the conversation has not moved.
  */
-test("a card opens beside its anchor, and flips when that side will not hold it", () => {
+test("a card opens beside the row, not beside the face inside it", () => {
+  // The correction of 2026-09-21, and the numbers are the ones measured at
+  // 1440 against the fixture: the avatar at 672..704, the bubble at 710..1044.
+  // Opening beside the **face** put the card at 712..1032 — over 320 of the
+  // bubble's 334 points, which is the message whose author had just been
+  // pressed. Beside the **row** it starts after 1044.
   const screen = { width: 1440, height: 900 };
   const size = { width: 320, height: 400 };
-  // An avatar at the left edge of the conversation pane: the card opens to its
-  // right, top-aligned with the face.
-  const roomy = placeBeside({
-    viewport: screen,
-    safe: none,
-    anchor: { top: 300, bottom: 332, left: 700, right: 732 },
-    size,
-  });
-  assert.deepEqual(roomy, { top: 300, left: 740, side: "right" });
+  const anchor = { top: 177, bottom: 209, left: 672, right: 704 };
+  const row = { top: 173, bottom: 213, left: 672, right: 1044 };
 
-  // An avatar near the right edge: there is no room on the right, so it flips.
-  const tight = placeBeside({
-    viewport: screen,
-    safe: none,
-    anchor: { top: 300, bottom: 332, left: 1300, right: 1332 },
-    size,
-  });
-  assert.equal(tight.side, "left");
-  assert.equal(tight.left, 1300 - 8 - 320);
+  const beside = placeBeside({ viewport: screen, safe: none, anchor, size, avoid: row });
+  assert.equal(beside.side, "right");
+  assert.equal(beside.left, 1052);
+  // The vertical position still comes from the face, which is what makes the
+  // card read as that person's rather than as a panel that appeared.
+  assert.equal(beside.top, 177);
+  // The property the geometry is for: the two boxes do not intersect.
+  assert.ok(beside.left >= row.right, "the card overlaps the row it belongs to");
 });
 
-test("the room on the right is measured against the card's end, not the anchor's", () => {
-  // An anchor that fits with room to spare, and a card that does not: 1440 - 12
-  // margin - 320 card = 1108 is the last left edge a card may take, and the
-  // anchor's right edge at 1100 is inside that — but the card would start at
-  // 1108 + gap. Asking «does the anchor fit» rather than «does the card fit»
-  // answers «right» and puts eight points of it off the screen.
+test("without a row to avoid, the face plays both parts", () => {
+  // The shape this function had before the row was passed in. Kept working
+  // because a caller with no row is possible and a thrown error would be a
+  // worse answer than a card beside the anchor.
   const placed = placeBeside({
     viewport: { width: 1440, height: 900 },
     safe: none,
-    anchor: { top: 300, bottom: 332, left: 1072, right: 1104 },
+    anchor: { top: 300, bottom: 332, left: 700, right: 732 },
     size: { width: 320, height: 400 },
   });
+  assert.deepEqual(placed, { top: 300, left: 740, side: "right" });
+});
+
+test("a row with no room on the right flips to its left", () => {
+  const placed = placeBeside({
+    viewport: { width: 1440, height: 900 },
+    safe: none,
+    anchor: { top: 300, bottom: 332, left: 1000, right: 1032 },
+    size: { width: 320, height: 400 },
+    avoid: { top: 300, bottom: 340, left: 1000, right: 1300 },
+  });
   assert.equal(placed.side, "left");
+  assert.equal(placed.left, 1000 - 8 - 320);
+});
+
+test("a row with room on neither side sends the card below it", () => {
+  // The case the coordinator asked about: if neither side of a row is free,
+  // the honest answer is vertical — which is what every other anchored menu in
+  // this product does. Aligned to the face's own x so it still points at
+  // somebody.
+  const placed = placeBeside({
+    viewport: { width: 900, height: 900 },
+    safe: none,
+    anchor: { top: 200, bottom: 232, left: 300, right: 332 },
+    size: { width: 320, height: 300 },
+    avoid: { top: 196, bottom: 240, left: 300, right: 760 },
+  });
+  assert.equal(placed.side, "below");
+  assert.equal(placed.top, 240 + 8);
+  assert.equal(placed.left, 300);
+});
+
+test("a row with room on neither side and none below sends the card above it", () => {
+  const placed = placeBeside({
+    viewport: { width: 900, height: 500 },
+    safe: none,
+    anchor: { top: 380, bottom: 412, left: 300, right: 332 },
+    size: { width: 320, height: 300 },
+    avoid: { top: 376, bottom: 420, left: 300, right: 760 },
+  });
+  assert.equal(placed.side, "above");
+  assert.equal(placed.top, 376 - 8 - 300);
+});
+
+test("the room beside the row is measured against the card's end, not the row's", () => {
+  // 1440 - 12 margin - 320 card = 1108 is the last left edge a card may take,
+  // and a row ending at 1104 is inside that — but the card would start at 1112.
+  // Asking «does the row fit» rather than «does the card fit» answers «right»
+  // and puts four points of it off the screen.
+  const placed = placeBeside({
+    viewport: { width: 1440, height: 900 },
+    safe: none,
+    anchor: { top: 300, bottom: 332, left: 672, right: 704 },
+    size: { width: 320, height: 400 },
+    avoid: { top: 300, bottom: 340, left: 672, right: 1104 },
+  });
+  assert.equal(placed.side, "left");
+});
+
+test("below wins over above when both would fit", () => {
+  // The preference, not merely the fallback. Below keeps the reader's eye
+  // travelling the way the conversation runs, and a card that jumps above the
+  // row hides what was said before it — which is the same cost as covering the
+  // row itself, one message earlier.
+  const placed = placeBeside({
+    viewport: { width: 900, height: 1400 },
+    safe: none,
+    anchor: { top: 600, bottom: 632, left: 300, right: 332 },
+    size: { width: 320, height: 300 },
+    avoid: { top: 596, bottom: 640, left: 300, right: 760 },
+  });
+  // Above fits (596 - 8 - 300 = 288 >= 8) and below fits (648 <= 1092).
+  assert.equal(placed.side, "below");
+});
+
+test("the left flip is measured from the row, not from the face inside it", () => {
+  // The face sits at the row's left edge, so a mutation that measures the flip
+  // from the face gives the same answer for every row whose avatar is flush —
+  // which is all of them, until one is not. Here the row starts well left of
+  // the face, and the two answers differ by exactly that distance.
+  const placed = placeBeside({
+    viewport: { width: 1440, height: 900 },
+    safe: none,
+    anchor: { top: 300, bottom: 332, left: 1100, right: 1132 },
+    size: { width: 320, height: 400 },
+    avoid: { top: 300, bottom: 340, left: 900, right: 1400 },
+  });
+  assert.equal(placed.side, "left");
+  // From the row: 900 - 8 - 320 = 572. From the face it would be 772.
+  assert.equal(placed.left, 572);
+});
+
+test("a row scrolled off the left edge still puts its card on the screen", () => {
+  // The clamp in the sideways branch, which nothing else reaches: a row can be
+  // dragged or scrolled so its right edge is negative, and `avoid.right + gap`
+  // is then left of the screen while still «fitting» on the right.
+  const placed = placeBeside({
+    viewport: { width: 1440, height: 900 },
+    safe: none,
+    anchor: { top: 300, bottom: 332, left: -400, right: -368 },
+    size: { width: 320, height: 400 },
+    avoid: { top: 300, bottom: 340, left: -400, right: -100 },
+  });
+  assert.equal(placed.side, "right");
+  assert.ok(placed.left >= 12, `card placed off the left edge at ${placed.left}`);
 });
 
 test("a card with room on neither side is clamped rather than hidden", () => {

@@ -376,12 +376,36 @@ test.describe("the person behind the conversation, on two surfaces", () => {
     await page.waitForTimeout(250);
     const box = await popout.boundingBox();
 
-    // **Beside**, measured rather than eyeballed: it starts to the right of the
-    // face and its top is level with it. `placeBeside` owns the arithmetic and
-    // is unit-tested; this is the proof that the real surface uses it.
-    expect(box!.x, "the popout must stand to the right of the face").toBeGreaterThan(
-      faceBox!.x + faceBox!.width,
-    );
+    // **The property, not the geometry.** The first version of this assertion
+    // said «x is greater than the face's right edge», and that was true of a
+    // card sitting squarely on top of the message: the face is at the left of
+    // the row and the bubble begins immediately after it. A test pinned to a
+    // coordinate passes the next time the layout moves and the property breaks.
+    //
+    // What must hold is that **the anchor's own drawn row is not covered** —
+    // the avatar and the bubble together, because the avatar hangs below a
+    // short bubble and neither alone is the row a reader sees.
+    const rowBox = await page.evaluate(() => {
+      const row = document.querySelector("[data-message-row]")!;
+      const bubble = row.querySelector('[data-message-bubble="true"]')!.getBoundingClientRect();
+      const face = document.querySelector('[data-testid="message-author-avatar"]')!.getBoundingClientRect();
+      return {
+        left: Math.min(face.left, bubble.left),
+        right: Math.max(face.right, bubble.right),
+        top: Math.min(face.top, bubble.top),
+        bottom: Math.max(face.bottom, bubble.bottom),
+      };
+    });
+    const overlapX = Math.max(0, Math.min(box!.x + box!.width, rowBox.right) - Math.max(box!.x, rowBox.left));
+    const overlapY = Math.max(0, Math.min(box!.y + box!.height, rowBox.bottom) - Math.max(box!.y, rowBox.top));
+    expect(
+      Math.min(overlapX, overlapY),
+      `the popout covers the row it was opened from by ${overlapX}x${overlapY}px`,
+    ).toBe(0);
+
+    // And it is still **beside** rather than merely somewhere else: its top is
+    // level with the face, which is what makes it read as that person's card
+    // rather than a panel that happened to appear.
     expect(
       Math.abs(box!.y - faceBox!.y),
       "the popout's top must be level with the face it belongs to",
@@ -442,11 +466,17 @@ test.describe("the person behind the conversation, on two surfaces", () => {
     // because a scroll inside the message list never reaches `window`.
     await face.click();
     await expect(popout).toBeVisible();
-    // Over the conversation and clear of the card: the popout stands at roughly
-    // x 740..1060, and a wheel delivered inside it scrolls the card rather than
-    // the list, which is how the first version of this test failed.
+    // Over the conversation and provably clear of the card — computed, not a
+    // coordinate. A wheel delivered inside the popout scrolls the card rather
+    // than the list (the first version of this test failed that way), and a
+    // point taken to the **right** of the card fell off a 1440 screen the
+    // moment the card moved there (the second version failed that way). The
+    // row's own left edge is over the conversation and left of the card.
     const over = await popout.boundingBox();
-    await page.mouse.move(over!.x + over!.width + 200, 400);
+    const rowLeft = (await page.locator("[data-message-row]").first().boundingBox())!.x;
+    const wheelX = rowLeft + 40;
+    expect(wheelX, "the wheel must land outside the popout").toBeLessThan(over!.x);
+    await page.mouse.move(wheelX, 400);
     // **Upwards.** A conversation opens anchored to its newest message, so a
     // downward wheel moves nothing and fires no scroll event — the first
     // version of this assertion was green against a list that never scrolled.

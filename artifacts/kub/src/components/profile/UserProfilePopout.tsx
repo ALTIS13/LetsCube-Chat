@@ -40,10 +40,22 @@ import type { ProfileAnchor } from "@/lib/profileTier";
  */
 export function UserProfilePopout({
   anchor,
+  row,
   onClose,
   children,
 }: {
   anchor: ProfileAnchor;
+  /**
+   * The drawn part of the anchor's own message row.
+   *
+   * The card opens beside **this**, not beside the face. Opening beside the
+   * face is what Discord configures and it is what this file did first; at 1440
+   * it landed over 320 of the bubble's 334 points, taking away exactly the
+   * context the glance exists to preserve. Discord's rows are full-width text
+   * and have no beside; ours are bubbles with 380 points of empty conversation
+   * to their right.
+   */
+  row: ProfileAnchor | null;
   onClose: () => void;
   children: React.ReactNode;
 }) {
@@ -88,6 +100,7 @@ export function UserProfilePopout({
   return (
     <BesideLayer
       anchor={anchor}
+      avoid={row ?? undefined}
       layerRef={layerRef}
       // `-strong`: it covers a conversation it is not part of, which is rule 11
       // of the material contract and the list `tests/unit/entry-glass.test.mjs`

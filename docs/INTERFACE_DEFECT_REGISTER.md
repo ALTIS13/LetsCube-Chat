@@ -23215,4 +23215,122 @@ honest scope here was one contract. **`chromium-mobile-412` is worse off than
 360 and nothing in this entry helps it** — it is named nowhere in any of the
 three documents, which is worth knowing before the next «we test at every width».
 
+
+### And then it covered the message it was opened from — corrected 2026-09-21
+
+**Found by another agent while photographing bot profiles, and confirmed
+against the renders this entry had already filed.** The anchored popout landed
+on the message row whose author had just been pressed — for a person and for a
+bot alike. That is the one thing the anchoring was for, and it was worse than
+the centred version in one respect: the centred card at least did not hide the
+thing the reader was looking at.
+
+Two renders of the same feature had been reviewed by then and neither reading
+caught it, because both were looking at the card. **A screenshot shows this
+class of defect and a number does not** — and the number, «x is greater than
+the face's right edge», was true the whole time.
+
+#### What the reference actually does, read rather than assumed
+
+The first pass established the anchoring *mechanism* from the bundle and
+recorded that the *placement* had not been read. It has been now, from the same
+build (stable 615980), and it is exact — chunk **67878**, the message header:
+
+```js
+eL.A, { targetElementRef: N, user: d.author, guildId: l, channelId: d.channel_id,
+        messageId: d.id, renderPopout: a, position: r.Fr ? "window_center" : "right",
+        avatarUrl: O, children: e => e3({ ...T, avatarImgRef: N }) }
+```
+
+`targetElementRef` and `avatarImgRef` are the same ref, so **the target is the
+avatar `<img>`** and the position is `"right"`. Module **922016** is the popout
+component, and its defaults fill in the rest: `align` is derived from position —
+`"right"` gives **`"top"`** — with `spacing: 8`, `autoInvert: true` and
+`nudgeAlignIntoViewport: true`.
+
+Right of the face, top-aligned, eight points, flip, clamp. **That is precisely
+what `placeBeside` already did**, which is worth recording as a confirmation of
+the mechanism — and is exactly why the defect is instructive:
+
+> **Copying the configuration is not copying the outcome.**
+
+Discord's popout overlaps *its* message rows too. It has no choice: its
+messages are **full-width text rows**, so the row is the column and there is no
+beside. The reason the same configuration is wrong for us is structural, not a
+matter of taste.
+
+#### What our layout affords, measured at 1440 against the fixture
+
+| | x | width |
+| --- | --- | --- |
+| avatar | 672–704 | 32 |
+| bubble | **710–1044** | 334 |
+| popout, as it was | 712–1032 | 320 |
+| free conversation right of the bubble | **1044–1424** | **380** |
+
+The card covered **320 of the bubble's 334 points**. And 380 points of empty
+conversation sat to its right, doing nothing — more than the 328 a card and its
+gap need. **Our messages are bubbles capped at about half the pane**, so we have
+a beside that Discord has not got; not using it would be copying a constraint
+instead of a decision.
+
+#### The rule now, and the precedent it follows
+
+`placeBeside` takes an **`avoid`** box — the drawn row — and the two boxes
+decide different axes: the **face** decides where the card sits vertically, so
+it still reads as that person's card, and the **row** decides which side of it
+the card opens on. The order is right of the row, then left of it, then below
+it, then above it; below is preferred over above when both fit, because a card
+that jumps above the row hides what was said before it, which is the same cost
+one message earlier.
+
+The precedent is in the same module and was already written down: `placeAtPoint`
+takes `avoid` so that a menu opening upwards «stops above the message rather
+than above the pointer, so it never lies over the very message it acts on».
+This is that idea on the other axis.
+
+The row is the **union of the avatar and the bubble**, measured at the press
+from `[data-message-row]`, because the avatar hangs below a short bubble and
+neither alone is the row a reader sees. One helper in `MessageBubble` measures
+both boxes and hands them to both subjects, so the person's card and the bot's
+card get the same treatment — which is how the defect was reported.
+
+Measured after: popout **1052–1372**, row 672–1044, **overlap 0**.
+
+#### The assertion is the property, not the geometry
+
+The old one — «x is greater than the face's right edge» — passed against a card
+sitting squarely on the message, because the face is at the row's left and the
+bubble begins immediately after it. A coordinate assertion survives the layout
+moving and the property breaking.
+
+What is asserted now is that the **popout's box and the drawn row's box do not
+intersect**, computed from both rects at 1440. It is the same discipline the
+spec already used for the chat list, which it requires to be *identical* before
+and after opening rather than «roughly where it was».
+
+**390 is untouched**: the phone is single-tier and opens the full page, so this
+is a desktop-only constraint and it cost the phone nothing.
+
+#### Evidence
+
+- **47 of 47 mutations red**, seven of them added for this rule alone: opening
+  beside the face again, measuring either side from the face, taking the
+  vertical position from the row, preferring above, dropping the avatar out of
+  the union, not finding the row at all, and renaming the row's handle.
+- **Seven survivors on the first pass, and every one was a gap rather than a
+  pass.** Three were stale anchors from a concurrent rewrite — re-pointed, not
+  deleted. Four were real: the sideways clamp had no case that reached it (a row
+  scrolled off the left edge does), the left flip was measured on a fixture
+  whose face and row shared an edge, «below over above» had no case where both
+  fitted, and the row's **handle** was asserted only where it is read and not
+  where it is written — so renaming the attribute left the guard green and the
+  popout silently back on top of the message.
+- **Unit 3850/3850**; `tests/server` 145/145; typecheck across five packages;
+  build `sw.js d15a5c70b01ad685`, `built in 8.70s`; profile e2e 24/24 and the
+  concurrent bot spec 36/36, no skips.
+- **Re-photographed at 1440 in both themes**, and the bot's card checked in the
+  other agent's own capture: in every frame the message and its timestamp are
+  whole and the card stands beside them.
+
 ---

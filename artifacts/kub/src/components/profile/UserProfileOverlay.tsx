@@ -92,6 +92,7 @@ export function UserProfileOverlay() {
   const opener = useAppStore((s) => s.profileOverlayOpener);
   const contextChatId = useAppStore((s) => s.profileOverlayChatId);
   const anchor = useAppStore((s) => s.profileOverlayAnchor);
+  const anchorRow = useAppStore((s) => s.profileOverlayRow);
   const chats = useAppStore((s) => s.chats);
   const escalated = useAppStore((s) => s.profileOverlayEscalated);
   const escalate = useAppStore((s) => s.escalateUserProfile);
@@ -255,7 +256,7 @@ export function UserProfileOverlay() {
   // what Discord's own phone client does (measured, §17.7).
   if (userId && tier === "compact" && anchor) {
     return (
-      <UserProfilePopout anchor={anchor} onClose={close}>
+      <UserProfilePopout anchor={anchor} row={anchorRow} onClose={close}>
         {surface}
       </UserProfilePopout>
     );

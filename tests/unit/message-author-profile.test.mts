@@ -123,8 +123,32 @@ test("the bubble measures the box the popout will stand beside", () => {
   // from a second ago points at the wrong row.
   assert.match(BUBBLE, /trigger\.getBoundingClientRect\(\)/);
   for (const edge of ["top", "bottom", "left", "right"]) {
-    assert.match(BUBBLE, new RegExp(`${edge}: box\.${edge}`), `the anchor drops ${edge}`);
+    assert.match(BUBBLE, new RegExp(`${edge}: box\\.${edge}`), `the anchor drops ${edge}`);
   }
+});
+
+test("and the second box, which is the one it must not cover", () => {
+  // Two boxes, not one, because they decide different axes: the **face** says
+  // where the card sits vertically, the **row** says which side of it the card
+  // opens on. Opening beside the face alone is what Discord configures, and at
+  // 1440 it put the card over 320 of the bubble's 334 points — the message
+  // whose author had just been pressed. Discord's rows are full-width text and
+  // have no beside; ours are bubbles with room to their right.
+  assert.match(BUBBLE, /trigger\.closest\("\[data-message-row\]"\)/);
+  // **And the row actually carries that name.** The lookup and the attribute
+  // are written in two places, and renaming one leaves the other matching
+  // nothing — the popout would quietly fall back to the face and cover the
+  // message again, which is the defect this whole correction is about.
+  assert.match(BUBBLE, /data-message-row="true"/);
+  assert.match(BUBBLE, /data-message-bubble="true"/);
+  // The union of the two, because the avatar hangs below a short bubble and
+  // neither alone is the drawn row a reader sees.
+  assert.match(BUBBLE, /Math\.min\(box\.top, bubbleBox\.top\)/);
+  assert.match(BUBBLE, /Math\.max\(box\.right, bubbleBox\.right\)/);
+  // And both subjects get it — a person and a bot alike, which is how the
+  // defect was reported.
+  assert.match(BUBBLE, /openUserProfile\([^)]*anchor, row\)/);
+  assert.match(BUBBLE, /openBotProfile\([^)]*anchor, row\)/);
 });
 
 test("the bubble hands over the place it was read from", () => {

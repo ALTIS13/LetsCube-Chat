@@ -196,6 +196,16 @@ interface AppState {
    * rather than pointing at the top-left corner.
    */
   profileOverlayAnchor: ProfileAnchor | null
+  /**
+   * The drawn part of the anchor's own row, which the popout must not cover.
+   *
+   * Separate from the anchor because the two decide different axes: the face
+   * decides where the card sits vertically, the row decides which side of it
+   * the card opens on. Measured at 1440 before this existed, the card landed
+   * over 320 of the bubble's 334 points — it took away exactly the context the
+   * small tier exists to preserve.
+   */
+  profileOverlayRow: ProfileAnchor | null
   /** Whether «Полный профиль» has been pressed on the compact card. */
   profileOverlayEscalated: boolean
   openUserProfile: (
@@ -203,6 +213,7 @@ interface AppState {
     opener?: ProfileOpener,
     chatId?: string | null,
     anchor?: ProfileAnchor | null,
+    row?: ProfileAnchor | null,
   ) => void
   /**
    * Discord's `view-profile` item, which is `POPOUT_CLOSE` followed by
@@ -247,12 +258,15 @@ interface AppState {
   botProfileChatId: string | null
   botProfileOpener: ProfileOpener
   botProfileAnchor: ProfileAnchor | null
+  /** The drawn part of the row, as `profileOverlayRow` is for a person. */
+  botProfileRow: ProfileAnchor | null
   openBotProfile: (
     botId: string,
     seed?: BotProfileSeed | null,
     opener?: ProfileOpener,
     chatId?: string | null,
     anchor?: ProfileAnchor | null,
+    row?: ProfileAnchor | null,
   ) => void
   closeBotProfile: () => void
 
@@ -616,8 +630,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   profileOverlayOpener: "named",
   profileOverlayChatId: null,
   profileOverlayAnchor: null,
+  profileOverlayRow: null,
   profileOverlayEscalated: false,
-  openUserProfile: (userId, opener = "named", chatId = null, anchor = null) =>
+  openUserProfile: (userId, opener = "named", chatId = null, anchor = null, row = null) =>
     set(() => ({
       profileOverlayUserId: userId,
       profileOverlayOpener: opener,
@@ -626,34 +641,45 @@ export const useAppStore = create<AppState>((set, get) => ({
       // face is a different box, and the old short-circuit would have left the
       // popout pointing at the row the reader had already scrolled past.
       profileOverlayAnchor: anchor,
+      profileOverlayRow: row,
       profileOverlayEscalated: false,
       // The two cards are one place on the screen.
       botProfileId: null,
       botProfileSeed: null,
       botProfileAnchor: null,
+      botProfileRow: null,
     })),
   botProfileId: null,
   botProfileSeed: null,
   botProfileChatId: null,
   botProfileOpener: "named",
   botProfileAnchor: null,
-  openBotProfile: (botId, seed = null, opener = "named", chatId = null, anchor = null) =>
+  botProfileRow: null,
+  openBotProfile: (botId, seed = null, opener = "named", chatId = null, anchor = null, row = null) =>
     set(() => ({
       botProfileId: botId,
       botProfileSeed: seed,
       botProfileChatId: chatId,
       botProfileOpener: opener,
       botProfileAnchor: anchor,
+      botProfileRow: row,
       // The two cards are one place on the screen.
       profileOverlayUserId: null,
       profileOverlayAnchor: null,
+      profileOverlayRow: null,
       profileOverlayEscalated: false,
     })),
   closeBotProfile: () =>
     set((state) =>
       state.botProfileId === null
         ? state
-        : { botProfileId: null, botProfileSeed: null, botProfileChatId: null, botProfileAnchor: null },
+        : {
+            botProfileId: null,
+            botProfileSeed: null,
+            botProfileChatId: null,
+            botProfileAnchor: null,
+            botProfileRow: null,
+          },
     ),
 
   composerDraftRequest: null,
@@ -674,6 +700,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             profileOverlayUserId: null,
             profileOverlayChatId: null,
             profileOverlayAnchor: null,
+            profileOverlayRow: null,
             profileOverlayEscalated: false,
           },
     ),
