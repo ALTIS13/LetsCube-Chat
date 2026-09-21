@@ -1,5 +1,26 @@
 # QA Results
 
+## 2026-09-21 - Disabled Android Call Dispatcher
+
+Tracker 32-D1 Task 3 passed independent spec/quality review. SQL remains a proposal,
+Edge is not deployed/activated, and no native install or real FCM send occurred.
+[Detailed evidence](operations/2026-09-21-android-call-dispatch.md).
+
+- Server suite: 291/291; focused SQL 56/56 included. Push/actual-handler/generic
+  regression suite: 89/89. Twenty behavioral mutations killed. No test skips.
+- Same-image PG17 full-schema apply/rehearsal, real PostgREST roles and exact RPCs,
+  forced SKIP LOCKED and registration-rebind races, transactional Vault/pg_net wake,
+  exact catalog rollback, then legacy/new registration HTTP 12/12 and baseline 5/5.
+- Exact Edge v1.74.0 with real isolated PostgREST and synthetic provider passed
+  four-device acceptance and stale UNREGISTERED/rebind protection. No external send.
+- Frontend typecheck and build passed; `sw.js cc5ad7397bebc83c`, built in 14.41s.
+  Existing sourcemap, mixed import and large-chunk warnings remain. Deno 2.5.2
+  typecheck passed with pinned web-push typings and no tracked dependency changes.
+- No UI/browser/phone delivery success is inferred from these backend checks.
+  Realme read-only inspection: Android 15, microG, app 0.1.3/build 4, notification
+  permission false and 0/6 Firebase init resource names (positive controls passed).
+  Nothing unavailable. No personal content capture or app-data change.
+
 ## 2026-09-21 - Android Call Session/Outbox Foundation
 
 Tracker 32-D1 Task 2 is verified as a proposal, not activated delivery.

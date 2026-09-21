@@ -435,10 +435,17 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     and ring/cancel outbox proposals are now independently reviewed and verified
     on an isolated full-schema PG17 copy, including PostgREST compatibility,
     forced concurrent RPCs and exact rollback. They are NOT applied in production.
-    Next: Task 3 disabled dispatcher, then staged schema apply, native candidate and
-    physical QA before activation. See the
+    Task 3's disabled dispatcher is also complete: independent spec/quality review,
+    291 server and 89 focused push tests, actual PG17/PostgREST/Edge integration,
+    forced registration/claim races and exact rollback. Nothing is currently
+    unavailable. Realme is authorized but has microG and an old APK without Firebase
+    resources, with notifications denied; it is not delivery proof. Next: Task 4
+    native handler/binding, then staged schema/candidate and physical QA. Immediate
+    wake recovery, aggregate capacity and retention are explicit activation gates.
+    See the
     [staged implementation plan](superpowers/plans/2026-09-21-android-call-delivery.md) and
-    [Task 2 evidence](operations/2026-09-21-android-call-delivery.md).
+    [Task 2 evidence](operations/2026-09-21-android-call-delivery.md) and
+    [Task 3 evidence](operations/2026-09-21-android-call-dispatch.md).
 
 33. `[ ]` Documents and the rest of what a message can carry, opened **in the
     chat** the way other media already is. Asked for by the owner on

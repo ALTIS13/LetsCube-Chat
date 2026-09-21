@@ -135,27 +135,36 @@
 - Import: `supabase/functions/send-push-notifications/voice-payload.ts`
 - Create: `tests/unit/voice-push-dispatch.test.mts`
 - Modify: `tests/unit/push-dispatcher-ownership.test.mjs`
-- Modify: the Task 2 supabase_admin migration and rehearsal before either is applied.
+- Create: `20260921122846_android_voice_push_dispatch.sql` and matching rehearsal/rollback companions under `.migration-backup/supabase/migrations/`, as `supabase_admin`.
+
+  Execution ruling, 2026-09-21: keep the independently reviewed Task 2 proposals
+  byte-identical; add Task 3 separately instead of rewriting their proven inputs.
+  Rollback order is Task 3, Task 2 outbox, Task 2 session binding.
 
 **Interfaces:**
 - Consumes: claimed `voice_ring_push_events` / `voice_ring_push_devices` rows and freshly revalidated session-bound, enabled Android/FCM devices.
 - Produces: one FCM HTTP v1 send attempt per eligible device and a terminal/retry outbox transition without exposing the token.
 
-- [ ] **Step 1: Add failing dispatcher tests**
+- [x] **Step 1: Add failing dispatcher tests**
 
   Prove fail-closed behavior for absent, stale, or mismatched session binding, absent or unsupported `voice_call_protocol`, `calls_enabled=false`, revoked/disabled devices, expired/replaced rings, caller devices, and unsupported event protocol versions. Prove that ordinary native notification outbox dispatch remains unchanged.
 
-- [ ] **Step 2: Add a disabled voice-outbox drain**
+- [x] **Step 2: Add a disabled voice-outbox drain**
 
   Claim with `FOR UPDATE SKIP LOCKED`, re-read the exact `voice_channels` ring before a ring send, and build only through `buildVoiceFcmMessage`. The dispatcher is the sole timestamp normalization authority: it parses PostgreSQL `timestamptz` strings once, rejects invalid dates, and passes non-negative safe integer Unix epoch milliseconds for `ring_started_at`, `expires_at`, and `now`; neither SQL payloads nor the builder guess units. It passes the server-selected `recipient_id` and freshly revalidated `recipient_session_id`. Cancel events retain the same ring key. Retries stop at absolute expiry. Delivery is at-least-once per device: persist each device attempt/outcome, tolerate uncertain provider acknowledgement, and rely on the deterministic ring key for native deduplication; never report an FCM acceptance as delivered.
 
-- [ ] **Step 3: Add immediate wake-up without changing the one-minute generic cron**
+- [x] **Step 3: Add immediate wake-up without changing the one-minute generic cron**
 
   Queue `net.http_post` in the same transaction after a new voice outbox event, using the existing production scheduler endpoint and secret lookup shape. The rehearsal inspects only secret names, never values. The dispatcher gate remains disabled, so this task sends no production ring.
 
-- [ ] **Step 4: Verify Edge and legacy-dispatcher ownership**
+- [x] **Step 4: Verify Edge and legacy-dispatcher ownership**
 
   The Supabase Edge function remains the sole owner of Web/FCM delivery. The legacy API push loop remains off and does not claim the voice outbox.
+
+  Completed 2026-09-21 as disabled source/proposal only: independent spec/quality
+  review, 291 server and 89 focused push tests, 20 mutations, actual PG17/PostgREST
+  and deployed Edge-runtime rehearsal, forced races and exact rollback.
+  [Evidence and device limitations](../../operations/2026-09-21-android-call-dispatch.md).
 
 ### Task 4: Build the Signed Android Native Candidate
 
@@ -200,17 +209,35 @@
 **Interfaces:**
 - Produces: measured foreground/background/screen-off/killed behavior and a controlled activation or rollback decision.
 
+- [ ] **Operational prerequisites before enabling either gate**
+
+  Establish observable immediate-wake failure/recovery within the original
+  45-second lifetime, bounded handling when multiple drains or more than 20
+  targets overlap, and an authorized retention cleanup for expired/exhausted
+  outbox rows. The current minute fallback is not a deadline guarantee. Measure
+  aggregate capacity and queue age without tokens/payloads. Do not call delivery
+  production-ready while these or native receipt checks are unproven.
+
 - [ ] **Step 1: Apply owner-specific schema only after backup and rehearsals pass**
 
-  Apply the postgres migration as `postgres` and the voice migration as `supabase_admin`, each once, in its own transaction with raising self-checks. Leave dispatcher delivery disabled.
+  Apply the binding migration as `postgres`, then outbox and dispatcher migrations
+  as `supabase_admin`, each once in its own transaction with raising self-checks.
+  Deploy the reviewed Edge code separately with both gates disabled. Verify actual
+  runtime code, roles and gate state; a web Git push does not deploy this Edge code.
 
 - [ ] **Step 2: Build and verify one signed candidate**
 
   Run the existing production release builder and verifier. Confirm package id, signer continuity, version/build increment, non-debuggable status, and artifact SHA-256 before installation.
 
-- [ ] **Step 3: Upgrade the authorised Nothing device without clearing data**
+- [ ] **Step 3: Upgrade an available authorised device without clearing data**
 
-  Use `adb install -r` only after the owner-authorized candidate gate. Verify session preservation and that registration produces a session-bound enabled FCM device without printing its token.
+  Use `adb install -r` only after the owner-authorized candidate and signer/data
+  continuity gates. Verify session preservation and session-bound enabled FCM
+  registration without printing a token. Nothing is unavailable as of 2026-09-21;
+  Realme is authorized but uses microG, has an old Firebase-free APK and denied
+  notification permission. Keep microG compatibility and official-GMS proof
+  separate; neither an old APK nor an emulator substitutes for the required
+  physical cases.
 
 - [ ] **Step 4: Run the physical matrix**
 

@@ -1,11 +1,14 @@
+// @ts-types="npm:@types/web-push@3.6.4"
 import webpush from "npm:web-push@3.6.7";
 import { buildFcmMessage, isPermanentFcmTokenError } from "./fcm.ts";
+import { drainVoicePush, isVoiceRequestAuthorized, voiceSummary } from "./voice-dispatch.ts";
 import {
   buildDeclarativeWebPushPayload,
   createWebPushTopic,
   getWebPushUrgency,
   isPermanentWebPushSubscriptionError,
   readWebPushErrorReason,
+  type SafeWebPushPayload,
 } from "./webpush.ts";
 import {
   buildWnsToast,
@@ -70,6 +73,12 @@ Deno.serve(async (request: Request) => {
     return json({ ok: false, error: "unauthorized" }, 401);
   }
 
+  const body = await readBody(request);
+  if (body?.scope === "voice") {
+    if (!isVoiceRequestAuthorized(request, dispatchToken)) return json({ ok: false, error: "unauthorized" }, 401);
+    return json({ ok: true, ...await dispatchVoice(body.limit) });
+  }
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const secretKey = readSupabaseSecretKey();
   const vapidPublic = Deno.env.get("VAPID_PUBLIC_KEY");
@@ -83,7 +92,6 @@ Deno.serve(async (request: Request) => {
     return json({ ok: false, error: "vapid_not_configured" }, 500);
   }
 
-  const body = await readBody(request);
   const limit = normalizeLimit(body?.limit);
   const claimToken = crypto.randomUUID();
   webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
@@ -124,8 +132,45 @@ Deno.serve(async (request: Request) => {
     nativeRows.schemaMissing,
   );
 
-  return json({ ok: true, sent, failed, pruned, limit, native });
+  const voice = Deno.env.get("VOICE_PUSH_DISPATCH_ENABLED") === "1"
+    ? isVoiceRequestAuthorized(request, Deno.env.get("KUB_PUSH_DISPATCH_TOKEN"))
+      ? await dispatchVoice(body?.limit) : voiceSummary("unauthorized")
+    : undefined;
+  return json({ ok: true, sent, failed, pruned, limit, native, ...(voice ? { voice } : {}) });
 });
+
+async function dispatchVoice(limit: unknown) {
+  const enabled = () => Deno.env.get("VOICE_PUSH_DISPATCH_ENABLED") === "1";
+  if (!enabled()) return voiceSummary("disabled");
+  const config = readFcmConfig();
+  if (!config) return voiceSummary("credentials_pending");
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const secretKey = readSupabaseSecretKey();
+  if (!supabaseUrl || !secretKey) return voiceSummary("runtime_pending");
+  try {
+    return await drainVoicePush({
+      enabled, now: Date.now, uuid: () => crypto.randomUUID(),
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      getAccessToken: (signal) => getGoogleAccessToken(config, signal),
+      rpc: async (name, args, signal) => {
+        signal.throwIfAborted();
+        const response = await restFetch(new URL(`/rest/v1/rpc/${name}`, supabaseUrl), secretKey, {
+          method: "POST", headers: { prefer: "return=representation" }, signal, body: JSON.stringify(args),
+        });
+        if (!response.ok) throw new Error("voice_rpc_failed");
+        return await response.json();
+      },
+      send: async (envelope, accessToken, signal) => {
+        signal.throwIfAborted();
+        const response = await fetch(`https://fcm.googleapis.com/v1/projects/${encodeURIComponent(config.projectId)}/messages:send`, {
+          method: "POST", signal, headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+          body: JSON.stringify(envelope),
+        });
+        return { status: response.status, retryAfter: response.headers.get("retry-after"), body: await readJson(response) };
+      },
+    }, limit);
+  } catch { return voiceSummary("rpc_failed"); }
+}
 
 function isAuthorized(request: Request, expectedToken: string) {
   const headerToken = request.headers.get("x-kub-push-token");
@@ -146,11 +191,11 @@ function readSupabaseSecretKey() {
   return Deno.env.get("SUPABASE_SECRET_KEY") || "";
 }
 
-async function readBody(request: Request): Promise<{ limit?: unknown } | null> {
+async function readBody(request: Request): Promise<{ limit?: unknown; scope?: unknown } | null> {
   const text = await request.text();
   if (!text.trim()) return null;
   try {
-    return JSON.parse(text) as { limit?: unknown };
+    return JSON.parse(text) as { limit?: unknown; scope?: unknown };
   } catch {
     return null;
   }
@@ -542,7 +587,7 @@ async function deliver(
   }
 }
 
-function safePayload(payload: Record<string, unknown>) {
+function safePayload(payload: Record<string, unknown>): SafeWebPushPayload {
   const senderKind = safeSenderKind(payload.senderKind ?? payload.sender_kind);
   const senderId = senderKind === "user" ? safeText(payload.senderId ?? payload.sender_id, "", 80) : "";
   const botId = senderKind === "bot" ? safeText(payload.botId ?? payload.bot_id, "", 80) : "";
@@ -704,7 +749,7 @@ function isSafeWnsIdentifier(value: string): boolean {
   return /^[A-Za-z0-9._-]{1,128}$/.test(value);
 }
 
-async function getGoogleAccessToken(config: FcmConfig): Promise<string> {
+async function getGoogleAccessToken(config: FcmConfig, signal?: AbortSignal): Promise<string> {
   const issuedAt = Math.floor(Date.now() / 1000);
   const header = base64UrlJson({ alg: "RS256", typ: "JWT" });
   const claims = base64UrlJson({
@@ -732,8 +777,10 @@ async function getGoogleAccessToken(config: FcmConfig): Promise<string> {
     grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
     assertion,
   });
+  signal?.throwIfAborted();
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
+    signal,
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body,
   });

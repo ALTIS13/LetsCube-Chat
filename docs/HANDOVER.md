@@ -132,7 +132,7 @@ whole deployment** — no bot has registered a command yet.
 ## 4. Where to start
 
 **Active checkpoint, 2026-09-21 (Codex):** owner Codex, main checkout
-`D:\CodexProjects\LetsCube-Chat`, Task 2 base `cc3b1c43`. Tracker 49, D-284 and the
+`D:\CodexProjects\LetsCube-Chat`, Task 3 base `b1d5349c`. Tracker 49, D-284 and the
 D-088 address-subscription regression are verified and deployed in `804101f5`
 (runtime commit `dc59ea28`). This includes outgoing ring updates after public
 navigation, Windows caption, auth-bound transport/resume and late-RPC guards.
@@ -140,11 +140,18 @@ Tracker 32-D1 Task 1's pure Android call payload is committed but unused by disp
 Task 2 session-binding/outbox proposals passed independent review, 235 server
 tests, real-owner PG17 full-schema rehearsals, PostgREST compatibility, forced
 concurrent RPCs and exact rollback. Production SQL and call dispatch remain
-unchanged. Next is Task 3's dispatcher behind a disabled gate, then staged schema/native rollout,
-not a reimplementation of foreground ringing. No database, native-release or live
-dispatcher changes in this batch. Evidence and remaining gates:
+unchanged. Task 3's disabled dispatcher passed independent spec/quality review,
+291 server and 89 focused push tests, actual PG17/PostgREST/Edge integration and
+exact rollback. Nothing is unavailable by the owner's instruction; authorized
+Realme has Android 15/microG, LETSCUBE 0.1.3/build 4, notification permission denied
+and no Firebase init resources in its installed APK. Next: Task 4 native handler
+and binding source, then the separately gated candidate/schema/physical rollout.
+Task 5 must also close immediate-wake recovery, capacity and retention checks;
+minute polling alone cannot meet 45 seconds. No production SQL/Edge activation or
+native installation in this batch. Evidence and remaining gates:
 [`2026-09-21-voice-continuation.md`](operations/2026-09-21-voice-continuation.md).
 Completed Task 2 evidence: [Android session/outbox rehearsal](operations/2026-09-21-android-call-delivery.md).
+Completed Task 3 evidence: [Disabled call dispatcher](operations/2026-09-21-android-call-dispatch.md).
 
 In this order, and the order is not arbitrary — several of these are a chain.
 
@@ -162,8 +169,8 @@ full; each carries his own words and the measurements behind the decisions.
    accept/decline/cancel, call history, missed sweep and session call preferences
    already exist in source and production. Remaining: measured multi-client
    delivery, background OS notification and closed Android call delivery. Start
-   with Task 3 of the Android plan: payload and schema rehearsals are complete;
-   production schema is still unchanged.
+   with Task 4 of the Android plan: payload, schema and disabled-dispatcher
+   rehearsals are complete; production schema/Edge are still unchanged.
    Source tests are not physical proof.
 4. **Item 45 — the group chat.** A separate `chats.type`, born from a live private
    call by one «add to conversation» press; the two already talking are rejoined
