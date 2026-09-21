@@ -6824,6 +6824,26 @@ after «Файл» the menu's «Фото или видео», in the dialog its 
 follow the device, which would have sent a desktop's «Файл» to a box that never
 opened. `originalLimitMessage` takes that surface now.
 
+**Amended 2026-09-21, and read this before undoing the amendment.** This entry
+is easy to summarise as «no remembered quality», and on that summary the SD/HD
+badge shipped as D-290 was deliberately *not* persisted. Reading the entry
+itself reverses that. What it rejected was **being asked** — «what testers
+object to is not how many choices there are but that there is a choice at all» —
+and what it removed was the three-stop selector above and the five-stop slider,
+objects Telegram does not have. **A remembered binary state is the opposite of a
+question:** you set it once and it stops asking, and *not* remembering is
+precisely what makes it a question on every send. The client this entry cites —
+«как в Telegram» — persists it, measured on the owner's device on 2026-09-20:
+set to SD, left the editor, reopened, still SD.
+
+So the SD/HD state is remembered per device from 2026-09-21, in
+`kub:photo-resolution:v1`, and that **completes** this entry rather than
+overturning it. The two things it removed stay removed: there is no quality
+question at send time, and «Файл» remains the separate, explicitly named
+uncompressed path. The reasoning lives beside the key in
+`artifacts/kub/src/lib/mediaQuality.ts` so the next reader meets it before the
+code rather than after.
+
 Verified on the fixture server: `media-send-without-compression.spec.ts` 13 of 13
 on Chromium at 1440, Chromium at 390 and WebKit at 390, 14 skipped by shape, with a
 new desktop test for «Файл» and the phone tests moved to it; the unit tests that
@@ -19424,7 +19444,7 @@ reaches the 2-core allocation, and a single «capacity» figure would hide that.
 
 ---
 
-## D-263 `[ ]` The bot platform's remaining nuances, and how a bot looks in a chat
+## D-263 `[x]` The bot platform's remaining nuances, and how a bot looks in a chat
 
 **Asked for by the owner, 2026-09-19:** «с ботами также требуется полностью
 проработать все нюансы и моменты которые обсудили ранее… уже есть работающий бот
@@ -19451,6 +19471,170 @@ actually renders before designing anything, and report that before proposing.
 
 ---
 
+
+### Closed on 2026-09-21 — the three complaints, and what each one cost
+
+**The live bot was read first, as the entry asked.** Structural counts only,
+read-only on `supabase-db` inside a transaction that ended in `ROLLBACK`; no
+message body, chat name or person left the query. What it found matters more
+than the repairs:
+
+| | |
+| --- | --- |
+| bots | 3, all `active`; `langame_bot` is the working one |
+| **`public.bot_commands`** | **0 rows, deployment-wide** |
+| `langame_bot` | 1 chat, 56 messages, **all of them `text`**, 41–559 characters, average 170 |
+| with an inline keyboard | 5 — four of one row of two buttons, one of a single button |
+| edited by the bot afterwards | **0** — `editMessageText` exists and has never been used |
+| how people address it | in the group: 3 `«/cmd@…»`, 0 bare, 6 ordinary text; in the private chat: 1 bare |
+
+**No bot in this deployment has ever registered a command.** So every command
+surface — the composer's menu, the typed «/» list, and both surfaces added below
+— is empty against production today, and the three `/cmd@langame_bot` messages
+in that group were typed out **by hand**, because with no rows in
+`bot_commands` the menu could not have written them. That is the second
+complaint, observed in the wild: somebody had already learned the trick the
+composer now performs for them.
+
+---
+
+**1. A sent `/command` was inert text.** True at the rendering level and
+measured: `lib/formatText.tsx` tokenised code, strike, bold, italic, URLs and
+`@mentions`, and had no token for a command at all. A `/shift` in a bubble was
+six characters.
+
+*The reference, MEASURED ON DEVICE 2026-09-21* (`P212C6000159`, Telegram
+12.10.3): tapping `/start` inside a Telegram bubble **sent `/start` again at
+once** — the whole exchange repeated on screen, with no confirmation and
+nothing put in the composer. Discord's own command sheet, same device, gives an
+argument-free command an explicit «Отправить ➤» (109 dp, right-aligned) and an
+argument-taking one a chevron to a form. Both make a command in front of you
+runnable in one act, and neither confirms.
+
+*Ours*: a `/command` is now a control in the message and pressing it sends it.
+**Where it differs from Telegram on purpose**: Telegram draws every `/word` as
+a link and sends whatever was tapped, whether or not a bot answers to it. Ours
+draws only what **this chat's bot registered** — `botCommandMentionRuns` — so
+every coloured command on screen is one that will be answered. That is §8 of
+`docs/operations/reference-clients.md` applied to a link: a token that sent
+something nothing answers would be an inert control wearing a link's clothes.
+
+The grammar is `private.bot_can_receive_message`'s own, not the Bot API's prose:
+anchored at position 0, terminated by whitespace or end of string, and matched
+on lowered text — so `/shift,` is text, ` /shift` is text, `/SHIFT@ShiftBot` is
+a command, and `/shift@ab` is nothing, because `bots.username` is five
+characters at the shortest.
+
+**2. A hand-typed `/cmd` in a group was silently dropped.** The authoriser's
+`restricted` branch — the only kind `chat_bot_add` can create — admits
+`^/[a-z][a-z0-9_]{0,31}@<username>([[:space:]]|$)`, a mention of the bot, or a
+reply to it. A bare `/shift` matches none of the three, and nothing anywhere
+said so.
+
+*Ours*: the composer writes the address. A command typed whole in a group goes
+out as `/shift@shiftbot`, and `/shift 12 марта` as `/shift@shiftbot 12 марта`
+— the authoriser's own `([[:space:]]|$)` is what makes that second form
+deliverable. The person who types a command out now gets the delivery the
+person who picks it from the menu has had since D-244.
+
+*Why not a warning.* A sentence saying «this will not reach the bot», while the
+product knows exactly how to make it reach the bot, would be a worse answer
+than making it reach the bot. Nothing about it is silent either: the
+conversation shows the addressed form, which is both what was sent and what
+will arrive.
+
+*Three refusals keep this from rewriting what people wrote*, each asserted:
+only a command the bot **registered** (so `/lol` in a group stays a joke), only
+at **position 0** (which is the only place the authoriser looks), and only when
+**nothing is addressed already** — somebody who wrote `/shift@otherbot` meant
+that bot. An edit is left alone; a correction to an existing message is not a
+new delivery, which is why «/» does not open the menu there either.
+
+**3. A bot's profile answered nothing.** `messageAuthorProfileTarget` returned
+`{kind:"none", reason:"bot"}` and the face was a `<div>`; the entry's own
+comment in `lib/messageAuthorProfile.ts` named D-263 as the owner of that
+refusal.
+
+*The two references disagree about what a bot's profile is for, and that is the
+whole decision.* Both MEASURED ON DEVICE 2026-09-21:
+
+- **Telegram's** (a published demo bot, so nobody's data was read): avatar,
+  name, **a count of users** where a person's card has a last-seen line, four
+  round actions — «Чат», «Звук», «Ссылка», «Стоп» — and one card of 387 dp
+  carrying the description under «О себе» and the handle under «Имя
+  пользователя», plus a 350 × 48 dp «Открыть приложение». **It lists no
+  commands at all.** It answers «what is this bot».
+- **Discord's**: a banner, the avatar, the name with a «✓ БОТ» badge, the
+  handle, mutual servers, «+ Добавить приложение» (992 × 99 px = 378 × 37.7 dp
+  at 16.8 dp margins) and «Сообщение», then one card of the same 378 dp:
+  «Биография», «В числе участников с», and **«Команды» — the commands as
+  chips with «Посмотреть все команды»**, which opens a sheet listing every
+  command with its description and a per-row send button. It answers «what can
+  this bot do».
+
+*Ours takes Discord's*, because that is the one that answers the complaint: the
+owner rates Discord's bots highest «из-за большей кастомизации и удобства их
+реализации» and `CLAUDE.md` §7 makes Discord the default. A card that named a
+bot and stopped would have answered «a bot's profile answers nothing» with a
+name.
+
+*Where we differ from Discord deliberately*: its sheet splits the rows — send
+for an argument-free command, a form for one that takes arguments. We cannot
+make that split honestly, because `public.bot_commands` holds a name and a
+description and **no argument schema**, so this product cannot tell the two
+apart. Taking the send branch for everything would make every command with an
+argument unusable from the card, which is exactly why D-126 decided the
+composer's menu fills the field. The card's rows therefore do what the menu's
+rows do — the same function, `botCommandDraft`, not a second one.
+
+*Where it is better than the menu, and this is the one place it is*:
+`chooseChatBot` gives the composer a **single** bot, so in a group holding two
+the menu can only ever reach the first. A card is opened from a particular face
+and addresses **that** bot.
+
+*What it refuses, each as an absence and not a dead control*: no presence line,
+no standing in this chat, no mutual groups, no «Открыть чат» — the card is
+opened from inside the conversation it would open. Telegram's card makes the
+first three refusals too; what it puts in their place is a user count, which we
+do not have and do not invent. A bot whose `state` is not `active` still gets a
+card — `public.bots` hands the row to anyone sharing a live chat with it
+whatever the state, which is what keeps a disabled bot's name readable (D-247)
+— and every row on it is disabled with the reason said.
+
+### What this deliberately did not build
+
+- **No second tier.** A person has a compact card and a full one; a bot has one
+  body in two containers. The three things that make a summary a summary — a
+  capped badge strip, a clamped bio, a smaller face — have no counterpart, and
+  a card showing half a bot's commands would be a list you cannot use with a
+  button to go and use it. `resolveProfileTier` is still what places it, with
+  `escalated: false` stated rather than defaulted.
+- **No bot card from the group member list.** D-276 named that as the natural
+  follow-up; the row is still not clickable. The message author is where
+  §15.1's importer list starts and where this entry's complaint was made.
+- **No command surface reachable before you share a chat with the bot.**
+  `bot_commands` is readable only to a member or an owner, so search still
+  cannot preview them — correct, and unchanged since D-126.
+
+### Evidence
+
+- `tests/unit/bot-chat-surfaces.test.mts` (43), `tests/unit/bot-profile.test.mts`
+  (18), `tests/unit/message-author-profile.test.mts`.
+- `tests/e2e/bot-command-and-profile.spec.ts` — 16 tests, every assertion on
+  the body of a POST to `messages` or on the rendered DOM, never on an
+  identifier. The message the bot sends in that fixture carries `/report`
+  alongside `/shift` and `/shifts` as a **control**: it has the shape of a
+  command and nothing registered it, so a tokenizer that made every slash-word
+  pressable would pass every other assertion in the file.
+- **28 mutations, 28 red.** Twenty on the pure decisions and the wiring
+  (`node --test`), eight through the browser. One survived a first pass and was
+  **redundancy rather than reach**: a second length bound beside `isCommandName`
+  guarded nothing, because `isCommandName` is the CHECK written out. It was
+  removed rather than asserted around, and removing it exposed a real defect
+  beside it — the scan lowered the whole line **inside both loops**, which is
+  quadratic in the length of an attacker-supplied message. Lowered once now.
+
+---
 
 ## D-264 `[x]` The update notice asked a question, covered the way out of the conversation, and predated the material
 
@@ -22794,5 +22978,220 @@ should not be read as an open gap blocking anything: **a phone has one profile
 surface**, so there is nothing for a store to hold together there beyond the
 caching it already does. The question only has force where two surfaces can
 disagree, and on a phone there are not two.
+
+---
+
+## D-293 `[x]` Every conversation opened from search or from a notification closed itself again
+
+**Severity:** high, and live on `main`. It is `CLAUDE.md` §11's contract —
+«search and notification jumps land on the exact message» — failing at the
+first half: the conversation did not stay open at all.
+
+**Found** on 2026-09-21 while running the bot suite for D-263: the long-standing
+test «a bot found in search opens its chat instead of a modal» was red, and had
+been since `054bf8ee`. It was **not** somebody else's failure to step over.
+
+**Surface:** `artifacts/kub/src/components/search/SearchShared.tsx` (the bot,
+chat and message branches) and
+`artifacts/kub/src/components/sidebar/NotificationBell.tsx` (four paths: a chat
+notification, a message notification, an accepted group invite, and a grouped
+message entry).
+
+**The cause is an old line meeting a new feature.** Since `054bf8ee` a
+conversation has an address, and `useChatAddress` pushes `/chat/<id>` the
+instant the chat is selected. Every one of those call sites then ran
+`setLocation("/")`, which used to mean «come back to the messenger» and now
+means «`/` with a conversation open» — which `reconcileChatAddress` answers
+with `close`, because from inside the messenger that is a Back press out of the
+conversation.
+
+**Measured**, from the page's own `history.pushState`, opening a bot from
+search:
+
+```
+push /chat/22222222-2222-4222-8222-00000000b001    the address, from the selection
+push /                                             the search, meaning "the messenger"
+```
+
+and `selectedChatId` came back `null` with the conversation shut. It only bites
+when the search or the notification centre is used **from inside the
+messenger**: from `/tasks` the previous location is not a messenger route, the
+reconciler answers `navigate` instead of `close`, and the conversation opens
+correctly — which is why it survived review.
+
+**Repair:** navigate to the conversation's **own** address rather than to `/`,
+which is right from either origin and idempotent (the reconciler then answers
+`idle`). A message notification and a message result carry the message segment
+too, so a reload lands on the same message — which is what `054bf8ee` built the
+second segment for. The two `setLocation("/")` calls in `runSearchCommand` are
+left alone: «open chats» and «focus search» go to the list on purpose and open
+no conversation.
+
+**Regression test:**
+`tests/e2e/chat-address.spec.ts` — «a conversation opened from search keeps its
+address and stays open», asserting the address **and** the selection **and**
+that both still hold a second later, because the close arrived after the open
+rather than instead of it. `tests/e2e/bot-chat-surfaces.spec.ts`'s existing test
+goes green with the repair and red without it; both mutations are in the
+battery.
+
+**The second finding, recorded because it cost an hour of the diagnosis.** A
+probe run after editing the source reported `selectedChatId === null` while the
+conversation was plainly open on screen. That was not the defect — it was the
+trap `CLAUDE.md` §5 already records: once Vite has taken a hot update, a bare
+`import("/src/store/app.store.ts")` in the page reaches a **second** store. The
+dev server has to be restarted before any spec that reads the store, and the
+mutation battery now restarts it between every mutation for the same reason.
+
+---
+
+## D-294 `[x]` The media viewer's title collapses to nothing on a 360px phone, and both guards named for that case were drawing a different one
+
+**Severity:** medium on the shipped Android app, and the finding underneath it is
+worse than the defect. Found 2026-09-21 from a red test, not from a report.
+
+**Reproduction:** `tests/e2e/media-viewer-actions.spec.ts`, «the busiest header
+the viewer can draw still fits a phone (D-147, D-148)», on
+`chromium-mobile-360`. Red at 360, green at 390, 412, 1440 and 1920. It predates
+the work of 2026-09-20.
+
+**Surface:** `artifacts/kub/src/components/chat/MediaViewer.tsx`, the 48px header
+row.
+
+### What was actually wrong, measured
+
+The header is one row holding a kind glyph, the picture's name, an originality
+badge, a file control, a fullscreen control on a video, and the way out. Every
+control takes its natural width and the **title gets the remainder** — so on a
+narrower phone the remainder goes to zero. Measured at 360 in the Android shell,
+whose file control keeps its word at every width by D-147's own rule, on a video,
+which is the only kind with a fourth control, showing a re-encoded upload, which
+adds the badge:
+
+| width | shell | badge | title | characters legible |
+| --- | --- | --- | --- | --- |
+| 360 | Android | «Копия» | **12px** | **0** |
+| 390 | Android | «Копия» | 42px | 3 |
+| 360 | browser | «Копия» | 97px | 10 |
+| 1440 | Android | «Сжатая копия» | 1008px | whole |
+
+Not «an ellipsis with four characters in front of it», which is what the source
+comment claimed: an ellipsis with none.
+
+### Three things were wrong at once
+
+**1. The number the guard used was arbitrary.** It required the title to be
+wider than 80px. 80 was measured once, at 390, on a container whose width is the
+viewport minus a fixed 251px of chrome — so it says «≥80 at 390» and nothing at
+any other width. A second guard in `media-original-claim.spec.ts` carried its
+own different number, 60px, for the same contract.
+
+**2. Neither guard measured what its comment said.** The 80px one read
+`row.querySelector("div.truncate, div.flex-1")`, which matches the **column**
+holding the title, the position line and the badge — not the title. It cannot
+see the badge at all: with the badge present the column is 59px either way while
+the name inside it drops from 59px to 12px. The 60px one read
+`badge.parentElement.firstElementChild`, meaning «whatever sits left of the
+badge», which would have followed the badge anywhere and gone on measuring
+something.
+
+**3. Neither drew the case it was named for.** Both say «the busiest header» /
+«the worst header there is». The busiest header is the Android shell **with the
+badge**; one omitted the badge, the other omitted the shell, and the shell is
+worth 85px — the difference between a glyph and «В браузере». That 85px is the
+whole distance between 97px of title, which passes, and 12px, which ships.
+
+### Fixed 2026-09-21
+
+The column already existed for exactly this reason, and its own comment says so:
+«One column for the name and the place, so the place is a second line instead of
+a competitor for the width the title already fights for.» The badge was left as
+a competitor on line one. It moves to the second line, beside the position —
+both are metadata about the file, and the title gets the primary line. The kind
+glyph is dropped below `sm`: it names what already fills the screen behind it,
+which is 26px of restatement in the one row with nothing to spare. Header
+padding and gaps tighten below `sm`.
+
+Measured after, same worst case, same 48px row, no horizontal scroll at any
+width:
+
+| width | title | characters legible |
+| --- | --- | --- |
+| 360 | **99px** | **11 of 15** |
+| 390 | 129px | 14 of 15 |
+| 412 | 151px | whole |
+| 1440 | 1008px | whole |
+
+**The guards now measure the contract instead of a number.** One definition, in
+`tests/e2e/helpers/viewerHeader.ts`, in **characters that survive the
+truncation** — which is the unit «still a title rather than one letter and an
+ellipsis» is written in, and the unit a pixel count cannot stand in for, because
+how many characters a pixel buys depends on which font the machine resolved.
+Both specs draw the genuinely busiest header, and the title element has a test id
+of its own rather than being found by its position beside something else.
+
+**Renders:** `output/media-viewer/video-android-shell-chromium-mobile-360.png`
+(«Проход по э…» over «2 из 2 · Копия», all four controls reachable) and
+`output/media-original-claim/video-copy-dark-chromium-desktop-1440.png` («Проход
+по этажу, сжатое видео» over «4 из 4 · 14 сентября · Сжатая копия»).
+
+**Mutations:** restoring the badge to the title row turns both guards red at 360
+with «4 of 15 characters at 360px, title 52px»; collapsing the column to one row
+turns them red on the badge no longer being drawn. Before the repair the first
+guard read 59 against 80 and the second read 97 against 60 and passed.
+
+---
+
+## D-295 `[x]` The width nothing runs, and the guard that was green for eight days because of it
+
+**Severity:** process, and it is the durable half of D-294. Recorded 2026-09-21.
+
+**The finding.** D-294 was red only because somebody ran the project nobody
+runs. `chromium-mobile-360` has been in `playwright.config.ts` since 2026-09-06,
+added because D-058, D-060 and D-061 all came in from below 390 — three of five
+findings from a width nothing had ever been checked at. It is in the
+configuration and in almost nobody's command line. Counted across the three
+documents that record how this project is actually tested:
+
+| project | tracker | QA results | register | total |
+| --- | --- | --- | --- | --- |
+| `chromium-mobile-390` | 2 | 15 | 21 | **38** |
+| `chromium-desktop-1440` | 2 | 13 | 18 | **33** |
+| `webkit-mobile-390` | 2 | 18 | 10 | **30** |
+| `webkit-ios-standalone` | 1 | 8 | 4 | **13** |
+| `chromium-mobile-360` | 0 | 1 | 4 | **5** |
+| `chromium-desktop-1920` | 0 | 0 | 2 | 2 |
+| `chromium-desktop-3840` | 0 | 0 | 1 | 1 |
+| `chromium-mobile-412` | 0 | 0 | 0 | **0** |
+
+**The cause is not the configuration.** `pnpm e2e` is `playwright test` with no
+`--project`, which runs all eight. Nobody runs it: a full run from the root
+currently stops at load on `resumable-media-upload.spec.ts`, so CLAUDE.md §5
+says to pass explicit files — and every documented command names projects too.
+The one example in CLAUDE.md names `chromium-desktop-1440` and nothing else. So
+the routine matrix is a habit of four names, encoded in no file, and the two
+narrow-and-wide ends of the configured matrix are checked almost never.
+
+**Should 360 be in it? Yes, for any contract about a phone**, and the evidence is
+not an opinion: three defects came from below 390 the first time anybody looked,
+D-151 had to be decided at 360 because «360 is the width that has to hold», and
+D-294 sat green for eight days at the one width that broke it. The cost is
+small — the two viewer specs at 360 and 390 together ran in 10.1s.
+
+**What was done about it, and what was not.** A line in a document is read when
+somebody writes a document, not when they type a command, so the repair is in the
+contract instead: `tests/e2e/helpers/viewerHeader.ts` carries
+`NARROWEST_PHONE = 360×800`, and the guard **resizes to it itself** before
+asserting, then asserts again at whatever width the project chose. A width
+nothing runs is a width nothing protects, so a contract about the narrow end now
+brings its own width and holds whichever project runs it. Proved: with the
+product defect restored, the guard is red on `chromium-desktop-1440` as well as
+on `chromium-mobile-360`.
+
+No mechanism was built to force the project itself into every run. That would
+either fail every ordinary partial run or be another rule nobody reads, and the
+honest scope here was one contract. **`chromium-mobile-412` is worse off than
+360 and nothing in this entry helps it** — it is named nowhere in any of the
+three documents, which is worth knowing before the next «we test at every width».
 
 ---

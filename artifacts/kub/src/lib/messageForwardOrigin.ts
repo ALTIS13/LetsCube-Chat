@@ -27,16 +27,43 @@
  * the half is named rather than hidden: a surface that quietly says different
  * things to two people is worse than one that says so out loud.
  *
- * ## What would close the other half, and why it is not here
+ * ## What closes the other half — and it is the owner's correction, not ours
  *
- * Telegram denormalises. Its `fwd_from` carries the origin **on the copy**, and
- * the proof that it is stored rather than joined is its own privacy setting: a
- * sender who forbids linking still has their *name* travel with the forward,
- * which no join could produce. Ours would need the same — a column on
- * `public.messages` filled by `forward_message` from the server's own row of
- * the source — and that is a production migration, which CLAUDE.md §10 does not
- * let this task take on its own. It is written up for the owner in the tracker
- * under item 46 (h), with its cost.
+ * The paragraph that stood here proposed denormalising as an improvement we
+ * might one day afford. The owner settled it on 2026-09-20 and corrected the
+ * premise underneath it: «У телеграма скрытие имени при пересылке завязано на
+ * настройках приватности, т.е. изначально все видят изначального отправителя
+ * пересылаемого сообщения.»
+ *
+ * So the RLS-dependent half above is not «a real half left open». It is wrong.
+ * Under it the same forward shows a name to one reader and withholds it from
+ * another, and **nobody chose that** — it is an artefact of who holds access,
+ * not a decision by the person whose name it is. A privacy property that varies
+ * by the viewer's access without the subject's involvement is not a privacy
+ * property. The control belongs to the person being disclosed: disclosed by
+ * default, opted out once in «Конфиденциальность», read at the moment of
+ * forwarding and never again.
+ *
+ * ## What the copy carries, and how this file reads it
+ *
+ * Migration 20260921120000 puts the answer on the copy:
+ *
+ *   - `forward_origin_name` — the origin's display name, captured at forward
+ *     time. Readable by everyone who can read the message at all, so it no
+ *     longer flickers by reader;
+ *   - `forward_origin_hidden` — true where the original sender had opted out at
+ *     that moment. Permanent in both directions: a later change of their
+ *     setting reaches into nothing already sent.
+ *
+ * Both are written only by `trg_messages_forward_origin`, never by a client.
+ *
+ * **Three states, not two**, and the third is why `hidden` is a column of its
+ * own rather than «name is null». A forward made before that migration carries
+ * neither: `name` null and `hidden` false. That is «not recorded», and it falls
+ * back to the join, which is exactly today's behaviour — the migration
+ * deliberately backfills nothing, because reading every sender's setting **as
+ * it stands now** and stamping it on messages sent before they had one is the
+ * retroactive direction the decision refuses.
  *
  * Nothing here imports anything but the actor helper, which imports nothing
  * either, so `node --test` reads this file directly.
@@ -78,15 +105,42 @@ export function forwardOriginName(input: {
   forwardedFromId?: string | null;
   explicit?: { name: string } | null;
   source?: ForwardSourceRow | null;
+  /** `messages.forward_origin_name`, captured at forward time. */
+  originName?: string | null;
+  /** `messages.forward_origin_hidden`: the original sender had opted out. */
+  originHidden?: boolean | null;
 }): string | null {
   if (!input.forwardedFromId) return null;
+
+  // The copy's own record comes first, before anything read per reader. It is
+  // the same answer for everybody, which is the whole point of writing it down.
+  if (input.originHidden) return null;
+  const recorded = input.originName?.trim();
+  if (recorded) return recorded;
+
   const explicit = input.explicit?.name?.trim();
   if (explicit) return explicit;
+  // Nothing recorded: a forward from before 20260921120000. The join, and with
+  // it the old per-reader answer, which is what those rows have always had.
   const source = input.source;
   if (!source) return null;
   if (source.deleted_at) return null;
   const name = messageActorDisplayName(source).trim();
   return name || null;
+}
+
+/**
+ * Whether the origin is withheld because the person chose to withhold it.
+ *
+ * Distinct from «there is no name here» — the surface may want to say so, and a
+ * reader who is told «Переслано» because somebody opted out is being told
+ * something true, while one told the same because they lack access is not.
+ */
+export function forwardOriginIsHidden(input: {
+  forwardedFromId?: string | null;
+  originHidden?: boolean | null;
+}): boolean {
+  return Boolean(input.forwardedFromId) && Boolean(input.originHidden);
 }
 
 /** Whether the line is drawn at all: any forward gets one, named or not. */

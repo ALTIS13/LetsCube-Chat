@@ -16,18 +16,31 @@ const gateway: PrivacyGateway = {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("privacy_preferences")
-      .select("presence_visible")
+      .select("presence_visible,forward_origin_visible")
       .eq("user_id", userId)
       .maybeSingle();
-    // An absent row is not an error — it is the default.
+    // An absent row is not an error — it is the defaults.
     if (error) throw new Error(error.message);
-    return data ? { presenceVisible: data.presence_visible !== false } : null;
+    return data
+      ? {
+          presenceVisible: data.presence_visible !== false,
+          forwardOriginVisible: data.forward_origin_visible !== false,
+        }
+      : null;
   },
 
-  async write(userId, presenceVisible) {
+  async write(userId, preferences) {
     const supabase = createClient();
+    // The whole row, every time. An upsert naming one column resets the other
+    // to its column default, which for the forward setting means turning
+    // somebody's opt-out back on because they changed their presence.
     const { error } = await supabase.from("privacy_preferences").upsert(
-      { user_id: userId, presence_visible: presenceVisible, updated_at: new Date().toISOString() },
+      {
+        user_id: userId,
+        presence_visible: preferences.presenceVisible,
+        forward_origin_visible: preferences.forwardOriginVisible,
+        updated_at: new Date().toISOString(),
+      },
       { onConflict: "user_id" },
     );
     if (error) throw new Error(error.message);
@@ -51,6 +64,12 @@ const store = createPrivacyPreferencesStore(gateway);
  * then nothing for anyone — staff included — to read, which is the difference
  * between privacy and a display filter.
  *
+ * The second is whose name a forward carries. It is the same principle one step
+ * further out: the decision belongs to the person being disclosed rather than
+ * to whoever happens to hold access to the chat the message came from. Written
+ * by the database onto each copy at forward time, so it governs what is
+ * forwarded next and never what was forwarded already — in either direction.
+ *
  * Nothing here affects being found or being written to. That was the condition
  * the setting was asked for under: a colleague must always be reachable.
  */
@@ -67,5 +86,10 @@ export function usePrivacyPreferences() {
     [userId],
   );
 
-  return { ...snapshot, setPresenceVisible };
+  const setForwardOriginVisible = useCallback(
+    (visible: boolean) => store.setPreference(userId, "forwardOriginVisible", visible),
+    [userId],
+  );
+
+  return { ...snapshot, setPresenceVisible, setForwardOriginVisible };
 }

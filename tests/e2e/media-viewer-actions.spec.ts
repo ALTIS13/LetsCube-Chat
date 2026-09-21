@@ -14,6 +14,12 @@ import {
   requireFixtureServer,
   type Row,
 } from "./helpers/messageActionsFixture";
+import {
+  NARROWEST_PHONE,
+  TITLE_CHARACTERS_REQUIRED,
+  measureViewerHeader,
+  titleShortfall,
+} from "./helpers/viewerHeader";
 
 /**
  * The media viewer's controls, and the one volume behind a conversation.
@@ -209,6 +215,13 @@ interface OpenOptions {
   /** Makes Capacitor report the Android app: the shell that cannot keep a download. */
   androidShell?: boolean;
   /**
+   * Stamps the metadata a re-encoded upload carries, so the viewer draws the
+   * originality badge. Without it `mediaOriginality` answers «unknown» and the
+   * header has no badge at all — which is how a test could call itself «the
+   * busiest header the viewer can draw» while drawing one item short of it.
+   */
+  compressed?: boolean;
+  /**
    * Whether to walk into the conversation. A phone's chat list and its chat are
    * the same column, so a test that wants the side menu has to stay in the list:
    * from inside a chat there is no menu button on screen to press.
@@ -232,6 +245,12 @@ async function openConversation(page: Page, options: OpenOptions = {}) {
   }
 
   const seed = rows();
+  if (options.compressed) {
+    for (const row of seed.messages) {
+      const media = row as { media_metadata: Record<string, unknown> };
+      media.media_metadata = { ...media.media_metadata, optimized: true };
+    }
+  }
   await openFixture(page, {
     me: ME,
     chats: seed.chats,
@@ -364,27 +383,34 @@ function headerGlyphs(page: Page): Promise<{ fullscreen: string; file: string }>
 
 test("the busiest header the viewer can draw still fits a phone (D-147, D-148)", async ({ page }, info) => {
   await requireFixtureServer(page.request);
-  // The worst case on purpose: the Android shell, whose control carries the
-  // longest word, plus a video, which is the only kind with a fourth control.
-  await openConversation(page, { androidShell: true });
+  // The worst case on purpose, and it is three things at once, not two: the
+  // Android shell, whose file control keeps its word at every width (D-147);
+  // a video, the only kind with a fourth control (D-148); and a re-encoded
+  // upload, which adds the originality badge. The badge was the one this test
+  // used to leave out while claiming the busiest header — and it was the item
+  // that did the damage, taking the title to 12px at 360 and 42px at 390.
+  // Read before the first resize, or the project's own width is lost.
+  const chosen = page.viewportSize() ?? NARROWEST_PHONE;
+  await openConversation(page, { androidShell: true, compressed: true });
   await openVideo(page);
 
-  const header = await page.evaluate(() => {
-    const control = document.querySelector('[data-testid="media-viewer-file-action"]');
-    const row = control?.parentElement;
-    const title = row?.querySelector("div.truncate, div.flex-1");
-    if (!row) return null;
-    return {
-      overflow: row.scrollWidth - row.clientWidth,
-      titleWidth: Math.round(title?.getBoundingClientRect().width ?? 0),
-    };
-  });
-  expect(header).not.toBeNull();
-  // A row that scrolls has controls a finger cannot reach.
-  expect(header!.overflow).toBeLessThanOrEqual(1);
-  // And the title is still a title rather than one letter and an ellipsis.
-  expect(header!.titleWidth).toBeGreaterThan(80);
+  // Both ends of the matrix this contract is about: the narrowest phone, which
+  // the runner may not have selected, and whatever width it did select.
+  for (const size of [NARROWEST_PHONE, chosen]) {
+    await page.setViewportSize(size);
+    const header = await measureViewerHeader(page);
+    expect(header, "the viewer draws no title element").not.toBeNull();
+    const shortfall = titleShortfall(header!, size.width);
+    // The case is only the worst one if the badge is really drawn.
+    expect(header!.badgeDrawn, `no originality badge, ${shortfall}`).toBe(true);
+    // A row that scrolls has controls a finger cannot reach.
+    expect(header!.overflow, `the header scrolls sideways, ${shortfall}`).toBeLessThanOrEqual(1);
+    // And the title is still a title rather than one letter and an ellipsis.
+    expect(header!.legible, shortfall)
+      .toBeGreaterThanOrEqual(Math.min(TITLE_CHARACTERS_REQUIRED, header!.length));
+  }
 
+  await page.setViewportSize(NARROWEST_PHONE);
   await page.screenshot({ path: shotPath(info, "video-android-shell") });
 });
 

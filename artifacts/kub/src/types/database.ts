@@ -676,6 +676,26 @@ export interface Database {
           system_payload: Json | null
           reply_to_id: string | null
           forwarded_from_id: string | null
+          /**
+           * The forward's origin, denormalised at forward time
+           * (20260921120000). Written only by trg_messages_forward_origin, so
+           * these two are read-only from every client: there is no Insert or
+           * Update entry for them below, and the trigger discards anything
+           * sent in them anyway.
+           *
+           * Three states: a name, `hidden` for a sender who opted out, and
+           * both empty for a forward made before that migration — «not
+           * recorded», which falls back to the join.
+           *
+           * Optional, and that is a fourth state rather than laziness: until
+           * 20260921120000 is applied the database returns neither column, and
+           * an optimistic row the client builds for a message it has just sent
+           * has not been near the trigger that writes them. `undefined` means
+           * «this deployment does not answer», which `messageForwardOrigin.ts`
+           * treats exactly as «not recorded» — the old behaviour, unchanged.
+           */
+          forward_origin_name?: string | null
+          forward_origin_hidden?: boolean
           edited_at: string | null
           deleted_at: string | null
           pinned: boolean
@@ -906,17 +926,26 @@ export interface Database {
         Row: {
           user_id: string
           presence_visible: boolean
+          /**
+           * Whether this person's name travels with a message of theirs that
+           * somebody forwards (20260921120000). Disclosed by default, as in
+           * Telegram; the control belongs to the person being disclosed, and
+           * it is read at the moment of forwarding and never afterwards.
+           */
+          forward_origin_visible: boolean
           created_at: string
           updated_at: string
         }
         Insert: {
           user_id: string
           presence_visible?: boolean
+          forward_origin_visible?: boolean
           created_at?: string
           updated_at?: string
         }
         Update: {
           presence_visible?: boolean
+          forward_origin_visible?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -2099,9 +2128,11 @@ export interface MessageWithSender extends Message {
    * The source message, joined (D-291).
    *
    * Identity only, and `null` where RLS refused it — the reader is not a member
-   * of the chat the original was sent to. So the person who forwarded it sees
-   * the name and a stranger in the target chat does not; the limit and what
-   * would remove it are recorded in `lib/messageForwardOrigin.ts`.
+   * of the chat the original was sent to. **Only forwards made before
+   * 20260921120000 depend on it now**: from that migration the origin is on the
+   * copy in `forward_origin_name`/`forward_origin_hidden`, the same answer for
+   * every reader. The join stays for those older rows, which are deliberately
+   * not backfilled; `lib/messageForwardOrigin.ts` decides between the two.
    */
   forwarded_from?: ForwardedFromRow | null
 }

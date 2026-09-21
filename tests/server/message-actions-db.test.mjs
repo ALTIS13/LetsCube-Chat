@@ -2,9 +2,11 @@
  * The message-action migrations, their rollbacks and their rehearsals, run in a
  * real PostgreSQL.
  *
- * The five message-action migrations of 20260911140000–20260911144000, and the
- * two after them that close who reads reactions and earned achievements
- * (20260911150000, 20260911151000), are written to be applied to production by
+ * The five message-action migrations of 20260911140000–20260911144000, the two
+ * after them that close who reads reactions and earned achievements
+ * (20260911150000, 20260911151000), and 20260921120000, which denormalises a
+ * forward's origin and gives the opt-out to the person being named, are written
+ * to be applied to production by
  * the main session after a rehearsal on a throwaway copy of production's schema.
  * That rehearsal is `.migration-backup/supabase/rehearsal/`.
  * This file does not replace it and cannot: it runs the same SQL in PGlite —
@@ -39,6 +41,7 @@ const MIGRATIONS = [
   "20260911144000_forward_message_with_media",
   "20260911150000_reactions_visible_to_chat_members",
   "20260911151000_user_achievements_signed_in_only",
+  "20260921120000_a_forward_names_its_source",
 ];
 
 const read = (relative) => readFileSync(path.join(root, relative), "utf8");
@@ -128,6 +131,15 @@ create table public.topics (
   chat_id uuid not null references public.chats(id) on delete cascade,
   name text not null,
   created_at timestamptz not null default now()
+);
+
+-- Production's bots table, reduced to what the forward-origin trigger reads.
+-- Without it a forward whose source was sent by a bot raises at runtime while
+-- every test here passes, which is the shape this stub exists to avoid.
+create table public.bots (
+  id uuid primary key default gen_random_uuid(),
+  username text not null unique,
+  display_name text not null
 );
 
 create table public.messages (
@@ -479,10 +491,23 @@ test("each rollback removes its migration, and the migrations apply again afterw
         to_regprocedure('public.set_message_reaction(uuid,text)') is null as reaction_gone,
         to_regprocedure('public.delete_messages_for_everyone(uuid[])') is null as delete_gone,
         to_regprocedure('public.forward_message(uuid,uuid,uuid,timestamp with time zone,uuid)') is null as forward_gone,
+        to_regprocedure('public.messages_forward_origin()') is null as forward_origin_gone,
+        not exists (
+          select 1 from pg_attribute
+           where attrelid = 'public.messages'::regclass
+             and attname in ('forward_origin_name', 'forward_origin_hidden')
+             and not attisdropped
+        ) as origin_columns_gone,
+        not exists (
+          select 1 from pg_attribute
+           where attrelid = 'public.privacy_preferences'::regclass
+             and attname = 'forward_origin_visible' and not attisdropped
+        ) as origin_setting_gone,
         to_regclass('private.message_read_events') is null as events_gone,
         to_regclass('private.message_deletions') is null as deletions_gone,
         (select count(*)::int from pg_trigger where not tgisinternal and tgname in (
-          'trg_guard_chat_member_read_marks', 'trg_record_message_read_event', 'trg_enforce_reaction_limit'
+          'trg_guard_chat_member_read_marks', 'trg_record_message_read_event', 'trg_enforce_reaction_limit',
+          'trg_messages_forward_origin'
         )) as triggers_left,
         exists (
           select 1 from pg_policies
@@ -499,6 +524,9 @@ test("each rollback removes its migration, and the migrations apply again afterw
       reaction_gone: true,
       delete_gone: true,
       forward_gone: true,
+      forward_origin_gone: true,
+      origin_columns_gone: true,
+      origin_setting_gone: true,
       events_gone: true,
       deletions_gone: true,
       triggers_left: 0,

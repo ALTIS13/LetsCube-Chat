@@ -139,6 +139,25 @@ export function presenceHint(visible: boolean): string | null {
   return "Время последнего входа не сохраняется. Вас по-прежнему можно найти и написать вам";
 }
 
+/** The forward-origin row's value. */
+export function forwardOriginSummary(visible: boolean): string {
+  return visible ? "Показывается" : "Скрыто";
+}
+
+/**
+ * The forward-origin row's second line.
+ *
+ * It carries a fact a switch cannot: the answer is written onto each copy at
+ * the moment of forwarding, so this governs what happens next and reaches into
+ * nothing already sent — in either direction. A person who turns it off and
+ * then looks at yesterday's forward would otherwise read the unchanged name as
+ * the setting not having worked.
+ */
+export function forwardOriginHint(visible: boolean): string | null {
+  if (visible) return "Пересланные сообщения будут подписаны вашим именем";
+  return "Новые пересылки пойдут без вашего имени. Отправленные раньше не изменятся";
+}
+
 /** A profile text field's value, or the empty marker. */
 export function textValueSummary(value: string | null | undefined): string {
   const trimmed = typeof value === "string" ? value.trim() : "";
@@ -268,6 +287,7 @@ export type SettingsRowId =
   | "push-tasks"
   | "push-invites"
   | "presence"
+  | "forward-origin"
   | "blocked"
   | "devices"
   | "theme"
@@ -315,6 +335,10 @@ export const SETTINGS_ROWS: readonly SettingsRowMeta[] = [
   { id: "push-tasks", section: "notifications", label: "Задачи", keywords: ["пуш", "push", "таски"] },
   { id: "push-invites", section: "notifications", label: "Приглашения", keywords: ["пуш", "push", "инвайты"] },
   { id: "presence", section: "privacy", label: "Статус «в сети»", keywords: ["онлайн", "presence", "последний вход", "видимость"] },
+  // 2026-09-21. Somebody who wants this arrives with «пересылка», «переслал» or
+  // «моё имя», not with the label — and one who arrives with «анонимно» is
+  // asking for exactly this and must not be left to conclude we have nothing.
+  { id: "forward-origin", section: "privacy", label: "Имя при пересылке", keywords: ["пересылка", "переслать", "переслал", "forward", "имя", "анонимно", "автор", "источник"] },
   // 2026-09-14. A block a person cannot find again is a trap, so the list of
   // people they have blocked has to be reachable by search as well as by
   // scrolling — and a row with no entry here cannot be filtered at all.

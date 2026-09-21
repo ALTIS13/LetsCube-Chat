@@ -189,8 +189,9 @@ test.describe("the attach sheet (D-122)", () => {
    * D-174. The owner asked on 2026-09-13 for SD by default with HD available,
    * which supersedes the photo half of D-119 — that entry recorded no quality
    * choice at all. What D-119 objected to is kept: the default needs no
-   * thought, nothing is remembered between sends, and the composer asks
-   * nothing. The control lives here, on the sheet that already holds the send.
+   * thought and the composer asks nothing. The control lives here, on the sheet
+   * that already holds the send. Since 2026-09-21 the state it is in is
+   * remembered per device; the test below this one is what holds that.
    *
    * This test measures the bytes rather than the button. A control that
    * toggles and changes nothing downstream would pass any assertion about its
@@ -209,11 +210,11 @@ test.describe("the attach sheet (D-122)", () => {
     await expect(first).toHaveCount(0);
     await expect.poll(() => backend.inserts.length).toBe(1);
 
-    // Second send: HD, chosen for this send only.
+    // Second send: HD, set once.
     const second = await openSheet(page);
     await pick(page, '[data-attach-entry="library"]', [facade]);
     const hd = second.getByTestId("attach-hd");
-    await expect(hd, "a quality chosen once must not be remembered for the next send").toHaveAttribute(
+    await expect(hd, "the first send was SD, so the badge opens in SD").toHaveAttribute(
       "aria-pressed",
       "false",
     );
@@ -297,6 +298,54 @@ test.describe("the attach sheet (D-122)", () => {
 
     await expect(page.getByText("Фото уйдут в высоком разрешении").first()).toBeVisible();
     await expect(page.getByText("Отправить без сжатия", { exact: false }).first()).toBeVisible();
+  });
+
+  /**
+   * The state is remembered, and that completes D-119 rather than overturning
+   * it: what D-119 rejected was being asked, and a binary that forgets is a
+   * question put again on every send. Telegram persists it — measured on the
+   * owner's device on 2026-09-20.
+   *
+   * Across a reload, not merely across a reopen. A sheet that kept the state in
+   * a variable outside the component would pass the reopen and lose it the
+   * moment the app restarted, which is every morning and every update — and
+   * «per device» is the whole of the claim.
+   */
+  test("the resolution is remembered between sends, per device (D-119)", async ({ page }) => {
+    await installBackend(page);
+    await openChat(page);
+    const facade = await testPhoto("facade.png", 30);
+
+    const first = await openSheet(page);
+    await pick(page, '[data-attach-entry="library"]', [facade]);
+    const badge = first.getByTestId("attach-hd");
+    await expect(badge, "SD is the default the owner set").toHaveAttribute("aria-pressed", "false");
+    await badge.click();
+    await expect(badge).toHaveAttribute("aria-pressed", "true");
+    await first.getByTestId("attach-send").click();
+    await expect(first).toHaveCount(0);
+
+    // The application restarted, not just the sheet.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await openChat(page);
+    const second = await openSheet(page);
+    await pick(page, '[data-attach-entry="library"]', [facade]);
+    await expect(
+      second.getByTestId("attach-hd"),
+      "HD was set once and the next send asked again",
+    ).toHaveAttribute("aria-pressed", "true");
+    // Its face says the state, so a reader does not have to infer it (D-290).
+    await expect(second.getByTestId("attach-hd")).toHaveText("HD");
+
+    // And it goes back, which a preference has to: a state that can only be
+    // turned on is a trap rather than a setting.
+    await second.getByTestId("attach-hd").click();
+    await expect(second.getByTestId("attach-hd")).toHaveAttribute("aria-pressed", "false");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await openChat(page);
+    const third = await openSheet(page);
+    await pick(page, '[data-attach-entry="library"]', [facade]);
+    await expect(third.getByTestId("attach-hd")).toHaveAttribute("aria-pressed", "false");
   });
 
   test("HD is not offered until a photograph is selected (D-174)", async ({ page }) => {

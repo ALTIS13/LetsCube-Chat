@@ -1546,10 +1546,25 @@ Use this queue before starting the next production-hardening turn. Do not repeat
       chat has nothing in that position, and a bot that has never been started
       replaces the whole composer with one «Запустить бота» button.
 
-    Against ours: D-263 says a sent `/command` is inert text and a bot's profile
-    answers nothing, so we have **none of the three shapes** — not even the
-    44 dp commands icon, which costs the composer least and answers D-263's
-    first complaint directly. On reach, Telegram's Web App is far larger (a
+    ~~Against ours: D-263 says a sent `/command` is inert text and a bot's
+    profile answers nothing, so we have **none of the three shapes** — not even
+    the 44 dp commands icon, which costs the composer least and answers D-263's
+    first complaint directly.~~
+
+    **Corrected 2026-09-21: the commands icon has been there since
+    2026-09-14.** `ed040073` (D-126) put a `bot-commands-button` inside the
+    field's capsule for every chat that holds a reachable bot, and «/» in the
+    field opens the same list. Measured on our own composer rather than
+    described: it occupies **40 px** of the field's width (36 wide plus a 4 px
+    gap) and is 44 px tall, against Telegram's 44 dp — so the cheapest rung is
+    not only present, it costs the composer **less** than the reference's. The
+    paragraph above was written from D-263's wording rather than from the
+    source, and §17.3 of `reference-clients.md` repeats the same error; both are
+    corrected there, in §19.3.
+
+    What is genuinely absent is either of the two **expensive** shapes: a menu
+    button carrying the bot's own label, and the full-screen Web App behind it.
+    That is a platform decision and it now lives in item 48. On reach, Telegram's Web App is far larger (a
     whole hosted application) and Discord's components are far cheaper (drawn by
     the client from a fixed vocabulary, never leaving the message). §7 leaves
     bots contested on purpose; the staged reading is that Discord's in-message
@@ -1990,6 +2005,76 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     on: a command that does nothing, a `/cmd` silently dropped in a group, and
     a bot with no profile card. An interface on top of a command path that
     does not work would be a second thing that does not work.
+
+    ### The floor is closed — 2026-09-21, D-263
+
+    All three complaints are repaired and the entry is `[x]`. A command in the
+    conversation is a control and pressing it sends it; a command typed whole in
+    a group goes out addressed, so the bot hears it; a bot's face opens a card
+    carrying its description and its commands. 28 mutations red, 16 e2e, 61 unit
+    assertions. The measurements behind each decision are in §19 of
+    `docs/operations/reference-clients.md`.
+
+    ### What was established for this item's two gaps, and not built
+
+    **Langame, read before anything was designed** — read-only on production,
+    structural counts only, in a transaction that ended in `ROLLBACK`:
+
+    - `public.bot_commands` holds **0 rows, deployment-wide**. No bot has ever
+      called `setMyCommands`, so **every** command surface in the product is
+      empty against production today — the composer's menu, the typed «/» list,
+      and the two added by D-263.
+    - `langame_bot`: 1 chat, **56 messages, every one of them `text`**, 41–559
+      characters, 170 on average. **5** carry an inline keyboard — four of one
+      row of two buttons, one of a single button. **0** have ever been edited,
+      so `editMessageText` is present and has never been used.
+    - Addressing, in the wild: in the group **3** messages of the form
+      `/cmd@…` and **0** bare ones; in the private chat, 1 bare. With
+      `bot_commands` empty the menu could not have written those three, so they
+      were typed **by hand** — somebody had already learned the trick D-263's
+      second complaint is about.
+
+    So the owner's example («a field for the link plus controls and a progress
+    bar») is further away than the capability table suggests: the two
+    capabilities we have are **unused**, and the bot would have to start using
+    them before an interface built on them is worth anything.
+
+    **Which shape «a message visible to one person» should be — established,
+    and the answer is the ephemeral one.**
+
+    Discord's, first-party: the `EPHEMERAL` flag is **64 (`1 << 6`)** and sends
+    «a message that only the user can see». OFFICIAL. **Whether Discord persists
+    it is UNESTABLISHED** — its own documentation does not say, in either
+    direction, so the widely repeated «never stored» is COMMUNITY and this
+    tracker does not promote it. That corrects the framing this item was filed
+    with.
+
+    Ours, measured read-only on production: `public.messages` carries **9
+    policies, 29 functions naming it, 11 triggers and 10 indexes**, is in the
+    `supabase_realtime` publication, and has `REPLICA IDENTITY default`. So a
+    `visible_to_user_id` column is not one change but a new axis every one of
+    those would have to learn — plus every unread count, every search and the
+    stream. The replica identity is the sharper cost: a Supabase filter reaches
+    a DELETE only for key columns on a default-identity table, so such a column
+    could not filter the stream a viewer subscribes to, and the row would have
+    to be discarded **after** arriving — the wrong side of the wire for a
+    privacy rule.
+
+    **And the ephemeral channel already exists in embryo.**
+    `private.bot_callback_answers` is on the deployment, holds **0 rows**, and
+    its grants are **`postgres` only — not even `service_role`**;
+    `public.bot_callback_press` exists with EXECUTE for `authenticated`. So the
+    path by which a bot says something to **one** person, out of band and with
+    no `messages` row, is built and simply not wired end to end: the client
+    asks, the server mints a callback id, and the bot's `answerCallbackQuery`
+    has nowhere to be written. Finishing that is a grant and a writer against a
+    table nothing else reads. Recorded, **not built**, as this item asks. Item
+    43's Web App surface shares the question and should take the same reading.
+
+    **The input field, unestablished and deliberately so.** Telegram's answer
+    is a Web App or a forced reply and Discord's is a modal; neither was
+    measured on the device this pass, because the pass's budget went to the
+    floor. It needs §7's measurement before it is designed.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
@@ -4472,6 +4557,71 @@ privacy property.
 transaction with a self-check that raises rather than committing half, and a
 rollback in the header. The behaviour is authorised; the migration still earns
 its sequence.
+
+### Done under that decision, 2026-09-21 — and one thing waiting on the owner
+
+**HD is remembered.** `kub:photo-resolution:v1`, read at mount and written on the
+press, in `artifacts/kub/src/lib/mediaQuality.ts` (the decision, importable by
+`node --test`) and `attach/AttachSheet.tsx` (the two wrapped browser calls). No
+quality question at send time and «Файл» untouched. D-119 carries the amendment
+that its removal of a *remembered quality* meant the multi-stop selector, so the
+next reader does not undo this. Six mutations red, including the storage-key
+literal and the absent `try`/`catch`; the e2e asserts it across a **reload**,
+not merely across a reopen, because a module-level variable would pass the
+second and fail every morning.
+
+**The forward's origin: written, rehearsed, NOT applied.**
+`.migration-backup/supabase/migrations/20260921120000_a_forward_names_its_source.sql`
+with its rollback and
+`.migration-backup/supabase/rehearsal/20260921120000_a_forward_names_its_source.test.sql`.
+It waits on the owner, per §10 and per his own instruction.
+
+What it does: `privacy_preferences.forward_origin_visible` (default true,
+disclosed), `messages.forward_origin_name` and `messages.forward_origin_hidden`,
+and `trg_messages_forward_origin` as the **only** writer of those two columns.
+
+**Why a trigger and not `forward_message`** — and the first two are holes rather
+than preferences. `"Chat members can send messages"` inspects no column but
+`user_id`, so without a guard a client could POST a message carrying
+`forward_origin_name = 'Пётр Ильин'`: impersonation, not a formatting bug.
+`"Users can edit own messages"` would then let the forwarder PATCH it afterwards,
+and «carries it permanently» is half the decision — a column REVOKE will not
+close that, as `voice_channels` measured on 2026-09-20. And the client's
+direct-insert fallback gets a correct origin for free rather than silently
+producing forwards with no origin at all.
+
+**The finding worth keeping from the mutation run.** The migration's own header
+first claimed that rehearsal case (c) — forwarding an opted-out sender's message
+— would catch a missing SECURITY DEFINER. **It does not.** `forward_message` is
+itself SECURITY DEFINER, so the trigger fires inside its context and reads the
+privacy row correctly either way; removing `security definer` and relaxing the
+self-check left the entire rehearsal green. The path that needs it is the
+**direct insert**, which runs as `authenticated` with nothing definer between.
+Case (k) is that path, it is now the net, and the header says so. Eight mutations
+of the migration, eight red, no holes — but only after the hole was found and
+closed, which is the argument for running the battery rather than reasoning about
+it.
+
+**Not backfilled, deliberately.** Existing forwards keep both columns empty,
+which the client reads as «not recorded» and answers exactly as today. Reading
+every sender's setting *as it stands now* and stamping it onto messages sent
+before they had one is the retroactive direction the decision refuses.
+
+**The client half is built except one line.** The decision module, the
+projection, the types, the privacy store, the gateway and the
+«Имя при пересылке» row in «Конфиденциальность» are all in. The one remaining
+wire is in `MessageBubble.tsx`, which another agent has dirty in this worktree —
+passing `originName`/`originHidden` into `forwardOriginName`, which already
+accepts both and is unit-tested for all four states. Until that line lands the
+product behaves exactly as it does today; nothing regresses, and nothing of the
+new behaviour shows.
+
+**Related, and it is why retention by age was refused:** `forward_message` copies
+variant rows pointing at *the same files*, so a forward and its source share
+objects. Re-read before any deletion policy is written.
+
+**The viewer header and the width nothing runs** are D-294 and D-295 in the
+register.
 
 ## Completed Baseline - Do Not Rebuild Without A New Finding
 

@@ -15,6 +15,18 @@
 export interface PrivacyPreferences {
   /** Publish "last seen" and the online dot to other people. */
   presenceVisible: boolean;
+  /**
+   * Let this person's name travel with a message of theirs that somebody
+   * forwards (20260921120000).
+   *
+   * Disclosed by default, as in Telegram, and the control belongs to the person
+   * being disclosed rather than to the reader's access. It is read by the
+   * database at the moment of forwarding and written onto the copy there;
+   * turning it off later reaches into nothing already sent, and turning it back
+   * on does not un-hide anything either. So this switch governs what happens
+   * next, and only that — which is what the row under it says on the screen.
+   */
+  forwardOriginVisible: boolean;
 }
 
 export interface PrivacyPreferencesState {
@@ -25,15 +37,21 @@ export interface PrivacyPreferencesState {
 
 /** What the store needs from storage, and nothing more. */
 export interface PrivacyGateway {
-  /** `null` when the person has no row yet, which means the default. */
-  read(userId: string): Promise<{ presenceVisible: boolean } | null>;
-  write(userId: string, presenceVisible: boolean): Promise<void>;
+  /** `null` when the person has no row yet, which means the defaults. */
+  read(userId: string): Promise<PrivacyPreferences | null>;
+  write(userId: string, preferences: PrivacyPreferences): Promise<void>;
   /** Erase what was already published. Only called when hiding presence. */
   clearPresence(userId: string): Promise<void>;
 }
 
 export const PRIVACY_DEFAULTS: Readonly<PrivacyPreferences> = Object.freeze({
   presenceVisible: true,
+  // Disclosed by default: this is the owner's decision of 2026-09-20 and
+  // Telegram's own behaviour, not a convenience. A default of `false` would
+  // mean every forward made before anybody touched the setting carries no name,
+  // which is the opposite of what «изначально все видят изначального
+  // отправителя» says.
+  forwardOriginVisible: true,
 });
 
 const INITIAL: PrivacyPreferencesState = {
@@ -100,7 +118,7 @@ export function createPrivacyPreferencesStore(gateway: PrivacyGateway) {
           // A reply that arrives after the account changed belongs to nobody.
           if (activeUserId !== userId) return;
           emit({
-            preferences: { presenceVisible: row ? row.presenceVisible : true },
+            preferences: row ? { ...PRIVACY_DEFAULTS, ...row } : { ...PRIVACY_DEFAULTS },
             loading: false,
             error: null,
           });
@@ -121,12 +139,44 @@ export function createPrivacyPreferencesStore(gateway: PrivacyGateway) {
       return inFlight;
     },
 
+    /**
+     * One writer for both switches, because the row is written as a whole.
+     *
+     * An upsert of `{ user_id, presence_visible }` would reset
+     * `forward_origin_visible` to its column default on every presence change —
+     * silently turning somebody's opt-out back on. The gateway takes the whole
+     * preference object for that reason.
+     */
+    async setPreference<K extends keyof PrivacyPreferences>(
+      userId: string | null,
+      key: K,
+      value: PrivacyPreferences[K],
+    ): Promise<boolean> {
+      if (!userId) return false;
+      const previous = state.preferences;
+      const next = { ...previous, [key]: value };
+      emit({ preferences: next, loading: false, error: null });
+      try {
+        await gateway.write(userId, next);
+      } catch (error) {
+        emit({
+          preferences: previous,
+          loading: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+      }
+      loadedFor = userId;
+      return true;
+    },
+
     async setPresenceVisible(userId: string | null, visible: boolean): Promise<boolean> {
       if (!userId) return false;
       const previous = state.preferences;
-      emit({ preferences: { presenceVisible: visible }, loading: false, error: null });
+      const next = { ...previous, presenceVisible: visible };
+      emit({ preferences: next, loading: false, error: null });
       try {
-        await gateway.write(userId, visible);
+        await gateway.write(userId, next);
       } catch (error) {
         emit({
           preferences: previous,

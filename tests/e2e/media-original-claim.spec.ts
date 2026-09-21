@@ -10,6 +10,11 @@ import {
   requireFixtureServer,
   type Row,
 } from "./helpers/messageActionsFixture";
+import {
+  TITLE_CHARACTERS_REQUIRED,
+  measureViewerHeader,
+  titleShortfall,
+} from "./helpers/viewerHeader";
 
 /**
  * D-097: the viewer's file control, and what it actually hands over.
@@ -351,6 +356,16 @@ test("an original still says so, and a message that says nothing is left alone",
 
 test("the badge costs the title what it can afford, in the worst header there is", async ({ page, browserName }, info) => {
   await requireFixtureServer(page.request);
+  // «The worst header there is» was not, until 2026-09-21. This ran in the
+  // browser shell, where the file control is a glyph below `sm` — 40px. In the
+  // Android shell the same control keeps its word at every width (D-147) and is
+  // 125px, and that is the header the product actually ships to a phone. The
+  // 85px between them is why this guard read 97px of title at 360 and passed
+  // while the shipped one had 12px. Capacitor decides the platform from this
+  // one property; see `getPlatformId` in `@capacitor/core`.
+  await page.addInitScript(() => {
+    (window as unknown as Record<string, unknown>).androidBridge = { postMessage: () => undefined };
+  });
   await openConversation(page, "dark", browserName);
   // A video: the one kind whose header carries a fourth control, which is where
   // D-147 measured the title down to 37 pixels.
@@ -363,21 +378,30 @@ test("the badge costs the title what it can afford, in the worst header there is
   await expect(page.getByTestId("media-viewer-fullscreen")).toBeVisible();
 
   const measured = await page.evaluate(() => {
+    // By its own test id, not by position in the tree. This used to read
+    // `badge.parentElement.firstElementChild`, which meant «whatever sits left
+    // of the badge» — so the assertion would have followed the badge to any
+    // other row and gone on measuring something, silently.
     const badge = document.querySelector('[data-testid="media-viewer-originality"]') as HTMLElement | null;
-    const title = badge?.parentElement?.firstElementChild as HTMLElement | null;
-    if (!badge || !title) return null;
+    if (!badge) return null;
     return {
-      title: Math.round(title.getBoundingClientRect().width),
       badge: Math.round(badge.getBoundingClientRect().width),
       badgeRight: Math.round(badge.getBoundingClientRect().right),
       viewport: window.innerWidth,
     };
   });
+  const fit = await measureViewerHeader(page);
   await page.screenshot({ path: shotPath(info, "video-copy-dark") });
 
   expect(measured).not.toBeNull();
-  // Enough of the picture's own name to read, not just an ellipsis.
-  expect(measured!.title, `title ${measured!.title}px beside a ${measured!.badge}px badge`).toBeGreaterThan(60);
+  expect(fit, "the viewer draws no title element").not.toBeNull();
+  // Enough of the picture's own name to read, not just an ellipsis. The number
+  // that used to stand here (60px) was this spec's own, different from the one
+  // `media-viewer-actions.spec.ts` kept for the same contract (80px), and both
+  // were measured once at one width in the wrong shell. There is one definition
+  // now, in characters, and it lives in `helpers/viewerHeader.ts`.
+  expect(fit!.legible, `${titleShortfall(fit!, measured!.viewport)}, badge ${measured!.badge}px`)
+    .toBeGreaterThanOrEqual(Math.min(TITLE_CHARACTERS_REQUIRED, fit!.length));
   // And the badge itself is whole: a word cut off is worse than none.
   expect(measured!.badgeRight).toBeLessThanOrEqual(measured!.viewport);
 });

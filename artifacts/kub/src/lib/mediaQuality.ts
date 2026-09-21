@@ -159,9 +159,11 @@ export function getVideoRecordingProfile(
  * uploads the picked bytes untouched. HD is a smaller photo than an original;
  * it is only a larger one than SD.
  *
- * D-119 removed a five-stop selector that asked on every send and remembered
- * what it was told. This is not that returning: the default needs no thought,
- * nothing is remembered between sends, and the composer still asks nothing.
+ * D-119 removed a three-stop selector and a five-stop slider that asked on
+ * every send. This is not that returning: the default needs no thought and the
+ * composer still asks nothing. The state **is** remembered, since 2026-09-21,
+ * and that completes D-119 rather than overturning it — see
+ * `PHOTO_RESOLUTION_STORAGE_KEY` below for why.
  */
 export const PHOTO_SEND_SD: MediaQuality = "compact";
 export const PHOTO_SEND_HD: MediaQuality = "original";
@@ -245,3 +247,63 @@ export const PHOTO_SEND_ORIGINAL_HINT = "Исходный файл — «Отп�
 
 /** One key, so pressing the badge twice replaces the line rather than stacking two. */
 export const PHOTO_SEND_QUALITY_FEEDBACK_KEY = "attach-photo-quality";
+
+// ── remembering which state it is in, per device ─────────────────────────────
+
+/**
+ * Where the SD/HD state is kept between sends.
+ *
+ * **This completes D-119; it does not overturn it.** D-119 is easy to read from
+ * its summary as «no remembered quality», and on that reading not persisting
+ * looks like obedience. Read the entry itself and it reverses: what it rejected
+ * was *being asked* — «what testers object to is not how many choices there are
+ * but that there is a choice at all» — and what it removed was a three-stop
+ * selector and a five-stop slider, objects Telegram does not have.
+ *
+ * A remembered binary state is the opposite of a question. You set it once and
+ * it stops asking. **Not** remembering is precisely what makes it a question on
+ * every send, which is the thing D-119 was written against. And the client
+ * D-119 cites — «как в Telegram» — does persist it: measured 2026-09-20 on the
+ * owner's device, Telegram 12.10.3, set to SD, left the editor, reopened, still
+ * SD.
+ *
+ * Two things this does not change, and they are what keeps D-119 whole: no
+ * quality question at send time, and «Файл» stays the separate, explicitly
+ * named uncompressed path. This state raises a resolution cap (D-290); it has
+ * never been the way to send an original and still is not.
+ *
+ * Per device, in `localStorage`, like every other preference here — the naming
+ * follows `kub:voice-volume:v1` and `kub:audio-settings:v1`.
+ */
+export const PHOTO_RESOLUTION_STORAGE_KEY = "kub:photo-resolution:v1";
+
+/**
+ * The two stored spellings.
+ *
+ * Deliberately not the `MediaQuality` values `PHOTO_SEND_SD`/`PHOTO_SEND_HD`.
+ * Those name an **encode profile**, and `"original"` in that vocabulary means
+ * 2560px at 0.90 rather than the untouched file — a word already carrying two
+ * meanings in this file. Writing it into storage would let a later change to
+ * either meaning silently reinterpret what somebody had already chosen. What is
+ * stored is the state the badge shows.
+ */
+export const PHOTO_RESOLUTION_HD = "hd";
+export const PHOTO_RESOLUTION_SD = "sd";
+
+/**
+ * What a stored value means, with everything else meaning SD.
+ *
+ * Only the exact HD spelling turns it on: `null` from a first run, `""` from a
+ * cleared entry, a half-written value, and any spelling a later version might
+ * add all fall to the default rather than to a guess. The default is the one
+ * the owner set — «по стоку загрузку в sd качестве» — so an unreadable store
+ * costs somebody data, not the other way round.
+ */
+export function readStoredPhotoResolution(raw: string | null | undefined): boolean {
+  return raw === PHOTO_RESOLUTION_HD;
+}
+
+/** What goes into storage when the badge is pressed. */
+export function photoResolutionToStore(hd: boolean): string {
+  return hd ? PHOTO_RESOLUTION_HD : PHOTO_RESOLUTION_SD;
+}

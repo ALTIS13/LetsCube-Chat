@@ -259,72 +259,92 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
         onPointerUp={handleFramePointerUp}
         onPointerCancel={() => { swipeRef.current = null; }}
       >
-        <div className="flex h-12 flex-shrink-0 items-center gap-2 border-b border-white/10 bg-black/80 px-3 text-white">
-          <KubIcon name={media.type === "image" ? "image" : "video"} size={18} />
+        <div className="flex h-12 flex-shrink-0 items-center gap-1.5 border-b border-white/10 bg-black/80 px-2 text-white sm:gap-2 sm:px-3">
           {/*
-            One column for the name and the place, so the place is a second
-            line instead of a competitor for the width the title already fights
-            for. Without a sequence the column holds exactly what the header
-            held before and the row is the same 48px — every other caller of
-            this viewer opens a single item and sees no change at all.
+            The glyph names the kind of thing already filling the screen behind
+            it, so below `sm` it is 26px of restatement in the one row where the
+            picture's own name has nothing to spare — measured at 360 in the
+            Android shell the name had 12px, which is no characters at all. It
+            stays from `sm`, where the width is not contested.
+          */}
+          <KubIcon
+            name={media.type === "image" ? "image" : "video"}
+            size={18}
+            className="hidden shrink-0 sm:block"
+          />
+          {/*
+            One column for the name and everything said about it, so what is
+            said is a second line instead of a competitor for the width the
+            title already fights for. Without a sequence or a badge the column
+            holds exactly what the header held before and the row is the same
+            48px — every other caller of this viewer opens a single item and
+            sees no change at all.
           */}
           <div className="flex min-w-0 flex-1 flex-col justify-center">
-          {note ? (
-            <div className="flex min-w-0 items-baseline gap-2">
-              <span className="min-w-0 truncate text-sm font-semibold">{title}</span>
-              {/*
-                A word at every width, and the sentence behind it. A copy is
-                what a person gets when they press «Сохранить», so hiding the
-                fact below `sm` would hide it from the shell it matters most on
-                (D-147 states the same rule for a control that leaves the app).
-                It costs the title, which is why `min-w-0 truncate` is on the
-                line above and why the narrow spelling exists at all: measured
-                in the busiest header the viewer draws, the title keeps 210px at
-                1440, 128px at 390 and 98px at 360.
-              */}
-              <span
-                data-testid="media-viewer-originality"
-                data-originality={originality}
-                title={note.sentence}
-                className="shrink-0 text-xs font-medium text-white/70"
-              >
-                {/*
-                  Two spellings of one fact, neither of them hidden. Measured at
-                  360 with a video — the busiest header the viewer draws — the
-                  full phrase left the picture's own name 51px, which is an
-                  ellipsis with four characters in front of it. «Копия» is the
-                  opposite of «Оригинал», so the narrow pair still reads as a
-                  pair, and why it is a copy is in the `title` above and in the
-                  file control's accessible name, which does not depend on width.
-                */}
-                <span className="sm:hidden">{note.compactBadge}</span>
-                <span className="hidden sm:inline">{note.badge}</span>
-              </span>
-            </div>
-          ) : (
-            <div className="min-w-0 truncate text-sm font-semibold">{title}</div>
-          )}
-          {position && (
+          <div data-testid="media-viewer-title" className="min-w-0 truncate text-sm font-semibold">{title}</div>
+          {(position || note) && (
             /*
-              The answer to «где я». The date beside it is the same date the
-              grid groups by, so the two surfaces agree about which month this
-              picture is in — and it is dropped below `sm`, where the position
-              is the fact worth the width and «14 сентября» is not.
+              The second line: where this picture stands in the run, and what
+              the stored file is. The date beside the position is the same date
+              the grid groups by, so the two surfaces agree about which month
+              this picture is in — and it is dropped below `sm`, where the
+              position is the fact worth the width and «14 сентября» is not.
+
+              The badge used to sit beside the title, and that was the rule this
+              column exists to enforce being broken by the column's own author.
+              Measured 2026-09-21 in the header the viewer really draws at its
+              worst — the Android shell, whose file control keeps its word at
+              every width (D-147), on a video, which is the only kind with a
+              fourth control — «Копия» beside the title left the title 12px at
+              360 and 42px at 390. Not «an ellipsis with four characters in
+              front of it»: an ellipsis with none. On this line it costs the
+              title nothing at any width.
             */
-            <div
-              data-testid="media-viewer-position"
-              className="flex min-w-0 items-baseline gap-1.5 text-xs leading-tight text-white/60"
-            >
-              <span className="shrink-0">{position}</span>
-              {sequence?.stamp ? (
-                // A separator, because two facts with only a gap between them
-                // read as one string — photographed at 1440 as «3 из 60  27
-                // сентября» before this was added.
-                <span className="hidden min-w-0 truncate sm:inline">
-                  <span aria-hidden="true" className="mr-1.5 text-white/40">·</span>
-                  {sequence.stamp}
+            <div className="flex min-w-0 items-baseline gap-1.5 text-xs leading-tight text-white/60">
+              {position && (
+                <span
+                  data-testid="media-viewer-position"
+                  className="flex min-w-0 shrink-0 items-baseline gap-1.5"
+                >
+                  <span className="shrink-0">{position}</span>
+                  {sequence?.stamp ? (
+                    // A separator, because two facts with only a gap between them
+                    // read as one string — photographed at 1440 as «3 из 60  27
+                    // сентября» before this was added.
+                    <span className="hidden min-w-0 truncate sm:inline">
+                      <span aria-hidden="true" className="mr-1.5 text-white/40">·</span>
+                      {sequence.stamp}
+                    </span>
+                  ) : null}
                 </span>
-              ) : null}
+              )}
+              {note && (
+                <>
+                  {/*
+                    A word at every width, and the sentence behind it. A copy is
+                    what a person gets when they press «Сохранить», so hiding the
+                    fact below `sm` would hide it from the shell it matters most on
+                    (D-147 states the same rule for a control that leaves the app).
+                  */}
+                  {position ? <span aria-hidden="true" className="shrink-0 text-white/40">·</span> : null}
+                  <span
+                    data-testid="media-viewer-originality"
+                    data-originality={originality}
+                    title={note.sentence}
+                    className="min-w-0 truncate font-medium text-white/70"
+                  >
+                    {/*
+                      Two spellings of one fact, neither of them hidden. «Копия»
+                      is the opposite of «Оригинал», so the narrow pair still
+                      reads as a pair, and why it is a copy is in the `title`
+                      above and in the file control's accessible name, which does
+                      not depend on width.
+                    */}
+                    <span className="sm:hidden">{note.compactBadge}</span>
+                    <span className="hidden sm:inline">{note.badge}</span>
+                  </span>
+                </>
+              )}
             </div>
           )}
           </div>
@@ -380,11 +400,12 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
             stage rather than in the header.
 
             The header is 48px holding a name, a badge, a file action, a
-            fullscreen control and a close — measured at 360 the name already
-            keeps only 98px there, and two more 36px buttons would leave it
-            none. At the edge they cost the header nothing and land where a
-            hand already reaches on a phone. 44px square is the coarse-pointer
-            floor this product holds everything to.
+            fullscreen control and a close — measured 2026-09-21 at 360 in the
+            Android shell, which is the busiest one the viewer draws, the name
+            keeps 99px there, and two more 36px buttons would leave it none. At
+            the edge they cost the header nothing and land where a hand already
+            reaches on a phone. 44px square is the coarse-pointer floor this
+            product holds everything to.
 
             Both stay on screen while a page is on its way: `mediaStepOffered`
             answers «is there anywhere to go», and `planMediaStep` answers what

@@ -38,7 +38,7 @@ test("an empty query is the whole screen, in the order the screen draws it", () 
   assert.deepEqual(idsOf(all), [
     "name", "username", "bio", "phone", "decoration",
     "push", "push-messages", "push-tasks", "push-invites",
-    "presence", "blocked", "devices",
+    "presence", "forward-origin", "blocked", "devices",
     "theme", "message-text-size", "audio", "updates",
   ]);
   // Whitespace is not a query. A field holding only spaces must not empty the
@@ -82,11 +82,12 @@ test("the microphone row answers to the words the owner uses for it", () => {
 test("a heading finds the whole block under it", () => {
   const result = settingsSearchResult("конфиденциальность", EVERYONE);
   assert.deepEqual([...result.sections], ["privacy"]);
-  // Three rows since 2026-09-18: presence, the list of people this person has
-  // blocked, and where they are signed in. The heading still wins the whole
-  // section rather than one row.
+  // Four rows since 2026-09-21: presence, whose name a forward of theirs
+  // carries, the list of people this person has blocked, and where they are
+  // signed in. The heading still wins the whole section rather than one row.
   assert.deepEqual(idsOf(matchSettingsRows("конфиденциальность", EVERYONE)), [
     "presence",
+    "forward-origin",
     "blocked",
     "devices",
   ]);
@@ -189,8 +190,31 @@ test("the catalogue is not handed out for mutation", () => {
   assert.equal(matchSettingsRows("", EVERYONE).length, length);
   // 16 since 2026-09-18, when «Активные сеансы» joined the privacy section
   // (slice F of the call proposal); 17 since 2026-09-20, when «Размер текста
-  // сообщений» joined the application section (D-287). The number is the point
-  // of this line — a row that vanishes is invisible — so it is moved
+  // сообщений» joined the application section (D-287); 18 since 2026-09-21,
+  // when «Имя при пересылке» joined the privacy section. The number is the
+  // point of this line — a row that vanishes is invisible — so it is moved
   // deliberately rather than widened into a range.
-  assert.equal(SETTINGS_ROWS.length, 17);
+  assert.equal(SETTINGS_ROWS.length, 18);
+});
+
+test("the forward-origin row is reachable by what a person would type", () => {
+  // Nobody searches for «Имя при пересылке». They arrive with the verb, or with
+  // the word for what they want to be — and a row with no keywords cannot be
+  // filtered at all, so each of these is the row's only way of being found.
+  for (const query of ["пересылк", "переслал", "forward", "анонимно", "автор"]) {
+    const ids = idsOf(matchSettingsRows(query, EVERYONE));
+    assert.ok(
+      ids.includes("forward-origin"),
+      `«${query}» does not find the row: ${JSON.stringify(ids)}`,
+    );
+  }
+});
+
+test("the forward row sits beside presence, not at the end of the section", () => {
+  // Both are «what others learn about me», and the owner put the setting there
+  // deliberately. Asserted by position rather than by presence in the list: a
+  // grep for a name proves it exists, never where it is.
+  const ids = idsOf(matchSettingsRows("", EVERYONE));
+  assert.ok(ids.indexOf("presence") < ids.indexOf("forward-origin"));
+  assert.ok(ids.indexOf("forward-origin") < ids.indexOf("blocked"));
 });

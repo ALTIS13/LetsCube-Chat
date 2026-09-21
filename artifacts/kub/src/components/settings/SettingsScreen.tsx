@@ -42,6 +42,8 @@ import {
   audioSummary,
   decorationSummary,
   presenceHint,
+  forwardOriginHint,
+  forwardOriginSummary,
   presenceSummary,
   pushStatusAction,
   pushStatusSummary,
@@ -453,6 +455,7 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
   const pushAction = pushStatusAction(pushStatus, { nativeAndroid });
   const buildVersionLabel = getVisibleReleaseVersion(getBuildMetadata().version);
   const presenceExplanation = presenceHint(privacy.preferences.presenceVisible);
+  const forwardOriginExplanation = forwardOriginHint(privacy.preferences.forwardOriginVisible);
 
   const identity = (
     <div className="flex items-center gap-3 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-3 kub-grid-subtle sm:px-4">
@@ -710,7 +713,36 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
               />
             </SettingsRow>
           )}
-          {privacy.error && shows("presence") && (
+          {shows("forward-origin") && (
+            /* Beside «Статус «в сети»», which is where a person already goes to
+               decide what others learn about them. Disclosed by default, as in
+               Telegram — the owner settled that on 2026-09-20 — so this switch
+               is on until somebody turns it off, and what it governs is every
+               forward made after that and nothing made before. */
+            <SettingsRow
+              /* `forward`, not `eye`/`eyeOff`. The row above already wears
+                 that pair for being seen, and two rows in one group drawing the
+                 same glyph is the defect D-148 recorded one surface over. This
+                 glyph names the mechanism the setting governs, which is the
+                 thing that tells the two rows apart; the state is in the value,
+                 the hint and the switch, three times over. There is no
+                 «userOff» in the vocabulary and inventing one to mean «name
+                 withheld» would draw a person being removed. */
+              icon="forward"
+              iconTone={privacy.preferences.forwardOriginVisible ? "accent" : "muted"}
+              label="Имя при пересылке"
+              value={forwardOriginSummary(privacy.preferences.forwardOriginVisible)}
+              hint={forwardOriginExplanation}
+            >
+              <KubSwitch
+                aria-label="Показывать моё имя в пересланных сообщениях"
+                checked={privacy.preferences.forwardOriginVisible}
+                disabled={privacy.loading}
+                onCheckedChange={(next) => void privacy.setForwardOriginVisible(next)}
+              />
+            </SettingsRow>
+          )}
+          {privacy.error && (shows("presence") || shows("forward-origin")) && (
             <RowNote tone="danger">Не удалось сохранить настройку. Попробуйте ещё раз.</RowNote>
           )}
           {shows("blocked") && (

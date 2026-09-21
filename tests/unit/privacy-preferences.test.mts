@@ -2,37 +2,50 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  PRIVACY_DEFAULTS,
   createPrivacyPreferencesStore,
   type PrivacyGateway,
+  type PrivacyPreferences,
 } from "../../artifacts/kub/src/lib/privacyPreferences.ts";
 
 interface Recorder extends PrivacyGateway {
   reads: string[];
   writes: Array<{ userId: string; presenceVisible: boolean }>;
+  rows: Record<string, PrivacyPreferences | undefined>;
   cleared: string[];
 }
 
+/** The whole row, as the table holds it; a bare boolean is presence shorthand. */
+const row = (value: boolean | Partial<PrivacyPreferences>): PrivacyPreferences =>
+  typeof value === "boolean"
+    ? { ...PRIVACY_DEFAULTS, presenceVisible: value }
+    : { ...PRIVACY_DEFAULTS, ...value };
+
 function recordingGateway(
-  rows: Record<string, boolean | undefined> = {},
+  seed: Record<string, boolean | Partial<PrivacyPreferences> | undefined> = {},
   failures: { read?: Error; write?: Error; clear?: Error } = {},
 ): Recorder {
   const reads: string[] = [];
   const writes: Array<{ userId: string; presenceVisible: boolean }> = [];
   const cleared: string[] = [];
+  const rows: Record<string, PrivacyPreferences | undefined> = {};
+  for (const [userId, value] of Object.entries(seed)) {
+    if (value !== undefined) rows[userId] = row(value);
+  }
   return {
     reads,
     writes,
     cleared,
+    rows,
     async read(userId) {
       reads.push(userId);
       if (failures.read) throw failures.read;
-      const value = rows[userId];
-      return value === undefined ? null : { presenceVisible: value };
+      return rows[userId] ?? null;
     },
-    async write(userId, presenceVisible) {
+    async write(userId, preferences) {
       if (failures.write) throw failures.write;
-      writes.push({ userId, presenceVisible });
-      rows[userId] = presenceVisible;
+      writes.push({ userId, presenceVisible: preferences.presenceVisible });
+      rows[userId] = { ...preferences };
     },
     async clearPresence(userId) {
       if (failures.clear) throw failures.clear;
@@ -45,7 +58,7 @@ test("an absent row means presence is published", async () => {
   const store = createPrivacyPreferencesStore(recordingGateway());
   await store.sync("user-1");
   assert.deepEqual(store.getSnapshot(), {
-    preferences: { presenceVisible: true },
+    preferences: { presenceVisible: true, forwardOriginVisible: true },
     loading: false,
     error: null,
   });
@@ -136,7 +149,7 @@ test("signing out clears the answer and stops claiming to be loading", async () 
   await store.sync("user-1");
   await store.sync(null);
   assert.deepEqual(store.getSnapshot(), {
-    preferences: { presenceVisible: true },
+    preferences: { presenceVisible: true, forwardOriginVisible: true },
     loading: false,
     error: null,
   });
@@ -154,7 +167,7 @@ test("a reply for an account that has since been left is discarded", async () =>
     async read(userId) {
       call += 1;
       if (call === 1) await firstRead;
-      return { presenceVisible: userId === "user-2" };
+      return { ...PRIVACY_DEFAULTS, presenceVisible: userId === "user-2" };
     },
     async write() {},
     async clearPresence() {},
@@ -229,7 +242,7 @@ test("a new account never shows the previous one's answer, not even while loadin
   const gateway: PrivacyGateway = {
     async read(userId) {
       if (userId === "user-2") await pending;
-      return { presenceVisible: userId !== "user-1" };
+      return { ...PRIVACY_DEFAULTS, presenceVisible: userId !== "user-1" };
     },
     async write() {},
     async clearPresence() {},
@@ -271,4 +284,82 @@ test("a failed erase does not undo a saved preference", async () => {
   await store.sync("user-1");
   assert.equal(await store.setPresenceVisible("user-1", false), true);
   assert.equal(store.getSnapshot().preferences.presenceVisible, false);
+});
+
+// -- whose name a forward carries (20260921120000) ---------------------------
+
+test("an absent row discloses the name, because that is what Telegram does", async () => {
+  const store = createPrivacyPreferencesStore(recordingGateway());
+  await store.sync("user-1");
+  assert.equal(
+    store.getSnapshot().preferences.forwardOriginVisible,
+    true,
+    "the owner, 2026-09-20: everyone sees the original sender unless he opts out",
+  );
+  // A literal, not PRIVACY_DEFAULTS.forwardOriginVisible compared with itself,
+  // which would hold whichever way the default was written.
+  assert.equal(PRIVACY_DEFAULTS.forwardOriginVisible, true);
+});
+
+test("the opt-out is stored and comes back", async () => {
+  const gateway = recordingGateway({ "user-1": { forwardOriginVisible: false } });
+  const store = createPrivacyPreferencesStore(gateway);
+  await store.sync("user-1");
+  assert.equal(store.getSnapshot().preferences.forwardOriginVisible, false);
+  assert.equal(store.getSnapshot().preferences.presenceVisible, true, "the other switch is untouched");
+});
+
+/**
+ * The defect this shape exists to prevent, and it is a loss of somebody's
+ * choice rather than a display bug: a write naming one column resets the other
+ * to its column default, so changing presence would silently turn a forward
+ * opt-out back on and the person's name would start travelling again without
+ * them touching anything.
+ */
+test("changing one switch does not reset the other", async () => {
+  const gateway = recordingGateway();
+  const store = createPrivacyPreferencesStore(gateway);
+  await store.sync("user-1");
+
+  assert.equal(await store.setPreference("user-1", "forwardOriginVisible", false), true);
+  assert.equal(await store.setPresenceVisible("user-1", false), true);
+
+  assert.deepEqual(gateway.rows["user-1"], { presenceVisible: false, forwardOriginVisible: false });
+  assert.equal(
+    store.getSnapshot().preferences.forwardOriginVisible,
+    false,
+    "turning presence off turned the forward opt-out back on",
+  );
+
+  assert.equal(await store.setPreference("user-1", "forwardOriginVisible", true), true);
+  assert.deepEqual(gateway.rows["user-1"], { presenceVisible: false, forwardOriginVisible: true });
+});
+
+test("a failed write rolls the forward switch back too", async () => {
+  const gateway = recordingGateway({}, { write: new Error("network down") });
+  const store = createPrivacyPreferencesStore(gateway);
+  await store.sync("user-1");
+
+  assert.equal(await store.setPreference("user-1", "forwardOriginVisible", false), false);
+  assert.equal(store.getSnapshot().preferences.forwardOriginVisible, true, "back to what is stored");
+  assert.equal(store.getSnapshot().error, "network down");
+});
+
+test("hiding the name erases nothing, because nothing already sent may change", async () => {
+  // Presence clears a stored timestamp. A forward's origin is written onto each
+  // copy at forward time and is permanent by design, so clearing here would be
+  // reaching back into messages already sent - the direction the decision
+  // explicitly refuses.
+  const gateway = recordingGateway();
+  const store = createPrivacyPreferencesStore(gateway);
+  await store.sync("user-1");
+  await store.setPreference("user-1", "forwardOriginVisible", false);
+  assert.deepEqual(gateway.cleared, []);
+});
+
+test("nothing is written for the forward switch without an account", async () => {
+  const gateway = recordingGateway();
+  const store = createPrivacyPreferencesStore(gateway);
+  assert.equal(await store.setPreference(null, "forwardOriginVisible", false), false);
+  assert.deepEqual(gateway.writes, []);
 });

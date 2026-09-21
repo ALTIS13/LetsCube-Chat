@@ -250,9 +250,13 @@ export interface AttachSendRequest {
   files: File[];
   compress: boolean;
   /**
-   * What a photo is re-encoded at, for this send only (D-174). SD unless the
-   * sheet was told otherwise; nothing is remembered between sends. Ignored
-   * where `compress` is false, because an original is not re-encoded at all.
+   * What a photo is re-encoded at (D-174). SD unless the sheet was told
+   * otherwise, and since 2026-09-21 the sheet remembers which it was told, per
+   * device — see `PHOTO_RESOLUTION_STORAGE_KEY` in `lib/mediaQuality.ts` for
+   * why that completes D-119 rather than reopening it. The value is still named
+   * on every send rather than defaulted downstream, so the one place that
+   * decides is the one the person pressed. Ignored where `compress` is false,
+   * because an original is not re-encoded at all.
    */
   photoQuality: MediaQuality;
   caption: string;

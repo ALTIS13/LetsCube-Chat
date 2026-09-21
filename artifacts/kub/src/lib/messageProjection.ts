@@ -18,8 +18,15 @@ export const MESSAGE_LAST_MESSAGE_SELECT =
  *
  * RLS answers this embed as it answers any other read of `public.messages`:
  * `is_chat_member(chat_id)`. A reader who is not in the source chat gets
- * `null` here, which is «Переслано» without a name, exactly as before. Nothing
- * is widened and no policy is touched.
+ * `null` here. Nothing is widened and no policy is touched.
+ *
+ * **Since 20260921120000 this embed is the fallback, not the answer.** The
+ * origin is denormalised onto the copy — `forward_origin_name` and
+ * `forward_origin_hidden`, which the leading `*` below already brings back —
+ * and is the same for every reader, because who is disclosed is the sender's
+ * decision rather than the reader's access. The embed still serves forwards
+ * made before that migration, which carry neither column and are deliberately
+ * not backfilled. `lib/messageForwardOrigin.ts` chooses between them.
  */
 const FORWARDED_FROM_JOIN =
   `forwarded_from:messages!forwarded_from_id(id,type,deleted_at,user_id,bot_id,sender:profiles!user_id(id,full_name,username,avatar_url),bot:bots!bot_id(${BOT_PUBLIC_MESSAGE_COLUMNS}))`;

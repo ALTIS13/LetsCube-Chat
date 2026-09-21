@@ -47,10 +47,13 @@ import {
 } from "@/lib/mediaCompression";
 import { showActionFeedback } from "@/lib/actionFeedback";
 import {
+  PHOTO_RESOLUTION_STORAGE_KEY,
   PHOTO_SEND_ORIGINAL_HINT,
   PHOTO_SEND_QUALITY_FEEDBACK_KEY,
+  photoResolutionToStore,
   photoSendQuality,
   photoSendQualitySentence,
+  readStoredPhotoResolution,
 } from "@/lib/mediaQuality";
 import { useVideoSendLadder } from "@/hooks/useVideoSendLadder";
 import { isNativeAndroid } from "@/lib/platform/capabilities";
@@ -127,16 +130,15 @@ export default function AttachSheet({
   const [filesSelected, setFilesSelected] = useState<string[]>([]);
   const [caption, setCaption] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
-  // Off for every send, and not remembered between them: the objection D-119
-  // recorded was to being asked and then having the answer applied for ever
-  // afterwards. The sheet unmounts with the send, so this resets itself.
+  // Remembered between sends, per device, since 2026-09-21. The tester called
+  // ours «настройка HD», which is what a person calls a control that looks like
+  // a preference — and a preference that forgets is a question asked again.
+  // Why that completes D-119 instead of overturning it is written once, beside
+  // the key, in `lib/mediaQuality.ts`.
   //
-  // Telegram does remember it — measured on the device on 2026-09-20: set to SD,
-  // left, reopened, still SD — and the tester called ours «настройка HD»,
-  // which is what a person calls a control that looks like a preference. That
-  // is a decision about D-119's own rule and is recorded for the owner under
-  // item 46 rather than taken here.
-  const [hd, setHd] = useState(false);
+  // Read at mount rather than in an effect: the badge must be drawn in the
+  // state it is in, not drawn wrong and corrected a frame later.
+  const [hd, setHd] = useState(() => readStoredPhotoResolution(readPhotoResolution()));
   const [dragY, setDragY] = useState(0);
   const [dragFrom, setDragFrom] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -322,6 +324,7 @@ export default function AttachSheet({
    */
   const changePhotoResolution = (next: boolean) => {
     setHd(next);
+    writePhotoResolution(next);
     showActionFeedback({
       kind: "info",
       title: photoSendQualitySentence(next),
@@ -688,4 +691,33 @@ export default function AttachSheet({
       </div>
     </>
   );
+}
+
+/**
+ * The SD/HD state, read off this device.
+ *
+ * Wrapped because access itself throws, not merely returns null, in a private
+ * window and wherever site data is blocked — the same shape
+ * `hooks/useMessageTextSize.ts` and `lib/playbackVolume.ts` use. What the value
+ * means is decided in `lib/mediaQuality.ts`, which imports nothing and can
+ * therefore be reached by `node --test`; this pair only fetches the string.
+ */
+function readPhotoResolution(): string | null {
+  try {
+    if (typeof localStorage === "undefined") return null;
+    return localStorage.getItem(PHOTO_RESOLUTION_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writePhotoResolution(hd: boolean): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(PHOTO_RESOLUTION_STORAGE_KEY, photoResolutionToStore(hd));
+  } catch {
+    // A device that refuses storage still gets the state for this sheet; it
+    // just will not have it for the next one. Losing a preference is not worth
+    // failing a send over.
+  }
 }
