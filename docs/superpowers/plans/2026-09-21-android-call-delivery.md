@@ -25,7 +25,10 @@
 - Existing browser/PWA, Windows, iOS, message/task/system FCM, and in-app notification behavior must remain unchanged.
 - No production schema apply, deployment, release publication, device installation, or real FCM send occurs before its explicit task and gate.
 
-## Current Live Baseline, 2026-09-21
+## Pre-Rollout Baseline, 2026-09-21
+
+Historical observations before Tasks 1-5. For the current disabled server rollout
+and device availability, use [the rollout report](../../operations/2026-09-21-android-call-rollout.md).
 
 - Production has live private-call RPCs, Realtime publication, missed-call sweep, per-session `calls_enabled`, Android FCM registration, native notification outbox, and one-minute push cron.
 - Production has no voice ring outbox, no ring/cancel enqueue in voice RPCs, no push-device-to-session binding, no device call-protocol capability, no call FCM payload, and no Android call channel or killed-process handler.
@@ -239,13 +242,18 @@ Version/signing/publication remain Task 5's explicit release gate.
   Manual files: `supabase/migration-proposals/20260921153256_android_voice_push_operations*.sql`
   with byte-identical `.migration-backup` copies, outside automatic CLI discovery.
 
-- [ ] **Step 1: Apply owner-specific schema only after backup and rehearsals pass**
+- [x] **Step 1: Apply owner-specific schema only after backup and rehearsals pass**
 
   Apply the binding migration as `postgres`, then outbox and dispatcher migrations
   and operations proposals as `supabase_admin`, each once in its own transaction
   with raising self-checks. Keep recovery/cleanup cron jobs inactive as well.
   Deploy the reviewed Edge code separately with both gates disabled. Verify actual
   runtime code, roles and gate state; a web Git push does not deploy this Edge code.
+
+  Completed 2026-09-21: fresh full SQL archive restored offline, owner-specific
+  apply/rollback rehearsed, four production migrations applied once. Edge runtime
+  bytes and authenticated disabled response verified; gates off, jobs inactive.
+  [Rollout evidence and limits](../../operations/2026-09-21-android-call-rollout.md).
 
 - [ ] **Step 2: Build and verify one signed candidate**
 

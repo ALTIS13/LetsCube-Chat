@@ -434,7 +434,8 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     are implemented without connecting the dispatcher. Task 2's session binding
     and ring/cancel outbox proposals are now independently reviewed and verified
     on an isolated full-schema PG17 copy, including PostgREST compatibility,
-    forced concurrent RPCs and exact rollback. They are NOT applied in production.
+    forced concurrent RPCs and exact rollback. The disabled rollout below now
+    supersedes their original proposal-only production status.
     Task 3's disabled dispatcher is also complete: independent spec/quality review,
     291 server and 89 focused push tests, actual PG17/PostgREST/Edge integration,
     forced registration/claim races and exact rollback. Nothing is currently
@@ -446,9 +447,11 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     No signed candidate or production activation. Task 5 operational source and
     isolated QA are complete: five-second recovery, four HTTP slots/global 16
     leases, aggregate health, bounded retention, real transaction races and exact
-    rollback. Server 334/334; unit 4035 pass and one existing jq skip. Next: staged
-    schema/Edge rollout with gates and new jobs off, then the separately
-    authorized candidate and physical QA. No source result proves FCM receipt.
+    rollback. Server 334/334; unit 4035 pass and one existing jq skip. Task 5 Step 1
+    is now complete: full SQL backup restored offline, four migrations applied,
+    Edge deployed, gates and new jobs off. [Live rollout evidence](operations/2026-09-21-android-call-rollout.md).
+    Next: separately authorized candidate and physical QA. No source or disabled
+    HTTP result proves FCM receipt.
     Implementation `9d059c4a` is pushed and web-deployed: exact healthy image,
     previous-replica retirement and public entry/control markers verified.
     See the

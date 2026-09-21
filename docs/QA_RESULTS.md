@@ -1,5 +1,21 @@
 # QA Results
 
+## 2026-09-21 - Disabled Android Call Server Rollout
+
+Task 5 Step 1 completed on production from `0e2e0535`.
+[Backup, actual runtime evidence and limits](operations/2026-09-21-android-call-rollout.md).
+
+- Fresh full SQL archive restored offline on the pinned PG image; four migrations
+  applied/reversed under real owners, catalog projections and rollback match.
+- Four production migrations applied once with raising checks; RLS preserved,
+  PostgREST refreshed, protected health HTTP200 and anonymous denial HTTP401.
+- Exact six Edge runtime hashes, unchanged environment, healthy targeted restart;
+  unauthorized voice HTTP401, authorized voice HTTP200/disabled/zero counters.
+- SQL/Edge gates off; both new jobs inactive; original generic minute push remains
+  active. No manual generic drain, real call send, signed APK or phone installation.
+- Focused entry/FCM/ownership suite 20/20. Earlier full-suite and UI/native results
+  are reused for unchanged source, not reported as a fresh physical run.
+
 ## 2026-09-21 - Android Call Recovery, Capacity And Retention
 
 Tracker 32-D1 Task 5 operational source/proposal and isolated QA complete.

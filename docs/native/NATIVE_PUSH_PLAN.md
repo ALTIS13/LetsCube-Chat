@@ -12,7 +12,9 @@ delivery success can be inferred from the historical ordinary-push results below
 Task 5 operational prerequisites are complete as disabled proposals and isolated
 runtime checks: five-second wake recovery, aggregate admission/health and bounded
 retention. [Evidence and controlled rollout order](../operations/2026-09-21-android-call-operations.md).
-Production schema/Edge, signed candidate and physical FCM delivery remain separate.
+Production schema/Edge are now installed with both gates off and new jobs inactive.
+[Disabled rollout evidence](../operations/2026-09-21-android-call-rollout.md).
+The separately authorized signed candidate and physical FCM delivery remain pending.
 
 ## Existing Ordinary Push Foundation
 

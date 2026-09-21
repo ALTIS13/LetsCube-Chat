@@ -2,6 +2,11 @@
 
 ## Checkpoint
 
+Follow-up: Task 5 Step 1 is now deployed with gates off and jobs inactive;
+[production rollout evidence](2026-09-21-android-call-rollout.md). The following
+records the earlier source/proposal and isolated-QA batch, not current absence
+of production schema. Native signing, installation and activation remain pending.
+
 Owner Codex coordinator, shared main baseline `ae841b93`. Task 5 operational
 source/proposal and isolated integration, not production activation. SQL and
 capacity workers own disjoint files; a third agent independently reviews the

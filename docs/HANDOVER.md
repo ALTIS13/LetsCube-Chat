@@ -132,13 +132,13 @@ whole deployment** — no bot has registered a command yet.
 ## 4. Where to start
 
 **Active checkpoint, 2026-09-21 (Codex):** owner Codex, main checkout
-`D:\CodexProjects\LetsCube-Chat`, Task 5 operational source/proposal from `ae841b93`.
-Operational proposal and isolated PG/PostgREST/Edge/cron recovery, concurrency,
-retention and exact rollback checks are complete. Server 334/334; unit 4035 pass,
-one existing jq skip. Next: fresh-backup controlled schema/Edge rollout with
-gates off, then separately authorized signed candidate and physical matrix.
-No production SQL/Edge rollout, signed candidate or phone installation.
-[Task 5 resume/evidence](operations/2026-09-21-android-call-operations.md).
+`D:\CodexProjects\LetsCube-Chat`, Task 5 Step 1 from `0e2e0535`.
+Fresh full SQL backup restored offline; four owner-specific migrations applied,
+reviewed Edge separately deployed. Production catalog and disabled HTTP checks
+pass. Both dispatch gates remain off and both new jobs inactive. No signed
+candidate, phone installation or real call send. Next: separately authorized
+signed candidate and physical matrix.
+[Current rollout evidence](operations/2026-09-21-android-call-rollout.md).
 Task 4 source/debug is complete and deployed in `9d059c4a`; its browser, native
 receipt and process-death OS-expiry evidence remains valid and separate from
 real FCM delivery. [Task 4 report](operations/2026-09-21-android-call-native.md).
@@ -146,17 +146,17 @@ Tracker 49, D-284 and the
 D-088 address-subscription regression are verified and deployed in `804101f5`
 (runtime commit `dc59ea28`). This includes outgoing ring updates after public
 navigation, Windows caption, auth-bound transport/resume and late-RPC guards.
-Tracker 32-D1 Task 1's pure Android call payload is committed but unused by dispatch.
+Tracker 32-D1 Task 1's pure Android call payload is deployed behind disabled dispatch.
 Task 2 session-binding/outbox proposals passed independent review, 235 server
 tests, real-owner PG17 full-schema rehearsals, PostgREST compatibility, forced
-concurrent RPCs and exact rollback. Production SQL and call dispatch remain
-unchanged. Task 3's disabled dispatcher passed independent spec/quality review,
+concurrent RPCs and exact rollback. The controlled rollout above supersedes that
+proposal-only production status. Task 3 passed independent spec/quality review,
 291 server and 89 focused push tests, actual PG17/PostgREST/Edge integration and
 exact rollback. Nothing is unavailable by the owner's instruction; authorized
 Realme has Android 15/microG, LETSCUBE 0.1.3/build 4, notification permission denied
 and no Firebase init resources in its installed APK (prior read-only inventory;
 not remeasured in Task 4). Native handler and binding source are now complete;
-next is the separately gated candidate/schema/physical rollout.
+next is the separately gated signed candidate and physical rollout.
 Task 5's operational proposal now covers five-second recovery, aggregate capacity,
 health and bounded retention, with real isolated runtime proof. Minute polling
 alone is not a deadline guarantee. No production SQL/Edge activation or
@@ -185,8 +185,9 @@ full; each carries his own words and the measurements behind the decisions.
    delivery, background OS notification and closed Android call delivery. Start
    with Task 5 of the Android plan: payload, schema, disabled-dispatcher rehearsals
    and native source/debug checks, operational recovery/capacity/retention are
-   complete as source and isolated QA; production schema/Edge are still unchanged.
-   Source tests are not physical proof.
+   complete. Production schema/Edge are now installed with gates and new jobs off.
+   Next is the separately authorized signed candidate; source tests and disabled
+   HTTP checks are not physical delivery proof.
 4. **Item 45 — the group chat.** A separate `chats.type`, born from a live private
    call by one «add to conversation» press; the two already talking are rejoined
    and the third person is **rung** (so it needs item 32). Its whole settings
