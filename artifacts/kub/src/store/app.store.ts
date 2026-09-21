@@ -7,6 +7,7 @@ import { sameData, shareById } from '@/lib/structuralSharing'
 import type { Profile, ChatWithLastMessage, MessageWithSender } from '@/types/database'
 import { sameActorClientMessage } from '@/lib/messageActor'
 import { isHeartbeatOnlyProfileChange } from '@/lib/profileChange'
+import type { BotProfileSeed } from '@/lib/botProfile'
 import type { ProfileAnchor, ProfileOpener } from '@/lib/profileTier'
 import {
   CHAT_MUTE_CACHE_KEY,
@@ -209,6 +210,63 @@ interface AppState {
    */
   escalateUserProfile: () => void
   closeUserProfile: () => void
+
+  /**
+   * Which bot's card is open over the shell, if any (D-263).
+   *
+   * A second slice rather than a widened `profileOverlayUserId`, and the reason
+   * is that a bot is not a person with fields missing. The person's card asks
+   * `profiles`, carries presence, a standing in this chat and the groups you
+   * share; a bot's asks `bots` and `bot_commands` and has none of those — §8's
+   * rule again, that a control which cannot work is absent rather than drawn
+   * empty. One union would have made every consumer of the person slice branch
+   * on a kind, which is how a surface ends up drawing «был(а) недавно» for a
+   * program.
+   *
+   * What the two do share is the tier: `resolveProfileTier` decides both, so a
+   * bot pressed in passing opens beside the message where there is room for a
+   * beside, and takes the phone's whole screen where there is not.
+   *
+   * Only one of the two is ever open. Opening either closes the other, because
+   * they occupy the same place on the screen and «two cards» is not a state
+   * anything here can draw.
+   */
+  botProfileId: string | null
+  /**
+   * The row the opener already had, so the card draws a name rather than a
+   * skeleton.
+   *
+   * A bot's message carries its whole `bots` row (`resolveMessageActor` refuses
+   * a message whose embedded bot is not the one it names), so the commonest
+   * opener knows everything but the commands. A seed is never trusted for the
+   * commands and never replaces a read that has answered; it is the first
+   * paint and nothing else.
+   */
+  botProfileSeed: BotProfileSeed | null
+  /** Where the card is being read from, which is what decides the addressing. */
+  botProfileChatId: string | null
+  botProfileOpener: ProfileOpener
+  botProfileAnchor: ProfileAnchor | null
+  openBotProfile: (
+    botId: string,
+    seed?: BotProfileSeed | null,
+    opener?: ProfileOpener,
+    chatId?: string | null,
+    anchor?: ProfileAnchor | null,
+  ) => void
+  closeBotProfile: () => void
+
+  /**
+   * A draft the chat pane is asked to put in its composer, from outside it.
+   *
+   * The same shape `chatPanelRequest` uses and for the same reason: the asker
+   * is mounted over the shell, not inside `ChatWindow`, and a `key` is what
+   * makes the same text asked for twice arrive twice. Choosing a command on a
+   * bot's card is the one caller today (D-263).
+   */
+  composerDraftRequest: { chatId: string; text: string; key: number } | null
+  requestComposerDraft: (chatId: string, text: string) => void
+  clearComposerDraftRequest: (key: number) => void
 
   /**
    * Which chat's in-chat search is open, if any.
@@ -569,7 +627,43 @@ export const useAppStore = create<AppState>((set, get) => ({
       // popout pointing at the row the reader had already scrolled past.
       profileOverlayAnchor: anchor,
       profileOverlayEscalated: false,
+      // The two cards are one place on the screen.
+      botProfileId: null,
+      botProfileSeed: null,
+      botProfileAnchor: null,
     })),
+  botProfileId: null,
+  botProfileSeed: null,
+  botProfileChatId: null,
+  botProfileOpener: "named",
+  botProfileAnchor: null,
+  openBotProfile: (botId, seed = null, opener = "named", chatId = null, anchor = null) =>
+    set(() => ({
+      botProfileId: botId,
+      botProfileSeed: seed,
+      botProfileChatId: chatId,
+      botProfileOpener: opener,
+      botProfileAnchor: anchor,
+      // The two cards are one place on the screen.
+      profileOverlayUserId: null,
+      profileOverlayAnchor: null,
+      profileOverlayEscalated: false,
+    })),
+  closeBotProfile: () =>
+    set((state) =>
+      state.botProfileId === null
+        ? state
+        : { botProfileId: null, botProfileSeed: null, botProfileChatId: null, botProfileAnchor: null },
+    ),
+
+  composerDraftRequest: null,
+  requestComposerDraft: (chatId, text) =>
+    set((state) => ({
+      composerDraftRequest: { chatId, text, key: (state.composerDraftRequest?.key ?? 0) + 1 },
+    })),
+  clearComposerDraftRequest: (key) =>
+    set((state) => (state.composerDraftRequest?.key === key ? { composerDraftRequest: null } : state)),
+
   escalateUserProfile: () =>
     set((state) => (state.profileOverlayEscalated ? state : { profileOverlayEscalated: true })),
   closeUserProfile: () =>

@@ -38,10 +38,27 @@ test("your own messages open your own card", () => {
   assert.deepEqual(messageAuthorProfileTarget(actor), { kind: "person", userId: "me" });
 });
 
-test("a bot's face opens nothing, and that is D-263's to change", () => {
+test("a bot's face opens the bot, with the row the message carried (D-263)", () => {
+  // Until 2026-09-21 this answered `{kind:"none", reason:"bot"}` and the face
+  // was a `div`. The card exists now, so the refusal has gone — and the row
+  // travels with the target rather than being looked up, because
+  // `resolveMessageActor` has already refused any message whose embedded bot is
+  // not the one its `bot_id` names.
   const actor: MessageActor = { kind: "bot", id: "b1", bot: BOT };
-  assert.deepEqual(messageAuthorProfileTarget(actor), { kind: "none", reason: "bot" });
-  assert.equal(messageAuthorOpensProfile(actor), false);
+  assert.deepEqual(messageAuthorProfileTarget(actor), { kind: "bot", botId: "b1", bot: BOT });
+  assert.equal(messageAuthorOpensProfile(actor), true);
+});
+
+test("a bot and a person are different subjects, not one with fields missing", () => {
+  // The distinction the two store slices rest on. A caller that read only
+  // `kind === "person"` used to get `false` for a bot and now has to branch,
+  // which is the point: a bot's card asks `bots` and `bot_commands` and has no
+  // presence, no standing and no mutual groups to draw.
+  const person = messageAuthorProfileTarget({ kind: "user", id: "u1", profile: PERSON });
+  const bot = messageAuthorProfileTarget({ kind: "bot", id: "b1", bot: BOT });
+  assert.notEqual(person.kind, bot.kind);
+  assert.equal("userId" in bot, false, "a bot has no user id and must not be handed to the person's card");
+  assert.equal("botId" in person, false);
 });
 
 test("a deleted author has no row to read", () => {
@@ -85,11 +102,12 @@ const BUBBLE = readFileSync(
   "utf8",
 );
 
-test("the bubble asks this module and opens the profile as a glance", () => {
+test("the bubble asks this module and opens both subjects as a glance", () => {
   assert.ok(BUBBLE.includes("messageAuthorProfileTarget"));
-  // «glance», because the person is incidental to the message being read. The
-  // surface that answers is `resolveProfileTier`'s business, not the bubble's.
-  assert.match(BUBBLE, /openUserProfile\(authorProfileUserId, "glance",/);
+  // «glance» in both arms, because the subject is incidental to the message
+  // being read. Which surface answers is `resolveProfileTier`'s business.
+  assert.match(BUBBLE, /openUserProfile\(authorTarget\.userId, "glance",/);
+  assert.match(BUBBLE, /openBotProfile\(authorTarget\.botId, authorTarget\.bot, "glance",/);
   // Two anchors, as Discord's two importers are, and both go through the one
   // helper that measures the box.
   const calls = (BUBBLE.match(/openAuthorProfile\(event\.currentTarget\)/g) ?? []).length;
@@ -117,10 +135,20 @@ test("the bubble hands over the place it was read from", () => {
   assert.ok(BUBBLE.includes("message.chat_id ?? null"));
 });
 
-test("the face is a button only when there is somebody behind it", () => {
+test("the face is a button only when there is a subject behind it", () => {
+  // A scan, and a deliberately weak one: what it can honestly check is that
+  // the bubble gates the anchors on **this module's** answer rather than on
+  // something it decided itself. That the gate actually leaves a deleted
+  // author's face inert is measured where a browser can see it —
+  // `tests/e2e/bot-profile-card.spec.ts`, which presses one.
   assert.ok(
-    BUBBLE.includes("authorProfileUserId ? ("),
-    "the avatar must fall back to the plain element when the actor opens nothing",
+    BUBBLE.includes('const authorOpensProfile = authorTarget.kind !== "none";'),
+    "the anchors must be gated on the target this module produced",
+  );
+  assert.equal(
+    BUBBLE.includes("authorProfileUserId"),
+    false,
+    "the person-only gate is gone; a bot has no user id and would have read as nobody",
   );
   assert.ok(BUBBLE.includes('data-testid="message-author-avatar"'));
 });

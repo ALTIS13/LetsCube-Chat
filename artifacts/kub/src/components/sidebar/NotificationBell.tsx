@@ -8,6 +8,7 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { useAvatarMediaUrl } from "@/hooks/useMediaObjectUrl";
 import { createClient } from "@/lib/supabase/client";
 import { safeOpenChat } from "@/lib/safeOpenChat";
+import { chatAddressPath } from "@/lib/chatRoute";
 import { requestChatMessageJump } from "@/lib/chatJumpEvents";
 import { showAppAlert } from "@/lib/appDialogs";
 import { cn } from "@/lib/utils";
@@ -221,7 +222,11 @@ export function NotificationBell() {
       if (opened && target.kind === "message") {
         window.setTimeout(() => requestChatMessageJump(target.chatId, target.messageId), 150);
       }
-      if (opened) setLocation("/");
+      // The conversation's own address, never «/» (D-293): `useChatAddress`
+      // has already addressed the selected chat, and «/» afterwards reads as a
+      // Back press out of it — which closed the conversation a notification
+      // had just opened.
+      if (opened) setLocation(chatAddressPath(target.chatId, target.kind === "message" ? target.messageId : null));
       return;
     }
 
@@ -240,8 +245,9 @@ export function NotificationBell() {
     if (target?.kind === "group_invite") {
       if (target.status === "accepted" && target.chatId) {
         setOpen(false);
-        const opened = await safeOpenChat(target.chatId);
-        if (opened) setLocation("/");
+        const chatId = target.chatId;
+        const opened = await safeOpenChat(chatId);
+        if (opened) setLocation(chatAddressPath(chatId));
         return;
       }
       showInviteStatusNotice(target.status);
@@ -255,7 +261,7 @@ export function NotificationBell() {
     if (opened && entry.latestMessageId) {
       window.setTimeout(() => requestChatMessageJump(entry.chatId, entry.latestMessageId!), 150);
     }
-    if (opened) setLocation("/");
+    if (opened) setLocation(chatAddressPath(entry.chatId, entry.latestMessageId ?? null));
   };
 
   const handleMarkVisibleRead = async () => {
@@ -288,7 +294,7 @@ export function NotificationBell() {
     const opened = await safeOpenChat(result.data);
     if (opened) {
       setOpen(false);
-      setLocation("/");
+      setLocation(chatAddressPath(result.data));
     } else {
       showAppAlert("Приглашение принято. Чат появится после обновления списка.", "Приглашение", "checkCircle");
     }

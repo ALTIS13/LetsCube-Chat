@@ -22,7 +22,7 @@ import { chatRoleColourOnChat, readChatRoleColour } from "@/lib/chatRolePalette"
 import type { ChatRole } from "@/lib/chatRoles";
 import { useAppStore } from "@/store/app.store";
 import { messageAuthorProfileTarget } from "@/lib/messageAuthorProfile";
-import { FormattedText, isLocationPreviewMessage } from "@/lib/formatText";
+import { FormattedText, isLocationPreviewMessage, type BotCommandsInText } from "@/lib/formatText";
 import { KubIcon } from "@/components/kub";
 import { useChatMediaPlayback, VideoCircleProgressRing, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 import { ROUND_VIDEO_OPEN_CLASS, ROUND_VIDEO_PLAYBACK_CLASS } from "@/lib/conversationStacking";
@@ -104,6 +104,16 @@ interface MessageBubbleProps {
    * conversation. A hook here would be one round trip per message.
    */
   authorChatRole?: ChatRole | null;
+  /**
+   * What makes a `/command` in this message pressable, or null (D-263).
+   *
+   * Handed down from `ChatWindow`, which already reads the chat's bot and its
+   * commands once for the composer's menu. A hook here would be one membership
+   * read per message on screen, and the two readers could disagree about which
+   * bot the chat speaks to — which is the failure `useBotChat` was moved to
+   * fix for the menu (D-244).
+   */
+  botCommands?: BotCommandsInText | null;
 }
 
 function getMessageTextLayoutKind(type: MessageWithSender["type"], content: string): TextLayoutKind {
@@ -547,6 +557,8 @@ interface MeasuredTextWithMetaProps {
   stackRef: React.RefObject<HTMLDivElement | null>;
   measureKey: string;
   compound?: boolean;
+  /** What makes a `/command` in this body pressable, or null (D-263). */
+  bot?: BotCommandsInText | null;
 }
 
 function MeasuredTextWithMeta({
@@ -557,6 +569,7 @@ function MeasuredTextWithMeta({
   stackRef,
   measureKey,
   compound = false,
+  bot = null,
 }: MeasuredTextWithMetaProps) {
   const [placement, setPlacement] = useState<MetaPlacement>(() => getInitialMetaPlacement(content));
   // The meta is taken out of the text flow and pinned to the bubble's bottom
@@ -812,7 +825,7 @@ function MeasuredTextWithMeta({
         className={cn(textClassName, placement === "inline" && "w-fit")}
       >
         <span ref={textContentRef} data-message-text-content="true">
-          <FormattedText content={content} />
+          <FormattedText content={content} bot={bot} />
         </span>
         {/* A spacer, not the meta itself. It keeps the last line from running
             under the timestamp — and because it is the only thing left in the
@@ -860,6 +873,7 @@ export function MessageBubble({
   isSelectionMode = false,
   messagesMap = {}, mediaVariant, senderAvatarVariant, deliveryState, groupReadInfo, onOpenGroupReadReceipts,
   authorChatRole = null,
+  botCommands = null,
 }: MessageBubbleProps) {
   // D-046. `.msg-appear` carries `will-change: opacity, transform` under a
   // comment saying the hint is dropped when the animation ends. Nothing dropped
@@ -894,8 +908,17 @@ export function MessageBubble({
   // Through a selector, for the reason above: the action, not the state, so
   // nothing here re-renders when a profile opens somewhere else.
   const openUserProfile = useAppStore((state) => state.openUserProfile);
+  const openBotProfile = useAppStore((state) => state.openBotProfile);
   const authorTarget = messageAuthorProfileTarget(actor);
-  const authorProfileUserId = authorTarget.kind === "person" ? authorTarget.userId : null;
+  /**
+   * Whether the face and the name are anchors at all (D-263).
+   *
+   * Two kinds of subject behind one pair of anchors: a person and a bot. What
+   * is still refused — a deleted author, a system message, an actor that
+   * resolves to neither — is refused by being a `div` and a `span`, which is
+   * §8's rule rather than a disabled button.
+   */
+  const authorOpensProfile = authorTarget.kind !== "none";
   /**
    * The face or the name, and the box it occupies right now.
    *
@@ -907,16 +930,20 @@ export function MessageBubble({
    */
   const openAuthorProfile = useCallback(
     (trigger: HTMLElement) => {
-      if (!authorProfileUserId) return;
+      if (authorTarget.kind === "none") return;
       const box = trigger.getBoundingClientRect();
-      openUserProfile(authorProfileUserId, "glance", message.chat_id ?? null, {
-        top: box.top,
-        bottom: box.bottom,
-        left: box.left,
-        right: box.right,
-      });
+      const anchor = { top: box.top, bottom: box.bottom, left: box.left, right: box.right };
+      // «glance» in both arms: the subject is incidental to the message being
+      // read, which is the axis `profileTier.ts` says decides the surface. The
+      // bot's card carries the row the message already holds, so it paints a
+      // name rather than a skeleton while its own read is out.
+      if (authorTarget.kind === "person") {
+        openUserProfile(authorTarget.userId, "glance", message.chat_id ?? null, anchor);
+        return;
+      }
+      openBotProfile(authorTarget.botId, authorTarget.bot, "glance", message.chat_id ?? null, anchor);
     },
-    [authorProfileUserId, message.chat_id, openUserProfile],
+    [authorTarget, message.chat_id, openBotProfile, openUserProfile],
   );
   /**
    * The colour the author's name takes, or null (D-215).
@@ -934,6 +961,16 @@ export function MessageBubble({
    * leave the name unstyled.
    */
   const authorRoleColour = readChatRoleColour(authorChatRole?.colour ?? null);
+  /**
+   * The vocabulary the body is tokenized with, or null while selecting.
+   *
+   * A row being chosen is not a row being read: in selection mode the whole
+   * row is one target and a command inside it that still ran would be one
+   * press doing two things. The command falls back to the text it always was,
+   * which is also the honest signal that the message is being picked rather
+   * than used.
+   */
+  const botCommandsInText = isSelectionMode ? null : botCommands;
   const textContent = message.content ?? "";
   /**
    * Who wrote the original, where the reader may know (D-291).
@@ -1387,7 +1424,7 @@ export function MessageBubble({
               // `resolveProfileTier`'s whole subject and it is decided there,
               // not here. A face with nobody behind it stays a `div`, which is
               // §8's rule rather than a disabled button.
-              authorProfileUserId ? (
+              authorOpensProfile ? (
                 <button
                   type="button"
                   data-testid="message-author-avatar"
@@ -1413,17 +1450,17 @@ export function MessageBubble({
           {!isMe && isFirstInGroup && actor.kind !== "system" && (
             <span className="ml-3 mb-0.5 inline-flex min-w-0 items-center gap-1.5 text-xs font-semibold text-[color:var(--kub-accent-text)]">
               <span
-                className={cn("truncate", authorProfileUserId && "cursor-pointer hover:underline")}
+                className={cn("truncate", authorOpensProfile && "cursor-pointer hover:underline")}
                 // Two anchors, not one — Discord's popout is opened by the
                 // avatar and by the username as separate importers of the same
                 // wrapper, and the name is the half a reader reaches for when
                 // the avatar is absent because the message is not last in its
                 // group.
-                role={authorProfileUserId ? "button" : undefined}
-                tabIndex={authorProfileUserId ? 0 : undefined}
-                onClick={authorProfileUserId ? (event) => openAuthorProfile(event.currentTarget) : undefined}
+                role={authorOpensProfile ? "button" : undefined}
+                tabIndex={authorOpensProfile ? 0 : undefined}
+                onClick={authorOpensProfile ? (event) => openAuthorProfile(event.currentTarget) : undefined}
                 onKeyDown={
-                  authorProfileUserId
+                  authorOpensProfile
                     ? (event) => {
                         if (event.key !== "Enter" && event.key !== " ") return;
                         event.preventDefault();
@@ -1552,7 +1589,7 @@ export function MessageBubble({
                 playbackItem={createPlaybackItemFromMessage(message, isMe, originalUrl)}
               />
             ) : message.type === "image" && message.media_url ? (
-              <MediaWithCaption caption={mediaCaption}>
+              <MediaWithCaption caption={mediaCaption} bot={botCommandsInText}>
                 <MediaImage
                   url={imageDisplayUrl ?? originalUrl}
                   originalUrl={originalUrl}
@@ -1589,7 +1626,7 @@ export function MessageBubble({
                   }}
                 />
               ) : (
-                <MediaWithCaption caption={mediaCaption}>
+                <MediaWithCaption caption={mediaCaption} bot={botCommandsInText}>
                   <MediaVideo
                     url={videoPlaybackUrl}
                     originalUrl={originalUrl}
@@ -1624,7 +1661,7 @@ export function MessageBubble({
                 )}
               >
                 <span className="min-w-0 flex-1">
-                  <FormattedText content={message.content ?? ""} />
+                  <FormattedText content={message.content ?? ""} bot={botCommandsInText} />
                 </span>
                 <span
                   data-message-footer="true"
@@ -1635,6 +1672,7 @@ export function MessageBubble({
               </div>
             ) : canUseMeasuredTextMeta ? (
               <MeasuredTextWithMeta
+                bot={botCommandsInText}
                 content={message.content ?? ""}
                 textClassName={cn(
                   "min-w-0 max-w-full kub-message-text whitespace-pre-wrap text-[color:var(--kub-text)]",
@@ -1656,7 +1694,7 @@ export function MessageBubble({
                   widthClasses.text
                 )}
               >
-                <FormattedText content={message.content ?? ""} />
+                <FormattedText content={message.content ?? ""} bot={botCommandsInText} />
               </p>
             )}
 
@@ -1901,13 +1939,22 @@ function MediaImage({
   );
 }
 
-function MediaWithCaption({ children, caption }: { children: ReactNode; caption: string | null }) {
+function MediaWithCaption({
+  children,
+  caption,
+  bot = null,
+}: {
+  children: ReactNode;
+  caption: string | null;
+  /** A caption is message text too, so a command in one runs (D-263). */
+  bot?: BotCommandsInText | null;
+}) {
   return (
     <div className="flex max-w-full flex-col gap-1.5">
       {children}
       {caption && (
         <p className="min-w-0 max-w-full whitespace-pre-wrap kub-message-text text-[color:var(--kub-text)]">
-          <FormattedText content={caption} />
+          <FormattedText content={caption} bot={bot} />
         </p>
       )}
     </div>

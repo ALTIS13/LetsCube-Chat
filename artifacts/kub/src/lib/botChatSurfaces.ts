@@ -379,6 +379,195 @@ export function matchBotCommands(
 }
 
 // ---------------------------------------------------------------------------
+// A command that is already in the conversation, and one that was typed whole
+// (D-263)
+// ---------------------------------------------------------------------------
+
+/**
+ * A command token read out of a line of message text.
+ *
+ * `command` and `address` are lowered, because the authoriser lowers the whole
+ * content before it matches: `pg_catalog.lower(coalesce(content, ''))` is the
+ * left side of every branch of `private.bot_can_receive_message`. So `/SHIFT`
+ * is delivered exactly as `/shift` is, and a reader of this module must not
+ * answer differently from the function that decides delivery.
+ */
+export interface BotCommandMention {
+  /** Without the slash, lowered. */
+  readonly command: string;
+  /** The bot the text names, lowered, or null when it names none. */
+  readonly address: string | null;
+  /** How many characters of the input the whole token occupies. */
+  readonly length: number;
+}
+
+/** `bots.username` CHECK: `^[a-z][a-z0-9_]{4,31}$`, so 5..32 characters. */
+const MIN_USERNAME_LENGTH = 5;
+const MAX_USERNAME_LENGTH = 32;
+
+function isLowerLetter(code: number): boolean {
+  return code >= 97 && code <= 122;
+}
+
+function isNameTail(code: number): boolean {
+  return isLowerLetter(code) || (code >= 48 && code <= 57) || code === 95;
+}
+
+/**
+ * The command token at the very start of `text`, or null.
+ *
+ * Written against `private.bot_can_receive_message`'s own regex rather than
+ * against the Bot API's prose, because the function is what decides whether the
+ * message arrives:
+ *
+ *   `'^/[a-z][a-z0-9_]{0,31}@' || username || '([[:space:]]|$)'`
+ *
+ * Three consequences are load-bearing and each is asserted:
+ *
+ *   - **the anchor is position 0**, so a command after a space is not a command
+ *     to that function and is not one here either;
+ *   - **what may follow the token is whitespace or nothing**, so `/shiftmore`
+ *     and `/shift,` are text, not commands;
+ *   - **case does not matter**, because the content is lowered first.
+ *
+ * `@` is read even when no bot is named after it, and answers null — a bare
+ * `/shift@` matches neither the addressed branch nor the bare one, and treating
+ * it as the bare command would make the token claim a delivery it will not get.
+ */
+export function readBotCommandMention(text: string): BotCommandMention | null {
+  if (text.charAt(0) !== "/") return null;
+  // Lowered once, not per character. The first version called
+  // `toLocaleLowerCase` inside both loops, which is quadratic in the length of
+  // a message line — and a message line is attacker-supplied.
+  const lowered = text.toLocaleLowerCase("en-US");
+  let cursor = 1;
+  while (cursor < lowered.length) {
+    const code = lowered.charCodeAt(cursor);
+    const ok = cursor === 1 ? isLowerLetter(code) : isNameTail(code);
+    if (!ok) break;
+    cursor += 1;
+  }
+  // `isCommandName` is the only length authority, and deliberately so: it is
+  // the CHECK on `bot_commands.command` written out, and a second bound beside
+  // it was redundant — a mutation of it stayed green, which is what redundancy
+  // looks like from a test's side.
+  const command = lowered.slice(1, cursor);
+  if (!isCommandName(command)) return null;
+
+  let address: string | null = null;
+  let end = cursor;
+  if (lowered.charAt(cursor) === "@") {
+    let mention = cursor + 1;
+    while (mention < lowered.length) {
+      const code = lowered.charCodeAt(mention);
+      const ok = mention === cursor + 1 ? isLowerLetter(code) : isNameTail(code);
+      if (!ok) break;
+      mention += 1;
+    }
+    const named = lowered.slice(cursor + 1, mention);
+    if (named.length < MIN_USERNAME_LENGTH || named.length > MAX_USERNAME_LENGTH) return null;
+    address = named;
+    end = mention;
+  }
+
+  const after = text.charAt(end);
+  if (after !== "" && after.trim() !== "") return null;
+  return { command, address, length: end };
+}
+
+/**
+ * Whether a command token in the conversation is one this chat can run.
+ *
+ * Both halves matter and the second is the one that makes the affordance
+ * honest. A command the bot never registered is left as text, because a
+ * pressable `/lol` would be the inert control §8 of
+ * `docs/operations/reference-clients.md` refuses, wearing a link's clothes.
+ *
+ * **This is where ours deliberately differs from Telegram.** Measured on
+ * `P212C6000159` on 2026-09-21: Telegram draws every `/word` as a link and
+ * sends it on a tap, whether or not any bot in the chat answers to it. Ours
+ * draws only what will be answered, which is the same rule with the failure
+ * removed rather than a different one.
+ *
+ * An address that names a different bot is refused for the same reason: the
+ * authoriser would hand that message to the bot named, and this chat's bot —
+ * whose commands are the ones on the screen — would never see it.
+ */
+export function botCommandMentionRuns(
+  mention: BotCommandMention,
+  commands: readonly BotCommand[],
+  addressing: BotChatAddressing,
+): boolean {
+  if (!commands.some((entry) => entry.command === mention.command)) return false;
+  if (mention.address === null) return true;
+  const username = addressing.botUsername?.trim().toLocaleLowerCase("en-US");
+  return Boolean(username) && mention.address === username;
+}
+
+/**
+ * What pressing a command in the conversation sends.
+ *
+ * The token as the authoriser needs it, never the rest of the line: what was
+ * highlighted is what the press acts on, and sending words the reader did not
+ * press would be a surprise. In a group it carries the bot's name for the same
+ * reason the menu's draft does (D-244) — `botCommandAddress` is asked rather
+ * than re-derived, so one rule serves both doors.
+ *
+ * **Measured, and it is the reference's answer too.** Telegram, on the device
+ * on 2026-09-21: tapping `/start` inside a bubble sent `/start` again at once,
+ * with no confirmation and nothing put in the composer — the whole exchange
+ * repeated on screen. Discord's command sheet, same device and day, gives an
+ * argument-free command an explicit «Отправить ➤» that also sends with no
+ * confirmation. Both make a command in front of you runnable in one act.
+ */
+export function botCommandRunText(
+  mention: BotCommandMention,
+  addressing: BotChatAddressing,
+): string {
+  return `/${mention.command}${botCommandAddress(addressing)}`;
+}
+
+/**
+ * What a typed command actually goes out as (D-263, second complaint).
+ *
+ * The complaint is that a hand-typed `/cmd` in a group is **silently dropped**:
+ * it is shown in the conversation, the bot never hears it, and nothing anywhere
+ * says so. That is not a defect in the authoriser — under `restricted` it
+ * admits `/cmd@username`, a mention of the bot, or a reply to it, and refusing
+ * the rest is what keeps a group's traffic out of a bot — it is the composer
+ * knowing the address and not writing it.
+ *
+ * So the address is written. The person who types a command whole now gets the
+ * delivery the person who picks it from the menu has had since D-244, and the
+ * conversation shows `/shift@shiftbot`, which is both what was sent and what
+ * will arrive — so nothing is silent about it.
+ *
+ * The three refusals are what keep this from being a rewrite of people's words:
+ *
+ *   - **only a command the bot registered.** `/lol` in a group stays a joke.
+ *   - **only at position 0**, which is the only place the authoriser looks.
+ *   - **only when nothing is addressed already**, whoever is addressed. A
+ *     person writing `/shift@otherbot` meant the other bot.
+ *
+ * Everything after the token is kept, so `/shift 12` becomes
+ * `/shift@shiftbot 12` — the authoriser's own `([[:space:]]|$)` is what makes
+ * that form deliverable, and an argument is the commonest reason to type a
+ * command out instead of picking it.
+ */
+export function addressTypedBotCommand(
+  text: string,
+  addressing: BotChatAddressing,
+  commands: readonly BotCommand[],
+): string {
+  const address = botCommandAddress(addressing);
+  if (!address) return text;
+  const mention = readBotCommandMention(text);
+  if (!mention || mention.address !== null) return text;
+  if (!commands.some((entry) => entry.command === mention.command)) return text;
+  return `${text.slice(0, mention.length)}${address}${text.slice(mention.length)}`;
+}
+
+// ---------------------------------------------------------------------------
 // Opening a bot, and starting it (D-127)
 // ---------------------------------------------------------------------------
 

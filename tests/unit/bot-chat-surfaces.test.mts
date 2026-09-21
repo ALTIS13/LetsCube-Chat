@@ -31,8 +31,11 @@ import {
   botButtonKey,
   botCallbackFailureMessage,
   botChatNeedsStart,
+  addressTypedBotCommand,
   botCommandAddress,
   botCommandDraft,
+  botCommandMentionRuns,
+  botCommandRunText,
   botCommandQuery,
   botCommandSlash,
   botMessageExplainsInternals,
@@ -43,6 +46,7 @@ import {
   isBotPartnerChat,
   matchBotCommands,
   parseBotCommands,
+  readBotCommandMention,
   parseBotInlineKeyboard,
 } from "../../artifacts/kub/src/lib/botChatSurfaces.ts";
 
@@ -601,4 +605,185 @@ test("every sentence is one the person is meant to read", () => {
     assert.equal(message, message.trim());
   }
   assert.equal(BOT_CALLBACK_DONE, "Готово");
+});
+
+// ---------------------------------------------------------------------------
+// A command already in the conversation, and one typed whole (D-263)
+// ---------------------------------------------------------------------------
+//
+// Every boundary below is `private.bot_can_receive_message`'s own, not the Bot
+// API's prose. Its restricted branch is
+//
+//   lower(content) ~ '^/[a-z][a-z0-9_]{0,31}@' || username || '([[:space:]]|$)'
+//
+// so the anchor is position 0, the terminator is whitespace or end of string,
+// and the whole content is lowered before the match. A reader of a command that
+// answered differently from that function would draw a control the server then
+// refuses, which is the shape this register keeps re-filing.
+
+const SHIFT_COMMANDS = [
+  { command: "shift", description: "Ближайшая смена" },
+  { command: "shifts", description: "Все смены" },
+];
+const IN_GROUP = { chatType: "group", botUsername: "shiftbot" };
+const IN_PRIVATE = { chatType: "private", botUsername: "shiftbot" };
+
+test("a command token is read exactly where the authoriser would look for one", () => {
+  assert.deepEqual(readBotCommandMention("/shift"), { command: "shift", address: null, length: 6 });
+  assert.deepEqual(readBotCommandMention("/shift 12"), { command: "shift", address: null, length: 6 });
+  assert.deepEqual(readBotCommandMention("/shift@shiftbot"), {
+    command: "shift",
+    address: "shiftbot",
+    length: 15,
+  });
+  assert.deepEqual(readBotCommandMention("/shift@shiftbot 12"), {
+    command: "shift",
+    address: "shiftbot",
+    length: 15,
+  });
+
+  // Lowered, because the function lowers the content before it matches.
+  assert.deepEqual(readBotCommandMention("/SHIFT@ShiftBot"), {
+    command: "shift",
+    address: "shiftbot",
+    length: 15,
+  });
+
+  // `/shiftmore` is a command called «shiftmore», not «shift» with a tail: the
+  // authoriser's terminator is `([[:space:]]|$)`, so the name runs to the end.
+  assert.deepEqual(readBotCommandMention("/shiftmore"), {
+    command: "shiftmore",
+    address: null,
+    length: 10,
+  });
+});
+
+test("what is not a command is not read as one", () => {
+  assert.equal(readBotCommandMention("/shift,"), null, "a comma is not the authoriser's terminator");
+  assert.equal(readBotCommandMention("/shift."), null);
+  assert.equal(readBotCommandMention(" /shift"), null, "the anchor is position 0");
+  assert.equal(readBotCommandMention("привет /shift"), null);
+  assert.equal(readBotCommandMention("/"), null, "a slash alone names nothing");
+  assert.equal(readBotCommandMention("/1shift"), null, "a command starts with a letter");
+  assert.equal(readBotCommandMention("//shift"), null);
+  assert.equal(readBotCommandMention("/shift@"), null, "an address that names nobody is not the bare form");
+  assert.equal(readBotCommandMention("/shift@ab"), null, "a username is at least five characters");
+  assert.equal(readBotCommandMention("/shift@shiftbot!"), null);
+  assert.equal(readBotCommandMention(""), null);
+  assert.equal(
+    readBotCommandMention(`/${"a".repeat(33)}`),
+    null,
+    "a command is at most 32 characters, exactly as the CHECK says",
+  );
+  assert.deepEqual(readBotCommandMention(`/${"a".repeat(32)}`), {
+    command: "a".repeat(32),
+    address: null,
+    length: 33,
+  });
+});
+
+test("a command runs only when this chat's bot answers to it", () => {
+  const bare = readBotCommandMention("/shift")!;
+  const addressed = readBotCommandMention("/shift@shiftbot")!;
+  const other = readBotCommandMention("/shift@otherbot")!;
+  const unknown = readBotCommandMention("/lol")!;
+
+  assert.equal(botCommandMentionRuns(bare, SHIFT_COMMANDS, IN_GROUP), true);
+  assert.equal(botCommandMentionRuns(addressed, SHIFT_COMMANDS, IN_GROUP), true);
+  assert.equal(
+    botCommandMentionRuns(other, SHIFT_COMMANDS, IN_GROUP),
+    false,
+    "a message addressed to another bot is that bot's, and this one never sees it",
+  );
+  assert.equal(
+    botCommandMentionRuns(unknown, SHIFT_COMMANDS, IN_GROUP),
+    false,
+    "a command nothing registered would be a pressable control with nothing behind it",
+  );
+  assert.equal(botCommandMentionRuns(bare, [], IN_GROUP), false);
+  assert.equal(
+    botCommandMentionRuns(addressed, SHIFT_COMMANDS, { chatType: "group", botUsername: null }),
+    false,
+    "without a username there is nothing to compare the address against",
+  );
+  assert.equal(
+    botCommandMentionRuns(addressed, SHIFT_COMMANDS, { chatType: "group", botUsername: "  ShiftBot " }),
+    true,
+    "the username is compared lowered and trimmed, as the authoriser has it",
+  );
+});
+
+test("pressing a command sends the token, and in a group it names the bot", () => {
+  const bare = readBotCommandMention("/shift 12")!;
+  assert.equal(
+    botCommandRunText(bare, IN_GROUP),
+    "/shift@shiftbot",
+    "the token is what was pressed; the argument beside it was not",
+  );
+  assert.equal(botCommandRunText(bare, IN_PRIVATE), "/shift");
+  const addressed = readBotCommandMention("/shift@shiftbot")!;
+  assert.equal(botCommandRunText(addressed, IN_GROUP), "/shift@shiftbot", "addressed once, not twice");
+});
+
+test("a command typed whole in a group is addressed rather than dropped", () => {
+  assert.equal(addressTypedBotCommand("/shift", IN_GROUP, SHIFT_COMMANDS), "/shift@shiftbot");
+  assert.equal(
+    addressTypedBotCommand("/shift 12", IN_GROUP, SHIFT_COMMANDS),
+    "/shift@shiftbot 12",
+    "the argument survives, and the authoriser's own terminator is what makes that form deliverable",
+  );
+  assert.equal(
+    addressTypedBotCommand("/SHIFT", IN_GROUP, SHIFT_COMMANDS),
+    "/SHIFT@shiftbot",
+    "the words stay the person's; only the address is added",
+  );
+});
+
+test("the three refusals that keep the address from rewriting what people wrote", () => {
+  assert.equal(
+    addressTypedBotCommand("/lol", IN_GROUP, SHIFT_COMMANDS),
+    "/lol",
+    "a command the bot never registered stays a joke",
+  );
+  assert.equal(
+    addressTypedBotCommand("привет /shift", IN_GROUP, SHIFT_COMMANDS),
+    "привет /shift",
+    "position 0 is the only place the authoriser looks",
+  );
+  assert.equal(
+    addressTypedBotCommand("/shift@otherbot", IN_GROUP, SHIFT_COMMANDS),
+    "/shift@otherbot",
+    "somebody who named a bot meant that bot",
+  );
+  assert.equal(
+    addressTypedBotCommand("/shift@shiftbot", IN_GROUP, SHIFT_COMMANDS),
+    "/shift@shiftbot",
+    "addressed once",
+  );
+});
+
+test("nothing is addressed where the authoriser does not require it", () => {
+  assert.equal(
+    addressTypedBotCommand("/shift", IN_PRIVATE, SHIFT_COMMANDS),
+    "/shift",
+    "a private chat short-circuits the branch; an address there is noise in front of the bot's parser",
+  );
+  assert.equal(
+    addressTypedBotCommand("/shift", { chatType: "group", botUsername: null }, SHIFT_COMMANDS),
+    "/shift",
+    "no username, no address invented",
+  );
+  assert.equal(addressTypedBotCommand("/shift", { chatType: "group", botUsername: "shiftbot" }, []), "/shift");
+  assert.equal(addressTypedBotCommand("обычное сообщение", IN_GROUP, SHIFT_COMMANDS), "обычное сообщение");
+  assert.equal(addressTypedBotCommand("", IN_GROUP, SHIFT_COMMANDS), "");
+});
+
+test("the address a command gets is the one the menu already writes", () => {
+  // One rule, two doors. If these ever disagree, the person who types a command
+  // and the person who picks it from the menu reach different bots.
+  const [first] = SHIFT_COMMANDS;
+  assert.equal(
+    addressTypedBotCommand(`/${first.command}`, IN_GROUP, SHIFT_COMMANDS),
+    botCommandDraft(first, IN_GROUP).trimEnd(),
+  );
 });

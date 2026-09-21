@@ -69,6 +69,7 @@ import { getChatDisplayInfo, isSavedChat } from "@/lib/chatDisplay";
 import { reportError } from "@/lib/monitoring";
 import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
 import { useBotChat } from "@/hooks/useBotChat";
+import type { BotCommandsInText } from "@/lib/formatText";
 import { BOT_START_COMMAND, botChatNeedsStart, type BotChatAddressing } from "@/lib/botChatSurfaces";
 // One copy of "is this a voice note / a round video", shared with the profile
 // card's shared-media sections. A second copy drifts, and then playback and the
@@ -1272,6 +1273,60 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     return true;
   }, [forwardDraft, replyTo?.id, sendForwardDraft, sendMessage, sendStagedAttachments, userId]);
 
+  /**
+   * Running a command that is already in the conversation (D-263).
+   *
+   * `sendMessage` directly rather than `handleSend`, and that is the decision
+   * rather than a shortcut: `handleSend` gives the text to whatever the
+   * composer is holding — a forward waiting for a comment, a staged
+   * attachment, the reply a different message is aimed at — and a command
+   * pressed in the scrollback asked for none of them. Measured on the device,
+   * Telegram's tap sends the command and nothing else.
+   */
+  const runBotCommand = useCallback((content: string) => {
+    if (!userId) {
+      showAppAlert("Войдите в аккаунт, чтобы отправлять сообщения.", "Сообщение");
+      return;
+    }
+    void sendMessage(content);
+  }, [sendMessage, userId]);
+
+  /**
+   * What makes a `/command` in the conversation pressable, or null (D-263).
+   *
+   * Null unless this chat holds a reachable bot **that registered at least one
+   * command**: with an empty vocabulary nothing can match, so the scan is not
+   * worth running over every message on screen. `botAddressing` is the one the
+   * composer's menu uses, so the token a reader presses and the draft the menu
+   * writes address the same bot by construction.
+   */
+  const botCommandsInText = useMemo<BotCommandsInText | null>(
+    () =>
+      botChat.botId && botChat.commands.length > 0
+        ? { commands: botChat.commands, addressing: botAddressing, onRun: runBotCommand }
+        : null,
+    [botAddressing, botChat.botId, botChat.commands, runBotCommand],
+  );
+
+  /**
+   * A draft asked for from outside the pane — a command chosen on a bot's card
+   * (D-263).
+   *
+   * The card is mounted over the shell, not inside this tree, so the request
+   * travels through the store the way `chatPanelRequest` already does, and the
+   * `key` is what makes the same command chosen twice arrive twice. It lands in
+   * the composer through `draftOverride`, which is the door a restored draft
+   * already uses: one way in, so the focus and the edit-cancel that come with
+   * it are not written a second time.
+   */
+  const composerDraftRequest = useAppStore((s) => s.composerDraftRequest);
+  const clearComposerDraftRequest = useAppStore((s) => s.clearComposerDraftRequest);
+  useEffect(() => {
+    if (!composerDraftRequest || composerDraftRequest.chatId !== chatId) return;
+    setDraftRestore({ id: `composer-request:${composerDraftRequest.key}`, text: composerDraftRequest.text });
+    clearComposerDraftRequest(composerDraftRequest.key);
+  }, [chatId, clearComposerDraftRequest, composerDraftRequest]);
+
   const handleReply = useCallback((msg: MessageWithSender) => {
     setReplyTo(msg);
     setReplyFocusKey((key) => key + 1);
@@ -1630,6 +1685,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             isSavedChat={savedChat}
             myRole={myRole}
             authorChatRoles={authorChatRoles}
+            botCommands={botCommandsInText}
             onLoadOlder={loadOlderMessages}
             hasMoreOlder={hasMoreOlder}
             loadingOlder={loadingOlder}

@@ -2559,3 +2559,205 @@ where there is a *beside* for it to stand in.
 and any other surface share a store the way the web client's popout and modal do
 (§15.1). Nothing on a phone exposes that, and our own store was built from the
 web reading, which is the half that was measurable.
+
+
+## 19. Subject 11 — a bot's profile, a command you can press, and where the two clients part
+
+**Third device pass, 2026-09-21**, same phone as sections 16 and 18
+(`P212C6000159` / `A063`, Android 15, 1080 x 2400 at density 420, so
+1 dp = 2.625 device px). Telegram 12.10.3, Discord 345.9. Taken for D-263,
+whose three complaints were about to be answered by taste.
+
+**How the privacy rule was kept.** Telegram was measured only in a chat with
+its **published demo bot** `@DurgerKingBot` and on that bot's own profile page,
+neither of which holds anybody's data. Discord's bot profile and command sheet
+were reached through one server channel and analysed as geometry and bands; no
+content was recorded and none is repeated here. `adb exec-out screencap` only —
+**no uiautomator**, per the rule this document records after a WebView handed
+message text to the accessibility tree. Every capture was deleted once read and
+none is in the repository. The device was returned to its launcher.
+
+### 19.1 A `/command` inside a message — MEASURED ON DEVICE, 2026-09-21
+
+The question D-263's first complaint turns on: in the reference, is a command
+already in the conversation a control or is it text?
+
+**Telegram: a control, and pressing it sends.** The `/start` left in the demo
+bot's chat by the section 17 pass was tapped at the centre of its glyphs. The
+whole screen changed and the exchange **repeated**: a second outgoing `/start`
+bubble and a second reply, the earlier pair pushed 560 px up. So the tap sent
+the command immediately — **no confirmation, and nothing put in the composer**.
+
+Two details worth having, because they cut against what a reader would guess:
+
+- **On an outgoing bubble it is not coloured and not underlined.** The token
+  reads as plain white text on Telegram's blue outgoing fill. It is a control
+  that does not look like one there; the colouring is for incoming bubbles,
+  where the accent has a ground to sit on.
+- **Telegram highlights `/word` whether or not any bot answers to it.** A tap
+  on a command nothing registered sends a message nothing replies to.
+
+**Discord: the concept does not exist, because a command is never a message.**
+In a channel, what a slash command leaves behind is a client-drawn attribution
+line above the bot's reply — «⟨person⟩ использует ⌗ play», with the command
+name as an accent-tinted chip — and the person's `/play` never becomes a
+message at all. The rest of the reply is components: a container with two lines
+of text and a row of three buttons, and a second message as an embed with a
+coloured left bar, a code block and a link-out button.
+
+**What ours took, and where it differs on purpose.** Telegram's mechanic: a
+command in the conversation is pressable and the press sends it. Discord's
+mechanic is not available to us without an interaction model. Where ours
+differs is the highlight: **only a command this chat's bot registered is drawn
+as a control**, because a pressable `/lol` that sends a message nothing answers
+is the inert control §8 refuses, wearing a link's clothes. That is Telegram's
+rule with its failure removed, not a different rule. D-263 carries it.
+
+### 19.2 A bot's profile, per client — MEASURED ON DEVICE, 2026-09-21
+
+The two clients disagree about what a bot's profile is **for**, and that
+disagreement is the whole of the design decision.
+
+| | Telegram (`@DurgerKingBot`) | Discord (a music bot, same phone) |
+| --- | --- | --- |
+| the surface | a page | a page, banner to both edges |
+| under the name | **a count of users** («13 919 пользователей») where a person has a last-seen line | the handle, then «1 общий сервер» |
+| the badge | none on the profile | **«✓ БОТ»**, a filled accent pill after the name |
+| actions | four round-icon buttons: «Чат», «Звук», «Ссылка», «Стоп» | «+ Добавить приложение» (992 x 99 px = **378 x 37.7 dp**, 16.8 dp margins) and «💬 Сообщение» |
+| one card, 387 dp / 378 dp wide | description under «О себе», handle under «Имя пользователя», then a 350 x 48 dp «Открыть приложение» | «Биография», «В числе участников с», **«Команды»** |
+| **the commands** | **absent entirely** | **present, as chips, with «Посмотреть все команды»** |
+| below the card | a sentence about the mini-app's terms | «Роли», «Действия модератора», «Заметка» |
+
+**Discord's command sheet, which is the part worth copying.** «Посмотреть все
+команды» opens a sheet with the bot's banner and description at the top, then
+**«Недавнее»** — the commands this person has used — and **«Все команды»** with
+a sort control («Популярные ⌄»). Every row is a name, a description under it,
+and on the right **either** a «Отправить ➤» button (109 dp, right-aligned at a
+28.6 dp margin) **or** a chevron. The split is by argument: `skip` takes none
+and gets the button; `play` takes a query and gets the chevron to a form.
+
+**A correction to §7, which said the tag reads `APP`.** On this device, in
+Russian, Discord's Android client draws **«БОТ»** with a checkmark. §7's
+`APP` claim is OFFICIAL for Discord's own English documentation and is not
+wrong; it is a claim about a different localisation, and this row is what a
+Russian-speaking reader of ours actually sees beside a bot's name. SHIPPED,
+Discord Android 345.9, ru locale.
+
+**Which we took, and why.** Discord's. The owner rates its bots highest «из-за
+большей кастомизации и удобства их реализации» and §7 makes Discord the
+default; more to the point, D-263's complaint was «a bot's profile answers
+nothing», and of the two only Discord's card answers **what the bot can do**.
+Ours therefore carries the identity, the description and the commands, with
+every row pressable.
+
+**And where ours differs, with the reason.** We cannot make Discord's
+send-versus-form split: `public.bot_commands` holds a name and a description
+and **no argument schema**, so this product cannot tell an argument-free
+command from one that needs a query. Taking the send branch for all of them
+would make every command with an argument unusable from the card. So every row
+does what the composer's own menu does — fills the field and stops (D-126) —
+which is Discord's chevron branch generalised: *when you cannot tell, take the
+branch that cannot lose what the person meant to type.*
+
+### 19.3 The correction §17.3 and tracker item 46 both need
+
+Both say, of the three shapes in Telegram's composer slot, that «we have none
+of the three — not even the cheapest, the 44 dp «Команды бота» icon». **That
+is wrong, and was wrong when it was written.** The commands icon shipped on
+2026-09-14 in `ed040073` (D-126): `MessageInput.tsx` draws a
+`data-testid="bot-commands-button"` inside the field's capsule whenever the
+chat holds a reachable bot, and «/» in the field opens the same list.
+
+Measured on our own composer rather than described: the button occupies
+**40 px** of the field's width (36 px wide plus a 4 px gap) and is 44 px tall.
+Telegram's is 44 dp = 115 device px of its 1080-px row; at 390 CSS px ours is
+40 of them. So the cheapest rung of that ladder is not only present, it costs
+the composer **less** than the reference's.
+
+What we still do not have is either of the two expensive shapes — a menu button
+carrying the bot's own label, and the full-screen Web App behind it — and that
+remains a platform decision rather than a control. Item 48 is where it now
+lives.
+
+### 19.4 What the live bot actually sends — MEASURED ON PRODUCTION, 2026-09-21
+
+Read-only on `supabase-db` inside a transaction that ended in `ROLLBACK`;
+structural counts only, with no message body, chat name or person leaving the
+query. Recorded here because item 48 asks for it and because it is a better
+source than any reference client for what our bots need: it is the one that
+exists here.
+
+- **3 bots, all `active`.** `langame_bot` is the working one; the other two are
+  a retired creation canary and a test.
+- **`public.bot_commands` holds 0 rows, deployment-wide.** No bot has ever
+  called `setMyCommands`. Every command surface in the product is therefore
+  empty against production today.
+- `langame_bot`: **1 chat, 56 messages, all of type `text`**, 41–559 characters
+  long, 170 on average. **5** carry an inline keyboard — four of one row of two
+  buttons, one of a single button. **0** have ever been edited, so
+  `editMessageText` exists and has never been used.
+- How people address it: in the group, **3** messages of the form `/cmd@…`,
+  **0** bare commands and 6 ordinary sentences; in the private chat, 1 bare
+  command. With `bot_commands` empty the menu could not have written those
+  three, so they were **typed by hand** — somebody had already learned the
+  trick D-263's second complaint is about.
+
+### 19.5 «A message visible to one person»: which shape, established rather than designed
+
+Item 48 asks for the shape before the feature, and the answer has two halves.
+
+**Discord's, first-party:** the `EPHEMERAL` message flag is **64 (`1 << 6`)**
+and the documentation says it sends «a message that only the user can see».
+OFFICIAL, read 2026-09-21. **Whether Discord persists it is UNESTABLISHED** —
+its own documentation does not say, in either direction. The widely repeated
+«never stored» is COMMUNITY, and this file does not promote it.
+
+**Ours, measured** — read-only on production, same transaction as 19.4:
+
+| | |
+| --- | --- |
+| policies on `public.messages` | **9** |
+| functions whose body names `public.messages` | **29** |
+| triggers on it | **11** |
+| indexes on it | **10** |
+| in the `supabase_realtime` publication | **yes** |
+| its `REPLICA IDENTITY` | **default** |
+| a per-viewer axis that already exists | **`public.message_hidden_for_users`** |
+
+So a `visible_to_user_id` column with a policy conjunct is not one change; it
+is a new axis that **nine policies, twenty-nine functions and eleven triggers**
+would each have to learn, plus every unread count, every search and the
+realtime stream. And `REPLICA IDENTITY default` is a second, sharper cost: a
+Supabase filter reaches a DELETE only for key columns on a default-identity
+table, so such a column could not be used to filter the stream a viewer
+subscribes to — the row would have to be filtered after it arrived, which is
+the wrong side of the wire for a privacy rule.
+
+**The ephemeral shape is the cheaper one for us, and it already exists in
+embryo.** `private.bot_callback_answers` is on the deployment, holds **0 rows**,
+and its grants are **`postgres` only — not even `service_role`**; `public.
+bot_callback_press` exists and `authenticated` holds EXECUTE on it. So the
+channel by which a bot says something to **one** person, out of band and
+without a `messages` row, is already built and simply not wired end to end: the
+client asks, the server mints a callback id, and the bot's `answerCallbackQuery`
+has nowhere to be written. Finishing that is a grant and a writer, against a
+table nothing else reads — where the persisted shape is an axis across the
+whole message store.
+
+**Recorded, not built**, exactly as item 48 asks. Item 43's Web App surface
+shares the question and should be answered with the same reading.
+
+### 19.6 What this pass did not establish
+
+- **Discord's ephemeral persistence.** Its own docs do not say. A behavioural
+  read would mean sending one and looking for it afterwards, which is a write
+  to somebody's server.
+- **Whether Discord's command sheet is reachable without a server.** It was
+  opened from a bot's profile inside a server; whether a DM with a bot offers
+  the same door was not checked.
+- **Telegram's «Команды бота» icon on a bot that has *also* set a menu
+  button.** §17.3 measured the three shapes separately; whether the icon and
+  the menu can stand in that slot together was not measured.
+- **Our own command surfaces against a bot that has registered commands, in
+  production.** 19.4 says why: none has. Everything about ours in this section
+  is from the fixture and from the browser at 1440 and 390.

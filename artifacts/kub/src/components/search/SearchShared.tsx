@@ -29,6 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { LOCATION_RESULT_PATH, canOpenLocationResult } from "@/lib/searchResultAccess";
 import { useAppStore } from "@/store/app.store";
+import { chatAddressPath } from "@/lib/chatRoute";
 
 export type SearchTypeFilter = SearchEntityFilter;
 
@@ -504,7 +505,14 @@ export function useSearchResultActions({ onAfterOpen }: { onAfterOpen?: () => vo
         unavailableTitle: "Бот",
       });
       if (!opened) return;
-      setLocation("/");
+      // The conversation's own address, never «/» (D-293). Since
+      // `054bf8ee` a conversation has one, and `useChatAddress` gives the
+      // newly selected chat that address the moment it is selected — so
+      // pushing «/» afterwards is read by the reconciler as a Back press out
+      // of the conversation and closes it again. Measured: the history trail
+      // for a bot opened from search was «push /chat/<id>» then «push /», and
+      // `selectedChatId` came back null.
+      setLocation(chatAddressPath(chatId));
       closeAfterOpen();
     },
     [closeAfterOpen, setLocation],
@@ -551,7 +559,14 @@ export function useSearchResultActions({ onAfterOpen }: { onAfterOpen?: () => vo
           unavailableTitle: "Чат недоступен",
         });
         if (opened) {
-          setLocation("/");
+      // The conversation's own address, never «/» (D-293). Since
+      // `054bf8ee` a conversation has one, and `useChatAddress` gives the
+      // newly selected chat that address the moment it is selected — so
+      // pushing «/» afterwards is read by the reconciler as a Back press out
+      // of the conversation and closes it again. Measured: the history trail
+      // for a bot opened from search was «push /chat/<id>» then «push /», and
+      // `selectedChatId` came back null.
+          setLocation(chatAddressPath(result.chatId));
           closeAfterOpen();
         }
         return;
@@ -563,7 +578,9 @@ export function useSearchResultActions({ onAfterOpen }: { onAfterOpen?: () => vo
           unavailableTitle: "Сообщение недоступно",
         });
         if (opened) {
-          setLocation("/");
+          // The message's address, so a reload lands on the same message —
+          // which is what `054bf8ee` built the second segment for.
+          setLocation(chatAddressPath(result.chatId, result.messageId));
           closeAfterOpen();
           window.setTimeout(() => requestChatMessageJump(result.chatId!, result.messageId!), 250);
           window.setTimeout(() => requestChatMessageJump(result.chatId!, result.messageId!), 700);

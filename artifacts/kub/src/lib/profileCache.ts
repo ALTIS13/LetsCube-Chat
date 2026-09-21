@@ -60,10 +60,18 @@ import type { Profile } from "../types/database.ts";
  */
 export const PROFILE_FRESHNESS_MS = 60_000;
 
-/** What the cache holds for one person. */
-export interface ProfileCacheEntry {
+/**
+ * What the cache holds for one subject.
+ *
+ * Generic since 2026-09-21, when a bot's card arrived (D-263). The **decision**
+ * below is what the two hooks share — the in-flight gate, the window, the
+ * cached failure — and it reads nothing but `fetchedAt` and whether an entry
+ * exists, so it was never about a person. Two copies of that rule is exactly
+ * the drift this file's header describes Discord avoiding with one store.
+ */
+export interface ProfileCacheEntry<T = Profile> {
   /** The row, or `null` when the last attempt was refused or found nothing. */
-  profile: Profile | null;
+  profile: T | null;
   /**
    * Whether the last attempt failed, as opposed to answering «nobody».
    *
@@ -93,8 +101,9 @@ export function profileRequestDecision({
   now,
   freshnessMs = PROFILE_FRESHNESS_MS,
 }: {
+  /** The subject's id — a person's or a bot's; the rule does not care which. */
   userId: string | null | undefined;
-  entry: ProfileCacheEntry | undefined;
+  entry: ProfileCacheEntry<unknown> | undefined;
   inFlight: boolean;
   now: number;
   freshnessMs?: number;
@@ -116,7 +125,7 @@ export function profileRequestDecision({
  * comment for why it is cached at all.
  */
 export function profileEntryIsFresh(
-  entry: ProfileCacheEntry,
+  entry: ProfileCacheEntry<unknown>,
   now: number,
   freshnessMs: number = PROFILE_FRESHNESS_MS,
 ): boolean {
@@ -130,6 +139,6 @@ export function profileEntryIsFresh(
  * the reason it exists there is the reason it exists here: a surface that waits
  * for an *answer* waits for ever against a database that refuses.
  */
-export function profileEntrySettled(entry: ProfileCacheEntry | undefined): boolean {
+export function profileEntrySettled(entry: ProfileCacheEntry<unknown> | undefined): boolean {
   return entry !== undefined;
 }

@@ -12,6 +12,7 @@ import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { BottomNav } from "./BottomNav";
 import { DesktopUpdatePill } from "@/components/desktop/DesktopUpdatePill";
 import { UserProfileOverlay } from "@/components/profile/UserProfileOverlay";
+import { BotProfileOverlay } from "@/components/profile/BotProfileOverlay";
 import { useDesktopUpdate } from "@/hooks/useDesktopUpdate";
 import { useChatAddress } from "@/hooks/useChatAddress";
 import { cn } from "@/lib/utils";
@@ -242,6 +243,9 @@ export function MainLayout() {
           the reader between them. `KubModal` portals to the body, so its place
           in this tree costs nothing but its lifetime. */}
       <UserProfileOverlay />
+      {/* The other card. Only one is ever open; the store closes each when
+          the other opens, because they occupy the same place (D-263). */}
+      <BotProfileOverlay />
     </div>
   );
 }

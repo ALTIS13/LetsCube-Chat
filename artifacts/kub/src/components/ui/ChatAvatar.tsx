@@ -395,3 +395,50 @@ export function MessageActorAvatar({
     </div>
   );
 }
+
+/**
+ * A bot's face, drawn from what a `bots` read actually returns (D-263).
+ *
+ * `MessageActorAvatar` above needs a whole `MessageActor`, whose bot arm
+ * carries a complete `BotProfile` row — `created_at` and `updated_at`
+ * included, because that is what travels with a message. A card built from
+ * `select id,username,display_name,description,avatar_url,state` has none of
+ * them, and inventing two timestamps so that a type would accept an object
+ * nothing reads is the kind of fabrication this project keeps finding in its
+ * own history.
+ *
+ * So: the same three primitives — the palette, the ink rule D-044 measured,
+ * and `AvatarImage`'s fallback on a 404 — asked for directly. A bot's picture
+ * is never a variant, which is why there is no `avatarVariant` here.
+ */
+export function BotFaceAvatar({
+  botId,
+  name,
+  avatarUrl,
+  size = "sm",
+  className,
+}: {
+  botId: string;
+  name: string;
+  avatarUrl: string | null;
+  size?: "sm" | "md" | "lg" | "xl";
+  className?: string;
+}) {
+  const bgColor = getAvatarColor(botId);
+  const fallback = (
+    <div
+      className={cn("rounded-full flex items-center justify-center font-medium", sizeMap[size])}
+      style={{ background: bgColor, color: avatarInkFor(bgColor) }}
+      aria-label={name}
+    >
+      <KubIcon name="bot" size={Math.max(12, Math.round(pixelMap[size] * 0.48))} />
+    </div>
+  );
+  return (
+    <div className={cn("relative flex-shrink-0", className)} data-message-actor-kind="bot">
+      {avatarUrl ? (
+        <AvatarImage name={name} originalUrl={avatarUrl} profileId={null} size={size} fallback={fallback} />
+      ) : fallback}
+    </div>
+  );
+}

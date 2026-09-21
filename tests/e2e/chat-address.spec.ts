@@ -63,6 +63,28 @@ async function installBackend(page: Page) {
       membership(CHAT_ID, ANYA, "member", null),
     ],
     messages: MESSAGES,
+    rpc: (name, body) => {
+      if (name !== "global_search_v2") return undefined;
+      if ((body as { p_query?: string }).p_query !== CHAT_NAME) return { body: [] };
+      return {
+        body: [
+          {
+            result_type: "chat",
+            id: CHAT_ID,
+            title: CHAT_NAME,
+            subtitle: null,
+            snippet: null,
+            avatar_url: null,
+            chat_id: CHAT_ID,
+            message_id: null,
+            task_id: null,
+            location_id: null,
+            created_at: "2026-09-01T00:00:00.000Z",
+            rank: 100,
+          },
+        ],
+      };
+    },
   });
 }
 
@@ -168,6 +190,131 @@ test.describe("the conversation's address", () => {
     const byAddress = await landing(page);
 
     expect(byAddress, "a reload landed somewhere else than the click did").toEqual(byClick);
+  });
+
+
+  /**
+   * D-293. The defect this pins was live on `main`, and it is the address
+   * feature meeting code written before it existed.
+   *
+   * Every surface that opens a conversation from outside it — the global
+   * search's four result kinds, the notification centre's four — ran
+   * `safeOpenChat(id)` and then `setLocation("/")`, which used to mean «come
+   * back to the messenger». Since `054bf8ee` a conversation has an address and
+   * `useChatAddress` pushes it the instant the chat is selected, so the «/»
+   * that followed was read by `reconcileChatAddress` as a **Back press out of
+   * the conversation** and answered with `close`.
+   *
+   * Measured before the repair, from the page's own `history.pushState`:
+   *
+   *     push /chat/3f2504e0-…      ← the address, from the selection
+   *     push /                     ← the search, meaning «the messenger»
+   *
+   * and `selectedChatId` came back `null` with the conversation shut. §11 of
+   * `CLAUDE.md` names search and notification jumps as a regression contract,
+   * so this is asserted on the address and on the conversation being open —
+   * never on which function was called.
+   */
+  test("a conversation opened from search keeps its address and stays open (D-293)", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await installBackend(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const input = page.getByTestId("sidebar-search-input");
+    await input.click();
+    await input.fill(CHAT_NAME);
+    await page.locator('section[data-search-section="chat"]').getByText(CHAT_NAME, { exact: true }).first().click();
+
+    // The conversation, and its own address. Both, because either alone can be
+    // true while the other is wrong: the address without the selection is the
+    // defect's mirror image, and the selection without the address is what the
+    // reconciler undoes a frame later.
+    await expect.poll(() => page.evaluate(() => location.pathname)).toBe(`/chat/${CHAT_ID}`);
+    await expect
+      .poll(() =>
+        page.evaluate(async () => {
+          const { useAppStore } = await import("/src/store/app.store.ts");
+          return useAppStore.getState().selectedChatId;
+        }),
+      )
+      .toBe(CHAT_ID);
+    // And it is still open a second later, which is the half the defect failed:
+    // the close arrived after the open, not instead of it.
+    await page.waitForTimeout(1200);
+    await expect(page.locator('[data-testid="message-scroll-container"]')).toBeVisible();
+    expect(await page.evaluate(() => location.pathname)).toBe(`/chat/${CHAT_ID}`);
+  });
+
+  /**
+   * The same defect through the other door, because §11 names both.
+   *
+   * The notification centre had four of these — a chat notification, a message
+   * notification, an accepted invite and a grouped message entry — each running
+   * `safeOpenChat(id)` and then `setLocation("/")`. The jump landed and the
+   * address reconciler closed it again. `notification-center.spec.ts` signs in
+   * against production and cannot run on the fixture host, so the door is
+   * measured here instead, against the mocked backend.
+   */
+  test("a conversation opened from a notification keeps its address too (D-293)", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await installBackend(page);
+    const seen = MESSAGES[MESSAGES.length - 1];
+    await page.route("**/rest/v1/notifications**", async (route) => {
+      if (route.request().method() !== "GET") return route.fallback();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            id: "7f000000-0000-4000-8000-000000000001",
+            user_id: ME.id,
+            kind: "message_mention",
+            title: CHAT_NAME,
+            body: "Вас упомянули",
+            payload: { chat_id: CHAT_ID, message_id: seen.id },
+            read_at: null,
+            created_at: "2026-09-01T09:40:00.000Z",
+          },
+        ]),
+      });
+    });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    await page.getByTestId("notification-bell-button").click();
+    await expect(page.getByTestId("notification-panel")).toBeVisible();
+    // A message notification is drawn as a per-chat GROUP, not as a plain row
+    // — `NotificationBell` folds every «…message…» kind into one entry per
+    // chat — so this is the door a mention actually goes through, and
+    // `handleMessageGroupClick` is one of the four paths the repair touched.
+    await page.getByTestId("notification-message-group").first().click();
+
+    // The message's own address, second segment included, so a reload lands on
+    // the same message — which is what the address's second segment is for.
+    // The segment is «/m/», spelled out rather than imported: a test that built
+    // the expected path with the same function the product uses would agree
+    // with it however that function changed.
+    await expect
+      .poll(() => page.evaluate(() => location.pathname))
+      .toBe(`/chat/${CHAT_ID}/m/${seen.id}`);
+    await expect
+      .poll(() =>
+        page.evaluate(async () => {
+          const { useAppStore } = await import("/src/store/app.store.ts");
+          return useAppStore.getState().selectedChatId;
+        }),
+      )
+      .toBe(CHAT_ID);
+    // Still both, a second later. That is the half the defect failed: the
+    // close arrived after the open rather than instead of it, so an assertion
+    // taken at the first frame would have passed against the defect.
+    await page.waitForTimeout(1200);
+    expect(await page.evaluate(() => location.pathname)).toContain(`/chat/${CHAT_ID}`);
+    expect(
+      await page.evaluate(async () => {
+        const { useAppStore } = await import("/src/store/app.store.ts");
+        return useAppStore.getState().selectedChatId;
+      }),
+    ).toBe(CHAT_ID);
   });
 
   test("the address survives the conversation being left and re-entered", async ({ page }) => {

@@ -3,6 +3,7 @@
 import React, { RefObject, useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import { KubIcon, KubModal } from "@/components/kub";
 import { MessageBubble, getVisibleMediaCaption, isRoundVideoMessage } from "./MessageBubble";
+import type { BotCommandsInText } from "@/lib/formatText";
 import { MessageActionLayer, type MessageMenuRequest } from "./MessageActionLayer";
 import { MessageActionsContext, type MessageActionsContextValue, type ReactionPerson } from "./messageActionsContext";
 import { TypingIndicator } from "./TypingIndicator";
@@ -110,6 +111,8 @@ interface MessageListProps {
    * deployment older than the tables all look like.
    */
   authorChatRoles?: ReadonlyMap<string, ChatRole>;
+  /** What makes a `/command` in a body pressable, or null (D-263). */
+  botCommands?: BotCommandsInText | null;
   onLoadOlder?: () => Promise<{ loaded: number } | void> | { loaded: number } | void;
   hasMoreOlder?: boolean;
   loadingOlder?: boolean;
@@ -352,6 +355,7 @@ export function MessageList({
   quickReactions: quickReactionsOverride,
   loadReadTimes,
   authorChatRoles,
+  botCommands = null,
 }: MessageListProps) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1460,6 +1464,7 @@ export function MessageList({
               // reason: the row is memoised, so what it is handed has to be the
               // stored object and not one built here per render.
               authorChatRole={msg.user_id ? authorChatRoles?.get(msg.user_id) : undefined}
+              botCommands={botCommands}
               deliveryState={receiptsByMessageId.delivery.get(msg.id) ?? null}
               groupReadInfo={receiptsByMessageId.groupRead.get(msg.id) ?? null}
               messageRefs={messageRefs}
@@ -1636,6 +1641,7 @@ interface MessageRowProps {
   senderAvatarVariant: AvatarVariantUrls | undefined;
   /** This author's highest tag in this group, or undefined where they wear none. */
   authorChatRole: ChatRole | undefined;
+  botCommands: BotCommandsInText | null;
   deliveryState: MessageDeliveryState | null;
   groupReadInfo: GroupReadReceiptInfo | null;
   messageRefs: React.MutableRefObject<Record<string, HTMLDivElement>> | undefined;
@@ -1725,6 +1731,7 @@ const MessageRow = React.memo(function MessageRow({
   mediaVariant,
   senderAvatarVariant,
   authorChatRole,
+  botCommands,
   deliveryState,
   groupReadInfo,
   messageRefs,
@@ -2078,6 +2085,7 @@ const MessageRow = React.memo(function MessageRow({
               mediaVariant={mediaVariant}
               senderAvatarVariant={senderAvatarVariant}
               authorChatRole={authorChatRole}
+              botCommands={botCommands}
               deliveryState={deliveryState}
               groupReadInfo={groupReadInfo}
               onOpenGroupReadReceipts={handlers.onOpenGroupReadReceipts}

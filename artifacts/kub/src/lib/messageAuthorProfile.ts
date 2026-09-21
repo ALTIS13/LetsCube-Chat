@@ -24,9 +24,13 @@
  * work must be absent, not inert. So a face with no person behind it is simply
  * not a button.
  *
- *  - **a bot** — there is a card to draw one day and it is not a person's.
- *    D-263 owns it; until then a bot's face opens nothing, exactly as a bot row
- *    in the chat list carries no «Открыть профиль» (D-283).
+ *  - ~~**a bot** — there is a card to draw one day and it is not a person's.~~
+ *    **Drawn since 2026-09-21.** A bot's face and name are anchors like a
+ *    person's, and they open a different card: `lib/botProfile.ts` says what it
+ *    holds and what a person's card holds that a bot's must not. The tier is
+ *    the same rule, so a bot pressed in passing opens beside the message where
+ *    there is a beside and takes the phone's screen where there is not. What is
+ *    still refused below is refused for a reason that has not changed.
  *  - **a deleted bot, a deleted person** — there is no row to read.
  *  - **a system message** — nobody wrote it.
  *  - **an unresolvable actor** — `resolveMessageActor` answers `invalid` for a
@@ -39,18 +43,29 @@
  * keeps everything that does. `MemberCard` already states the same rule.
  */
 
+import type { BotProfileSeed } from "./botProfile.ts";
 import type { MessageActor } from "./messageActor.ts";
 
 export type MessageAuthorProfileTarget =
   | { kind: "person"; userId: string }
-  | { kind: "none"; reason: "bot" | "deleted" | "system" | "invalid" };
+  /**
+   * The bot, with the row the message carried (D-263).
+   *
+   * The row travels rather than being looked up because it is already here and
+   * already checked: `resolveMessageActor` answers `invalid` for a message
+   * whose embedded bot is not the one its `bot_id` names, so a `bot` actor's
+   * `bot` is that bot. The card still reads `bots` and `bot_commands` — this is
+   * the first paint, not the answer.
+   */
+  | { kind: "bot"; botId: string; bot: BotProfileSeed }
+  | { kind: "none"; reason: "deleted" | "system" | "invalid" };
 
 export function messageAuthorProfileTarget(actor: MessageActor): MessageAuthorProfileTarget {
   switch (actor.kind) {
     case "user":
       return { kind: "person", userId: actor.id };
     case "bot":
-      return { kind: "none", reason: "bot" };
+      return { kind: "bot", botId: actor.id, bot: actor.bot };
     case "deleted_bot":
     case "deleted_user":
       return { kind: "none", reason: "deleted" };
@@ -63,5 +78,5 @@ export function messageAuthorProfileTarget(actor: MessageActor): MessageAuthorPr
 
 /** Whether the face and the name are pressable at all. */
 export function messageAuthorOpensProfile(actor: MessageActor): boolean {
-  return messageAuthorProfileTarget(actor).kind === "person";
+  return messageAuthorProfileTarget(actor).kind !== "none";
 }

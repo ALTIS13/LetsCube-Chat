@@ -59,6 +59,7 @@ import { CAPSULE_CONTROL_GLASS, CAPSULE_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING } from "@/lib/controlSurface";
 import { BotCommandMenu } from "./BotCommandMenu";
 import {
+  addressTypedBotCommand,
   BOT_COMMANDS_LABEL,
   BOT_START_LABEL,
   botCommandDraft,
@@ -919,9 +920,32 @@ export function MessageInput({
       if (textareaRef.current) {
         textareaRef.current.focus();
       }
+      /**
+       * What actually goes out (D-263, second complaint).
+       *
+       * In a group a bare `/shift` is shown in the conversation and never
+       * reaches the bot: `private.bot_can_receive_message` admits
+       * `/shift@shiftbot`, a mention of the bot, or a reply to it, and drops
+       * the rest without a word. The composer knows the address — it writes
+       * it into every draft the menu produces (D-244) — so it writes it here
+       * too, and the person who types a command whole gets the delivery the
+       * person who picks it from the menu has had since then. The rule and all
+       * three of its refusals are in `botChatSurfaces.ts`, where `node --test`
+       * can mutate them.
+       *
+       * **Inside this branch, not above it.** An edit is a correction to a
+       * message that was already delivered or already dropped, so rewriting
+       * its text would change what somebody wrote for a delivery that is not
+       * going to happen — the same reason «/» does not open the command menu
+       * while editing. A first version expressed that as an `isEditing` term
+       * in the condition, and the mutation that removed the term stayed green:
+       * `onEdit` never read this value, so the term was a guard that guarded
+       * nothing. It is scoped instead, which cannot rot.
+       */
+      const outgoing = bot ? addressTypedBotCommand(trimmed, bot.addressing, bot.commands) : trimmed;
       let result: unknown;
       try {
-        result = await onSend(trimmed);
+        result = await onSend(outgoing);
       } catch (error) {
         restoreComposerTextIfCurrent(composerSendScope, sendToken, previousText, {
           restoreText: setText,
@@ -948,7 +972,7 @@ export function MessageInput({
     if (textareaRef.current) {
       textareaRef.current.focus();
     }
-  }, [text, hasAttachments, hasForwardDraft, onSend, isEditing, editingMessage, onEdit, setEditingMessage, chatId, composerSendScope]);
+  }, [text, hasAttachments, hasForwardDraft, onSend, isEditing, editingMessage, onEdit, setEditingMessage, chatId, composerSendScope, bot]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Escape") {

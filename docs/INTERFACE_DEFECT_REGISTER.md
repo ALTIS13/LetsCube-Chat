@@ -19626,13 +19626,29 @@ whatever the state, which is what keeps a disabled bot's name readable (D-247)
   alongside `/shift` and `/shifts` as a **control**: it has the shape of a
   command and nothing registered it, so a tokenizer that made every slash-word
   pressable would pass every other assertion in the file.
-- **28 mutations, 28 red.** Twenty on the pure decisions and the wiring
-  (`node --test`), eight through the browser. One survived a first pass and was
-  **redundancy rather than reach**: a second length bound beside `isCommandName`
-  guarded nothing, because `isCommandName` is the CHECK written out. It was
-  removed rather than asserted around, and removing it exposed a real defect
-  beside it — the scan lowered the whole line **inside both loops**, which is
-  quadratic in the length of an attacker-supplied message. Lowered once now.
+- **28 mutations, 28 red** — twenty on the pure decisions and the wiring
+  (`node --test`), eight through the browser — but only after **three survived a
+  first pass**, and each survivor was worth more than the mutations that died.
+
+  1. **A second length bound beside `isCommandName` guarded nothing**, because
+     `isCommandName` is the CHECK written out. Removed rather than asserted
+     around — and removing it exposed a real defect beside it: the scan lowered
+     the whole line **inside both loops**, which is quadratic in the length of
+     an attacker-supplied message. Lowered once now.
+  2. **A slash inside a word.** Nothing in the spec put a `/shift` after a
+     letter, so dropping the word-boundary check stayed green. That is a real
+     gap, and `смены/shift и https://example.com/shift` is now a message in
+     the fixture with an assertion that neither is a control.
+  3. **An `isEditing` term that read like a guard and was dead.** `onEdit` never
+     consumed the addressed text, so the term could be deleted with no effect.
+     The repair was structural rather than another assertion: the addressing
+     moved **inside** the send branch, where it cannot be reached from an edit
+     at all, and the test now goes red against the mutation that matters — the
+     edit branch learning to address.
+
+  The battery also fingerprints every file it touches before and after. It
+  learned to: a run killed mid-mutation left one behind, the suite went red for
+  an hour, and it read exactly like a regression in the change under test.
 
 ---
 
@@ -23027,13 +23043,18 @@ second segment for. The two `setLocation("/")` calls in `runSearchCommand` are
 left alone: «open chats» and «focus search» go to the list on purpose and open
 no conversation.
 
-**Regression test:**
-`tests/e2e/chat-address.spec.ts` — «a conversation opened from search keeps its
-address and stays open», asserting the address **and** the selection **and**
-that both still hold a second later, because the close arrived after the open
-rather than instead of it. `tests/e2e/bot-chat-surfaces.spec.ts`'s existing test
-goes green with the repair and red without it; both mutations are in the
-battery.
+**Regression tests, one per door:** `tests/e2e/chat-address.spec.ts` carries
+«a conversation opened from search keeps its address and stays open» and «a
+conversation opened from a notification keeps its address too» — each asserting
+the address **and** the selection **and** that both still hold a second later,
+because the close arrived after the open rather than instead of it, so an
+assertion taken on the first frame would have passed against the defect. The
+second one exists because `notification-center.spec.ts` signs in against
+production and cannot run on the fixture host, and §11 names notification jumps
+as well as search jumps. `tests/e2e/bot-chat-surfaces.spec.ts`'s existing test
+goes green with the repair and red without it. Three mutations, all watched
+going red: the bot branch, the chat branch and the grouped-message branch each
+put back to `setLocation("/")`.
 
 **The second finding, recorded because it cost an hour of the diagnosis.** A
 probe run after editing the source reported `selectedChatId === null` while the

@@ -1,5 +1,13 @@
 import React from "react";
 
+import {
+  botCommandMentionRuns,
+  botCommandRunText,
+  readBotCommandMention,
+  type BotChatAddressing,
+  type BotCommand,
+} from "./botChatSurfaces.ts";
+
 /**
  * Render a plain-text message body with light Markdown-ish formatting:
  *   **bold**, *italic*, `code`, ~~strike~~, auto-linked URLs and @mentions.
@@ -38,7 +46,27 @@ type Token =
   | { kind: "text"; value: string }
   | { kind: "code" | "strike" | "bold" | "italic"; value: string }
   | { kind: "url"; href: string }
-  | { kind: "mention"; user: string; lead: string };
+  | { kind: "mention"; user: string; lead: string }
+  | { kind: "command"; shown: string; send: string };
+
+/**
+ * What a chat needs to know before a `/command` in it is anything but text
+ * (D-263).
+ *
+ * Absent — which is every chat without a bot, and every surface that draws a
+ * message outside the conversation — and the tokenizer below never even looks
+ * for one, so nothing about an ordinary message changes.
+ *
+ * It is the whole bot vocabulary rather than a bare callback because the three
+ * decisions are not this file's to make: whether the token runs at all
+ * (`botCommandMentionRuns`) and what pressing it sends (`botCommandRunText`)
+ * both live in `botChatSurfaces.ts`, where `node --test` can mutate them.
+ */
+export interface BotCommandsInText {
+  readonly commands: readonly BotCommand[];
+  readonly addressing: BotChatAddressing;
+  readonly onRun: (text: string) => void;
+}
 
 interface LocationPreview {
   href: string;
@@ -46,8 +74,50 @@ interface LocationPreview {
   lng: number;
 }
 
-function nextMatch(input: string): { start: number; len: number; token: Token } | null {
+/**
+ * The first runnable command in the slice, or null.
+ *
+ * Not a `PATTERNS` entry, because it is the only token whose existence depends
+ * on something outside the text: a `/shift` is a command in a chat whose bot
+ * registered «shift» and six characters anywhere else. `readBotCommandMention`
+ * reads the token against the authoriser's own grammar and
+ * `botCommandMentionRuns` decides whether it is this chat's.
+ *
+ * A command begins at a slice boundary or after whitespace, the same
+ * convention the `mention` pattern uses — and with the same known slack, that
+ * a token consumed just before makes position 0 look like a boundary. It costs
+ * nothing here: the character before a consumed token is bold's asterisk or
+ * code's backtick, and Telegram treats a command after either as a command too.
+ */
+function nextCommandMatch(
+  input: string,
+  bot: BotCommandsInText,
+): { start: number; len: number; token: Token } | null {
+  for (let index = 0; index < input.length; index += 1) {
+    if (input[index] !== "/") continue;
+    if (index > 0 && (input[index - 1] ?? "").trim() !== "") continue;
+    const mention = readBotCommandMention(input.slice(index));
+    if (!mention) continue;
+    if (!botCommandMentionRuns(mention, bot.commands, bot.addressing)) continue;
+    return {
+      start: index,
+      len: mention.length,
+      token: {
+        kind: "command",
+        shown: input.slice(index, index + mention.length),
+        send: botCommandRunText(mention, bot.addressing),
+      },
+    };
+  }
+  return null;
+}
+
+function nextMatch(input: string, bot: BotCommandsInText | null): { start: number; len: number; token: Token } | null {
   let best: { start: number; len: number; token: Token } | null = null;
+  if (bot) {
+    const command = nextCommandMatch(input, bot);
+    if (command) best = command;
+  }
   for (const { name, re } of PATTERNS) {
     const m = re.exec(input);
     if (!m) continue;
@@ -80,12 +150,12 @@ function nextMatch(input: string): { start: number; len: number; token: Token } 
   return best;
 }
 
-function tokenize(input: string): Token[] {
+function tokenize(input: string, bot: BotCommandsInText | null): Token[] {
   const out: Token[] = [];
   let cursor = 0;
   while (cursor < input.length) {
     const slice = input.slice(cursor);
-    const hit = nextMatch(slice);
+    const hit = nextMatch(slice, bot);
     if (!hit) {
       out.push({ kind: "text", value: slice });
       break;
@@ -144,8 +214,33 @@ export function isLocationPreviewMessage(content: string): boolean {
   return parseLocationPreview(content) !== null;
 }
 
-function renderToken(t: Token, key: number): React.ReactNode {
+function renderToken(t: Token, key: number, bot: BotCommandsInText | null): React.ReactNode {
   switch (t.kind) {
+    case "command":
+      return (
+        <button
+          key={key}
+          type="button"
+          data-bot-command-run={t.send}
+          // The press must not reach the bubble under it. A message row
+          // carries its own gestures — the menu, the selection, the reply —
+          // and a command that both ran and opened the row's menu would be
+          // one press doing two things.
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            bot?.onRun(t.send);
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          // `inline` so it wraps with the sentence it is part of, and the
+          // colour the mentions already take: it is a word in a body of text,
+          // held to 4.5:1, not a control with a shape.
+          className="inline cursor-pointer bg-transparent p-0 font-medium [overflow-wrap:anywhere]"
+          style={{ color: LINK_COLOR }}
+        >
+          {t.shown}
+        </button>
+      );
     case "text":
       return <React.Fragment key={key}>{t.value}</React.Fragment>;
     case "bold":
@@ -187,7 +282,20 @@ function renderToken(t: Token, key: number): React.ReactNode {
   }
 }
 
-export function FormattedText({ content }: { content: string }) {
+export function FormattedText({
+  content,
+  bot = null,
+}: {
+  content: string;
+  /**
+   * What makes a `/command` in this message pressable, or null (D-263).
+   *
+   * Null everywhere but a conversation holding a bot, so the overwhelming
+   * majority of messages are tokenized exactly as they were before: the scan
+   * for a command is not run at all.
+   */
+  bot?: BotCommandsInText | null;
+}) {
   const location = parseLocationPreview(content);
   if (location) {
     return (
@@ -212,7 +320,7 @@ export function FormattedText({ content }: { content: string }) {
   return (
     <>
       {lines.map((line, lineIdx) => {
-        const nodes = tokenize(line).map(renderToken);
+        const nodes = tokenize(line, bot).map((token, index) => renderToken(token, index, bot));
         return (
           <React.Fragment key={lineIdx}>
             {nodes}
