@@ -126,7 +126,7 @@ function refuse(reason, message) {
   return { ok: false, reason, message };
 }
 
-function newestSource(root) {
+export function newestSource(root) {
   let newest = null;
   const visit = (absolute) => {
     if (!existsSync(absolute)) return;

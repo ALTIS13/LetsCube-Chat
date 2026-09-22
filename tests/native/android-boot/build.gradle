@@ -1,0 +1,26 @@
+buildscript {
+    repositories { google(); mavenCentral() }
+    dependencies { classpath 'com.android.tools.build:gradle:8.13.0' }
+}
+apply plugin: 'com.android.application'
+repositories { google(); mavenCentral() }
+
+layout.buildDirectory = file('../../../output/native-boot-android/build')
+android {
+    namespace 'qa.letscube.boot'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'qa.letscube.boot'
+        minSdk 28
+        targetSdk 36
+        versionCode 1
+        versionName 'qa-only'
+    }
+    signingConfigs.debug {
+        storeFile file('../../../output/native-boot-android/qa-debug.keystore')
+        storePassword 'android'
+        keyAlias 'androiddebugkey'
+        keyPassword 'android'
+    }
+    sourceSets.main.assets.srcDirs = ['../../../output/native-boot-android/assets']
+}

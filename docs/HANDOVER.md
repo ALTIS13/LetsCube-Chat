@@ -131,6 +131,15 @@ whole deployment** — no bot has registered a command yet.
 
 ## 4. Where to start
 
+**Native proof continuation, 2026-09-23:** owner resumed after restoring the browser
+extension. The QA batch began at `d649db3f`. Windows actual WebView2 passed 6/6;
+an isolated Android 14 WebView passed seven positive cases and detected three
+mutations. Runner/source/APK hashes match the accepted Android report; the owned
+emulator was removed. Independent review and focused gates closed the QA harness
+findings. No product-source change or new native release in this continuation.
+Next: separately authorized full-shell native candidate and device matrix.
+[Native proof and limits](operations/2026-09-22-native-boot-proof.md).
+
 **Active checkpoint, 2026-09-22 (Codex):** owner Codex, main checkout
 `D:\CodexProjects\LetsCube-Chat`, D-298 recovery batch on `0813bd05`.
 Pre-React failures now expose an explicit same-URL retry without clearing sessions
@@ -143,8 +152,8 @@ Typecheck and production-mode build pass. Runtime source `f1bbd60b` was publishe
 one healthy exact image, old replica retired, before/after asset markers confirmed,
 live guest recovery 4/4 at 1440/390 in both themes. Consult the actual image when
 resuming; subsequent documentation-only commits may advance its tag.
-Next: isolated actual WebView2/Android lifecycle fault injection, then separately
-authorized native candidate/release. No signed EXE/APK issued by this source batch;
+Next: separately authorized native candidate/release. No signed EXE/APK issued by
+this source batch;
 Android still embeds its older bundle. Physical all-platform stability is not proved.
 [Current evidence and remaining platform gaps](operations/2026-09-22-boot-recovery.md).
 
