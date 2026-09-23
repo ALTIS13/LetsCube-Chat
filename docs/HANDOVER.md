@@ -180,6 +180,18 @@ overlap regression and owned Android 13 debug APK lifecycle/screenshot passed.
 Physical signed-release and authenticated UI validation remain open.
 [Evidence](operations/2026-09-23-android-auth-offline-banner.md).
 
+**Realme Android 15/microG push QA, 2026-09-23 (Codex):** the old installed
+0.1.3/build 4 had no Firebase initialization resources. A current
+production-configured 0.1.7/build 8 debug APK with all six resources was
+installed on the owner-authorized test Realme. A fresh Android notification
+permission was incorrectly shown as blocked because noninteractive push restore
+mapped `prompt` to `denied`; the source fix is validated by a red/green test and
+the physical settings flow now shows Enable and obtains OS permission. FCM token
+registration still fails with `IOException`: microG Cloud Messaging is enabled,
+but device registration reports Not registered. No delivery or tap is proved.
+The phone requires its normal unlock after a diagnostic reboot before the next
+microG UI check. [Evidence](operations/2026-09-23-realme-microg-push.md).
+
 **Native proof continuation, 2026-09-23:** owner resumed after restoring the browser
 extension. The QA batch began at `d649db3f`. Windows actual WebView2 passed 6/6;
 an isolated Android 14 WebView passed seven positive cases and detected three

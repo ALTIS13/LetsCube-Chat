@@ -23593,3 +23593,15 @@ themes and with/without a bottom safe-area inset. An owned offline Android
 registration and privacy links remain unobscured. Cold/resume and force-stop
 checks passed. This does not cover authenticated screens or physical release
 devices. [Evidence](operations/2026-09-23-android-auth-offline-banner.md).
+
+## D-309 `[x]` Fresh Android notification permission is shown as blocked
+
+2026-09-23, Realme Android 15 with microG. A new debug install had Android
+permission state `prompt`, but settings showed "blocked" with no Enable button.
+The authenticated background push restore did not request permission (correct)
+but classified `prompt` as `native_denied` (incorrect), overriding the initial
+settings state. A red/green adapter test now requires `native_inactive` for
+background `prompt`, while a real `denied` remains denied. Reinstalled debug APK
+on Realme showed Enable; tapping it opened the OS permission prompt, and the
+permission became granted. FCM transport remains a separate open device issue;
+see [Realme QA](operations/2026-09-23-realme-microg-push.md).

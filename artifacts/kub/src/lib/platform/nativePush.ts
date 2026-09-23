@@ -78,6 +78,10 @@ export async function enableNativeAndroidPush(
       permission = await push.requestPermissions();
     }
 
+    if (!requestPermission && permission.receive !== "granted" && permission.receive !== "denied") {
+      return { status: "native_inactive", message: "Нажмите «Включить», чтобы разрешить уведомления Android." };
+    }
+
     if (permission.receive !== "granted") {
       return { status: "native_denied", message: nativePushPermissionHelp() };
     }

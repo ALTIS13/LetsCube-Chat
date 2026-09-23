@@ -183,9 +183,17 @@ test("actual permission adapter is silent on restore and prompts only explicit e
   const h = fixture({ permission: "prompt" }); const dispose = h.calls.startNativeVoiceCalls(); await h.flush();
   assert.equal(h.effects.some(([name]) => name === "permissionPrompt"), false);
   assert.equal(h.effects.some(([name]) => name === "commit"), false);
+  assert.equal(h.calls.nativeVoicePushSnapshot().status, "native_inactive");
   const result = await h.calls.enableNativeVoicePush();
   assert.equal(result.status, "native_active");
   assert.equal(h.effects.filter(([name]) => name === "permissionPrompt").length, 1);
+  dispose();
+});
+
+test("explicitly denied Android permission stays blocked during background restore", async () => {
+  const h = fixture({ permission: "denied" }); const dispose = h.calls.startNativeVoiceCalls(); await h.flush();
+  assert.equal(h.calls.nativeVoicePushSnapshot().status, "native_denied");
+  assert.equal(h.effects.some(([name]) => name === "permissionPrompt"), false);
   dispose();
 });
 
