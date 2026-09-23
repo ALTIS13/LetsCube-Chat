@@ -117,7 +117,7 @@ export function SessionDevicesSection({
               >
                 <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                   <span
-                    className="min-w-0 max-w-full truncate text-sm font-medium text-[color:var(--kub-text)]"
+                    className="min-w-0 max-w-full text-sm font-medium text-[color:var(--kub-text)]"
                     // The whole string, for a device the patterns only half
                     // recognised. It is the reader's own and it never leaves
                     // this screen.

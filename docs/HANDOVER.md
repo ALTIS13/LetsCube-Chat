@@ -131,6 +131,21 @@ whole deployment** — no bot has registered a command yet.
 
 ## 4. Where to start
 
+**Interface visual pass, 2026-09-23 (Codex):** D-272 and the device-title
+follow-up under D-222 are closed; D-299 to D-303 close five newly measured
+public/support layout defects. Local synthetic 1440/390 light/dark pixels were
+inspected. The combined public/support browser suite passed 24/24; targeted
+call, session-device and desktop-shell guards passed. Typecheck and a real
+production-mode web build passed. No production deploy, native signing or
+physical-device QA in this pass. An initial desktop-shell run used an ignored
+local Vite env setting that enabled an unmocked access-snapshot RPC and hid
+synthetic permissions; the affected cases passed after explicitly setting
+`VITE_ACCESS_SNAPSHOT_RPC_ENABLED=0` for the fixture server. Next: broader
+screen-by-screen visual inventory and the separately authorized native
+candidate/device matrix; do not infer that production or installed clients
+carry this local UI patch.
+[Visual pass and exact validation](operations/2026-09-23-interface-visual-pass.md).
+
 **Native proof continuation, 2026-09-23:** owner resumed after restoring the browser
 extension. The QA batch began at `d649db3f`. Windows actual WebView2 passed 6/6;
 an isolated Android 14 WebView passed seven positive cases and detected three

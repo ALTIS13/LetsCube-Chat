@@ -61,9 +61,12 @@ export function PublicPageShell({ children, scrollRootRef }: PublicPageShellProp
             </Link>
             <Link
               href="/support"
-              className="hidden min-h-11 items-center rounded-md px-2 py-2 text-[color:var(--kub-text)] transition-colors kub-raise-hover sm:inline-flex"
+              aria-label="Поддержка"
+              title="Поддержка"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-2 py-2 text-[color:var(--kub-text)] transition-colors kub-raise-hover sm:min-w-0"
             >
-              Поддержка
+              <KubIcon name="chats" size={18} className="sm:hidden" />
+              <span className="hidden sm:inline">Поддержка</span>
             </Link>
             <Link
               href="/login"

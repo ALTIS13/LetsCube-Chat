@@ -385,7 +385,7 @@ export function SupportTab() {
             <h1 className="truncate text-base font-bold text-[color:var(--kub-text)]">
               Поддержка
             </h1>
-            <p className="truncate text-xs text-[color:var(--kub-muted)]">
+            <p className="text-xs text-[color:var(--kub-muted)] sm:truncate">
               Приём, переписка и передача обращений
             </p>
           </div>

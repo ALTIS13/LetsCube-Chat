@@ -453,6 +453,39 @@ test("the shell draws no second band in the messenger", async ({ page, browserNa
 });
 
 for (const theme of ["dark", "light"] as const) {
+  test(`the folded chat list keeps the call exit reachable, ${theme}`, async ({ page, browserName }, info) => {
+    needsWebRtc(browserName);
+    test.skip((page.viewportSize()?.width ?? 0) < 768, "the fold belongs to the desktop chat list");
+    await open(page, { theme });
+    await join(page);
+    await page.keyboard.press("Escape");
+    const leave = bar(page).getByTestId("voice-call-bar-leave");
+    await expect(leave).toBeVisible();
+
+    await page.getByTestId("chat-list-fold").click();
+    await expect.poll(() => page.locator(".kub-chat-list-column").evaluate((node) =>
+      Math.round(node.getBoundingClientRect().width),
+    )).toBe(66);
+
+    const bounds = await leave.evaluate((node) => {
+      const column = node.closest(".kub-chat-list-column")?.getBoundingClientRect();
+      const open = node.closest("[data-testid='voice-call-bar']")?.querySelector<HTMLElement>("[data-testid='voice-call-bar-open']")?.getBoundingClientRect();
+      const control = node.getBoundingClientRect();
+      if (!column || !open) throw new Error("the call controls are not in the chat list");
+      return { columnLeft: column.left, columnRight: column.right, left: control.left, right: control.right, width: control.width, openBottom: open.bottom, leaveTop: control.top };
+    });
+    expect(bounds.left).toBeGreaterThanOrEqual(bounds.columnLeft - 0.5);
+    expect(bounds.right).toBeLessThanOrEqual(bounds.columnRight + 0.5);
+    expect(bounds.width).toBeLessThanOrEqual(42);
+    expect(bounds.leaveTop, "the folded call controls overlap").toBeGreaterThanOrEqual(bounds.openBottom + 2);
+    await expect(leave.getByTestId("voice-call-bar-leave-icon")).toBeVisible();
+    await page.screenshot({ path: info.outputPath(`folded-call-${theme}.png`) });
+    await leave.click();
+    await expect(bar(page)).toHaveCount(0);
+  });
+}
+
+for (const theme of ["dark", "light"] as const) {
   test(`public routes keep the running microphone reachable, ${theme}`, async ({ page, browserName }, info) => {
     needsWebRtc(browserName);
     await open(page, { theme });

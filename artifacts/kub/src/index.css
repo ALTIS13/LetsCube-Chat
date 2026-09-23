@@ -2791,6 +2791,12 @@ textarea::placeholder, input::placeholder {
       max-width: calc(2rem * (1 - var(--kub-chat-list-narrow, 0) * 1.1));
     }
 
+    /* At the 66px resting state, the two necessary actions occupy separate
+       rows; the faded optional controls must not reserve flex gaps. */
+    @container (width <= 7.5rem) {
+      .kub-voice-call-bar__extra { display: none; }
+    }
+
     /* The other band on this edge: «you are in this conversation on another
        device». It narrows by the same ratio and by the same two steps — the
        words first, then the control — with one difference that is a rule

@@ -126,17 +126,23 @@ export function SupportPage() {
   return (
     <PublicPageShell scrollRootRef={scrollRootRef}>
       <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-        <header className="mb-8 max-w-3xl">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--kub-pink)]">
-            Связь с командой
-          </p>
-          <h1 className="mt-3 text-3xl font-bold leading-tight text-[color:var(--kub-text)] sm:text-4xl">
+        <header className={ticket && session ? "mb-4 max-w-3xl" : "mb-8 max-w-3xl"}>
+          {!(ticket && session) && (
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--kub-pink)]">
+              Связь с командой
+            </p>
+          )}
+          <h1 className={ticket && session
+            ? "text-xl font-bold leading-tight text-[color:var(--kub-text)]"
+            : "mt-3 text-3xl font-bold leading-tight text-[color:var(--kub-text)] sm:text-4xl"}>
             Поддержка LETSCUBE
           </h1>
-          <p className="mt-4 text-sm leading-7 text-[color:var(--kub-muted)] sm:text-base">
-            Опишите ситуацию и сразу продолжите общение с оператором в защищённом чате.
-            Контактные данные нужны только для обратной связи и поиска клиента, если это потребуется.
-          </p>
+          {!(ticket && session) && (
+            <p className="mt-4 text-sm leading-7 text-[color:var(--kub-muted)] sm:text-base">
+              Опишите ситуацию и сразу продолжите общение с оператором в защищённом чате.
+              Контактные данные нужны только для обратной связи и поиска клиента, если это потребуется.
+            </p>
+          )}
         </header>
 
         {restoring ? (

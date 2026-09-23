@@ -187,7 +187,7 @@ export function Sidebar() {
           sideMenuOpen={sideMenuOpen}
         />
 
-        <div className="kub-chat-list-column relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="kub-chat-list-column @container relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {/* What a strip of avatars has no room for. The rules in index.css
               fade and close this as `--kub-chat-list-narrow` goes to 1, so the
               list keeps narrowing continuously instead of switching mode. */}

@@ -504,6 +504,11 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     Next is isolated actual native lifecycle proof, not another visual redesign.
     No signed native artifact issued; browser fixtures are not a device matrix.
     [Current repair checkpoint and platform limits](operations/2026-09-22-boot-recovery.md).
+    **2026-09-23 continuation:** synthetic 1440/390 visual audit closed D-272,
+    the D-222 device-title follow-up and D-299 to D-303 (public navigation,
+    Bot API hit targets, guest support composer, admin support title/filters).
+    Liquid-glass styling stayed intact; changes are local, not deployed.
+    [Validation and remaining scope](operations/2026-09-23-interface-visual-pass.md).
 35. `[~]` Standing: **«where you were» is state the product owns and
     restores.** Asked for by the owner on 2026-09-20, as the principle behind
     the update complaint rather than as a feature of it: «В этом и смысл что

@@ -316,6 +316,7 @@ $env:PORT = '5187'
 $env:BASE_PATH = '/'
 $env:VITE_SUPABASE_URL = 'http://127.0.0.1:54321'
 $env:VITE_SUPABASE_ANON_KEY = 'playwright-public-fixture'
+$env:VITE_ACCESS_SNAPSHOT_RPC_ENABLED = '0'
 pnpm.cmd --filter @workspace/kub run dev
 ```
 
@@ -358,8 +359,14 @@ Stop the temporary server after the test.
 For the unconfigured matrix the same Vite command is used on the dedicated port
 `5188` with `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` and
 `VITE_SUPABASE_PUBLISHABLE_KEY` explicitly absent from the environment. No
-`.env` file exists under `artifacts/kub`, so the process environment is the only
-configuration source and the unconfigured state is reproducible.
+Ignored `.env` and `.env.local` files may exist under `artifacts/kub` in a local
+checkout. Explicitly unset every relevant `VITE_*` variable for the
+unconfigured matrix, and override fixture-sensitive flags such as
+`VITE_ACCESS_SNAPSHOT_RPC_ENABLED=0` for a configured synthetic server. On
+2026-09-23 a fixture run without that override loaded an unmocked permission
+snapshot setting and made five desktop-shell cases falsely look like missing
+task access; all five passed with the explicit fixture flag. Never print the
+contents of local env files.
 
 Existing build warnings about Vite sourcemaps, mixed Supabase imports, and chunk
 size are known warnings, not automatic permission to ignore new errors.

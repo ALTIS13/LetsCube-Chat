@@ -106,7 +106,7 @@ test.describe("public privacy and support surfaces", () => {
     expect(gatewayRequests).toBe(0);
   });
 
-  test("/support opens and restores a guest chat without leaking its secret", async ({ page }) => {
+  test("/support opens and restores a guest chat without leaking its secret", async ({ page }, info) => {
     const guestSecret = "guest-secret-value-that-stays-in-indexeddb";
     const ticketId = "f7a42e23-bd69-4ca3-a983-1fde8b7c44c1";
     // The guest session is dated against the wall clock: `guestSupportSessionStore.load()`
@@ -255,6 +255,14 @@ test.describe("public privacy and support surfaces", () => {
 
     await expect(page.getByTestId("guest-support-chat")).toBeVisible();
     expect(await page.getByTestId("public-scroll-root").evaluate((node) => node.scrollTop)).toBeLessThanOrEqual(1);
+    if ((page.viewportSize()?.width ?? 0) <= 390) {
+      const sendButtonBottom = await page.getByRole("button", { name: "Отправить сообщение" }).evaluate(
+        (node) => node.getBoundingClientRect().bottom,
+      );
+      expect(sendButtonBottom, "the guest chat composer is below the first mobile viewport").toBeLessThanOrEqual(
+        page.viewportSize()!.height,
+      );
+    }
     await expect(page.getByText("Обращение LC-2026-0042")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Не открывается переписка" })).toBeVisible();
     const guestScroll = page.getByTestId("guest-support-scroll");
@@ -286,6 +294,17 @@ test.describe("public privacy and support surfaces", () => {
       scroll: node.scrollWidth,
     }));
     expect(width.scroll).toBeLessThanOrEqual(width.client + 1);
+
+    for (const theme of ["dark", "light"] as const) {
+      await page.evaluate((nextTheme) => localStorage.setItem("kub-theme", nextTheme), theme);
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await expect(page.getByTestId("guest-support-chat")).toBeVisible();
+      await page.screenshot({ path: `output/support-guest-chat/guest-chat-${theme}-${info.project.name}.png` });
+      const bottom = await page.getByRole("button", { name: "Отправить сообщение" }).evaluate(
+        (node) => node.getBoundingClientRect().bottom,
+      );
+      expect(bottom).toBeLessThanOrEqual(page.viewportSize()!.height);
+    }
   });
 });
 

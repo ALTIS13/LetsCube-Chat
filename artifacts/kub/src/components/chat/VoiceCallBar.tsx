@@ -207,7 +207,7 @@ export function VoiceCallBar({
       data-voice-tone={view.tone}
     >
       <KubGlassLayer />
-      <div className="relative flex items-center gap-2 px-3 py-2">
+      <div className="relative flex items-center gap-2 px-3 py-2 @max-[7.5rem]:flex-col @max-[7.5rem]:gap-1 @max-[7.5rem]:px-0">
         <button
           type="button"
           onClick={() => {
@@ -217,7 +217,7 @@ export function VoiceCallBar({
           }}
           disabled={!view.openChatId}
           className={cn(
-            "flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left",
+            "flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left @max-[7.5rem]:flex-none",
             view.openChatId && "kub-raise-hover",
             FOCUS_RING_INSET,
           )}
@@ -304,7 +304,7 @@ export function VoiceCallBar({
         </button>
 
         {view.controls && (
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1 @max-[7.5rem]:justify-center @max-[7.5rem]:gap-0">
             {/* «Состояние связи», the same panel the capsule's headset opens,
                 and deliberately not the same glyph.
 
@@ -523,13 +523,17 @@ export function VoiceCallBar({
                 if (waiting) void cancelVoiceRing(waiting);
                 else void endVoiceCall();
               }}
-              className="group/capsule relative h-8 shrink-0 rounded-full px-3"
+              className="group/capsule relative h-8 shrink-0 rounded-full px-3 @max-[7.5rem]:w-8 @max-[7.5rem]:px-0"
+              aria-label={ringing ? "Отменить вызов" : "Выйти из разговора"}
               title={ringing ? "Отменить вызов" : "Выйти из разговора"}
               data-testid="voice-call-bar-leave"
             >
               <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />
-              <span className="relative text-xs font-semibold whitespace-nowrap text-[color:var(--kub-danger-text)]">
+              <span className="relative text-xs font-semibold whitespace-nowrap text-[color:var(--kub-danger-text)] @max-[7.5rem]:hidden">
                 {ringing ? "Отменить" : "Выйти"}
+              </span>
+              <span className="relative hidden h-full w-full items-center justify-center text-[color:var(--kub-danger-text)] @max-[7.5rem]:flex" data-testid="voice-call-bar-leave-icon">
+                <KubIcon name="phoneOff" size={16} />
               </span>
             </button>
           </div>

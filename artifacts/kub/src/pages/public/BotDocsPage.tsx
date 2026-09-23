@@ -83,7 +83,7 @@ export function BotDocsPage() {
                   <li key={item.id}>
                     <a
                       href={`#${item.id}`}
-                      className="block border-l-2 border-transparent py-2 pl-3 text-sm text-[color:var(--kub-muted)] transition-colors hover:border-[color:var(--kub-cyan)] hover:text-[color:var(--kub-text)]"
+                      className="flex min-h-11 items-center border-l-2 border-transparent py-2 pl-3 text-sm text-[color:var(--kub-muted)] transition-colors hover:border-[color:var(--kub-cyan)] hover:text-[color:var(--kub-text)]"
                     >
                       {item.label}
                     </a>

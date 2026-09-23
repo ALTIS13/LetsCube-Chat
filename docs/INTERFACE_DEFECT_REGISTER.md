@@ -14902,6 +14902,15 @@ the muting direction and, as above, not in the other.
 
 ## D-222 `[~]` A viewport breakpoint deciding a layout that lives in a column the owner drags
 
+**2026-09-23 narrow device title closure (Codex):** The 260px settings
+stress case still clipped «Неизвестное устройство» because its title used
+`truncate`. The existing `session-devices.spec.ts` reproduced the clipped
+string before the change. The title now wraps, while the call switch stays
+inside its row at 260/360/540px. The focused case passed; the full section
+passed 26 tests with two desktop-only checks skipped on the mobile project.
+Synthetic 1440/390 screenshots were inspected in both themes. This closes
+the device-title follow-up, not every item in D-222.
+
 **2026-09-21 narrow-measure follow-up (Codex):** `session-devices.spec.ts:400`
 still fails at a forced 260px settings measure on both the current Android-call
 branch and an isolated archive of `7e0a9bcc`. `SessionDevicesSection`'s unknown
@@ -20673,7 +20682,18 @@ something, unpredictably, which is worse than one that changes nothing.
 
 ---
 
-## D-272 `[ ]` At the folded list «Выйти» is 29px wider than the column it is in
+## D-272 `[x]` At the folded list «Выйти» is 29px wider than the column it is in
+
+**Fixed 2026-09-23 (Codex):** A synthetic running-call test folded the real
+chat-list column to 66px and found the leave button 30.75px beyond its right
+edge. Replacing the word with a 32px phone-disconnect icon at the narrow
+container width made the edge assertion pass, but screenshot inspection then
+found it overlapping the return-to-call headset. The two necessary controls
+now form separate vertical rows at 120px and below; optional controls reserve
+no gaps there. The test checks both bounds and non-overlap, clicks leave, and
+passes in dark and light at 1440px. The call/sidebar validation scope and
+fixture caveat are recorded in the visual-pass report; no call transport or
+routing behavior changed.
 
 **Found while measuring D-267**, on 2026-09-20, photographing the call bar at
 every column width the handle can produce.
@@ -23445,3 +23465,48 @@ failure recovery, signed-release parity and physical-device matrix remain open,
 hence `[~]`, not `[x]`.
 [Implementation and evidence limits](operations/2026-09-22-boot-recovery.md).
 [Full-shell debug smoke](operations/2026-09-23-android-full-shell-smoke.md).
+
+## D-299 `[x]` Public support is hidden on a phone
+
+2026-09-23, synthetic browser audit. At 390px the only public-header link to
+`/support` had `display:none`; the footer offered email but not the chat form.
+`PublicPageShell` now gives the support link a 44px icon target on a phone and
+retains the text label on desktop. A before/after navigation test covers `/`,
+`/download` and `/bots/docs` at 390/1440 in both themes, including an actual
+click to `/support`. The first four assertions were red before the patch and
+the completed suite is green. No authenticated or production data was used.
+
+## D-300 `[x]` Bot API contents links are too short for touch
+
+2026-09-23, synthetic browser audit. Each of five mobile contents links
+measured 36px high. They now have a 44px minimum without changing the desktop
+layout. `public-page-navigation.spec.ts` checks their rendered hit boxes at
+390/1440 in both themes. The old 36px value failed the new test.
+
+## D-301 `[x]` Guest support chat opens with its send button below the phone viewport
+
+2026-09-23, synthetic 390x844 fixture. After creating an appeal, the public
+page reset its scroll to the top but kept the introductory copy above a 72dvh
+chat. The send button ended at y=850.5, 6.5px below the viewport. With an
+active appeal, `SupportPage` now keeps a compact page heading and omits the
+pre-appeal introduction. `privacy-support-public.spec.ts` was red before and
+green after, then covered creation, send and restored chat at 1440/390 with
+both themes. No real support request was submitted.
+
+## D-302 `[x]` Support admin subtitle loses 72px on a phone
+
+2026-09-23, synthetic admin fixture. At 390px «Приём, переписка и передача
+обращений» had 270px of text in a 198px box under `truncate`. It now wraps on
+the phone and retains its desktop single-line form. `support-mobile-layout.spec.ts`
+measures the drawn text at 1440/390 in both themes.
+
+## D-303 `[x]` Support queue filters are 36px high at a narrow fine pointer
+
+2026-09-23, synthetic admin fixture. The initial audit read 36px at 390px;
+the follow-up showed that a real coarse-pointer phone already received 44px
+from shared CSS, while a narrow fine-pointer window remained at 36px. The
+queue filter buttons now have 44px height below `sm` regardless of pointer
+type, and retain 36px at wider widths. `support-mobile-layout.spec.ts` checks
+all six boxes and a filter click in both themes. This is a narrow-window
+consistency fix, not a claim that a touch phone's filter was previously too
+short.

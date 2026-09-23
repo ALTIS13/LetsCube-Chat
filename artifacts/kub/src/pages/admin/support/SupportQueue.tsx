@@ -95,7 +95,7 @@ export function SupportQueue({
             onClick={() => onFilterChange(item.id)}
             aria-pressed={filter === item.id}
             className={cn(
-              `kub-button kub-interactive h-9 shrink-0 rounded-lg px-3 text-xs font-semibold transition-colors ${FOCUS_RING}`,
+              `kub-button kub-interactive h-11 shrink-0 rounded-lg px-3 text-xs font-semibold transition-colors sm:h-9 ${FOCUS_RING}`,
               // The selected chip is a fill, so it presses by moving the fill;
               // the veil is only for the ones that have none. Putting the sink
               // on a filled control dilutes the ground its foreground was
