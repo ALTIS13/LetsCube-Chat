@@ -353,7 +353,40 @@ The emulator was shut down. The original AVD's user-data, cache and default
 boot RAM image sizes and UTC modification timestamps matched the pre-run
 baseline exactly; the original AVD's installed app was not replaced. This is
 Android 14 native integration and guest-lifecycle evidence, **not** a live
-backend-to-device FCM delivery or physical official-GMS result. The Android 13
-live card/tap result above remains the only official-GMS live push proof for
-this candidate. Android Stable remains `0.1.7/8`; no release was signed or
-published.
+backend-to-device FCM delivery or physical official-GMS result. At this
+checkpoint the Android 13 live card/tap result above was the only
+official-GMS live push proof for this candidate. Android Stable remained
+`0.1.7/8`; no release was signed or published.
+
+### Android 14/API 34 live FCM and exact-card tap
+
+The same Google Play API 34 AVD was started again with `-read-only` and
+`-no-snapshot-save`. The current `0.1.8/9` production-configured debug APK
+was installed only in that temporary overlay. A fresh QA client session
+authenticated in its Capacitor WebView with notification permission already
+granted. The app's `register_push_device` request succeeded, and the test
+account's `push_enabled` preference was confirmed. Only the public API key
+was used; no service-role credential, registration token, session value or
+message body was printed or stored in the report.
+
+A real QA owner-to-client message produced a native chat-tag Android card
+while the app was in the background. In a separate run, the app went Home and
+was stopped with `am kill`, **not** force-stop. After another real QA message,
+FCM delivered its card while the app had been stopped. A tap on the message
+inside Android System UI opened the exact chat/message route; the target
+`data-message-id` row existed and was visible in the WebView viewport. The
+first attempt at measuring that route lost its DevTools connection across
+process restart; it was not counted as a route pass. A subsequent run waited
+for the new WebView socket and proved the exact route and visible row.
+
+The exact-ID delete RPC, chat-notification read RPC and authenticated device
+unregister RPC each returned success for the QA artifacts. The final Android OS
+card count for LETSCUBE was zero. The temporary QA script and CDP forward
+were removed; the emulator was shut down. The original AVD's user-data,
+cache and default-boot RAM image sizes and UTC timestamps still matched their
+pre-test values exactly.
+
+This closes **emulator** Android 14 live background and normally killed
+delivery plus System UI exact-message activation for the debug candidate. It
+does not prove force-stop delivery, long-session/vendor reliability, a physical
+official-GMS handset or the signed release. Android Stable remains `0.1.7/8`.

@@ -278,6 +278,16 @@ No live FCM send, physical official-GMS validation or signed release was
 performed; Stable remains `0.1.7/8`.
 [Detail](operations/2026-09-23-realme-microg-push.md).
 
+**Android 14 live FCM continuation, 2026-09-23:** the read-only Google Play
+API 34 AVD then authenticated a QA client and registered a native device.
+Separate live QA messages produced a background card and an `am kill` card;
+an actual System UI tap on the latter opened the exact message row in view.
+Test messages, notification rows and temporary device registration were
+cleaned. The original AVD image baselines still matched after shutdown.
+This is debug/emulator proof, not physical official-GMS or signed-release QA.
+Stable remains `0.1.7/8`.
+[Detail](operations/2026-09-23-realme-microg-push.md).
+
 **Native proof continuation, 2026-09-23:** owner resumed after restoring the browser
 extension. The QA batch began at `d649db3f`. Windows actual WebView2 passed 6/6;
 an isolated Android 14 WebView passed seven positive cases and detected three
