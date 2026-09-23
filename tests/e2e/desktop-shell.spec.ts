@@ -107,7 +107,13 @@ function fixtureRows(pinned: string[] = []) {
 
 async function boot(
   page: Page,
-  { staff = true, storedShell = null as string | null, pinned = [] as string[] } = {},
+  {
+    staff = true,
+    storedShell = null as string | null,
+    pinned = [] as string[],
+    folderCount = 1,
+    theme = null as "dark" | "light" | null,
+  } = {},
 ) {
   if (storedShell !== null) {
     await page.addInitScript((value) => {
@@ -126,6 +132,11 @@ async function boot(
       return undefined;
     },
   });
+  if (theme) {
+    // The fixture seeds dark first; this later init script selects the theme
+    // actually under test before the app's first paint.
+    await page.addInitScript((value) => localStorage.setItem("kub-theme", value), theme);
+  }
   // Registered after the fixture, so these answer first.
   await page.route(`${FIXTURE_HOST}/rest/v1/folders*`, (route) =>
     route.fulfill({
@@ -140,6 +151,16 @@ async function boot(
           position: 1,
           created_at: READ,
         },
+        ...Array.from({ length: folderCount - 1 }, (_, index) => ({
+          id: `44444444-4444-4444-8444-${String(index + 2).padStart(12, "0")}`,
+          user_id: me.id,
+          created_by: me.id,
+          scope: "personal",
+          name: ["Работа", "Семья", "Учёба", "Команда", "Архив"][index] ?? `Папка ${index + 2}`,
+          emoji: null,
+          position: index + 2,
+          created_at: READ,
+        })),
       ],
     }),
   );
@@ -361,6 +382,68 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
   test.beforeEach(async ({ request }) => {
     await requireFixtureServer(request);
   });
+
+  for (const theme of ["dark", "light"] as const) {
+    test(`search edge arrows keep text clear and expose keyboard focus, ${theme}`, async ({ page }, info) => {
+      test.skip(!isDesktop(page), "the search arrows are a desktop affordance");
+      await boot(page, { theme });
+      expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(theme === "dark");
+      await page.getByTestId("sidebar-search-input").fill("Анна");
+
+      const row = page.getByTestId("search-type-filters");
+      const arrow = page.getByRole("button", { name: "Прокрутить фильтры вправо" });
+      await expect(row).toBeVisible();
+      await expect(arrow).toBeVisible();
+
+      const mask = await row.evaluate((node) => getComputedStyle(node).maskImage);
+      expect(mask, "pills remain visible beneath the translucent arrow").toContain("26px");
+
+      await page.keyboard.press("Tab");
+      await arrow.focus();
+      await expect(arrow).toBeFocused();
+      const focus = await arrow.evaluate((node) => {
+        const style = getComputedStyle(node);
+        return { kind: style.outlineStyle, width: Number.parseFloat(style.outlineWidth) };
+      });
+      expect(focus.kind).not.toBe("none");
+      expect(focus.width).toBeGreaterThanOrEqual(2);
+      await page.screenshot({ path: `output/interface-edge-scroll/search-${info.project.name}-${theme}.png` });
+
+      await arrow.click();
+      await expect(page.getByRole("button", { name: "Прокрутить фильтры влево" })).toBeVisible();
+      await expect(row).toHaveAttribute("data-scroll-left", "true");
+    });
+
+    test(`the narrow folder strip fades content under its arrow, ${theme}`, async ({ page }, info) => {
+      test.skip(isDesktop(page), "the folder strip belongs to the phone shell");
+      await boot(page, { folderCount: 6, theme });
+      expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(theme === "dark");
+      const row = page.locator("[data-kub-list-chrome] .kub-edge-scroll-fade");
+      await expect(row).toBeVisible();
+      const arrow = page.getByRole("button", { name: "Прокрутить папки вправо" });
+      await expect(arrow).toBeVisible();
+      const state = await row.evaluate((node) => ({
+        edge: node.getAttribute("data-scroll-right"),
+        mask: getComputedStyle(node).maskImage,
+      }));
+      expect(state.edge).toBe("true");
+      expect(state.mask).toContain("26px");
+      await page.keyboard.press("Tab");
+      await arrow.focus();
+      const focus = await arrow.evaluate((node) => {
+        const style = getComputedStyle(node);
+        return { kind: style.outlineStyle, width: Number.parseFloat(style.outlineWidth) };
+      });
+      expect(focus.kind).not.toBe("none");
+      expect(focus.width).toBeGreaterThanOrEqual(2);
+      await row.locator("..").screenshot({
+        path: `output/interface-edge-scroll/folders-${info.project.name}-${theme}.png`,
+      });
+      await arrow.click();
+      await expect(page.getByRole("button", { name: "Прокрутить папки влево" })).toBeVisible();
+      await expect(row).toHaveAttribute("data-scroll-left", "true");
+    });
+  }
 
   test("the handle sits on the seam and takes no width of its own", async ({ page }) => {
     test.skip(!isDesktop(page), "there is nothing to drag below `md`");

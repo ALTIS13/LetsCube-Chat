@@ -63,7 +63,9 @@ export function FolderTabs({ folders, activeFolder, onFolderChange, onCreate, on
       <div
         ref={scrollRef}
         onWheel={handleWheel}
-        className="flex items-center overflow-x-auto no-scrollbar min-w-0 flex-1"
+        data-scroll-left={canScrollLeft}
+        data-scroll-right={canScrollRight}
+        className="kub-edge-scroll-fade flex items-center overflow-x-auto no-scrollbar min-w-0 flex-1"
       >
         {folders.map((folder) => {
           const isActive = activeFolder === folder.id;

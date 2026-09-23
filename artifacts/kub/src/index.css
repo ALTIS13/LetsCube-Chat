@@ -2582,6 +2582,27 @@ textarea::placeholder, input::placeholder {
    From `md` only. A phone has one pane, the bottom capsule and the horizontal
    folder strip, and none of that is this stage's to change. */
 @layer components {
+  /* The arrows sit over glass. Fade the scrolling content itself so a label
+     cannot show through the translucent arrow, without changing row geometry. */
+  .kub-edge-scroll-fade {
+    --kub-edge-left-clear: 0px;
+    --kub-edge-left-fade: 0px;
+    --kub-edge-right-fade: 100%;
+    --kub-edge-right-clear: 100%;
+    -webkit-mask-image: linear-gradient(to right, transparent 0px, transparent var(--kub-edge-left-clear), #000 var(--kub-edge-left-fade), #000 var(--kub-edge-right-fade), transparent var(--kub-edge-right-clear), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0px, transparent var(--kub-edge-left-clear), #000 var(--kub-edge-left-fade), #000 var(--kub-edge-right-fade), transparent var(--kub-edge-right-clear), transparent 100%);
+  }
+
+  .kub-edge-scroll-fade[data-scroll-left="true"] {
+    --kub-edge-left-clear: 26px;
+    --kub-edge-left-fade: 56px;
+  }
+
+  .kub-edge-scroll-fade[data-scroll-right="true"] {
+    --kub-edge-right-fade: calc(100% - 56px);
+    --kub-edge-right-clear: calc(100% - 26px);
+  }
+
   /* Below `md` the left region is the whole screen. Written here rather than as
      `w-full` in the markup, because a utility beats a class in this layer
      (rule 10) and `w-full` silently won over the width below — measured, the

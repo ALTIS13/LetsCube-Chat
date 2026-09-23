@@ -507,6 +507,8 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     **2026-09-23 continuation:** synthetic 1440/390 visual audit closed D-272,
     the D-222 device-title follow-up and D-299 to D-303 (public navigation,
     Bot API hit targets, guest support composer, admin support title/filters).
+    A follow-up also closed D-157 in the search and folder scroll rows with
+    rendered Chromium/WebKit checks of masking and keyboard focus.
     Liquid-glass styling stayed intact; changes are local, not deployed.
     [Validation and remaining scope](operations/2026-09-23-interface-visual-pass.md).
 35. `[~]` Standing: **«where you were» is state the product owns and

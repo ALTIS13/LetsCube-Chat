@@ -288,7 +288,9 @@ export function SearchTypeFilters({
         data-testid="search-type-filters"
         ref={scrollRef}
         onWheel={handleWheel}
-        className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto no-scrollbar"
+        data-scroll-left={canScrollLeft}
+        data-scroll-right={canScrollRight}
+        className="kub-edge-scroll-fade flex min-w-0 flex-1 gap-1.5 overflow-x-auto no-scrollbar"
       >
         {SEARCH_FILTERS.map((filter) => {
           const isActive = filter.id === active;

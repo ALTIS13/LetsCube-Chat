@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject, type WheelEve
 /**
  * A row that scrolls sideways, and the two arrows that say it does.
  *
- * This is `FolderTabs`' mechanism, lifted out of it unchanged so a second row
+ * This is `FolderTabs`' mechanism, lifted out of it so a second row
  * can have it without a second copy. It was already the product's answer to
  * this problem — a scroll ref, the two edges kept by a scroll listener and a
  * `ResizeObserver`, a step of `max(120, clientWidth * 0.6)`, a vertical wheel
@@ -89,19 +89,19 @@ export type EdgeScrollDirection = "left" | "right";
 /**
  * The arrow's surface, and why it is a gradient rather than a button.
  *
- * It has no fill of its own: it fades the row out into `--glass-fill`, the
+ * It has no solid fill of its own: it fades the row out into `--glass-fill`, the
  * panel's own fill read from the token rather than a colour picked to match it,
  * so it cannot drift when the material changes (rule 1). The fade is the point
  * — it says the row continues under it — and the chevron is what you press.
  *
  * Written twice, in full, because a composed string is invisible to Tailwind's
- * scanner. The two differ only in which edge they are pinned to and which way
- * the gradient runs.
+ * scanner. Both share the keyboard focus outline; only their edge and gradient
+ * direction differ.
  */
 export const EDGE_ARROW_CLASS: Record<EdgeScrollDirection, string> = {
-  left: "absolute left-0 top-0 bottom-0 z-10 flex items-center justify-center px-1.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] transition-colors bg-gradient-to-r from-[var(--glass-fill)] from-60% to-transparent",
+  left: "absolute left-0 top-0 bottom-0 z-10 flex items-center justify-center px-1.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] transition-colors bg-gradient-to-r from-[var(--glass-fill)] from-60% to-transparent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
   right:
-    "absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center px-1.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] transition-colors bg-gradient-to-l from-[var(--glass-fill)] from-60% to-transparent",
+    "absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center px-1.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] transition-colors bg-gradient-to-l from-[var(--glass-fill)] from-60% to-transparent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
 };
 
 export interface EdgeArrowProps {

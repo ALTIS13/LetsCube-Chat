@@ -140,8 +140,11 @@ production-mode web build passed. No production deploy, native signing or
 physical-device QA in this pass. An initial desktop-shell run used an ignored
 local Vite env setting that enabled an unmocked access-snapshot RPC and hid
 synthetic permissions; the affected cases passed after explicitly setting
-`VITE_ACCESS_SNAPSHOT_RPC_ENABLED=0` for the fixture server. Next: broader
-screen-by-screen visual inventory and the separately authorized native
+`VITE_ACCESS_SNAPSHOT_RPC_ENABLED=0` for the fixture server. A follow-up closed
+D-157's translucent-arrow text collision and missing focus outline; the full
+desktop-shell spec passed 29 cases (25 platform skips), the shared unit suite
+passed 21 cases, and WebKit mobile folder checks passed in both themes.
+Next: broader screen-by-screen visual inventory and the separately authorized native
 candidate/device matrix; do not infer that production or installed clients
 carry this local UI patch.
 [Visual pass and exact validation](operations/2026-09-23-interface-visual-pass.md).

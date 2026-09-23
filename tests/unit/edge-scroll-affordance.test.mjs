@@ -211,19 +211,17 @@ for (const [label, file] of [
 }
 
 /**
- * The exact strings `FolderTabs` shipped, so lifting them into the hook cannot
- * have changed a pixel of it. The fade is the panel's own `--glass-fill` rather
- * than a colour chosen to match it, which is rule 1: read from the token it
- * cannot drift when the material changes.
+ * Both rows keep one shared arrow class. The fade reads the panel's
+ * `--glass-fill`, and keyboard focus has an inset outline on either edge.
  */
-test("the arrow wears the strings the folder strip already shipped", () => {
+test("the shared arrows keep the glass fade and show keyboard focus", () => {
   assert.equal(
     EDGE_ARROW_CLASS.left,
-    "absolute left-0 top-0 bottom-0 z-10 flex items-center justify-center px-1.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] transition-colors bg-gradient-to-r from-[var(--glass-fill)] from-60% to-transparent",
+    "absolute left-0 top-0 bottom-0 z-10 flex items-center justify-center px-1.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] transition-colors bg-gradient-to-r from-[var(--glass-fill)] from-60% to-transparent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
   );
   assert.equal(
     EDGE_ARROW_CLASS.right,
-    "absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center px-1.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] transition-colors bg-gradient-to-l from-[var(--glass-fill)] from-60% to-transparent",
+    "absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center px-1.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] transition-colors bg-gradient-to-l from-[var(--glass-fill)] from-60% to-transparent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
   );
 });
 

@@ -9547,20 +9547,34 @@ checker to notice.
 
 ---
 
-## D-157 `[ ]` Three things the arrows left behind: a collision in the shipped strip, no focus indicator, no e2e
+## D-157 `[x]` Three things the arrows left behind: a collision in the shipped strip, no focus indicator, no e2e
 
-Found while closing D-156, each deliberately not acted on, and each for a reason.
+**Closed locally 2026-09-23 (Codex).** The scrolling content now fades to fully
+transparent before the 26px arrow hit area on both the search filter row and
+phone folder strip; the arrow remains glass instead of gaining an opaque plate.
+The shared arrow has a visible inset keyboard-focus outline. The desktop search
+browser regression reproduced the missing mask before the fix; the rendered
+checks now cover masking and focus there and in a phone fixture with six
+folders. Chromium
+and WebKit screenshots in both themes were inspected; the desktop-shell run
+passed 29 tests with 25 platform-intentional skips, and both WebKit folder
+theme cases passed. This has not been deployed or checked on an installed
+native client. The three observations below are the original D-156 follow-ups,
+kept as the reason for
+the repair.
+
+Found while closing D-156, each deliberately left for this follow-up.
 
 **1. The same chevron-over-text collision exists in `FolderTabs`.** It is the same markup — the arrow box is
 about 26px, the `from-60%` fade has no room, `--glass-fill` is translucent — and it simply reads softer
-over flat tabs than over filled pills. Not fixed here because changing a shipped component to cure another
+over flat tabs than over filled pills. Not fixed in D-156 because changing a shipped component to cure another
 component's fault is a second fault. The cure is the same either way: give the fade room, or give the arrow an
 opaque backing, and prove it on both rows' pixels.
 
 **2. Neither row's arrows have a visible focus indicator.** They carry none of `kub-button`,
 `kub-icon-action` or `kub-interactive`, so `control-vocabulary`'s «everything pressable declares a
 focus indicator» sweep never reaches them: they are focusable buttons that show nothing when focused. Pre-existing
-in `FolderTabs` and preserved rather than quietly changed. Note that the guard's silence here is itself the
+in `FolderTabs` and was preserved rather than quietly changed. Note that the guard's silence here is itself the
 finding — a sweep that selects by class cannot see a control that wears none.
 
 **3. No end-to-end spec references the type-filter row at all.** Its only automated coverage is the unit file

@@ -23,6 +23,10 @@ screen inventory, then the separately gated native/device matrix.
   Before/after browser assertions were red before the relevant fixes and green
   afterward. The support-filter change specifically covers a narrow
   fine-pointer window; coarse-pointer phones already had a shared 44px rule.
+- D-157 continuation: both overflowing horizontal rows now mask text before
+  their translucent scroll arrows, and the arrows have a visible keyboard
+  focus outline. Real search and six-folder fixtures were captured and
+  inspected; WebKit mobile also rendered the repaired folder strip.
 
 ## Validation
 
@@ -43,6 +47,11 @@ screen inventory, then the separately gated native/device matrix.
   `VITE_ACCESS_SNAPSHOT_RPC_ENABLED=0`, those exact five cases passed; five
   mobile-project skips were intentional. The entire broad run was not repeated
   after this fixture-only correction, so do not describe it as all green.
+- After the D-157 change, the full desktop-shell spec on 1440px Chromium and
+  390px mobile Chromium passed 29 cases with 25 intentional platform skips.
+  The focused WebKit mobile folder cases passed in both themes. The shared
+  edge-scroll unit suite passed 21/21. Typecheck and the fixture production build passed again;
+  the same known Vite warnings remained.
 
 ## Limits
 
