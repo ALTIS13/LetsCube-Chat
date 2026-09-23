@@ -1183,6 +1183,33 @@ html, body {
     background: linear-gradient(rgb(var(--kub-cyan-rgb) / 0.16), rgb(var(--kub-cyan-rgb) / 0.16)), var(--kub-surface);
   }
 
+  .kub-connection-status-banner {
+    bottom: calc(1rem + var(--kub-safe-bottom));
+    width: calc(100vw - 24px);
+    max-width: 24rem;
+    padding: 0.75rem 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .kub-connection-status-banner {
+      bottom: calc(1.25rem + var(--kub-safe-bottom));
+    }
+  }
+
+  @supports selector(html:has(.kub-auth-shell)) {
+    .kub-android-connection-visible:has(.kub-auth-shell) .kub-connection-status-banner {
+      top: calc(0.5rem + var(--kub-safe-top));
+      bottom: auto;
+      width: max-content;
+      max-width: calc(100vw - 24px);
+      padding: 0.5rem 0.75rem;
+    }
+
+    .kub-android-connection-visible:has(.kub-auth-shell) .kub-connection-status-detail {
+      display: none;
+    }
+  }
+
   /* Layered as a background IMAGE, which is the whole trick: it composites over
      whatever background-color the element already has instead of replacing it,
      so the same rule reads correctly on the page, on a panel and inside a menu.
@@ -2085,6 +2112,11 @@ textarea::placeholder, input::placeholder {
 
   .kub-auth-shell > [data-testid="auth-form-shell"] {
     margin-block: auto;
+  }
+
+  .kub-android-connection-visible .kub-auth-shell {
+    padding-top: calc(max(1rem, var(--kub-safe-top)) + 3rem);
+    padding-bottom: max(1rem, var(--kub-safe-bottom));
   }
 
   .kub-auth-shell::after {

@@ -173,6 +173,13 @@ Android 13 guest lifecycle, desktop selected-row alpha and mobile emoji tests
 passed. Authenticated physical Android appearance is still open.
 [Evidence](operations/2026-09-23-android-webview-color.md).
 
+**Android auth offline banner, 2026-09-23 (Codex):** D-308 is fixed locally.
+Native Android auth shows a compact status at the top, leaving registration and
+privacy controls visible; browser/PWA retain their bottom banner. A focused
+overlap regression and owned Android 13 debug APK lifecycle/screenshot passed.
+Physical signed-release and authenticated UI validation remain open.
+[Evidence](operations/2026-09-23-android-auth-offline-banner.md).
+
 **Native proof continuation, 2026-09-23:** owner resumed after restoring the browser
 extension. The QA batch began at `d649db3f`. Windows actual WebView2 passed 6/6;
 an isolated Android 14 WebView passed seven positive cases and detected three

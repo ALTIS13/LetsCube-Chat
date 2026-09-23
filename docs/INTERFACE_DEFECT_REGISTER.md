@@ -23578,12 +23578,18 @@ selected-row render check and Android 13 debug full-shell smoke passed. The nati
 smoke uses a guest session; authenticated chat visuals and physical devices
 remain unproven. [Evidence](operations/2026-09-23-android-webview-color.md).
 
-## D-308 `[ ]` Persistent offline banner covers the auth footer on Android
+## D-308 `[x]` Persistent offline banner covers the auth footer on Android
 
 2026-09-23, inspected owned offline Android 13/API 33 debug screenshot
 `output/native-boot-android/run-20260923-074414-8009c2/guest-screen.png`.
 The fixed `connection-status-banner` covers the lower sign-in text and privacy
 link at the initial scroll position. The auth shell itself scrolls, but the
-fixed banner remains over its bottom area. Reproduce with the offline guest
-fixture; verify the lower actions remain readable and reachable at 360/390px,
-with and without safe-area inset, in both themes. No layout fix in D-307.
+fixed banner remains over its bottom area. The native Android auth view now
+uses a compact top status banner and reserves space above the brand; other
+routes and browser/PWA keep the existing bottom banner. The overlap regression
+was red before and 8/8 green after at 360/390px and desktop widths, in both
+themes and with/without a bottom safe-area inset. An owned offline Android
+13/API 33 debug APK screenshot shows the banner above the brand while the
+registration and privacy links remain unobscured. Cold/resume and force-stop
+checks passed. This does not cover authenticated screens or physical release
+devices. [Evidence](operations/2026-09-23-android-auth-offline-banner.md).
