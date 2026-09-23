@@ -189,8 +189,14 @@ mapped `prompt` to `denied`; the source fix is validated by a red/green test and
 the physical settings flow now shows Enable and obtains OS permission. FCM token
 registration still fails with `IOException`: microG Cloud Messaging is enabled,
 but device registration reports Not registered. No delivery or tap is proved.
-The phone requires its normal unlock after a diagnostic reboot before the next
-microG UI check. [Evidence](operations/2026-09-23-realme-microg-push.md).
+ADB wake/swipe unlocked it without a PIN. microG self-check passed, its official
+0.3.16.252432 update was verified by signer and installed, an old Nexus 5X
+profile was changed to Automatic: Device, and a dialer check-in was attempted.
+The official Companion was also updated with signer verification. Clearing
+only GmsCore app data, re-enabling registration/Cloud Messaging and rebooting
+did not fix check-in. The device is still unregistered and the token test fails;
+the app itself cold-launches with notification permission retained.
+[Evidence](operations/2026-09-23-realme-microg-push.md).
 
 **Native proof continuation, 2026-09-23:** owner resumed after restoring the browser
 extension. The QA batch began at `d649db3f`. Windows actual WebView2 passed 6/6;
