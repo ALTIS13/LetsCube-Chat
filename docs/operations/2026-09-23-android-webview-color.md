@@ -50,3 +50,35 @@ tested separately.
 The debug APK still does not prove signed-release parity, Android 15/OEM layout,
 FCM registration/delivery, authenticated chat UI or physical notification taps.
 Do not promote a release on this evidence alone.
+
+## D-307: frequent authenticated-state fallbacks
+
+Source audit found the same opaque fallback in generated Tailwind backgrounds
+for the selected/dragged chat row, message jump highlight, reaction picker,
+composer recording state, notification tab/error and settings selection/error.
+Their translucent accent backgrounds now use the D-306 theme RGB channel tokens.
+This preserves the chat accent override and avoids changing iOS PWA routing or
+notification/read logic. The broader `color-mix()` inventory is not closed;
+less frequent surfaces still require a separate authenticated old-WebView audit.
+
+- `node --test tests/unit/webview-color-fallback.test.mjs`: 4/4 pass after a
+  pre-fix failure on `ChatListItem.tsx`.
+- `pnpm.cmd --filter @workspace/kub typecheck`: exit 0.
+- `pnpm.cmd android:build:production:debug`: exit 0. A bare `pnpm.cmd --filter
+  @workspace/kub build` first stopped on missing `PORT`; the approved Android
+  wrapper supplied the required public settings and built/synced the APK.
+- Compiled `index-*.css` inspection confirmed `background-color:rgb(var(--kub-*-rgb)/.NN)`
+  for the edited utilities, with no opaque companion declaration for them.
+- Focused shell/contrast/color unit suite: 121/121 pass.
+- Desktop fixture selected chat row: at-rest alpha 0.14 and hover alpha 0.18,
+  Playwright 1/1 pass. An initial immediate assertion saw the old hover alpha
+  during `transition-colors`; the test now waits for the settled style.
+- Mobile 390px preview fixture: composer and reaction touch checks 4/4 pass.
+  An initial run without its required preview flag was stopped and not counted.
+- Owned offline Android 13 full Capacitor debug APK: cold/resume and after
+  force-stop both passed; all packaged web files matched the bundle; owned AVD
+  removed. `run-20260923-074414-8009c2/guest-screen.png` was inspected, but
+  the guest screen cannot prove the changed authenticated states.
+
+No signed release, production deploy, physical install or FCM delivery was
+performed in this follow-up.

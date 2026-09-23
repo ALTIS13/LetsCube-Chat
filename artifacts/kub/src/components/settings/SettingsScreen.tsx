@@ -1363,7 +1363,7 @@ function RowNote({ children, tone = "muted" }: { children: ReactNode; tone?: "mu
 export function SettingsErrorNotice({ error }: { error: string | null }) {
   if (!error) return null;
   return (
-    <div className="mx-3 mt-3 rounded-xl border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger-text)] sm:mx-4">
+    <div className="mx-3 mt-3 rounded-xl border border-[color:var(--kub-danger)]/30 bg-[rgb(var(--kub-danger-rgb)/0.12)] px-3 py-2 text-xs text-[color:var(--kub-danger-text)] sm:mx-4">
       {error}
     </div>
   );

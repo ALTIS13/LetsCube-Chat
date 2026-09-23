@@ -166,6 +166,13 @@ in an initial Android 14 run and passed on rerun; it remains a QA limit. The
 connected Realme was untouched; no signed release or FCM delivery proof.
 [Exact matrix and images](operations/2026-09-23-android-webview-color.md).
 
+**Android 13 common-state follow-up, 2026-09-23 (Codex):** D-307 removes
+opaque `color-mix()` fallbacks from frequent chat, reaction, notification and
+settings backgrounds. The production-configured debug APK was rebuilt; isolated
+Android 13 guest lifecycle, desktop selected-row alpha and mobile emoji tests
+passed. Authenticated physical Android appearance is still open.
+[Evidence](operations/2026-09-23-android-webview-color.md).
+
 **Native proof continuation, 2026-09-23:** owner resumed after restoring the browser
 extension. The QA batch began at `d649db3f`. Windows actual WebView2 passed 6/6;
 an isolated Android 14 WebView passed seven positive cases and detected three

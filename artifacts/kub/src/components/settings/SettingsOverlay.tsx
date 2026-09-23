@@ -303,7 +303,7 @@ export function SettingsOverlay({ screen, isPhone }: { screen: SettingsScreen; i
  * would raise that file's count by one and the guard would be measuring prose.
  */
 const CHOSEN_ROW =
-  "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] hover:bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] text-[color:var(--kub-accent-text)]";
+  "bg-[rgb(var(--kub-cyan-rgb)/0.14)] hover:bg-[rgb(var(--kub-cyan-rgb)/0.18)] text-[color:var(--kub-accent-text)]";
 const RESTING_ROW =
   "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] kub-raise-hover";
 

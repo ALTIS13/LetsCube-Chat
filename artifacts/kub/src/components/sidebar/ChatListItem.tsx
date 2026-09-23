@@ -244,9 +244,9 @@ export const ChatListItem = memo(function ChatListItem({
         // phone, and on a computer at rest, the class computes the same 12px.
         "kub-chat-list-row w-full flex items-center py-2.5 transition-colors relative group",
         "kub-raise-hover",
-        isSelected && "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] hover:bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]",
+        isSelected && "bg-[rgb(var(--kub-cyan-rgb)/0.14)] hover:bg-[rgb(var(--kub-cyan-rgb)/0.18)]",
         isDragging && "opacity-55",
-        isDragOver && "bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)] outline outline-1 outline-[color:var(--kub-cyan)]/45"
+        isDragOver && "bg-[rgb(var(--kub-cyan-rgb)/0.10)] outline outline-1 outline-[color:var(--kub-cyan)]/45"
       )}
     >
       {/* Active accent rail */}

@@ -414,7 +414,7 @@ export function MessageActionLayer({
       className={cn(
         "kub-interactive flex shrink-0 items-center justify-center rounded-full leading-none transition-transform hover:scale-110 kub-raise-hover",
         phone ? "h-11 w-11 text-[26px]" : "h-9 w-9 text-xl pointer-coarse:h-11 pointer-coarse:w-11 pointer-coarse:text-2xl",
-        mine === emoji && "bg-[color-mix(in_srgb,var(--kub-cyan)_24%,transparent)]",
+        mine === emoji && "bg-[rgb(var(--kub-cyan-rgb)/0.24)]",
         FOCUS_RING,
         PRESS_SINK,
       )}

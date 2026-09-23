@@ -1199,7 +1199,7 @@ export function MessageInput({
         isAttachmentBusy
           ? "text-[color:var(--kub-muted)] opacity-60 cursor-not-allowed"
           : recorderMode === "video"
-          ? "bg-[color-mix(in_srgb,var(--kub-pink)_18%,transparent)] text-[color:var(--kub-pink)] hover:bg-[color-mix(in_srgb,var(--kub-pink)_26%,transparent)]"
+          ? "bg-[rgb(var(--kub-pink-rgb)/0.18)] text-[color:var(--kub-pink)] hover:bg-[rgb(var(--kub-pink-rgb)/0.26)]"
           : "text-[color:var(--kub-text)]"
       )}
       aria-label={recordingButtonLabel(recorderMode)}
@@ -1414,7 +1414,7 @@ export function MessageInput({
           <div
             data-testid="composer-refusal"
             role="status"
-            className="mb-2 flex items-center gap-2 rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger-text)]"
+            className="mb-2 flex items-center gap-2 rounded-xl border border-[color:var(--kub-danger)]/40 bg-[rgb(var(--kub-danger-rgb)/0.12)] px-3 py-2 text-xs text-[color:var(--kub-danger-text)]"
           >
             <KubIcon name="ban" size={14} tone="currentColor" className="shrink-0" />
             <span className="min-w-0 flex-1 font-medium">{refusal}</span>
@@ -1653,7 +1653,7 @@ export function MessageInput({
                   isAttachmentBusy
                     ? "text-[color:var(--kub-muted)] opacity-60 cursor-not-allowed"
                     : recorderMode === "video"
-                    ? "bg-[color-mix(in_srgb,var(--kub-pink)_18%,transparent)] text-[color:var(--kub-pink)] hover:bg-[color-mix(in_srgb,var(--kub-pink)_26%,transparent)]"
+                    ? "bg-[rgb(var(--kub-pink-rgb)/0.18)] text-[color:var(--kub-pink)] hover:bg-[rgb(var(--kub-pink-rgb)/0.26)]"
                     : "text-[color:var(--kub-text)]"
                 )}
                 aria-label={recorderMode === "video" ? "Видеосообщение" : "Голосовое"}

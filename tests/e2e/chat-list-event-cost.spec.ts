@@ -82,6 +82,23 @@ test.describe("what one event costs the chat list and the conversation", () => {
     await requireFixtureServer(request);
   });
 
+  test("selected chat highlight remains translucent at rest and on hover", async ({ page }) => {
+    const { backend, realtime } = await boot(page);
+    await openChat(page, backend, realtime, CHAT.A);
+    const row = chatRow(page, CHAT.A);
+    await page.mouse.move(1400, 800);
+
+    const alpha = async () => row.evaluate((element) => {
+      const color = getComputedStyle(element).backgroundColor;
+      const match = color.match(/^rgba\([^)]*,\s*([\d.]+)\)$/);
+      return match ? Number(match[1]) : color;
+    });
+
+    await expect.poll(alpha, { message: "selected row at rest must not use an opaque accent" }).toBeCloseTo(0.14, 2);
+    await row.hover();
+    await expect.poll(alpha, { message: "selected row hover must not use an opaque accent" }).toBeCloseTo(0.18, 2);
+  });
+
   test("a message in another chat changes that row and fetches nothing", async ({ page }) => {
     test.setTimeout(90_000);
     const { backend, realtime } = await boot(page);

@@ -23566,3 +23566,24 @@ and Android 14 light screenshot were inspected after rebuilding the APK, and
 all three successful lifecycle runs passed. One separate Android 14 first-focus
 wait failed and passed on rerun; no physical-device, signed-release or FCM claim.
 [Evidence](operations/2026-09-23-android-webview-color.md).
+
+## D-307 `[x]` Common chat states have opaque Android 13 color fallbacks
+
+2026-09-23, follow-up to D-306. The compiled CSS also lowered translucent
+`color-mix()` backgrounds on selected chat rows, message highlights, reactions,
+composer controls, notification tabs and settings states to solid accent colors
+outside `@supports`. Those frequent states now use the existing theme RGB tokens
+with explicit alpha. Source regression, compiled CSS inspection, desktop
+selected-row render check and Android 13 debug full-shell smoke passed. The native
+smoke uses a guest session; authenticated chat visuals and physical devices
+remain unproven. [Evidence](operations/2026-09-23-android-webview-color.md).
+
+## D-308 `[ ]` Persistent offline banner covers the auth footer on Android
+
+2026-09-23, inspected owned offline Android 13/API 33 debug screenshot
+`output/native-boot-android/run-20260923-074414-8009c2/guest-screen.png`.
+The fixed `connection-status-banner` covers the lower sign-in text and privacy
+link at the initial scroll position. The auth shell itself scrolls, but the
+fixed banner remains over its bottom area. Reproduce with the offline guest
+fixture; verify the lower actions remain readable and reachable at 360/390px,
+with and without safe-area inset, in both themes. No layout fix in D-307.

@@ -401,7 +401,7 @@ export function NotificationBell() {
                   className={cn(
                     "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors",
                     activeTab === tab.id
-                      ? "bg-[color-mix(in_srgb,var(--kub-cyan)_16%,transparent)] text-[color:var(--kub-accent-text)]"
+                      ? "bg-[rgb(var(--kub-cyan-rgb)/0.16)] text-[color:var(--kub-accent-text)]"
                       : "text-[color:var(--kub-muted)] kub-raise-hover",
                   )}
                 >
@@ -417,7 +417,7 @@ export function NotificationBell() {
           </div>
 
           {error && (
-            <div className="mx-3 mt-3 shrink-0 rounded-xl border border-[color:var(--kub-danger)]/35 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger-text)]">
+            <div className="mx-3 mt-3 shrink-0 rounded-xl border border-[color:var(--kub-danger)]/35 bg-[rgb(var(--kub-danger-rgb)/0.10)] px-3 py-2 text-xs text-[color:var(--kub-danger-text)]">
               {error}
             </div>
           )}

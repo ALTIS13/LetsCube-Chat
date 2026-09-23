@@ -376,7 +376,7 @@ export function ReactionChip({
           FOCUS_RING,
           popping && "kub-reaction-pop",
           group.mine
-            ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] border-[color-mix(in_srgb,var(--kub-cyan)_72%,transparent)] text-[color:var(--kub-accent-text)]"
+            ? "bg-[rgb(var(--kub-cyan-rgb)/0.14)] border-[color-mix(in_srgb,var(--kub-cyan)_72%,transparent)] text-[color:var(--kub-accent-text)]"
             : "bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] text-[color:var(--kub-muted)]",
         )}
       >

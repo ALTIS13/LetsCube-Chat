@@ -1977,7 +1977,7 @@ const MessageRow = React.memo(function MessageRow({
       ref={(el) => { if (el && messageRefs) messageRefs.current[msg.id] = el; }}
       className={cn(
         highlighted &&
-          "transition-colors duration-500 rounded-lg bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]"
+          "transition-colors duration-500 rounded-lg bg-[rgb(var(--kub-cyan-rgb)/0.18)]"
       )}
       // Lifted above the dim while its phone menu is open, and moved only as
       // far as the menu needs. A transform, so nothing in the conversation is
@@ -2100,7 +2100,7 @@ const MessageRow = React.memo(function MessageRow({
             <span
               aria-hidden="true"
               data-message-swipe-reply="true"
-              className="pointer-events-none absolute right-2 top-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--kub-cyan)_22%,transparent)] text-[color:var(--kub-cyan)]"
+              className="pointer-events-none absolute right-2 top-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-[rgb(var(--kub-cyan-rgb)/0.22)] text-[color:var(--kub-cyan)]"
               style={{ opacity: progress, transform: `translateY(-50%) scale(${0.6 + 0.4 * progress})` }}
             >
               <KubIcon name="reply" size={18} />
