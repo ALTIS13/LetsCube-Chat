@@ -239,6 +239,18 @@ QA chat/message in the WebView; a true unlocked OS-card tap and signed-release
 matrix remain open. Android Stable stays `0.1.7/8`.
 [QA detail](operations/2026-09-23-realme-microg-push.md).
 
+**Official-GMS AVD delivery continuation, later 2026-09-23:** a Google Play
+Android 13 AVD installed the same `0.1.8/9` production-configured debug APK,
+registered an FCM device, and received a live data-only QA chat card while in
+the background. After `am kill` stopped the app without force-stopping it, a
+second QA chat card arrived; Android restarted the process for delivery while
+the launcher stayed foreground. The system grouped the two chat cards, and an
+actual tap on the expanded second card opened its exact chat/message with the
+target row visible, leaving the first card intact. This closes the official-GMS
+emulator delivery and tap check, not physical official-GMS, signed APK,
+long-session or wider device-matrix QA. Android Stable remains `0.1.7/8`.
+[Detailed evidence](operations/2026-09-23-realme-microg-push.md).
+
 **Native proof continuation, 2026-09-23:** owner resumed after restoring the browser
 extension. The QA batch began at `d649db3f`. Windows actual WebView2 passed 6/6;
 an isolated Android 14 WebView passed seven positive cases and detected three

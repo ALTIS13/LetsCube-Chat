@@ -240,7 +240,34 @@ The card's real `PendingIntent` was exercised by instrumentation. The device
 was locked then, so that run does not establish an end-user tap transition.
 With the handset unlocked, an equivalent explicit Android intent opened the
 correct QA chat and the target message was present in the WebView viewport;
-that is a route check, not a substitute for a human OS-card tap. A fresh
-official-GMS device delivery matrix, a true card tap, killed-process/offline
-repeats, and signed APK verification remain before Android Stable promotion.
+that is a route check, not a substitute for a human OS-card tap. At this
+checkpoint, official-GMS delivery, a true card tap, killed-process/
+offline repeats, and signed APK verification remained before Android Stable
+promotion; the AVD continuation below closes only the emulator portions.
 No release signing, AAB or catalog publication occurred.
+
+### Google Play Android 13 AVD: live delivery and card tap
+
+An isolated Google Play API 33 AVD installed the same production-configured
+`0.1.8/9` debug APK. Its instrumented Play Services/FCM registration and
+synthetic chat-card checks passed 3/3. A QA client session registered an active
+`0.1.8` FCM device without logging the token. A live QA owner-to-client send
+created one native outbox row per registered Android device, both sent without
+error; the AVD showed the correct chat-tag OS card within the bounded poll.
+
+The app process was then stopped with `am kill`, not force-stopped. A different
+QA chat message was accepted by FCM and appeared as a second distinct chat
+card while the launcher remained foreground; the app process restarted for
+delivery. Android displayed a group header above the two cards. Tapping that
+header only expands the group, so the expanded QA child card was tapped next.
+That actual System UI tap removed only the chosen card, opened the app at
+`/chat/<chat-id>/m/<message-id>`, and left the target message row visible in
+the WebView viewport. The other chat card remained active. This is real AVD
+OS-card activation, not merely a synthetic PendingIntent or direct intent.
+
+The Realme microG offline two-chat sample and this official-GMS emulator
+sample prove distinct environments, but neither proves a signed production
+APK on a physical official-GMS handset or long-session/vendor reliability.
+The new path has only a generic small icon, not a sender-avatar rendering
+claim. Android Stable remains `0.1.7/8`; no signing, AAB or publication was
+performed. Browser/PWA push and in-app notification ownership were unchanged.
