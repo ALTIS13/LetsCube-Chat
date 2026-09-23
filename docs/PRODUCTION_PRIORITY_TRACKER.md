@@ -511,6 +511,12 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     rendered Chromium/WebKit checks of masking and keyboard focus.
     Liquid-glass styling stayed intact; changes are local, not deployed.
     [Validation and remaining scope](operations/2026-09-23-interface-visual-pass.md).
+    **2026-09-23 Android visual follow-up:** D-304 separates the floating
+    navigation from the gesture area and prevents row text from competing
+    with its labels. D-305 shortens the clipped search hint while preserving
+    the full accessible name. Both are locally verified with synthetic UI;
+    the connected Realme still runs 0.1.3 build 4. Installed-client parity
+    remains a separate native candidate/release task.
 35. `[~]` Standing: **«where you were» is state the product owns and
     restores.** Asked for by the owner on 2026-09-20, as the principle behind
     the update complaint rather than as a feature of it: «В этом и смысл что

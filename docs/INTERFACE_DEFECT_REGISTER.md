@@ -23524,3 +23524,33 @@ type, and retain 36px at wider widths. `support-mobile-layout.spec.ts` checks
 all six boxes and a filter click in both themes. This is a narrow-window
 consistency fix, not a claim that a touch phone's filter was previously too
 short.
+
+## D-304 `[x]` Android's floating navigation includes the gesture area inside its capsule
+
+2026-09-23, synthetic native-Android browser fixture at 390px. With a 24px
+bottom inset, the capsule measured 80px high but only 8px from the screen edge.
+Its glass also allowed chat-row text to compete with the tab labels. The user's
+Android screenshot shows the same layout concern, but its exact installed
+version is not proven from the image alone.
+
+The Android branch now keeps the tab row at 56px, floats it 24px plus the 8px
+gap above the gesture area, and uses the existing strong glass material over
+the scrolling rows. The list's existing end padding still lifts its last row
+above the capsule. Web/iOS keep their previous geometry and panel material.
+`android-bottom-nav-safe-area.spec.ts` failed at 80px before the change, then
+passed for native dark/light and web. The 390px synthetic screenshots were
+inspected. No signed APK, physical Android visual test or production deploy
+is claimed. A read-only ADB package check found the connected Realme still on
+0.1.3 build 4; the screenshot's source device is not established.
+
+## D-305 `[x]` Search hint is wider than the field on phone and desktop
+
+2026-09-23, synthetic 390px and 1440px fixtures in both themes. The prior
+visible placeholder «Поиск людей, чатов, сообщений или +номера…» measured
+329px where only 317px was available on the phone and 163px in the desktop
+chat-list column. This defect exists in the pre-patch `HEAD`, independently
+of which APK produced the user's screenshot. The visible hint is now «Поиск»;
+the field's accessible name still describes people, chats, messages and phone
+numbers. A rendered-width regression in `desktop-shell.spec.ts` was red
+before and green after. This is a local source change, not an installed-APK
+or production claim.

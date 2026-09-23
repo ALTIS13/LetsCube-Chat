@@ -384,6 +384,29 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
   });
 
   for (const theme of ["dark", "light"] as const) {
+    test(`the search hint fits the chat-list header, ${theme}`, async ({ page }) => {
+      test.skip(![390, 1440].includes(page.viewportSize()?.width ?? 0), "this guard measures the phone and default desktop column");
+      await boot(page, { staff: false, theme });
+      const input = page.getByTestId("sidebar-search-input");
+      await expect(input).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+
+      const hint = await input.evaluate((node) => {
+        const style = getComputedStyle(node);
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("no canvas text context");
+        context.font = style.font;
+        return {
+          text: node.placeholder,
+          width: context.measureText(node.placeholder).width,
+          available: node.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight),
+        };
+      });
+      expect(hint.text).toContain("Поиск");
+      expect(hint.width, `the search hint is clipped: ${JSON.stringify(hint)}`).toBeLessThanOrEqual(hint.available);
+    });
+
     test(`search edge arrows keep text clear and expose keyboard focus, ${theme}`, async ({ page }, info) => {
       test.skip(!isDesktop(page), "the search arrows are a desktop affordance");
       await boot(page, { theme });

@@ -187,7 +187,7 @@ test.describe("a failure says what failed, in Russian, beside the control", () =
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("chat-list-item")).toHaveCount(1);
 
-    await page.getByPlaceholder("Поиск людей, чатов, сообщений или +номера…").fill("Привет");
+    await page.getByTestId("sidebar-search-input").fill("Привет");
     await expect(page.getByText(SEARCH_HISTORY_UNAVAILABLE)).toBeVisible();
     await expect(page.getByText(/обновления базы данных|migration|SQL/i)).toHaveCount(0);
     // What the person can still do is the half worth keeping.

@@ -149,6 +149,15 @@ candidate/device matrix; do not infer that production or installed clients
 carry this local UI patch.
 [Visual pass and exact validation](operations/2026-09-23-interface-visual-pass.md).
 
+**Android list follow-up, 2026-09-23 (Codex):** D-304 locally adjusts only
+native Android's floating navigation: a 24px gesture inset is now below its
+56px capsule, and row text no longer competes with the tab labels. Synthetic
+390px dark/light and web regression checks passed. D-305 shortens the clipped
+chat-list search hint at 390/1440 while retaining its full accessible label.
+No signed APK or deploy.
+The connected Realme reports installed 0.1.3 build 4, so its appearance is
+not evidence of the current checkout. Further visual inventory remains open.
+
 **Native proof continuation, 2026-09-23:** owner resumed after restoring the browser
 extension. The QA batch began at `d649db3f`. Windows actual WebView2 passed 6/6;
 an isolated Android 14 WebView passed seven positive cases and detected three

@@ -50,7 +50,6 @@ const read = (file) => readFileSync(new URL(file, root), "utf8");
  * pointed at something that would then have to be wrong to satisfy it.
  */
 const panels = [
-  ["components/layout/BottomNav.tsx", "justify-around", "kub-glass"],
   ["components/kub/KubHeader.tsx", "border-b border-[color:var(--kub-border-color)]", "kub-glass"],
   // The tasks page's two chrome bars. Neither is sticky, so what they blur is
   // the ambient rather than passing content — which is the same thing the
@@ -72,6 +71,13 @@ const panels = [
   ["components/bots/BotSettingsPanel.tsx", "border-[color:var(--kub-border-color)] p-2", "kub-glass"],
   ["components/bots/BotSettingsPanel.tsx", "rounded-md border border-[color:var(--kub-border-color)] p-4", "kub-glass"],
 ];
+
+test("bottom navigation uses panel glass on web and strong glass over Android chat rows", () => {
+  const source = read("components/layout/BottomNav.tsx");
+  assert.match(source, /nativeAndroid\s*\?\s*"kub-glass-strong bottom-\[/);
+  assert.match(source, /:\s*"kub-glass bottom-\[/);
+  assert.doesNotMatch(source, /"kub-glass kub-glass-strong/);
+});
 
 /**
  * Chrome that content sits on *and* that opens something `fixed`.

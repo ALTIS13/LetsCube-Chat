@@ -181,7 +181,7 @@ test("every inset utility the markup writes is declared once, and reads the toke
   }
 });
 
-test("the bottom tab bar adds the home-indicator inset to its height", () => {
+test("web pads its bottom tab bar; native Android floats above the gesture area", () => {
   const nav = read("artifacts/kub/src/components/layout/BottomNav.tsx");
 
   assert.ok(writesClass(nav, "pb-safe"), "the tab bar stopped asking for the bottom inset at all");
@@ -199,8 +199,14 @@ test("the bottom tab bar adds the home-indicator inset to its height", () => {
   // it asked was that the token appear somewhere in the text. So the value is
   // resolved through index.css, which this file already reads, and both
   // mistakes are caught.
-  const height = /height:\s*"([^"]+)"/.exec(nav);
-  assert.ok(height, "the tab bar no longer sets an explicit height — re-read this test before deleting it");
+  const height = /height:\s*nativeAndroid\s*\?\s*"([^"]+)"\s*:\s*"([^"]+)"/.exec(nav);
+  assert.ok(height, "the tab bar no longer sets platform-specific heights — re-read this test before deleting it");
+  assert.equal(height[1], "calc(var(--kub-bottom-nav) - var(--kub-safe-bottom))");
+  assert.equal(height[2], "var(--kub-bottom-nav)");
+  assert.ok(
+    nav.includes("bottom-[calc(var(--kub-bottom-nav-gap)+var(--kub-safe-bottom))]"),
+    "native Android no longer floats clear of the gesture area",
+  );
 
   const resolve = (expression, depth = 0) => {
     const text = String(expression).trim();
@@ -215,7 +221,7 @@ test("the bottom tab bar adds the home-indicator inset to its height", () => {
     return resolve(cssSource.slice(at + name.length + 1, end), depth + 1);
   };
 
-  const resolved = resolve(height[1]);
+  const resolved = resolve(height[2]);
   assert.ok(
     resolved.includes("var(--kub-safe-bottom)"),
     `the tab bar's height resolves to "${resolved}", which never reaches the home indicator's inset`,

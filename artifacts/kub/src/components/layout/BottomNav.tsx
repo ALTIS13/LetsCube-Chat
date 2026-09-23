@@ -5,6 +5,7 @@ import { useAppStore } from "@/store/app.store";
 import { KubIcon } from "@/components/kub";
 import { useTaskAccessGate } from "@/hooks/useTaskAccess";
 import { bottomNavDestinations, type BottomNavDestination } from "@/lib/bottomNavDestinations";
+import { isNativeAndroid } from "@/lib/platform/capabilities";
 import { cn } from "@/lib/utils";
 
 export function BottomNav() {
@@ -12,6 +13,7 @@ export function BottomNav() {
   const { canAccessTasks } = useTaskAccessGate();
   const { mobileSection, setMobileSection } = useAppStore();
   const isOnTasksRoute = location.startsWith("/tasks");
+  const nativeAndroid = isNativeAndroid();
 
   // Which entries exist, and the reason each one does, live in
   // `lib/bottomNavDestinations.ts` — including the three that were taken out,
@@ -41,22 +43,21 @@ export function BottomNav() {
       // viewport and escape the pane column, and on a computer this element
       // still exists in the markup while `md:hidden` keeps it off screen.
       //
-      // `justify-around` and `kub-glass` stay on the element. `shell-glass`
-      // pins that pair, and its reason holds: this is chrome that content
-      // sits on and that opens nothing.
-      className="kub-glass absolute inset-x-10 bottom-[var(--kub-bottom-nav-gap)] z-20 md:hidden flex items-center justify-around px-2 pb-safe rounded-full border border-[color:var(--kub-border-color)]"
-      // The row is 56px and the home indicator is extra, not a share of it.
-      // Tailwind boxes are `border-box`, so with a flat `height: 56px` the
-      // safe-area padding this bar asks for would have been taken out of the
-      // tabs rather than added below them — six labels and their icons into
-      // 22px on an iPhone. The height carries the inset so the padding has
-      // somewhere to go; both read the `--kub-safe-bottom` token, which is 0px
-      // on a phone without an inset, on Android and in the desktop shell, so
-      // there this is the same 56px bar it was.
-      //
-      // The number now lives in `--kub-bottom-nav` because the panes reserve
-      // the same height below themselves, and two copies of one number drift.
-      style={{ height: "var(--kub-bottom-nav)" }}
+      // Android uses the stronger existing material: row text can pass under
+      // this floating surface, but must not compete with its tab labels.
+      className={cn(
+        "absolute inset-x-10 z-20 md:hidden flex items-center justify-around px-2 rounded-full border border-[color:var(--kub-border-color)]",
+        // On native Android the gesture area belongs below the floating
+        // capsule, not inside it. Web/iOS retain their existing inset padding.
+        nativeAndroid
+          ? "kub-glass-strong bottom-[calc(var(--kub-bottom-nav-gap)+var(--kub-safe-bottom))]"
+          : "kub-glass bottom-[var(--kub-bottom-nav-gap)] pb-safe",
+      )}
+      style={{
+        height: nativeAndroid
+          ? "calc(var(--kub-bottom-nav) - var(--kub-safe-bottom))"
+          : "var(--kub-bottom-nav)",
+      }}
     >
       {tabs.map((entry) => {
         const { id, label, icon } = entry;
