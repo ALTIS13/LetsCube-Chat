@@ -5,7 +5,7 @@ type FcmData = Record<string, string>;
 export type FcmMessageEnvelope = {
   message: {
     token: string;
-    notification: {
+    notification?: {
       title: string;
       body: string;
       image?: string;
@@ -13,8 +13,8 @@ export type FcmMessageEnvelope = {
     android: {
       priority: "HIGH" | "NORMAL";
       ttl: string;
-      collapse_key: string;
-      notification: {
+      collapse_key?: string;
+      notification?: {
         channel_id: "messages" | "tasks" | "system";
         tag: string;
         image?: string;
@@ -24,7 +24,7 @@ export type FcmMessageEnvelope = {
   };
 };
 
-export function buildFcmMessage(payload: PushPayload, token: string): FcmMessageEnvelope {
+export function buildFcmMessage(payload: PushPayload, token: string, appVersion?: string | null): FcmMessageEnvelope {
   const kind = safeText(payload.kind, "system", 60);
   const category = getCategory(kind);
   const chatId = safeText(payload.chatId ?? payload.chat_id, "", 80);
@@ -65,12 +65,26 @@ export function buildFcmMessage(payload: PushPayload, token: string): FcmMessage
   if (preview) data.preview = preview;
   if (category === "message" && chatId) data.group_tag = `message:chat:${chatId}`;
 
+  const title = safeText(payload.title, "LETSCUBE", 80);
+  const body = safeText(payload.body, "Новое уведомление", 180);
+  // Notification messages ignore collapse_key in FCM's offline queue. New
+  // Android shells display chat data themselves; older APKs retain auto-display.
+  if (category === "message" && supportsNativeChatData(appVersion)) {
+    return {
+      message: {
+        token,
+        android: { priority: "HIGH", ttl: "86400s" },
+        data: { ...data, title, body, native_chat_v: "1" },
+      },
+    };
+  }
+
   return {
     message: {
       token,
       notification: {
-        title: safeText(payload.title, "LETSCUBE", 80),
-        body: safeText(payload.body, "Новое уведомление", 180),
+        title,
+        body,
         ...(senderAvatarUrl ? { image: senderAvatarUrl } : {}),
       },
       android: {
@@ -86,6 +100,13 @@ export function buildFcmMessage(payload: PushPayload, token: string): FcmMessage
       data,
     },
   };
+}
+
+function supportsNativeChatData(version: string | null | undefined): boolean {
+  const parts = /^(\d+)\.(\d+)\.(\d+)(?:$|[+-])/.exec(version ?? "");
+  if (!parts) return false;
+  const [major, minor, patch] = parts.slice(1).map(Number);
+  return major > 0 || minor > 1 || (minor === 1 && patch >= 8);
 }
 
 function safeSenderKind(value: unknown): "user" | "bot" | "" {

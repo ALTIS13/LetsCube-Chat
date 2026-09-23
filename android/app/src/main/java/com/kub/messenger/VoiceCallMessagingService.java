@@ -12,6 +12,15 @@ public class VoiceCallMessagingService extends MessagingService {
             VoiceCallRuntime.get(this).receive(data);
             return;
         }
+        if (ChatPushNotificationContract.isReserved(data)) {
+            try {
+                ChatPushNotifications.receive(this, message);
+            } catch (RuntimeException ignored) {
+                // The in-app notification remains authoritative if Android display fails.
+            }
+            super.onMessageReceived(message);
+            return;
+        }
         super.onMessageReceived(message);
     }
     // Token refresh intentionally inherits Capacitor's unchanged implementation.

@@ -139,7 +139,7 @@ test("native push dispatcher isolates FCM and WNS providers", () => {
   );
 
   assert.match(source, /provider:\s*"fcm"\s*\|\s*"apns"\s*\|\s*"wns"/);
-  assert.match(source, /select",\s*"id,token,provider,enabled,revoked_at"/);
+  assert.match(source, /select",\s*"id,token,provider,enabled,revoked_at,app_version"/);
   assert.match(source, /device\.provider\s*===\s*"wns"/);
   assert.match(source, /getWnsAccessToken/);
   assert.match(source, /deliverWns/);

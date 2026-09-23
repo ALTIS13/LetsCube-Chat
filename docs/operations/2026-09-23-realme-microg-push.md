@@ -206,3 +206,41 @@ API build exit 0; web production build generated `sw.js` and completed in
 the dev server used a real backend URL; with the required local mock URL,
 Android bottom navigation passed 3/3 and support layout 8/8. The first run's
 other 24 cases passed, with three desktop-only bottom-nav skips.
+
+## Versioned non-collapsible chat transport follow-up (2026-09-23)
+
+The earlier 150-second offline observation is superseded by a controlled
+single-message repeat: the native outbox was accepted at 11:10:00 UTC, and
+the Realme displayed a new card for the same QA chat at 11:10:41 UTC after
+Wi-Fi returned. It was not permanently lost. This is one successful sample,
+not a delivery-time guarantee.
+
+[Firebase's queue contract](https://firebase.google.com/docs/cloud-messaging/customize-messages/collapsible-message-types)
+states that notification messages always collapse and ignore `collapse_key`.
+The previous per-chat key only described the Android display tag, not FCM's
+offline queue. Android `0.1.8/9` therefore uses a versioned data-only FCM chat
+payload; the native service displays one OS card per chat and passes the exact
+message route through the existing Capacitor tap listener. Older APKs and
+task/system pushes retain the prior notification payload. In-app notifications
+remain the source of truth; Web Push/PWA payloads and schema were not changed.
+
+The production-configured debug `0.1.8/9` APK upgraded the test Realme without
+clearing its data or notification permission. Android unit tests passed, an
+instrumentation test displayed a synthetic data-only card, and FCM availability
+plus token acquisition passed 2/2. The isolated Edge Function deployment
+changed only `fcm.ts` and `index.ts`, with exact-source preflight hashes and
+server-side backups ending in `.bak.20260923-chat-data`; the container returned
+healthy. A live QA message to the `0.1.8` device showed a single Android
+chat-tag card (ID 0) after an error-free FCM send. A two-sender/two-chat QA
+probe then queued both messages while the handset had no network. After Wi-Fi
+reconnected, both different chat tags were present as active OS cards; the
+third LETSCUBE record was Android's summary card, not a duplicate message.
+
+The card's real `PendingIntent` was exercised by instrumentation. The device
+was locked then, so that run does not establish an end-user tap transition.
+With the handset unlocked, an equivalent explicit Android intent opened the
+correct QA chat and the target message was present in the WebView viewport;
+that is a route check, not a substitute for a human OS-card tap. A fresh
+official-GMS device delivery matrix, a true card tap, killed-process/offline
+repeats, and signed APK verification remain before Android Stable promotion.
+No release signing, AAB or catalog publication occurred.

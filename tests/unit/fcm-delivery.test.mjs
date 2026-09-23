@@ -6,7 +6,7 @@ import {
   isPermanentFcmTokenError,
 } from "../../supabase/functions/send-push-notifications/fcm.ts";
 
-test("FCM message delivery uses the messages channel and a stable chat collapse key", () => {
+test("legacy Android message payload retains the messages channel and OS chat tag", () => {
   const result = buildFcmMessage(
     {
       title: "CodexTest",
@@ -24,6 +24,8 @@ test("FCM message delivery uses the messages channel and a stable chat collapse 
   assert.equal(result.message.token, "device-token");
   assert.equal(result.message.android.notification.channel_id, "messages");
   assert.equal(result.message.android.priority, "HIGH");
+  // FCM ignores collapse_key for notification messages; this only documents
+  // the legacy payload. The Android tag groups cards after delivery.
   assert.equal(result.message.android.collapse_key, "message:chat:chat-1");
   assert.equal(result.message.notification.title, "CodexTest");
   assert.equal(result.message.notification.body, "Привет");
@@ -36,6 +38,36 @@ test("FCM message delivery uses the messages channel and a stable chat collapse 
     tag: "message:chat:chat-1",
     group_tag: "message:chat:chat-1",
   });
+});
+
+test("new Android clients receive non-collapsible chat data with native display fields", () => {
+  const payload = {
+    title: "CodexTest",
+    body: "Привет",
+    kind: "message",
+    chatId: "chat-1",
+    messageId: "message-1",
+    tag: "message:chat:chat-1",
+    url: "/?chat=chat-1&message=message-1",
+  };
+  const current = buildFcmMessage(payload, "device-token", "0.1.8").message;
+  assert.equal("notification" in current, false);
+  assert.equal("collapse_key" in current.android, false);
+  assert.equal("notification" in current.android, false);
+  assert.equal(current.android.priority, "HIGH");
+  assert.equal(current.data.title, "CodexTest");
+  assert.equal(current.data.body, "Привет");
+  assert.equal(current.data.native_chat_v, "1");
+  assert.equal(current.data.chat_id, "chat-1");
+  assert.equal(current.data.message_id, "message-1");
+
+  const old = buildFcmMessage(payload, "device-token", "0.1.7").message;
+  assert.equal(old.notification.title, "CodexTest");
+  assert.equal(old.android.notification.tag, "message:chat:chat-1");
+  assert.equal(old.android.collapse_key, "message:chat:chat-1");
+  assert.equal(buildFcmMessage(payload, "device-token", "invalid").message.notification.title, "CodexTest");
+  const task = buildFcmMessage({ kind: "task_assigned", title: "Задача" }, "device-token", "0.1.8").message;
+  assert.equal(task.notification.title, "Задача");
 });
 
 test("task FCM delivery stays separate from message grouping", () => {
@@ -77,6 +109,14 @@ test("FCM payload never exposes raw media or signed URLs", () => {
 
   assert.equal(result.message.notification.body, "Новое уведомление");
   assert.equal(result.message.data.route, "/?chat=chat-1");
+  const native = buildFcmMessage({
+    title: "LETSCUBE",
+    body: "https://core.letscube.ru/storage/v1/object/sign/private/photo.jpg?token=secret",
+    kind: "message",
+    chatId: "chat-1",
+    messageId: "message-1",
+  }, "device-token", "0.1.8");
+  assert.equal(native.message.data.body, "Новое уведомление");
 });
 
 test("FCM bot message preserves actor identity, grouping, route, and trusted avatar", () => {

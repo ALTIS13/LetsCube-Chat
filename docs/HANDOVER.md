@@ -226,6 +226,19 @@ MicroG offline-queue reliability and signed-release proof remain open. Do not
 infer Android Stable readiness from registration or debug APK tests alone.
 [Measured results](operations/2026-09-23-realme-microg-push.md).
 
+**Android versioned chat push follow-up, later 2026-09-23 (Codex):** the old
+offline observation was not reproducible as permanent loss: a new card appeared
+41 seconds after FCM acceptance following Wi-Fi reconnect. Firebase documents
+that notification messages ignore `collapse_key`, so Android `0.1.8/9` debug
+now uses a non-collapsible data-only chat path with native per-chat OS display;
+older APKs and task/system notifications retain their payload. The isolated
+Edge files were backed up and deployed, and two distinct QA chats sent while
+the Realme was offline both produced separate cards after reconnect. Synthetic
+card display and FCM token tests pass. A simulated intent reached the exact
+QA chat/message in the WebView; a true unlocked OS-card tap and signed-release
+matrix remain open. Android Stable stays `0.1.7/8`.
+[QA detail](operations/2026-09-23-realme-microg-push.md).
+
 **Native proof continuation, 2026-09-23:** owner resumed after restoring the browser
 extension. The QA batch began at `d649db3f`. Windows actual WebView2 passed 6/6;
 an isolated Android 14 WebView passed seven positive cases and detected three

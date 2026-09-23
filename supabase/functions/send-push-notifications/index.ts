@@ -45,6 +45,7 @@ type PushDeviceRow = {
   provider: "fcm" | "apns" | "wns";
   enabled: boolean;
   revoked_at?: string | null;
+  app_version?: string | null;
 };
 
 type FcmConfig = {
@@ -273,7 +274,7 @@ async function selectNativeOutbox(supabaseUrl: string, secretKey: string, limit:
 async function selectPushDevices(supabaseUrl: string, secretKey: string, ids: string[]) {
   if (ids.length === 0) return { ok: true as const, data: [] as PushDeviceRow[] };
   const url = new URL("/rest/v1/user_push_devices", supabaseUrl);
-  url.searchParams.set("select", "id,token,provider,enabled,revoked_at");
+  url.searchParams.set("select", "id,token,provider,enabled,revoked_at,app_version");
   url.searchParams.set("id", `in.(${ids.join(",")})`);
   const response = await restFetch(url, secretKey);
   if (!response.ok) return { ok: false as const, status: response.status };
@@ -413,7 +414,7 @@ async function deliverFcm(
         authorization: `Bearer ${accessToken}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify(buildFcmMessage(row.payload, device.token)),
+      body: JSON.stringify(buildFcmMessage(row.payload, device.token, device.app_version)),
     },
   );
 

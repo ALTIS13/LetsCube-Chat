@@ -69,6 +69,10 @@ final class VoiceCallRuntime {
 
     static boolean supported() { return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O; }
 
+    static boolean isResumed() {
+        synchronized (LOCK) { return resumed; }
+    }
+
     String beginBinding(String recipientId, String recipientSessionId) {
         synchronized (LOCK) {
             String epoch = transaction(state -> state.beginBinding(recipientId, recipientSessionId));
