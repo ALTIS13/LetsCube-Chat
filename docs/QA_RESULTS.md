@@ -1,5 +1,31 @@
 # QA Results
 
+## 2026-09-23 - Android FCM Idle QA And Web Rollout
+
+- Web production container `letscube-web` reached healthy image
+  `f880e3f7e582fc616c44dccd4bd01087c1e25d8b`; a CSS marker absent from
+  the prior source is present in the live asset. `/privacy` and `/support`
+  answered HTTP 200. Public navigation on the live domain passed 8/8 across
+  1440px/390px and light/dark. Fresh QA Auth sign-in yielded visible desktop
+  and mobile shells and chat lists without JS errors, stale/unavailable state,
+  or backend 5xx. No personal screens or message contents were captured.
+- Edge Function `send-push-notifications` is healthy; its mounted `fcm.ts`
+  hash matches the reviewed source. The file was backed up before the scoped
+  replacement. In-app notifications remain authoritative; Browser/PWA push
+  and the Android Stable artifact were not replaced.
+- Android 13 Google Play AVD FCM registration smoke: 2/2. Physical Realme
+  forced-Doze card delivery: observed before and after the message-priority
+  change. Offline/reconnect: one accepted QA push did not yield a newer card
+  within 150 seconds; a later online QA message did. MicroG queue recovery is
+  unresolved, so this is not a signed-release acceptance result.
+- Validation: focused FCM/Web Push/projection 21/21; Kub typecheck 0; unit
+  4077 passed/1 skipped; server 334/334; API build 0; web production build
+  emitted `sw.js build` and completed in 22.11 seconds. The initial local
+  E2E run used production backend settings and hit 11 deliberate fixture
+  guards; with the correct mock backend, the affected navigation tests passed
+  3/3 and support layout passed 8/8. Three desktop-only bottom-nav cases
+  remained skipped. See [physical detail](operations/2026-09-23-realme-microg-push.md).
+
 ## 2026-09-22 - Pre-React Recovery And Current-Document Readiness
 
 D-298 web/source repair; actual native lifecycle and new signed artifacts remain

@@ -1,6 +1,15 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-08-31.
+Status: active production-hardening tracker, updated 2026-09-23.
+
+**2026-09-23 rollout checkpoint:** shared web/backend source through
+`f880e3f7` is in `main`; the web container and FCM Edge Function were verified
+healthy against their intended bytes. Android 13 official-GMS emulator passes
+FCM registration 2/2, and Realme microG receives forced-Doze QA cards.
+Android Stable remains at `0.1.7/8`: signed candidate, physical official-GMS
+delivery and reliable microG offline/reconnect delivery are **open**, not
+implicitly approved by this source rollout. Full evidence is in
+`docs/QA_RESULTS.md` and `docs/operations/2026-09-23-realme-microg-push.md`.
 
 This file is the working source of truth for the next production stages. Before starting any new production task, read this file first, then update the relevant checkboxes/status when work is completed, blocked, or intentionally deferred.
 
