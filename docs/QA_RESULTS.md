@@ -1,5 +1,15 @@
 # QA Results
 
+## 2026-09-23 - Android 0.1.8/9 Signed Stable Release
+
+Signed APK published from `02441b29`. Local and public release verifiers passed;
+the public APK is 7,502,015 bytes with SHA-256
+`3954291616f5146acd02fdcae0651b6ec5baf5e7b9b66d59c7f4e4622ebe9cc4`.
+Signer continuity with `0.1.7` and Android 14 signed guest launch passed;
+16 Android auth/offline layout checks passed. Authenticated FCM on the signed
+APK and physical official-GMS QA remain open.
+[Full release evidence](operations/2026-09-23-android-0.1.8-release.md).
+
 ## 2026-09-23 - Android FCM Idle QA And Web Rollout
 
 - Web production container `letscube-web` reached healthy image

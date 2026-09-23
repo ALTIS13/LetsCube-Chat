@@ -25,7 +25,7 @@ Current repository groundwork:
 - App id: `com.kub.messenger`
 - App name: `LETSCUBE`
 - Web assets directory: `artifacts/kub/dist/public`
-- Android version: `versionCode 3`, `versionName 0.1.2`
+- Android Stable version: `versionCode 9`, `versionName 0.1.8` (2026-09-23)
 - Reproducible icon/splash source: `assets/logo.svg`
 - Android asset generation script: `pnpm.cmd android:assets`
 - Android sync script: `pnpm.cmd android:sync`

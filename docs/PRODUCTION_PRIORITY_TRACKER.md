@@ -2,7 +2,12 @@
 
 Status: active production-hardening tracker, updated 2026-09-23.
 
-**2026-09-23 rollout checkpoint:** shared web/backend source is in `main`;
+**2026-09-23 rollout checkpoint:** Android Stable is now the signed `0.1.8/9`
+APK cut from `02441b29`. Public HTTPS artifact, signer continuity, signed
+Android 14 guest launch and production-bundle layout checks passed. Signed
+authenticated FCM, physical official-GMS, long-session and wider device-matrix
+QA remain open. [Release evidence](operations/2026-09-23-android-0.1.8-release.md).
+Shared web/backend source is in `main`;
 the web container and FCM Edge Function were verified
 healthy against their intended bytes. The Android `0.1.8/9` debug candidate
 receives background/killed-process data-only chat push on a Google Play API 33
@@ -18,9 +23,9 @@ the same read-only AVD passed live background and normally killed FCM cards;
 an actual System UI child-card tap opened its exact message in the WebView.
 Both QA messages, notifications and temporary device registration were
 cleaned; the original AVD remained unchanged.
-Android Stable remains at `0.1.7/8`: signed candidate, physical official-GMS
-delivery and long-session/vendor QA are **open**, not implicitly approved by
-this source rollout. Full evidence is in
+The previous Android Stable `0.1.7/8` status below was superseded by the
+signed `0.1.8/9` publication above. Physical official-GMS delivery and
+long-session/vendor QA remain **open**. Prior debug evidence is in
 `docs/QA_RESULTS.md` and `docs/operations/2026-09-23-realme-microg-push.md`.
 
 This file is the working source of truth for the next production stages. Before starting any new production task, read this file first, then update the relevant checkboxes/status when work is completed, blocked, or intentionally deferred.
@@ -5137,13 +5142,15 @@ Candidate work:
 
 ## Native And Desktop Packaging
 
-Status: `[~]` active. Android and Windows Tauri internal candidates are available; production signing and update gates remain open.
+Status: `[~]` active. Android `0.1.8/9` is signed and published in Stable;
+authenticated signed-FCM, physical official-GMS and broader device/long-session
+gates remain open. Windows Tauri has its separate release and updater gates.
 
 - `[x]` Production debug APK connection and physical launch: the public build allowlist, LETSCUBE adaptive icons/dark splash, Android `0.1.0` versioning, install and first launch were verified on a Nothing/Spacewar A063 running Android 15.
 - `[x]` Native Android FCM foundation: local ignored Firebase client config, Capacitor permission/registration/channels, live auth-scoped device RPCs, RLS-protected device/outbox schema, trusted HTTP v1 delivery and one physical background notification/tap smoke are complete.
 - `[x]` Self-hosted native release catalog: Android `0.1.0` internal APK and immutable Windows Tauri `0.2.0` build `4` NSIS are available at `api.letscube.ru`; public size/SHA and cache/CORS headers were verified.
 - `[~]` Native push release QA: real owner-to-client message delivery, sender exclusion, category preference suppression, same-chat collapse, server-backed chat read-sync, cold-start tap routing, killed-process delivery, separate task delivery, location-staff task routing, restart registration recovery and Android 16 Google Play emulator coverage pass. On 2026-08-26 the signed final `0.1.2/3` Nothing A063 official-GMS candidate retained authenticated session/chat/registration through a same-key upgrade and passed fresh post-DND background/killed grouped cards, exact-chat taps and read-sync. Fix round 4 separately proved independent foreground FCM transport, authenticated offline/reconnect, first-unread anchoring and bounded geolocation. Fix round 5 passed explicit logout/login/session restore and the remaining large-chat/history/footer cases; controller closeout then passed large-file upload/progress/sent playback/cleanup plus camera/photo/video/video-circle/voice controls. An earlier card absence under active DND is not counted as a delivery failure. A second Android 15 Realme device passes APK/portrait UI QA, but its custom-ROM microG cannot complete Google Check-in (`AccountDisabled`); broader vendor/device coverage remains an external release-quality action.
-- `[~]` 2026-09-23 supersedes the old Realme check-in note above: the stale microG account binding was removed on this designated test handset, so check-in, FCM token, background/killed-process card and exact-route QA succeeded. The `0.1.8/9` debug candidate adds non-collapsible data-only chat push for new Android versions while old devices retain their existing payload. Two QA chats queued offline produced two distinct cards after reconnect on Realme. Google Play API 33 and API 34 AVDs registered FCM devices, received live background and `am kill` chat cards, and actual System UI card taps reached exact messages. API 33 additionally preserved another chat card after a tap. Physical official-GMS validation of this candidate, long-session/device matrix, signed APK verification and Stable publication remain open. In-app notifications still own state.
+- `[~]` 2026-09-23 supersedes the old Realme check-in note above: the stale microG account binding was removed on this designated test handset, so check-in, FCM token, background/killed-process card and exact-route QA succeeded. The `0.1.8/9` debug candidate adds non-collapsible data-only chat push for new Android versions while old devices retain their existing payload. Two QA chats queued offline produced two distinct cards after reconnect on Realme. Google Play API 33 and API 34 AVDs registered FCM devices, received live background and `am kill` chat cards, and actual System UI card taps reached exact messages. API 33 additionally preserved another chat card after a tap. Signed APK verification and Stable publication are now complete as recorded above. Physical official-GMS validation, authenticated signed-release FCM, and long-session/device-matrix QA remain open. In-app notifications still own state.
 - `[x]` Stabilize chat message footer geometry: a physical Android probe reproduced the `inline`/`anchored` ResizeObserver feedback loop on a medium-length incoming message. Once measured overflow anchors the footer it now remains anchored until a real viewport/content change; timestamp digits and private-delivery icons reserve fixed width. The same physical probe changed from two alternating layouts to one stable layout across 160 samples.
 - `[x]` Release signing/AAB with the permanent RSA-4096 PKCS12 identity and all
   signing inputs outside Git. Canonical nondebuggable `0.1.2/3` APK/AAB pass

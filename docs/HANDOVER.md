@@ -38,10 +38,10 @@ Three shells over one web application:
 | --- | --- | --- |
 | web | `artifacts/kub`, React/Vite, served at **https://app.letscube.ru** | deploys on every push to `main` |
 | Windows | Tauri EXE; loads `app.letscube.ru` at runtime, bundles only its splash | `0.2.14` build 18, 2026-09-06 |
-| Android | Capacitor APK; **embeds** its web bundle | `0.1.7` build 8, 2026-09-17, cut from `facd7c6e` |
+| Android | Capacitor APK; **embeds** its web bundle | `0.1.8` build 9, 2026-09-23, cut from `02441b29` |
 
 So the Windows shell always shows the current web; **the Android APK shows the web
-as of its cut**, and is now well behind it. A tester on Android is describing that
+as of its cut**, and will lag subsequent web deploys. A tester on Android is describing that
 build — check the platform and version before treating a report as a current
 defect, and read the live catalog rather than any number written down:
 `https://api.letscube.ru/releases/v1/{android,windows}/stable.json`. Cutting and
@@ -130,6 +130,15 @@ whole deployment** — no bot has registered a command yet.
 ---
 
 ## 4. Where to start
+
+**Android Stable release, 2026-09-23 (Codex):** owner-authorized signed
+`0.1.8/9` APK was published from `02441b29`. Local and public release verifiers,
+signer continuity with `0.1.7`, Android 14/API 34 signed guest launch, and
+16 production-bundle layout checks passed. The prior Stable manifest has a
+server-side backup. Signed authenticated FCM, physical official-GMS delivery,
+long-session and wider matrix QA remain open; debug AVD/Realme push evidence
+must not be promoted to signed/physical-GMS proof.
+[Release evidence and rollback](operations/2026-09-23-android-0.1.8-release.md).
 
 **Interface visual pass, 2026-09-23 (Codex):** D-272 and the device-title
 follow-up under D-222 are closed; D-299 to D-303 close five newly measured
