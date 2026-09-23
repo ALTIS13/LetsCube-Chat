@@ -260,6 +260,15 @@ chat's card disappeared, the other remained. No backend/schema change or
 signed release; Stable remains `0.1.7/8`.
 [Evidence](operations/2026-09-23-realme-microg-push.md).
 
+**Remote-read QA continuation, 2026-09-23:** an awake Realme `0.1.8/9` debug
+WebView received a read update from a separate authenticated QA session: the
+server unread row, OS chat card and in-app badge all cleared. An earlier
+`Resumed`-but-`Dozing` probe had been a false negative; a sleeping process only
+reconciled on wake. Android 14 API 34 coverage is still unproved: the existing
+AVD had a different debug signer, and a fresh isolated AVD stayed `adb offline`
+before APK installation. It was removed without touching the old AVD.
+[Evidence](operations/2026-09-23-realme-microg-push.md).
+
 **Native proof continuation, 2026-09-23:** owner resumed after restoring the browser
 extension. The QA batch began at `d649db3f`. Windows actual WebView2 passed 6/6;
 an isolated Android 14 WebView passed seven positive cases and detected three

@@ -302,3 +302,32 @@ Validation for this read-sync change: focused tests 5/5; complete unit suite
 sourcemap/chunk and Gradle deprecation warnings (`sw.js` build
 `f8de1d464b54231e`). The updated APK installed over the previous debug
 build with `adb install -r` and retained its QA session.
+
+### Remote read from a separate QA session
+
+A physical Realme retest used only QA accounts and the same `0.1.8/9` debug
+APK. A killed-process QA send created one chat OS card. With the WebView
+visible and `mWakefulness=Awake`, its notification badge showed one unread
+entry. A separate authenticated QA session called the existing chat read RPC:
+the server unread count changed from one to zero, the Android chat card from
+one to zero, and the WebView badge from one to none. Android's automatic group
+summary also disappeared when the final child card was gone. The earlier
+two-chat test separately established that an unrelated card remains.
+
+An earlier attempt appeared to fail: Activity was marked `Resumed`, but
+`mWakefulness=Dozing` and `mStayOn=false`. The card cleared on the next wake,
+when the hook refreshed; this was not proof of a broken Realtime subscription.
+A second run with `mWakefulness=Awake` showed the badge update without an app
+restart. These tests establish immediate read-sync while the Android WebView
+is awake, not remote cancellation while the device sleeps or the app process
+is dead. That latter case would need a separate server-to-device cancellation
+signal and remains unclaimed. The temporary stay-awake value was restored to
+`0`, the CDP forward removed, and no personal conversation was captured.
+
+Android 14 extension of the debug matrix was attempted but not counted as an
+app test. An existing API 34 AVD held a different debug signer, so its package
+was left installed and its data untouched. A newly created isolated API 34 AVD
+remained `adb offline` on three cold starts, including a software-rendered
+start with Vulkan disabled; it never accepted an APK. The temporary AVD and
+diagnostic files were removed. Android 13 Google Play AVD and Realme results
+above remain valid; physical official-GMS and signed-release QA remain open.
