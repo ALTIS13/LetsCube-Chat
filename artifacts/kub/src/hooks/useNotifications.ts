@@ -15,6 +15,8 @@ import {
   updateBrowserAppBadge,
 } from "@/lib/browserNotificationPresentation";
 import { isDesktopApp } from "@/lib/platform/desktop";
+import { isNativeAndroid } from "@/lib/platform/capabilities";
+import { closeNativeChatNotification } from "@/lib/platform/nativePush";
 import {
   closeDesktopNotificationForRow,
   desktopMessageOverflowRows,
@@ -251,7 +253,8 @@ export function useNotifications() {
       if (!item.read_at) continue;
       const previousTag = previousUnread.get(item.id);
       if (previousTag && !currentUnreadTagCounts.has(previousTag)) {
-        void closeBrowserNotification(previousTag);
+        if (isNativeAndroid()) void closeNativeChatNotification(previousTag);
+        else void closeBrowserNotification(previousTag);
         if (isDesktopApp() && !isMessageNotification(item)) {
           void closeDesktopNotificationForRow(item);
         }
@@ -318,7 +321,10 @@ export function useNotifications() {
           kind: "message",
           payload: { chat_id: markedChatId },
         });
-        if (tag) await closeBrowserNotification(tag);
+        if (tag) {
+          if (isNativeAndroid()) await closeNativeChatNotification(tag);
+          else await closeBrowserNotification(tag);
+        }
       },
     );
     if (!rpcError) {

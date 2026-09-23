@@ -271,3 +271,34 @@ APK on a physical official-GMS handset or long-session/vendor reliability.
 The new path has only a generic small icon, not a sender-avatar rendering
 claim. Android Stable remains `0.1.7/8`; no signing, AAB or publication was
 performed. Browser/PWA push and in-app notification ownership were unchanged.
+
+### Physical Android notification read-sync follow-up
+
+The `0.1.8/9` debug shell exposed a remaining presentation gap: opening a QA
+chat marked its notification row read on the server, but Android kept that
+chat's OS card. The read RPC and in-app state were correct; only native card
+cleanup was missing. The existing browser card cleanup did not apply to the
+Capacitor notification manager.
+
+The client now dismisses only delivered Android cards whose tag matches the
+read chat after successful server read-sync, including a read update received
+from another device. It never removes another chat's card or the Android group
+summary by tag. Browser/PWA cleanup retains its existing path; server/schema
+code and FCM delivery were not changed.
+
+Red/green focused tests covered exact-tag selection, unrelated-card retention,
+invalid tags and the local/remote read call sites. The production-configured
+debug APK rebuilt successfully and upgraded the Realme without clearing app
+data. Two fresh QA chats produced distinct OS cards. With the test device
+unlocked and the WebView visible, opening one chat changed that QA
+notification to read on the server (`1/1`); only its OS card disappeared, while
+the other chat's card remained. The device's temporary stay-awake setting was
+restored to its original value and the CDP port forward removed. This does
+not substitute for signed-release or official-GMS physical QA.
+
+Validation for this read-sync change: focused tests 5/5; complete unit suite
+4081 passed, 1 existing skip, 0 failed; Kub typecheck exit 0;
+`pnpm.cmd android:build:production:debug` exit 0 with the existing Vite
+sourcemap/chunk and Gradle deprecation warnings (`sw.js` build
+`f8de1d464b54231e`). The updated APK installed over the previous debug
+build with `adb install -r` and retained its QA session.

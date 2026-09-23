@@ -251,6 +251,15 @@ emulator delivery and tap check, not physical official-GMS, signed APK,
 long-session or wider device-matrix QA. Android Stable remains `0.1.7/8`.
 [Detailed evidence](operations/2026-09-23-realme-microg-push.md).
 
+**Native OS-card read-sync follow-up, 2026-09-23:** a physical Realme probe
+showed an OS chat card persisted after its server notification was marked read.
+The client now closes only that chat's delivered Android card after successful
+read-sync, including remote read transitions. Red/green tests, Kub typecheck,
+production-configured debug APK build and physical two-chat QA passed: the read
+chat's card disappeared, the other remained. No backend/schema change or
+signed release; Stable remains `0.1.7/8`.
+[Evidence](operations/2026-09-23-realme-microg-push.md).
+
 **Native proof continuation, 2026-09-23:** owner resumed after restoring the browser
 extension. The QA batch began at `d649db3f`. Windows actual WebView2 passed 6/6;
 an isolated Android 14 WebView passed seven positive cases and detected three

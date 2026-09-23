@@ -4,6 +4,7 @@ import { ANDROID_PUSH_UNAVAILABLE, PUSH_ENABLE_FAILED } from "../plainMessages";
 import { parseMessageNotificationProjection } from "../messageNotificationProjection";
 import { isReservedNativeVoiceData } from "./nativeVoiceContract";
 import { waitForNativePushRegistration } from "./nativePushRegistration";
+import { closeDeliveredChatNotification } from "./nativePushReadSync";
 
 export type NativePushResultStatus =
   | "native_unavailable"
@@ -142,6 +143,15 @@ export async function registerNativePushNavigationListeners(
     };
   } catch {
     return () => undefined;
+  }
+}
+
+export async function closeNativeChatNotification(tag: string): Promise<void> {
+  if (!isNativeAndroid() || !hasCallableAndroidBridge()) return;
+  try {
+    await closeDeliveredChatNotification(PushNotifications, tag);
+  } catch {
+    // The server read state remains authoritative if Android card cleanup fails.
   }
 }
 

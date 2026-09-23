@@ -2,13 +2,15 @@
 
 Status: active production-hardening tracker, updated 2026-09-23.
 
-**2026-09-23 rollout checkpoint:** shared web/backend source through
-`f880e3f7` is in `main`; the web container and FCM Edge Function were verified
-healthy against their intended bytes. Android 13 official-GMS emulator passes
-FCM registration 2/2, and Realme microG receives forced-Doze QA cards.
+**2026-09-23 rollout checkpoint:** shared web/backend source is in `main`;
+the web container and FCM Edge Function were verified
+healthy against their intended bytes. The Android `0.1.8/9` debug candidate
+receives background/killed-process data-only chat push on a Google Play API 33
+AVD and physical Realme microG. The AVD card tap reached the exact message;
+Realme offline two-chat delivery and chat-scoped OS-card read-sync passed.
 Android Stable remains at `0.1.7/8`: signed candidate, physical official-GMS
-delivery and reliable microG offline/reconnect delivery are **open**, not
-implicitly approved by this source rollout. Full evidence is in
+delivery and long-session/vendor QA are **open**, not implicitly approved by
+this source rollout. Full evidence is in
 `docs/QA_RESULTS.md` and `docs/operations/2026-09-23-realme-microg-push.md`.
 
 This file is the working source of truth for the next production stages. Before starting any new production task, read this file first, then update the relevant checkboxes/status when work is completed, blocked, or intentionally deferred.
