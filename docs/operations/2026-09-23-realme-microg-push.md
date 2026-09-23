@@ -161,3 +161,48 @@ Reference: [microG installation and background-service requirements](https://git
 [microG check-in guidance](https://github.com/microg/GmsCore/wiki/Helpful-Information),
 [official GmsCore release](https://github.com/microg/GmsCore/releases/tag/v0.3.16.252432),
 [microG Cloud Messaging network roles](https://github.com/microg/GmsCore/wiki/Google-Network-Connections).
+
+## GMS emulator and idle/reconnect follow-up (2026-09-23)
+
+A separate Android 13/API 33 Google Play AVD was created for this test; the
+pre-existing API 34 AVD had an APK signed by a different key and was not
+modified. The fresh AVD has Google's GmsCore and Play Store, accepted the
+production-configured debug APK and instrumentation APK, and passed both
+`FcmRegistrationSmokeTest` cases (Play Services availability and token
+acquisition). This extends registration coverage to an official-GMS stack,
+but is not a second physical handset or end-to-end delivery on that stack.
+
+The FCM payload previously set `NORMAL` for chat messages. Firebase documents
+that normal-priority delivery can wait in Doze and recommends `HIGH` for
+user-visible chat notifications. A red/green test now requires `HIGH` for
+message and task categories and retains `NORMAL` for routine system events.
+Only `fcm.ts` was copied to the mounted Edge Function after an exact backup;
+the container returned to healthy. No web/PWA push code or schema changed.
+[Firebase priority guidance](https://firebase.google.com/docs/cloud-messaging/android-message-priority).
+
+On the Realme, a QA message under forced deep idle produced a newer native
+notification at the 30-second poll before the priority change. The same test
+after the change produced a newer card at the 50-second poll. Both runs
+restored `deviceidle=ACTIVE` and the original battery state. These samples
+prove delivery while forced idle, **not** a latency improvement: the server
+outbox is scheduled once per minute, so dispatch phase dominates this small
+sample. Raw device tokens and message bodies were not logged.
+
+An offline/reconnect test disabled only the Realme's Wi-Fi (mobile data was
+already off), sent one QA message, and found no new card offline as expected.
+Wi-Fi was restored and Internet connectivity verified, but no newer card
+appeared in 150 seconds. The QA recipient's native outbox row had `sent_at`
+and no error. A later QA message sent while online produced a new card after
+90 seconds. The missing offline card remains **unresolved**: FCM acceptance
+does not prove handset delivery, and microG reconnect/queue behavior versus
+per-chat collapse cannot be separated by this probe. The app's in-app
+notifications remain the source of truth. Do not claim reliable offline queue
+delivery on microG or promote this debug APK to Android Stable on this evidence.
+
+Validation in this continuation: focused push/projection/Web Push tests 21/21;
+Kub typecheck exit 0; unit suite 4077 passed, 1 skipped; server suite 334/334;
+API build exit 0; web production build generated `sw.js` and completed in
+22.11 seconds. A first Playwright run had 11 fixture-guard failures because
+the dev server used a real backend URL; with the required local mock URL,
+Android bottom navigation passed 3/3 and support layout 8/8. The first run's
+other 24 cases passed, with three desktop-only bottom-nav skips.

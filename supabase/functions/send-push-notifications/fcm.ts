@@ -74,7 +74,7 @@ export function buildFcmMessage(payload: PushPayload, token: string): FcmMessage
         ...(senderAvatarUrl ? { image: senderAvatarUrl } : {}),
       },
       android: {
-        priority: category === "task" ? "HIGH" : "NORMAL",
+        priority: category === "message" || category === "task" ? "HIGH" : "NORMAL",
         ttl: "86400s",
         collapse_key: tag,
         notification: {

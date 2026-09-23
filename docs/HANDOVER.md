@@ -215,6 +215,17 @@ debug APK passed FCM instrumentation 2/2 and the final card/tap check. Signed
 release and official-GMS device-matrix proof remain pending.
 [Updated evidence](operations/2026-09-23-realme-microg-push.md).
 
+**Android FCM idle/matrix follow-up, 2026-09-23 (Codex):** a fresh Google Play
+Android 13 AVD passed FCM availability and token registration 2/2 without
+touching the pre-existing AVD. Message/task FCM priority was changed to `HIGH`
+while system events remain `NORMAL`; the mounted Edge Function is healthy.
+Physical Realme forced-Doze notifications arrived before and after the change.
+An offline QA message was accepted by FCM but yielded no new card within 150
+seconds of Wi-Fi reconnect; a subsequent online QA message did produce a card.
+MicroG offline-queue reliability and signed-release proof remain open. Do not
+infer Android Stable readiness from registration or debug APK tests alone.
+[Measured results](operations/2026-09-23-realme-microg-push.md).
+
 **Native proof continuation, 2026-09-23:** owner resumed after restoring the browser
 extension. The QA batch began at `d649db3f`. Windows actual WebView2 passed 6/6;
 an isolated Android 14 WebView passed seven positive cases and detected three

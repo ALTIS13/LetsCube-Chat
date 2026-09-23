@@ -23,6 +23,7 @@ test("FCM message delivery uses the messages channel and a stable chat collapse 
 
   assert.equal(result.message.token, "device-token");
   assert.equal(result.message.android.notification.channel_id, "messages");
+  assert.equal(result.message.android.priority, "HIGH");
   assert.equal(result.message.android.collapse_key, "message:chat:chat-1");
   assert.equal(result.message.notification.title, "CodexTest");
   assert.equal(result.message.notification.body, "Привет");
@@ -51,9 +52,15 @@ test("task FCM delivery stays separate from message grouping", () => {
   );
 
   assert.equal(result.message.android.notification.channel_id, "tasks");
+  assert.equal(result.message.android.priority, "HIGH");
   assert.equal(result.message.android.collapse_key, "task:task-1");
   assert.equal(result.message.data.type, "task");
   assert.equal(result.message.data.task_id, "task-1");
+});
+
+test("routine system FCM delivery keeps normal priority", () => {
+  const result = buildFcmMessage({ kind: "system_update", title: "LETSCUBE" }, "device-token");
+  assert.equal(result.message.android.priority, "NORMAL");
 });
 
 test("FCM payload never exposes raw media or signed URLs", () => {
