@@ -23554,3 +23554,15 @@ the field's accessible name still describes people, chats, messages and phone
 numbers. A rendered-width regression in `desktop-shell.spec.ts` was red
 before and green after. This is a local source change, not an installed-APK
 or production claim.
+
+## D-306 `[x]` Android 13 WebView renders opaque auth accents and offline warning
+
+2026-09-23, full debug APK on isolated Android 13/API 33 AVD. Built CSS used
+opaque accent-color fallbacks for `color-mix()`; Android 13 painted the auth
+grid and panel saturated blue and the offline banner solid red. Android 14
+did not show the same fallback. Shared auth/grid/panel/banner colors now use
+explicit alpha with theme RGB tokens. Android 13 light and system-dark screenshots
+and Android 14 light screenshot were inspected after rebuilding the APK, and
+all three successful lifecycle runs passed. One separate Android 14 first-focus
+wait failed and passed on rerun; no physical-device, signed-release or FCM claim.
+[Evidence](operations/2026-09-23-android-webview-color.md).

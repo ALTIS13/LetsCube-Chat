@@ -40,7 +40,7 @@ test("the subtle lattice does not paint a rule on the block's own edge", () => {
 test("the lattice is still a lattice", () => {
   // Guards against "fixing" the collision by deleting the grid.
   const subtle = rule(".kub-grid-subtle");
-  assert.match(subtle, /linear-gradient\(color-mix/, "the horizontal rules are gone");
+  assert.match(subtle, /linear-gradient\(rgb\(var\(--kub-cyan-rgb\) \/ 0\.04\)/, "the translucent horizontal rules are gone");
   assert.match(subtle, /linear-gradient\(90deg/, "the vertical rules are gone");
   assert.match(subtle, /background-size:\s*56px 56px/, "the tile size changed");
 });

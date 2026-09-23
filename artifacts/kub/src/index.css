@@ -389,6 +389,7 @@ html[data-ios-standalone] {
      was fine. Lightened along the same hue, the smallest step that clears
      every surface. */
   --kub-cyan: #4d8bd0;
+  --kub-cyan-rgb: 77 139 208;
   --kub-cyan-hover: #5b96d4;
   --kub-action-primary-background: var(--kub-cyan);
   --kub-action-primary-foreground: var(--kub-bg);
@@ -409,6 +410,7 @@ html[data-ios-standalone] {
      blue had. Lightened along the same hue by the smallest step that clears
      every surface. */
   --kub-pink: #f04a92;
+  --kub-pink-rgb: 240 74 146;
   /* The third colour used as text, joining --kub-danger-text and
      --kub-accent-text for the same reason: this one measures 4.71:1 on a panel
      but 3.75:1 against the worst backdrop a translucent panel can composite to,
@@ -424,6 +426,7 @@ html[data-ios-standalone] {
      place to change if the surfaces move again. */
   --kub-online-text: #4DCD5E;
   --kub-danger: #EF4444;
+  --kub-danger-rgb: 239 68 68;
   /* What a field, a well or a track is cut into. Deliberately not
      --kub-surface-2: that token also stands for a raised thing — a hover, a
      chip, a context row — and one value cannot mean both "above" and "below"
@@ -620,6 +623,7 @@ html[data-ios-standalone] {
      and 4.05:1 over one, #AEBEFF still 4.39:1; these clear it along the same
      hues. */
   --kub-chat-accent: #6D8BF2;
+  --kub-chat-accent-rgb: 109 139 242;
   --kub-chat-accent-hover: #7F99F5;
   --kub-chat-muted: #AFC2D7;
   --kub-chat-accent-text: #B8C6FF;
@@ -826,6 +830,7 @@ html[data-ios-standalone] {
      darker to stay distinguishable at 6.32:1. The dark theme passes at 4.73:1
      and is deliberately left alone. */
   --kub-cyan: #2d6fac;
+  --kub-cyan-rgb: 45 111 172;
   --kub-cyan-hover: #2b5e91;
   --kub-action-primary-background: var(--kub-cyan);
   --kub-action-primary-foreground: var(--kub-bg);
@@ -847,6 +852,7 @@ html[data-ios-standalone] {
      the smallest step that clears both the background and a white surface.
      The dark theme keeps the brand magenta. */
   --kub-pink: #c03068;
+  --kub-pink-rgb: 192 48 104;
   /* Deliberately the same value. Measured 5.29:1 on a panel and 4.77:1 against
      the worst backdrop, so it passes and there is no reason to shift the
      product's colour; the token exists so call sites can be uniform across
@@ -863,6 +869,7 @@ html[data-ios-standalone] {
      4.82:1 on a veiled row. */
   --kub-online-text: #2E6E2E;
   --kub-danger: #DC2626;
+  --kub-danger-rgb: 220 38 38;
   /* See .dark. On a light ground a well goes down towards the page, which is
      the value fields in this theme already had. */
   --kub-inset: #EAF3FA;
@@ -969,6 +976,7 @@ html[data-ios-standalone] {
      names sit on the violet pool at the left and a stroke of the pattern over
      it is the darkest ground a word here meets. */
   --kub-chat-accent: #3B5CCF;
+  --kub-chat-accent-rgb: 59 92 207;
   --kub-chat-accent-hover: #3350B8;
   --kub-chat-muted: #43566B;
   --kub-chat-accent-text: #213A94;
@@ -1164,6 +1172,17 @@ html, body {
      tooltips. At panel opacity these compete with what they cover. */
   .kub-glass-strong { background-color: var(--glass-fill-strong); }
 
+  /* Android 13 WebView needs an explicit translucent fallback: the CSS build
+     otherwise lowers color-mix() to the opaque accent before @supports. */
+  .kub-connection-status-offline {
+    border-color: rgb(var(--kub-danger-rgb) / 0.35);
+    background: linear-gradient(rgb(var(--kub-danger-rgb) / 0.16), rgb(var(--kub-danger-rgb) / 0.16)), var(--kub-surface);
+  }
+  .kub-connection-status-online {
+    border-color: rgb(var(--kub-cyan-rgb) / 0.35);
+    background: linear-gradient(rgb(var(--kub-cyan-rgb) / 0.16), rgb(var(--kub-cyan-rgb) / 0.16)), var(--kub-surface);
+  }
+
   /* Layered as a background IMAGE, which is the whole trick: it composites over
      whatever background-color the element already has instead of replacing it,
      so the same rule reads correctly on the page, on a panel and inside a menu.
@@ -1305,6 +1324,7 @@ html.light[data-ios-standalone] body::before {
      the rest of the product keeps its own. */
   .kub-chat-screen {
     --kub-cyan: var(--kub-chat-accent);
+    --kub-cyan-rgb: var(--kub-chat-accent-rgb);
     --kub-cyan-hover: var(--kub-chat-accent-hover);
     --kub-muted: var(--kub-chat-muted);
     --kub-accent-text: var(--kub-chat-accent-text);
@@ -1325,6 +1345,7 @@ html.light[data-ios-standalone] body::before {
     --kub-muted: var(--kub-message-out-meta);
     --kub-accent-text: var(--kub-message-out-text);
     --kub-cyan: var(--kub-message-out-text);
+    --kub-cyan-rgb: 255 255 255;
     --kub-cyan-hover: var(--kub-message-out-text);
     --kub-danger-text: var(--kub-message-out-danger);
     --kub-border-color: var(--kub-message-out-line);
@@ -1506,10 +1527,10 @@ textarea::placeholder, input::placeholder {
   .kub-grid-bg {
     background-color: var(--kub-bg);
     background-image:
-      radial-gradient(ellipse 70% 55% at 18% 12%, color-mix(in srgb, var(--kub-cyan) 16%, transparent) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 50% at 85% 92%, color-mix(in srgb, var(--kub-pink) 14%, transparent) 0%, transparent 60%),
-      linear-gradient(color-mix(in srgb, var(--kub-cyan) 6%, transparent) 1px, transparent 1px),
-      linear-gradient(90deg, color-mix(in srgb, var(--kub-cyan) 6%, transparent) 1px, transparent 1px);
+      radial-gradient(ellipse 70% 55% at 18% 12%, rgb(var(--kub-cyan-rgb) / 0.16) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 85% 92%, rgb(var(--kub-pink-rgb) / 0.14) 0%, transparent 60%),
+      linear-gradient(rgb(var(--kub-cyan-rgb) / 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--kub-cyan-rgb) / 0.06) 1px, transparent 1px);
     background-size: 100% 100%, 100% 100%, 56px 56px, 56px 56px;
     background-position: 0 0, 0 0, 0 0, 0 0;
   }
@@ -1535,16 +1556,16 @@ textarea::placeholder, input::placeholder {
   .kub-grid-subtle {
     background-color: var(--kub-bg);
     background-image:
-      linear-gradient(color-mix(in srgb, var(--kub-cyan) 4%, transparent) 1px, transparent 1px),
-      linear-gradient(90deg, color-mix(in srgb, var(--kub-cyan) 4%, transparent) 1px, transparent 1px);
+      linear-gradient(rgb(var(--kub-cyan-rgb) / 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--kub-cyan-rgb) / 0.04) 1px, transparent 1px);
     background-size: 56px 56px;
     background-position: 28px 28px;
   }
 
   /* Cyan / pink glow halos used behind hero elements and primary buttons. */
-  .kub-glow-cyan { box-shadow: 0 0 0 1px color-mix(in srgb, var(--kub-cyan) 40%, transparent), 0 8px 32px -8px color-mix(in srgb, var(--kub-cyan) 55%, transparent); }
-  .kub-glow-pink { box-shadow: 0 0 0 1px color-mix(in srgb, var(--kub-pink) 40%, transparent), 0 8px 32px -8px color-mix(in srgb, var(--kub-pink) 55%, transparent); }
-  .kub-glow-soft { box-shadow: 0 4px 24px -8px color-mix(in srgb, var(--kub-cyan) 35%, transparent); }
+  .kub-glow-cyan { box-shadow: 0 0 0 1px rgb(var(--kub-cyan-rgb) / 0.4), 0 8px 32px -8px rgb(var(--kub-cyan-rgb) / 0.55); }
+  .kub-glow-pink { box-shadow: 0 0 0 1px rgb(var(--kub-pink-rgb) / 0.4), 0 8px 32px -8px rgb(var(--kub-pink-rgb) / 0.55); }
+  .kub-glow-soft { box-shadow: 0 4px 24px -8px rgb(var(--kub-cyan-rgb) / 0.35); }
 
   /* The shared feel of a control responding to a pointer. Colour and shadow move
      at the fast step; the press is a transform, never a size change.
@@ -1978,7 +1999,7 @@ textarea::placeholder, input::placeholder {
   .kub-panel {
     isolation: isolate;
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--kub-cyan) 7%, transparent) 0%, transparent 60%),
+      linear-gradient(180deg, rgb(var(--kub-cyan-rgb) / 0.07) 0%, transparent 60%),
       var(--glass-fill);
     -webkit-backdrop-filter: var(--glass-blur);
     backdrop-filter: var(--glass-blur);
@@ -1991,7 +2012,8 @@ textarea::placeholder, input::placeholder {
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .kub-panel {
       background:
-        linear-gradient(180deg, color-mix(in srgb, var(--kub-cyan) 5%, var(--kub-surface)) 0%, var(--kub-surface) 60%);
+        linear-gradient(180deg, rgb(var(--kub-cyan-rgb) / 0.05) 0%, transparent 60%),
+        var(--kub-surface);
     }
   }
 }
@@ -2079,7 +2101,7 @@ textarea::placeholder, input::placeholder {
     z-index: 0;
     height: min(44rem, 70vh);
     pointer-events: none;
-    background: radial-gradient(ellipse at center, color-mix(in srgb, var(--kub-pink) 18%, transparent), transparent 68%);
+    background: radial-gradient(ellipse at center, rgb(var(--kub-pink-rgb) / 0.18), transparent 68%);
     opacity: 0.55;
   }
 

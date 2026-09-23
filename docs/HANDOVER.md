@@ -158,6 +158,14 @@ No signed APK or deploy.
 The connected Realme reports installed 0.1.3 build 4, so its appearance is
 not evidence of the current checkout. Further visual inventory remains open.
 
+**Android 13 WebView follow-up, 2026-09-23 (Codex):** D-306 found an opaque
+`color-mix()` build fallback on the guest auth grid, panel and offline banner.
+The shared color repair is local; debug APK and isolated Android 13 light/dark
+and Android 14 screenshots/lifecycle were checked. One first-focus wait failed
+in an initial Android 14 run and passed on rerun; it remains a QA limit. The
+connected Realme was untouched; no signed release or FCM delivery proof.
+[Exact matrix and images](operations/2026-09-23-android-webview-color.md).
+
 **Native proof continuation, 2026-09-23:** owner resumed after restoring the browser
 extension. The QA batch began at `d649db3f`. Windows actual WebView2 passed 6/6;
 an isolated Android 14 WebView passed seven positive cases and detected three

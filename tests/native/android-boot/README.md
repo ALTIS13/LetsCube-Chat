@@ -63,12 +63,15 @@ Latest machine-readable evidence: `output/native-boot-android/latest-report.json
 ## Full Capacitor debug shell
 
 After `pnpm.cmd android:build:production:debug`, run
-`pwsh -NoProfile -File tests/native/android-boot/full-shell.ps1`. This uses the
+`pwsh -NoProfile -File tests/native/android-boot/full-shell.ps1`. Pass
+`-ApiLevel 33` to test the installed Android 13 image instead of the default
+Android 14 image. `-DarkMode` switches the owned emulator to the system dark
+theme before installing the app. This uses the
 current debug APK and builds an instrumentation APK. It compares the entire
 packaged web tree with the built bundle before creating an AVD (excluding
 `.well-known/assetlinks.json`, omitted by AAPT, and the two generated Cordova
 files). The bundle must contain the current source commit marker. It
-launches its own fresh Android 14 AVD, verifies its name/fingerprint and absence
+launches its own fresh Android 13 or 14 AVD, verifies its name/fingerprint and absence
 of the messenger package, and never targets a physical device. The normal
 `com.kub.messenger` debug package is installed only there. The emulator starts
 with both network backends restricted, then enables airplane mode before install.

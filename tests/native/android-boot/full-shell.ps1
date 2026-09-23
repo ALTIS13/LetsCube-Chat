@@ -1,5 +1,7 @@
 param(
     [string]$Sdk = 'D:\Progi\AndroidStudio-sdk',
+    [ValidateSet(33, 34)][int]$ApiLevel = 34,
+    [switch]$DarkMode,
     [int]$Port = 5582
 )
 $ErrorActionPreference = 'Stop'
@@ -7,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 $out = Join-Path $repo 'output/native-boot-android'
 $adb = Join-Path $Sdk 'platform-tools/adb.exe'
-$sdkImage = Join-Path $Sdk 'system-images/android-34/google_apis_playstore/x86_64'
+$sdkImage = Join-Path $Sdk "system-images/android-$ApiLevel/google_apis_playstore/x86_64"
 $apk = Join-Path $repo 'android/app/build/outputs/apk/debug/app-debug.apk'
 $testApk = Join-Path $repo 'android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'
 $emulatorExe = Join-Path $Sdk 'emulator/emulator.exe'
@@ -116,15 +118,16 @@ hw.sdCard=no
 disk.dataPartition.size=4G
 image.sysdir.1=$sdkImage\
 tag.id=google_apis_playstore
-target=android-34
+target=android-$ApiLevel
 "@
     [IO.File]::WriteAllText((Join-Path $avdDir 'config.ini'), $avdConfig)
-    [IO.File]::WriteAllText((Join-Path $avdRoot "$avdName.ini"), "avd.ini.encoding=UTF-8`npath=$avdDir`ntarget=android-34`n")
+    [IO.File]::WriteAllText((Join-Path $avdRoot "$avdName.ini"), "avd.ini.encoding=UTF-8`npath=$avdDir`ntarget=android-$ApiLevel`n")
     $emulatorArgs = @('-avd', $avdName, '-port', "$Port", '-no-window', '-no-audio', '-no-snapshot', '-no-boot-anim',
         '-gpu', 'swiftshader_indirect', '-no-metrics', '-wifi-user-mode-options', 'restrict=on,ipv6=off',
         '-network-user-mode-options', 'restrict=on,ipv6=off')
     [IO.File]::WriteAllText((Join-Path $runDir 'launch.json'), (@{
         avd=$avdName; arguments=$emulatorArgs; apkSha256=$apkSha; testApkSha256=$testApkSha; target='full-capacitor-shell';
+        requestedApi=$ApiLevel; darkMode=$DarkMode.IsPresent;
         personalDeviceAccess='none'; createdUtc=[DateTime]::UtcNow.ToString('o')
     } | ConvertTo-Json) + "`n")
     $emulator = $null
@@ -148,6 +151,7 @@ target=android-34
         Invoke-Adb @('shell','cmd','connectivity','airplane-mode','enable') | Out-Null
         Invoke-Adb @('shell','svc','wifi','disable') | Out-Null
         Invoke-Adb @('shell','svc','data','disable') | Out-Null
+        if ($DarkMode) { Invoke-Adb @('shell','cmd','uimode','night','yes') | Out-Null }
         if ((Invoke-Adb @('shell','settings','get','global','airplane_mode_on')) -ne '1') { throw 'Owned emulator offline guard failed' }
         if ((Invoke-Adb @('shell','pm','list','packages','com.kub.messenger')).Contains('package:')) {
             throw 'Expected a fresh emulator without the production package'
@@ -178,7 +182,7 @@ target=android-34
             testApkSha256=$testApkSha; bundleIndexSha256=$indexSha;
             sourceCommit=$sourceCommit; embeddedWebFiles=$bundleFiles.Count;
             modes=@('cold','resume','after-force-stop'); package='com.kub.messenger';
-            accountAuthenticated=$false
+            accountAuthenticated=$false; requestedDarkMode=$DarkMode.IsPresent
         }
     } finally {
         if ($emulator) { Stop-OwnedBootEmulator -Emulator $emulator -Port $Port -AvdName $avdName -Executable $emulatorExe }
