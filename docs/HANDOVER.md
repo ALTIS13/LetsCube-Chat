@@ -137,8 +137,15 @@ an isolated Android 14 WebView passed seven positive cases and detected three
 mutations. Runner/source/APK hashes match the accepted Android report; the owned
 emulator was removed. Independent review and focused gates closed the QA harness
 findings. No product-source change or new native release in this continuation.
-Next: separately authorized full-shell native candidate and device matrix.
+Subsequent full Capacitor debug APK smoke on an owned Android 14 AVD reached
+React-ready and a visible guest login form on cold launch, after
+background/foreground and after force-stop; all packaged web assets matched the
+current built bundle, both offline instrumentation runs
+passed, and the AVD was removed. This does not prove full-shell fault injection,
+FCM, signed-release parity or physical-device behavior. Next: native candidate
+and device matrix only with separate release authority.
 [Native proof and limits](operations/2026-09-22-native-boot-proof.md).
+[Full-shell debug smoke](operations/2026-09-23-android-full-shell-smoke.md).
 
 **Active checkpoint, 2026-09-22 (Codex):** owner Codex, main checkout
 `D:\CodexProjects\LetsCube-Chat`, D-298 recovery batch on `0813bd05`.

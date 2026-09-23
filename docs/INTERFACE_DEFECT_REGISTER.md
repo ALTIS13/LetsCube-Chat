@@ -23436,6 +23436,12 @@ Windows source requires a current-document rendered-root receipt plus Finished
 and loaded, with stale-navigation rejection and bounded 30-second observation.
 The overlay releases recovery without inventing success. An app committing after
 the native deadline remains usable; native status honestly stays unconfirmed.
-JS 50/50, Rust 82 pass/four existing ignored. Actual WebView2/Android lifecycle
-fault injection and native release parity remain open, hence `[~]`, not `[x]`.
+JS 50/50, Rust 82 pass/four existing ignored. Actual WebView2 and isolated
+Android WebView lifecycle fault injection subsequently passed. A full Capacitor
+debug APK reached React-ready and visible guest login on an owned offline Android
+14 AVD across cold start, background/foreground and process restart; it was not
+fault-injected. Full-shell
+failure recovery, signed-release parity and physical-device matrix remain open,
+hence `[~]`, not `[x]`.
 [Implementation and evidence limits](operations/2026-09-22-boot-recovery.md).
+[Full-shell debug smoke](operations/2026-09-23-android-full-shell-smoke.md).

@@ -1,7 +1,8 @@
 # D-298 Android Boot QA
 
-Owner: independent Android proof worker. Only this directory and
-`output/native-boot-android/` are owned. No production Android/HTML/shared docs edits.
+The original isolated-controller harness owns only this directory and
+`output/native-boot-android/`. The separate full-shell smoke below also has one
+`androidTest` class; neither changes production Android/HTML code.
 
 Run from PowerShell 7:
 
@@ -58,3 +59,27 @@ Pause/resume invokes real native callbacks through Instrumentation, not physical
 background navigation. No screenshots are taken; DOM state is not pixel proof.
 
 Latest machine-readable evidence: `output/native-boot-android/latest-report.json`.
+
+## Full Capacitor debug shell
+
+After `pnpm.cmd android:build:production:debug`, run
+`pwsh -NoProfile -File tests/native/android-boot/full-shell.ps1`. This uses the
+current debug APK and builds an instrumentation APK. It compares the entire
+packaged web tree with the built bundle before creating an AVD (excluding
+`.well-known/assetlinks.json`, omitted by AAPT, and the two generated Cordova
+files). The bundle must contain the current source commit marker. It
+launches its own fresh Android 14 AVD, verifies its name/fingerprint and absence
+of the messenger package, and never targets a physical device. The normal
+`com.kub.messenger` debug package is installed only there. The emulator starts
+with both network backends restricted, then enables airplane mode before install.
+Its test asserts React-ready and a visible guest login form with the recovery
+surface removed, background/foreground focus and
+a second run after app force-stop. It does not log in or request push permission.
+The shared output lock and exact owned-AVD cleanup from the original harness
+remain in force. Per-run results and sanitized instrumentation logs stay in
+`output/native-boot-android/run-*/`. A guest-screen PNG is captured while the
+Activity has focus, then pulled from only the owned emulator. No release APK
+or user device is touched.
+
+This is full-shell **healthy lifecycle** evidence, not a test of full-shell
+entry-module failure, signed release, real FCM delivery or physical OEM behavior.
