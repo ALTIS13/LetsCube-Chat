@@ -8,6 +8,7 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.media.AudioAttributes;
 import android.net.Uri;
 import android.os.Build;
 
@@ -16,7 +17,20 @@ import com.google.firebase.messaging.RemoteMessage;
 import java.util.Map;
 
 final class ChatPushNotifications {
-    private static final String CHANNEL_ID = "messages";
+    private static final String LEGACY_CHANNEL_ID = "messages";
+    private static final String FRESH_CHANNEL_ID = "messages_v2";
+
+    static String channelIdFor(boolean legacyExists, boolean freshExists) {
+        // Once a fresh install chose v2, a later legacy FCM channel must not
+        // change the native message sound. Legacy-only upgrades retain their
+        // existing channel's sound and mute choices by design.
+        return freshExists || !legacyExists ? FRESH_CHANNEL_ID : LEGACY_CHANNEL_ID;
+    }
+
+    private static Uri soundUri(Context context) {
+        // A name-based URI survives resource ID changes across app updates.
+        return Uri.parse("android.resource://" + context.getPackageName() + "/raw/letscube_message_v2");
+    }
 
     static void receive(Context context, RemoteMessage message) {
         Map<String, String> data = message.getData();
@@ -26,11 +40,22 @@ final class ChatPushNotifications {
         if (manager == null || !manager.areNotificationsEnabled()) return;
         if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED) return;
+        String channelId = LEGACY_CHANNEL_ID;
         if (Build.VERSION.SDK_INT >= 26) {
-            NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Сообщения", NotificationManager.IMPORTANCE_DEFAULT);
-            channel.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
-            manager.createNotificationChannel(channel);
-            if (manager.getNotificationChannel(CHANNEL_ID).getImportance() == NotificationManager.IMPORTANCE_NONE) return;
+            NotificationChannel legacy = manager.getNotificationChannel(LEGACY_CHANNEL_ID);
+            NotificationChannel fresh = manager.getNotificationChannel(FRESH_CHANNEL_ID);
+            channelId = channelIdFor(legacy != null, fresh != null);
+            if (FRESH_CHANNEL_ID.equals(channelId) && fresh == null) {
+                NotificationChannel channel = new NotificationChannel(FRESH_CHANNEL_ID, "Сообщения", NotificationManager.IMPORTANCE_DEFAULT);
+                channel.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
+                channel.setSound(soundUri(context), new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build());
+                manager.createNotificationChannel(channel);
+            }
+            NotificationChannel selected = manager.getNotificationChannel(channelId);
+            if (selected == null || selected.getImportance() == NotificationManager.IMPORTANCE_NONE) return;
         }
 
         Intent intent = new Intent(context, MainActivity.class)
@@ -52,7 +77,7 @@ final class ChatPushNotifications {
         PendingIntent tap = PendingIntent.getActivity(context, event.chatId.hashCode(), intent,
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification.Builder builder = Build.VERSION.SDK_INT >= 26
-            ? new Notification.Builder(context, CHANNEL_ID) : new Notification.Builder(context);
+            ? new Notification.Builder(context, channelId) : new Notification.Builder(context);
         Notification notification = builder
             .setSmallIcon(R.drawable.ic_stat_message)
             .setContentTitle(event.title)

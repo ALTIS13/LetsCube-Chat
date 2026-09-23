@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type UIEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type UIEvent } from "react";
 import { ChatListItem } from "./ChatListItem";
 import { useAppStore } from "@/store/app.store";
 import { KubEmptyState, KubIcon, type KubIconName } from "@/components/kub";
@@ -81,15 +81,35 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
   const [busyActionId, setBusyActionId] = useState<string | null>(null);
   const [draggedPinnedChatId, setDraggedPinnedChatId] = useState<string | null>(null);
 
-  // Two thresholds rather than one, because a single one flaps: a row that
-  // tucks at exactly the scroll position it untucks at will do both on every
-  // frame while a finger rests on the boundary. It tucks after 48px and only
-  // comes back within 8px of the top.
+  // Keep the thresholds wider than the 44px header change. Search comes back
+  // before the list hits the top, leaving room for the upward gesture to finish.
   const tuckedRef = useRef(false);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const lastScrollTopRef = useRef(0);
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    const chrome = scroller?.closest(".kub-chat-list-column")?.querySelector("[data-kub-list-chrome]");
+    if (!scroller || !chrome || !onScrollStateChange) return;
+
+    let previousY = scroller.getBoundingClientRect().top;
+    const observer = new ResizeObserver(() => {
+      const y = scroller.getBoundingClientRect().top;
+      const delta = y - previousY;
+      previousY = y;
+      if (window.matchMedia("(min-width: 768px)").matches || delta === 0) return;
+
+      scroller.scrollTop += delta;
+      lastScrollTopRef.current = scroller.scrollTop;
+    });
+    observer.observe(chrome);
+    return () => observer.disconnect();
+  }, [onScrollStateChange]);
   const handleListScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {
       const top = event.currentTarget.scrollTop;
-      const next = tuckedRef.current ? top > 8 : top > 48;
+      const scrollingDown = top > lastScrollTopRef.current;
+      lastScrollTopRef.current = top;
+      const next = tuckedRef.current ? top > 48 : scrollingDown && top > 96;
       if (next === tuckedRef.current) return;
       tuckedRef.current = next;
       onScrollStateChange?.(next);
@@ -620,6 +640,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
         // of it applies. See `--kub-bottom-nav` in index.css.
         className="flex-1 overflow-y-auto pb-[calc(var(--kub-bottom-nav)+var(--kub-bottom-nav-gap)*2)] md:pb-0"
         data-testid="chat-list-scroller"
+        ref={scrollerRef}
         onScroll={handleListScroll}
       >
         {chats.map((chat) => (

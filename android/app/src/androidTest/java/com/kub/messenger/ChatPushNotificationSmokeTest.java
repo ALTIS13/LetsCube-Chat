@@ -5,6 +5,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.Manifest;
+import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -26,6 +27,12 @@ public class ChatPushNotificationSmokeTest {
         Assume.assumeTrue(manager.areNotificationsEnabled());
         Assume.assumeTrue(Build.VERSION.SDK_INT < 33 || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
             == PackageManager.PERMISSION_GRANTED);
+        String expectedChannel = null;
+        if (Build.VERSION.SDK_INT >= 26) {
+            expectedChannel = ChatPushNotifications.channelIdFor(
+                manager.getNotificationChannel("messages") != null,
+                manager.getNotificationChannel("messages_v2") != null);
+        }
 
         String chat = "6f9f45a8-1de9-475e-82df-d16e39b9df7b";
         String message = "4e3468a1-61d3-4c70-b67d-3d8f045b87bf";
@@ -47,7 +54,15 @@ public class ChatPushNotificationSmokeTest {
                 if (tag.equals(card.getTag())) found = card;
             }
             assertNotNull("A data-only message must display an OS card", found);
-            assertEquals("messages", found.getNotification().getChannelId());
+            if (Build.VERSION.SDK_INT >= 26) {
+                assertEquals(expectedChannel, found.getNotification().getChannelId());
+                NotificationChannel selected = manager.getNotificationChannel(expectedChannel);
+                assertNotNull(selected);
+                if ("messages_v2".equals(expectedChannel)) {
+                    assertEquals("android.resource://" + context.getPackageName() + "/raw/letscube_message_v2",
+                        selected.getSound().toString());
+                }
+            }
             assertEquals(R.drawable.ic_stat_message, found.getNotification().getSmallIcon().getResId());
             assertNotNull(found.getNotification().contentIntent);
             assertTrue((found.getNotification().flags & android.app.Notification.FLAG_AUTO_CANCEL) != 0);

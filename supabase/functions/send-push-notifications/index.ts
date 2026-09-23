@@ -62,7 +62,6 @@ type WnsConfig = {
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
-const MAX_ATTEMPTS = 5;
 
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") {
@@ -97,16 +96,14 @@ Deno.serve(async (request: Request) => {
   const claimToken = crypto.randomUUID();
   webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
 
-  const [rows, nativeRows] = await Promise.all([
-    claimOutbox(supabaseUrl, secretKey, limit, claimToken),
-    selectNativeOutbox(supabaseUrl, secretKey, limit),
-  ]);
+  const rows = await claimOutbox(supabaseUrl, secretKey, limit, claimToken);
   if (!rows.ok) return json(rows.body, rows.status);
-  if (!nativeRows.ok) return json(nativeRows.body, nativeRows.status);
 
   const subscriptionIds = Array.from(new Set(rows.data.map((row) => row.subscription_id)));
   const subscriptions = await selectSubscriptions(supabaseUrl, secretKey, subscriptionIds);
   if (!subscriptions.ok) return json(subscriptions.body, subscriptions.status);
+  const nativeRows = await claimNativeOutbox(supabaseUrl, secretKey, limit, claimToken);
+  if (!nativeRows.ok) return json(nativeRows.body, nativeRows.status);
   const byId = new Map(subscriptions.data.map((item) => [item.id, item]));
 
   let sent = 0;
@@ -129,8 +126,8 @@ Deno.serve(async (request: Request) => {
   const native = await dispatchNativePush(
     supabaseUrl,
     secretKey,
+    claimToken,
     nativeRows.data,
-    nativeRows.schemaMissing,
   );
 
   const voice = Deno.env.get("VOICE_PUSH_DISPATCH_ENABLED") === "1"
@@ -236,39 +233,15 @@ async function selectSubscriptions(supabaseUrl: string, secretKey: string, ids: 
   return { ok: true as const, data: (await response.json()) as SubscriptionRow[] };
 }
 
-async function selectNativeOutbox(supabaseUrl: string, secretKey: string, limit: number) {
-  const url = new URL("/rest/v1/notifications_native_push_outbox", supabaseUrl);
-  url.searchParams.set(
-    "select",
-    "id,device_id,payload,attempt_count,notifications!inner(read_at)",
-  );
-  url.searchParams.set("sent_at", "is.null");
-  url.searchParams.set("attempt_count", `lt.${MAX_ATTEMPTS}`);
-  url.searchParams.set("notifications.read_at", "is.null");
-  url.searchParams.set("order", "created_at.asc");
-  url.searchParams.set("limit", String(limit));
-  const response = await restFetch(url, secretKey);
-  if (response.ok) {
-    return {
-      ok: true as const,
-      data: (await response.json()) as NativeOutboxRow[],
-      schemaMissing: false,
-    };
-  }
-
-  const text = await response.text();
-  if (response.status === 404 || text.includes("notifications_native_push_outbox")) {
-    return { ok: true as const, data: [] as NativeOutboxRow[], schemaMissing: true };
-  }
-  return {
-    ok: false as const,
-    status: 500,
-    body: {
-      ok: false,
-      error: "native_push_outbox_query_failed",
-      status: response.status,
-    },
-  };
+async function claimNativeOutbox(supabaseUrl: string, secretKey: string, limit: number, claimToken: string) {
+  const url = new URL("/rest/v1/rpc/native_push_outbox_claim", supabaseUrl);
+  const response = await restFetch(url, secretKey, {
+    method: "POST",
+    headers: { prefer: "return=representation" },
+    body: JSON.stringify({ p_limit: limit, p_claim_token: claimToken }),
+  });
+  if (!response.ok) return { ok: false as const, status: 500, body: await summarizeResponse(response) };
+  return { ok: true as const, data: (await response.json()) as NativeOutboxRow[] };
 }
 
 async function selectPushDevices(supabaseUrl: string, secretKey: string, ids: string[]) {
@@ -284,12 +257,9 @@ async function selectPushDevices(supabaseUrl: string, secretKey: string, ids: st
 async function dispatchNativePush(
   supabaseUrl: string,
   secretKey: string,
+  claimToken: string,
   rows: NativeOutboxRow[],
-  schemaMissing: boolean,
 ) {
-  if (schemaMissing) {
-    return { sent: 0, failed: 0, pruned: 0, pending: 0, status: "schema_pending" };
-  }
   if (rows.length === 0) {
     return { sent: 0, failed: 0, pruned: 0, pending: 0, status: "idle" };
   }
@@ -297,6 +267,7 @@ async function dispatchNativePush(
   const deviceIds = Array.from(new Set(rows.map((row) => row.device_id)));
   const devices = await selectPushDevices(supabaseUrl, secretKey, deviceIds);
   if (!devices.ok) {
+    for (const row of rows) await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {});
     return { sent: 0, failed: rows.length, pruned: 0, pending: rows.length, status: "device_query_failed" };
   }
 
@@ -313,7 +284,7 @@ async function dispatchNativePush(
   for (const row of rows) {
     const device = byId.get(row.device_id);
     if (!device || !device.enabled || device.revoked_at) {
-      await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+      await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {
         sent_at: new Date().toISOString(),
         last_error: "device_missing",
       });
@@ -324,6 +295,7 @@ async function dispatchNativePush(
     let result: "sent" | "failed" | "pruned";
     if (device.provider === "wns") {
       if (!wnsConfig) {
+        await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {});
         pending += 1;
         continue;
       }
@@ -343,12 +315,14 @@ async function dispatchNativePush(
       result = await deliverWns(
         supabaseUrl,
         secretKey,
+        claimToken,
         wnsAccessToken,
         row,
         device,
       );
     } else if (device.provider === "fcm") {
       if (!fcmConfig) {
+        await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {});
         pending += 1;
         continue;
       }
@@ -368,12 +342,14 @@ async function dispatchNativePush(
       result = await deliverFcm(
         supabaseUrl,
         secretKey,
+        claimToken,
         fcmConfig.projectId,
         fcmAccessToken,
         row,
         device,
       );
     } else {
+      await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {});
       pending += 1;
       continue;
     }
@@ -401,6 +377,7 @@ async function dispatchNativePush(
 async function deliverFcm(
   supabaseUrl: string,
   secretKey: string,
+  claimToken: string,
   projectId: string,
   accessToken: string,
   row: NativeOutboxRow,
@@ -419,7 +396,7 @@ async function deliverFcm(
   );
 
   if (response.ok) {
-    await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+    await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {
       sent_at: new Date().toISOString(),
       last_error: null,
     });
@@ -433,14 +410,14 @@ async function deliverFcm(
       revoked_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
-    await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+    await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {
       sent_at: new Date().toISOString(),
       last_error: `gone:${response.status}`,
     });
     return "pruned";
   }
 
-  await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+  await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {
     attempt_count: row.attempt_count + 1,
     last_error: `fcm:${response.status}:${readFcmErrorStatus(body)}`.slice(0, 160),
   });
@@ -450,6 +427,7 @@ async function deliverFcm(
 async function deliverWns(
   supabaseUrl: string,
   secretKey: string,
+  claimToken: string,
   accessToken: string,
   row: NativeOutboxRow,
   device: PushDeviceRow,
@@ -461,7 +439,7 @@ async function deliverWns(
       revoked_at: revokedAt,
       updated_at: revokedAt,
     });
-    await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+    await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {
       sent_at: revokedAt,
       last_error: "invalid_channel",
     });
@@ -482,7 +460,7 @@ async function deliverWns(
       body: buildWnsToast(safePayload(row.payload)),
     });
   } catch {
-    await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+    await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {
       attempt_count: row.attempt_count + 1,
       last_error: "wns:network_error",
     });
@@ -490,7 +468,7 @@ async function deliverWns(
   }
 
   if (response.ok) {
-    await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+    await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {
       sent_at: new Date().toISOString(),
       last_error: null,
     });
@@ -505,14 +483,14 @@ async function deliverWns(
       revoked_at: revokedAt,
       updated_at: revokedAt,
     });
-    await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+    await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {
       sent_at: revokedAt,
       last_error: `gone:${response.status}:${reason}`.slice(0, 160),
     });
     return "pruned";
   }
 
-  await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+  await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {
     attempt_count: row.attempt_count + 1,
     last_error: `wns:${response.status}:${reason}`.slice(0, 160),
   });
@@ -680,8 +658,21 @@ async function markOutbox(
   );
 }
 
-async function markNativeOutbox(supabaseUrl: string, secretKey: string, id: string, patch: Record<string, unknown>) {
-  await patchRow(supabaseUrl, secretKey, "notifications_native_push_outbox", id, patch);
+async function markNativeOutbox(
+  supabaseUrl: string,
+  secretKey: string,
+  claimToken: string,
+  id: string,
+  patch: Record<string, unknown>,
+) {
+  const response = await patchRow(supabaseUrl, secretKey, "notifications_native_push_outbox", id, {
+    ...patch,
+    claim_token: null,
+    claimed_until: null,
+  }, claimToken, true);
+  if (!response.ok || !(await response.json() as Array<{ id: string }>).some((row) => row.id === id)) {
+    throw new Error("native_push_ack_failed");
+  }
 }
 
 async function patchRow(
@@ -695,14 +686,17 @@ async function patchRow(
   id: string,
   patch: Record<string, unknown>,
   claimToken?: string,
+  returnRepresentation = false,
 ) {
   const url = new URL(`/rest/v1/${table}`, supabaseUrl);
   url.searchParams.set("id", `eq.${id}`);
-  if (table === "notifications_push_outbox" && claimToken) {
+  if ((table === "notifications_push_outbox" || table === "notifications_native_push_outbox") && claimToken) {
     url.searchParams.set("claim_token", `eq.${claimToken}`);
   }
-  await restFetch(url, secretKey, {
+  if (returnRepresentation) url.searchParams.set("select", "id");
+  return await restFetch(url, secretKey, {
     method: "PATCH",
+    ...(returnRepresentation ? { headers: { prefer: "return=representation" } } : {}),
     body: JSON.stringify(patch),
   });
 }

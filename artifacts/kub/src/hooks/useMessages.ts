@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import type { Json, MessageWithSender, Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
@@ -47,6 +47,7 @@ import { canUseHumanMessageControls, isIncomingMessage } from "@/lib/messageActo
 import { blockedSendRefusal } from "@/lib/personalModeration";
 import { mergeMessagesById } from "@/lib/messageMerge";
 import { isMissingRpcError, rpcAvailability } from "@/lib/rpcAvailability";
+import { clearedAtCache } from "@/lib/clearedAtCache";
 import {
   DELETE_FOR_EVERYONE_RPC,
   deletionBatches,
@@ -90,50 +91,20 @@ const EMPTY_MESSAGES: MessageWithSender[] = [];
  */
 const fetchedMessageScopes = new Set<string>();
 
-/** In-flight `cleared_at` reads, so the message and pinned fetches of one chat share one request. */
-const clearedAtRequests = new Map<string, Promise<string | null>>();
-/** `cleared_at` reads answered a moment ago. */
-const clearedAtAnswers = new Map<string, { value: string | null; at: number }>();
-/**
- * How long an answer is reused. A reopened chat reads the mark for its pinned
- * messages as it opens, and read it again for its history when the channel
- * joined, well under a second later. Nothing delivers a change to the mark to
- * this hook in between, so the second read only repeated the first. Clearing
- * the history here forgets the answer.
- */
-const CLEARED_AT_REUSE_MS = 3_000;
-
 function loadClearedAt(
   supabase: ReturnType<typeof createClient>,
   chatId: string,
   userId: string,
-): Promise<string | null> {
-  const key = `${chatId}:${userId}`;
-  const pending = clearedAtRequests.get(key);
-  if (pending) return pending;
-  const answer = clearedAtAnswers.get(key);
-  if (answer && Date.now() - answer.at < CLEARED_AT_REUSE_MS) return Promise.resolve(answer.value);
-  const request = (async () => {
+): Promise<string | null | undefined> {
+  return clearedAtCache.getOrLoad(chatId, userId, async () => {
     const { data: membership, error } = await supabase
       .from("chat_members")
       .select("cleared_at")
       .eq("chat_id", chatId)
       .eq("user_id", userId)
       .maybeSingle();
-    const value = membership?.cleared_at ?? null;
-    if (!error) clearedAtAnswers.set(key, { value, at: Date.now() });
-    return value;
-  })().finally(() => {
-    clearedAtRequests.delete(key);
+    return { value: membership?.cleared_at ?? null, ok: !error };
   });
-  clearedAtRequests.set(key, request);
-  return request;
-}
-
-function forgetClearedAt(chatId: string) {
-  for (const key of Array.from(clearedAtAnswers.keys())) {
-    if (key.startsWith(`${chatId}:`)) clearedAtAnswers.delete(key);
-  }
 }
 
 interface SendMessageInput {
@@ -192,7 +163,13 @@ export function useMessages(
    */
   const [pinnedRead, setPinnedRead] = useState<ListReadProgress>(LIST_READ_PENDING);
   const [clearedAt, setClearedAt] = useState<string | null>(null);
+  const [verifiedChatId, setVerifiedChatId] = useState<string | null>(null);
+  const [verifyingChatId, setVerifyingChatId] = useState<string | null>(null);
   const [hiddenMessageIds, setHiddenMessageIds] = useState<Set<string>>(() => new Set());
+  useLayoutEffect(() => {
+    setVerifiedChatId(null);
+    setVerifyingChatId(null);
+  }, [chatId]);
   /**
    * The refusal the composer shows beside itself, or null.
    *
@@ -319,13 +296,26 @@ export function useMessages(
     );
     bumpFetch("useMessages");
     if (!background) setLoading(options.cacheIsStale === true || !hasCachedMessages);
+    if (!userId || !clearedAtCache.hasFresh(chatId, userId)) {
+      setVerifiedChatId(null);
+      setVerifyingChatId(chatId);
+    }
     try {
-      let localClearedAt: string | null = null;
+      let localClearedAt: string | null | undefined;
       const user = currentUserRef.current;
       if (user) {
         localClearedAt = await loadClearedAt(supabase, chatId, user.id);
+        if (localClearedAt === undefined) {
+          setVerifiedChatId(null);
+          setVerifyingChatId(chatId);
+          setMessages(chatId, []);
+          setPinnedMessages([]);
+          hasMoreOlderRef.current = false;
+          setHasMoreOlder(false);
+          return;
+        }
         setClearedAt(localClearedAt);
-      }
+      } else return;
       // A group keeps soft-deleted rows in its timeline, so MessageBubble can
       // render «Сообщение удалено» in the slot they occupied and nothing shifts
       // when a message is removed. A private chat draws none — delete for both
@@ -379,6 +369,8 @@ export function useMessages(
           return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
         }), effectiveHiddenIds);
         setMessages(chatId, mergeMessagesById(visibleFetched, visibleExisting));
+        setVerifiedChatId(chatId);
+        setVerifyingChatId(null);
         fetchedMessageScopes.add(getPinnedKey(chatId, topicId));
         if (user) {
           const latestVisible = visibleFetched[visibleFetched.length - 1] ?? visibleExisting[visibleExisting.length - 1] ?? null;
@@ -398,7 +390,7 @@ export function useMessages(
     } finally {
       if (!background) setLoading(false);
     }
-  }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat]);
+  }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat, userId]);
 
   // Opening a chat. One this session has already fetched renders from the
   // store and is revalidated once, when its channel has joined (the handler
@@ -417,7 +409,7 @@ export function useMessages(
     // effect runs before the chat window zeroes the count, so the count still
     // says whether there are any.
     const unreadWhileClosed = (useAppStore.getState().chats.find((item) => item.id === chatId)?.unread_count ?? 0) > 0;
-    if (fetchedMessageScopes.has(scope) && cached && !unreadWhileClosed) {
+    if (fetchedMessageScopes.has(scope) && cached && !unreadWhileClosed && userId && clearedAtCache.hasFresh(chatId, userId)) {
       setLoading(false);
       if (subscribedChatIdRef.current === chatId) {
         // Same chat, channel already live: a topic switch, or new general topic ids.
@@ -433,7 +425,7 @@ export function useMessages(
     }
     void fetchMessages({ cacheIsStale: cached && unreadWhileClosed });
     return undefined;
-  }, [fetchMessages]);
+  }, [fetchMessages, userId]);
 
   const refreshMessageById = useCallback(async (messageId: string) => {
     const activeChatId = chatIdRef.current;
@@ -686,12 +678,17 @@ export function useMessages(
     }
     const fetchKey = getPinnedKey(chatId, topicId);
     setPinnedRead((current) => listReadStarted(current, { background: false }));
-    let localClearedAt = clearedAtRef.current;
+    let localClearedAt: string | null | undefined = clearedAtRef.current;
     const user = currentUserRef.current;
     if (user) {
       localClearedAt = await loadClearedAt(supabase, chatId, user.id);
+      if (localClearedAt === undefined) {
+        setPinnedMessages([]);
+        setPinnedRead((current) => listReadRefused(current, { subject: fetchKey, message: "Не удалось проверить историю чата." }));
+        return;
+      }
       setClearedAt(localClearedAt);
-    }
+    } else return;
     let query = supabase
       .from("messages")
       .select(MESSAGE_SELECT_WITH_JOINS)
@@ -1640,7 +1637,9 @@ export function useMessages(
       return { ok: false, error: mapPgError(error) };
     }
     const nextClearedAt = new Date().toISOString();
-    forgetClearedAt(chatId);
+    clearedAtCache.evictChat(chatId);
+    setVerifiedChatId(null);
+    setVerifyingChatId(chatId);
     setClearedAt(nextClearedAt);
     setMessages(chatId, []);
     // This emptiness is the person's own doing, not a refused read.
@@ -1653,22 +1652,26 @@ export function useMessages(
   // every render of this hook rendered the conversation for any render of the
   // chat window — a chat list update, a composer resize — though no message
   // had changed.
+  const boundaryVerified = Boolean(chatId && userId && verifyingChatId !== chatId && (
+    verifiedChatId === chatId || clearedAtCache.hasFresh(chatId, userId)
+  ));
   const visibleMessages = useMemo(() => {
+    if (!boundaryVerified) return EMPTY_MESSAGES;
     const scoped = chatMessages.filter((message) =>
       !hiddenMessageIds.has(message.id) && messageBelongsToTopic(message, topicId, generalTopicIds)
     );
     if (scoped.length === chatMessages.length && !hiddenMessageIds.size) return chatMessages;
     return sanitizeHiddenReplies(scoped, hiddenMessageIds);
-  }, [chatMessages, generalTopicIds, hiddenMessageIds, topicId]);
+  }, [boundaryVerified, chatMessages, generalTopicIds, hiddenMessageIds, topicId]);
 
   const currentPinnedKey = getPinnedKey(chatId, topicId);
   /** Whether what is held was read for the conversation now on screen. */
   const pinnedAnswersThisChat = pinnedRead.subject === currentPinnedKey;
   const visiblePinnedMessages = useMemo(() => {
-    if (!pinnedAnswersThisChat) return EMPTY_MESSAGES;
+    if (!boundaryVerified || !pinnedAnswersThisChat) return EMPTY_MESSAGES;
     if (!hiddenMessageIds.size) return pinnedMessages;
     return sanitizeHiddenReplies(pinnedMessages.filter((message) => !hiddenMessageIds.has(message.id)), hiddenMessageIds);
-  }, [hiddenMessageIds, pinnedAnswersThisChat, pinnedMessages]);
+  }, [boundaryVerified, hiddenMessageIds, pinnedAnswersThisChat, pinnedMessages]);
 
   /**
    * The four states a list read can be in, for the pinned banner (D-140).

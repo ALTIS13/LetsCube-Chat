@@ -1233,12 +1233,17 @@ export function MessageBubble({
       {deliveryState?.isOwnMessage && !showGroupReadIndicator && (
         <span
           data-message-delivery-slot="true"
-          className="inline-flex h-[13px] w-[13px] shrink-0 items-center justify-center"
+          className={cn(
+            "inline-flex h-[13px] w-[13px] shrink-0 items-center justify-center",
+            // Own bubbles remap the global accent to white; a read check needs
+            // its own contrasting accent on the blue bubble in both themes.
+            deliveryState.state === "read" && "text-[#6CF5B9]",
+          )}
         >
           <KubIcon
             name={deliveryState.icon}
             size={13}
-            tone={deliveryState.tone}
+            tone={deliveryState.state === "read" ? "currentColor" : deliveryState.tone}
             label={deliveryState.label}
           />
         </span>

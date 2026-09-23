@@ -8,6 +8,7 @@ import {
   isDefaultMessageTextSize,
   messageTextLineHeight,
   messageTextSizeSteps,
+  messageTextSizePercent,
   messageTextSizeSummary,
 } from "../../artifacts/kub/src/lib/messageTextSize.ts";
 
@@ -69,10 +70,14 @@ test("the control offers every whole pixel in the range and nothing outside it",
   assert.ok(!steps.includes(23));
 });
 
-test("the summary says which one is the default, because that is the question somebody has", () => {
-  assert.equal(messageTextSizeSummary(16), "16 px — по умолчанию");
-  assert.equal(messageTextSizeSummary(20), "20 px");
-  assert.equal(messageTextSizeSummary(13), "13 px");
+test("the control describes each persisted pixel step relative to the 16 px default", () => {
+  assert.equal(messageTextSizePercent(13), 81);
+  assert.equal(messageTextSizePercent(16), 100);
+  assert.equal(messageTextSizePercent(20), 125);
+  assert.equal(messageTextSizePercent(22), 138);
+  assert.equal(messageTextSizeSummary(16), "100% — по умолчанию");
+  assert.equal(messageTextSizeSummary(20), "125%");
+  assert.equal(messageTextSizeSummary(13), "81%");
 });
 
 

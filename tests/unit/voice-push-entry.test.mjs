@@ -26,7 +26,7 @@ test.beforeEach(() => {
   env = { KUB_PUSH_DISPATCH_TOKEN: "fixture-dispatch", SUPABASE_URL: "https://fixture.invalid", SUPABASE_SECRET_KEY: "fixture-backend" };
   requests = []; vapid = 0; webSends = [];
   network = async (url) => {
-    if (url.pathname === "/rest/v1/rpc/push_outbox_claim" || url.pathname === "/rest/v1/notifications_native_push_outbox") return Response.json([]);
+    if (url.pathname === "/rest/v1/rpc/push_outbox_claim" || url.pathname === "/rest/v1/rpc/native_push_outbox_claim") return Response.json([]);
     throw new Error("unexpected offline request");
   };
   globalThis.fetch = async (input, init = {}) => {
@@ -113,7 +113,7 @@ test("generic web delivery and acknowledgement finish before an isolated voice f
     if (url.pathname === "/rest/v1/rpc/push_outbox_claim") return Response.json([{ id: "fictional-outbox",
       subscription_id: "fictional-subscription", payload: { title: "Fixture", body: "Message", sender_kind: "user",
         sender_id: "fixture-user" }, attempt_count: 0 }]);
-    if (url.pathname === "/rest/v1/notifications_native_push_outbox") return Response.json([]);
+    if (url.pathname === "/rest/v1/rpc/native_push_outbox_claim") return Response.json([]);
     if (url.pathname === "/rest/v1/push_subscriptions") return Response.json([{ id: "fictional-subscription",
       endpoint: "https://fixture.invalid/webpush", p256dh: "fictional", auth: "fictional", is_active: true }]);
     if (init.method === "PATCH") {
@@ -129,6 +129,46 @@ test("generic web delivery and acknowledgement finish before an isolated voice f
   assert.equal(body.sent, 1); assert.equal(body.failed, 0); assert.equal(body.voice.status, "provider_auth_failed");
   assert.equal(JSON.parse(webSends[0][1]).senderKind, "user");
   assert.doesNotMatch(JSON.stringify(body), /private provider/);
+});
+
+test("native cron claims an unread row and acknowledges only its own FCM lease", async () => {
+  Object.assign(env, { VAPID_PUBLIC_KEY: "fixture-public", VAPID_PRIVATE_KEY: "fixture-private" });
+  fcmCredentials();
+  const rowId = "20000000-0000-4000-8000-000000000001";
+  const deviceId = "30000000-0000-4000-8000-000000000001";
+  let nativeClaimToken;
+  network = async (url, init) => {
+    if (url.pathname === "/rest/v1/rpc/push_outbox_claim") return Response.json([]);
+    if (url.pathname === "/rest/v1/rpc/native_push_outbox_claim") {
+      const body = JSON.parse(init.body);
+      nativeClaimToken = body.p_claim_token;
+      assert.match(nativeClaimToken, /^[0-9a-f-]{36}$/);
+      return Response.json([{ id: rowId, device_id: deviceId, payload: { title: "Fixture", body: "Message" }, attempt_count: 0 }]);
+    }
+    if (url.pathname === "/rest/v1/user_push_devices") return Response.json([
+      { id: deviceId, token: "synthetic-registration", provider: "fcm", enabled: true, app_version: "0.1.8" },
+    ]);
+    if (url.hostname === "oauth2.googleapis.com") return Response.json({ access_token: "synthetic-oauth" });
+    if (url.hostname === "fcm.googleapis.com") return Response.json({ name: "fixture-message" });
+    if (url.pathname === "/rest/v1/notifications_native_push_outbox") {
+      assert.equal(init.method, "PATCH");
+      assert.equal(url.searchParams.get("id"), `eq.${rowId}`);
+      assert.equal(url.searchParams.get("claim_token"), `eq.${nativeClaimToken}`);
+      assert.equal(url.searchParams.get("select"), "id");
+      assert.equal(init.headers.prefer, "return=representation");
+      const patch = JSON.parse(init.body);
+      assert.ok(patch.sent_at);
+      assert.equal(patch.claim_token, null);
+      assert.equal(patch.claimed_until, null);
+      return Response.json([{ id: rowId }]);
+    }
+    throw new Error(`unexpected offline request to ${url.hostname}`);
+  };
+  const response = await handler(request({ limit: 1 }));
+  const body = await response.json();
+  assert.equal(body.native.sent, 1);
+  assert.equal(body.native.failed, 0);
+  assert.equal(requests.filter((item) => item.url.hostname === "fcm.googleapis.com").length, 1);
 });
 
 for (const provider of ["accepted", "unregistered", "mismatched-sender"]) {

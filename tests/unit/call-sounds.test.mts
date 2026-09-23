@@ -125,13 +125,25 @@ test("the ringback is the ring's cadence, single-toned and quieter", () => {
   );
 });
 
-test("a notification is one short tone, however far ahead it is asked about", () => {
+test("a notification is a short two-note figure, however far ahead it is asked about", () => {
   const spec = CALL_SOUNDS.notification;
   assert.equal(spec.loop, false);
-  assert.deepEqual(tonesOf(spec), [[880]]);
-  assert.ok(callSoundCycleMs(spec) <= 400, "one tone, not a phrase");
+  assert.equal(spec.decay, "exponential");
+  assert.ok(spec.gain <= 0.1, "the notification must retain its quiet peak budget");
+  assert.deepEqual(timingOf(spec), [100, 24, 156]);
+  assert.deepEqual(shapeOf(spec), [
+    [{ hz: 740, level: 1 }, { hz: 1480, level: 0.18 }],
+    [{ hz: 988, level: 1 }, { hz: 1976, level: 0.18 }],
+  ]);
+  assert.ok(callSoundCycleMs(spec) <= 300, "one compact cue, not a phrase");
   const forever = callSoundBursts(spec, { fromMs: 0, untilMs: 600_000 });
-  assert.deepEqual(forever, [{ atMs: 0, durationMs: 220, tones: equalTones(880) }]);
+  assert.deepEqual(forever, [
+    { atMs: 0, durationMs: 100, tones: [{ hz: 740, level: 1 }, { hz: 1480, level: 0.18 }] },
+    { atMs: 124, durationMs: 156, tones: [{ hz: 988, level: 1 }, { hz: 1976, level: 0.18 }] },
+  ]);
+  assert.deepEqual(callSoundBursts(spec, { fromMs: 280, untilMs: 600_000 }), []);
+  assert.notDeepEqual(pitchesOf(spec), pitchesOf(CALL_SOUNDS.join));
+  assert.notDeepEqual(pitchesOf(spec), pitchesOf(CALL_SOUNDS.leave));
 });
 
 test("the level is shared between a burst's tones rather than added up", () => {
@@ -155,7 +167,9 @@ test("the level is shared between a burst's tones rather than added up", () => {
   // that a sound rings on two tones and resolves on one.
   const notification = CALL_SOUNDS.notification;
   const [ping] = callSoundBursts(notification, { fromMs: 0, untilMs: 1 });
-  assert.equal(callSoundToneGain(notification, ping, ping.tones[0]), notification.gain);
+  assert.ok(
+    Math.abs(callSoundToneGain(notification, ping, ping.tones[0]) - notification.gain / 1.18) < 1e-12,
+  );
 });
 
 test("a tone's level is a share, and the shares of a burst add up to the sound", () => {
@@ -305,14 +319,11 @@ test("nothing sits below the fundamental, which was measured rather than assumed
   }
 });
 
-test("a telephone is plain and a voice channel is struck", () => {
-  // The three that existed must keep their straight line: what makes a
-  // telephone recognisable is that it is a machine, and the baseline diff
-  // carries `decay` precisely so that «identical» covers this.
-  for (const name of ["ring", "ringback", "notification"] as CallSoundName[]) {
+test("a telephone is plain while the short cues are struck", () => {
+  for (const name of ["ring", "ringback"] as CallSoundName[]) {
     assert.equal(CALL_SOUNDS[name].decay, "linear", `${name} must stay plain`);
   }
-  for (const name of VOICE_SOUNDS) {
+  for (const name of ["notification", ...VOICE_SOUNDS] as CallSoundName[]) {
     assert.equal(CALL_SOUNDS[name].decay, "exponential");
   }
 });
@@ -408,10 +419,10 @@ test("nothing a voice channel makes competes with speech", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The three that existed, pinned burst for burst
+// The unchanged telephone sounds, pinned burst for burst
 // ---------------------------------------------------------------------------
 
-test("the model grew and the telephone did not move", () => {
+test("the telephone sounds did not move", () => {
   // The left-hand side of this was generated from `lib/callSounds.ts` as it
   // stood at **6f2a4fba** — the commit that last touched it before any of this
   // work, when a spec was a list of frequencies and a burst had no pitches of
@@ -427,8 +438,7 @@ test("the model grew and the telephone did not move", () => {
   // silently compares against whoever committed last.
   //
   // Four cycles rather than one: the second is where an off-by-one in the cycle
-  // arithmetic shows, and a non-looping sound answering with one burst over a
-  // window four times its length is itself part of what is pinned.
+  // arithmetic shows. The notification's non-looping limit is tested above.
   const telephoneBursts = [0, 700, 3_200, 3_900, 6_400, 7_100, 9_600, 10_300];
   const expected: Record<string, unknown[]> = {
     ring: telephoneBursts.map((atMs) => ({
@@ -450,16 +460,6 @@ test("the model grew and the telephone did not move", () => {
       attackMs: 18,
       releaseMs: 70,
     })),
-    notification: [
-      {
-        atMs: 0,
-        durationMs: 220,
-        decay: "linear",
-        voices: [{ hz: 880, gain: 0.1 }],
-        attackMs: 8,
-        releaseMs: 180,
-      },
-    ],
   };
   for (const [name, rows] of Object.entries(expected)) {
     assert.deepEqual(callSoundPlan(callSoundsModule, name), rows, `${name} moved`);

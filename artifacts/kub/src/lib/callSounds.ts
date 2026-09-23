@@ -62,11 +62,12 @@
  * even index sounds, odd index is silent — is gone with it, and with it one
  * invariant that an inserted element could break without anything noticing.
  *
- * `ring`, `ringback` and `notification` came through unchanged, and that is a
- * measurement rather than a claim: `scripts/call-sound-baseline.mjs` plans four
- * cycles of each against the module at any git revision and diffs burst for
- * burst — time, length, tones, level per oscillator, attack and release.
- * `tests/unit/call-sounds.test.mts` pins the same table.
+ * `ring` and `ringback` came through unchanged, and that is a measurement
+ * rather than a claim: `scripts/call-sound-baseline.mjs` plans four cycles
+ * against the module at any git revision and diffs burst for burst — time,
+ * length, tones, level per oscillator, attack and release.
+ * `tests/unit/call-sounds.test.mts` pins the same table. The notification
+ * later gained its own two-note figure, without changing the telephone pair.
  *
  * ## A note is partials, and it falls away rather than stopping
  *
@@ -129,9 +130,9 @@
 /**
  * The seven sounds this product makes. Nothing else may make one.
  *
- * Three are a telephone and four are a voice channel. The four were asked for
- * on 2026-09-19, after the owner noticed that somebody joining a channel made
- * no sound at all — because there was none to make.
+ * Two are a telephone, one is a notification, and four are a voice channel.
+ * The four were asked for on 2026-09-19, after the owner noticed that somebody
+ * joining a channel made no sound at all — because there was none to make.
  */
 export type CallSoundName =
   | "ring"
@@ -347,12 +348,17 @@ export const CALL_SOUNDS: Record<CallSoundName, CallSoundSpec> = {
   notification: {
     name: "notification",
     gain: 0.1,
-    attackMs: 8,
-    // Most of the burst is the release: a tone that stops dead reads as a
-    // beep, and one that falls away reads as a bell.
-    releaseMs: 180,
-    decay: "linear",
-    cadence: alternating(equal(880), [220]),
+    attackMs: 6,
+    releaseMs: 94,
+    decay: "exponential",
+    // A short fourth up, with a quiet octave on each note. The first falls
+    // away before the longer resolution; neither pitch belongs to the voice
+    // channel's A4/E5 family.
+    cadence: [
+      { tones: [{ hz: 740, level: 1 }, { hz: 1480, level: 0.18 }], durationMs: 100 },
+      { tones: [], durationMs: 24 },
+      { tones: [{ hz: 988, level: 1 }, { hz: 1976, level: 0.18 }], durationMs: 156 },
+    ],
     loop: false,
   },
   /**
@@ -473,8 +479,8 @@ export function callSoundCycleMs(spec: CallSoundSpec): number {
  * Measured from the start of the sound, so the caller schedules against one
  * origin and never accumulates drift: `fromMs` inclusive, `untilMs` exclusive.
  * A sound that does not loop has the bursts of its first cycle and no others,
- * however far ahead it is asked about — which is what makes the notification a
- * single tone rather than a smoke alarm.
+ * however far ahead it is asked about — which makes the notification a single
+ * short cue rather than a smoke alarm.
  */
 export function callSoundBursts(
   spec: CallSoundSpec,

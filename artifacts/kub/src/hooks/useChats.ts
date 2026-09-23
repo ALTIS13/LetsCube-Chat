@@ -39,6 +39,7 @@ import {
 import { CHATS_UNAVAILABLE, plainFailure } from "@/lib/plainMessages";
 import { isIncomingMessage } from "@/lib/messageActor";
 import { MESSAGE_LAST_MESSAGE_SELECT } from "@/lib/messageProjection";
+import { clearedAtCache } from "@/lib/clearedAtCache";
 import { subscribeByTable } from "@/lib/realtimeTableChannels";
 import {
   createResumeRevalidationGate,
@@ -157,6 +158,7 @@ export function useChats() {
     bumpFetch("useChats");
 
     try {
+      const membershipRead = clearedAtCache.beginMembershipRead();
       const { data: memberships, error: membershipsError } = await supabase
         .from("chat_members")
         .select("chat_id, joined_at, last_read_at, last_delivered_at, hidden_at, cleared_at, pinned, pinned_at, pinned_order")
@@ -193,6 +195,7 @@ export function useChats() {
       }
 
       const myMemberships = (memberships ?? []) as MyMembershipRow[];
+      clearedAtCache.seedFromMembershipRead(userId, myMemberships, membershipRead);
       const membershipByChat = new Map(myMemberships.map((membership) => [membership.chat_id, membership]));
       const chatIds = myMemberships.map((m) => m.chat_id);
 
@@ -542,13 +545,20 @@ export function useChats() {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "chat_members", filter: `user_id=eq.${userId}` },
-        scheduleRefetch,
+        (payload: { new: MembershipRowLike }) => {
+          if (payload.new?.chat_id) clearedAtCache.evictChat(payload.new.chat_id);
+          scheduleRefetch();
+        },
       )
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "chat_members", filter: `user_id=eq.${userId}` },
         (payload: { new: MembershipRowLike }) => {
           if (!payload.new?.chat_id) return;
+          if ("cleared_at" in payload.new) {
+            const previous = useAppStore.getState().chats.find((chat) => chat.id === payload.new.chat_id);
+            if (previous?.cleared_at !== payload.new.cleared_at) clearedAtCache.evictChat(payload.new.chat_id);
+          }
           const outcome = applyEvent({ kind: "own-membership", row: payload.new });
           if (outcome === "unknown-chat" || outcome === "needs-refetch") scheduleRefetch();
           else if (outcome === "needs-summary") scheduleSummary(payload.new.chat_id);
@@ -557,7 +567,10 @@ export function useChats() {
       .on(
         "postgres_changes",
         { event: "DELETE", schema: "public", table: "chat_members", filter: `user_id=eq.${userId}` },
-        scheduleRefetch,
+        (payload: { old: Partial<MembershipRowLike> }) => {
+          if (payload.old?.chat_id) clearedAtCache.evictChat(payload.old.chat_id);
+          scheduleRefetch();
+        },
       )
       .subscribe((status: string) => {
         if (import.meta.env.DEV) console.debug("[chat-members:user]", userId, status);

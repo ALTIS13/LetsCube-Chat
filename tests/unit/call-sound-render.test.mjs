@@ -211,12 +211,31 @@ test("moving a partial's level moves what comes out, which is how the sharing is
 // How loud it is
 // ---------------------------------------------------------------------------
 
+test("the rendered notification has two distinct notes, a rest and a quiet tail", () => {
+  const { samples, sampleRate } = renderCallSoundSamples("notification");
+  const first = amplitudeAt(samples, sampleRate, 740, 12, 55);
+  const second = amplitudeAt(samples, sampleRate, 988, 140, 180);
+  assert.ok(first > 0.01, `first note at 740 Hz: ${first}`);
+  assert.ok(second > 0.01, `second note at 988 Hz: ${second}`);
+  assert.ok(first > amplitudeAt(samples, sampleRate, 988, 12, 55) * 2);
+  assert.ok(second > amplitudeAt(samples, sampleRate, 740, 140, 180) * 2);
+  assert.ok(amplitudeAt(samples, sampleRate, 1480, 12, 55) < first / 3);
+  assert.ok(amplitudeAt(samples, sampleRate, 1976, 140, 180) < second / 3);
+  assert.equal(windowRms(samples, sampleRate, 105, 120), 0, "a real rest separates the notes");
+  assert.ok(
+    windowRms(samples, sampleRate, 245, 270) < windowRms(samples, sampleRate, 145, 170) / 4,
+    "the resolving note falls away before it ends",
+  );
+  assert.equal(peakWithin(samples, sampleRate, 280, 500), 0, "the one-shot is over by 280 ms");
+});
+
 test("the level is callSoundToneGain's, asked of the burst and of the tone", () => {
   const spec = CALL_SOUNDS.notification;
   const full = renderSpecSamples(spec);
-  assert.ok(Math.abs(peakOf(full.samples) - spec.gain) < 0.002, "one tone peaks at the whole level");
+  const fullPeak = peakOf(full.samples);
+  assert.ok(fullPeak > 0.04 && fullPeak <= spec.gain, "the cue is audible within its peak budget");
   const half = renderSpecSamples({ ...spec, gain: spec.gain / 2 });
-  assert.ok(Math.abs(peakOf(half.samples) - spec.gain / 2) < 0.002, "halve the gain, halve the peak");
+  assert.ok(Math.abs(peakOf(half.samples) - fullPeak / 2) < 0.002, "halve the gain, halve the peak");
 
   // Two sines in one burst share the level rather than doubling it, which is
   // the whole reason the division exists. Two copies of the same pitch are in

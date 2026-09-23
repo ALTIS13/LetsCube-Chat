@@ -316,7 +316,7 @@ export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSear
             its visibility, which was measured rather than assumed. */}
         <div
           className={cn(
-            "order-last w-full min-w-0 basis-full transition-[max-height,opacity] duration-200 md:order-none md:w-auto md:basis-auto md:flex-1",
+            "order-last w-full min-w-0 basis-full transition-opacity duration-200 md:order-none md:w-auto md:basis-auto md:flex-1",
             tuck
               ? "max-h-0 overflow-hidden opacity-0 md:max-h-none md:overflow-visible md:opacity-100"
               : "max-h-12 opacity-100",

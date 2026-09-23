@@ -11,8 +11,10 @@ import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useTheme } from "@/hooks/useTheme";
 import { useMessageTextSize } from "@/hooks/useMessageTextSize";
 import {
+  MESSAGE_TEXT_SIZE_DEFAULT_PX,
   MESSAGE_TEXT_SIZE_MAX_PX,
   MESSAGE_TEXT_SIZE_MIN_PX,
+  messageTextSizePercent,
   messageTextSizeSummary,
 } from "@/lib/messageTextSize";
 import { usePrivacyPreferences } from "@/hooks/usePrivacyPreferences";
@@ -836,35 +838,59 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
             </SettingsRow>
           )}
           {shows("message-text-size") && (
-            <SettingsRow
-              icon="chats"
-              iconTone="accent"
-              label="Размер текста сообщений"
-              value={messageTextSizeSummary(messageTextSize)}
+            <div
+              data-testid="message-text-size-setting"
+              className={cn(ROW_GRID, "grid-cols-[1.125rem_minmax(0,1fr)] items-start")}
             >
-              <div className="flex shrink-0 items-center gap-2">
-                <span aria-hidden="true" className="text-[11px] text-[color:var(--kub-muted)]">А</span>
-                <input
-                  type="range"
-                  min={MESSAGE_TEXT_SIZE_MIN_PX}
-                  max={MESSAGE_TEXT_SIZE_MAX_PX}
-                  step={1}
-                  value={messageTextSize}
-                  aria-label="Размер текста сообщений"
-                  aria-valuetext={`${messageTextSize} px`}
-                  onChange={(event) => setMessageTextSize(Number(event.target.value))}
-                  className="kub-field kub-range h-8 w-32 sm:w-40"
-                  style={{
-                    "--kub-range-filled": `${Math.round(
-                      ((messageTextSize - MESSAGE_TEXT_SIZE_MIN_PX) /
-                        (MESSAGE_TEXT_SIZE_MAX_PX - MESSAGE_TEXT_SIZE_MIN_PX)) *
-                        100,
-                    )}%`,
-                  } as CSSProperties}
-                />
-                <span aria-hidden="true" className="text-[17px] leading-none text-[color:var(--kub-muted)]">А</span>
+              <RowIcon name="chats" tone="accent" />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                  <span data-testid="message-text-size-label" className="text-sm text-[color:var(--kub-text)]">
+                    Размер текста сообщений
+                  </span>
+                  <output className="text-sm font-medium tabular-nums text-[color:var(--kub-text)]">
+                    {messageTextSizeSummary(messageTextSize)}
+                  </output>
+                </div>
+                <div className="mt-2 min-w-0">
+                  <input
+                    type="range"
+                    min={MESSAGE_TEXT_SIZE_MIN_PX}
+                    max={MESSAGE_TEXT_SIZE_MAX_PX}
+                    step={1}
+                    value={messageTextSize}
+                    aria-label="Размер текста сообщений"
+                    aria-valuetext={`${messageTextSizePercent(messageTextSize)}% (${messageTextSize} px${messageTextSize === MESSAGE_TEXT_SIZE_DEFAULT_PX ? ", по умолчанию" : ""})`}
+                    onChange={(event) => setMessageTextSize(Number(event.target.value))}
+                    className="kub-field kub-range block w-full"
+                    style={{
+                      "--kub-range-filled": `${Math.round(
+                        ((messageTextSize - MESSAGE_TEXT_SIZE_MIN_PX) /
+                          (MESSAGE_TEXT_SIZE_MAX_PX - MESSAGE_TEXT_SIZE_MIN_PX)) *
+                          100,
+                      )}%`,
+                    } as CSSProperties}
+                  />
+                  <div
+                    aria-hidden="true"
+                    className="relative mt-1.5 flex h-5 items-end justify-between text-xs tabular-nums text-[color:var(--kub-muted)]"
+                  >
+                    <span>{messageTextSizePercent(MESSAGE_TEXT_SIZE_MIN_PX)}%</span>
+                    <span
+                      data-testid="message-text-size-default-mark"
+                      className="absolute bottom-0 -translate-x-1/2 text-[color:var(--kub-cyan)]"
+                      style={{
+                        left: `${((MESSAGE_TEXT_SIZE_DEFAULT_PX - MESSAGE_TEXT_SIZE_MIN_PX) / (MESSAGE_TEXT_SIZE_MAX_PX - MESSAGE_TEXT_SIZE_MIN_PX)) * 100}%`,
+                      }}
+                    >
+                      <span className="mx-auto mb-0.5 block h-1 w-px bg-[var(--kub-cyan)]" />
+                      100%
+                    </span>
+                    <span>{messageTextSizePercent(MESSAGE_TEXT_SIZE_MAX_PX)}%</span>
+                  </div>
+                </div>
               </div>
-            </SettingsRow>
+            </div>
           )}
           {shows("audio") && (
             <DisclosureRow

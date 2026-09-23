@@ -88,9 +88,15 @@ export function isDefaultMessageTextSize(sizePx: number): boolean {
   return sizePx === MESSAGE_TEXT_SIZE_DEFAULT_PX;
 }
 
-/** «16 px — как обычно» / «20 px». What the settings row shows. */
+/** A familiar scale for the control; stored values remain whole pixels. */
+export function messageTextSizePercent(sizePx: number): number {
+  return Math.round((clampMessageTextSize(sizePx) / MESSAGE_TEXT_SIZE_DEFAULT_PX) * 100);
+}
+
+/** The current percentage and whether it is the shipped default. */
 export function messageTextSizeSummary(sizePx: number): string {
-  return isDefaultMessageTextSize(sizePx) ? `${sizePx} px — по умолчанию` : `${sizePx} px`;
+  const percent = `${messageTextSizePercent(sizePx)}%`;
+  return isDefaultMessageTextSize(sizePx) ? `${percent} — по умолчанию` : percent;
 }
 
 // ── the composer, which now reads the same number (D-289) ────────────────
