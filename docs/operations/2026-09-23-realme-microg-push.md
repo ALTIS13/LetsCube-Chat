@@ -331,3 +331,29 @@ remained `adb offline` on three cold starts, including a software-rendered
 start with Vulkan disabled; it never accepted an APK. The temporary AVD and
 diagnostic files were removed. Android 13 Google Play AVD and Realme results
 above remain valid; physical official-GMS and signed-release QA remain open.
+
+### Android 14/API 34 read-only AVD continuation
+
+The existing Google Play API 34 AVD could boot, but held an older LETSCUBE
+package signed by a different debug key. To avoid changing that installation,
+the emulator was started with `-read-only -no-snapshot-save` on port 5564. Only
+inside this disposable overlay, the old package was uninstalled and the current
+production-configured `0.1.8/9` debug APK plus its instrumentation APK installed.
+
+The FCM registration smoke passed 2/2: Play Services was available and
+`FirebaseMessaging.getToken()` returned a nonempty value; no token was printed.
+After granting `POST_NOTIFICATIONS` in this overlay, the data-only chat
+notification smoke passed 1/1, checking the native channel, icon and tap
+PendingIntent and cancelling its synthetic card in `finally`. The full-shell
+guest smoke passed 1/1 in 19.278 seconds: React-ready login was visible after
+cold launch and again after background/foreground. Its guest-only screenshot
+remained inside the disposable overlay and was not copied out.
+
+The emulator was shut down. The original AVD's user-data, cache and default
+boot RAM image sizes and UTC modification timestamps matched the pre-run
+baseline exactly; the original AVD's installed app was not replaced. This is
+Android 14 native integration and guest-lifecycle evidence, **not** a live
+backend-to-device FCM delivery or physical official-GMS result. The Android 13
+live card/tap result above remains the only official-GMS live push proof for
+this candidate. Android Stable remains `0.1.7/8`; no release was signed or
+published.

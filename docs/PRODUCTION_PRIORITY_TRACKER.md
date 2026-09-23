@@ -10,8 +10,11 @@ AVD and physical Realme microG. The AVD card tap reached the exact message;
 Realme offline two-chat delivery and chat-scoped OS-card read-sync passed.
 An awake Realme also cleared an OS card and in-app badge after a separate QA
 session marked the chat read; a dozing WebView reconciled only on wake. The
-attempted Android 14 AVD extension was blocked before APK installation by an
-`adb offline` clean emulator, not by an observed app failure.
+initial Android 14 AVD extension was blocked before APK installation by an
+`adb offline` clean emulator. A later read-only run of the existing Google Play
+API 34 AVD passed current debug FCM registration 2/2, synthetic OS-card 1/1
+and guest cold/resume 1/1 without modifying the original AVD. Live Android 14
+FCM delivery is still unproved.
 Android Stable remains at `0.1.7/8`: signed candidate, physical official-GMS
 delivery and long-session/vendor QA are **open**, not implicitly approved by
 this source rollout. Full evidence is in

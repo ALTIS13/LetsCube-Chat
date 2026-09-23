@@ -269,6 +269,15 @@ AVD had a different debug signer, and a fresh isolated AVD stayed `adb offline`
 before APK installation. It was removed without touching the old AVD.
 [Evidence](operations/2026-09-23-realme-microg-push.md).
 
+**Android 14 matrix continuation, 2026-09-23:** after the fresh AVD's
+`adb offline` failure, the existing Google Play API 34 AVD ran in a disposable
+`-read-only` overlay. Current `0.1.8/9` debug FCM registration passed 2/2,
+synthetic native chat card passed 1/1, and full guest cold/resume passed 1/1.
+The original AVD image size/timestamp baselines remained unchanged after exit.
+No live FCM send, physical official-GMS validation or signed release was
+performed; Stable remains `0.1.7/8`.
+[Detail](operations/2026-09-23-realme-microg-push.md).
+
 **Native proof continuation, 2026-09-23:** owner resumed after restoring the browser
 extension. The QA batch began at `d649db3f`. Windows actual WebView2 passed 6/6;
 an isolated Android 14 WebView passed seven positive cases and detected three
