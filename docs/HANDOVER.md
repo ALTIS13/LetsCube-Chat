@@ -198,6 +198,23 @@ did not fix check-in. The device is still unregistered and the token test fails;
 the app itself cold-launches with notification permission retained.
 [Evidence](operations/2026-09-23-realme-microg-push.md).
 
+**Realme microG check-in recovery, later 2026-09-23 (Codex):** a targeted,
+sanitized `GmsCheckinSvc` trace isolated failure to the retained Google account
+authorization path, before device check-in. On the owner-designated test phone,
+the stale device-local Google account binding was removed; forced check-in then
+succeeded. Physical instrumentation now passes both Play Services availability
+and token acquisition (2/2, token not printed). microG reports a registered
+device, connected Cloud Messaging and LETSCUBE in its app list. No replacement
+of microG was required. Subsequent QA found that reserved FCM data key
+`message_type` caused HTTP 400 and wrongly revoked the valid device. The
+payload key and revocation classifier were corrected, and only `fcm.ts` was
+deployed with an exact server-side backup. On the Realme, background and
+normally killed-process OS cards delivered, both card taps reached their exact
+messages, and foreground chat sync worked. A rebuilt production-configured
+debug APK passed FCM instrumentation 2/2 and the final card/tap check. Signed
+release and official-GMS device-matrix proof remain pending.
+[Updated evidence](operations/2026-09-23-realme-microg-push.md).
+
 **Native proof continuation, 2026-09-23:** owner resumed after restoring the browser
 extension. The QA batch began at `d649db3f`. Windows actual WebView2 passed 6/6;
 an isolated Android 14 WebView passed seven positive cases and detected three

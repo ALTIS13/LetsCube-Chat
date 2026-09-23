@@ -75,17 +75,87 @@ failure and 11 tests that deliberately reject a non-owned physical device;
 one two-process probe was skipped. It is not a valid full-suite regression
 result for Realme. No raw FCM token or QA credential was printed or committed.
 
+## Check-in root cause and recovery (later on 2026-09-23)
+
+The exact `GmsCheckinSvc` stack trace, captured without identifiers or tokens,
+showed `org.microg.gms.common.NotOkayException` from
+`HttpFormClient.request` via `AuthRequest.getResponse`, before the device
+check-in request. Android AccountManager still held one Google account after
+the earlier GmsCore data reset. On this owner-designated test phone, that
+device-local Google account binding was removed through Android Settings;
+this also removed its synchronized local data from the Realme. The Google
+account itself was not deleted. No account name or credential was displayed.
+
+With zero Google accounts in AccountManager, a forced microG check-in logged
+success. Its settings now show a recent device registration. The focused
+instrumentation reports `OK (2 tests)`: Play Services availability and
+`FirebaseMessaging.getToken()` both pass, without exposing the token. microG
+Cloud Messaging is enabled, shows a connected state, and lists LETSCUBE as one
+registered app. The diagnosis is a stale/broken account authorization path in
+microG, not evidence that the APK needs a replacement Google-services stack.
+Installing another GmsCore APK or changing the ROM is unnecessary and was not
+attempted.
+
+This supersedes the unregistered/token-failure result above; those paragraphs
+remain as the chronological diagnostic record. Server-side device registration,
+actual foreground/background/closed-process notification delivery, and tap
+routing were still unproved at this checkpoint.
+
+## End-to-end FCM delivery and payload correction (later on 2026-09-23)
+
+The QA client then registered a fresh active Android/FCM device row on the
+self-hosted server. A single QA message sent from the QA owner account created
+a native outbox row, but the first FCM attempt returned HTTP 400 and revoked
+the new device. The APK Firebase project and server `FCM_PROJECT_ID` matched.
+No token or credential was printed.
+
+A one-off, server-local FCM `validate_only` probe used the same device token:
+minimal notification HTTP 200; the original full LETSCUBE payload HTTP 400
+with both `google.rpc.BadRequest` (`message.data`) and
+`google.firebase.fcm.v1.FcmError` (`INVALID_ARGUMENT`). Removing only
+`message.data.message_type` yielded HTTP 200; renaming it to
+`message.data.kub_message_type` also yielded HTTP 200. Thus the device token
+was valid; `message_type` was a reserved FCM data key. The previous provider
+error classifier also incorrectly revoked a device when a payload
+`BadRequest` and an FCM error appeared together.
+
+The patch emits `kub_message_type` and preserves the legacy client read
+fallback. It refuses to revoke on HTTP 400 when `google.rpc.BadRequest` is
+present. Red/green tests exposed both failures before the patch and now pass.
+Twenty focused push/projection tests pass; Kub typecheck exits 0. The server
+entrypoint and old `fcm.ts` hashes matched the checkout before deployment.
+Only `fcm.ts` was replaced in the mounted Edge Function; the original is
+retained as `fcm.ts.bak.20260923` beside it. The Edge container was restarted,
+is healthy, and its mounted `fcm.ts` hash matches the reviewed source. No SQL
+or schema was changed. Browser/PWA push code was not deployed or modified.
+
+After app restart, the QA device row became active again. With the app in the
+background, an owner-to-client QA message was accepted by FCM (`sent_at`, no
+error) and appeared as an Android notification. A real tap opened LETSCUBE
+and rendered that exact message in the chat. With the app in the foreground,
+the next QA message appeared in the open conversation. For process-death QA,
+the background debug app process was killed under its own UID via `run-as`
+without setting Android's force-stopped state. A new message produced an OS
+notification; FCM respawned the process, and the card tap opened the target
+message. This does not claim delivery after Android force-stop, which has
+different platform semantics.
+
+The production-configured **debug** APK was rebuilt with the client parser
+change and installed over the QA app without clearing data or notification
+permission. Firebase instrumentation passed 2/2 again. A final background
+message on this rebuilt APK produced an error-free FCM send, Android card,
+and exact message navigation. The debug build completed with existing Vite
+sourcemap and Gradle deprecation warnings. No release signing, AAB, production
+APK publication, or broad device-matrix claim was made.
+
 ## Remaining proof
 
-1. Diagnose why this Realme's microG check-in remains unregistered despite a
-   passing self-check, reachable Google transport, current GmsCore/Companion,
-   a fresh microG data state and manual dialer check-in. No LETSCUBE server-side
-   change is indicated by these tests.
-2. Only after token registration succeeds, verify server device registration,
-   foreground/background/process-stopped delivery and notification-tap routing
-   using QA accounts. Do not infer this from Play Services availability alone.
-3. Compare on an official-GMS device separately. microG compatibility cannot be
-   generalized from a single unregistered device.
+1. Compare on an official-GMS Android device. One microG Realme passing these
+   QA flows cannot establish device-matrix reliability.
+2. Build, sign, and publish a separately authorized Android release candidate;
+   verify the installed signed APK, not only this production-configured debug APK.
+3. Keep killed-process delivery distinct from Android force-stop, and repeat
+   longer offline/Doze/reconnect tests before claiming sustained reliability.
 
 Reference: [microG installation and background-service requirements](https://github.com/microg/GmsCore/wiki/Installation),
 [microG check-in guidance](https://github.com/microg/GmsCore/wiki/Helpful-Information),

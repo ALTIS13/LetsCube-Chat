@@ -105,7 +105,7 @@ test("FCM bot message preserves actor identity, grouping, route, and trusted ava
     bot_id: "bot-1",
     sender_name: "Помощник",
     sender_avatar_url: "https://app.letscube.ru/media/bots/helper.webp",
-    message_type: "text",
+    kub_message_type: "text",
     preview: "Готово",
     group_tag: "message:chat:chat-1",
   });
@@ -166,6 +166,23 @@ test("only permanent FCM token errors prune a device", () => {
         details: [
           {
             "@type": "type.googleapis.com/google.rpc.BadRequest",
+            errorCode: "INVALID_ARGUMENT",
+          },
+        ],
+      },
+    }),
+    false,
+  );
+  assert.equal(
+    isPermanentFcmTokenError(400, {
+      error: {
+        details: [
+          {
+            "@type": "type.googleapis.com/google.rpc.BadRequest",
+            fieldViolations: [{ field: "message.data" }],
+          },
+          {
+            "@type": "type.googleapis.com/google.firebase.fcm.v1.FcmError",
             errorCode: "INVALID_ARGUMENT",
           },
         ],

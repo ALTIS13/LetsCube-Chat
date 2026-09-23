@@ -44,7 +44,7 @@ export function parseMessageNotificationProjection(
     botId: senderKind === "bot" ? botId : null,
     senderName: safeText(row.sender_name, senderKind === "bot" ? "Бот" : "Участник", 128),
     senderAvatarUrl: safeNotificationAvatarUrl(row.sender_avatar_url),
-    messageType: safeText(row.message_type, "text", 32),
+    messageType: safeText(row.kub_message_type ?? row.message_type, "text", 32),
     preview: safeText(row.preview, "Сообщение", 180),
     route: expectedRoute,
     groupTag: expectedGroupTag,

@@ -42,6 +42,22 @@ test("bot notification projection preserves exact actor, route, group, chat, and
   assert.equal(isSelfMessageNotification(payload, "user-1"), false);
 });
 
+test("native message type uses the FCM-safe key while legacy payloads still parse", () => {
+  const { parseMessageNotificationProjection } = notificationApi();
+  const base = {
+    chat_id: "chat-1",
+    message_id: "message-9",
+    sender_kind: "user",
+    sender_id: "user-1",
+  };
+  assert.equal(parseMessageNotificationProjection({
+    ...base,
+    kub_message_type: "video",
+    message_type: "text",
+  })?.messageType, "video");
+  assert.equal(parseMessageNotificationProjection({ ...base, message_type: "audio" })?.messageType, "audio");
+});
+
 test("notification navigation is derived from authoritative chat and message IDs", () => {
   const { parseMessageNotificationProjection } = notificationApi();
   const projection = parseMessageNotificationProjection({

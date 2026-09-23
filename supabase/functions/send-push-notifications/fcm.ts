@@ -61,7 +61,7 @@ export function buildFcmMessage(payload: PushPayload, token: string): FcmMessage
   if (senderKind === "bot" && botId) data.bot_id = botId;
   if (senderName) data.sender_name = senderName;
   if (senderAvatarUrl) data.sender_avatar_url = senderAvatarUrl;
-  if (messageType) data.message_type = messageType;
+  if (messageType) data.kub_message_type = messageType;
   if (preview) data.preview = preview;
   if (category === "message" && chatId) data.group_tag = `message:chat:${chatId}`;
 
@@ -114,6 +114,11 @@ export function isPermanentFcmTokenError(status: number, body: unknown): boolean
   if (!error || typeof error !== "object") return false;
   const details = (error as { details?: unknown }).details;
   if (!Array.isArray(details)) return false;
+
+  if (status === 400 && details.some((detail) =>
+    detail && typeof detail === "object" &&
+    (detail as { "@type"?: unknown })["@type"] === "type.googleapis.com/google.rpc.BadRequest"
+  )) return false;
 
   return details.some((detail) => {
     if (!detail || typeof detail !== "object") return false;
