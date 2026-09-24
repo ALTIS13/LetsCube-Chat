@@ -84,6 +84,7 @@ import {
   Shield,
   ShieldCheck,
   ShieldSlash,
+  ShareNetwork,
   SignOut,
   Smiley,
   SoccerBall,
@@ -198,6 +199,7 @@ export type KubIconName =
   | "search"
   | "send"
   | "settings"
+  | "share"
   | "shield"
   | "shieldOff"
   | "smile"
@@ -355,6 +357,7 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   search: { Icon: MagnifyingGlass },
   send: { Icon: PaperPlaneTilt, weight: "fill" },
   settings: { Icon: GearSix },
+  share: { Icon: ShareNetwork },
   shield: { Icon: Shield },
   shieldOff: { Icon: ShieldSlash },
   smile: { Icon: Smiley },

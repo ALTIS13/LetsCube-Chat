@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip } from "./helpers/auth";
 
 const QA_ROLES = ["owner", "tech_admin", "location_admin", "location_staff", "client"] as const;
@@ -8,24 +8,29 @@ test.describe("LETSCUBE PWA install settings", () => {
     await openSettingsOrSkip(page);
 
     await expect(page.getByTestId("pwa-install-title")).toContainText("LETSCUBE");
-    const expectedVariant = testInfo.project.name.includes("mobile") ? "Android APK" : "Windows EXE";
+    const expectedVariant = testInfo.project.name.includes("mobile")
+      ? "Android APK"
+      : "Windows EXE";
     await expect(page.getByTestId("pwa-install-variant")).toContainText(expectedVariant);
     await expect(page.getByTestId("pwa-install-button")).toHaveCount(0);
     await expect(page.getByTestId("pwa-install-guidance")).toHaveCount(0);
   });
 
-  test("iPhone browser shows iOS home-screen install guidance from the install button", async ({ page }) => {
-    await emulateIphoneSafari(page);
+  test("iPhone browser shows browser-neutral home-screen install guidance", async ({ page }) => {
+    await emulateIphoneChrome(page);
     await openSettingsOrSkip(page);
 
     await expect(page.getByTestId("pwa-install-title")).toContainText("iPhone");
     await expect(page.getByTestId("pwa-install-variant")).toContainText("iPhone / iOS PWA");
-    await expect(page.getByTestId("pwa-install-mode")).toContainText("Safari");
+    await expect(page.getByTestId("pwa-install-mode")).toContainText("Браузер");
 
     await page.getByTestId("pwa-install-button").click();
     await expect(page.getByTestId("pwa-install-guidance")).toContainText("Установка на iPhone");
     await expect(page.getByTestId("pwa-install-guidance")).toContainText("Поделиться");
     await expect(page.getByTestId("pwa-install-guidance")).toContainText("На экран Домой");
+    await expect(page.getByTestId("pwa-install-guidance")).toContainText(
+      "Открыть как веб-приложение",
+    );
   });
 });
 
@@ -42,11 +47,11 @@ async function openSettingsOrSkip(page: Page) {
   await expect(page.getByTestId("settings-section-application")).toBeVisible();
 }
 
-async function emulateIphoneSafari(page: Page) {
+async function emulateIphoneChrome(page: Page) {
   await page.addInitScript(() => {
     const userAgent =
-      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 " +
-      "(KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 " +
+      "(KHTML, like Gecko) CriOS/141.0.0.0 Mobile/15E148 Safari/604.1";
     Object.defineProperty(navigator, "userAgent", {
       configurable: true,
       get: () => userAgent,

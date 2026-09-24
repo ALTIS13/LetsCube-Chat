@@ -33,12 +33,15 @@
       })();
     </script>
     <script>
-      // The installed iPhone app, and only that: `navigator.standalone` exists
-      // on iOS alone and is true only when the app was opened from the home
-      // screen. The status-bar guard in src/index.css keys on this attribute,
-      // because the status bar's glyphs belong to iOS and only the installed
-      // app draws the page underneath them.
-      if (navigator.standalone === true) {
+      // Match the installed-mode check in usePwa: a Home Screen web app may
+      // expose display-mode: standalone even when navigator.standalone is
+      // absent. Set this before CSS paints, so its height and safe-area rules
+      // never start with the shorter browser viewport on iOS.
+      var iosWebApp = /iPhone|iPod|iPad/i.test(navigator.userAgent || "")
+        || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      var standaloneDisplay = window.matchMedia
+        && window.matchMedia("(display-mode: standalone)").matches;
+      if (navigator.standalone === true || (iosWebApp && standaloneDisplay)) {
         document.documentElement.setAttribute("data-ios-standalone", "");
       }
     </script>

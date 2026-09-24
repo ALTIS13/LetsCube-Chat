@@ -22,6 +22,7 @@ import {
 import {
   applicationServerKeyMatches,
   browserSubscriptionRecord,
+  subscribeDuringUserGesture,
   urlBase64ToUint8Array,
 } from "@/lib/browserPushSubscription";
 import { createDeferredPushTargetHandler } from "@/lib/pushNavigationQueue";
@@ -52,8 +53,11 @@ export type PushStatus = "unsupported" | "native_unavailable" | "denied" | "miss
 export type PushPreferences = PushPreferenceState;
 
 export type PushPreferenceKey = keyof Omit<PushPreferences, "push_enabled">;
+export const PUSH_STATE_CHANGED_EVENT = "kub:push-state-changed";
 
 const VAPID_PUBLIC = (import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined) ?? "";
+const BROWSER_REGISTRATION_ERROR = "Не удалось подготовить уведомления. Проверьте подключение и повторите попытку.";
+const BROWSER_REGISTRATION_WAIT_MS = 8_000;
 const DEFAULT_PREFERENCES: PushPreferences = {
   push_enabled: false,
   message_push_enabled: true,
@@ -71,6 +75,57 @@ export function usePush() {
   const [message, setMessage] = useState<string | null>(null);
   const browserReconcileInFlightRef = useRef(false);
   const browserLastReconciledAtRef = useRef(0);
+  const browserRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
+  const browserRegistrationAttemptRef = useRef(0);
+  const browserRegistrationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [browserRegistrationReady, setBrowserRegistrationReady] = useState(false);
+  const [browserRegistrationFailed, setBrowserRegistrationFailed] = useState(false);
+  const [browserReconciled, setBrowserReconciled] = useState(false);
+
+  const prepareBrowserRegistration = useCallback((retry: boolean) => {
+    if (isNativeApp() || !supportsBrowserPush() || !VAPID_PUBLIC || currentNotificationPermission() === "denied") return;
+    const attempt = ++browserRegistrationAttemptRef.current;
+    if (browserRegistrationTimerRef.current !== null) clearTimeout(browserRegistrationTimerRef.current);
+    setBrowserRegistrationFailed(false);
+    if (retry) setMessage("Подготавливаем уведомления…");
+    browserRegistrationTimerRef.current = setTimeout(() => {
+      if (browserRegistrationAttemptRef.current !== attempt) return;
+      setBrowserRegistrationFailed(true);
+      setMessage(BROWSER_REGISTRATION_ERROR);
+    }, BROWSER_REGISTRATION_WAIT_MS);
+
+    // The app runtime registers on first load. Retry the same script and scope
+    // only after a failed/pending setup; subscribe still needs a later tap.
+    const base = import.meta.env.BASE_URL || "/";
+    const scope = base.endsWith("/") ? base : `${base}/`;
+    const ready = retry
+      ? navigator.serviceWorker.register(`${scope}sw.js`, { scope }).then(() => navigator.serviceWorker.ready)
+      : navigator.serviceWorker.ready;
+    void ready.then((registration) => {
+      if (browserRegistrationAttemptRef.current !== attempt) return;
+      if (browserRegistrationTimerRef.current !== null) clearTimeout(browserRegistrationTimerRef.current);
+      browserRegistrationTimerRef.current = null;
+      browserRegistrationRef.current = registration;
+      setBrowserRegistrationReady(true);
+      setBrowserRegistrationFailed(false);
+      setMessage((current) => current === BROWSER_REGISTRATION_ERROR || current === "Подготавливаем уведомления…" ? null : current);
+    }).catch(() => {
+      if (browserRegistrationAttemptRef.current !== attempt) return;
+      if (browserRegistrationTimerRef.current !== null) clearTimeout(browserRegistrationTimerRef.current);
+      browserRegistrationTimerRef.current = null;
+      setBrowserRegistrationFailed(true);
+      setMessage(BROWSER_REGISTRATION_ERROR);
+    });
+  }, []);
+
+  useEffect(() => {
+    prepareBrowserRegistration(false);
+    return () => {
+      browserRegistrationAttemptRef.current += 1;
+      if (browserRegistrationTimerRef.current !== null) clearTimeout(browserRegistrationTimerRef.current);
+      browserRegistrationTimerRef.current = null;
+    };
+  }, [prepareBrowserRegistration]);
 
   // D-132 (settings-profile F2). This said a database update was needed, to a
   // person who cannot apply one. The status is unchanged — `migration_missing`
@@ -85,9 +140,11 @@ export function usePush() {
   const loadPreferences = useCallback(async () => {
     if (!userId) {
       setPreferencesLoaded(false);
+      setBrowserReconciled(false);
       return;
     }
     setPreferencesLoaded(false);
+    setBrowserReconciled(false);
     setLoadingPreferences(true);
     const { data, error } = await supabase
       .from("notification_preferences")
@@ -141,7 +198,7 @@ export function usePush() {
       setStatus("unsupported");
       return;
     }
-    if (Notification.permission === "denied") {
+    if (currentNotificationPermission() === "denied") {
       setStatus("denied");
       return;
     }
@@ -234,6 +291,7 @@ export function usePush() {
       setMessage(mapPgError(error));
     } finally {
       browserReconcileInFlightRef.current = false;
+      setBrowserReconciled(true);
     }
   }, [markMigrationMissing, preferences.push_enabled, preferencesLoaded, supabase, userId]);
 
@@ -311,33 +369,20 @@ export function usePush() {
       setMessage(BROWSER_PUSH_UNAVAILABLE);
       return;
     }
+    const reg = browserRegistrationRef.current;
+    if (!reg || !browserReconciled) {
+      setMessage("Подготавливаем уведомления. Повторите через несколько секунд.");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      setStatus("denied");
+      return;
+    }
+    // No await before this call: WebKit allows the permission prompt only
+    // while transient activation from this exact press is still alive.
     try {
-      const reg = await navigator.serviceWorker.register("/sw.js");
-      // Make sure the SW is active before subscribing.
-      await navigator.serviceWorker.ready;
-
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        setStatus(permission === "denied" ? "denied" : "inactive");
-        return;
-      }
-
-      let sub = await reg.pushManager.getSubscription();
-      if (sub && applicationServerKeyMatches(sub, VAPID_PUBLIC) === false) {
-        await supabase
-          .from("push_subscriptions")
-          .update({ is_active: false, updated_at: new Date().toISOString() })
-          .eq("user_id", userId)
-          .eq("endpoint", sub.endpoint);
-        await sub.unsubscribe();
-        sub = null;
-      }
-      sub ??= await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        // Cast: PushManager.subscribe expects BufferSource; Uint8Array<ArrayBufferLike>
-        // satisfies that at runtime but TS's narrower BufferSource overload trips.
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC) as unknown as BufferSource,
-      });
+      const subscriptionOperation = subscribeDuringUserGesture(reg, urlBase64ToUint8Array(VAPID_PUBLIC));
+      const sub = await subscriptionOperation;
 
       // Upsert on user+endpoint so re-enabling on the same device does not
       // create duplicate rows and the same browser endpoint cannot be moved
@@ -381,10 +426,12 @@ export function usePush() {
       setMessage("Push-уведомления включены.");
       setStatus("active");
       browserLastReconciledAtRef.current = Date.now();
+      window.dispatchEvent(new Event(PUSH_STATE_CHANGED_EVENT));
     } catch (e) {
+      if (currentNotificationPermission() === "denied") setStatus("denied");
       setMessage(mapPgError(e));
     }
-  }, [markMigrationMissing, preferences, supabase, userId]);
+  }, [browserReconciled, markMigrationMissing, preferences, supabase, userId]);
 
   const disable = useCallback(async () => {
     try {
@@ -448,6 +495,7 @@ export function usePush() {
       setPreferences((prev) => ({ ...prev, push_enabled: false }));
       setMessage("Push-уведомления выключены.");
       setStatus("inactive");
+      window.dispatchEvent(new Event(PUSH_STATE_CHANGED_EVENT));
     } catch (e) {
       setMessage(mapPgError(e));
     }
@@ -480,11 +528,18 @@ export function usePush() {
     preferences,
     loadingPreferences,
     message,
+    readyForPrompt: preferencesLoaded && (status === "denied" || (browserRegistrationReady && browserReconciled)),
+    browserRegistrationFailed,
+    retryBrowserRegistration: () => prepareBrowserRegistration(true),
     enable,
     disable,
     setPreference,
     refresh: loadPreferences,
   };
+}
+
+function currentNotificationPermission(): NotificationPermission {
+  return Notification.permission;
 }
 
 export function usePushNotificationNavigation() {

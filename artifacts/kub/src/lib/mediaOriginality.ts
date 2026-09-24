@@ -137,10 +137,15 @@ export function originalityNote(state: MediaOriginality): OriginalityNote | null
  * shell's wording moves on a message that says nothing about itself.
  */
 export function mediaFileActionName(
-  action: { kind: "save" | "open"; accessibleName: string },
+  action: { kind: "save" | "open" | "share"; accessibleName: string },
   state: MediaOriginality,
 ): string {
   if (state === "unknown") return action.accessibleName;
   const what = state === "original" ? "оригинал" : "сжатую копию";
+  if (action.kind === "share") {
+    return state === "original"
+      ? "Поделиться оригиналом или сохранить его"
+      : "Поделиться сжатой копией или сохранить её";
+  }
   return action.kind === "save" ? `Сохранить ${what}` : `Открыть ${what} в браузере`;
 }

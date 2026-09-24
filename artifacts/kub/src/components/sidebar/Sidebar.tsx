@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { KubButton, KubGlassLayer, KubIcon, KubNotice } from "@/components/kub";
 import { SidebarHeader } from "./SidebarHeader";
+import { PwaPushNudge } from "./PwaPushNudge";
 import { VoiceCallBar } from "@/components/chat/VoiceCallBar";
 import { VoiceElsewhereBar } from "@/components/chat/VoiceElsewhereBar";
 import { useVoicePresenceReader } from "@/hooks/useVoicePresence";
@@ -219,6 +220,8 @@ export function Sidebar() {
               </div>
             )}
           </div>
+
+          {isPhone && !hasSearchQuery && !chatSearchOpen && <PwaPushNudge />}
 
           {hasSearchQuery ? (
             <SidebarSearchResults query={searchQuery} />

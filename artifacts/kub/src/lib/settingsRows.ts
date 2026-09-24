@@ -31,6 +31,7 @@ export type SettingsPushStatus =
 export interface SettingsPlatform {
   nativeAndroid: boolean;
   desktopWindows: boolean;
+  iosPwa?: boolean;
 }
 
 export type SettingsTheme = "system" | "dark" | "light";
@@ -76,6 +77,7 @@ export function pushStatusSummary(status: SettingsPushStatus, platform: Settings
     case "denied":
       if (platform.nativeAndroid) return "Заблокировано в настройках приложения Android";
       if (platform.desktopWindows) return "Заблокировано в настройках приложения Windows";
+      if (platform.iosPwa) return "Заблокировано в настройках iPhone";
       return "Заблокировано в настройках браузера";
     // The same two build states the `usePush` messages used to spell out: a
     // missing signing key and a missing preference store (D-132, F2).

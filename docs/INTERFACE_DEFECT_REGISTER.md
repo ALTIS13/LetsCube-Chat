@@ -6519,6 +6519,15 @@ given back, the header on screen, the composer on the keys; and a browser that i
 not the installed app still lifting the composer. The source half is
 `tests/unit/installed-ios-viewport.test.mjs`.
 
+**2026-09-24 follow-up, still awaiting iPhone proof:** the app's installed-mode
+check accepted either `navigator.standalone` or `display-mode: standalone`, but
+the early `data-ios-standalone` height switch accepted only the former. A new
+WebKit/Chromium regression test reproduced the short-height path when only the
+standard display mode was present. The early switch now accepts that signal on
+iOS too. The original user's visible bottom band has not been measured on the
+device since this change; `docs/operations/ios-pwa-viewport-validation.md`
+records the real-iPhone acceptance steps.
+
 ## D-112 `[x]` In the Windows app the window's own buttons sit over the page's top-right controls, and take most of their clicks
 
 **Severity:** high for the Windows app. Reported by the owner on 2026-09-11 with a
@@ -23620,3 +23629,36 @@ the exact chat/message target survives. Built-SW update/takeover passed all six
 WebKit cases and all six Chromium cases, with one initial Chromium activation
 timeout green on isolated rerun. This is WebKit engine evidence on Windows, not
 a physical iPhone notification tap. [Evidence](operations/2026-09-24-push-and-message-ux.md).
+
+## D-311 `[x]` iPhone PWA asked for push permission on login and offered no useful recovery
+
+2026-09-24. `AppRoutes` called `Notification.requestPermission()` on the first
+authenticated render, without a user gesture. WebKit requires a direct gesture
+for a permission prompt, and the existing `usePush.enable()` also awaited worker
+registration/permission/subscription lookup before calling `subscribe()`.
+The automatic request is removed. The installed-iPhone chat list now offers a
+non-modal, dismissible push invitation, with a 30-day local snooze per account;
+an OS denial instead shows the iPhone Settings path. The worker registration is
+prepared ahead of time and `subscribe()` begins in the enable tap. Red/green
+fixture checks in Chromium and desktop WebKit prove no automatic permission
+call, one in-gesture subscription, snooze and denied guidance. Physical iPhone
+permission and delivery remain unverified.
+
+Before rollout, review found two recovery edges: ordinary iPhone browser tabs
+could display the installed app's Settings path, and a failed Service Worker
+registration could leave the enable control disabled indefinitely. Both now
+have regression coverage: the Settings path requires standalone mode; after
+eight seconds without a ready worker, Settings explains the failure and offers
+registration retry. A successful retry still requires a fresh enable tap so
+WebKit's user gesture is preserved.
+
+## D-312 `[x]` iPhone PWA photo action downloaded a file without a quick Photos path
+
+2026-09-24. The viewer's existing `saveMediaAs` path creates an anchor download,
+which does not provide a direct route to the iPhone Photos library. For an image
+whose file can be prefetched and accepted by Web Share Level 2, the viewer now
+offers the system share sheet, started synchronously by the tap; unsupported
+sharing and failed preparation retain the truthful download action. Video keeps
+download to avoid eager large-file fetches. Fixture checks pass in Chromium and
+desktop WebKit at 390px for share and fallback. Availability of “Save Image”
+inside the actual iOS sheet and physical-device behavior remain unverified.

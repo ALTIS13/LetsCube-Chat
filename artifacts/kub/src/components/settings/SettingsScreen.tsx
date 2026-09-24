@@ -27,7 +27,7 @@ import { PhoneSection } from "@/components/sidebar/PhoneSection";
 import { AudioSettingsSection } from "@/components/sidebar/AudioSettingsSection";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
-import { isNativeAndroid } from "@/lib/platform/capabilities";
+import { getCurrentDistributionTarget, isNativeAndroid } from "@/lib/platform/capabilities";
 import { isDesktopApp } from "@/lib/platform/desktop";
 import { ReleaseDistributionSection } from "@/components/settings/ReleaseDistributionSection";
 import { StorageSection } from "@/components/settings/StorageSection";
@@ -153,13 +153,20 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
   const sessionDevices = useSessionDevices({ enabled: true });
   const nativeAndroid = isNativeAndroid();
   const desktopWindows = isDesktopApp();
+  const installedIosPwa = getCurrentDistributionTarget() === "ios_pwa"
+    && typeof window !== "undefined"
+    && (window.matchMedia?.("(display-mode: standalone)").matches
+      || (navigator as Navigator & { standalone?: boolean }).standalone === true);
   const { settings: audioSettings } = useAudioSettings();
   const {
     status: pushStatus,
     preferences: pushPreferences,
     loadingPreferences,
+    readyForPrompt,
+    browserRegistrationFailed,
     message: pushMessage,
     enable: enablePush,
+    retryBrowserRegistration,
     disable: disablePush,
     setPreference: setPushPreference,
   } = usePush();
@@ -643,7 +650,11 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
               icon={pushStatus === "active" ? "notifications" : "notificationsOff"}
               iconTone={pushStatus === "active" ? "accent" : "muted"}
               label="Push-уведомления"
-              value={pushStatusSummary(pushStatus, { nativeAndroid, desktopWindows })}
+              value={pushStatusSummary(pushStatus, {
+                nativeAndroid,
+                desktopWindows,
+                iosPwa: installedIosPwa,
+              })}
             >
               {pushAction === "disable" && (
                 <KubButton size="sm" variant="secondary" onClick={disablePush}>
@@ -651,11 +662,18 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
                 </KubButton>
               )}
               {pushAction === "enable" && (
-                <KubButton size="sm" onClick={enablePush}>
-                  Включить
+                <KubButton
+                  size="sm"
+                  onClick={browserRegistrationFailed ? retryBrowserRegistration : enablePush}
+                  disabled={!readyForPrompt && !browserRegistrationFailed && !nativeAndroid}
+                >
+                  {browserRegistrationFailed ? "Повторить подготовку" : "Включить"}
                 </KubButton>
               )}
             </SettingsRow>
+          )}
+          {pushStatus === "denied" && installedIosPwa && (
+            <RowNote>Откройте «Настройки» iPhone → «Уведомления» → LETSCUBE и разрешите уведомления.</RowNote>
           )}
           {/* D-137. These three are **stored preferences**, not device state:
               they live in `notification_preferences` and the push gate reads

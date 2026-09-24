@@ -127,11 +127,14 @@ test("the badge is a word and the sentence is what it means", () => {
 test("the control's name says what the press will hand over, per shell", () => {
   const save = mediaFileAction("windows_native");
   const open = mediaFileAction("android_native");
+  const share = mediaFileAction("ios_pwa", "image");
 
   assert.equal(mediaFileActionName(save, "original"), "Сохранить оригинал");
   assert.equal(mediaFileActionName(save, "compressed"), "Сохранить сжатую копию");
   assert.equal(mediaFileActionName(open, "original"), "Открыть оригинал в браузере");
   assert.equal(mediaFileActionName(open, "compressed"), "Открыть сжатую копию в браузере");
+  assert.equal(mediaFileActionName(share, "original"), "Поделиться оригиналом или сохранить его");
+  assert.equal(mediaFileActionName(share, "compressed"), "Поделиться сжатой копией или сохранить её");
 
   // D-147's own wording is what an unknown message keeps, in both shells: this
   // module adds to that answer and never replaces it.

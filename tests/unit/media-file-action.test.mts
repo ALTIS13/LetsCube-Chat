@@ -26,8 +26,17 @@ const EVERY_TARGET: DistributionTarget[] = [
 test("only the Android app hands the file to the browser; every other shell keeps it", () => {
   assert.equal(mediaFileAction("android_native").kind, "open");
   for (const target of EVERY_TARGET.filter((one) => one !== "android_native")) {
-    assert.equal(mediaFileAction(target).kind, "save", `${target} should save the file in place`);
+    assert.equal(mediaFileAction(target, "image").kind, target === "ios_pwa" ? "share" : "save", `${target} should keep the file in the shell`);
   }
+});
+
+test("the iPhone PWA offers the native share sheet, with a save fallback", () => {
+  const action = mediaFileAction("ios_pwa", "image");
+  assert.equal(action.kind, "share");
+  assert.equal(action.label, "Поделиться");
+  assert.equal(action.accessibleName, "Поделиться фото или сохранить его");
+  assert.equal(action.leavesApp, false);
+  assert.equal(mediaFileAction("ios_pwa", "video").kind, "save");
 });
 
 test("a control that leaves the app says so, and wears the icon for it", () => {
@@ -52,7 +61,7 @@ test("the icon and the promise agree in every shell", () => {
     assert.equal(action.leavesApp, action.kind === "open", `${target} promises one thing and does another`);
     assert.equal(
       action.icon,
-      action.kind === "open" ? "externalLink" : "download",
+      action.kind === "open" ? "externalLink" : action.kind === "share" ? "share" : "download",
       `${target} wears the wrong glyph`,
     );
     assert.ok(action.label.length > 0, `${target} has no word on it`);

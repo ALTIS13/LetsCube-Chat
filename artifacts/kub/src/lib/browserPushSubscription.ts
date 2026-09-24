@@ -69,3 +69,14 @@ export function urlBase64ToUint8Array(base64: string): Uint8Array {
     output[index] = raw.charCodeAt(index);
   return output;
 }
+
+/** Must be called directly in the click handler; WebKit consumes transient activation for the prompt. */
+export function subscribeDuringUserGesture(
+  registration: Pick<ServiceWorkerRegistration, "pushManager">,
+  applicationServerKey: Uint8Array,
+): Promise<PushSubscription> {
+  return registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: applicationServerKey as unknown as BufferSource,
+  });
+}

@@ -54,6 +54,7 @@ test("the push row says what push is doing on this platform, not what it could d
   assert.equal(pushStatusSummary("denied", ANDROID), "Заблокировано в настройках приложения Android");
   assert.equal(pushStatusSummary("denied", WINDOWS), "Заблокировано в настройках приложения Windows");
   assert.equal(pushStatusSummary("denied", BROWSER), "Заблокировано в настройках браузера");
+  assert.equal(pushStatusSummary("denied", { ...BROWSER, iosPwa: true }), "Заблокировано в настройках iPhone");
 
   assert.equal(pushStatusSummary("unsupported", BROWSER), "Браузер не поддерживает");
   // The other two build states the row used to spell out: a missing signing

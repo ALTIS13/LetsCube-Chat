@@ -13,7 +13,7 @@ import { usePushForegroundSession } from "@/hooks/usePushForegroundSession";
 import { useBanState } from "@/hooks/useBanState";
 import { usePushNotificationNavigation } from "@/hooks/usePush";
 import { useNativeVoiceCalls } from "@/hooks/useNativeVoiceCalls";
-import { isNativeApp, supportsBrowserPush } from "@/lib/platform/capabilities";
+import { isNativeApp } from "@/lib/platform/capabilities";
 import { isDesktopShell } from "@/lib/platform/desktop";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { IframeAuthBanner } from "@/components/IframeAuthBanner";
@@ -397,19 +397,6 @@ function AppRoutes({
     }
     clearMonitoringUser();
     return undefined;
-  }, [userId]);
-
-  // Browser notification permission prompt — once on first authenticated load.
-  useEffect(() => {
-    if (
-      userId &&
-      supportsBrowserPush() &&
-      typeof window !== "undefined" &&
-      "Notification" in window &&
-      Notification.permission === "default"
-    ) {
-      Notification.requestPermission();
-    }
   }, [userId]);
 
   // Auth callback always renders so it can exchange the code, regardless of session state.

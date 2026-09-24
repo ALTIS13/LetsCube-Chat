@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { reportError } from "@/lib/monitoring";
 import { getCurrentDistributionTarget, isNativeApp, supportsPwaInstall } from "@/lib/platform/capabilities";
 import { isDesktopApp } from "@/lib/platform/desktop";
-import type { DistributionTarget } from "@/lib/platform/distribution";
+import { getPwaInstallCopy } from "@/lib/pwa/installCopy";
 import {
   nextHandoffDelay,
   pageEntryPath,
@@ -19,17 +19,6 @@ export const KUB_SW_SKIP_WAITING_MESSAGE = "KUB_SKIP_WAITING";
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
-};
-
-export type PwaInstallCopy = {
-  platform: DistributionTarget;
-  title: string;
-  description: string;
-  buttonLabel: string;
-  variantLabel: string;
-  modeLabel: string;
-  instructionTitle: string;
-  instructionSteps: string[];
 };
 
 let registrationStarted = false;
@@ -139,7 +128,8 @@ export function usePwaInstall() {
   const installCopy = getPwaInstallCopy({
     platform: getCurrentDistributionTarget(),
     installed,
-    canPromptInstall,
+    isTablet: typeof navigator !== "undefined"
+      && (/iPad/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)),
   });
 
   return {
@@ -235,101 +225,4 @@ function isStandaloneDisplay() {
     window.matchMedia?.("(display-mode: standalone)").matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true
   );
-}
-
-function getPwaInstallCopy({
-  platform,
-  installed,
-  canPromptInstall,
-}: {
-  platform: DistributionTarget;
-  installed: boolean;
-  canPromptInstall: boolean;
-}): PwaInstallCopy {
-  if (platform === "android_native") {
-    return {
-      platform,
-      title: "Android-приложение LETSCUBE",
-      description: "Приложение уже запущено как Android APK. Установка через браузер здесь не нужна.",
-      buttonLabel: "Установлено",
-      variantLabel: "Android APK",
-      modeLabel: "Native",
-      instructionTitle: "Установка не требуется",
-      instructionSteps: ["LETSCUBE уже открыт как Android-приложение."],
-    };
-  }
-
-  if (platform === "windows_native") {
-    return {
-      platform,
-      title: "Windows-приложение LETSCUBE",
-      description: "Приложение уже запущено как Windows-клиент. Доступность обновлений проверяется автоматически.",
-      buttonLabel: "Установлено",
-      variantLabel: "Windows EXE",
-      modeLabel: "Приложение",
-      instructionTitle: "Установка не требуется",
-      instructionSteps: ["LETSCUBE уже открыт как Windows-приложение."],
-    };
-  }
-
-  const installedPrefix = installed ? "LETSCUBE установлен" : "Установить LETSCUBE";
-
-  if (platform === "ios_pwa") {
-    const isTablet = typeof navigator !== "undefined"
-      && (/iPad/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
-    const device = isTablet ? "iPad" : "iPhone";
-    return {
-      platform,
-      title: installed ? `${installedPrefix} на ${device}` : `${installedPrefix} на ${device}`,
-      description: installed
-        ? "Приложение уже открывается с экрана Домой без обычной вкладки браузера."
-        : "На iOS установка выполняется через Safari: кнопка ниже покажет точные шаги.",
-      buttonLabel: "Установить",
-      variantLabel: `${device} / iOS PWA`,
-      modeLabel: installed ? "Установлено" : "Safari",
-      instructionTitle: `Установка на ${device}`,
-      instructionSteps: [
-        "Откройте LETSCUBE в Safari.",
-        "Нажмите кнопку «Поделиться» внизу экрана.",
-        "Выберите «На экран Домой», затем нажмите «Добавить».",
-      ],
-    };
-  }
-
-  if (platform === "android_download") {
-    return {
-      platform,
-      title: "LETSCUBE для Android",
-      description: "Используйте отдельное Android-приложение. Доступность APK проверяется автоматически.",
-      buttonLabel: "Скачать APK",
-      variantLabel: "Android APK",
-      modeLabel: "Браузер",
-      instructionTitle: "Android-приложение",
-      instructionSteps: [],
-    };
-  }
-
-  if (platform === "windows_download") {
-    return {
-      platform,
-      title: "LETSCUBE для Windows",
-      description: "Используйте отдельное Windows-приложение. Доступность EXE проверяется автоматически.",
-      buttonLabel: "Скачать EXE",
-      variantLabel: "Windows EXE",
-      modeLabel: "Браузер",
-      instructionTitle: "Windows-приложение",
-      instructionSteps: [],
-    };
-  }
-
-  return {
-    platform,
-    title: "Веб-версия LETSCUBE",
-    description: "Продолжайте работу в браузере. Отдельная установка для этой платформы не требуется.",
-    buttonLabel: "",
-    variantLabel: "Web",
-    modeLabel: "Браузер",
-    instructionTitle: "",
-    instructionSteps: [],
-  };
 }

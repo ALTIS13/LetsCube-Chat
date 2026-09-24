@@ -35,7 +35,7 @@
 
 import type { DistributionTarget } from "./platform/distribution.ts";
 
-export type MediaFileActionKind = "save" | "open";
+export type MediaFileActionKind = "save" | "open" | "share";
 
 export interface MediaFileAction {
   /** «save» keeps the file in this shell; «open» hands its address to the browser. */
@@ -56,7 +56,7 @@ export interface MediaFileAction {
    */
   accessibleName: string;
   /** `download` where the file is kept, `externalLink` where the address is handed away. */
-  icon: "download" | "externalLink";
+  icon: "download" | "externalLink" | "share";
   /** Whether pressing it puts the person outside LETSCUBE. */
   leavesApp: boolean;
 }
@@ -79,8 +79,17 @@ const OPEN: MediaFileAction = {
   leavesApp: true,
 };
 
-export function mediaFileAction(target: DistributionTarget): MediaFileAction {
-  return target === "android_native" ? OPEN : SAVE;
+const SHARE_PHOTO: MediaFileAction = {
+  kind: "share",
+  label: "Поделиться",
+  accessibleName: "Поделиться фото или сохранить его",
+  icon: "share",
+  leavesApp: false,
+};
+
+export function mediaFileAction(target: DistributionTarget, kind?: MediaFileKind): MediaFileAction {
+  if (target === "android_native") return OPEN;
+  return target === "ios_pwa" && kind === "image" ? SHARE_PHOTO : SAVE;
 }
 
 /** What a saved file is called, told from its address alone. */

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 
 import { parseRules } from "./helpers/css.mjs";
 
@@ -43,15 +44,25 @@ test("the premise: the status bar is the translucent one, drawn over the page", 
   );
 });
 
-test("the band is gated on the installed app, and the gate is set from navigator.standalone", () => {
+test("the status-bar band follows installed iOS mode, not an ordinary tab or Android standalone", () => {
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
   const gate = scripts.find((source) => source.includes("data-ios-standalone"));
   assert.ok(gate, "nothing in index.html marks the installed app, so the band never applies");
-  assert.match(
-    gate,
-    /if\s*\(\s*navigator\.standalone\s*===\s*true\s*\)\s*\{\s*document\.documentElement\.setAttribute\("data-ios-standalone",\s*""\);\s*\}/,
-    "the installed-app marker is no longer set exactly when navigator.standalone is true",
-  );
+  const marked = ({ userAgent, standalone, displayStandalone }) => {
+    const attributes = new Set();
+    runInNewContext(gate, {
+      navigator: { userAgent, platform: "iPhone", maxTouchPoints: 5, standalone },
+      window: { matchMedia: () => ({ matches: displayStandalone }) },
+      document: { documentElement: { setAttribute: (name) => attributes.add(name) } },
+    });
+    return attributes.has("data-ios-standalone");
+  };
+  const iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148";
+  const android = "Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 Chrome/140.0 Mobile Safari/537.36";
+  assert.equal(marked({ userAgent: iphone, standalone: true, displayStandalone: false }), true);
+  assert.equal(marked({ userAgent: iphone, standalone: undefined, displayStandalone: true }), true);
+  assert.equal(marked({ userAgent: iphone, standalone: false, displayStandalone: false }), false);
+  assert.equal(marked({ userAgent: android, standalone: undefined, displayStandalone: true }), false);
 });
 
 test("the band covers exactly the status bar, takes no taps, and sits above everything", () => {

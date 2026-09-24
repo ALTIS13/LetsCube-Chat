@@ -174,10 +174,32 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
     if (delta) step(delta);
   };
 
-  // Decided once per shell rather than per press, and above the early returns
-  // because a hook may not be skipped. What it decides, and why the four shells
-  // do not get the same answer, is in `lib/mediaFileAction.ts` (D-147).
-  const fileAction = useMemo(() => mediaFileAction(getCurrentDistributionTarget()), []);
+  // The iPhone share sheet is useful for photos, while videos keep the existing
+  // download path (preloading a large clip just to open Share is too costly).
+  const fileAction = useMemo(() => mediaFileAction(getCurrentDistributionTarget(), media?.type), [media?.type]);
+  const [shareFile, setShareFile] = useState<{ url: string; file: File } | null>(null);
+  const [shareUnavailable, setShareUnavailable] = useState(false);
+  useEffect(() => {
+    setShareFile(null);
+    setShareUnavailable(false);
+    if (fileAction.kind !== "share" || media?.type !== "image") return;
+    if (typeof navigator.share !== "function" || typeof navigator.canShare !== "function") {
+      setShareUnavailable(true);
+      return;
+    }
+    const controller = new AbortController();
+    void fetch(media.url, { signal: controller.signal }).then(async (response) => {
+      if (!response.ok) throw new Error("image unavailable");
+      const blob = await response.blob();
+      if (!blob.type.startsWith("image/")) throw new Error("not an image");
+      const file = new File([blob], mediaFileName(media.url, "image"), { type: blob.type });
+      if (!navigator.canShare({ files: [file] })) throw new Error("file share unavailable");
+      if (!controller.signal.aborted) setShareFile({ url: media.url, file });
+    }).catch(() => {
+      if (!controller.signal.aborted) setShareUnavailable(true);
+    });
+    return () => controller.abort();
+  }, [fileAction.kind, media?.type, media?.url]);
 
   if (!media) return null;
   if (typeof document === "undefined") return null;
@@ -190,7 +212,12 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
   // still passes the boolean and still claims nothing.
   const originality: MediaOriginality = media.originality ?? (media.original ? "original" : "unknown");
   const note = originalityNote(originality);
-  const fileActionName = mediaFileActionName(fileAction, originality);
+  // While the original image is loading, and on devices without Web Share
+  // Level 2, the control remains a truthful download instead of a dead Share.
+  const effectiveFileAction = fileAction.kind === "share" && (!shareFile || shareFile.url !== media.url || shareUnavailable)
+    ? mediaFileAction("web_only", media.type)
+    : fileAction;
+  const fileActionName = mediaFileActionName(effectiveFileAction, originality);
   // The zoom stage pads itself, so a zoomed picture can run to the frame's edge
   // while one at rest keeps exactly the margin it had.
   const zoomable = media.type === "image" && !loadError;
@@ -212,7 +239,17 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
   const showArrows = Boolean(sequence) && !zoomed;
 
   const handleFile = () => {
-    if (fileAction.kind === "save") {
+    if (effectiveFileAction.kind === "share" && shareFile?.url === media.url) {
+      // Start the native sheet in this same tap; an awaited fetch here would
+      // lose the transient user activation required by WebKit.
+      void navigator.share({ files: [shareFile.file] }).catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setShareUnavailable(true);
+        showActionFeedback({ kind: "info", title: "Не удалось открыть меню. Файл можно скачать.", key: "media-viewer-file" });
+      });
+      return;
+    }
+    if (effectiveFileAction.kind === "save") {
       void saveMediaAs(media.url, mediaFileName(media.url, media.type));
       return;
     }
@@ -351,22 +388,21 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
           <button
             type="button"
             data-testid="media-viewer-file-action"
-            data-action-kind={fileAction.kind}
+            data-action-kind={effectiveFileAction.kind}
             onClick={handleFile}
             aria-label={fileActionName}
             title={fileActionName}
             className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 text-sm text-white/80 transition-colors hover:bg-white/10 hover:text-white"
           >
-            <KubIcon name={fileAction.icon} size={16} />
+            <KubIcon name={effectiveFileAction.icon} size={16} />
             {/*
               A control that takes a person out of LETSCUBE keeps its word at
-              every width. The shell it applies to is a phone, so a warning that
-              disappears below `sm` is a warning nobody ever gets (D-147). One
-              that keeps the file says so in its glyph on a phone and in words
-              from `sm`, which is what this header always did and costs the
-              picture's own title nothing.
+              every width (D-147). Share also keeps its word on an iPhone: the
+              sheet is the route to Photos, and a bare three-node glyph was not
+              a discoverable way to save. Plain download keeps the compact glyph
+              on a phone and gains its word from `sm`.
             */}
-            <span className={fileAction.leavesApp ? undefined : "hidden sm:inline"}>{fileAction.label}</span>
+            <span className={effectiveFileAction.leavesApp || effectiveFileAction.kind === "share" ? undefined : "hidden sm:inline"}>{effectiveFileAction.label}</span>
           </button>
           {media.type === "video" && (
             <button
@@ -446,8 +482,8 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
                 onClick={handleFile}
                 className="mt-2 inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-sm text-white/85 transition-colors hover:bg-white/10 hover:text-white"
               >
-                <KubIcon name={fileAction.icon} size={16} />
-                {fileAction.label}
+                <KubIcon name={effectiveFileAction.icon} size={16} />
+                {effectiveFileAction.label}
               </button>
             </div>
           ) : media.type === "image" ? (
