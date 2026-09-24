@@ -57,7 +57,7 @@ import { mediaDayLabel } from "@/lib/sharedMediaBrowsing";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
 import { useAppStore } from "@/store/app.store";
 import { createClient, getSupabasePublicUrl } from "@/lib/supabase/client";
-import { KubEmptyState, KubIcon } from "@/components/kub";
+import { KubButton, KubEmptyState, KubIcon } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
 import { showActionFeedback } from "@/lib/actionFeedback";
 import { mapPgError } from "@/lib/errors";
@@ -172,12 +172,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const messageTopicId = isForum ? selectedTopicId : undefined;
   const messageGeneralTopicIds = isForum ? generalTopicIds : EMPTY_GENERAL_TOPIC_IDS;
   const {
-    messages, pinnedMessages, pinnedReady, loading, loadingOlder, hasMoreOlder, olderError, isTyping,
+    messages, pinnedMessages, pinnedReady, loading, historyPending, historyError,
+    loadingOlder, hasMoreOlder, olderError, isTyping,
     sendMessage, sendMediaMessage, sendTyping, toggleReaction,
     actionRefusal, clearActionRefusal,
     retryMessageSend, discardLocalMessage,
     editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, deleteMessagesForEveryone, togglePin, forwardMessage, clearChatForMe,
-    loadOlderMessages, ensureMessageLoaded,
+    loadOlderMessages, ensureMessageLoaded, refetch: refetchMessages,
   } = useMessages(chatId, messageTopicId, messageGeneralTopicIds);
 
   /**
@@ -1647,9 +1648,18 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           insets all belong to the conversation, not to the pane. */}
       {railOffered && railFitsColumn && <ChannelRail {...railProps} />}
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {loading ? (
+        {loading || historyPending ? (
           <div className="flex-1 flex items-center justify-center chat-bg">
             <KubIcon name="spinner" size={28} className="text-[color:var(--kub-cyan)]" />
+          </div>
+        ) : historyError ? (
+          <div className="flex-1 flex items-center justify-center chat-bg">
+            <KubEmptyState
+              icon={<KubIcon name="chatRect" size={24} />}
+              title="Историю не удалось проверить"
+              description={historyError}
+              action={<KubButton type="button" variant="secondary" onClick={() => void refetchMessages()}>Повторить</KubButton>}
+            />
           </div>
         ) : conversation.length === 0 ? (
           <div className="flex-1 flex items-center justify-center chat-bg">

@@ -133,7 +133,7 @@ type TimeoutResult = { timedOut: true };
 
 type EnsureMessageLoadedResult =
   | { ok: true; message: MessageWithSender }
-  | { ok: false; reason: "not-found" | "hidden" | "deleted" | "cleared" | "topic" };
+  | { ok: false; reason: "not-found" | "hidden" | "deleted" | "cleared" | "topic" | "unavailable" };
 
 export function useMessages(
   chatId: string | null,
@@ -141,6 +141,7 @@ export function useMessages(
   generalTopicIds: string[] = [],
 ) {
   const [loading, setLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMoreOlder, setHasMoreOlder] = useState(false);
   const [olderError, setOlderError] = useState<string | null>(null);
@@ -165,10 +166,13 @@ export function useMessages(
   const [clearedAt, setClearedAt] = useState<string | null>(null);
   const [verifiedChatId, setVerifiedChatId] = useState<string | null>(null);
   const [verifyingChatId, setVerifyingChatId] = useState<string | null>(null);
+  const verifiedChatIdRef = useRef(verifiedChatId);
+  verifiedChatIdRef.current = verifiedChatId;
   const [hiddenMessageIds, setHiddenMessageIds] = useState<Set<string>>(() => new Set());
   useLayoutEffect(() => {
     setVerifiedChatId(null);
     setVerifyingChatId(null);
+    setHistoryError(null);
   }, [chatId]);
   /**
    * The refusal the composer shows beside itself, or null.
@@ -215,7 +219,8 @@ export function useMessages(
   const currentUserRef = useRef(currentUser);
   currentUserRef.current = currentUser;
   const chatIdRef = useRef(chatId);
-  useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
+  chatIdRef.current = chatId;
+  const historyRequestGenerationRef = useRef(0);
   const clearedAtRef = useRef(clearedAt);
   useEffect(() => { clearedAtRef.current = clearedAt; }, [clearedAt]);
   const hiddenMessageIdsRef = useRef(hiddenMessageIds);
@@ -290,11 +295,14 @@ export function useMessages(
 
   const fetchMessages = useCallback(async (options: FetchMessagesOptions = {}) => {
     if (!chatId) return;
+    const requestGeneration = ++historyRequestGenerationRef.current;
+    const isCurrent = () => chatIdRef.current === chatId && historyRequestGenerationRef.current === requestGeneration;
     const background = options.background === true;
     const hasCachedMessages = (useAppStore.getState().messages[chatId] ?? []).some((message) =>
       messageBelongsToTopic(message, topicId, generalTopicIds)
     );
     bumpFetch("useMessages");
+    if (!background) setHistoryError(null);
     if (!background) setLoading(options.cacheIsStale === true || !hasCachedMessages);
     if (!userId || !clearedAtCache.hasFresh(chatId, userId)) {
       setVerifiedChatId(null);
@@ -305,9 +313,11 @@ export function useMessages(
       const user = currentUserRef.current;
       if (user) {
         localClearedAt = await loadClearedAt(supabase, chatId, user.id);
+        if (!isCurrent()) return;
         if (localClearedAt === undefined) {
           setVerifiedChatId(null);
           setVerifyingChatId(chatId);
+          setHistoryError("Не удалось проверить историю чата.");
           setMessages(chatId, []);
           setPinnedMessages([]);
           hasMoreOlderRef.current = false;
@@ -343,25 +353,49 @@ export function useMessages(
         .order("created_at", { ascending: false })
         .order("id", { ascending: false })
         .limit(MESSAGE_PAGE_SIZE + 1);
+      if (!isCurrent()) return;
       if (error) {
         console.error("Messages fetch error:", error);
+        if (verifiedChatIdRef.current !== chatId) setHistoryError("Не удалось загрузить историю чата.");
         return;
       }
       if (data) {
         const rawFetched = data as unknown as MessageWithSender[];
         const fetched = rawFetched.slice(0, MESSAGE_PAGE_SIZE).reverse();
         const nextHasMoreOlder = rawFetched.length > MESSAGE_PAGE_SIZE;
-        hasMoreOlderRef.current = nextHasMoreOlder;
-        setHasMoreOlder(nextHasMoreOlder);
-        setOlderError(null);
-        const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(fetched));
+        let existing = useAppStore.getState().messages[chatId] ?? EMPTY_MESSAGES;
+        const checkedIds = new Set(getMessageAndReplyIds([...fetched, ...existing]));
+        const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, [...checkedIds]);
+        if (!isCurrent()) return;
+        if (!fetchedHiddenIds) {
+          if (verifiedChatIdRef.current !== chatId) setHistoryError("Не удалось проверить скрытые сообщения.");
+          return;
+        }
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          const latest = useAppStore.getState().messages[chatId] ?? EMPTY_MESSAGES;
+          if (latest === existing) break;
+          existing = latest;
+          const addedIds = getMessageAndReplyIds(existing).filter((id) => !checkedIds.has(id));
+          if (!addedIds.length) continue;
+          const addedHiddenIds = await fetchHiddenMessageIdSet(supabase, addedIds);
+          if (!isCurrent()) return;
+          if (!addedHiddenIds) {
+            if (verifiedChatIdRef.current !== chatId) setHistoryError("Не удалось проверить скрытые сообщения.");
+            return;
+          }
+          for (const id of addedIds) checkedIds.add(id);
+          for (const id of addedHiddenIds) fetchedHiddenIds.add(id);
+        }
+        if ((useAppStore.getState().messages[chatId] ?? EMPTY_MESSAGES) !== existing) {
+          if (verifiedChatIdRef.current !== chatId) setHistoryError("История изменилась во время проверки. Повторите загрузку.");
+          return;
+        }
         rememberHiddenMessageIds(fetchedHiddenIds);
         const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
         const visibleFetched = sanitizeHiddenReplies(
           fetched.filter((message) => !effectiveHiddenIds.has(message.id)),
           effectiveHiddenIds,
         );
-        const existing = useAppStore.getState().messages[chatId] ?? [];
         const visibleExisting = sanitizeHiddenReplies(existing.filter((message) => {
           if (effectiveHiddenIds.has(message.id)) return false;
           if (!messageBelongsToTopic(message, topicId, generalTopicIds)) return false;
@@ -369,6 +403,10 @@ export function useMessages(
           return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
         }), effectiveHiddenIds);
         setMessages(chatId, mergeMessagesById(visibleFetched, visibleExisting));
+        hasMoreOlderRef.current = nextHasMoreOlder;
+        setHasMoreOlder(nextHasMoreOlder);
+        setOlderError(null);
+        setHistoryError(null);
         setVerifiedChatId(chatId);
         setVerifyingChatId(null);
         fetchedMessageScopes.add(getPinnedKey(chatId, topicId));
@@ -387,10 +425,49 @@ export function useMessages(
     } catch (error) {
       console.error("Messages fetch error:", error);
       reportError(error, { category: "messages_fetch_failed", chatId, background });
+      if (isCurrent() && verifiedChatIdRef.current !== chatId) setHistoryError("Не удалось загрузить историю чата.");
     } finally {
-      if (!background) setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat, userId]);
+
+  useEffect(() => {
+    if (!chatId || !userId) return;
+    const cached = useAppStore.getState().messages[chatId] ?? [];
+    if (!cached.length) return;
+    let active = true;
+    void (async () => {
+      const mark = await loadClearedAt(supabase, chatId, userId);
+      if (!active) return;
+      if (mark === undefined) {
+        setHistoryError("Не удалось проверить историю чата.");
+        return;
+      }
+      const hidden = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(cached));
+      if (!active) return;
+      if (!hidden) {
+        setHistoryError("Не удалось проверить скрытые сообщения.");
+        return;
+      }
+      if (useAppStore.getState().messages[chatId] !== cached) {
+        void fetchMessages({ background: true });
+        return;
+      }
+      rememberHiddenMessageIds(hidden);
+      const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...hidden]);
+      const visible = sanitizeHiddenReplies(cached.filter((message) => {
+        if (effectiveHiddenIds.has(message.id)) return false;
+        if (!mark) return true;
+        return new Date(message.created_at).getTime() > new Date(mark).getTime();
+      }), effectiveHiddenIds);
+      setMessages(chatId, visible);
+      setClearedAt(mark);
+      setHistoryError(null);
+      setVerifiedChatId(chatId);
+      setVerifyingChatId(null);
+    })();
+    return () => { active = false; };
+  }, [chatId, userId, supabase, rememberHiddenMessageIds, setMessages, fetchMessages]);
 
   // Opening a chat. One this session has already fetched renders from the
   // store and is revalidated once, when its channel has joined (the handler
@@ -450,6 +527,7 @@ export function useMessages(
     if (localClearedAt && new Date(nextMessage.created_at).getTime() <= new Date(localClearedAt).getTime()) return;
 
     const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]));
+    if (!fetchedHiddenIds) return;
     rememberHiddenMessageIds(fetchedHiddenIds);
     const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
     if (effectiveHiddenIds.has(nextMessage.id)) return;
@@ -464,6 +542,7 @@ export function useMessages(
   const loadOlderMessages = useCallback(async () => {
     const activeChatId = chatIdRef.current;
     if (!activeChatId || loadingOlderRef.current || !hasMoreOlderRef.current) return { loaded: 0 };
+    const historyGeneration = historyRequestGenerationRef.current;
     const activeTopicId = topicIdRef.current;
     const activeGeneralTopicIds = generalTopicIdsRef.current;
     const localClearedAt = clearedAtRef.current;
@@ -508,14 +587,18 @@ export function useMessages(
 
       if (error) throw error;
       const rawFetched = (data ?? []) as unknown as MessageWithSender[];
-      if (chatIdRef.current !== activeChatId || topicIdRef.current !== activeTopicId) return { loaded: 0 };
+      if (chatIdRef.current !== activeChatId || topicIdRef.current !== activeTopicId || historyRequestGenerationRef.current !== historyGeneration) return { loaded: 0 };
       const fetched = rawFetched.slice(0, MESSAGE_PAGE_SIZE).reverse();
       const nextHasMoreOlder = rawFetched.length > MESSAGE_PAGE_SIZE;
-      hasMoreOlderRef.current = nextHasMoreOlder;
-      setHasMoreOlder(nextHasMoreOlder);
-      if (!fetched.length) return { loaded: 0 };
+      if (!fetched.length) {
+        hasMoreOlderRef.current = nextHasMoreOlder;
+        setHasMoreOlder(nextHasMoreOlder);
+        return { loaded: 0 };
+      }
 
       const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(fetched));
+      if (chatIdRef.current !== activeChatId || topicIdRef.current !== activeTopicId || historyRequestGenerationRef.current !== historyGeneration) return { loaded: 0 };
+      if (!fetchedHiddenIds) throw new Error("hidden_message_ids_unavailable");
       rememberHiddenMessageIds(fetchedHiddenIds);
       const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
       const visibleFetched = sanitizeHiddenReplies(fetched.filter((message) => {
@@ -532,10 +615,14 @@ export function useMessages(
         return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
       }), effectiveHiddenIds);
       setMessages(activeChatId, mergeMessagesById(visibleFetched, visibleExisting));
+      hasMoreOlderRef.current = nextHasMoreOlder;
+      setHasMoreOlder(nextHasMoreOlder);
       return { loaded: visibleFetched.length };
     } catch (error) {
       console.error("Older messages fetch error:", error);
-      setOlderError("Не удалось загрузить более ранние сообщения.");
+      if (chatIdRef.current === activeChatId && historyRequestGenerationRef.current === historyGeneration) {
+        setOlderError("Не удалось загрузить более ранние сообщения.");
+      }
       return { loaded: 0 };
     } finally {
       loadingOlderRef.current = false;
@@ -555,6 +642,7 @@ export function useMessages(
     if (!data) return { ok: false, reason: "not-found" };
     const message = data as unknown as MessageWithSender;
     const hiddenIds = await fetchHiddenMessageIdSet(supabase, [message.id, message.reply_to_id].filter(Boolean) as string[]);
+    if (!hiddenIds) return { ok: false, reason: "unavailable" };
     if (hiddenIds.has(message.id)) {
       rememberHiddenMessageIds(hiddenIds);
       return { ok: false, reason: "hidden" };
@@ -615,7 +703,7 @@ export function useMessages(
         const current = useAppStore.getState().messages[chatIdRef.current ?? ""] ?? [];
         if (current.some((message) => message.id === detail.messageId)) return;
         void fetchMessageById(detail.messageId!).then((result) => {
-          if (!result.ok && result.reason === "not-found") scheduleReconcile(ACTIVE_CHAT_RECONNECT_DELAY_MS);
+          if (!result.ok && (result.reason === "not-found" || result.reason === "unavailable")) scheduleReconcile(ACTIVE_CHAT_RECONNECT_DELAY_MS);
         });
       }, 900);
       timers.set(detail.messageId, timer);
@@ -715,6 +803,10 @@ export function useMessages(
     }
     const pinnedRows = (data ?? []) as unknown as MessageWithSender[];
     const pinnedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(pinnedRows));
+    if (!pinnedHiddenIds) {
+      setPinnedRead((current) => listReadRefused(current, { subject: fetchKey, message: "Не удалось проверить скрытые сообщения." }));
+      return;
+    }
     rememberHiddenMessageIds(pinnedHiddenIds);
     const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...pinnedHiddenIds]);
     setPinnedMessages(sortPinnedMessages(sanitizeHiddenReplies(
@@ -838,6 +930,7 @@ export function useMessages(
           if (!data) return;
           const nextMessage = data as unknown as MessageWithSender;
           const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]));
+          if (!fetchedHiddenIds) return;
           if (fetchedHiddenIds.size) rememberHiddenMessageIds(fetchedHiddenIds);
           const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
           if (effectiveHiddenIds.has(nextMessage.id)) return;
@@ -865,6 +958,7 @@ export function useMessages(
             const current = useAppStore.getState().messages[payload.new.chat_id] ?? [];
             const nextMessage = data as unknown as MessageWithSender;
             const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]));
+            if (!fetchedHiddenIds) return;
             if (fetchedHiddenIds.size) rememberHiddenMessageIds(fetchedHiddenIds);
             const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
             if (effectiveHiddenIds.has(nextMessage.id)) return;
@@ -1638,10 +1732,16 @@ export function useMessages(
     }
     const nextClearedAt = new Date().toISOString();
     clearedAtCache.evictChat(chatId);
-    setVerifiedChatId(null);
-    setVerifyingChatId(chatId);
-    setClearedAt(nextClearedAt);
+    if (chatIdRef.current === chatId) historyRequestGenerationRef.current += 1;
     setMessages(chatId, []);
+    if (chatIdRef.current !== chatId) return { ok: true, error: null };
+    setVerifiedChatId(chatId);
+    setVerifyingChatId(null);
+    setHistoryError(null);
+    setLoading(false);
+    setClearedAt(nextClearedAt);
+    hasMoreOlderRef.current = false;
+    setHasMoreOlder(false);
     // This emptiness is the person's own doing, not a refused read.
     setPinnedMessages([]);
     setPinnedRead(listReadSucceeded(getPinnedKey(chatId, topicId)));
@@ -1652,9 +1752,7 @@ export function useMessages(
   // every render of this hook rendered the conversation for any render of the
   // chat window — a chat list update, a composer resize — though no message
   // had changed.
-  const boundaryVerified = Boolean(chatId && userId && verifyingChatId !== chatId && (
-    verifiedChatId === chatId || clearedAtCache.hasFresh(chatId, userId)
-  ));
+  const boundaryVerified = Boolean(chatId && userId && verifyingChatId !== chatId && verifiedChatId === chatId);
   const visibleMessages = useMemo(() => {
     if (!boundaryVerified) return EMPTY_MESSAGES;
     const scoped = chatMessages.filter((message) =>
@@ -1693,7 +1791,8 @@ export function useMessages(
     pinnedReady: pinnedAnswersThisChat && !pinnedRead.loading,
     pinnedError: visiblePinnedError,
     pinnedView,
-    loading, loadingOlder, hasMoreOlder, olderError, isTyping,
+    loading, historyPending: Boolean(chatId && !boundaryVerified && !historyError), historyError,
+    loadingOlder, hasMoreOlder, olderError, isTyping,
     sendMessage, sendMediaMessage, sendTyping, toggleReaction,
     actionRefusal, clearActionRefusal,
     retryMessageSend, discardLocalMessage,
@@ -1732,7 +1831,8 @@ function applyGeneralTopicFilter<T extends { or: (filters: string) => T; is: (co
 }
 
 function getMessageAndReplyIds(messages: MessageWithSender[]): string[] {
-  return Array.from(new Set(messages.flatMap((message) => [message.id, message.reply_to_id].filter(Boolean) as string[])));
+  return Array.from(new Set(messages.flatMap((message) => [message.id, message.reply_to_id]
+    .filter((id): id is string => Boolean(id && !id.startsWith("tmp:"))))));
 }
 
 function sanitizeHiddenReply(message: MessageWithSender, hiddenIds: Set<string>): MessageWithSender {
@@ -1818,16 +1918,20 @@ function upsertPinnedMessage(
 async function fetchHiddenMessageIdSet(
   supabase: ReturnType<typeof createClient>,
   messageIds: string[],
-): Promise<Set<string>> {
+): Promise<Set<string> | null> {
   const ids = Array.from(new Set(messageIds.filter(Boolean)));
   if (!ids.length) return new Set();
-  const { data, error } = await supabase
-    .from("message_hidden_for_users")
-    .select("message_id")
-    .in("message_id", ids);
-  if (error) {
-    console.error("Hidden message ids fetch error:", error);
-    return new Set();
+  const hidden = new Set<string>();
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    const { data, error } = await supabase
+      .from("message_hidden_for_users")
+      .select("message_id")
+      .in("message_id", ids.slice(offset, offset + 100));
+    if (error) {
+      console.error("Hidden message ids fetch error:", error);
+      return null;
+    }
+    for (const row of data ?? []) hidden.add(row.message_id);
   }
-  return new Set((data ?? []).map((row) => row.message_id));
+  return hidden;
 }

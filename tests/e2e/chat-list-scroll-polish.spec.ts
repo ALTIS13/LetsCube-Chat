@@ -159,6 +159,7 @@ for (const theme of ["dark", "light"] as const) {
         activeRowAnimations: Math.max(...samples.map((sample) => sample.animations)),
       }),
     );
+    if (anchorDrift > 2) console.log("[chat-list-scroll-samples]", JSON.stringify(samples));
     expect(after.rowHeight).toBe(before.rowHeight);
     expect(anchorDrift).toBeLessThanOrEqual(2);
     expect(renders.counts.ChatListItem).toBe(0);

@@ -20,8 +20,8 @@ test("Android release identity stays on the LETSCUBE package contract", () => {
   assert.match(gradle, /versionProperties\.getProperty\("VERSION_CODE"\)/);
   assert.match(gradle, /versionProperties\.getProperty\("VERSION_NAME"\)/);
   assert.deepEqual(readAndroidReleaseMetadata(root), {
-    versionName: "0.1.8",
-    versionCode: 9,
+    versionName: "0.1.9",
+    versionCode: 10,
   });
 });
 

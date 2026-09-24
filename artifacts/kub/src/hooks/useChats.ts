@@ -671,7 +671,7 @@ function latestTimestamp(...values: Array<string | null | undefined>): string | 
 async function fetchHiddenMessageIdSet(
   supabase: ReturnType<typeof createClient>,
   messageIds: string[],
-): Promise<Set<string>> {
+): Promise<Set<string> | null> {
   const ids = Array.from(new Set(messageIds.filter(Boolean)));
   if (!ids.length) return new Set();
   const { data, error } = await supabase
@@ -680,7 +680,7 @@ async function fetchHiddenMessageIdSet(
     .in("message_id", ids);
   if (error) {
     console.error("Hidden chat preview ids fetch error:", error);
-    return new Set();
+    return null;
   }
   return new Set((data ?? []).map((row) => row.message_id));
 }
@@ -718,7 +718,9 @@ async function fetchFallbackChatSummary(
     supabase,
     lastRows.map((message) => message.id),
   );
-  const lastMessage = lastRows.find((message) => !hiddenLastIds.has(message.id)) ?? null;
+  const lastMessage = hiddenLastIds
+    ? lastRows.find((message) => !hiddenLastIds.has(message.id)) ?? null
+    : null;
 
   let unreadQuery = supabase
     .from("messages")

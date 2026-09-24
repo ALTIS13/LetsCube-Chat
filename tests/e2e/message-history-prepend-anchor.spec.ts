@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import {
   chat,
@@ -8,8 +8,8 @@ import {
   openChat,
   openFixture,
   person,
-  requireFixtureServer,
   type Row,
+  requireFixtureServer,
 } from "./helpers/messageActionsFixture";
 
 /**
@@ -35,24 +35,26 @@ const ANYA = person("11111111-1111-4111-8111-1111111111d2", "Аня");
 const CHAT_ID = "22222222-2222-4222-8222-2222222222d1";
 const LATEST_TEXT = "Последнее из трёхсот";
 
-function history(): Row[] {
+function history(count = 300): Row[] {
   const start = Date.now() - 400 * 60_000;
-  return Array.from({ length: 300 }, (_, index) => message(
-    `55555555-5555-4555-8555-5${String(index).padStart(11, "0")}`,
-    CHAT_ID,
-    index % 2 ? ME : ANYA,
-    index === 299 ? LATEST_TEXT : `Сообщение ${index + 1}`,
-    new Date(start + index * 60_000).toISOString(),
-  ));
+  return Array.from({ length: count }, (_, index) =>
+    message(
+      `55555555-5555-4555-8555-5${String(index).padStart(11, "0")}`,
+      CHAT_ID,
+      index % 2 ? ME : ANYA,
+      index === count - 1 ? LATEST_TEXT : `Сообщение ${index + 1}`,
+      new Date(start + index * 60_000).toISOString(),
+    ),
+  );
 }
 
-async function openConversation(page: Page): Promise<Locator> {
+async function openConversation(page: Page, count = 300): Promise<Locator> {
   const now = new Date().toISOString();
   await openFixture(page, {
     me: ME,
     chats: [chat(CHAT_ID, "private", null, now)],
     memberships: [membership(CHAT_ID, ME, "owner", now), membership(CHAT_ID, ANYA, "member", now)],
-    messages: history(),
+    messages: history(count),
   });
   await openChat(page, ANYA.full_name, LATEST_TEXT);
   const container = page.getByTestId("message-scroll-container");
@@ -71,10 +73,15 @@ async function delayOlderPages(page: Page, ms: number) {
 }
 
 function frames(page: Page, count: number) {
-  return page.evaluate((left) => new Promise<void>((resolve) => {
-    const step = (remaining: number) => (remaining ? requestAnimationFrame(() => step(remaining - 1)) : resolve());
-    step(left);
-  }), count);
+  return page.evaluate(
+    (left) =>
+      new Promise<void>((resolve) => {
+        const step = (remaining: number) =>
+          remaining ? requestAnimationFrame(() => step(remaining - 1)) : resolve();
+        step(left);
+      }),
+    count,
+  );
 }
 
 test.describe("the anchor through an older-history load", () => {
@@ -83,7 +90,51 @@ test.describe("the anchor through an older-history load", () => {
     await requireFixtureServer(request);
   });
 
-  test("the message being read does not move on any painted frame of the load, a scroll during it included", async ({ page }) => {
+  test("the last older page remains retryable after hidden-ID verification fails", async ({
+    page,
+  }) => {
+    const container = await openConversation(page, 101);
+    const oldestId = "55555555-5555-4555-8555-500000000000";
+    let refusals = 0;
+    await page.route(`${FIXTURE_HOST}/rest/v1/message_hidden_for_users**`, async (route) => {
+      if (refusals === 0 && route.request().url().includes(oldestId)) {
+        refusals += 1;
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ code: "PGRST503", message: "synthetic older-page refusal" }),
+        });
+        return;
+      }
+      await route.fallback();
+    });
+    await container.dispatchEvent("wheel", { deltaY: -1 });
+    await container.evaluate((node) => {
+      (node as HTMLElement).scrollTop = 0;
+    });
+    await container.dispatchEvent("scroll");
+    await expect(container).toHaveAttribute("data-loading-older", "true");
+    await expect.poll(() => refusals).toBe(1);
+    await expect(container).toHaveAttribute("data-loading-older", "false");
+    await container.dispatchEvent("wheel", { deltaY: -1 });
+    // The status-band layout may itself trigger the next top-of-list scroll.
+    // If it does not, the reader's next scroll must still be able to retry.
+    await expect
+      .poll(async () => {
+        await container.evaluate((node) => {
+          (node as HTMLElement).scrollTop = 0;
+        });
+        await container.dispatchEvent("scroll");
+        return container.locator("[data-message-id]").count();
+      })
+      .toBe(101);
+    await expect(container).toHaveAttribute("data-has-more-older", "false");
+  });
+
+  test("the message being read does not move on any painted frame of the load, a scroll during it included", async ({
+    page,
+  }) => {
     const container = await openConversation(page);
     // The reader takes over from the entry, as a wheel does.
     await container.dispatchEvent("wheel", { deltaY: -1 });
@@ -96,16 +147,25 @@ test.describe("the anchor through an older-history load", () => {
       const el = node as HTMLElement;
       el.scrollTop = 120;
       const top = el.getBoundingClientRect().top;
-      const visible = [...el.querySelectorAll<HTMLElement>("[data-message-id]")]
-        .find((item) => item.getBoundingClientRect().bottom > top + 1);
+      const visible = [...el.querySelectorAll<HTMLElement>("[data-message-id]")].find(
+        (item) => item.getBoundingClientRect().bottom > top + 1,
+      );
       const id = visible?.dataset.messageId;
       if (!id) return null;
       const offset = () => {
-        const target = [...el.querySelectorAll<HTMLElement>("[data-message-id]")].find((item) => item.dataset.messageId === id);
-        return target ? target.getBoundingClientRect().top - el.getBoundingClientRect().top : Number.POSITIVE_INFINITY;
+        const target = [...el.querySelectorAll<HTMLElement>("[data-message-id]")].find(
+          (item) => item.dataset.messageId === id,
+        );
+        return target
+          ? target.getBoundingClientRect().top - el.getBoundingClientRect().top
+          : Number.POSITIVE_INFINITY;
       };
       const first = offset();
-      const probe = window as unknown as { __anchorOffset: () => number; __worstDrift: number; __stopDrift: boolean };
+      const probe = window as unknown as {
+        __anchorOffset: () => number;
+        __worstDrift: number;
+        __stopDrift: boolean;
+      };
       probe.__anchorOffset = offset;
       probe.__worstDrift = 0;
       probe.__stopDrift = false;
@@ -124,19 +184,33 @@ test.describe("the anchor through an older-history load", () => {
     // What a wheel still turning sends while the page is on its way.
     await container.dispatchEvent("scroll");
     await expect(container).toHaveAttribute("data-loading-older", "false", { timeout: 15_000 });
-    await expect.poll(() => container.evaluate((node) => node.querySelectorAll("[data-message-id]").length)).toBeGreaterThan(100);
+    await expect
+      .poll(() => container.evaluate((node) => node.querySelectorAll("[data-message-id]").length))
+      .toBeGreaterThan(100);
     await page.waitForTimeout(1_000);
 
     const result = await page.evaluate(() => {
-      const probe = window as unknown as { __anchorOffset: () => number; __worstDrift: number; __stopDrift: boolean };
+      const probe = window as unknown as {
+        __anchorOffset: () => number;
+        __worstDrift: number;
+        __stopDrift: boolean;
+      };
       probe.__stopDrift = true;
       return { final: probe.__anchorOffset(), worst: probe.__worstDrift };
     });
-    expect(Math.abs(result.final - start!), "where the load left the message being read").toBeLessThanOrEqual(3);
-    expect(result.worst, "the furthest the message moved on a painted frame of the load").toBeLessThanOrEqual(3);
+    expect(
+      Math.abs(result.final - start!),
+      "where the load left the message being read",
+    ).toBeLessThanOrEqual(3);
+    expect(
+      result.worst,
+      "the furthest the message moved on a painted frame of the load",
+    ).toBeLessThanOrEqual(3);
   });
 
-  test("a settle pass of the entry does not take a reader to the bottom after their wheel let go", async ({ page }) => {
+  test("a settle pass of the entry does not take a reader to the bottom after their wheel let go", async ({
+    page,
+  }) => {
     const container = await openConversation(page);
 
     // Frames are held, the way a busy main thread delays one, until a settle
@@ -144,7 +218,11 @@ test.describe("the anchor through an older-history load", () => {
     // one. Cancelled frames are dropped, as the real queue drops them.
     await page.evaluate(() => {
       type Held = { id: number; callback: FrameRequestCallback };
-      const gate = window as unknown as { __held: Held[]; __gateOpen: boolean; __nextHeldId: number };
+      const gate = window as unknown as {
+        __held: Held[];
+        __gateOpen: boolean;
+        __nextHeldId: number;
+      };
       const request = window.requestAnimationFrame.bind(window);
       const cancel = window.cancelAnimationFrame.bind(window);
       gate.__held = [];
@@ -163,9 +241,17 @@ test.describe("the anchor through an older-history load", () => {
     });
     await expect
       .poll(
-        () => page.evaluate(() => (window as unknown as { __held: { callback: FrameRequestCallback }[] }).__held
-          .some((entry) => String(entry.callback).includes("applyBottomNow"))),
-        { message: "no pass of the entry asked for a frame to go to the bottom while it held the reader there", timeout: 5_000 },
+        () =>
+          page.evaluate(() =>
+            (window as unknown as { __held: { callback: FrameRequestCallback }[] }).__held.some(
+              (entry) => String(entry.callback).includes("applyBottomNow"),
+            ),
+          ),
+        {
+          message:
+            "no pass of the entry asked for a frame to go to the bottom while it held the reader there",
+          timeout: 5_000,
+        },
       )
       .toBe(true);
 
@@ -180,13 +266,19 @@ test.describe("the anchor through an older-history load", () => {
 
     // Now the frames the main thread was late with.
     await page.evaluate(() => {
-      const gate = window as unknown as { __held: { callback: FrameRequestCallback }[]; __gateOpen: boolean };
+      const gate = window as unknown as {
+        __held: { callback: FrameRequestCallback }[];
+        __gateOpen: boolean;
+      };
       gate.__gateOpen = true;
       for (const entry of gate.__held.splice(0)) entry.callback(performance.now());
     });
     await frames(page, 3);
 
     const after = await container.evaluate((node) => (node as HTMLElement).scrollTop);
-    expect(Math.abs(after - reading), `the reader at ${reading}px was taken to ${after}px`).toBeLessThanOrEqual(2);
+    expect(
+      Math.abs(after - reading),
+      `the reader at ${reading}px was taken to ${after}px`,
+    ).toBeLessThanOrEqual(2);
   });
 });
