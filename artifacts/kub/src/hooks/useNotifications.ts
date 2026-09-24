@@ -9,6 +9,7 @@ import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrum
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import { KUB_CHAT_NOTIFICATIONS_READ_EVENT, type ChatNotificationsReadDetail } from "@/lib/notificationEvents";
 import { markChatMessageNotificationsRead } from "@/lib/notificationReadSync";
+import { mergeNotificationRows, rollbackFailedNotificationReads } from "@/lib/notificationRows";
 import {
   closeBrowserNotification,
   notificationPresentationTag,
@@ -96,23 +97,18 @@ export function useNotifications() {
       }),
     );
 
-    let failed = false;
+    const failedIds = new Set<string>();
     for (const id of idsToMark) {
       const { error: rpcErr } = await supabase.rpc("notifications_mark_read", { p_id: id });
       if (rpcErr) {
-        failed = true;
+        failedIds.add(id);
         if (!options.silent) setError(mapPgError(rpcErr));
       }
       autoMarkingReadRef.current.delete(id);
     }
 
-    if (failed) {
-      setItems((prev) =>
-        prev.map((n) => {
-          if (!snapshot.has(n.id)) return n;
-          return { ...n, read_at: snapshot.get(n.id) ?? null };
-        }),
-      );
+    if (failedIds.size > 0) {
+      setItems((prev) => rollbackFailedNotificationReads(prev, snapshot, failedIds));
     }
   }, [supabase]);
 
@@ -155,7 +151,7 @@ export function useNotifications() {
         }
       }
     }
-    setItems((prev) => filterRowsForDisplay(mergeRows(prev, nextRows), userId, mutedChatIds));
+    setItems((prev) => filterRowsForDisplay(mergeNotificationRows(prev, nextRows, PAGE_SIZE), userId, mutedChatIds));
   }, [userId, supabase, normalizeRowsForDisplay, mutedChatIds, presentDesktopNotification]);
 
   useEffect(() => {
@@ -205,7 +201,7 @@ export function useNotifications() {
           const osToast =
             isDesktopApp() && !row.read_at && !presentedDesktopIdsRef.current.has(row.id);
           playNotificationSoundFor({ chatId: payloadString(row.payload, "chat_id") ?? null, osToast });
-          setItems((prev) => mergeRows(prev, [row]));
+          setItems((prev) => mergeNotificationRows(prev, [row], PAGE_SIZE));
           if (osToast) {
             presentDesktopNotification(row);
           }
@@ -391,20 +387,6 @@ export function useNotifications() {
   }, [supabase]);
 
   return { items, unreadCount, loading, error, markRead, markReadIds, markMessageNotificationsForChatRead, markAllRead, refresh };
-}
-
-// Merge two unordered notification lists by id, keep the newest copy
-// of each row (highest `created_at`), sort desc, and cap at PAGE_SIZE.
-function mergeRows(a: Notification[], b: Notification[]): Notification[] {
-  const byId = new Map<string, Notification>();
-  for (const n of a) byId.set(n.id, n);
-  for (const n of b) {
-    const existing = byId.get(n.id);
-    if (!existing || existing.created_at <= n.created_at) byId.set(n.id, n);
-  }
-  return Array.from(byId.values())
-    .sort((x, y) => (x.created_at < y.created_at ? 1 : x.created_at > y.created_at ? -1 : 0))
-    .slice(0, PAGE_SIZE);
 }
 
 function filterMutedNotifications(items: Notification[], mutedChatIds: string[]): Notification[] {
