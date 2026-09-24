@@ -116,6 +116,14 @@ test("generic web delivery and acknowledgement finish before an isolated voice f
     if (url.pathname === "/rest/v1/rpc/native_push_outbox_claim") return Response.json([]);
     if (url.pathname === "/rest/v1/push_subscriptions") return Response.json([{ id: "fictional-subscription",
       endpoint: "https://fixture.invalid/webpush", p256dh: "fictional", auth: "fictional", is_active: true }]);
+    if (url.pathname === "/rest/v1/rpc/push_outbox_delivery_recheck") {
+      assert.deepEqual(JSON.parse(init.body), {
+        p_outbox_id: "fictional-outbox",
+        p_claim_token: JSON.parse(requests[0].body).p_claim_token,
+      });
+      assert.equal(webSends.length, 0);
+      return Response.json("deliver");
+    }
     if (init.method === "PATCH") {
       assert.equal(url.pathname, "/rest/v1/notifications_push_outbox");
       assert.ok(JSON.parse(init.body).sent_at); acknowledged = true;
@@ -130,6 +138,46 @@ test("generic web delivery and acknowledgement finish before an isolated voice f
   assert.equal(JSON.parse(webSends[0][1]).senderKind, "user");
   assert.doesNotMatch(JSON.stringify(body), /private provider/);
 });
+
+for (const [status, expectedPruned, expectedFailed] of [
+  ["foreground", 0, 0],
+  ["read", 1, 0],
+  ["rpc_error", 0, 1],
+]) {
+  test(`generic Web Push does not reach the provider after ${status}`, async () => {
+    Object.assign(env, { VAPID_PUBLIC_KEY: "fixture-public", VAPID_PRIVATE_KEY: "fixture-private" });
+    network = async (url) => {
+      if (url.pathname === "/rest/v1/rpc/push_outbox_claim") return Response.json([{
+        id: "fictional-outbox",
+        subscription_id: "fictional-subscription",
+        payload: { title: "Fixture", body: "Message" },
+        attempt_count: 0,
+      }]);
+      if (url.pathname === "/rest/v1/rpc/native_push_outbox_claim") return Response.json([]);
+      if (url.pathname === "/rest/v1/push_subscriptions") return Response.json([{
+        id: "fictional-subscription",
+        endpoint: "https://fixture.invalid/webpush",
+        p256dh: "fictional",
+        auth: "fictional",
+        is_active: true,
+      }]);
+      if (url.pathname === "/rest/v1/rpc/push_outbox_delivery_recheck") {
+        return status === "rpc_error"
+          ? new Response("unavailable", { status: 503 })
+          : Response.json(status);
+      }
+      throw new Error(`unexpected offline request to ${url.pathname}`);
+    };
+
+    const response = await handler(request({ limit: 1 }));
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.sent, 0);
+    assert.equal(body.pruned, expectedPruned);
+    assert.equal(body.failed, expectedFailed);
+    assert.equal(webSends.length, 0);
+  });
+}
 
 test("native cron claims an unread row and acknowledges only its own FCM lease", async () => {
   Object.assign(env, { VAPID_PUBLIC_KEY: "fixture-public", VAPID_PRIVATE_KEY: "fixture-private" });

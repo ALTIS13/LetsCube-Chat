@@ -32,6 +32,13 @@ type SubscriptionRow = {
   is_active?: boolean;
 };
 
+type WebPushDeliveryStatus =
+  | "deliver"
+  | "foreground"
+  | "read"
+  | "subscription_inactive"
+  | "claim_lost";
+
 type NativeOutboxRow = {
   id: string;
   device_id: string;
@@ -120,6 +127,7 @@ Deno.serve(async (request: Request) => {
     );
     if (result === "sent") sent += 1;
     else if (result === "pruned") pruned += 1;
+    else if (result === "deferred") continue;
     else failed += 1;
   }
 
@@ -231,6 +239,33 @@ async function selectSubscriptions(supabaseUrl: string, secretKey: string, ids: 
   const response = await restFetch(url, secretKey);
   if (!response.ok) return { ok: false as const, status: 500, body: await summarizeResponse(response) };
   return { ok: true as const, data: (await response.json()) as SubscriptionRow[] };
+}
+
+async function recheckWebPushDelivery(
+  supabaseUrl: string,
+  secretKey: string,
+  outboxId: string,
+  claimToken: string,
+): Promise<{ ok: true; status: WebPushDeliveryStatus } | { ok: false }> {
+  const url = new URL("/rest/v1/rpc/push_outbox_delivery_recheck", supabaseUrl);
+  const response = await restFetch(url, secretKey, {
+    method: "POST",
+    headers: { prefer: "return=representation" },
+    body: JSON.stringify({
+      p_outbox_id: outboxId,
+      p_claim_token: claimToken,
+    }),
+  });
+  if (!response.ok) return { ok: false };
+
+  const status = await response.json() as unknown;
+  if (
+    status !== "deliver" && status !== "foreground" && status !== "read" &&
+    status !== "subscription_inactive" && status !== "claim_lost"
+  ) {
+    return { ok: false };
+  }
+  return { ok: true, status };
 }
 
 async function claimNativeOutbox(supabaseUrl: string, secretKey: string, limit: number, claimToken: string) {
@@ -504,7 +539,24 @@ async function deliver(
   row: OutboxRow,
   subscription: SubscriptionRow | undefined,
   webPushAppOrigin: string | undefined,
-): Promise<"sent" | "failed" | "pruned"> {
+): Promise<"sent" | "failed" | "pruned" | "deferred"> {
+  const eligibility = await recheckWebPushDelivery(
+    supabaseUrl,
+    secretKey,
+    row.id,
+    claimToken,
+  );
+  if (!eligibility.ok) return "failed";
+
+  const deliveryStatus = eligibility.status;
+  if (deliveryStatus === "foreground") return "deferred";
+  if (
+    deliveryStatus === "read" || deliveryStatus === "subscription_inactive" ||
+    deliveryStatus === "claim_lost"
+  ) {
+    return "pruned";
+  }
+
   if (!subscription || subscription.is_active === false) {
     await markOutbox(supabaseUrl, secretKey, claimToken, row.id, {
       suppressed_at: new Date().toISOString(),
