@@ -489,9 +489,9 @@ export function usePush() {
 
 export function usePushNotificationNavigation() {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
-  const deferredNativeTargetRef = useRef<ReturnType<typeof createDeferredPushTargetHandler> | null>(null);
-  if (!deferredNativeTargetRef.current) {
-    deferredNativeTargetRef.current = createDeferredPushTargetHandler(
+  const deferredPushTargetRef = useRef<ReturnType<typeof createDeferredPushTargetHandler> | null>(null);
+  if (!deferredPushTargetRef.current) {
+    deferredPushTargetRef.current = createDeferredPushTargetHandler(
       openPushTargetInApp,
       () => Boolean(useAppStore.getState().currentUser?.id),
     );
@@ -502,8 +502,10 @@ export function usePushNotificationNavigation() {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
     const onMsg = (e: MessageEvent) => {
       if (e.data?.type === "kub-open" && typeof e.data.url === "string") {
-        // Keep notification-click navigation inside the SPA; no document reload.
-        openPushTargetInApp(e.data.url);
+        // Keep notification-click navigation inside the SPA, but do not try to
+        // resolve its chat as an anonymous user while a resumed PWA is still
+        // restoring auth. The same queue already protects native cold starts.
+        deferredPushTargetRef.current?.handle(e.data.url);
       }
     };
     navigator.serviceWorker.addEventListener("message", onMsg);
@@ -513,7 +515,7 @@ export function usePushNotificationNavigation() {
   useEffect(() => {
     if (!(isNativeAndroid() || isDesktopApp())) return undefined;
     let cleanup: (() => void) | null = null;
-    const targetHandler = deferredNativeTargetRef.current;
+    const targetHandler = deferredPushTargetRef.current;
     if (!targetHandler) return undefined;
     const register = isNativeAndroid()
       ? registerNativePushNavigationListeners
@@ -525,8 +527,8 @@ export function usePushNotificationNavigation() {
   }, []);
 
   useEffect(() => {
-    if (!currentUserId || !(isNativeAndroid() || isDesktopApp())) return;
-    deferredNativeTargetRef.current?.flush();
+    if (!currentUserId) return;
+    deferredPushTargetRef.current?.flush();
   }, [currentUserId]);
 
   useEffect(() => {

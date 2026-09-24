@@ -118,6 +118,33 @@ then drop `public.push_outbox_delivery_recheck(uuid, uuid)` using the migration
 header. The function is additive, so leaving it unused is safer than dropping it
 before the old entrypoint is restored.
 
+### Installed-PWA notification-click continuation
+
+The client audit found a separate resume race after the server delivery fix.
+When an installed PWA window already existed, `notificationclick` focused it and
+posted the exact chat/message target. The browser listener then called
+`safeOpenChat` immediately. If iOS had resumed the document but authentication
+was still restoring, that call ran as an anonymous user, showed the unavailable
+chat path and discarded the target. A cold start with no existing window was not
+affected because `openWindow` kept the target in the URL until authentication.
+
+The browser listener now uses the same one-target authenticated queue as native
+notification navigation. A click received during session restoration stays
+pending; the appearance of `currentUserId` flushes it on every platform. Normal
+foreground clicks still open immediately. The service worker continues to show
+and close the OS notification normally; the change does not suppress a push
+WebKit has already received and does not alter the server dispatcher.
+
+The regression was red before the wiring change and green after it. Focused
+notification/read/receipt tests passed 18/18, including a VM-executed service
+worker click that closes the card, focuses the existing PWA client and preserves
+both ids. The built service worker passed all six WebKit cases and, after one
+Chromium activation timeout passed on an immediate isolated rerun, all six
+Chromium cases as well. Installed-shell/safe-area checks passed 22 WebKit cases;
+the update, keyboard and notice matrix passed 26/26 across WebKit and Chromium
+at the selected 390/1440 and light/dark fixtures. This remains engine emulation,
+not physical iPhone proof.
+
 ## Message UI and sound
 
 The read receipt already carried the correct server-derived state; the own
@@ -165,6 +192,10 @@ Realme was not touched.
   old OS-channel sound.
 - Keep Web Push, WNS, voice calls and iPhone PWA regressions separate from this
   server-only dispatch measurement.
+- On a physical iPhone, tap a message notification while the installed PWA is
+  backgrounded and its session is being restored; verify the exact conversation
+  and message open without a transient "chat unavailable" state. Also verify OS
+  Notification Center removal after that message is marked read.
 - The cached-history privacy gap described in the initial report was closed in
   `fdbb6d72`: warm reopen waits for hidden-ID verification, failed checks do
   not render unchecked history or sidebar previews, and stale responses cannot

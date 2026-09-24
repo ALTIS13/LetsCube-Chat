@@ -64,10 +64,29 @@ async function dispatchPush(worker) {
   await Promise.all(pending);
 }
 
+async function dispatchNotificationClick(worker, notification) {
+  const pending = [];
+  const listener = worker.listeners.get("notificationclick");
+  assert.equal(typeof listener, "function");
+  listener({
+    notification,
+    waitUntil(promise) {
+      pending.push(promise);
+    },
+  });
+  await Promise.all(pending);
+}
+
 test("a system push replaces the old card with the same stable tag", async () => {
   let oldCardClosed = false;
   const worker = loadServiceWorker({
-    notifications: [{ close() { oldCardClosed = true; } }],
+    notifications: [
+      {
+        close() {
+          oldCardClosed = true;
+        },
+      },
+    ],
   });
 
   await dispatchPush(worker);
@@ -85,6 +104,39 @@ test("hidden PWA clients still receive the system push card", async () => {
 
   assert.equal(worker.shown.length, 1);
   assert.equal(worker.shown[0].options.tag, "message:chat:chat-1");
+});
+
+test("clicking a message card focuses the PWA and preserves its exact chat and message target", async () => {
+  let focused = false;
+  let closed = false;
+  const posted = [];
+  const worker = loadServiceWorker({
+    clients: [
+      {
+        url: "https://app.letscube.ru/chat/another-chat",
+        focus() {
+          focused = true;
+        },
+        postMessage(message) {
+          posted.push(message);
+        },
+      },
+    ],
+  });
+
+  await dispatchPush(worker);
+  await dispatchNotificationClick(worker, {
+    data: worker.shown[0].options.data,
+    close() {
+      closed = true;
+    },
+  });
+
+  assert.equal(closed, true);
+  assert.equal(focused, true);
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0].type, "kub-open");
+  assert.equal(posted[0].url, "/?chat=chat-1&message=message-1");
 });
 
 test("a storage address on the production backend host never reaches a push card", async () => {
@@ -115,7 +167,10 @@ test("a storage address on the production backend host never reaches a push card
 
   assert.equal(worker.shown.length, 1);
   assert.equal(worker.shown[0].options.body, "Новое уведомление");
-  assert.equal(worker.shown[0].options.data.url, "/?chat=chat-1&message=message-1");
+  assert.equal(
+    worker.shown[0].options.data.url,
+    "/?chat=chat-1&message=message-1",
+  );
 });
 
 test("Realtime message delivery does not create a second legacy Notification card", async () => {

@@ -23605,3 +23605,18 @@ background `prompt`, while a real `denied` remains denied. Reinstalled debug APK
 on Realme showed Enable; tapping it opened the OS permission prompt, and the
 permission became granted. FCM transport remains a separate open device issue;
 see [Realme QA](operations/2026-09-23-realme-microg-push.md).
+
+## D-310 `[x]` An installed-PWA notification click can be lost while the session restores
+
+2026-09-24, iPhone PWA source/WebKit follow-up. With an existing PWA window,
+`notificationclick` focused the client and posted its chat/message URL. The
+browser listener bypassed the authenticated target queue and called
+`safeOpenChat` immediately; during session restoration that was an anonymous
+open, so the app reported an unavailable chat and forgot the click. The browser
+listener now shares the native deferred queue and every platform flushes it when
+`currentUserId` appears. The regression was red before and green after. A
+service-worker VM test also proves that the card closes, the client focuses and
+the exact chat/message target survives. Built-SW update/takeover passed all six
+WebKit cases and all six Chromium cases, with one initial Chromium activation
+timeout green on isolated rerun. This is WebKit engine evidence on Windows, not
+a physical iPhone notification tap. [Evidence](operations/2026-09-24-push-and-message-ux.md).
