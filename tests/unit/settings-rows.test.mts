@@ -8,6 +8,7 @@ import {
   decorationSummary,
   presenceHint,
   presenceSummary,
+  pushDeniedHelp,
   pushStatusAction,
   pushStatusSummary,
   shouldShowCounter,
@@ -94,6 +95,13 @@ test("the push row offers a button only where pressing it can work", () => {
     assert.equal(pushStatusAction(status, ANDROID), null, status);
     assert.equal(pushStatusAction(status, BROWSER), null, status);
   }
+});
+
+test("a denied permission tells each client where to restore it", () => {
+  assert.match(pushDeniedHelp(ANDROID), /Настройки.*Android.*LETSCUBE/u);
+  assert.match(pushDeniedHelp(BROWSER), /настройк.*браузера/u);
+  assert.match(pushDeniedHelp({ ...BROWSER, iosPwa: true }), /Настройки.*iPhone/u);
+  assert.match(pushDeniedHelp(WINDOWS), /Windows/u);
 });
 
 test("the theme row names the theme in force, not only the rule", () => {

@@ -112,6 +112,19 @@ export function pushStatusAction(
   return null;
 }
 
+export function pushDeniedHelp(platform: SettingsPlatform): string {
+  if (platform.nativeAndroid) {
+    return "Откройте «Настройки» Android → «Приложения» → LETSCUBE → «Уведомления» и разрешите их.";
+  }
+  if (platform.iosPwa) {
+    return "Откройте «Настройки» iPhone → «Уведомления» → LETSCUBE и разрешите уведомления.";
+  }
+  if (platform.desktopWindows) {
+    return "Разрешите уведомления для LETSCUBE в настройках Windows.";
+  }
+  return "Откройте настройки браузера для сайта LETSCUBE и разрешите уведомления.";
+}
+
 /**
  * The theme row's value.
  *

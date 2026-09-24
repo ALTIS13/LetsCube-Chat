@@ -47,6 +47,7 @@ import {
   forwardOriginHint,
   forwardOriginSummary,
   presenceSummary,
+  pushDeniedHelp,
   pushStatusAction,
   pushStatusSummary,
   shouldShowCounter,
@@ -672,8 +673,8 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
               )}
             </SettingsRow>
           )}
-          {pushStatus === "denied" && installedIosPwa && (
-            <RowNote>Откройте «Настройки» iPhone → «Уведомления» → LETSCUBE и разрешите уведомления.</RowNote>
+          {pushStatus === "denied" && shows("push") && (
+            <RowNote>{pushDeniedHelp({ nativeAndroid, desktopWindows, iosPwa: installedIosPwa })}</RowNote>
           )}
           {/* D-137. These three are **stored preferences**, not device state:
               they live in `notification_preferences` and the push gate reads
