@@ -97,10 +97,10 @@ Realme was not touched.
   old OS-channel sound.
 - Keep Web Push, WNS, voice calls and iPhone PWA regressions separate from this
   server-only dispatch measurement.
-- A hidden-message change made on another device while this client has a chat
-  closed can briefly appear from already cached history on a warm reopen until
-  the separate hidden-ID read completes. The current hidden-ID helper also
-  returns an empty set on read failure. Fix and test that privacy boundary in a
-  separate focused change before claiming full cached-history privacy safety.
+- The cached-history privacy gap described in the initial report was closed in
+  `fdbb6d72`: warm reopen waits for hidden-ID verification, failed checks do
+  not render unchecked history or sidebar previews, and stale responses cannot
+  replace a newly opened chat. Focused desktop/mobile regressions passed; see
+  the 0.1.9 release report for the published candidate and remaining limits.
 - Measure scroll and long-session smoothness on physical Android hardware;
   the focused chat-list test does not prove every large-history transition.

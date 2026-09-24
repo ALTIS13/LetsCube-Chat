@@ -38,7 +38,7 @@ Three shells over one web application:
 | --- | --- | --- |
 | web | `artifacts/kub`, React/Vite, served at **https://app.letscube.ru** | deploys on every push to `main` |
 | Windows | Tauri EXE; loads `app.letscube.ru` at runtime, bundles only its splash | `0.2.14` build 18, 2026-09-06 |
-| Android | Capacitor APK; **embeds** its web bundle | `0.1.8` build 9, 2026-09-23, cut from `02441b29` |
+| Android | Capacitor APK; **embeds** its web bundle | `0.1.9` build 10, 2026-09-24, cut from `fdbb6d72` |
 
 So the Windows shell always shows the current web; **the Android APK shows the web
 as of its cut**, and will lag subsequent web deploys. A tester on Android is describing that
@@ -130,6 +130,16 @@ whole deployment** — no bot has registered a command yet.
 ---
 
 ## 4. Where to start
+
+**Android/web Stable, 2026-09-24 (Codex):** `fdbb6d72` is deployed as the
+healthy web container and Android 0.1.9/build 10 is signed and published in
+Stable. Local and public APK verifier, signer continuity, Android 14 AVD guest
+launch and focused browser matrix passed. The Realme has the signed APK but is
+locked; authenticated signed push and physical official-GMS latency remain
+unproved. Windows 0.2.14 uses the live updated web, but a new native installer
+is blocked by missing Authenticode provider configuration. iOS/PWA is a
+separate owner's scope.
+[Release evidence and rollback](operations/2026-09-24-android-0.1.9-release.md).
 
 **Android Stable release, 2026-09-23 (Codex):** owner-authorized signed
 `0.1.8/9` APK was published from `02441b29`. Local and public release verifiers,
