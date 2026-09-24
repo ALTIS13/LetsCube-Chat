@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
+import { withChatDisplayTitles } from "@/lib/searchResultChatDisplay";
 import { normalizePhoneSearchQuery } from "@/lib/phoneSearch";
 import {
   hasLink,
@@ -317,9 +318,14 @@ export function useGlobalSearch({
     })();
   }, [debouncedQuery, enabled, filters, limit, runFallback, supabase, type]);
 
+  const displayResults = useMemo(
+    () => withChatDisplayTitles(results, chats, currentUserId),
+    [results, chats, currentUserId],
+  );
+
   return {
     query: debouncedQuery,
-    results,
+    results: displayResults,
     loading,
     migrationMissing,
     filtersLimited,
