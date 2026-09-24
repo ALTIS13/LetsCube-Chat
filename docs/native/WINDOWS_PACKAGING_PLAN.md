@@ -31,6 +31,7 @@ Windows 10/11 before the public release catalog is opened.
 - Run: `pnpm.cmd windows:tauri:run`.
 - Contract tests: `pnpm.cmd windows:tauri:test`.
 - Build: `pnpm.cmd windows:tauri:build:internal`.
+- First-party updater build: `pnpm.cmd windows:tauri:build:updater`.
 - Authenticode preflight: `pnpm.cmd windows:tauri:signing:preflight`.
 - Signed build: `pnpm.cmd windows:tauri:build:signed`.
 - Native long-session QA: `pnpm.cmd windows:tauri:qa:long-session`.
@@ -70,16 +71,17 @@ never import the old Electron profile.
 
 ## Signing and update boundary
 
-The currently published installer is not Authenticode-signed. A dedicated
-fail-closed signing path now supports Microsoft Artifact Signing or a valid
-current-user code-signing certificate. Windows SmartScreen can still warn
-until the stable publisher/download builds reputation; current Microsoft
-guidance does not guarantee an automatic EV bypass. Tauri updater signing is a
-separate trust boundary: Tauri 2 release builds reuse the signed NSIS `.exe` installer and
-its `.sig`, while the matching public verification key is embedded in the
-desktop client. Neither the Tauri signing private key/password nor an
-Authenticode secret belongs in Git, documentation, Coolify public variables or
-the remote web bundle.
+The currently published installer is not Authenticode-signed. The owner has
+chosen to keep distributing the EXE through LETSCUBE's first-party platform
+while a publicly trusted code-signing certificate is unavailable. This does
+not suppress Windows SmartScreen or grant Microsoft Store eligibility. The
+fail-closed Authenticode path remains available for later. Tauri updater
+signing is a separate trust boundary: release builds publish the NSIS `.exe`
+and its Tauri `.sig`, while the matching public verification key is embedded
+in the desktop client. The `.sig` verifies installer bytes for the updater; it
+is not an Authenticode signature. Neither the Tauri signing private
+key/password nor an Authenticode secret belongs in Git, documentation,
+Coolify public variables or the remote web bundle.
 
 The publisher keeps the existing download-catalog interface intact:
 

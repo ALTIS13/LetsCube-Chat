@@ -2,8 +2,25 @@
 
 Tauri updater signatures and Windows Authenticode solve different problems.
 The existing updater signature verifies bytes accepted by the LETSCUBE updater.
-Authenticode identifies the Windows publisher and is the public installer
-release gate.
+Authenticode identifies the Windows publisher and is required for a future
+EXE/MSI Microsoft Store submission. It is not required for the owner's current
+first-party distribution at `api.letscube.ru`. As of 2026-09-24, the owner has
+explicitly chosen to continue first-party EXE releases without Authenticode
+until a publicly trusted certificate is obtainable. Such downloads can still
+show Windows SmartScreen or publisher warnings; the updater signature does not
+remove those warnings.
+
+## Current first-party path
+
+Build with `pnpm.cmd windows:tauri:build:updater`. This path requires the
+ignored local Tauri updater signing inputs and their public-key match, but no
+Authenticode provider. Verify the resulting installer and updater `.sig`, then
+publish the **same immutable bytes** to Test and, only after install/upgrade,
+rollback and Windows device QA, to Stable using the existing
+`publish-native-release.sh` flow. The server publication path verifies the
+updater signature independently. Do not use the unsigned internal-QA build for
+distribution. Do not represent a Tauri-signed installer as Authenticode-signed
+or Microsoft Store-ready.
 
 ## Supported signing providers
 
@@ -64,7 +81,7 @@ the existing `certificate_store` path. A cloud HSM that does not expose the
 certificate through the Windows certificate store needs a provider-specific
 sign command; do not claim the present script supports it without a test sign.
 
-## Build and verification
+## Future Authenticode build and verification
 
 Run:
 
@@ -101,11 +118,12 @@ avoid unnecessary installer rebuilds, timestamp every signature and submit
 false positives to Microsoft when required. Microsoft Store distribution is a
 separate option and avoids the browser download reputation path.
 
-The current external blocker is a trusted, accessible code-signing certificate
-for the release entity. This machine has `signtool.exe`, but no configured
-provider or usable code-signing certificate. The existing MSIX Store identity
-does not provide an Authenticode private key for the primary EXE installer.
-Do not promote an unsigned installer to Stable or submit it to the EXE/MSI Store
-product. Microsoft's [EXE/MSI requirements](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msi/app-package-requirements)
+The remaining blocker for **Authenticode and Store**, not the first-party
+Stable channel, is a trusted, accessible code-signing certificate for the
+release entity. This machine has `signtool.exe`, but no configured provider or
+usable code-signing certificate. The existing MSIX Store identity does not
+provide an Authenticode private key for the primary EXE installer. Do not
+submit an unsigned installer to the EXE/MSI Store product. Microsoft's
+[EXE/MSI requirements](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msi/app-package-requirements)
 also require signatures on the shipped PE files; inspect the final installed
 payload on a clean Windows 10/11 machine before Store submission.

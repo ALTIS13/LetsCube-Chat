@@ -84,6 +84,21 @@ test("Windows signing configuration does not affect the unsigned internal QA bui
   );
 });
 
+test("first-party updater signing remains independent of Authenticode", () => {
+  const rootPackage = readJson("package.json");
+  const baseConfig = readJson("windows-tauri/src-tauri/tauri.conf.json");
+  const updaterBuild = readText("scripts/windows-tauri-updater-build.ps1");
+  const publisher = readText("scripts/publish-native-release.sh");
+
+  assert.match(rootPackage.scripts["windows:tauri:build:updater"], /windows-tauri-updater-build\.ps1/);
+  assert.equal(baseConfig.bundle.createUpdaterArtifacts, true);
+  assert.equal(baseConfig.bundle.windows.signCommand, undefined);
+  assert.match(updaterBuild, /TAURI_SIGNING_PRIVATE_KEY/);
+  assert.match(updaterBuild, /localPublicKey -ne \$trackedPublicKey/);
+  assert.doesNotMatch(updaterBuild, /windows-authenticode|WINDOWS_SIGNING_PROVIDER/);
+  assert.match(publisher, /verify_updater_signature/);
+});
+
 test("bundle verification ignores old installers and reaches the current app signature gate", (t) => {
   if (process.platform !== "win32") {
     t.skip("Authenticode verification requires Windows");

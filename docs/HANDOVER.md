@@ -137,7 +137,9 @@ Stable. Local and public APK verifier, signer continuity, Android 14 AVD guest
 launch and focused browser matrix passed. Realme was subsequently unlocked
 without a PIN and signed 0.1.9 showed its guest login; authenticated signed
 push and physical official-GMS latency remain unproved. Windows 0.2.14 uses
-the live updated web, but a new native installer is blocked by a missing
+the live updated web. The owner chose to continue first-party Windows EXE
+distribution with the separate Tauri updater signature while Authenticode is
+unavailable; only Authenticode/Store readiness is blocked by the missing
 publicly trusted code-signing certificate/provider. The Windows post-build
 gate now verifies both app and installer signatures and selects the current
 installer version even when older builds remain in the directory. The iPhone
