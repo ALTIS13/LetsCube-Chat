@@ -133,11 +133,14 @@ whole deployment** — no bot has registered a command yet.
 
 **Current checkpoint, 2026-09-25 (Codex):** iPhone PWA is owned by the
 separate `iOS/MacOs` task and was published from `48cdf716`. Web push-permission
-recovery copy was published from `0df228eb`. Android media export has passed
-source, debug APK and isolated AVD QA, including a byte-identical save, but is
-**not** in Android Stable 0.1.9/build 10. The active blocker is the unavailable
-release-signing input path. Next: obtain that path without sharing passwords in
-chat, cut 0.1.10/build 11, verify and publish the signed APK. See the
+recovery was published from `0df228eb`, and Android native media export from
+`4fc1b02c`. The existing protected signing inputs were found and verified;
+Android 0.1.10/build 11 is signed and published in Stable. Local/public APK
+verification, signer continuity, a signed upgrade on Realme and an isolated
+AVD guest launch passed. Next: physical authenticated Android media-save and
+FCM checks, particularly on official Google services; do not infer them from
+the AVD or the Realme guest launch. See the
+[release record](operations/2026-09-25-android-0.1.10-release.md) and
 [media-export QA record](operations/2026-09-25-android-media-export-qa.md).
 
 **Android/web Stable, 2026-09-24 (Codex):** `fdbb6d72` is deployed as the
