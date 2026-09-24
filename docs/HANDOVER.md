@@ -131,6 +131,15 @@ whole deployment** — no bot has registered a command yet.
 
 ## 4. Where to start
 
+**Current checkpoint, 2026-09-25 (Codex):** iPhone PWA is owned by the
+separate `iOS/MacOs` task and was published from `48cdf716`. Web push-permission
+recovery copy was published from `0df228eb`. Android media export has passed
+source, debug APK and isolated AVD QA, including a byte-identical save, but is
+**not** in Android Stable 0.1.9/build 10. The active blocker is the unavailable
+release-signing input path. Next: obtain that path without sharing passwords in
+chat, cut 0.1.10/build 11, verify and publish the signed APK. See the
+[media-export QA record](operations/2026-09-25-android-media-export-qa.md).
+
 **Android/web Stable, 2026-09-24 (Codex):** `fdbb6d72` is deployed as the
 healthy web container and Android 0.1.9/build 10 is signed and published in
 Stable. Local and public APK verifier, signer continuity, Android 14 AVD guest

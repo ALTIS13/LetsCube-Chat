@@ -23,8 +23,8 @@ const EVERY_TARGET: DistributionTarget[] = [
   "web_only",
 ];
 
-test("only the Android app hands the file to the browser; every other shell keeps it", () => {
-  assert.equal(mediaFileAction("android_native").kind, "open");
+test("the Android app and other shells keep the selected file", () => {
+  assert.equal(mediaFileAction("android_native", "image", true).kind, "save");
   for (const target of EVERY_TARGET.filter((one) => one !== "android_native")) {
     assert.equal(mediaFileAction(target, "image").kind, target === "ios_pwa" ? "share" : "save", `${target} should keep the file in the shell`);
   }
@@ -39,25 +39,26 @@ test("the iPhone PWA offers the native share sheet, with a save fallback", () =>
   assert.equal(mediaFileAction("ios_pwa", "video").kind, "save");
 });
 
-test("a control that leaves the app says so, and wears the icon for it", () => {
-  const leaving = mediaFileAction("android_native");
-  assert.equal(leaving.leavesApp, true);
-  assert.equal(leaving.label, "В браузере");
-  assert.equal(leaving.accessibleName, "Открыть в браузере");
-  assert.equal(leaving.icon, "externalLink");
+test("save controls name the action and do not imply an external browser", () => {
+  for (const target of ["android_native", "windows_native", "web_only"] as const) {
+    const action = mediaFileAction(target, "image", true);
+    assert.equal(action.leavesApp, false);
+    assert.equal(action.label, "Сохранить");
+    assert.equal(action.accessibleName, "Сохранить");
+    assert.equal(action.icon, "download");
+  }
+});
 
-  // The reverse, which is the half D-147 was really about: a control that keeps
-  // the file must not wear the glyph for leaving.
-  const staying = mediaFileAction("windows_native");
-  assert.equal(staying.leavesApp, false);
-  assert.equal(staying.label, "Сохранить");
-  assert.equal(staying.accessibleName, "Сохранить");
-  assert.equal(staying.icon, "download");
+test("an older Android shell without the export plugin keeps the honest browser fallback", () => {
+  const action = mediaFileAction("android_native", "image", false);
+  assert.equal(action.kind, "open");
+  assert.equal(action.label, "В браузере");
+  assert.equal(action.leavesApp, true);
 });
 
 test("the icon and the promise agree in every shell", () => {
   for (const target of EVERY_TARGET) {
-    const action = mediaFileAction(target);
+    const action = mediaFileAction(target, "image", true);
     assert.equal(action.leavesApp, action.kind === "open", `${target} promises one thing and does another`);
     assert.equal(
       action.icon,

@@ -16,6 +16,7 @@ import { mediaFileAction, mediaFileName } from "@/lib/mediaFileAction";
 import { mediaFileActionName, originalityNote, type MediaOriginality } from "@/lib/mediaOriginality";
 import { saveMediaAs } from "@/lib/messageMediaActions";
 import { getCurrentDistributionTarget } from "@/lib/platform/capabilities";
+import { canSaveNativeMedia, saveNativeMedia } from "@/lib/platform/nativeMediaExport";
 import {
   mediaPositionLabel,
   mediaStepOffered,
@@ -176,7 +177,12 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
 
   // The iPhone share sheet is useful for photos, while videos keep the existing
   // download path (preloading a large clip just to open Share is too costly).
-  const fileAction = useMemo(() => mediaFileAction(getCurrentDistributionTarget(), media?.type), [media?.type]);
+  const nativeExportAvailable = canSaveNativeMedia();
+  const fileAction = useMemo(
+    () => mediaFileAction(getCurrentDistributionTarget(), media?.type, nativeExportAvailable),
+    [media?.type, nativeExportAvailable],
+  );
+  const [exporting, setExporting] = useState(false);
   const [shareFile, setShareFile] = useState<{ url: string; file: File } | null>(null);
   const [shareUnavailable, setShareUnavailable] = useState(false);
   useEffect(() => {
@@ -250,6 +256,18 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
       return;
     }
     if (effectiveFileAction.kind === "save") {
+      if (nativeExportAvailable) {
+        setExporting(true);
+        void saveNativeMedia(media.url, mediaFileName(media.url, media.type))
+          .then((saved) => {
+            if (saved) showActionFeedback({ kind: "success", title: "Файл сохранён", key: "media-viewer-file" });
+          })
+          .catch(() => {
+            showActionFeedback({ kind: "error", title: "Не удалось сохранить файл", key: "media-viewer-file" });
+          })
+          .finally(() => setExporting(false));
+        return;
+      }
       void saveMediaAs(media.url, mediaFileName(media.url, media.type));
       return;
     }
@@ -390,8 +408,9 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
             data-testid="media-viewer-file-action"
             data-action-kind={effectiveFileAction.kind}
             onClick={handleFile}
-            aria-label={fileActionName}
-            title={fileActionName}
+            disabled={exporting}
+            aria-label={exporting ? "Сохраняем файл" : fileActionName}
+            title={exporting ? "Сохраняем файл" : fileActionName}
             className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 text-sm text-white/80 transition-colors hover:bg-white/10 hover:text-white"
           >
             <KubIcon name={effectiveFileAction.icon} size={16} />

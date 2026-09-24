@@ -28,13 +28,11 @@ import {
  *
  * - **D-147.** «Открыть оригинал» called `window.open(url, "_blank")` in every
  *   shell. In a browser that is a tab; in the Windows app Tauri denies the new
- *   window and hands the address to the default browser, and in the Android app
- *   Capacitor starts another application over this one. What is asserted here
- *   is the browser's own branch — the file is fetched and saved with no tab
- *   opened at all — and, where the page can be made to look like the Android
- *   shell, that the control changes its name to say where it goes. The Windows
- *   and iPhone shells cannot be reached from here; they are covered by
- *   `tests/unit/media-file-action.test.mts` and are unverified as shells.
+ *   window and hands the address to the default browser. The Android APK now
+ *   saves through its MediaExport bridge; this browser fixture simulates an
+ *   older Android shell without that bridge and checks its honest fallback.
+ *   The browser's own branch saves a blob without opening a tab. Native shell
+ *   behavior is checked separately on Android, not claimed by this fixture.
  * - **D-148.** The fullscreen control wore the same external-link glyph as the
  *   control beside it and had no accessible name, which on a phone — where both
  *   words are hidden — left two identical unnamed icons in a row.
@@ -212,7 +210,7 @@ interface OpenOptions {
   theme?: "light" | "dark";
   /** Seeded before the application starts, as a person's earlier choices would be. */
   storage?: Record<string, string>;
-  /** Makes Capacitor report the Android app: the shell that cannot keep a download. */
+  /** Simulates an older Android app with no MediaExport bridge. */
   androidShell?: boolean;
   /**
    * Stamps the metadata a re-encoded upload carries, so the viewer draws the
@@ -314,7 +312,7 @@ test("the viewer keeps the file in the app instead of opening its address (D-147
   await page.screenshot({ path: shotPath(info, "photo-light") });
 });
 
-test("in the shell that cannot keep a download, the control says where it goes (D-147)", async ({ page }, info) => {
+test("an older Android shell without MediaExport says where the file goes (D-147)", async ({ page }, info) => {
   await requireFixtureServer(page.request);
   await openConversation(page, { androidShell: true });
   await openPhoto(page);

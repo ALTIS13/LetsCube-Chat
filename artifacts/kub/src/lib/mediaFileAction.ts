@@ -12,9 +12,9 @@
  *   `NewWindowResponse::Deny` and hands any http(s) address to
  *   `opener().open_url()`, so the file opens in the default browser and
  *   LETSCUBE is left behind.
- * - **Android.** Capacitor's `Bridge.launchIntent` fires `Intent.ACTION_VIEW`
- *   for every host that is not the app's own, which starts another application
- *   on top of this one.
+ * - **Android.** The native MediaExport bridge opens the system file picker
+ *   and streams the stored file to the location chosen by the user. Older APKs
+ *   without that bridge still offer the explicit browser fallback.
  * - **The installed iPhone app.** A standalone display has no tabs of its own,
  *   so the address goes to Safari beside the app.
  *
@@ -23,12 +23,8 @@
  * other half of D-147: a control that takes a person out of the app must not
  * look like one that does not.
  *
- * **Android is the shell that cannot save.** An Android WebView drops every
- * download it is given unless the host installs a `DownloadListener`, and
- * neither Capacitor's `@capacitor/android` nor this project's `MainActivity`
- * installs one — there is no `setDownloadListener` anywhere in either. A
- * «Сохранить» there would be a control that does nothing at all, silently,
- * which is worse than one that is honest about handing the file to the browser.
+ * Android WebView downloads still do not use an anchor: only the explicitly
+ * registered native bridge may show a save control.
  *
  * Free of React and of every browser API, so `node --test` reads it directly.
  */
@@ -87,8 +83,12 @@ const SHARE_PHOTO: MediaFileAction = {
   leavesApp: false,
 };
 
-export function mediaFileAction(target: DistributionTarget, kind?: MediaFileKind): MediaFileAction {
-  if (target === "android_native") return OPEN;
+export function mediaFileAction(
+  target: DistributionTarget,
+  kind?: MediaFileKind,
+  androidExportAvailable = false,
+): MediaFileAction {
+  if (target === "android_native") return androidExportAvailable ? SAVE : OPEN;
   return target === "ios_pwa" && kind === "image" ? SHARE_PHOTO : SAVE;
 }
 
