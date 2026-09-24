@@ -89,7 +89,7 @@ function Get-CodeSigningCertificate {
     throw "The configured Authenticode certificate is outside its validity period."
   }
   $hasCodeSigningEku = $certificate.EnhancedKeyUsageList |
-    Where-Object { $_.ObjectId.Value -eq $codeSigningOid }
+    Where-Object { [string]$_.ObjectId -eq $codeSigningOid }
   if (-not $hasCodeSigningEku) {
     throw "The configured certificate is not valid for code signing."
   }
@@ -138,7 +138,7 @@ function Invoke-Verify {
     throw "Authenticode verification failed with status '$($signature.Status)'."
   }
   $hasCodeSigningEku = $signature.SignerCertificate.EnhancedKeyUsageList |
-    Where-Object { $_.ObjectId.Value -eq $codeSigningOid }
+    Where-Object { [string]$_.ObjectId -eq $codeSigningOid }
   if (-not $hasCodeSigningEku) {
     throw "Authenticode signer is not valid for code signing."
   }
@@ -181,10 +181,25 @@ function Invoke-VerifyBundle {
   if (-not (Test-Path -LiteralPath $resolvedBundle.Path -PathType Container)) {
     throw "Bundle path must be a directory."
   }
-  $installers = @(Get-ChildItem -LiteralPath $resolvedBundle.Path -Filter "*-setup.exe" -File)
-  if ($installers.Count -ne 1) {
-    throw "Expected exactly one NSIS setup executable, found $($installers.Count)."
+  $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+  $tauriConfigPath = Join-Path $repoRoot "windows-tauri/src-tauri/tauri.conf.json"
+  $tauriConfig = Get-Content -LiteralPath $tauriConfigPath -Raw | ConvertFrom-Json
+  $version = [string]$tauriConfig.version
+  if ($version -notmatch '^\d+\.\d+\.\d+$') {
+    throw "Tauri release version is invalid."
   }
+  $installers = @(Get-ChildItem -LiteralPath $resolvedBundle.Path -Filter "LETSCUBE_${version}_*-setup.exe" -File)
+  if ($installers.Count -ne 1) {
+    throw "Expected exactly one NSIS setup executable for version $version, found $($installers.Count)."
+  }
+
+  $releasePath = [IO.Path]::GetFullPath((Join-Path $resolvedBundle.Path "..\.."))
+  $applications = @(Get-ChildItem -LiteralPath $releasePath -Filter "*.exe" -File)
+  if ($applications.Count -ne 1) {
+    throw "Expected exactly one release application executable, found $($applications.Count)."
+  }
+
+  Invoke-Verify $applications[0].FullName
   Invoke-Verify $installers[0].FullName
 }
 

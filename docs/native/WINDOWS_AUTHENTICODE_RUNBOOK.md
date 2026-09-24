@@ -12,6 +12,12 @@ controlled Windows release environment:
 
 ### Microsoft Artifact Signing
 
+Public Trust is currently limited by Microsoft's organization-country list;
+Russia is not on it. Do not use a Private Trust profile for a public EXE: it
+does not establish trust on ordinary customer devices. Keep this provider only
+for a legally eligible release entity. See Microsoft's
+[Artifact Signing prerequisites](https://learn.microsoft.com/en-us/azure/artifact-signing/quickstart).
+
 Set these secret-manager or CI environment variable names:
 
 ```text
@@ -30,8 +36,19 @@ public variables or documentation.
 
 ### Certificate store
 
-Import a trusted code-signing certificate with its private key into the current
-release account certificate store and set:
+For the Russian ООО «КУБ», first confirm with a certificate authority that it
+can validate and issue a **publicly trusted organization code-signing
+certificate** to this entity and provide a Windows-compatible hardware token
+or cloud HSM. Do not buy a TLS, document-signing or Private Trust certificate
+for this purpose. Since June 2023, newly issued publicly trusted code-signing
+private keys require hardware-backed storage; follow the issuer's provisioning
+instructions rather than exporting a PFX. The issuer must confirm its chain is
+accepted by the Microsoft Trusted Root Program, plus the RFC 3161 timestamp
+service URL. See [Microsoft's signing options](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options).
+
+After vendor middleware is installed, make the certificate visible with an
+accessible private key in `Cert:\CurrentUser\My` for the Windows release account
+and set:
 
 ```text
 WINDOWS_SIGNING_PROVIDER=certificate_store
@@ -40,8 +57,12 @@ WINDOWS_TIMESTAMP_URL
 ```
 
 The certificate must be currently valid, contain the Code Signing EKU and have
-an accessible private key. The timestamp URL must be HTTPS. Do not export a PFX
-into the repository.
+an accessible private key. The timestamp URL must be HTTPS. Never put the
+private key, token PIN, PFX or cloud-HSM credential in the repository or chat.
+The public certificate thumbprint and timestamp URL are sufficient to configure
+the existing `certificate_store` path. A cloud HSM that does not expose the
+certificate through the Windows certificate store needs a provider-specific
+sign command; do not claim the present script supports it without a test sign.
 
 ## Build and verification
 
@@ -53,9 +74,10 @@ pnpm.cmd windows:tauri:build:signed
 ```
 
 The production command refuses to build when provider configuration or signing
-tools are absent. It signs the installer through Tauri's custom signing command
-and then independently verifies the resulting NSIS bundle with Windows trust
-policy. The unsigned internal QA command remains separate:
+tools are absent. Tauri invokes the custom signing command for Windows
+executables; the post-build gate independently verifies both the release app
+EXE and NSIS installer with Windows trust policy. The unsigned internal QA
+command remains separate:
 
 ```powershell
 pnpm.cmd windows:tauri:build:internal
@@ -79,6 +101,11 @@ avoid unnecessary installer rebuilds, timestamp every signature and submit
 false positives to Microsoft when required. Microsoft Store distribution is a
 separate option and avoids the browser download reputation path.
 
-The current external blocker is a configured Artifact Signing account/profile
-or a trusted code-signing certificate. No signing identity is present in the
-repository.
+The current external blocker is a trusted, accessible code-signing certificate
+for the release entity. This machine has `signtool.exe`, but no configured
+provider or usable code-signing certificate. The existing MSIX Store identity
+does not provide an Authenticode private key for the primary EXE installer.
+Do not promote an unsigned installer to Stable or submit it to the EXE/MSI Store
+product. Microsoft's [EXE/MSI requirements](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msi/app-package-requirements)
+also require signatures on the shipped PE files; inspect the final installed
+payload on a clean Windows 10/11 machine before Store submission.

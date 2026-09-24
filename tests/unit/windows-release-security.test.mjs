@@ -1,5 +1,16 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 const readText = (path) => readFileSync(path, "utf8");
@@ -42,6 +53,9 @@ test("Windows production build uses a dedicated fail-closed Authenticode path", 
   assert.match(signingScript, /artifact-signing-cli/);
   assert.match(signingScript, /WINDOWS_CERTIFICATE_THUMBPRINT/);
   assert.match(signingScript, /Get-AuthenticodeSignature/);
+  assert.match(signingScript, /Expected exactly one release application executable/);
+  assert.match(signingScript, /Invoke-Verify \$applications\[0\]\.FullName/);
+  assert.match(signingScript, /Invoke-Verify \$installers\[0\]\.FullName/);
   assert.match(
     signingScript,
     /Status\s+-ne\s+\[System\.Management\.Automation\.SignatureStatus\]::Valid/,
@@ -68,4 +82,41 @@ test("Windows signing configuration does not affect the unsigned internal QA bui
     rootPackage.scripts["windows:tauri:build:internal"],
     /tauri\.authenticode\.conf\.json/,
   );
+});
+
+test("bundle verification ignores old installers and reaches the current app signature gate", (t) => {
+  if (process.platform !== "win32") {
+    t.skip("Authenticode verification requires Windows");
+    return;
+  }
+
+  const version = readJson("windows-tauri/src-tauri/tauri.conf.json").version;
+  const release = mkdtempSync(join(tmpdir(), "letscube-signing-"));
+  const nsis = join(release, "bundle", "nsis");
+  mkdirSync(nsis, { recursive: true });
+  t.after(() => rmSync(release, { recursive: true, force: true }));
+
+  writeFileSync(join(release, "letscube-windows-tauri.exe"), "not a signed executable");
+  writeFileSync(join(nsis, "LETSCUBE_0.0.1_x64-setup.exe"), "old installer");
+  writeFileSync(join(nsis, `LETSCUBE_${version}_x64-setup.exe`), "current installer");
+
+  const result = spawnSync("pwsh", [
+    "-NoLogo", "-NoProfile", "-NonInteractive", "-File",
+    "scripts/windows-authenticode.ps1", "-Mode", "VerifyBundle", "-Path", nsis,
+  ], { encoding: "utf8" });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Authenticode verification failed/);
+  assert.doesNotMatch(result.stderr, /Expected exactly one NSIS setup executable/);
+
+  copyFileSync(process.execPath,
+    join(release, "letscube-windows-tauri.exe"));
+  const installerResult = spawnSync("pwsh", [
+    "-NoLogo", "-NoProfile", "-NonInteractive", "-File",
+    "scripts/windows-authenticode.ps1", "-Mode", "VerifyBundle", "-Path", nsis,
+  ], { encoding: "utf8" });
+
+  assert.notEqual(installerResult.status, 0);
+  assert.match(installerResult.stdout, /Verified letscube-windows-tauri\.exe/);
+  assert.match(installerResult.stderr, /Authenticode verification failed/);
 });

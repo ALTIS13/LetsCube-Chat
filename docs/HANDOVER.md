@@ -134,11 +134,14 @@ whole deployment** — no bot has registered a command yet.
 **Android/web Stable, 2026-09-24 (Codex):** `fdbb6d72` is deployed as the
 healthy web container and Android 0.1.9/build 10 is signed and published in
 Stable. Local and public APK verifier, signer continuity, Android 14 AVD guest
-launch and focused browser matrix passed. The Realme has the signed APK but is
-locked; authenticated signed push and physical official-GMS latency remain
-unproved. Windows 0.2.14 uses the live updated web, but a new native installer
-is blocked by missing Authenticode provider configuration. iOS/PWA is a
-separate owner's scope.
+launch and focused browser matrix passed. Realme was subsequently unlocked
+without a PIN and signed 0.1.9 showed its guest login; authenticated signed
+push and physical official-GMS latency remain unproved. Windows 0.2.14 uses
+the live updated web, but a new native installer is blocked by a missing
+publicly trusted code-signing certificate/provider. The Windows post-build
+gate now verifies both app and installer signatures and selects the current
+installer version even when older builds remain in the directory. The iPhone
+PWA continuation was sent to its separate owner in the `iOS/MacOs` task.
 [Release evidence and rollback](operations/2026-09-24-android-0.1.9-release.md).
 
 **Android Stable release, 2026-09-23 (Codex):** owner-authorized signed
