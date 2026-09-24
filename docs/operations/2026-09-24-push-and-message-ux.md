@@ -50,6 +50,74 @@ the SQL rollback for its new function and columns, but leave those additive
 objects in place unless restoring the old dispatcher has been verified; do not
 drop them while the new entrypoint is live.
 
+## iPhone PWA notification and read-sync follow-up
+
+The production audit found no queued backlog and no present read contradiction:
+pending unread Web Push rows, pending already-read rows and active claims were
+all zero, and no unread message notification sat at or behind its recipient's
+chat read watermark. The broader read/delivery scheduler tests also remain
+green. That ruled out a current database backlog but did not explain the
+tester's report that a notification could arrive after the chat had already
+been opened and read.
+
+The remaining race was between the two external operations. `push_outbox_claim`
+checked unread and foreground state, then the Edge Function later called the
+Web Push provider. A user could open the PWA, establish a foreground lease or
+mark the message read after claim but before that provider call. The already
+claimed payload would still leave the server. The service worker cannot safely
+hide such a push on iOS: WebKit requires a Web Push event to result in a visible
+notification. See the WebKit Web Push contract at
+<https://webkit.org/blog/12945/meet-web-push/>.
+
+Commit `e1641d74` adds service-role-only
+`push_outbox_delivery_recheck(uuid, uuid)`. It locks the exact token-bound
+outbox row immediately before delivery and returns one of five states. A read
+notification is suppressed as `read`; a missing/inactive subscription is
+suppressed as `subscription_inactive`; an active global foreground lease
+releases the claim without suppressing the unread notification, so the normal
+claim loop can deliver it after the user leaves; a lost claim sends nothing;
+only `deliver` reaches the provider. An RPC/network/unknown response also fails
+closed and leaves the lease to expire. Android/FCM, Windows/WNS and voice paths
+were not changed.
+
+The migration was proved in PGlite against read, foreground, deliver, inactive,
+lost-claim and expired-session cases. Its self-check was mutation-tested by
+turning `SECURITY DEFINER` into `SECURITY INVOKER`; the migration then aborted as
+required. The two repository migration copies are byte-identical. Expanded
+push, PWA lifecycle, receipt and native-provider validation passed 159/159;
+the complete TypeScript check passed. The target PWA production build completed
+as `sw.js build 24ec32fe1694d214`. The aggregate workspace build's separate
+mockup-sandbox first refused to run without its mandatory `PORT`; that is a
+runner configuration gate, not a compilation failure in the PWA target.
+
+The production database was backed up before the change at
+`/srv/letscube/backups/web-push-recheck-20260924T100625Z/postgres-before.dump`
+(6,771,184 bytes, custom-format catalog parsed by `pg_restore`). The exact SQL
+was rehearsed with `ROLLBACK`, then applied once as the owner of the four source
+tables. The live function is a pinned-search-path definer, executable by
+`service_role` and not by `anon` or `authenticated`; RLS stayed enabled. The
+previous Edge entrypoint and reviewed replacement are in the same root-only
+backup directory. The mounted source hash is the reviewed hash; no container
+restart was needed. A POST without dispatcher authorization returned HTTP 401,
+proving the module compiled, and the next six ten-second cron runs all succeeded
+with six HTTP 200 responses and no filtered Edge boot/recheck errors. Afterward
+the three outbox counts and the read-watermark contradiction count remained
+zero.
+
+WebKit simulation remains source evidence, not a phone claim: 22 installed-PWA
+safe-area cases and 15 update/manifest/keyboard cases passed across the selected
+mobile/light/dark fixtures. Two authenticated install-settings cases were not
+valid on the public-preview fixture and therefore are not counted as product
+proof. A physical iPhone is still required to verify Home Screen background
+delivery, an already displayed card disappearing after resume, notification tap
+routing, OS history behaviour and provider latency.
+
+Rollback for this slice: restore `index-before.ts` from the backup directory to
+the mounted function path and verify its old hash and an HTTP compile probe;
+then drop `public.push_outbox_delivery_recheck(uuid, uuid)` using the migration
+header. The function is additive, so leaving it unused is safer than dropping it
+before the old entrypoint is restored.
+
 ## Message UI and sound
 
 The read receipt already carried the correct server-derived state; the own

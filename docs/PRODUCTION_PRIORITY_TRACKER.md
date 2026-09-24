@@ -5023,6 +5023,7 @@ Scope:
 - `[x]` Harden browser/PWA push lifecycle: reconcile subscriptions on startup/focus/reconnect, detect stale VAPID keys, close read same-tag cards on active clients, update the installed-app badge, and preserve DB `read_at` as the cross-device source of truth.
 - `[x]` Add Web Push `Topic` isolation and a backward-compatible Declarative Web Push fallback for iOS/iPadOS 18.4+ without changing Browser/PWA subscription semantics.
 - `[x]` Remove the dual-dispatcher race: Supabase Cron/`send-push-notifications` owns production Web/FCM delivery; the legacy API push loop is off by default and cannot consume the same outbox unless explicitly enabled for isolated local testing.
+- `[x]` Close the claim-to-provider race for iPhone/PWA Web Push: immediately before delivery the server atomically rechecks the notification's read state, subscription and global foreground lease. Read rows are suppressed, foreground rows are released for later delivery, and a failed eligibility RPC sends nothing. Migration and Edge source are live as `e1641d74`; physical iPhone background/card/tap proof remains open.
 - `[ ]` Verify the installed iPhone/iPad Home Screen window without browser chrome.
 - `[ ]` Verify real browser/PWA push delivery and notification click routing against a live installed client.
 - `[x]` Verify automated iOS manifest injection and confirm Android/Windows browsers are not offered PWA installation across all five Playwright viewports.
