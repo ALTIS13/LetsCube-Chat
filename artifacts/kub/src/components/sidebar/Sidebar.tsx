@@ -108,10 +108,9 @@ export function Sidebar() {
   const chatSearchOpen =
     !isPhone && chatSearch !== null && chatSearch.chatId === selectedChatId;
 
-  // Settings. From `md` it is a surface over the application (D-285); below
-  // `md` there is no column on screen and it stays the full-screen sheet
-  // `SettingsModal` has always been. The phone's «Профиль» tab opens the same
-  // screen, which is why both flags are read here.
+  // Settings. From `md` it is a surface over the application (D-285). On a
+  // phone the menu still opens a sheet, while the Profile tab occupies this
+  // pane and leaves the bottom navigation available.
   //
   // It was this column's body between D-160 and D-285, and the reason it is not
   // any more is that the column is dragged by hand: at the 260 floor the name
@@ -174,7 +173,10 @@ export function Sidebar() {
       {/* One in-flow child, sized exactly as the four used to be, so the layer
           has a sibling to sit behind and the column's own layout is unchanged.
           The dialogs stay outside it — they are `fixed` and take no space. */}
-      <div className="relative flex min-h-0 flex-1">
+      <div
+        className="relative flex min-h-0 flex-1"
+        inert={isPhone && mobileSection === "profile" && !settingsOpen ? true : undefined}
+      >
         {/* From `md` only, and inside this column's own glass rather than
             behind a second sheet: the rail and the list are two blocks of one
             surface, told apart by a hairline (rule 11). */}
@@ -312,7 +314,12 @@ export function Sidebar() {
         <NewGroupModal onClose={() => setShowNewGroup(false)} onRefetch={refetch} />
       )}
       {/* Resizing changes the presentation, never the lifetime of the draft. */}
-      {settingsVisible && <SettingsSurface onClose={closeSettingsSheet} />}
+      {settingsVisible && (
+        <SettingsSurface
+          onClose={closeSettingsSheet}
+          profileTab={mobileSection === "profile" && !settingsOpen}
+        />
+      )}
 
       {/* `Ui::LayerWidget`, not a column and not a dropdown: it costs no width
           while it is closed, which is the whole of «удобно в боковом списке

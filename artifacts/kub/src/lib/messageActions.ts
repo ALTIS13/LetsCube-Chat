@@ -143,6 +143,7 @@ export function phoneMessageActions(ctx: MessageActionContext): {
 } {
   if (ctx.localSend) return { list: [], row: localSendActions(ctx, "copy") };
   const list: MessageActionId[] = ["copyLink"];
+  if (ctx.kind === "photo" || ctx.kind === "video") list.push("saveAs");
   if (ctx.can.forward) list.push("forward");
   if (ctx.can.pin) list.push(ctx.pinned ? "unpin" : "pin");
   list.push("details");

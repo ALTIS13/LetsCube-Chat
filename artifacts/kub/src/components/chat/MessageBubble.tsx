@@ -44,6 +44,7 @@ import { getVideoPlaybackFallbackUrl, selectVideoPlaybackUrl } from "@/lib/media
 import { groupReactions, type ReactionGroup } from "@/lib/messageReactions";
 import { isUncompressedMedia } from "@/lib/mediaCompression";
 import { mediaBubbleStyle } from "@/lib/mediaBubbleLayout";
+import { inlineImageSource } from "@/lib/mediaInlineLoad";
 import { resolveOriginalPreviewUrl } from "@/hooks/useMediaVariants";
 import { useMessageMediaSource, usePlaybackUrl } from "@/hooks/useMediaObjectUrl";
 import {
@@ -1038,8 +1039,10 @@ export function MessageBubble({
    * construction.
    */
   const originalUnavailable = Boolean(message.media_url) && originalSettled && !originalUrl;
+  const imagePreviewUrl = mediaVariant?.previewUrl ?? originalPreview?.url;
+  const inlineOriginalUrl = inlineImageSource(null, originalUrl, message.media_metadata);
   const imageDisplayUrl = message.type === "image"
-    ? mediaVariant?.previewUrl ?? originalPreview?.url ?? originalUrl
+    ? inlineImageSource(imagePreviewUrl, originalUrl, message.media_metadata)
     : originalUrl;
   const imageDimensions = message.type === "image" && mediaVariant?.previewWidth && mediaVariant?.previewHeight
     ? { width: mediaVariant.previewWidth, height: mediaVariant.previewHeight }
@@ -1618,8 +1621,9 @@ export function MessageBubble({
             ) : message.type === "image" && message.media_url ? (
               <MediaWithCaption caption={mediaCaption} bot={botCommandsInText}>
                 <MediaImage
-                  url={imageDisplayUrl ?? originalUrl}
+                  url={imageDisplayUrl}
                   originalUrl={originalUrl}
+                  allowOriginalInline={Boolean(inlineOriginalUrl)}
                   thumbUrl={mediaVariant?.thumbUrl}
                   thumbWidth={mediaVariant?.thumbWidth ?? null}
                   mainWidth={imageDisplayWidth}
@@ -1819,6 +1823,7 @@ interface MediaDimensions {
 function MediaImage({
   url,
   originalUrl,
+  allowOriginalInline,
   thumbUrl,
   thumbWidth,
   mainWidth,
@@ -1837,6 +1842,7 @@ function MediaImage({
    */
   url: string | null;
   originalUrl: string | null;
+  allowOriginalInline: boolean;
   thumbUrl?: string;
   thumbWidth?: number | null;
   mainWidth?: number | null;
@@ -1900,7 +1906,7 @@ function MediaImage({
   }, [originalUrl, url]);
 
   const handleError = () => {
-    if (activeUrl !== originalUrl) {
+    if (activeUrl !== originalUrl && allowOriginalInline) {
       setUsingOriginal(true);
       return;
     }
@@ -1912,16 +1918,28 @@ function MediaImage({
       <div className="flex max-w-[260px] items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
         <KubIcon name="warning" size={16} />
         <span className="min-w-0 flex-1">Не удалось загрузить изображение.</span>
-        <a href={originalUrl ?? undefined} target="_blank" rel="noreferrer" className="text-[color:var(--kub-accent-text)] hover:underline">
-          Открыть
-        </a>
+        {originalUrl && <button type="button" onClick={onOpen} className="text-[color:var(--kub-accent-text)] hover:underline">Открыть</button>}
       </div>
     );
   }
 
-  // No address yet. The box is the one the picture will fill, so nothing moves
-  // when it arrives — and this is not the failure box, because nothing has
-  // failed. Unreachable in the shipped mode; see the prop's note.
+  // A known large original waits for an explicit tap when no preview exists.
+  if (!activeUrl && originalUrl) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label="Загрузить фото"
+        className="flex w-[min(360px,calc(100vw-7.5rem))] max-w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-[var(--kub-surface-2)] text-sm text-[color:var(--kub-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] sm:w-[min(420px,70vw)]"
+        style={boxStyle}
+      >
+        <KubIcon name="download" size={18} />
+        Загрузить фото
+      </button>
+    );
+  }
+
+  // No address yet. Keep the final picture's box stable while it resolves.
   if (!activeUrl) {
     return (
       <div

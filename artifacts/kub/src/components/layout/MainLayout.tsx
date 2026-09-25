@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
  * Top-level shell. On <md, the layout is a one-pane drawer:
  *  - if a chat is selected → ChatWindow takes the whole pane (with a back button
  *    in the chat header that clears `selectedChatId`),
- *  - otherwise → Sidebar (chat list / folders / search) takes the whole pane,
+ *  - otherwise → Sidebar (chat list / folders / search / profile) takes the pane,
  *    plus a BottomNav docked to the bottom whose tabs drive `mobileSection`
  *    in the store.
  *
@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 export function MainLayout() {
   useMessengerVoiceSurface();
   const selectedChatId = useAppStore((s) => s.selectedChatId);
+  const mobileSection = useAppStore((s) => s.mobileSection);
   const setSelectedChatId = useAppStore((s) => s.setSelectedChatId);
   const setShowSidebar = useAppStore((s) => s.setShowSidebar);
   const isMobileChatOpen = !!selectedChatId;
@@ -236,7 +237,7 @@ export function MainLayout() {
             `relative`. Not against the viewport: a `fixed` capsule would
             ignore the column entirely, and this product has already been
             bitten by a stacking context clamping what a pane opens. */}
-        {!isMobileChatOpen && <BottomNav />}
+        {!isMobileChatOpen && mobileSection !== "profile" && <BottomNav />}
       </div>
       {/* A person, opened from a row or a face rather than from a conversation
           (D-283). Mounted on the shell and not inside a pane: the chat list

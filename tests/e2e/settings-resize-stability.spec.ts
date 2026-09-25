@@ -88,10 +88,15 @@ for (const theme of ["dark", "light"] as const) {
       .getByRole("navigation", { name: "Навигация" })
       .getByRole("button", { name: "Профиль" })
       .click();
-    await expect(settings(page)).toBeVisible();
+    await expect(page.getByTestId("settings-profile-tab")).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.getByTestId("settings-field-name").fill("Synthetic profile draft");
     await page.setViewportSize({ width: 844, height: 390 });
     await expect(settings(page), "profile disappeared after rotation").toBeVisible();
+    await expect(page.getByTestId("settings-field-name")).toHaveValue("Synthetic profile draft");
     await page.getByTestId("settings-close").click();
+    await expect(page.getByRole("dialog").filter({ hasText: "Отменить изменения?" })).toBeVisible();
+    await page.getByRole("button", { name: "Отменить", exact: true }).click();
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(

@@ -46,6 +46,7 @@ import { canReportMessage } from "@/lib/personalModeration";
 import { requestContentReport } from "./ReportDialog";
 import { messageLink } from "@/lib/messageLink";
 import { copyImageToClipboard, mediaDownloadName, saveMediaAs } from "@/lib/messageMediaActions";
+import { canSaveNativeMedia, saveNativeMedia } from "@/lib/platform/nativeMediaExport";
 import { ensureMessageMediaUrl } from "@/lib/media/mediaUrl";
 import { QUICK_REACTION } from "@/lib/messageReactions";
 import {
@@ -788,15 +789,27 @@ export function MessageList({
         if (message.media_url) {
           void mediaAddress().then((url) => {
             if (!url) return;
-            void saveMediaAs(
-              url,
-              mediaDownloadName({
-                type: message.type,
-                content: message.content,
-                mimeType: mediaMimeType(message),
-                createdAt: message.created_at,
-              }),
-            );
+            const fileName = mediaDownloadName({
+              type: message.type,
+              content: message.content,
+              mimeType: mediaMimeType(message),
+              createdAt: message.created_at,
+            });
+            if (canSaveNativeMedia() && (message.type === "image" || message.type === "video")) {
+              void saveNativeMedia(url, fileName)
+                .then((result) => {
+                  if (result.saved) showActionFeedback({
+                    kind: "success",
+                    title: result.location === "Pictures/LETSCUBE"
+                      ? "Фото сохранено в галерею LETSCUBE"
+                      : "Видео сохранено в галерею LETSCUBE",
+                    key: "message-save",
+                  });
+                })
+                .catch(() => showActionFeedback({ kind: "error", title: "Не удалось сохранить файл", key: "message-save" }));
+              return;
+            }
+            void saveMediaAs(url, fileName);
           });
         }
         return;

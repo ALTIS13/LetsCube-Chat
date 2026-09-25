@@ -8,7 +8,7 @@ import { bottomNavDestinations, type BottomNavDestination } from "@/lib/bottomNa
 import { isNativeAndroid } from "@/lib/platform/capabilities";
 import { cn } from "@/lib/utils";
 
-export function BottomNav() {
+export function BottomNav({ onSelect }: { onSelect?: (entry: BottomNavDestination) => void } = {}) {
   const [location, setLocation] = useLocation();
   const { canAccessTasks } = useTaskAccessGate();
   const { mobileSection, setMobileSection } = useAppStore();
@@ -25,6 +25,10 @@ export function BottomNav() {
   // The whole entry, not its parts: `route` is the discriminant, and narrowing
   // it here is what proves `setMobileSection` is never handed «tasks».
   const handleTab = (entry: BottomNavDestination) => {
+    if (onSelect) {
+      onSelect(entry);
+      return;
+    }
     if (entry.route) {
       setLocation("/tasks");
       return;
@@ -35,8 +39,8 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Навигация"
-      // A capsule that floats over the list rather than a bar the list sits
-      // on. Telegram's, measured: about 53dp tall and clear of each side by
+      // A capsule that floats over the list, and sits in a reserved slot on
+      // the profile tab. Telegram's, measured: about 53dp tall and clear by
       // about 40dp, fully rounded, with the content visible past its edges.
       //
       // `absolute`, not `fixed`: a fixed child would be laid out against the

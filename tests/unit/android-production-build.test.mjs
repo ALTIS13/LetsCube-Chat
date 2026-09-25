@@ -119,7 +119,7 @@ test("Android phone activity stays in portrait orientation", () => {
 
 test("Android production debug build reads canonical release metadata", () => {
   assert.deepEqual(readAndroidReleaseMetadata(process.cwd()), {
-    versionName: "0.1.9",
-    versionCode: 10,
+    versionName: "0.1.11",
+    versionCode: 12,
   });
 });

@@ -283,7 +283,7 @@ const veiled = [
   // form, whose two were its close and its clear-the-query. The overlay that
   // replaced it has three: the ✕ is `KubModal`'s now, and its own are the
   // clear-the-query and the rail button's shared shape.
-  ["components/settings/SettingsOverlay.tsx", 2],
+  ["components/settings/SettingsOverlay.tsx", 3],
   ["components/sidebar/FolderEditModal.tsx", 2],
   // `components/sidebar/FolderListModal.tsx` was here at 1 until D-120. It was
   // the phone's second folder surface, opened by a «Папки» tab beside the folder

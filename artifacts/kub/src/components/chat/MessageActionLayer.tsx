@@ -41,6 +41,7 @@ import {
   reactionCountLabel,
 } from "@/lib/messageReactions";
 import { REPORT_LABEL } from "@/lib/personalModeration";
+import { canSaveNativeMedia } from "@/lib/platform/nativeMediaExport";
 import { NO_SAFE_AREA_INSETS, readSafeAreaInsets, type SafeAreaInsets } from "@/lib/safeArea";
 import { cn } from "@/lib/utils";
 import type { MessageWithSender } from "@/types/database";
@@ -476,7 +477,9 @@ export function MessageActionLayer({
       )}
     >
       <KubIcon name={ACTION_ICONS[action]} size={18} tone={DANGER.has(action) ? "currentColor" : "muted"} className="shrink-0" />
-      <span className="min-w-0 flex-1 truncate">{MESSAGE_ACTION_LABELS[action]}</span>
+      <span className="min-w-0 flex-1 truncate">{phone && action === "saveAs"
+        ? (canSaveNativeMedia() ? "Сохранить" : "Скачать файл")
+        : MESSAGE_ACTION_LABELS[action]}</span>
       {action === "details" && <KubIcon name="chevronRight" size={16} tone="muted" className="shrink-0" />}
     </button>
   );

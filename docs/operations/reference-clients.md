@@ -2786,3 +2786,25 @@ shares the question and should be answered with the same reading.
 - **Our own command surfaces against a bot that has registered commands, in
   production.** 19.4 says why: none has. Everything about ours in this section
   is from the fixture and from the browser at 1440 and 390.
+
+## 20. Media download and save, 2026-09-25
+
+Telegram's first-party [auto-download description](https://telegram.org/blog/autoplay?setln=en)
+describes separate presets for mobile data, Wi-Fi and roaming. Its
+[storage description](https://telegram.org/blog/hidden-media-zero-storage-profile-pics?setln=en)
+describes a managed local cache with size and retention controls. The Android
+[DownloadController source](https://github.com/DrKLO/Telegram/blob/master/TMessagesProj/src/main/java/org/telegram/messenger/DownloadController.java)
+separates automatic download rules by network and media type. These sources
+establish the mechanics, not exact current thresholds on the owner's phone.
+No exact Discord receive-side auto-download threshold was established; do not
+attribute one to it.
+
+LETSCUBE's 2026-09-25 source audit found that available compressed previews
+already render automatically. A known large original without a preview also
+rendered automatically before the current fix; it now waits for a tap, while
+recorded originals at most 1 MiB and legacy rows without a recorded size keep
+the old automatic path. Android 10+ explicit photo/video save now targets
+`Pictures/LETSCUBE` or `Movies/LETSCUBE` through MediaStore rather than a
+document picker. This is a destination for user-saved files, **not** a managed
+private media cache. The remaining cache and transfer-feedback gaps are in
+`2026-09-25-media-navigation-audit.md`.

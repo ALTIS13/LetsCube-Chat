@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { KubButton, KubIcon, KubModal, type KubIconName } from "@/components/kub";
+import { BottomNav } from "@/components/layout/BottomNav";
 import { SettingsErrorNotice, type SettingsScreen } from "@/components/settings/SettingsScreen";
+import type { BottomNavDestination } from "@/lib/bottomNavDestinations";
 import {
   SETTINGS_SECTION_TITLES,
   settingsSearchResult,
@@ -22,8 +24,8 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * Settings as an overlay from `md` (D-285), a sheet below it. Both layouts keep
- * the same modal and field nodes alive across a viewport change.
+ * Settings are an overlay from `md` (D-285). On phones the menu opens a sheet,
+ * while the Profile tab uses the same screen in the pane above the bottom nav.
  *
  * The owner asked for Discord's approach by name, and gave the two doors he
  * expects: «Закрыть настройки в дискорде я могу просто кликнув по крестику
@@ -47,10 +49,20 @@ import { cn } from "@/lib/utils";
  *    the defect: how much room conversations get and how wide the settings are
  *    were one number and are now two.
  *
- * No material of its own (rule 1): `KubModal` paints `kub-glass-strong` and the
- * dim, and the two columns inside are rules on one sheet, not two panes.
+ * The dialog gets its material from `KubModal`; the inline phone tab uses the
+ * pane background, leaving the capsule clear of the settings scroller.
  */
-export function SettingsOverlay({ screen, isPhone }: { screen: SettingsScreen; isPhone: boolean }) {
+export function SettingsOverlay({
+  screen,
+  isPhone,
+  profileTab,
+  onProfileTabSelect,
+}: {
+  screen: SettingsScreen;
+  isPhone: boolean;
+  profileTab: boolean;
+  onProfileTabSelect: (destination: BottomNavDestination) => void;
+}) {
   const [query, setQuery] = useState("");
 
   // A layout update must not re-register this modal above an open confirmation.
@@ -94,7 +106,7 @@ export function SettingsOverlay({ screen, isPhone }: { screen: SettingsScreen; i
     const observer = new ResizeObserver(read);
     observer.observe(node, { box: "border-box" });
     return () => observer.disconnect();
-  }, [screen.ready]);
+  }, [screen.ready, isPhone, profileTab]);
 
   /** Which heading the rail marks. A query replaces the screen, so it marks none. */
   const syncActive = useCallback(() => {
@@ -129,46 +141,23 @@ export function SettingsOverlay({ screen, isPhone }: { screen: SettingsScreen; i
   const showRail = !isPhone && railVisible;
   const railWidth = showRail ? SETTINGS_RAIL_WIDTH : 0;
 
-  return (
-    <KubModal
-      open
-      onClose={leave}
-      title="Настройки"
-      icon={<KubIcon name="settings" size={16} />}
-      size="xl"
-      mobileSheet={isPhone}
-      scrollBody={false}
-      contentClassName="p-0"
-      className={isPhone ? undefined : "sm:max-w-none"}
-      // Built from the constants rather than beside them, so moving one moves
-      // the rendered box and `settings-overlay.spec.ts` sees it.
-      style={isPhone ? undefined : {
-        width: `min(${SETTINGS_OVERLAY_MAX_WIDTH}px, calc(100vw - ${2 * SETTINGS_OVERLAY_GUTTER_X}px))`,
-        height: `min(${SETTINGS_OVERLAY_MAX_HEIGHT}px, calc(100vh - ${2 * SETTINGS_OVERLAY_GUTTER_Y}px))`,
-        maxHeight: "none",
-      }}
-      panelRef={panelRef}
-      testId={isPhone ? undefined : "settings-overlay"}
-      // D-136 walks the doors by name, and the ✕ the owner asked for is this
-      // one — «крестик справа сверху». The column's had the same id, so the
-      // spec's desktop door list keeps working and gains the dim beside it.
-      closeTestId={isPhone ? undefined : "settings-close"}
-      footer={
-        <>
-          {isPhone && <KubButton variant="ghost" onClick={leave}>Закрыть</KubButton>}
-          <KubButton
-            onClick={() => void screen.save()}
-            disabled={screen.saving}
-            loading={screen.saving}
-            variant={screen.saved ? "secondary" : "primary"}
-            size={isPhone ? undefined : "sm"}
-            leftIcon={!screen.saving ? <KubIcon name="check" size={13} /> : undefined}
-          >
-            {screen.saved ? "Сохранено" : "Сохранить"}
-          </KubButton>
-        </>
-      }
-    >
+  const actions = (
+    <div data-testid="settings-actions" className="flex items-center justify-end gap-2">
+      {isPhone && <KubButton variant="ghost" onClick={leave}>Закрыть</KubButton>}
+      <KubButton
+        onClick={() => void screen.save()}
+        disabled={screen.saving}
+        loading={screen.saving}
+        variant={screen.saved ? "secondary" : "primary"}
+        size={isPhone ? undefined : "sm"}
+        leftIcon={!screen.saving ? <KubIcon name="check" size={13} /> : undefined}
+      >
+        {screen.saved ? "Сохранено" : "Сохранить"}
+      </KubButton>
+    </div>
+  );
+
+  const content = (
       <div className="flex h-full min-h-0 w-full">
         {showRail && (
           <nav
@@ -281,6 +270,64 @@ export function SettingsOverlay({ screen, isPhone }: { screen: SettingsScreen; i
           </div>
         </div>
       </div>
+  );
+
+  if (isPhone && profileTab) {
+    return (
+      <section
+        data-testid="settings-profile-tab"
+        aria-label="Настройки"
+        className="absolute inset-0 z-10 flex min-h-0 flex-col bg-[var(--kub-bg)] pt-window-top"
+      >
+        <header className="flex shrink-0 items-center justify-between border-b border-[color:var(--kub-border-color)] px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <KubIcon name="settings" size={16} className="text-[color:var(--kub-cyan)]" />
+            <h2 className="truncate text-base font-semibold text-[color:var(--kub-text)]">Настройки</h2>
+          </div>
+          <button
+            type="button"
+            onClick={leave}
+            aria-label="Закрыть"
+            className="kub-icon-action kub-interactive flex-shrink-0 rounded-lg p-1.5 text-[color:var(--kub-muted)] kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+          >
+            <KubIcon name="close" size={16} />
+          </button>
+        </header>
+        <div className="min-h-0 flex-1">{content}</div>
+        <div className="shrink-0 border-t border-[color:var(--kub-border-color)] px-4 py-3">
+          {actions}
+        </div>
+        <div className="relative h-[calc(var(--kub-bottom-nav)+var(--kub-bottom-nav-gap)*2)] shrink-0">
+          <BottomNav onSelect={onProfileTabSelect} />
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <KubModal
+      open
+      onClose={leave}
+      title="Настройки"
+      icon={<KubIcon name="settings" size={16} />}
+      size="xl"
+      mobileSheet={isPhone}
+      scrollBody={false}
+      contentClassName="p-0"
+      className={isPhone ? undefined : "sm:max-w-none"}
+      // Built from the constants rather than beside them, so moving one moves
+      // the rendered box and `settings-overlay.spec.ts` sees it.
+      style={isPhone ? undefined : {
+        width: `min(${SETTINGS_OVERLAY_MAX_WIDTH}px, calc(100vw - ${2 * SETTINGS_OVERLAY_GUTTER_X}px))`,
+        height: `min(${SETTINGS_OVERLAY_MAX_HEIGHT}px, calc(100vh - ${2 * SETTINGS_OVERLAY_GUTTER_Y}px))`,
+        maxHeight: "none",
+      }}
+      panelRef={panelRef}
+      testId={isPhone ? undefined : "settings-overlay"}
+      closeTestId={isPhone ? undefined : "settings-close"}
+      footer={actions}
+    >
+      {content}
     </KubModal>
   );
 }

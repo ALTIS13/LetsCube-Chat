@@ -47,6 +47,15 @@ final class MediaExportSource {
     URI uri() { return uri; }
     String fileName() { return fileName; }
     String mimeType() { return mimeType; }
+    boolean isImage() { return mimeType.startsWith("image/"); }
+    String galleryFolder() { return isImage() ? "Pictures/LETSCUBE" : "Movies/LETSCUBE"; }
+
+    boolean acceptsContentType(String header) {
+        if (header == null || header.isEmpty()) return true;
+        String type = header.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
+        return "application/octet-stream".equals(type)
+            || (isImage() ? type.startsWith("image/") : type.startsWith("video/"));
+    }
 
     private static String mimeTypeFor(String extension) {
         switch (extension) {

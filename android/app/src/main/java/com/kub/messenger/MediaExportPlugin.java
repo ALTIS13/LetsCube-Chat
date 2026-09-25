@@ -3,6 +3,7 @@ package com.kub.messenger;
 import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.DocumentsContract;
 import androidx.activity.result.ActivityResult;
 import com.getcapacitor.JSObject;
@@ -31,6 +32,15 @@ public class MediaExportPlugin extends Plugin {
             source = MediaExportSource.parse(call.getString("url"), call.getString("fileName"));
         } catch (IllegalArgumentException error) {
             call.reject("This media file cannot be saved", "MEDIA_SOURCE");
+            return;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                transfers.execute(() -> transferToGallery(call, source));
+            } catch (RejectedExecutionException error) {
+                call.reject("Could not save the media file", "MEDIA_TRANSFER");
+            }
             return;
         }
 
@@ -67,29 +77,63 @@ public class MediaExportPlugin extends Plugin {
     }
 
     private void transfer(PluginCall call, MediaExportSource source, Uri destination) {
-        HttpsURLConnection connection = null;
         boolean saved = false;
         try {
-            connection = (HttpsURLConnection) new URL(source.uri().toString()).openConnection();
-            connection.setInstanceFollowRedirects(false);
-            connection.setConnectTimeout(15_000);
-            connection.setReadTimeout(30_000);
-            if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) throw new IOException("Media unavailable");
-            try (InputStream input = connection.getInputStream();
-                 OutputStream output = getContext().getContentResolver().openOutputStream(destination, "wt")) {
-                if (output == null) throw new IOException("Document unavailable");
-                byte[] buffer = new byte[64 * 1024];
-                int count;
-                while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
-                output.flush();
-            }
+            copySource(source, destination);
             saved = true;
             call.resolve(new JSObject().put("saved", true));
         } catch (Exception error) {
             call.reject("Could not save the media file", "MEDIA_TRANSFER");
         } finally {
-            if (connection != null) connection.disconnect();
             if (!saved) deleteIncompleteDocument(destination);
+        }
+    }
+
+    private void transferToGallery(PluginCall call, MediaExportSource source) {
+        HttpsURLConnection connection = null;
+        try {
+            connection = openSource(source);
+            try (InputStream input = connection.getInputStream()) {
+                MediaExportGallery.save(getContext().getContentResolver(), source, input);
+            }
+            call.resolve(new JSObject().put("saved", true).put("location", source.galleryFolder()));
+        } catch (Exception error) {
+            call.reject("Could not save the media file", "MEDIA_TRANSFER");
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private void copySource(MediaExportSource source, Uri destination) throws IOException {
+        HttpsURLConnection connection = openSource(source);
+        try {
+            try (InputStream input = connection.getInputStream();
+                 OutputStream output = getContext().getContentResolver().openOutputStream(destination, "wt")) {
+                if (output == null) throw new IOException("Destination unavailable");
+                byte[] buffer = new byte[64 * 1024];
+                int count;
+                while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+                output.flush();
+            }
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    private HttpsURLConnection openSource(MediaExportSource source) throws IOException {
+        HttpsURLConnection connection = (HttpsURLConnection) new URL(source.uri().toString()).openConnection();
+        connection.setInstanceFollowRedirects(false);
+        connection.setConnectTimeout(15_000);
+        connection.setReadTimeout(30_000);
+        try {
+            if (connection.getResponseCode() != HttpURLConnection.HTTP_OK
+                || !source.acceptsContentType(connection.getContentType())) {
+                throw new IOException("Media unavailable");
+            }
+            return connection;
+        } catch (IOException error) {
+            connection.disconnect();
+            throw error;
         }
     }
 

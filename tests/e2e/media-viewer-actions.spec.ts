@@ -212,6 +212,7 @@ interface OpenOptions {
   storage?: Record<string, string>;
   /** Simulates an older Android app with no MediaExport bridge. */
   androidShell?: boolean;
+  largePhotoWithoutPreview?: boolean;
   /**
    * Stamps the metadata a re-encoded upload carries, so the viewer draws the
    * originality badge. Without it `mediaOriginality` answers «unknown» and the
@@ -243,6 +244,10 @@ async function openConversation(page: Page, options: OpenOptions = {}) {
   }
 
   const seed = rows();
+  if (options.largePhotoWithoutPreview) {
+    const photo = seed.messages[0] as { media_metadata: Record<string, unknown> };
+    photo.media_metadata = { ...photo.media_metadata, size_bytes: 8_000_000 };
+  }
   if (options.compressed) {
     for (const row of seed.messages) {
       const media = row as { media_metadata: Record<string, unknown> };
@@ -285,6 +290,76 @@ async function openViewer(page: Page, caption: string, control: string) {
 
 const openPhoto = (page: Page) => openViewer(page, PHOTO_CAPTION, "Открыть фото");
 const openVideo = (page: Page) => openViewer(page, VIDEO_CAPTION, "Открыть видео в просмотрщике");
+
+test("a known large photo without a preview waits for a tap before fetching its original", async ({ page }, info) => {
+  await requireFixtureServer(page.request);
+  let originalRequests = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === PHOTO_URL) originalRequests += 1;
+  });
+  await openConversation(page, { largePhotoWithoutPreview: true });
+  const bubble = page.locator('[data-message-bubble="true"]', { hasText: PHOTO_CAPTION });
+  const load = bubble.getByRole("button", { name: "Загрузить фото" });
+  await expect(load).toBeVisible();
+  expect(originalRequests).toBe(0);
+  await page.screenshot({ path: shotPath(info, "large-photo-deferred-light") });
+  await stampTheme(page, "dark");
+  await page.screenshot({ path: shotPath(info, "large-photo-deferred-dark") });
+  await load.click();
+  await expect(page.getByRole("dialog", { name: PHOTO_CAPTION })).toBeVisible();
+  await expect.poll(() => originalRequests).toBeGreaterThan(0);
+});
+
+test("a failed photo can be retried inside the viewer", async ({ page }, info) => {
+  await requireFixtureServer(page.request);
+  await openConversation(page, { largePhotoWithoutPreview: true });
+  let attempts = 0;
+  await page.route(`**${PHOTO_URL}`, (route) => {
+    attempts += 1;
+    if (attempts === 1) return route.fulfill({ status: 503, body: "Temporary failure" });
+    return route.fulfill({ status: 200, contentType: "image/svg+xml", body: TEST_CARD });
+  });
+
+  const bubble = page.locator('[data-message-bubble="true"]', { hasText: PHOTO_CAPTION });
+  await bubble.getByRole("button", { name: "Загрузить фото" }).click();
+  const viewer = page.getByRole("dialog", { name: PHOTO_CAPTION });
+  await expect(viewer.getByText("Не удалось загрузить изображение.")).toBeVisible();
+  const retry = viewer.getByRole("button", { name: "Повторить загрузку" });
+  const next = viewer.getByTestId("media-viewer-next");
+  if ((page.viewportSize()?.width ?? 0) < 640) {
+    const retryBox = await retry.boundingBox();
+    const nextBox = await next.boundingBox();
+    expect(retryBox).not.toBeNull();
+    expect(nextBox).not.toBeNull();
+    expect(nextBox!.y + nextBox!.height).toBeLessThan(retryBox!.y);
+  }
+  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: shotPath(info, "media-retry-light") });
+  await stampTheme(page, "dark");
+  await page.screenshot({ path: shotPath(info, "media-retry-dark") });
+  await retry.click();
+  await expect(viewer.getByRole("img", { name: PHOTO_CAPTION })).toBeVisible();
+  expect(attempts).toBe(2);
+});
+
+test("a photo can be saved from its phone message menu", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) >= 640, "Phone action card only");
+  await requireFixtureServer(page.request);
+  await openConversation(page);
+  const bubble = page.locator('[data-message-bubble="true"]', { hasText: PHOTO_CAPTION });
+  const caption = bubble.getByText(PHOTO_CAPTION, { exact: true });
+  const box = await caption.boundingBox();
+  expect(box).not.toBeNull();
+  await page.touchscreen.tap(Math.round(box!.x + box!.width / 2), Math.round(box!.y + box!.height / 2));
+  const menu = page.locator("[data-action-menu]");
+  await expect(menu).toBeVisible();
+  await expect(menu.locator('[data-message-action="saveAs"]')).toHaveText(/Скачать файл/);
+  await menu.locator('[data-message-action="saveAs"]').click();
+  await expect.poll(async () => (await fileHandling(page)).saved.length).toBeGreaterThan(0);
+  expect((await fileHandling(page)).opened).toEqual([]);
+});
 
 test("the viewer keeps the file in the app instead of opening its address (D-147)", async ({ page }, info) => {
   await requireFixtureServer(page.request);

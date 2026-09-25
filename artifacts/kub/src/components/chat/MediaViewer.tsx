@@ -97,6 +97,7 @@ interface MediaViewerProps {
 export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   // Lifted out of the picture so the frame can hide the arrows and stop
   // answering swipes while it is zoomed: zoomed, a drag is a pan and
   // `claimsDrag` stops it propagating, and an arrow sitting over the edge of a
@@ -108,6 +109,7 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
 
   useEffect(() => {
     setLoadError(false);
+    setLoadAttempt(0);
   }, [media?.url]);
 
   /**
@@ -259,8 +261,14 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
       if (nativeExportAvailable) {
         setExporting(true);
         void saveNativeMedia(media.url, mediaFileName(media.url, media.type))
-          .then((saved) => {
-            if (saved) showActionFeedback({ kind: "success", title: "Файл сохранён", key: "media-viewer-file" });
+          .then((result) => {
+            if (!result.saved) return;
+            const title = result.location === "Pictures/LETSCUBE"
+              ? "Фото сохранено в галерею LETSCUBE"
+              : result.location === "Movies/LETSCUBE"
+                ? "Видео сохранено в галерею LETSCUBE"
+                : "Файл сохранён";
+            showActionFeedback({ kind: "success", title, key: "media-viewer-file" });
           })
           .catch(() => {
             showActionFeedback({ kind: "error", title: "Не удалось сохранить файл", key: "media-viewer-file" });
@@ -473,7 +481,10 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
               data-testid="media-viewer-prev"
               onClick={() => step(-1)}
               aria-label="Предыдущее"
-              className="absolute left-1 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white/85 transition-colors hover:bg-black/70 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:left-3"
+              className={cn(
+                "absolute left-1 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-black/50 text-white/85 transition-colors hover:bg-black/70 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:left-3",
+                loadError ? "top-20 sm:top-1/2 sm:-translate-y-1/2" : "top-1/2 -translate-y-1/2",
+              )}
             >
               <KubIcon name="chevronLeft" size={22} />
             </button>
@@ -484,7 +495,10 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
               data-testid="media-viewer-next"
               onClick={() => step(1)}
               aria-label="Следующее"
-              className="absolute right-1 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white/85 transition-colors hover:bg-black/70 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:right-3"
+              className={cn(
+                "absolute right-1 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-black/50 text-white/85 transition-colors hover:bg-black/70 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:right-3",
+                loadError ? "top-20 sm:top-1/2 sm:-translate-y-1/2" : "top-1/2 -translate-y-1/2",
+              )}
             >
               <KubIcon name="chevronRight" size={22} />
             </button>
@@ -497,9 +511,20 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
               </div>
               <button
                 type="button"
+                onClick={() => {
+                  setLoadAttempt((attempt) => attempt + 1);
+                  setLoadError(false);
+                }}
+                className="mt-2 inline-flex items-center gap-2 rounded-lg bg-white/15 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-white/25"
+              >
+                <KubIcon name="rotate" size={16} />
+                Повторить загрузку
+              </button>
+              <button
+                type="button"
                 data-testid="media-viewer-file-action-fallback"
                 onClick={handleFile}
-                className="mt-2 inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-sm text-white/85 transition-colors hover:bg-white/10 hover:text-white"
+                className="ml-2 mt-2 inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-sm text-white/85 transition-colors hover:bg-white/10 hover:text-white"
               >
                 <KubIcon name={effectiveFileAction.icon} size={16} />
                 {effectiveFileAction.label}
@@ -509,7 +534,7 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
             // Keyed by the address, so another photo — or the same one opened
             // again after closing — always starts at rest. Closing unmounts it.
             <ZoomableImage
-              key={media.url}
+              key={`${media.url}:${loadAttempt}`}
               url={media.url}
               previewUrl={media.previewUrl}
               title={title}
@@ -518,6 +543,7 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
             />
           ) : (
             <video
+              key={`${media.url}:${loadAttempt}`}
               ref={videoRef}
               src={media.url}
               controls

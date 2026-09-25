@@ -121,6 +121,10 @@ test("the phone card: a list, then a row of icons", () => {
     "edit",
     "delete",
   ]);
+  for (const kind of ["photo", "video"] as const) {
+    assert.ok(phoneMessageActions(context({ kind })).list.includes("saveAs"), `${kind}: no save action on phone`);
+  }
+  assert.ok(!phoneMessageActions(context({ kind: "text" })).list.includes("saveAs"));
   // Someone else's message: no «Изменить».
   assert.deepEqual(phoneMessageActions(context({ own: false })).row, ["reply", "copy", "delete"]);
 });
