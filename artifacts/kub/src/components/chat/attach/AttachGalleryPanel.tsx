@@ -17,6 +17,7 @@ interface AttachGalleryPanelProps {
   picks: AttachPick[];
   selected: string[];
   onToggle: (id: string) => void;
+  onMove: (id: string, direction: -1 | 1) => void;
   /**
    * Room kept under the grid for what floats over it, in pixels, measured from
    * the floating stack itself. A fixed class was right while only the send
@@ -45,7 +46,7 @@ interface AttachGalleryPanelProps {
  * white glass rim vanished on the near-white sheet and the veil alone left the
  * cells within a few values of it.
  */
-export function AttachGalleryPanel({ entries, picks, selected, onToggle, reserveBottom }: AttachGalleryPanelProps) {
+export function AttachGalleryPanel({ entries, picks, selected, onToggle, onMove, reserveBottom }: AttachGalleryPanelProps) {
   const arrangement = attachGalleryArrangement(picks.length);
 
   if (arrangement === "tiles") {
@@ -100,38 +101,61 @@ export function AttachGalleryPanel({ entries, picks, selected, onToggle, reserve
         const number = selectionNumber(selected, pick.id);
         const noun = pick.kind === "video" ? "Видео" : "Фото";
         return (
-          <button
+          <div
             key={pick.id}
-            type="button"
-            role="checkbox"
-            aria-checked={number !== null}
-            aria-label={`${noun} ${index + 1}${number === null ? "" : `, номер ${number} в порядке отправки`}`}
             data-attach-pick={pick.kind}
-            onClick={() => onToggle(pick.id)}
-            className={cn(
-              "kub-interactive relative aspect-square overflow-hidden rounded-2xl bg-[var(--kub-inset)]",
-              FOCUS_RING,
-            )}
+            className="relative aspect-square overflow-hidden rounded-2xl bg-[var(--kub-inset)]"
           >
-            {pick.kind === "image" && pick.url ? (
-              <img src={pick.url} alt="" draggable={false} className="h-full w-full object-cover" />
-            ) : pick.kind === "video" && pick.url ? (
-              <video src={pick.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
-            ) : (
-              <span className="flex h-full w-full items-center justify-center text-[color:var(--kub-muted)]">
-                <KubIcon name="file" size={28} />
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={number !== null}
+              aria-label={`${noun} ${index + 1}${number === null ? "" : `, номер ${number} в порядке отправки`}`}
+              onClick={() => onToggle(pick.id)}
+              className={cn("kub-interactive absolute inset-0 h-full w-full", FOCUS_RING)}
+            >
+              {pick.kind === "image" && pick.url ? (
+                <img src={pick.url} alt="" draggable={false} className="h-full w-full object-cover" />
+              ) : pick.kind === "video" && pick.url ? (
+                <video src={pick.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center text-[color:var(--kub-muted)]">
+                  <KubIcon name="file" size={28} />
+                </span>
+              )}
+              {pick.kind === "video" && (
+                <span className="absolute bottom-1.5 left-1.5 flex h-6 items-center gap-1 rounded-full bg-black/55 px-2 text-[11px] font-semibold text-white">
+                  <KubIcon name="video" size={12} />
+                  Видео
+                </span>
+              )}
+              <span className="absolute right-1.5 top-1.5">
+                <AttachSelectionCircle number={number} over="photo" />
               </span>
+            </button>
+            {number !== null && selected.length > 1 && (
+              <div className="absolute left-1 top-1 z-10 flex gap-0.5 rounded-full bg-black/70 p-0.5 text-white">
+                <button
+                  type="button"
+                  aria-label={`Переместить ${noun.toLowerCase()} ${index + 1} раньше`}
+                  disabled={number === 1}
+                  onClick={() => onMove(pick.id, -1)}
+                  className={cn("flex size-6 items-center justify-center rounded-full disabled:opacity-35", FOCUS_RING)}
+                >
+                  <KubIcon name="chevronLeft" size={14} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Переместить ${noun.toLowerCase()} ${index + 1} позже`}
+                  disabled={number === selected.length}
+                  onClick={() => onMove(pick.id, 1)}
+                  className={cn("flex size-6 items-center justify-center rounded-full disabled:opacity-35", FOCUS_RING)}
+                >
+                  <KubIcon name="chevronRight" size={14} />
+                </button>
+              </div>
             )}
-            {pick.kind === "video" && (
-              <span className="absolute bottom-1.5 left-1.5 flex h-6 items-center gap-1 rounded-full bg-black/55 px-2 text-[11px] font-semibold text-white">
-                <KubIcon name="video" size={12} />
-                Видео
-              </span>
-            )}
-            <span className="absolute right-1.5 top-1.5">
-              <AttachSelectionCircle number={number} over="photo" />
-            </span>
-          </button>
+          </div>
         );
       })}
     </div>

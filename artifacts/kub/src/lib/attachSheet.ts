@@ -241,6 +241,16 @@ export function selectedInOrder<T extends { id: string }>(items: readonly T[], s
   return selected.map((id) => byId.get(id)).filter((item): item is T => Boolean(item));
 }
 
+/** Move one selected item in send order; the gallery's pick order stays unchanged. */
+export function moveSelected(selected: readonly string[], id: string, direction: -1 | 1): string[] {
+  const index = selected.indexOf(id);
+  const nextIndex = index + direction;
+  if (index < 0 || nextIndex < 0 || nextIndex >= selected.length) return [...selected];
+  const next = [...selected];
+  [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+  return next;
+}
+
 // ── sending ──────────────────────────────────────────────────────────────────
 
 export type AttachSendMode = "compressed" | "original";

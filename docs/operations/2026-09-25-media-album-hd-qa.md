@@ -13,6 +13,9 @@ viewport fix belongs to the separate iOS/MacOS task.
   defensively partitions longer queues into groups of 10, and a document or an
   existing failed-album retry separates fresh visual runs without discarding
   their grouping. This does not raise the sheet's user-visible limit.
+- Selected gallery items can be moved earlier or later before sending. Number
+  badges and the transmitted album order update together; the gallery's source
+  order is unchanged.
 - Adjacent visible items from the same sender, chat and album render as one
   responsive mosaic. A deleted, failed, hidden or missing item cannot pull in
   unrelated messages. An out-of-order retry returns to its pick position.
@@ -51,11 +54,17 @@ viewport fix belongs to the separate iOS/MacOS task.
   failing, then passed on desktop Chromium, mobile Chromium and mobile WebKit.
   Signed-only fallback and existing signed-only album checks passed on desktop
   Chromium and mobile WebKit. Client typecheck and production build passed.
+- 2026-09-26: selection-order unit tests passed (18/18). The full attachment
+  sheet matrix passed (68/68) on desktop Chromium 1440, mobile Chromium 360/390
+  and mobile WebKit 390. Its new test checks both numbered tiles and the bytes
+  uploaded in album order. Dark/light desktop/mobile fixture screenshots were
+  inspected. Workspace typecheck and client production build passed. This is
+  fixture/browser evidence, not native or production acceptance.
 
 ## Remaining
 
-- Inserts remain individual. One notification per album, atomic group insertion,
-  a pre-send mosaic preview and pick-order editing need separate backend/UX work.
+- Inserts remain individual. One notification per album, atomic group insertion
+  and a pre-send mosaic preview need separate backend/UX work.
 - Android 0.1.11/build 12 embeds an older web bundle. This web deploy does not
   update the installed APK; the next signed cut needs separate owner instruction,
   real Android gallery/album QA and artifact verification.

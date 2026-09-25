@@ -153,6 +153,36 @@ test.describe("the attach sheet (D-122)", () => {
     expect((await attachProbe(page)).media).toBe(0);
   });
 
+  test("selected photos can be reordered before their album is sent", async ({ page }) => {
+    const backend = await installBackend(page);
+    await openChat(page);
+    await page.getByRole("button", { name: "Прикрепить", exact: true }).click();
+    const sheet = page.getByTestId("attach-sheet");
+    await pick(page, '[data-attach-entry="library"]', [
+      await smallPhoto("red.png", 0),
+      await smallPhoto("green.png", 120),
+      await smallPhoto("blue.png", 240),
+    ]);
+    const moveBlue = sheet.getByRole("button", { name: "Переместить фото 3 раньше" });
+    await moveBlue.click();
+    await moveBlue.click();
+    await expect(sheet.getByRole("checkbox", { name: "Фото 3, номер 1 в порядке отправки" })).toBeVisible();
+    await expect(sheet.getByRole("checkbox", { name: "Фото 1, номер 2 в порядке отправки" })).toBeVisible();
+    await expect(sheet.getByRole("checkbox", { name: "Фото 2, номер 3 в порядке отправки" })).toBeVisible();
+    await expect(moveBlue).toBeDisabled();
+
+    await sheet.getByTestId("attach-send").click();
+    await expect.poll(() => backend.inserts.length).toBe(3);
+    expect(backend.inserts.map((row) => (row.media_metadata as Record<string, unknown>).album_index)).toEqual([0, 1, 2]);
+    const dominantChannels = await Promise.all(backend.inserts.map(async (row) => {
+      const uploaded = backend.uploads.find((item) => item.path === row.media_path);
+      expect(uploaded, "an album row has no matching uploaded photo").toBeDefined();
+      const pixel = await sharp(uploaded!.bytes).resize(1, 1).removeAlpha().raw().toBuffer();
+      return pixel.indexOf(Math.max(pixel[0], pixel[1], pixel[2]));
+    }));
+    expect(dominantChannels).toEqual([2, 0, 1]);
+  });
+
   test("«Отправить без сжатия» under «…» sends the picked bytes", async ({ page }) => {
     const backend = await installBackend(page);
     await openChat(page);

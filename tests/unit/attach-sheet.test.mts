@@ -15,6 +15,7 @@ import {
   formatAccuracy,
   formatCoordinates,
   locationMessageText,
+  moveSelected,
   nextTabIndex,
   offersSendWithoutCompression,
   opensAttachSheet,
@@ -152,6 +153,17 @@ test("a selection is numbered in the order it was made, and closes up when one l
 
   const items = [{ id: "a" }, { id: "b" }, { id: "c" }];
   assert.deepEqual(selectedInOrder(items, ["c", "missing", "a"]).map((item) => item.id), ["c", "a"]);
+});
+
+test("selected media moves one position without losing items or crossing an edge", () => {
+  const selected = ["first", "second", "third"];
+  assert.deepEqual(moveSelected(selected, "third", -1), ["first", "third", "second"]);
+  assert.deepEqual(moveSelected(selected, "first", 1), ["second", "first", "third"]);
+  assert.deepEqual(moveSelected(selected, "first", -1), selected);
+  assert.deepEqual(moveSelected(selected, "third", 1), selected);
+  assert.deepEqual(moveSelected(selected, "missing", -1), selected);
+  assert.deepEqual(selected, ["first", "second", "third"], "the stored order was mutated");
+  assert.deepEqual(selectedInOrder(selected.map((id) => ({ id })), moveSelected(selected, "third", -1)).map((item) => item.id), ["first", "third", "second"]);
 });
 
 test("the sheet selects no more than the composer can send at once", () => {

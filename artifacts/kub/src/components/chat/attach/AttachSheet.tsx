@@ -19,6 +19,7 @@ import {
   attachTab,
   attachTabSelection,
   fittedSheetHeight,
+  moveSelected,
   offersHdPhotos,
   offersSendWithoutCompression,
   planAttachSend,
@@ -610,6 +611,7 @@ export default function AttachSheet({
               picks={gallery}
               selected={gallerySelected}
               onToggle={(id) => setGallerySelected((current) => toggleSelection(current, id))}
+              onMove={(id, direction) => setGallerySelected((current) => moveSelected(current, id, direction))}
               reserveBottom={selecting ? floatingHeight + 24 : 0}
             />
           )}
