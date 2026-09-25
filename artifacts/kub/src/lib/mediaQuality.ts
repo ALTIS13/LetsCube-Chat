@@ -169,15 +169,16 @@ export const PHOTO_SEND_SD: MediaQuality = "compact";
 export const PHOTO_SEND_HD: MediaQuality = "original";
 
 /**
- * What a photo goes at when nobody says otherwise — the owner's instruction of
- * 2026-09-13, «по стоку загрузку в sd качестве».
+ * What a photo goes at when nobody says otherwise. The 2026-09-25 request
+ * changes the earlier SD default to HD for new devices. An existing explicit
+ * SD preference is still respected by the attach sheet.
  *
  * Deliberately not `DEFAULT_MEDIA_QUALITY`: that constant is also what the
  * camera recorder reads for its bitrates (`getVideoRecordingProfile`), so
  * moving it to answer a question about photographs would quietly re-tune video
  * recording as well.
  */
-export const DEFAULT_PHOTO_SEND_QUALITY: MediaQuality = PHOTO_SEND_SD;
+export const DEFAULT_PHOTO_SEND_QUALITY: MediaQuality = PHOTO_SEND_HD;
 
 /** The sheet's two-state control, as a value rather than a boolean at the call site. */
 export function photoSendQuality(hd: boolean): MediaQuality {
@@ -291,16 +292,14 @@ export const PHOTO_RESOLUTION_HD = "hd";
 export const PHOTO_RESOLUTION_SD = "sd";
 
 /**
- * What a stored value means, with everything else meaning SD.
+ * What a stored value means. A missing value is a new device and starts in HD;
+ * a stored SD value remains SD after the default changes.
  *
- * Only the exact HD spelling turns it on: `null` from a first run, `""` from a
- * cleared entry, a half-written value, and any spelling a later version might
- * add all fall to the default rather than to a guess. The default is the one
- * the owner set — «по стоку загрузку в sd качестве» — so an unreadable store
- * costs somebody data, not the other way round.
+ * Unreadable stored values stay conservative (SD) rather than silently
+ * spending more data. Only a truly absent key takes the new HD default.
  */
 export function readStoredPhotoResolution(raw: string | null | undefined): boolean {
-  return raw === PHOTO_RESOLUTION_HD;
+  return raw == null || raw === PHOTO_RESOLUTION_HD;
 }
 
 /** What goes into storage when the badge is pressed. */

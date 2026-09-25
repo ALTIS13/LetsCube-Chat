@@ -120,11 +120,13 @@ test.describe("the send path of photos and videos", () => {
     await openChat(page);
 
     await pickPhotosOrVideos(page, [fakeVideo("clip.mp4"), await testPhoto("facade.png", 30)]);
+    await page.getByTestId("attach-caption").fill(CAPTION);
     await sendPicked(page, 2);
 
     // Before, the loop returned at the refusal and the photo stayed «Готово к отправке».
     await expect.poll(() => backend.inserts.length).toBe(1);
     expect(uploadOf(backend, backend.inserts[0])?.name).toMatch(/^facade-image[.]/);
+    expect(backend.inserts[0]?.content, "the first delivered item carries the caption").toBe(CAPTION);
 
     const tile = page.getByTestId("staged-attachment-item").filter({ hasText: "clip.mp4" });
     await expect(tile).toHaveCount(1);
@@ -144,6 +146,39 @@ test.describe("the send path of photos and videos", () => {
     await tile.getByRole("button", { name: "Повторить отправку" }).click();
     await expect.poll(() => backend.inserts.length).toBe(2);
     expect(uploadOf(backend, backend.inserts[1])?.name).toBe("clip.mp4");
+    expect(backend.inserts[1]?.content, "retry must not send the delivered caption again").not.toBe(CAPTION);
+    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
+  });
+
+  test("a failed album photo keeps its group on retry without repeating the caption", async ({ page }) => {
+    const backend = await installBackend(page);
+    let refuseFirst = true;
+    backend.answer = (upload) => refuseFirst && upload.name.startsWith("first")
+      ? { status: 503, body: STORAGE_UNREACHABLE }
+      : null;
+    await openChat(page);
+
+    await pickPhotosOrVideos(page, [await testPhoto("first.png", 30), await testPhoto("second.png", 130)]);
+    await page.getByTestId("attach-caption").fill(CAPTION);
+    await sendPicked(page, 2);
+    await expect.poll(() => backend.inserts.length).toBe(1);
+    const second = backend.inserts[0];
+    expect(second?.content).toBe(CAPTION);
+    expect(second?.media_metadata).toMatchObject({ album_index: 1, album_count: 2 });
+
+    refuseFirst = false;
+    await page.getByTestId("staged-attachment-item")
+      .filter({ hasText: "first-image" })
+      .getByRole("button", { name: "Повторить отправку" })
+      .click();
+    await expect.poll(() => backend.inserts.length).toBe(2);
+    const retried = backend.inserts[1];
+    expect(retried?.content).not.toBe(CAPTION);
+    expect(retried?.media_metadata).toMatchObject({
+      album_id: (second?.media_metadata as Record<string, unknown>).album_id,
+      album_index: 0,
+      album_count: 2,
+    });
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
   });
 
@@ -294,6 +329,13 @@ test.describe("the send path of photos and videos", () => {
 
     // Before, each confirmed message awaited this update, so the first held the second.
     await expect.poll(() => backend.inserts.length).toBe(2);
+    const [first, second] = backend.inserts;
+    const firstAlbum = first.media_metadata as Record<string, unknown>;
+    const secondAlbum = second.media_metadata as Record<string, unknown>;
+    expect(firstAlbum.album_id, "the selection did not carry a shared album id").toEqual(expect.any(String));
+    expect(secondAlbum.album_id).toBe(firstAlbum.album_id);
+    expect([firstAlbum.album_index, secondAlbum.album_index]).toEqual([0, 1]);
+    expect([firstAlbum.album_count, secondAlbum.album_count]).toEqual([2, 2]);
     await expect.poll(() => backend.chatUpdates, "the update is still sent").toBeGreaterThanOrEqual(1);
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
     await backend.release();
@@ -316,24 +358,13 @@ test.describe("the send path of photos and videos", () => {
     const stored = backend.stored.get(upload.path);
     expect(stored, "storage kept the upload").toBeTruthy();
     const picture = await sharp(stored?.bytes).metadata();
-    /*
-      1440x1080 out of a 1600x1200 pick, and the two shipped decisions that make
-      it so. D-174 moved the default photo send to SD on 2026-09-13, which is
-      `compact` — a 1280 px long side — and D-116's floor keeps at least 1080 px
-      of the short side where the source had it. For 4:3 the floor is the larger
-      of the two, so the scale is 1080/1200 rather than 1280/1600.
-
-      This read 1600x1200 until D-206: at the old `balanced` default the 1920 cap
-      never bound and the photo went up untouched. Nothing about the case changed
-      — it is here for the name, the type and the format of the fallback encode —
-      but the size is the one number in it that a quality decision can move, so
-      it is stated with its arithmetic rather than left to be recalibrated.
-    */
-    expect({ format: picture.format, width: picture.width, height: picture.height }).toEqual({ format: "jpeg", width: 1440, height: 1080 });
+    // HD is the new-device default: a 1600x1200 pick stays within its 2560px
+    // cap. The fallback must still re-encode it as JPEG, not mislabel PNG bytes.
+    expect({ format: picture.format, width: picture.width, height: picture.height }).toEqual({ format: "jpeg", width: 1600, height: 1200 });
     expect(backend.inserts[0]).toMatchObject({
       type: "image",
       media_path: upload.path,
-      media_metadata: { mime_type: "image/jpeg", optimized: true, uncompressed: false, width: 1440, height: 1080, original_mime_type: "image/png" },
+      media_metadata: { mime_type: "image/jpeg", optimized: true, uncompressed: false, width: 1600, height: 1200, original_mime_type: "image/png" },
     });
   });
 
@@ -387,7 +418,7 @@ test.describe("the send path of photos and videos", () => {
     });
   });
 
-  test("a tall screenshot keeps 1080 px across instead of coming out 886 wide", async ({ page }) => {
+  test("a tall screenshot keeps at least 1080 px across in the default HD mode", async ({ page }) => {
     const backend = await installBackend(page);
     await openChat(page);
 
@@ -397,11 +428,11 @@ test.describe("the send path of photos and videos", () => {
 
     const [upload] = backend.uploads;
     const picture = await sharp(backend.stored.get(upload.path)?.bytes).metadata();
-    expect({ width: picture.width, height: picture.height }, "1290x2796 used to come out 886x1920").toEqual({ width: 1080, height: 2341 });
-    expect(backend.inserts[0]).toMatchObject({ media_metadata: { optimized: true, uncompressed: false, width: 1080, height: 2341 } });
+    expect({ width: picture.width, height: picture.height }, "1290x2796 used to come out 886x1920").toEqual({ width: 1181, height: 2560 });
+    expect(backend.inserts[0]).toMatchObject({ media_metadata: { optimized: true, uncompressed: false, width: 1181, height: 2560 } });
   });
 
-  test("where the canvas cannot write WebP, a tall screenshot goes as a 1080x2341 JPEG", async ({ page }) => {
+  test("where the canvas cannot write WebP, a tall screenshot goes as a 1181x2560 JPEG", async ({ page }) => {
     await answerWebpWithPng(page);
     const backend = await installBackend(page);
     await openChat(page);
@@ -414,8 +445,8 @@ test.describe("the send path of photos and videos", () => {
     const [upload] = backend.uploads;
     expect({ name: upload.name, type: upload.type }).toEqual({ name: "screenshot-image.jpg", type: "image/jpeg" });
     const picture = await sharp(backend.stored.get(upload.path)?.bytes).metadata();
-    expect({ format: picture.format, width: picture.width, height: picture.height }).toEqual({ format: "jpeg", width: 1080, height: 2341 });
-    expect(backend.inserts[0]).toMatchObject({ media_metadata: { mime_type: "image/jpeg", width: 1080, height: 2341 } });
+    expect({ format: picture.format, width: picture.width, height: picture.height }).toEqual({ format: "jpeg", width: 1181, height: 2560 });
+    expect(backend.inserts[0]).toMatchObject({ media_metadata: { mime_type: "image/jpeg", width: 1181, height: 2560 } });
   });
 
   test("a HEIC this engine cannot decode goes as it was picked", async ({ page }) => {
@@ -524,7 +555,7 @@ function uploadOf(backend: Backend, insert: Record<string, unknown> | undefined)
 
 async function conversationPhotoPaths(page: Page): Promise<string[]> {
   const sources = await page
-    .locator('[data-message-bubble="true"] button[aria-label="Открыть фото"] img')
+    .locator('[data-message-bubble="true"] button[aria-label^="Открыть фото"] img')
     .evaluateAll((images) => images.map((image) => image.getAttribute("src") ?? ""));
   return sources.filter((source) => source.startsWith(PUBLIC_MEDIA)).map((source) => decodeURIComponent(source.slice(PUBLIC_MEDIA.length)));
 }

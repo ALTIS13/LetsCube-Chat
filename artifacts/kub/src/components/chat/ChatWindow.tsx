@@ -127,6 +127,7 @@ import {
 } from "@/lib/stagedUploadWorkflow";
 import { describeUploadFailure, uploadFailureFeedback, uploadFailureMessage } from "@/lib/uploadFailure";
 import { ATTACHMENT_UPLOAD_CONCURRENCY, captionCarrierId, nextClientSentAt, runOrderedSend } from "@/lib/attachmentSendQueue";
+import { prepareMediaAlbumTargets } from "@/lib/mediaAlbumSend";
 import type { Json, MessageWithSender } from "@/types/database";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
 
@@ -772,8 +773,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   ): Promise<StagedAttachment[]> => {
     if (!files.length) return [];
     const compress = options.compress !== false;
-    // What a photograph is re-encoded at (D-174). Absent means SD, which is
-    // what a send that never mentioned quality asked for. Deliberately not
+    // What a photograph is re-encoded at (D-174). A new device starts at HD;
+    // an explicit stored SD choice still wins. Deliberately not
     // DEFAULT_MEDIA_QUALITY: that constant is the camera recorder bitrates,
     // and answering a question about photographs with it would re-tune video
     // recording as a side effect.
@@ -1061,10 +1062,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
     const scopeToken = uploadScope.capture();
     const captionText = caption.trim();
-    const targets = selectStagedAttachmentsForSend(
+    const targets = prepareMediaAlbumTargets(selectStagedAttachmentsForSend(
       explicitTargets ?? stagedAttachmentsRef.current,
       onlyAttachmentId,
-    );
+    ));
     if (!targets.length) return false;
 
     // D-286: from here the caption belongs to the attachment, not to this
@@ -1076,6 +1077,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       updateStagedAttachment(attachment.id, (current) => ({
         ...current,
         caption: attachment.id === captionCarrier ? captionText : null,
+        albumId: attachment.albumId,
+        albumIndex: attachment.albumIndex,
+        albumCount: attachment.albumCount,
       }));
     }
 
@@ -1169,7 +1173,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         // order even when two inserts start within one millisecond.
         const clientSentAt = nextClientSentAt(previousSentAt, Date.now());
         previousSentAt = clientSentAt;
-        const content = getStagedAttachmentMessageContent(attachment, sentAny || !captionText ? null : captionText);
+        const captionSentWithAttachment = Boolean(captionText) && !sentAny;
+        const content = getStagedAttachmentMessageContent(attachment, captionSentWithAttachment ? captionText : null);
         const sendResult = await runScopedStagedSendAttempt(
           uploadScope,
           scopeToken,
@@ -1200,6 +1205,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           return false;
         }
 
+        if (captionSentWithAttachment) {
+          for (const target of targets) {
+            updateStagedAttachment(target.id, (current) => ({ ...current, caption: null }));
+          }
+        }
         sentAny = true;
         removeStagedAttachment(attachment.id);
         return true;

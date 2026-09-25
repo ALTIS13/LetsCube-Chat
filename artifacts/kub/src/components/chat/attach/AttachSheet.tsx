@@ -707,7 +707,8 @@ function readPhotoResolution(): string | null {
     if (typeof localStorage === "undefined") return null;
     return localStorage.getItem(PHOTO_RESOLUTION_STORAGE_KEY);
   } catch {
-    return null;
+    // A blocked store is not a new device. Keep the conservative SD fallback.
+    return "";
   }
 }
 

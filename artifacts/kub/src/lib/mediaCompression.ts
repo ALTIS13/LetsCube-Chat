@@ -320,6 +320,9 @@ export interface MediaMetadataSource {
   previewFile?: { size: number; type?: string } | null;
   previewWidth?: number;
   previewHeight?: number;
+  albumId?: string;
+  albumIndex?: number;
+  albumCount?: number;
 }
 
 /**
@@ -366,6 +369,18 @@ export function buildAttachmentMediaMetadata(
     height: attachment.height ?? null,
   };
   if (!visual) return metadata;
+
+  const { albumId, albumIndex, albumCount } = attachment;
+  if (
+    typeof albumId === "string" &&
+    /^[A-Za-z0-9][A-Za-z0-9-]{6,78}[A-Za-z0-9]$/.test(albumId) &&
+    typeof albumCount === "number" && Number.isInteger(albumCount) && albumCount >= 2 && albumCount <= 10 &&
+    typeof albumIndex === "number" && Number.isInteger(albumIndex) && albumIndex >= 0 && albumIndex < albumCount
+  ) {
+    metadata.album_id = albumId;
+    metadata.album_index = albumIndex;
+    metadata.album_count = albumCount;
+  }
 
   const quality = attachment.kind === "video" && uncompressed ? "original" : attachment.mediaQuality;
   if (quality !== undefined) metadata[MEDIA_QUALITY_METADATA_KEY] = quality;

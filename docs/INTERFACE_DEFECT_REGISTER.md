@@ -6681,7 +6681,7 @@ encoder, the HEIC conversion's memory on large photos and the JPEG sizes need a 
 name, so what an iPhone hands the page is still unconfirmed from a device. The production measurement found no
 HEIC picked in 30 days.
 
-## D-115 `[ ]` Photos sent together arrive as separate messages, not as one album
+## D-115 `[~]` Photos sent together arrive as separate messages, not as one album
 
 **Severity:** medium. The same report; not yet reproduced.
 
@@ -6694,6 +6694,17 @@ sharing a group id, sent in one call, with one notification. The scoping — a n
 RPC inserting the group in a transaction, a grid, actions on one item or the whole album — is phased at 8–12
 days, with renders for the owner before it is built. Its first phase, the send path, is in progress with D-113
 and D-114.
+
+**2026-09-25 continuation:** the current web change set links up to ten visual
+attachments with an `album_id` and renders adjacent items as one mosaic while
+keeping each message ID, reply, reaction, selection and viewer target. A failed
+item remains retryable; after retry, adjacent items use their original pick
+order. Synthetic Chromium/WebKit fixtures cover send, partial failure,
+optimistic-to-ACK layout, previews and signed URLs. This is not yet a complete
+Telegram album: inserts are still individual, the server may notify once per
+item, and the attachment sheet does not rearrange the selection or preview the
+assembled mosaic before sending. Web deployment and an Android bundle release
+must be recorded separately before calling this shipped on either platform.
 
 ## D-116 `[ ]` A received photo is a WebP that the tester cannot zoom, and it looks poor
 
@@ -10722,6 +10733,11 @@ settled it.
 **Not done here, and not pretended to be:** the video half of the owner instruction, which is D-175. A video is
 not re-encoded on the way out at all, so a ladder of 480p to 4K with a size beside each has nothing to attach to
 yet.
+
+**2026-09-25 owner revision:** a new device now starts the photo control in HD.
+An explicit SD choice stored on that device is retained, and storage failure
+still falls back conservatively to SD. The HD mode remains a re-encode, not
+the untouched-file path; the video ladder keeps its separate default.
 
 ---
 

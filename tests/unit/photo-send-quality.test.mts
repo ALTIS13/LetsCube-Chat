@@ -1,6 +1,7 @@
 // What a photo is sent at, and the two things this must never quietly change.
 //
-// D-174: the owner asked on 2026-09-13 for SD by default with HD available.
+// D-174: SD was the 2026-09-13 default; on 2026-09-25 the owner asked for HD
+// on new devices, while keeping a person's explicit SD preference.
 // D-119 had removed a three-stop selector and a five-stop slider that asked on
 // every send; these tests pin the difference rather than the similarity.
 //
@@ -30,8 +31,8 @@ import {
 
 const source = (path: string) => readFileSync(new URL(`../../artifacts/kub/src/${path}`, import.meta.url), "utf8");
 
-test("a photo goes at SD unless the sheet says otherwise", () => {
-  assert.equal(DEFAULT_PHOTO_SEND_QUALITY, PHOTO_SEND_SD);
+test("a new device sends photos in HD while an explicit SD choice remains available", () => {
+  assert.equal(DEFAULT_PHOTO_SEND_QUALITY, PHOTO_SEND_HD);
   assert.equal(photoSendQuality(false), PHOTO_SEND_SD);
   assert.equal(photoSendQuality(true), PHOTO_SEND_HD);
   assert.equal(isHdPhotoQuality(PHOTO_SEND_HD), true);
@@ -106,13 +107,15 @@ test("the control lives on the sheet, and the composer is left alone", () => {
 
 // ── the state is remembered, per device (2026-09-21) ─────────────────────────
 
-test("only the exact HD spelling turns it on; everything unreadable is SD", () => {
+test("a missing preference starts in HD, but an explicit SD choice remains SD", () => {
   assert.equal(readStoredPhotoResolution(PHOTO_RESOLUTION_HD), true);
   assert.equal(readStoredPhotoResolution(PHOTO_RESOLUTION_SD), false);
+  assert.equal(readStoredPhotoResolution(null), true);
+  assert.equal(readStoredPhotoResolution(undefined), true);
   // The shapes a store really comes back in. Each of these is a state a device
   // is actually in: never written, cleared, half-written, written by a version
   // that spelled it differently, or written by one that added a third value.
-  for (const raw of [null, undefined, "", " ", "HD", "Hd", "hd ", "true", "1", "original", "compact", "ultra"]) {
+  for (const raw of ["", " ", "HD", "Hd", "hd ", "true", "1", "original", "compact", "ultra"]) {
     assert.equal(
       readStoredPhotoResolution(raw),
       false,

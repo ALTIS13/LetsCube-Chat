@@ -105,7 +105,7 @@ export function AttachGalleryPanel({ entries, picks, selected, onToggle, reserve
             type="button"
             role="checkbox"
             aria-checked={number !== null}
-            aria-label={`${noun} ${index + 1}`}
+            aria-label={`${noun} ${index + 1}${number === null ? "" : `, номер ${number} в порядке отправки`}`}
             data-attach-pick={pick.kind}
             onClick={() => onToggle(pick.id)}
             className={cn(

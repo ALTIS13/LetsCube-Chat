@@ -1,0 +1,51 @@
+# Media albums and photo resolution, 2026-09-25
+
+Owner: shared web/Windows/Android stream. Stage: web candidate, before production
+deploy. The iPhone PWA viewport fix belongs to the separate iOS/MacOS task.
+
+## Changed
+
+- A single selection of 2-10 photos/videos carries a stable album ID, index and
+  count in each visual message's existing `media_metadata`. No database schema or
+  storage policy changed. Individual message IDs, replies, reactions, read
+  states and retry paths remain addressable.
+- Adjacent visible items from the same sender, chat and album render as one
+  responsive mosaic. A deleted, failed, hidden or missing item cannot pull in
+  unrelated messages. An out-of-order retry returns to its pick position.
+- A new device starts photo sends in HD. A stored SD preference is retained;
+  blocked/unreadable preference storage falls back to SD. HD re-encodes the photo;
+  sending the untouched original remains a separate explicit action. Video
+  resolution settings are unchanged.
+- Shared-media and link lists now fail closed if the per-user hidden-message
+  lookup fails, and expose a retry without advancing pagination.
+
+## Evidence
+
+- Focused unit tests: 30 passed for album grouping/metadata, send quality and
+  compression boundaries.
+- Chromium desktop 1440, Chromium mobile 390 and WebKit mobile 390 fixture
+  matrix: 116 passed, 6 signed-only scenarios skipped on the ordinary fixture
+  server, and one WebKit reload fixture failed because its service worker
+  bypassed mocked routes. After blocking the service worker for that mocked
+  suite, all 16 WebKit attach-sheet cases passed. The 6 signed-only scenarios
+  passed separately with signed media mode enabled.
+- Whole-workspace typecheck and build passed after supplying `PORT` and
+  `BASE_PATH`, which the unrelated mockup-sandbox build configuration requires.
+  Initial build without them stopped there; it did not report a messenger error.
+- Synthetic screenshots inspected for mobile/desktop dark/light mosaics. These
+  fixtures do not establish physical-device or authenticated production behavior.
+
+## Remaining
+
+- Inserts remain individual. One notification per album, atomic group insertion,
+  a pre-send mosaic preview and pick-order editing need separate backend/UX work.
+- Android 0.1.11/build 12 embeds an older web bundle. This web deploy does not
+  update the installed APK; the next signed cut needs separate owner instruction,
+  real Android gallery/album QA and artifact verification.
+- Private media cache/download policy and authenticated physical save/open tests
+  remain open. The built web index chunk is still about 3.3 MB before gzip, so
+  startup/load profiling and code splitting are still worthwhile.
+- The two iPhone screenshots were handed to the separate iOS/MacOS task: bottom
+  composer clipping/black gap without a keyboard, and status bar overlap plus
+  clipped composer with the keyboard. Its source fix is separate; physical iPhone
+  acceptance is not established here.

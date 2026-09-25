@@ -860,6 +860,10 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
       return 0;
     }
     setLoadingMedia(true);
+    if (reset) {
+      setMedia([]);
+      setMediaHasMore(false);
+    }
     const start = reset ? 0 : mediaCursorRef.current;
     const { data: membership } = await supabase
       .from("chat_members")
@@ -899,20 +903,25 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
       setLoadingMedia(false);
       return 0;
     }
-    setMediaFailed(false);
     let received = 0;
     if (data) {
       const rawPage = data as Message[];
       received = rawPage.length;
-      mediaCursorRef.current = start + received;
       const hiddenIds = await fetchHiddenMessageIdSet(supabase, rawPage.map((item) => item.id));
+      if (hiddenIds === null) {
+        setMediaFailed(true);
+        setLoadingMedia(false);
+        return 0;
+      }
       const page = rawPage.filter((item) => !hiddenIds.has(item.id));
+      mediaCursorRef.current = start + received;
       setMedia((current) => {
         const next = reset ? page : [...current, ...page];
         return Array.from(new Map(next.map((item) => [item.id, item])).values());
       });
       setMediaHasMore(received >= MEDIA_PAGE_SIZE);
     }
+    setMediaFailed(false);
     setLoadingMedia(false);
     return received;
   }, [chat.id, currentUserId, supabase]);
@@ -930,6 +939,10 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
       return 0;
     }
     setLoadingLinks(true);
+    if (reset) {
+      setLinks([]);
+      setLinksHasMore(false);
+    }
     const start = reset ? 0 : linkCursorRef.current;
     const { data: membership } = await supabase
       .from("chat_members")
@@ -967,16 +980,21 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
       setLoadingLinks(false);
       return 0;
     }
-    setLinksFailed(false);
     const rows = data as Message[];
-    linkCursorRef.current = start + rows.length;
     const hiddenIds = await fetchHiddenMessageIdSet(supabase, rows.map((item) => item.id));
+    if (hiddenIds === null) {
+      setLinksFailed(true);
+      setLoadingLinks(false);
+      return 0;
+    }
     const visible = rows.filter((item) => !hiddenIds.has(item.id) && extractFirstLink(item.content));
+    linkCursorRef.current = start + rows.length;
     setLinks((current) => {
       const next = reset ? visible : [...current, ...visible];
       return Array.from(new Map(next.map((item) => [item.id, item])).values());
     });
     setLinksHasMore(rows.length >= LINK_PAGE_SIZE);
+    setLinksFailed(false);
     setLoadingLinks(false);
     return rows.length;
   }, [chat.id, currentUserId, supabase]);
@@ -2020,6 +2038,13 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
     void loadMedia(media.length === 0, mediaScope);
   }, [activeSection, links.length, loadLinks, loadMedia, loadMediaCounts, media.length, mediaScope]);
 
+  const retryFailedMediaLookups = useCallback(() => {
+    setAutoLoadStalled(false);
+    if (mediaFailed) void loadMedia(media.length === 0, mediaScope);
+    if (linksFailed) void loadLinks(links.length === 0);
+    void loadMediaCounts();
+  }, [links.length, linksFailed, loadLinks, loadMedia, loadMediaCounts, media.length, mediaFailed, mediaScope]);
+
   /**
    * The month the reader is in, shown while the grid moves and faded when it
    * stops (D-171, mechanic 2).
@@ -2537,6 +2562,28 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
                   <KubStableSkeleton width="17px" height="17px" rounded="sm" />
                   <KubStableSkeleton width="9rem" height="0.875rem" />
                 </div>
+              </div>
+            )}
+            {(mediaFailed || linksFailed) && !loadingMedia && !loadingLinks && (
+              <div
+                className="px-4 py-3 mt-2 border-t border-[color:var(--kub-rule)]"
+                role="alert"
+              >
+                <div className="text-sm text-[color:var(--kub-danger-text)]">
+                  {mediaFailed && linksFailed
+                    ? "Не удалось загрузить медиа и ссылки."
+                    : mediaFailed
+                      ? "Не удалось загрузить медиа."
+                      : "Не удалось загрузить ссылки."}
+                </div>
+                <button
+                  type="button"
+                  data-testid="chat-info-media-lookup-retry"
+                  onClick={retryFailedMediaLookups}
+                  className="mt-2 inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-accent-text)] kub-raise-hover"
+                >
+                  {SHARED_MEDIA_PAGE_FAILED_ACTION}
+                </button>
               </div>
             )}
             <div className="px-4 py-3 mt-2 border-t border-[color:var(--kub-rule)]">
@@ -3635,18 +3682,23 @@ function getMediaTileKind(message: Message): "image" | "gif" | "video" {
 async function fetchHiddenMessageIdSet(
   supabase: ReturnType<typeof createClient>,
   messageIds: string[],
-): Promise<Set<string>> {
+): Promise<Set<string> | null> {
   const ids = Array.from(new Set(messageIds.filter(Boolean)));
   if (!ids.length) return new Set();
-  const { data, error } = await supabase
-    .from("message_hidden_for_users")
-    .select("message_id")
-    .in("message_id", ids);
-  if (error) {
+  try {
+    const { data, error } = await supabase
+      .from("message_hidden_for_users")
+      .select("message_id")
+      .in("message_id", ids);
+    if (error || !data) {
+      console.error("Hidden media ids fetch error:", error);
+      return null;
+    }
+    return new Set(data.map((row) => row.message_id));
+  } catch (error) {
     console.error("Hidden media ids fetch error:", error);
-    return new Set();
+    return null;
   }
-  return new Set((data ?? []).map((row) => row.message_id));
 }
 
 /**

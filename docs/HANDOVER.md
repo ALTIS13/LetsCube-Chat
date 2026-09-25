@@ -38,7 +38,7 @@ Three shells over one web application:
 | --- | --- | --- |
 | web | `artifacts/kub`, React/Vite, served at **https://app.letscube.ru** | deploys on every push to `main` |
 | Windows | Tauri EXE; loads `app.letscube.ru` at runtime, bundles only its splash | `0.2.14` build 18, 2026-09-06 |
-| Android | Capacitor APK; **embeds** its web bundle | `0.1.9` build 10, 2026-09-24, cut from `fdbb6d72` |
+| Android | Capacitor APK; **embeds** its web bundle | `0.1.11` build 12, 2026-09-25; verify the live catalog before a new cut |
 
 So the Windows shell always shows the current web; **the Android APK shows the web
 as of its cut**, and will lag subsequent web deploys. A tester on Android is describing that
@@ -130,6 +130,17 @@ whole deployment** — no bot has registered a command yet.
 ---
 
 ## 4. Where to start
+
+**Current shared-web checkpoint, 2026-09-25 (Codex):** photo HD is the default
+on a new device; an explicit SD choice remains. A 2-10 visual selection now
+carries album metadata and renders as a grouped mosaic with independent message
+actions. The hidden-message gate in shared media/links now fails closed. Focused
+fixture and build checks passed; production deployment and authenticated device
+acceptance are separate. The iPhone PWA viewport bugs were passed to its owner.
+Next: confirm the web deploy, then address album-level notifications/pre-send
+preview, private media cache and physical Android QA. Do not cut an Android APK
+without separate owner instruction.
+[QA and remaining limits](operations/2026-09-25-media-album-hd-qa.md).
 
 **Current checkpoint, 2026-09-25 (Codex):** Android 0.1.11/build 12 is signed
 and published in Stable with gallery save, deferred large-photo originals and

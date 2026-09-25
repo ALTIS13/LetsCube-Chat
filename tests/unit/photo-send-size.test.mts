@@ -1,6 +1,6 @@
 /**
- * What an SD send actually comes out at — the two decisions composed, which
- * nothing composed before.
+ * What an explicit SD send actually comes out at — the two decisions composed,
+ * which nothing composed before. HD became the new-device default 2026-09-25.
  *
  * `photo-send-quality.test.mts` pins D-174: SD is `compact`, a 1280 px long
  * side. `photo-encoding.test.mts` pins D-116: a compressed photo keeps at least
@@ -26,19 +26,19 @@ import test from "node:test";
 
 import { PHOTO_MIN_SHORT_SIDE, compressedPhotoSize } from "../../artifacts/kub/src/lib/photoEncoding.ts";
 import {
-  DEFAULT_PHOTO_SEND_QUALITY,
   PHOTO_SEND_HD,
+  PHOTO_SEND_SD,
   getImageUploadProfile,
 } from "../../artifacts/kub/src/lib/mediaQuality.ts";
 
-const sdCap = getImageUploadProfile(DEFAULT_PHOTO_SEND_QUALITY).maxDimension;
+const sdCap = getImageUploadProfile(PHOTO_SEND_SD).maxDimension;
 const hdCap = getImageUploadProfile(PHOTO_SEND_HD).maxDimension;
 const at = (cap: number, width: number, height: number) => {
   const size = compressedPhotoSize(width, height, cap);
   return [size.width, size.height];
 };
 
-test("a photograph sent at the default never meets SD's 1280: the 1080 floor decides first", () => {
+test("a photograph explicitly sent at SD never meets its 1280 cap: the 1080 floor decides first", () => {
   // 4:3, the shape `media-send-path.spec.ts` sends. Telegram's SD, which D-174
   // took its two numbers from, would make this 1280x960.
   assert.deepEqual(at(sdCap, 1600, 1200), [1440, 1080]);

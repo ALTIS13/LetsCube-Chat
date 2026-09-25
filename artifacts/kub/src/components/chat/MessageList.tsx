@@ -3,6 +3,7 @@
 import React, { RefObject, useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import { KubIcon, KubModal } from "@/components/kub";
 import { MessageBubble, getVisibleMediaCaption, isRoundVideoMessage } from "./MessageBubble";
+import { MessageAlbumTile } from "./MessageAlbumTile";
 import type { BotCommandsInText } from "@/lib/formatText";
 import { MessageActionLayer, type MessageMenuRequest } from "./MessageActionLayer";
 import { MessageActionsContext, type MessageActionsContextValue, type ReactionPerson } from "./messageActionsContext";
@@ -27,6 +28,8 @@ import {
 import { sameData } from "@/lib/structuralSharing";
 import type { ChatRole } from "@/lib/chatRoles";
 import { visibleConversation } from "@/lib/deletedMessages";
+import { groupVisibleMediaAlbums } from "@/lib/mediaAlbum";
+import { messageAuthorProfileTarget } from "@/lib/messageAuthorProfile";
 import { groupReadInfoWithTimes, readMarksSignature, type ReadTimesLoader } from "@/lib/messageReadTimes";
 import { useMessageReadTimes } from "@/hooks/useMessageReadTimes";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
@@ -368,6 +371,10 @@ export function MessageList({
     () => [...visibleConversation(messages, chatType)].sort(compareMessagesForRender),
     [chatType, messages],
   );
+  const sortedIndexById = React.useMemo(
+    () => new Map(sortedMessages.map((message, index) => [message.id, index])),
+    [sortedMessages],
+  );
 
   const messagesMap = React.useMemo(() => {
     const map: Record<string, MessageWithSender> = {};
@@ -472,6 +479,14 @@ export function MessageList({
     });
     return first?.id ?? null;
   }, [initialUnreadCount, initialUnreadSince, sortedMessages, userId]);
+  const albumGroups = React.useMemo(() => {
+    const breaks = new Set<string>();
+    if (firstUnreadMessageId) breaks.add(firstUnreadMessageId);
+    sortedMessages.forEach((message, index) => {
+      if (index > 0 && shouldShowDateSeparator(sortedMessages[index - 1], message)) breaks.add(message.id);
+    });
+    return groupVisibleMediaAlbums(sortedMessages, breaks);
+  }, [firstUnreadMessageId, sortedMessages]);
 
   const readReceiptsMessage = React.useMemo(
     () => readReceiptsMessageId ? sortedMessages.find((message) => message.id === readReceiptsMessageId) ?? null : null,
@@ -1342,6 +1357,48 @@ export function MessageList({
   const resolvedBottomInset = Math.max(0, bottomInset);
   const resolvedTopInset = Math.max(0, topInset);
 
+  const renderMessageRow = (msg: MessageWithSender, idx: number, albumCompact: boolean | null = null) => {
+    const prev = idx > 0 ? sortedMessages[idx - 1] : null;
+    const next = idx < sortedMessages.length - 1 ? sortedMessages[idx + 1] : null;
+    const showDate = shouldShowDateSeparator(prev, msg);
+    const actor = resolveMessageActor(msg);
+    const actorKey = messageActorGroupingKey(msg);
+    const isMe = actor.kind === "user" && actor.id === userId;
+    const isSameSenderAsPrev = !showDate && prev !== null && messageActorGroupingKey(prev) === actorKey;
+    const isSameSenderAsNext = next !== null && messageActorGroupingKey(next) === actorKey &&
+      !shouldShowDateSeparator(msg, next);
+
+    return (
+      <MessageRow
+        key={messageEntranceKey(msg)}
+        msg={msg}
+        userId={userId}
+        isMe={isMe}
+        isFirstInGroup={!isSameSenderAsPrev}
+        isLastInGroup={!isSameSenderAsNext}
+        dateLabel={albumCompact === null && showDate ? getMessageDayLabel(msg.created_at) : null}
+        isFirstUnread={albumCompact === null && msg.id === firstUnreadMessageId}
+        highlighted={highlightedId === msg.id}
+        isEntering={enteringKeys.has(messageEntranceKey(msg))}
+        selectionMode={selectionMode}
+        selected={selectionMode && selectedIds.has(msg.id)}
+        focused={menu?.shape === "phone" && menu.messageId === msg.id}
+        lift={menu?.shape === "phone" && menu.messageId === msg.id ? menuLift : 0}
+        replyTarget={msg.reply_to_id ? messagesMap[msg.reply_to_id] : undefined}
+        mediaVariant={messageMediaVariants[msg.id]}
+        senderAvatarVariant={msg.sender?.id ? senderAvatarVariants[msg.sender.id] : undefined}
+        authorChatRole={msg.user_id ? authorChatRoles?.get(msg.user_id) : undefined}
+        botCommands={botCommands}
+        deliveryState={receiptsByMessageId.delivery.get(msg.id) ?? null}
+        groupReadInfo={receiptsByMessageId.groupRead.get(msg.id) ?? null}
+        messageRefs={messageRefs}
+        capabilities={rowCapabilities}
+        actions={rowActions}
+        albumCompact={albumCompact}
+      />
+    );
+  };
+
   return (
     <MessageActionsContext.Provider value={actionsContext}>
     <div
@@ -1422,69 +1479,69 @@ export function MessageList({
             </div>
           )}
 
-          {sortedMessages.map((msg, idx) => {
-          const prev = idx > 0 ? sortedMessages[idx - 1] : null;
-          const next = idx < sortedMessages.length - 1 ? sortedMessages[idx + 1] : null;
-          const showDate = shouldShowDateSeparator(prev, msg);
-          const actor = resolveMessageActor(msg);
-          const actorKey = messageActorGroupingKey(msg);
-          const isMe = actor.kind === "user" && actor.id === userId;
-          const isSameSenderAsPrev = !showDate && prev !== null && messageActorGroupingKey(prev) === actorKey;
-          const isSameSenderAsNext = next !== null && messageActorGroupingKey(next) === actorKey &&
-            !shouldShowDateSeparator(msg, next);
-
-          return (
-            <MessageRow
-              // Keyed by what survives the optimistic swap, not by the row id.
-              //
-              // A message you send is rendered twice under two ids: first as
-              // `tmp:<client id>`, then as the server row. With the id as the
-              // key those are two different DOM nodes, so the whole row is torn
-              // down and mounted again — and the second mount re-runs the
-              // bubble's meta measurement from its initial guess. That guess is
-              // `inline`; the answer for an own message is `anchored`, one row
-              // taller. Measured on the real chat with a witness row sampled
-              // every animation frame, that replay moved the entire
-              // conversation +15px and then -15px, a quarter of a second after
-              // the message had already settled — a twitch with nothing behind
-              // it, because nothing about the message had changed.
-              //
-              // `messageEntranceKey` is `client_message_id` when there is one,
-              // which is the single value both sides of the swap share, and the
-              // id otherwise. The store dedupes by the same value, so two rows
-              // can never hold one key.
-              key={messageEntranceKey(msg)}
-              msg={msg}
-              userId={userId}
-              isMe={isMe}
-              isFirstInGroup={!isSameSenderAsPrev}
-              isLastInGroup={!isSameSenderAsNext}
-              // The label rather than a flag. "Сегодня" turns into "Вчера" at
-              // midnight with nothing about the message changing, and a memoised
-              // row only renders again when one of its props does.
-              dateLabel={showDate ? getMessageDayLabel(msg.created_at) : null}
-              isFirstUnread={msg.id === firstUnreadMessageId}
-              highlighted={highlightedId === msg.id}
-              isEntering={enteringKeys.has(messageEntranceKey(msg))}
-              selectionMode={selectionMode}
-              selected={selectionMode && selectedIds.has(msg.id)}
-              focused={menu?.shape === "phone" && menu.messageId === msg.id}
-              lift={menu?.shape === "phone" && menu.messageId === msg.id ? menuLift : 0}
-              replyTarget={msg.reply_to_id ? messagesMap[msg.reply_to_id] : undefined}
-              mediaVariant={messageMediaVariants[msg.id]}
-              senderAvatarVariant={msg.sender?.id ? senderAvatarVariants[msg.sender.id] : undefined}
-              // The same shape as the avatar variant above, and for the same
-              // reason: the row is memoised, so what it is handed has to be the
-              // stored object and not one built here per render.
-              authorChatRole={msg.user_id ? authorChatRoles?.get(msg.user_id) : undefined}
-              botCommands={botCommands}
-              deliveryState={receiptsByMessageId.delivery.get(msg.id) ?? null}
-              groupReadInfo={receiptsByMessageId.groupRead.get(msg.id) ?? null}
-              messageRefs={messageRefs}
-              capabilities={rowCapabilities}
-              actions={rowActions}
-            />
-          );
+          {albumGroups.map((group) => {
+            const first = sortedMessages[group.startIndex];
+            if (group.kind === "single") return renderMessageRow(first, group.startIndex);
+            const prev = group.startIndex > 0 ? sortedMessages[group.startIndex - 1] : null;
+            const showDate = shouldShowDateSeparator(prev, first);
+            const actor = resolveMessageActor(first);
+            const isMe = actor.kind === "user" && actor.id === userId;
+            const compact = group.messages.length >= 5;
+            return (
+              <div key={messageEntranceKey(first)} data-message-album={group.albumId} className="my-1 min-w-0">
+                {showDate && (
+                  <div className="my-3 flex justify-center" data-message-date-separator={getMessageDayKey(first.created_at)}>
+                    <span className="rounded-full bg-[var(--kub-chat-chip)] px-3 py-1 text-xs font-semibold text-[color:var(--kub-chat-chip-text)]">
+                      {getMessageDayLabel(first.created_at)}
+                    </span>
+                  </div>
+                )}
+                {first.id === firstUnreadMessageId && (
+                  <div className="unread-separator my-3 flex items-center justify-center" data-testid="first-unread-separator">
+                    <span className="rounded-full border border-[color-mix(in_srgb,var(--kub-pink)_35%,var(--kub-border-color))] bg-[var(--kub-chat-chip)] px-3 py-1 text-[12px] font-semibold uppercase text-[color:var(--kub-pink-text)]">
+                      Новые сообщения
+                    </span>
+                  </div>
+                )}
+                <div className={cn("flex min-w-0", isMe ? "justify-end" : "justify-start")}>
+                  <div className={cn("min-w-0 w-[min(86vw,32rem)] max-w-full", !isMe && "ml-10")}>
+                    {!isMe && (
+                      <button
+                        type="button"
+                        aria-label={`Профиль: ${messageActorDisplayName(actor)}`}
+                        className="mb-1 block max-w-full truncate px-1 text-left text-xs font-semibold text-[color:var(--kub-accent-text)] hover:underline focus-visible:outline-2 focus-visible:outline-[color:var(--kub-cyan)]"
+                        onClick={(event) => {
+                          const target = messageAuthorProfileTarget(actor);
+                          if (target.kind === "none") return;
+                          const box = event.currentTarget.getBoundingClientRect();
+                          const albumBox = event.currentTarget.closest("[data-message-album]")?.getBoundingClientRect() ?? box;
+                          const anchor = { top: box.top, bottom: box.bottom, left: box.left, right: box.right };
+                          const row = { top: albumBox.top, bottom: albumBox.bottom, left: albumBox.left, right: albumBox.right };
+                          const store = useAppStore.getState();
+                          if (target.kind === "person") store.openUserProfile(target.userId, "glance", first.chat_id, anchor, row);
+                          else store.openBotProfile(target.botId, target.bot, "glance", first.chat_id, anchor, row);
+                        }}
+                      >
+                        {messageActorDisplayName(actor)}
+                      </button>
+                    )}
+                    <div
+                      className={cn("grid gap-1", compact ? "grid-cols-3" : "grid-cols-2")}
+                      style={{ gridAutoRows: compact ? "clamp(96px, 24vw, 156px)" : "clamp(132px, 36vw, 196px)" }}
+                    >
+                      {group.messages.map((message, offset) => (
+                        <div
+                          key={messageEntranceKey(message)}
+                          className={cn("min-w-0", group.messages.length === 3 && offset === 0 && "row-span-2")}
+                        >
+                          {renderMessageRow(message, sortedIndexById.get(message.id) ?? group.startIndex + offset, compact)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
           })}
 
           {/* Typing indicator */}
@@ -1660,6 +1717,8 @@ interface MessageRowProps {
   messageRefs: React.MutableRefObject<Record<string, HTMLDivElement>> | undefined;
   capabilities: MessageRowCapabilities;
   actions: MessageRowActions;
+  /** Null is the original bubble; albums keep this row's gestures and identity. */
+  albumCompact: boolean | null;
 }
 
 /** A local send offers no reaction. One function, so it compares equal. */
@@ -1750,6 +1809,7 @@ const MessageRow = React.memo(function MessageRow({
   messageRefs,
   capabilities,
   actions,
+  albumCompact,
 }: MessageRowProps) {
   const isSystemMessage = msg.type === "system";
   const canSelect = !msg.deleted_at && !isSystemMessage;
@@ -1986,9 +2046,11 @@ const MessageRow = React.memo(function MessageRow({
   return (
     <div
       data-message-id={msg.id}
+      data-message-album-item={albumCompact !== null ? "true" : undefined}
       data-message-focused={focused ? "true" : undefined}
       ref={(el) => { if (el && messageRefs) messageRefs.current[msg.id] = el; }}
       className={cn(
+        albumCompact !== null && "h-full",
         highlighted &&
           "transition-colors duration-500 rounded-lg bg-[rgb(var(--kub-cyan-rgb)/0.18)]"
       )}
@@ -2040,7 +2102,7 @@ const MessageRow = React.memo(function MessageRow({
         <div
           data-message-row="true"
           data-message-selected={selected ? "true" : undefined}
-          className="relative [-webkit-touch-callout:none] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+          className={cn("relative [-webkit-touch-callout:none] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]", albumCompact !== null && "h-full")}
           style={{ touchAction: "pan-y" }}
           role={selectable ? "checkbox" : undefined}
           aria-checked={selectable ? selected : undefined}
@@ -2068,6 +2130,7 @@ const MessageRow = React.memo(function MessageRow({
           <div
             className={cn(
               "relative flex w-full min-w-0 items-center overflow-hidden",
+              albumCompact !== null && "h-full",
               isMe ? "justify-end" : "justify-start",
               selectable && "cursor-pointer",
             )}
@@ -2081,7 +2144,22 @@ const MessageRow = React.memo(function MessageRow({
               if (swipe.settling && swipe.dx === 0) setSwipe({ dx: 0, dragging: false, settling: false });
             }}
           >
-            <MemoizedMessageBubble
+            {albumCompact !== null ? (
+              <MessageAlbumTile
+                message={msg}
+                mediaVariant={mediaVariant}
+                userId={userId}
+                isSelectionMode={selectionMode}
+                compact={albumCompact}
+                replyTarget={replyTarget}
+                deliveryState={deliveryState}
+                groupReadInfo={groupReadInfo}
+                onOpenMedia={actions.openMedia}
+                onJumpToReply={actions.jumpToReply}
+                onReaction={actions.reaction}
+                onOpenGroupReadReceipts={actions.openGroupReadReceipts}
+              />
+            ) : <MemoizedMessageBubble
               message={msg}
               isEntering={isEntering}
               isMe={isMe}
@@ -2102,7 +2180,7 @@ const MessageRow = React.memo(function MessageRow({
               deliveryState={deliveryState}
               groupReadInfo={groupReadInfo}
               onOpenGroupReadReceipts={handlers.onOpenGroupReadReceipts}
-            />
+            />}
           </div>
           {/*
             The arrow the gesture reveals, on the side the row is leaving. It

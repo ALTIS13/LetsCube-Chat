@@ -45,6 +45,10 @@ export interface StagedAttachment {
   error: string | null;
   clientMessageId: string;
   uploaded: StagedAttachmentUpload | null;
+  /** Stable across a failed item's retry; each item is still its own message. */
+  albumId?: string;
+  albumIndex?: number;
+  albumCount?: number;
   /**
    * The caption this attachment is to be sent with, kept so that a retry has
    * it (D-286). Only the attachment that carries the caption holds one; see

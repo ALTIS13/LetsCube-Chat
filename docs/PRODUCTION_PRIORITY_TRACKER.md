@@ -2,6 +2,16 @@
 
 Status: active production-hardening tracker, updated 2026-09-25.
 
+**2026-09-25 shared-web candidate:** 2-10 picked visual items now carry one
+album ID and render as a responsive mosaic without losing per-item actions;
+new-device photo default is HD, with explicit SD retained. Shared-media/link
+listing fails closed when hidden-ID lookup fails. Fixture tests and workspace
+build passed. Web deployment is pending; Android 0.1.11/build 12 remains on its
+embedded older bundle. Next product slices: one notification per album, atomic
+group insertion, pre-send mosaic/reorder, private cache/download, and physical
+Android QA. The two iPhone viewport screenshots were handed to the iOS/MacOS
+task. [Evidence and limits](operations/2026-09-25-media-album-hd-qa.md).
+
 **2026-09-25 rollout checkpoint:** Android Stable 0.1.11/build 12 is signed,
 published and independently downloaded/verified. The 0.1.10 manifest is backed
 up for rollback. MediaStore gallery save, deferred known-large photo originals,

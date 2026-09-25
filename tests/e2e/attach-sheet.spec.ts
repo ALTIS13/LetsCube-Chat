@@ -51,7 +51,9 @@ type Backend = { uploads: Upload[]; inserts: Array<Record<string, unknown>> };
 type PickedFile = { name: string; mimeType: string; buffer: Buffer };
 
 test.describe("the attach sheet (D-122)", () => {
-  test.use({ geolocation: PLACE, permissions: ["geolocation"] });
+  // All backend responses in this suite come from page.route. A service worker
+  // can bypass that route after reload in WebKit and talk to the absent fixture host.
+  test.use({ geolocation: PLACE, permissions: ["geolocation"], serviceWorkers: "block" });
 
   test.beforeEach(async ({ page, request }) => {
     const client = await request
@@ -130,6 +132,7 @@ test.describe("the attach sheet (D-122)", () => {
     const facade = await testPhoto("facade.png", 30);
     await pick(page, '[data-attach-entry="library"]', [facade]);
     await expect(sheet.getByRole("checkbox", { name: "Фото 1" })).toHaveAttribute("aria-checked", "true");
+    await expect(sheet.getByRole("checkbox", { name: "Фото 1, номер 1 в порядке отправки" })).toBeVisible();
     // «Стеклянная капсула» says how many go in the sheet's title, and the send
     // button carries the count in its own accessible name.
     await expect(sheet.getByRole("heading", { name: "Выбрано 1" })).toBeVisible();
@@ -187,6 +190,7 @@ test.describe("the attach sheet (D-122)", () => {
 
   /**
    * D-174. The owner asked on 2026-09-13 for SD by default with HD available,
+   * then changed the new-device default to HD on 2026-09-25.
    * which supersedes the photo half of D-119 — that entry recorded no quality
    * choice at all. What D-119 objected to is kept: the default needs no
    * thought and the composer asks nothing. The control lives here, on the sheet
@@ -202,9 +206,11 @@ test.describe("the attach sheet (D-122)", () => {
     await openChat(page);
     const facade = await testPhoto("facade.png", 30);
 
-    // First send: nothing is touched, which is what SD means.
+    // First send: turn the new-device HD default down to SD.
     const first = await openSheet(page);
     await pick(page, '[data-attach-entry="library"]', [facade]);
+    await expect(first.getByTestId("attach-hd")).toHaveAttribute("aria-pressed", "true");
+    await first.getByTestId("attach-hd").click();
     await expect(first.getByTestId("attach-hd")).toHaveAttribute("aria-pressed", "false");
     await first.getByTestId("attach-send").click();
     await expect(first).toHaveCount(0);
@@ -214,7 +220,7 @@ test.describe("the attach sheet (D-122)", () => {
     const second = await openSheet(page);
     await pick(page, '[data-attach-entry="library"]', [facade]);
     const hd = second.getByTestId("attach-hd");
-    await expect(hd, "the first send was SD, so the badge opens in SD").toHaveAttribute(
+    await expect(hd, "the explicit SD choice survives the first send").toHaveAttribute(
       "aria-pressed",
       "false",
     );
@@ -265,6 +271,11 @@ test.describe("the attach sheet (D-122)", () => {
     await pick(page, '[data-attach-entry="library"]', [await testPhoto("facade.png", 30)]);
     const badge = sheet.getByTestId("attach-hd");
 
+    await expect(badge).toHaveText("HD");
+    await expect(badge).toHaveAttribute("data-photo-resolution", "hd");
+    await expect(badge).toHaveAccessibleName("Фото уйдут в высоком разрешении");
+
+    await badge.click();
     await expect(badge).toHaveText("SD");
     await expect(badge).toHaveAttribute("data-photo-resolution", "sd");
     await expect(badge).toHaveAccessibleName("Фото уйдут в обычном разрешении");
@@ -296,7 +307,7 @@ test.describe("the attach sheet (D-122)", () => {
     await pick(page, '[data-attach-entry="library"]', [await testPhoto("facade.png", 30)]);
     await sheet.getByTestId("attach-hd").click();
 
-    await expect(page.getByText("Фото уйдут в высоком разрешении").first()).toBeVisible();
+    await expect(page.getByText("Фото уйдут в обычном разрешении").first()).toBeVisible();
     await expect(page.getByText("Отправить без сжатия", { exact: false }).first()).toBeVisible();
   });
 
@@ -319,9 +330,9 @@ test.describe("the attach sheet (D-122)", () => {
     const first = await openSheet(page);
     await pick(page, '[data-attach-entry="library"]', [facade]);
     const badge = first.getByTestId("attach-hd");
-    await expect(badge, "SD is the default the owner set").toHaveAttribute("aria-pressed", "false");
+    await expect(badge, "HD is the new-device default").toHaveAttribute("aria-pressed", "true");
     await badge.click();
-    await expect(badge).toHaveAttribute("aria-pressed", "true");
+    await expect(badge).toHaveAttribute("aria-pressed", "false");
     await first.getByTestId("attach-send").click();
     await expect(first).toHaveCount(0);
 
@@ -332,20 +343,37 @@ test.describe("the attach sheet (D-122)", () => {
     await pick(page, '[data-attach-entry="library"]', [facade]);
     await expect(
       second.getByTestId("attach-hd"),
-      "HD was set once and the next send asked again",
-    ).toHaveAttribute("aria-pressed", "true");
+      "SD was set once and the next send asked again",
+    ).toHaveAttribute("aria-pressed", "false");
     // Its face says the state, so a reader does not have to infer it (D-290).
-    await expect(second.getByTestId("attach-hd")).toHaveText("HD");
+    await expect(second.getByTestId("attach-hd")).toHaveText("SD");
 
     // And it goes back, which a preference has to: a state that can only be
     // turned on is a trap rather than a setting.
     await second.getByTestId("attach-hd").click();
-    await expect(second.getByTestId("attach-hd")).toHaveAttribute("aria-pressed", "false");
+    await expect(second.getByTestId("attach-hd")).toHaveAttribute("aria-pressed", "true");
     await page.reload({ waitUntil: "domcontentloaded" });
     await openChat(page);
     const third = await openSheet(page);
     await pick(page, '[data-attach-entry="library"]', [facade]);
-    await expect(third.getByTestId("attach-hd")).toHaveAttribute("aria-pressed", "false");
+    await expect(third.getByTestId("attach-hd")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("a blocked photo preference store falls back to SD without blocking the sheet", async ({ page }) => {
+    await page.addInitScript(() => {
+      const getItem = Storage.prototype.getItem;
+      Storage.prototype.getItem = function (key: string) {
+        if (key === "kub:photo-resolution:v1") throw new DOMException("Storage blocked", "SecurityError");
+        return getItem.call(this, key);
+      };
+    });
+    await installBackend(page);
+    await openChat(page);
+    const sheet = await openSheet(page);
+    await pick(page, '[data-attach-entry="library"]', [await testPhoto("facade.png", 30)]);
+    await expect(sheet.getByTestId("attach-hd")).toHaveAttribute("aria-pressed", "false");
+    await sheet.getByTestId("attach-send").click();
+    await expect(sheet).toHaveCount(0);
   });
 
   test("HD is not offered until a photograph is selected (D-174)", async ({ page }) => {
