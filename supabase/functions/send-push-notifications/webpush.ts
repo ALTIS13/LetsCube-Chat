@@ -21,17 +21,33 @@ export function buildDeclarativeWebPushPayload(
   payload: SafeWebPushPayload,
   configuredAppOrigin: string | undefined,
 ): SafeWebPushPayload & Record<string, unknown> {
+  // A subscription can outlive the account in this browser, and an already
+  // accepted push can arrive after logout. WebKit may display this declarative
+  // fallback without running our service worker, so both display paths must
+  // carry no sender or message content. Keep only routing/grouping metadata.
+  const neutral: SafeWebPushPayload = {
+    ...payload,
+    title: "LETSCUBE",
+    body: "Новое уведомление",
+    senderKind: "",
+    senderId: "",
+    botId: "",
+    senderName: "",
+    senderAvatarUrl: "",
+    messageType: "",
+    preview: "",
+  };
   const appOrigin = safeHttpsOrigin(configuredAppOrigin);
-  if (!appOrigin) return payload;
+  if (!appOrigin) return neutral;
 
   return {
-    ...payload,
+    ...neutral,
     web_push: 8030,
     notification: {
-      title: payload.title,
-      body: payload.body,
-      navigate: new URL(payload.url, appOrigin).href,
-      tag: payload.tag,
+      title: neutral.title,
+      body: neutral.body,
+      navigate: new URL(neutral.url, appOrigin).href,
+      tag: neutral.tag,
     },
   };
 }

@@ -7,17 +7,20 @@ import {
   requireFixtureServer,
 } from "./helpers/messageActionsFixture";
 
+// Authenticated fixture: no automatic capture of even synthetic account state.
+test.use({ screenshot: "off", trace: "off", video: "off" });
+
 const me = person("11111111-1111-4111-8111-000000000001", "Тестовый пользователь");
 const chatId = "22222222-2222-4222-8222-000000000001";
 
 async function openPushFixture(
   page: Page,
   permission: "default" | "denied",
-  options: { installed?: boolean; stalledWorker?: boolean } = {},
+  options: { installed?: boolean; stalledWorker?: boolean; existingSubscription?: boolean } = {},
 ) {
   await requireFixtureServer(page.request);
   await page.addInitScript(
-    ({ state, installed, stalledWorker }) => {
+    ({ state, installed, stalledWorker, existingSubscription }) => {
       Object.defineProperty(navigator, "userAgent", {
         configurable: true,
         value:
@@ -46,8 +49,34 @@ async function openPushFixture(
       let subscription: {
         endpoint: string;
         toJSON: () => { endpoint: string; keys: { p256dh: string; auth: string } };
-      } | null = null;
+        unsubscribe: () => Promise<boolean>;
+      } | null = existingSubscription
+        ? {
+            endpoint: "https://push.letscube.ru/fixture-old-account",
+            toJSON: () => ({
+              endpoint: "https://push.letscube.ru/fixture-old-account",
+              keys: { p256dh: "fixture", auth: "fixture" },
+            }),
+            unsubscribe: async () => {
+              (window as unknown as { __unsubscribedCount: number }).__unsubscribedCount += 1;
+              subscription = null;
+              return true;
+            },
+          }
+        : null;
+      (window as unknown as { __unsubscribedCount: number }).__unsubscribedCount = 0;
+      (window as unknown as { __closedCardCount: number }).__closedCardCount = 0;
       const registration = {
+        getNotifications: async () =>
+          existingSubscription
+            ? [
+                {
+                  close: () => {
+                    (window as unknown as { __closedCardCount: number }).__closedCardCount += 1;
+                  },
+                },
+              ]
+            : [],
         pushManager: {
           getSubscription: async () => subscription,
           subscribe: () => {
@@ -58,6 +87,11 @@ async function openPushFixture(
                 endpoint: "https://push.letscube.ru/fixture",
                 keys: { p256dh: "fixture", auth: "fixture" },
               }),
+              unsubscribe: async () => {
+                (window as unknown as { __unsubscribedCount: number }).__unsubscribedCount += 1;
+                subscription = null;
+                return true;
+              },
             };
             return Promise.resolve(subscription);
           },
@@ -87,6 +121,7 @@ async function openPushFixture(
       state: permission,
       installed: options.installed ?? true,
       stalledWorker: options.stalledWorker ?? false,
+      existingSubscription: options.existingSubscription ?? false,
     },
   );
   await openFixture(page, {
@@ -97,6 +132,80 @@ async function openPushFixture(
   });
   await page.goto("/", { waitUntil: "domcontentloaded" });
 }
+
+test("signing out clears old iPhone cards and invalidates this browser's push subscription", async ({
+  page,
+}) => {
+  await openPushFixture(page, "default", { existingSubscription: true });
+  await expect(page.getByRole("navigation", { name: "Навигация" })).toBeVisible();
+  await page.evaluate(async () => {
+    const { createClient } = await import("/src/lib/supabase/client.ts");
+    await createClient().auth.signOut();
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { __closedCardCount: number }).__closedCardCount),
+    )
+    .toBe(1);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as { __unsubscribedCount: number }).__unsubscribedCount,
+      ),
+    )
+    .toBe(1);
+});
+
+test("switching accounts in one PWA removes the previous account's cards and subscription", async ({
+  page,
+}) => {
+  await openPushFixture(page, "default", { existingSubscription: true });
+  await expect(page.getByRole("navigation", { name: "Навигация" })).toBeVisible();
+  await page.route("http://127.0.0.1:54321/auth/v1/token?grant_type=password", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        access_token: "playwright.other.jwt",
+        refresh_token: "playwright-other-refresh",
+        expires_in: 3600,
+        token_type: "bearer",
+        user: {
+          id: "11111111-1111-4111-8111-000000000002",
+          aud: "authenticated",
+          role: "authenticated",
+          email: "other-account@example.invalid",
+          user_metadata: { full_name: "Другой тестовый пользователь" },
+          app_metadata: {},
+        },
+      }),
+    });
+  });
+  const error = await page.evaluate(async () => {
+    const { createClient } = await import("/src/lib/supabase/client.ts");
+    return (
+      (
+        await createClient().auth.signInWithPassword({
+          email: "other-account@example.invalid",
+          password: "fixture-only",
+        })
+      ).error?.message ?? null
+    );
+  });
+  expect(error).toBeNull();
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { __closedCardCount: number }).__closedCardCount),
+    )
+    .toBe(1);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as { __unsubscribedCount: number }).__unsubscribedCount,
+      ),
+    )
+    .toBe(1);
+});
 
 test("installed iPhone PWA offers push once, then respects Later", async ({ page }, info) => {
   await openPushFixture(page, "default");

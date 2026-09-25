@@ -138,7 +138,11 @@ test("generic web delivery and acknowledgement finish before an isolated voice f
   };
   const response = await handler(request({ limit: 1 })); const body = await response.json();
   assert.equal(body.sent, 1); assert.equal(body.failed, 0); assert.equal(body.voice.status, "provider_auth_failed");
-  assert.equal(JSON.parse(webSends[0][1]).senderKind, "user");
+  const webPayload = JSON.parse(webSends[0][1]);
+  assert.equal(webPayload.senderKind, "");
+  assert.equal(webPayload.title, "LETSCUBE");
+  assert.equal(webPayload.body, "Новое уведомление");
+  assert.doesNotMatch(webSends[0][1], /Fixture|Message|fixture-user/);
   assert.doesNotMatch(JSON.stringify(body), /private provider/);
 });
 

@@ -28,23 +28,28 @@ const messagePayload = {
   renotify: false,
 };
 
-test("additive bot fields do not change the existing declarative PWA presentation", () => {
+test("Web Push never exposes message or sender content in either display path", () => {
   const result = buildDeclarativeWebPushPayload(
     messagePayload,
     "https://app.letscube.ru",
   );
 
-  assert.equal(result.title, "CodexTest");
+  assert.equal(result.title, "LETSCUBE");
+  assert.equal(result.body, "Новое уведомление");
   assert.equal(result.chatId, "chat-1");
   assert.equal(result.web_push, 8030);
   assert.deepEqual(result.notification, {
-    title: "CodexTest",
-    body: "Привет",
+    title: "LETSCUBE",
+    body: "Новое уведомление",
     navigate: "https://app.letscube.ru/?chat=chat-1&message=message-1",
     tag: "message:chat:chat-1",
   });
-  assert.equal(result.senderKind, "bot");
-  assert.equal(result.botId, "bot-1");
+  assert.equal(result.senderKind, "");
+  assert.equal(result.botId, "");
+  assert.equal(result.senderName, "");
+  assert.equal(result.senderAvatarUrl, "");
+  assert.equal(result.preview, "");
+  assert.doesNotMatch(JSON.stringify(result), /CodexTest|Привет|Помощник|helper.webp|bot-1/);
 });
 
 test("declarative web push is omitted when the configured app origin is unsafe", () => {
@@ -55,7 +60,8 @@ test("declarative web push is omitted when the configured app origin is unsafe",
 
   assert.equal("web_push" in result, false);
   assert.equal("notification" in result, false);
-  assert.equal(result.title, "CodexTest");
+  assert.equal(result.title, "LETSCUBE");
+  assert.equal(result.body, "Новое уведомление");
 });
 
 test("web push topics collapse only the same semantic tag", async () => {

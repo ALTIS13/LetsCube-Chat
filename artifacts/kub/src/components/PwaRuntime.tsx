@@ -2,13 +2,27 @@
 
 import { useEffect, useLayoutEffect, useState } from "react";
 import { usePwaServiceWorker } from "@/hooks/usePwa";
-import { isNativeAndroid } from "@/lib/platform/capabilities";
+import { isNativeAndroid, isNativeApp } from "@/lib/platform/capabilities";
+import { isDesktopApp } from "@/lib/platform/desktop";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 type ConnectionState = "hidden" | "offline" | "online";
 
 export function PwaRuntime() {
   usePwaServiceWorker();
+  useEffect(() => {
+    if (isNativeApp() || isDesktopApp() || !("serviceWorker" in navigator)) return;
+    let previousUserId: string | null = null;
+    const { data: { subscription } } = createClient().auth.onAuthStateChange((event, session) => {
+      const nextUserId = session?.user?.id ?? null;
+      const accountExited = event === "SIGNED_OUT";
+      const accountSwitched = event === "SIGNED_IN" && previousUserId !== null && nextUserId !== previousUserId;
+      previousUserId = nextUserId;
+      if (accountExited || accountSwitched) void clearBrowserPushForAccountExit();
+    });
+    return () => subscription.unsubscribe();
+  }, []);
   useLayoutEffect(() => {
     const root = document.documentElement;
     const viewport = window.visualViewport;
@@ -52,6 +66,23 @@ export function PwaRuntime() {
     };
   }, []);
   return <ConnectionStatusBanner />;
+}
+
+async function clearBrowserPushForAccountExit(): Promise<void> {
+  try {
+    const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+    if (!registration) return;
+    // Closing cards is best effort: a provider can still deliver an accepted
+    // push afterward, so the server must send only neutral display content.
+    try {
+      (await registration.getNotifications()).forEach((card) => card.close());
+    } catch {
+      // Unsupported presentation cleanup must not prevent unsubscribing.
+    }
+    await (await registration.pushManager.getSubscription())?.unsubscribe();
+  } catch {
+    // Sign-out must succeed even when the push service is unavailable.
+  }
 }
 
 function ConnectionStatusBanner() {
