@@ -6,7 +6,7 @@ import {
   isPermanentFcmTokenError,
 } from "../../supabase/functions/send-push-notifications/fcm.ts";
 
-test("legacy Android message payload retains the messages channel and OS chat tag", () => {
+test("legacy Android message payload retains routing without exposing account content", () => {
   const result = buildFcmMessage(
     {
       title: "CodexTest",
@@ -27,8 +27,8 @@ test("legacy Android message payload retains the messages channel and OS chat ta
   // FCM ignores collapse_key for notification messages; this only documents
   // the legacy payload. The Android tag groups cards after delivery.
   assert.equal(result.message.android.collapse_key, "message:chat:chat-1");
-  assert.equal(result.message.notification.title, "CodexTest");
-  assert.equal(result.message.notification.body, "Привет");
+  assert.equal(result.message.notification.title, "LETSCUBE");
+  assert.equal(result.message.notification.body, "Новое сообщение");
   assert.deepEqual(result.message.data, {
     type: "message",
     route: "/?chat=chat-1&message=message-1",
@@ -55,19 +55,20 @@ test("new Android clients receive non-collapsible chat data with native display 
   assert.equal("collapse_key" in current.android, false);
   assert.equal("notification" in current.android, false);
   assert.equal(current.android.priority, "HIGH");
-  assert.equal(current.data.title, "CodexTest");
-  assert.equal(current.data.body, "Привет");
+  assert.equal(current.data.title, "LETSCUBE");
+  assert.equal(current.data.body, "Новое сообщение");
   assert.equal(current.data.native_chat_v, "1");
   assert.equal(current.data.chat_id, "chat-1");
   assert.equal(current.data.message_id, "message-1");
 
   const old = buildFcmMessage(payload, "device-token", "0.1.7").message;
-  assert.equal(old.notification.title, "CodexTest");
+  assert.equal(old.notification.title, "LETSCUBE");
   assert.equal(old.android.notification.tag, "message:chat:chat-1");
   assert.equal(old.android.collapse_key, "message:chat:chat-1");
-  assert.equal(buildFcmMessage(payload, "device-token", "invalid").message.notification.title, "CodexTest");
+  assert.equal(buildFcmMessage(payload, "device-token", "invalid").message.notification.title, "LETSCUBE");
   const task = buildFcmMessage({ kind: "task_assigned", title: "Задача" }, "device-token", "0.1.8").message;
-  assert.equal(task.notification.title, "Задача");
+  assert.equal(task.notification.title, "LETSCUBE");
+  assert.equal(task.notification.body, "Новая задача");
 });
 
 test("task FCM delivery stays separate from message grouping", () => {
@@ -107,7 +108,7 @@ test("FCM payload never exposes raw media or signed URLs", () => {
     "device-token",
   );
 
-  assert.equal(result.message.notification.body, "Новое уведомление");
+  assert.equal(result.message.notification.body, "Новое сообщение");
   assert.equal(result.message.data.route, "/?chat=chat-1");
   const native = buildFcmMessage({
     title: "LETSCUBE",
@@ -116,10 +117,10 @@ test("FCM payload never exposes raw media or signed URLs", () => {
     chatId: "chat-1",
     messageId: "message-1",
   }, "device-token", "0.1.8");
-  assert.equal(native.message.data.body, "Новое уведомление");
+  assert.equal(native.message.data.body, "Новое сообщение");
 });
 
-test("FCM bot message preserves actor identity, grouping, route, and trusted avatar", () => {
+test("FCM bot message keeps exact routing but no actor or preview in a rebindable token", () => {
   const result = buildFcmMessage(
     {
       title: "Помощник",
@@ -140,26 +141,21 @@ test("FCM bot message preserves actor identity, grouping, route, and trusted ava
   );
 
   assert.equal(result.message.android.collapse_key, "message:chat:chat-1");
-  assert.equal(result.message.notification.image, "https://app.letscube.ru/media/bots/helper.webp");
-  assert.equal(result.message.android.notification.image, "https://app.letscube.ru/media/bots/helper.webp");
+  assert.equal("image" in result.message.notification, false);
+  assert.equal("image" in result.message.android.notification, false);
   assert.deepEqual(result.message.data, {
     type: "message",
     route: "/?chat=chat-1&message=message-1",
     chat_id: "chat-1",
     message_id: "message-1",
     tag: "message:chat:chat-1",
-    sender_kind: "bot",
-    bot_id: "bot-1",
-    sender_name: "Помощник",
-    sender_avatar_url: "https://app.letscube.ru/media/bots/helper.webp",
-    kub_message_type: "text",
-    preview: "Готово",
     group_tag: "message:chat:chat-1",
   });
 });
 
-test("FCM bot avatar rejects external and signed media URLs", () => {
+test("FCM never includes an avatar, whether trusted or untrusted", () => {
   for (const senderAvatarUrl of [
+    "https://app.letscube.ru/media/bots/helper.webp",
     "https://evil.example/bot.webp",
     "https://api.letscube.ru/storage/v1/object/sign/bots/helper.webp?token=secret",
   ]) {

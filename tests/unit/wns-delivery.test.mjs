@@ -9,7 +9,7 @@ import {
   readWnsResponseStatus,
 } from "../../supabase/functions/send-push-notifications/wns.ts";
 
-test("WNS message toast preserves exact in-app route and escapes preview text", () => {
+test("WNS message toast preserves exact in-app route without account content", () => {
   const xml = buildWnsToast({
     title: "Codex & Test",
     body: "<Первое сообщение>",
@@ -34,14 +34,14 @@ test("WNS message toast preserves exact in-app route and escapes preview text", 
     xml,
     /launch="letscube-notification:\/\/open\?route=%2F%3Fchat%3Dchat-1%26message%3Dmessage-1"/,
   );
-  assert.match(xml, /<header[^>]+title="Codex &amp; Test"/);
-  assert.match(xml, /<image[^>]+src="https:\/\/api\.letscube\.ru\/media\/bots\/helper\.webp"/);
-  assert.match(xml, /<text>&lt;Первое сообщение&gt;<\/text>/);
-  assert.doesNotMatch(xml, /<text>Codex &amp; Test<\/text>/);
+  assert.match(xml, /<header[^>]+title="LETSCUBE"/);
+  assert.match(xml, /<text>Новое сообщение<\/text>/);
+  assert.doesNotMatch(xml, /Codex|Первое сообщение|<image\b/);
 });
 
-test("WNS message toast rejects external and signed avatar URLs", () => {
+test("WNS message toast omits every avatar from rebindable channels", () => {
   for (const senderAvatarUrl of [
+    "https://app.letscube.ru/media/bots/helper.webp",
     "https://tracker.example/pixel.webp",
     "https://api.letscube.ru/storage/v1/object/sign/bots/helper.webp?token=secret",
   ]) {
@@ -81,7 +81,8 @@ test("WNS operational toast keeps task semantics separate from message headers",
   });
 
   assert.doesNotMatch(xml, /<header/);
-  assert.match(xml, /<text>Новая задача<\/text><text>Проверить зал<\/text>/);
+  assert.match(xml, /<text>LETSCUBE<\/text><text>Новая задача<\/text>/);
+  assert.doesNotMatch(xml, /Проверить зал/);
   assert.match(xml, /route=%2Ftasks%3Ftask%3Dtask-1/);
 });
 
