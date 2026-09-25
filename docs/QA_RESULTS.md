@@ -1,5 +1,21 @@
 # QA Results
 
+## 2026-09-25 - Android 0.1.11 And Media/Profile Web Rollout
+
+Signed Stable APK 0.1.11/build 12 is public and independently verified at
+7,534,407 bytes with SHA-256
+`9242a541b93833811bc76547eece69d64c1e3c820765de7a454352ec2b7a941f`.
+The previous Stable manifest has a byte-identical server backup. AVD gallery
+save and failed-write cleanup passed 2/2; the signed APK launched in an
+isolated AVD and upgraded 0.1.10 in place on Realme. Focused browser matrix:
+59 passed, one desktop-only width skip; a later targeted pass checked final
+menu wording and viewer retry geometry. The full JS unit suite, typecheck,
+Android release verifier and production web build passed. Coolify web image
+`4947680e7de8dac67f36ab25a78e208fb4f12a5c` is healthy; public HTML
+returned 200 with JS markers for the new media and profile controls. A
+physical authenticated save and managed private media cache remain open.
+[Release evidence](operations/2026-09-25-android-0.1.11-release.md).
+
 ## 2026-09-23 - Android 0.1.8/9 Signed Stable Release
 
 Signed APK published from `02441b29`. Local and public release verifiers passed;

@@ -134,9 +134,9 @@ whole deployment** — no bot has registered a command yet.
 **Current checkpoint, 2026-09-25 (Codex):** Android 0.1.11/build 12 is signed
 and published in Stable with gallery save, deferred large-photo originals and
 mobile Profile navigation. The public APK matches the local signed artifact and
-the previous Stable manifest has a byte-identical server backup. Web source is
-committed locally for deployment and must be verified against the running
-Coolify image after the push. Physical authenticated Android gallery behavior
+the previous Stable manifest has a byte-identical server backup. Web source
+from `4947680e` reached a healthy Coolify image and the public JavaScript
+contains the new media/profile controls. Physical authenticated Android gallery behavior
 and a managed private media cache remain open. See the
 [0.1.11 release record](operations/2026-09-25-android-0.1.11-release.md) and
 [media/navigation audit](operations/2026-09-25-media-navigation-audit.md).

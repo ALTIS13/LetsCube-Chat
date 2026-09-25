@@ -1,6 +1,16 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-09-23.
+Status: active production-hardening tracker, updated 2026-09-25.
+
+**2026-09-25 rollout checkpoint:** Android Stable 0.1.11/build 12 is signed,
+published and independently downloaded/verified. The 0.1.10 manifest is backed
+up for rollback. MediaStore gallery save, deferred known-large photo originals,
+viewer retry and persistent phone Profile navigation passed focused source,
+AVD and fixture checks. Web image `4947680e` is healthy and public JS contains
+the intended behavior. Physical authenticated Android gallery QA and an
+account-scoped private media cache remain open.
+[Release record](operations/2026-09-25-android-0.1.11-release.md) and
+[audit](operations/2026-09-25-media-navigation-audit.md).
 
 **2026-09-23 rollout checkpoint:** Android Stable is now the signed `0.1.8/9`
 APK cut from `02441b29`. Public HTTPS artifact, signer continuity, signed
