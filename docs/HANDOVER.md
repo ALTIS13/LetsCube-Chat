@@ -131,6 +131,16 @@ whole deployment** — no bot has registered a command yet.
 
 ## 4. Where to start
 
+**Current backend checkpoint, 2026-09-26 (Codex):** native FCM/WNS OS push
+payloads no longer carry sender, preview, avatar or task content across a
+rebindable device token. Exact-message routing and chat tags remain. Reviewed
+modules are mounted on the healthy Edge runtime; native packages were not cut
+and no live provider card was generated. Browser Web Push/PWA is a separate
+account-switch risk being coordinated with its owner. Album-level external push
+aggregation remains the next backend stage; preserve individual notification
+rows and their exact read/navigation semantics. See the
+[rollout and limits](operations/2026-09-26-native-push-account-privacy.md).
+
 **Current shared-web checkpoint, 2026-09-25 (Codex):** photo HD is the default
 on a new device; an explicit SD choice remains. A 2-10 visual selection now
 carries album metadata and renders as a grouped mosaic with independent message
