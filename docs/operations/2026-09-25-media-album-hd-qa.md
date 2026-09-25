@@ -1,7 +1,7 @@
 # Media albums and photo resolution, 2026-09-25
 
-Owner: shared web/Windows/Android stream. Stage: web candidate, before production
-deploy. The iPhone PWA viewport fix belongs to the separate iOS/MacOS task.
+Owner: shared web/Windows/Android stream. Stage: web deployed. The iPhone PWA
+viewport fix belongs to the separate iOS/MacOS task.
 
 ## Changed
 
@@ -34,6 +34,10 @@ deploy. The iPhone PWA viewport fix belongs to the separate iOS/MacOS task.
   Initial build without them stopped there; it did not report a messenger error.
 - Synthetic screenshots inspected for mobile/desktop dark/light mosaics. These
   fixtures do not establish physical-device or authenticated production behavior.
+- Commit `d86eea8f187fd0cc5cd679199bce2e2b072a125b` was pushed to
+  `main`. The live web container's image tag matched that SHA; public HTML and
+  its entry JS both returned HTTP 200, and the served JS contained the album
+  and HD interface markers. This proves the web rollout, not native acceptance.
 
 ## Remaining
 

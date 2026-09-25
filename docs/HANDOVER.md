@@ -135,11 +135,11 @@ whole deployment** — no bot has registered a command yet.
 on a new device; an explicit SD choice remains. A 2-10 visual selection now
 carries album metadata and renders as a grouped mosaic with independent message
 actions. The hidden-message gate in shared media/links now fails closed. Focused
-fixture and build checks passed; production deployment and authenticated device
-acceptance are separate. The iPhone PWA viewport bugs were passed to its owner.
-Next: confirm the web deploy, then address album-level notifications/pre-send
-preview, private media cache and physical Android QA. Do not cut an Android APK
-without separate owner instruction.
+fixture and build checks passed, and the live web image matched `d86eea8f`
+with its public bundle markers. Authenticated device acceptance is separate.
+The iPhone PWA viewport bugs were passed to its owner. Next: address
+album-level notifications/pre-send preview, private media cache and physical
+Android QA. Do not cut an Android APK without separate owner instruction.
 [QA and remaining limits](operations/2026-09-25-media-album-hd-qa.md).
 
 **Current checkpoint, 2026-09-25 (Codex):** Android 0.1.11/build 12 is signed
