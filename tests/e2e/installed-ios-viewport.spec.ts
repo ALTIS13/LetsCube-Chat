@@ -20,9 +20,9 @@ import {
  * again, and with the keyboard up the chat header went off the top of the
  * screen. Neither engine here is iOS. Chromium plays the installed app's flag and
  * its insets, and a stand-in for `visualViewport` plays the keyboard as iOS does:
- * what is visible shrinks and the page does not. What these checks hold is the
- * product's half — the shell's height token, the shell fitted to what is visible
- * while the keys are up, and the height given back when they go.
+ * what is visible shrinks and the page may pan. What these checks hold is the
+ * product's half — fitting the shell before and during keyboard use, keeping
+ * the header and composer visible, and restoring the home-indicator inset.
  */
 
 const INSETS: Insets = { top: 59, right: 0, bottom: 34, left: 0 };
@@ -46,16 +46,23 @@ function history(): Row[] {
 }
 
 /** A `visualViewport` the test moves, as iOS moves the real one for its keyboard. */
-async function installKeyboardStandIn(page: Page) {
-  await page.addInitScript(() => {
+async function installKeyboardStandIn(page: Page, initialVisibleHeight?: number) {
+  await page.addInitScript((visibleHeight) => {
     const events = new EventTarget();
-    const state = { height: window.innerHeight, offsetTop: 0 };
+    // Init scripts run before the mobile viewport meta tag is parsed. Read the
+    // settled layout height lazily unless a shorter iOS viewport was requested.
+    const nativeInnerHeight = Object.getOwnPropertyDescriptor(window, "innerHeight");
+    const state: { height: number | null; offsetTop: number; layoutHeight: number | null } = {
+      height: visibleHeight ?? null,
+      offsetTop: 0,
+      layoutHeight: null,
+    };
     const viewport = {
       get width() {
         return window.innerWidth;
       },
       get height() {
-        return state.height;
+        return state.height ?? window.innerHeight;
       },
       get offsetTop() {
         return state.offsetTop;
@@ -77,13 +84,32 @@ async function installKeyboardStandIn(page: Page) {
       dispatchEvent: events.dispatchEvent.bind(events),
     };
     Object.defineProperty(window, "visualViewport", { configurable: true, get: () => viewport });
-    (window as unknown as { __keyboard: (height: number) => void }).__keyboard = (
-      height: number,
-    ) => {
-      state.height = window.innerHeight - height;
+    (
+      window as unknown as {
+        __keyboard: (height: number, offsetTop?: number, shrinkLayout?: boolean) => void;
+      }
+    ).__keyboard = (height: number, offsetTop = 0, shrinkLayout = false) => {
+      state.layoutHeight ??= window.innerHeight;
+      state.height = height ? state.layoutHeight - height : (visibleHeight ?? null);
+      if (shrinkLayout) {
+        Object.defineProperty(window, "innerHeight", {
+          configurable: true,
+          get: () => state.height ?? state.layoutHeight,
+        });
+      } else if (nativeInnerHeight) {
+        Object.defineProperty(window, "innerHeight", nativeInnerHeight);
+      } else {
+        delete (window as unknown as { innerHeight?: number }).innerHeight;
+      }
+      state.offsetTop = offsetTop;
+      // iOS 26 can pan the rendered document without changing scrollTop.
+      // Reproduce that compositor result instead of merely reporting an offset.
+      document.body.style.position = offsetTop ? "relative" : "";
+      document.body.style.top = offsetTop ? `${-offsetTop}px` : "";
       events.dispatchEvent(new Event("resize"));
+      events.dispatchEvent(new Event("scroll"));
     };
-  });
+  }, initialVisibleHeight);
 }
 
 async function openConversation(page: Page) {
@@ -98,10 +124,15 @@ async function openConversation(page: Page) {
   await page.waitForTimeout(800);
 }
 
-function keyboard(page: Page, height: number) {
+function keyboard(page: Page, height: number, offsetTop = 0, shrinkLayout = false) {
   return page.evaluate(
-    (value) => (window as unknown as { __keyboard: (h: number) => void }).__keyboard(value),
-    height,
+    ([value, top, shrink]) =>
+      (
+        window as unknown as {
+          __keyboard: (h: number, offsetTop?: number, shrinkLayout?: boolean) => void;
+        }
+      ).__keyboard(value, top, shrink),
+    [height, offsetTop, shrinkLayout] as const,
   );
 }
 
@@ -116,9 +147,12 @@ function geometry(page: Page) {
       token: getComputedStyle(document.documentElement).getPropertyValue("--kub-app-height").trim(),
       fitted: document.documentElement.style.getPropertyValue("--kub-app-height"),
       shellHeight: shell ? Math.round(shell.getBoundingClientRect().height) : null,
+      shellTop: shell ? Math.round(shell.getBoundingClientRect().top) : null,
       dockBottom: dock ? Math.round(dock.getBoundingClientRect().bottom) : null,
       dockPadding: dock ? getComputedStyle(dock).paddingBottom : null,
       headerTop: header ? Math.round(header.getBoundingClientRect().top) : null,
+      visualHeight: window.visualViewport?.height ?? null,
+      visualTop: window.visualViewport?.offsetTop ?? null,
     };
   });
 }
@@ -168,7 +202,7 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
     await openConversation(page);
 
     const rest = await geometry(page);
-    expect(rest.token, "the installed app's shell height").toBe("100vh");
+    expect(rest.token, "the installed app's shell height").toBe(`${SCREEN}px`);
     expect(rest.shellHeight, "the shell is as tall as the screen").toBe(SCREEN);
     expect(rest.dockBottom, "the composer's dock reaches the bottom edge").toBe(SCREEN);
     expect(rest.dockPadding, "at rest the composer pads for the home indicator").toBe(
@@ -199,7 +233,7 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
       .poll(async () => (await geometry(page)).fitted, {
         message: "the shell's height was not given back",
       })
-      .toBe("");
+      .toBe(`${SCREEN}px`);
     expect((await geometry(page)).shellHeight, "the shell is as tall as the screen again").toBe(
       SCREEN,
     );
@@ -208,6 +242,64 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
         message: "the home indicator's padding did not come back",
       })
       .toBe(`${INSETS.bottom}px`);
+  });
+
+  test("a shorter installed-app visual viewport does not clip the composer at rest", async ({
+    page,
+  }) => {
+    await emulateInstalledIosApp(page, INSETS);
+    await installKeyboardStandIn(page, SCREEN - 60);
+    await openConversation(page);
+
+    await expect.poll(async () => (await geometry(page)).shellHeight).toBe(SCREEN - 60);
+    const rest = await geometry(page);
+    expect(rest.dockBottom, "the whole composer stays inside the visible app area").toBe(
+      SCREEN - 60,
+    );
+    expect(rest.dockPadding, "the home indicator still has its own padding").toBe(
+      `${INSETS.bottom}px`,
+    );
+  });
+
+  test("the keyboard's visual-viewport pan keeps the header and composer inside the visible area", async ({
+    page,
+  }) => {
+    await emulateInstalledIosApp(page, INSETS);
+    await installKeyboardStandIn(page);
+    await openConversation(page);
+
+    await page.locator('[data-testid="chat-composer-dock"] textarea').focus();
+    await keyboard(page, KEYBOARD, 72);
+
+    await expect.poll(async () => (await geometry(page)).shellTop).toBe(0);
+    const up = await geometry(page);
+    expect(up.headerTop, "the header cannot sit above the panned viewport").toBeGreaterThanOrEqual(
+      0,
+    );
+    expect(up.dockBottom, "the composer meets the keyboard after the pan").toBe(SCREEN - KEYBOARD);
+
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await keyboard(page, 0);
+    await expect.poll(async () => (await geometry(page)).shellTop).toBe(0);
+  });
+
+  test("a resized layout viewport still reveals the keyboard over a shorter installed-app screen", async ({
+    page,
+  }) => {
+    await emulateInstalledIosApp(page, INSETS);
+    await installKeyboardStandIn(page, SCREEN - 60);
+    await openConversation(page);
+
+    await page.locator('[data-testid="chat-composer-dock"] textarea').focus();
+    await keyboard(page, KEYBOARD, 72, true);
+
+    await expect.poll(async () => (await geometry(page)).shellTop).toBe(0);
+    await expect.poll(async () => (await geometry(page)).dockPadding).toBe("0px");
+    expect((await geometry(page)).dockBottom).toBe(SCREEN - KEYBOARD);
+
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await keyboard(page, 0);
+    await expect.poll(async () => (await geometry(page)).dockBottom).toBe(SCREEN - 60);
   });
 
   test("a phone browser that is not the installed app still lifts the composer by the keys' height", async ({

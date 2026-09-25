@@ -267,9 +267,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const supabase = createClient();
   const [stagedAttachments, setStagedAttachments] = useState<StagedAttachment[]>([]);
   const [keyboardInset, setKeyboardInset] = useState(0);
-  /** The installed iPhone app with its keyboard up, its shell fitted to what is visible (D-111). */
+  /** The installed iPhone app with its keyboard up; its shell is always fitted to what is visible (D-111). */
   const [shellFitsKeyboard, setShellFitsKeyboard] = useState(false);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
+  const restingVisualHeightRef = useRef<number | null>(null);
   const stagedAttachmentsRef = useRef<StagedAttachment[]>([]);
   const cancelledAttachmentIdsRef = useRef<Set<string>>(new Set());
   const uploadRegistryRef = useRef<ReturnType<typeof createStagedUploadHandleRegistry> | null>(null);
@@ -292,32 +293,47 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     // what is visible up over the page. Lifting the composer by the keyboard's
     // height put it on the keys but took the chat header off the top of the
     // screen, and on a shell iOS had already made short it left a band between
-    // the composer and the keys as well (D-111). There, while the keys are up,
-    // the shell is fitted to what is visible and the pan is taken back, so the
+    // the composer and the keys as well (D-111). There, the shell is fitted
+    // to what is visible and the keyboard pan is taken back, so the
     // header stays at the top and the composer sits on the keys. Phones and
     // browsers that resize for their keyboard keep the lift below.
     const installedIos = root.hasAttribute("data-ios-standalone");
     const releaseShell = () => {
       root.style.removeProperty("--kub-app-height");
+      root.style.removeProperty("--kub-app-top");
       setShellFitsKeyboard(false);
     };
     const updateKeyboardInset = () => {
       const mobile = window.innerWidth < 768;
       const composerHasFocus = Boolean(composerNode?.contains(document.activeElement));
-      if (!mobile || !visualViewport || !isComposerFocused || !composerHasFocus) {
+      if (!mobile || !visualViewport) {
         if (installedIos) releaseShell();
         setKeyboardInset(0);
         return;
       }
       if (installedIos) {
-        // What the keys cover, whether iOS has panned or not.
-        if (window.innerHeight - visualViewport.height > 80) {
-          root.style.setProperty("--kub-app-height", `${Math.round(visualViewport.height)}px`);
-          setShellFitsKeyboard(true);
-          if (window.scrollY !== 0 || visualViewport.offsetTop !== 0) window.scrollTo(0, 0);
-        } else {
-          releaseShell();
+        // A Home Screen app can be given less visible height than 100vh even
+        // before the keyboard opens. Fit the shell to that real visible area.
+        root.style.setProperty("--kub-app-height", `${Math.round(visualViewport.height)}px`);
+        if (!isComposerFocused || !composerHasFocus) {
+          restingVisualHeightRef.current = visualViewport.height;
         }
+        // Some iOS versions shrink innerHeight with visualViewport, so the
+        // current difference alone cannot identify an open keyboard.
+        const restingHeight = restingVisualHeightRef.current ?? visualViewport.height;
+        const keyboardVisible = isComposerFocused && composerHasFocus
+          && Math.max(window.innerHeight - visualViewport.height, restingHeight - visualViewport.height) > 80;
+        // On iOS 26 the system can pan the document without changing scrollY;
+        // scrollTo(0, 0) cannot undo it. Follow the visual viewport instead.
+        const pan = keyboardVisible
+          ? Math.max(0, Math.round(visualViewport.pageTop), Math.round(-document.body.getBoundingClientRect().top))
+          : 0;
+        root.style.setProperty("--kub-app-top", `${pan}px`);
+        setShellFitsKeyboard(keyboardVisible);
+        setKeyboardInset(0);
+        return;
+      }
+      if (!isComposerFocused || !composerHasFocus) {
         setKeyboardInset(0);
         return;
       }

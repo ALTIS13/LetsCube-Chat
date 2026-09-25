@@ -6528,6 +6528,20 @@ iOS too. The original user's visible bottom band has not been measured on the
 device since this change; `docs/operations/ios-pwa-viewport-validation.md`
 records the real-iPhone acceptance steps.
 
+**2026-09-25 follow-up, physical-device status unchanged:** two further iPhone
+captures show that the installed app still clips the composer at rest and pans
+the chat header away when the keyboard opens. The earlier test only simulated a
+shrinking `visualViewport.height`; it did not simulate a short visible viewport
+before focus or a document pan with unchanged scroll position. The chat shell
+now measures `visualViewport.height` at rest as well as with the keyboard open,
+and compensates for the measured document/viewport pan while the composer has
+focus. Keyboard detection compares against the pre-focus visible height too,
+because `innerHeight` can shrink along with `visualViewport.height`. Synthetic
+Chromium/WebKit regressions cover those cases and keyboard dismissal. The
+native black system band, if outside the PWA's paintable viewport, cannot be
+removed by moving the web shell; the result must be inspected on the tester's
+installed iPhone before this entry can be closed.
+
 ## D-112 `[x]` In the Windows app the window's own buttons sit over the page's top-right controls, and take most of their clicks
 
 **Severity:** high for the Windows app. Reported by the owner on 2026-09-11 with a
