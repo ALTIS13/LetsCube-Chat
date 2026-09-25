@@ -39,6 +39,8 @@ type WebPushDeliveryStatus =
   | "subscription_inactive"
   | "claim_lost";
 
+type NativePushDeliveryStatus = "deliver" | "read" | "device_inactive" | "claim_lost";
+
 type NativeOutboxRow = {
   id: string;
   device_id: string;
@@ -109,8 +111,6 @@ Deno.serve(async (request: Request) => {
   const subscriptionIds = Array.from(new Set(rows.data.map((row) => row.subscription_id)));
   const subscriptions = await selectSubscriptions(supabaseUrl, secretKey, subscriptionIds);
   if (!subscriptions.ok) return json(subscriptions.body, subscriptions.status);
-  const nativeRows = await claimNativeOutbox(supabaseUrl, secretKey, limit, claimToken);
-  if (!nativeRows.ok) return json(nativeRows.body, nativeRows.status);
   const byId = new Map(subscriptions.data.map((item) => [item.id, item]));
 
   let sent = 0;
@@ -131,6 +131,8 @@ Deno.serve(async (request: Request) => {
     else failed += 1;
   }
 
+  const nativeRows = await claimNativeOutbox(supabaseUrl, secretKey, limit, claimToken);
+  if (!nativeRows.ok) return json(nativeRows.body, nativeRows.status);
   const native = await dispatchNativePush(
     supabaseUrl,
     secretKey,
@@ -279,6 +281,31 @@ async function claimNativeOutbox(supabaseUrl: string, secretKey: string, limit: 
   return { ok: true as const, data: (await response.json()) as NativeOutboxRow[] };
 }
 
+async function recheckNativePushDelivery(
+  supabaseUrl: string,
+  secretKey: string,
+  outboxId: string,
+  claimToken: string,
+): Promise<{ ok: true; status: NativePushDeliveryStatus } | { ok: false }> {
+  try {
+    const url = new URL("/rest/v1/rpc/native_push_outbox_delivery_recheck", supabaseUrl);
+    const response = await restFetch(url, secretKey, {
+      method: "POST",
+      headers: { prefer: "return=representation" },
+      body: JSON.stringify({ p_outbox_id: outboxId, p_claim_token: claimToken }),
+    });
+    if (!response.ok) return { ok: false };
+
+    const status = await response.json() as unknown;
+    if (status !== "deliver" && status !== "read" && status !== "device_inactive" && status !== "claim_lost") {
+      return { ok: false };
+    }
+    return { ok: true, status };
+  } catch {
+    return { ok: false };
+  }
+}
+
 async function selectPushDevices(supabaseUrl: string, secretKey: string, ids: string[]) {
   if (ids.length === 0) return { ok: true as const, data: [] as PushDeviceRow[] };
   const url = new URL("/rest/v1/user_push_devices", supabaseUrl);
@@ -418,6 +445,10 @@ async function deliverFcm(
   row: NativeOutboxRow,
   device: PushDeviceRow,
 ): Promise<"sent" | "failed" | "pruned"> {
+  const eligibility = await recheckNativePushDelivery(supabaseUrl, secretKey, row.id, claimToken);
+  if (!eligibility.ok) return "failed";
+  if (eligibility.status !== "deliver") return "pruned";
+
   const response = await fetch(
     `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/messages:send`,
     {
@@ -480,6 +511,10 @@ async function deliverWns(
     });
     return "pruned";
   }
+
+  const eligibility = await recheckNativePushDelivery(supabaseUrl, secretKey, row.id, claimToken);
+  if (!eligibility.ok) return "failed";
+  if (eligibility.status !== "deliver") return "pruned";
 
   let response: Response;
   try {

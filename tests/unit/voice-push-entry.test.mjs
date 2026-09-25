@@ -113,7 +113,10 @@ test("generic web delivery and acknowledgement finish before an isolated voice f
     if (url.pathname === "/rest/v1/rpc/push_outbox_claim") return Response.json([{ id: "fictional-outbox",
       subscription_id: "fictional-subscription", payload: { title: "Fixture", body: "Message", sender_kind: "user",
         sender_id: "fixture-user" }, attempt_count: 0 }]);
-    if (url.pathname === "/rest/v1/rpc/native_push_outbox_claim") return Response.json([]);
+    if (url.pathname === "/rest/v1/rpc/native_push_outbox_claim") {
+      assert.equal(acknowledged, true, "native rows must be claimed after the Web Push drain");
+      return Response.json([]);
+    }
     if (url.pathname === "/rest/v1/push_subscriptions") return Response.json([{ id: "fictional-subscription",
       endpoint: "https://fixture.invalid/webpush", p256dh: "fictional", auth: "fictional", is_active: true }]);
     if (url.pathname === "/rest/v1/rpc/push_outbox_delivery_recheck") {
@@ -197,6 +200,10 @@ test("native cron claims an unread row and acknowledges only its own FCM lease",
       { id: deviceId, token: "synthetic-registration", provider: "fcm", enabled: true, app_version: "0.1.8" },
     ]);
     if (url.hostname === "oauth2.googleapis.com") return Response.json({ access_token: "synthetic-oauth" });
+    if (url.pathname === "/rest/v1/rpc/native_push_outbox_delivery_recheck") {
+      assert.deepEqual(JSON.parse(init.body), { p_outbox_id: rowId, p_claim_token: nativeClaimToken });
+      return Response.json("deliver");
+    }
     if (url.hostname === "fcm.googleapis.com") return Response.json({ name: "fixture-message" });
     if (url.pathname === "/rest/v1/notifications_native_push_outbox") {
       assert.equal(init.method, "PATCH");
@@ -216,6 +223,8 @@ test("native cron claims an unread row and acknowledges only its own FCM lease",
   const body = await response.json();
   assert.equal(body.native.sent, 1);
   assert.equal(body.native.failed, 0);
+  assert.ok(requests.findIndex((item) => item.url.pathname === "/rest/v1/rpc/native_push_outbox_delivery_recheck") <
+    requests.findIndex((item) => item.url.hostname === "fcm.googleapis.com"));
   assert.equal(requests.filter((item) => item.url.hostname === "fcm.googleapis.com").length, 1);
 });
 
