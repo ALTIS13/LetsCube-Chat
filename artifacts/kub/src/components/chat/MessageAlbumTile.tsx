@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useSyncExternalStore } from "react";
+import React, { useState, useSyncExternalStore } from "react";
 import { KubIcon } from "@/components/kub";
 import { useMessageMediaSource } from "@/hooks/useMediaObjectUrl";
 import { resolveOriginalPreviewUrl, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
@@ -58,8 +58,16 @@ export const MessageAlbumTile = React.memo(function MessageAlbumTile({
   const previewUrl = message.type === "image"
     ? inlineImageSource(mediaVariant?.previewUrl ?? uploadedPreviewUrl ?? mediaVariant?.thumbUrl, originalUrl, message.media_metadata)
     : mediaVariant?.videoPosterUrl;
-  const [failedPreview, setFailedPreview] = useState(false);
-  useEffect(() => setFailedPreview(false), [previewUrl]);
+  const [failedImageUrls, setFailedImageUrls] = useState<ReadonlySet<string>>(() => new Set());
+  const fallbackUrl = message.type === "image" && previewUrl && failedImageUrls.has(previewUrl)
+    ? inlineImageSource(null, originalUrl, message.media_metadata)
+    : null;
+  const displayUrl = previewUrl && !failedImageUrls.has(previewUrl)
+    ? previewUrl
+    : fallbackUrl && !failedImageUrls.has(fallbackUrl)
+      ? fallbackUrl
+      : null;
+  const failedPreview = Boolean(previewUrl && failedImageUrls.has(previewUrl));
   const caption = getVisibleMediaCaption(message);
   const reactions = groupReactions(message.reactions, userId);
   const forwardedFrom = forwardOriginName({
@@ -91,13 +99,13 @@ export const MessageAlbumTile = React.memo(function MessageAlbumTile({
         onClick={() => { if (originalUrl && !isSelectionMode) onOpenMedia(message.id); }}
         className="absolute inset-0 block h-full w-full overflow-hidden focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
       >
-        {previewUrl && !failedPreview ? (
+        {displayUrl ? (
           <img
-            src={previewUrl}
+            src={displayUrl}
             alt=""
             loading="lazy"
             decoding="async"
-            onError={() => setFailedPreview(true)}
+            onError={() => setFailedImageUrls((current) => new Set(current).add(displayUrl))}
             className="h-full w-full object-cover transition-transform duration-200 hover:scale-[1.02]"
           />
         ) : (

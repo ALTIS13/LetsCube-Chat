@@ -1488,7 +1488,7 @@ export function MessageList({
             const isMe = actor.kind === "user" && actor.id === userId;
             const compact = group.messages.length >= 5;
             return (
-              <div key={messageEntranceKey(first)} data-message-album={group.albumId} className="my-1 min-w-0">
+              <div key={messageEntranceKey(first)} data-message-album={group.albumId} role="group" aria-label={`Медиаальбом, вложений: ${group.messages.length}`} className="my-1 min-w-0">
                 {showDate && (
                   <div className="my-3 flex justify-center" data-message-date-separator={getMessageDayKey(first.created_at)}>
                     <span className="rounded-full bg-[var(--kub-chat-chip)] px-3 py-1 text-xs font-semibold text-[color:var(--kub-chat-chip-text)]">

@@ -22,6 +22,10 @@ viewport fix belongs to the separate iOS/MacOS task.
   resolution settings are unchanged.
 - Shared-media and link lists now fail closed if the per-user hidden-message
   lookup fails, and expose a retry without advancing pagination.
+- Failed album previews fall back to the original only when its known size is
+  small enough for inline loading. Large originals remain tap-to-open; in
+  signed-only mode the fallback uses the signed original, never a public URL.
+  The mosaic has a group label for assistive technology.
 
 ## Evidence
 
@@ -42,6 +46,11 @@ viewport fix belongs to the separate iOS/MacOS task.
   `main`. The live web container's image tag matched that SHA; public HTML and
   its entry JS both returned HTTP 200, and the served JS contained the album
   and HD interface markers. This proves the web rollout, not native acceptance.
+- Commit `73f8f3a4` for mixed-queue album sends was pushed and its web image
+  tag observed in production. A preview-failure regression was first observed
+  failing, then passed on desktop Chromium, mobile Chromium and mobile WebKit.
+  Signed-only fallback and existing signed-only album checks passed on desktop
+  Chromium and mobile WebKit. Client typecheck and production build passed.
 
 ## Remaining
 

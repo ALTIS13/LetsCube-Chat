@@ -37,6 +37,7 @@ async function openAlbum(
     signedOnly?: boolean;
     sizeBytes?: number;
     replyIndex?: number;
+    brokenPreviewIndex?: number;
   } = {},
 ) {
   await requireFixtureServer(page.request);
@@ -149,7 +150,12 @@ async function openAlbum(
       const previewPath = `u1/album-${index}.${index - 1 === options.videoIndex ? "poster" : "preview"}.webp`;
       await page.route(
         `http://127.0.0.1:54321/storage/v1/object/${options.signedOnly ? "sign" : "public"}/album-media/${previewPath}**`,
-        (route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: card(index) }),
+        (route) =>
+          route.fulfill(
+            options.brokenPreviewIndex === index - 1
+              ? { status: 404, body: "" }
+              : { status: 200, contentType: "image/svg+xml", body: card(index) },
+          ),
       );
     }
   }
@@ -163,6 +169,7 @@ test("consecutive album photos share a compact mosaic and keep their message IDs
   const originalLoads = await openAlbum(page, false);
   const album = page.locator(`[data-message-album="${ALBUM}"]`);
   await expect(album).toHaveCount(1);
+  await expect(album).toHaveAttribute("aria-label", "Медиаальбом, вложений: 3");
   await expect(album.locator("[data-message-id]")).toHaveCount(3);
   for (const id of IDS) await expect(album.locator(`[data-message-id="${id}"]`)).toBeVisible();
   await expect(album.locator("img")).toHaveCount(0);
@@ -193,6 +200,59 @@ test("small album photos without previews load their originals inline", async ({
     )
     .toBe(true);
   expect(originalLoads).toHaveLength(3);
+});
+
+test("a failed album preview falls back to a small original", async ({ page }) => {
+  const originalLoads = await openAlbum(page, true, [0, 1, 2], {
+    sizeBytes: 500_000,
+    brokenPreviewIndex: 0,
+  });
+  const tile = page.locator(`[data-message-id="${IDS[0]}"]`);
+  await expect(tile.locator("img")).toHaveAttribute("src", "/__fixture-media/album-1.svg");
+  await expect
+    .poll(() => tile.locator("img").evaluate((image) => (image as HTMLImageElement).naturalWidth))
+    .toBeGreaterThan(0);
+  expect(originalLoads.some((url) => url.includes("album-1.svg"))).toBe(true);
+});
+
+test("a failed album preview does not automatically load a large original", async ({ page }) => {
+  const originalLoads = await openAlbum(page, true, [0, 1, 2], {
+    brokenPreviewIndex: 0,
+  });
+  const tile = page.locator(`[data-message-id="${IDS[0]}"]`);
+  await expect(tile.getByText("Превью недоступно")).toBeVisible();
+  expect(originalLoads.some((url) => url.includes("album-1.svg"))).toBe(false);
+  await tile.getByRole("button", { name: "Открыть фото: Кадр 1" }).click();
+  await expect(page.getByRole("dialog", { name: "Кадр 1" })).toBeVisible();
+  expect(originalLoads.some((url) => url.includes("album-1.svg"))).toBe(true);
+});
+
+test("a failed signed album preview falls back only to a signed small original", async ({
+  page,
+}) => {
+  test.skip(process.env.KUB_ALBUM_SIGNED_ONLY !== "1", "run with a signed-only fixture dev server");
+  const originalLoads = await openAlbum(page, true, [0, 1, 2], {
+    signedOnly: true,
+    sizeBytes: 500_000,
+    brokenPreviewIndex: 0,
+  });
+  const tile = page.locator(`[data-message-id="${IDS[0]}"]`);
+  await expect(tile.locator("img")).toHaveAttribute(
+    "src",
+    /\/object\/sign\/album-media\/u1\/album-1\.jpg/,
+  );
+  await expect
+    .poll(() => tile.locator("img").evaluate((image) => (image as HTMLImageElement).naturalWidth))
+    .toBeGreaterThan(0);
+  expect(originalLoads.some((url) => url.includes("/object/sign/album-media/u1/album-1.jpg"))).toBe(
+    true,
+  );
+  const allImagesSigned = await page
+    .locator(`[data-message-album="${ALBUM}"] img`)
+    .evaluateAll((images) =>
+      images.every((image) => !(image as HTMLImageElement).src.includes("/object/public/")),
+    );
+  expect(allImagesSigned).toBe(true);
 });
 
 test("retried item at the end takes its album position but opens its own message", async ({
