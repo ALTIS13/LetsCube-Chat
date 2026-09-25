@@ -9,6 +9,10 @@ viewport fix belongs to the separate iOS/MacOS task.
   count in each visual message's existing `media_metadata`. No database schema or
   storage policy changed. Individual message IDs, replies, reactions, read
   states and retry paths remain addressable.
+- The attachment sheet still allows at most 10 files per send. The send helper
+  defensively partitions longer queues into groups of 10, and a document or an
+  existing failed-album retry separates fresh visual runs without discarding
+  their grouping. This does not raise the sheet's user-visible limit.
 - Adjacent visible items from the same sender, chat and album render as one
   responsive mosaic. A deleted, failed, hidden or missing item cannot pull in
   unrelated messages. An out-of-order retry returns to its pick position.

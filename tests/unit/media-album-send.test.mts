@@ -28,6 +28,35 @@ test("a single file, a document, and a failed album item on retry are not regrou
   assert.equal(prepareMediaAlbumTargets(withNewPick)[1].albumId, undefined);
 });
 
+test("long selections become albums of at most ten instead of losing grouping", () => {
+  for (const count of [11, 12, 21]) {
+    const targets = prepareMediaAlbumTargets(Array.from({ length: count }, (_, index) => image(`photo${index}`)));
+    for (let start = 0; start < count; start += 10) {
+      const batch = targets.slice(start, start + 10);
+      if (batch.length === 1) {
+        assert.equal(batch[0].albumId, undefined);
+        continue;
+      }
+      assert.deepEqual(batch.map((item) => item.albumId), Array(batch.length).fill(`photo${start}-message`));
+      assert.deepEqual(batch.map((item) => item.albumIndex), batch.map((_, index) => index));
+      assert.deepEqual(batch.map((item) => item.albumCount), Array(batch.length).fill(batch.length));
+    }
+  }
+});
+
+test("documents and existing album retries separate new visual runs", () => {
+  const failed = { ...image("failed"), albumId: "old-album", albumIndex: 0, albumCount: 2 };
+  const targets = prepareMediaAlbumTargets([
+    image("a"), video("b"),
+    { id: "doc", clientMessageId: "doc-message", kind: "file" },
+    failed, image("c"), image("d"),
+  ]);
+  assert.deepEqual(targets.map((item) => item.albumId), [
+    "a-message", "a-message", undefined, "old-album", "c-message", "c-message",
+  ]);
+  assert.deepEqual(targets.map((item) => item.albumIndex), [0, 1, undefined, 0, 0, 1]);
+});
+
 test("album metadata is sent only for visual media with a complete valid tuple", () => {
   const source = { kind: "image" as const, mimeType: "image/webp", size: 1234 };
   const album = buildAttachmentMediaMetadata(
