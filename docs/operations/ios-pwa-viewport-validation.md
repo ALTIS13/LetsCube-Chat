@@ -1,6 +1,6 @@
 # Проверка нижнего края iOS PWA
 
-Owner: LETSCUBE PWA. Stage: local viewport regression green; real installed-iPhone proof pending. Evidence: D-111 in `docs/INTERFACE_DEFECT_REGISTER.md` and `tests/e2e/installed-ios-viewport.spec.ts`. Blocker: the new captures show the symptom but do not provide inspectable device geometry or an interactive iPhone session. Next: compare a real installed app at rest, with the keyboard open, after dismissal and after relaunch.
+Owner: LETSCUBE PWA. Stage: the list and chat shell now share a global visual-viewport measurement; local Chromium/WebKit regression green, real installed-iPhone proof pending. Evidence: D-111 in `docs/INTERFACE_DEFECT_REGISTER.md` and `tests/e2e/installed-ios-viewport.spec.ts`. Blocker: the new captures show the symptom but do not provide inspectable device geometry or the active JS bundle identity. Next: compare a real installed app at rest, with the keyboard open, after dismissal and after relaunch.
 
 ## Что доступно на Windows 11
 
@@ -22,6 +22,7 @@ Owner: LETSCUBE PWA. Stage: local viewport regression green; real installed-iPho
   };
   const viewport = window.visualViewport;
   return {
+    entryScript: [...document.scripts].map((script) => script.src).filter(Boolean).map((src) => new URL(src).pathname).find((path) => /\/assets\/index-[^/]+\.js$/.test(path)) ?? null,
     standalone: navigator.standalone === true,
     displayMode: matchMedia('(display-mode: standalone)').matches,
     iosShell: document.documentElement.hasAttribute('data-ios-standalone'),
@@ -36,6 +37,7 @@ Owner: LETSCUBE PWA. Stage: local viewport regression green; real installed-iPho
     appTopToken: getComputedStyle(document.documentElement).getPropertyValue('--kub-app-top').trim(),
     safeBottomToken: getComputedStyle(document.documentElement).getPropertyValue('--kub-safe-bottom').trim(),
     shell: box('[data-testid="desktop-app-shell"]'),
+    navigation: box('[aria-label="Навигация"]'),
     composer: box('[data-testid="chat-composer-dock"]'),
     composerPaddingBottom: (() => {
       const dock = document.querySelector('[data-testid="chat-composer-dock"]');
@@ -45,6 +47,6 @@ Owner: LETSCUBE PWA. Stage: local viewport regression green; real installed-iPho
 })()
 ```
 
-Если `iosShell=false` при `displayMode=true`, сломано определение установленного режима. Если низ shell/composer выше видимого края на десятки CSS px, виновата высота контейнера. При открытой клавиатуре сравнить `bodyTop`, `visualPageTop`, верх shell и шапки: отрицательный `bodyTop` при нулевом `scrollY` означает системный сдвиг, который `scrollTo(0, 0)` не исправляет. Если shell и composer доходят до края, а пустой участок совпадает примерно с нижним safe-area inset, это не обрезка viewport: надо оценивать окраску фона и расстояние органов управления от системной полосы жестов. Участок экрана, который не входит в paintable viewport PWA, может принадлежать системе; CSS приложения не сможет его закрасить. Одна только экранная ширина или desktop screenshot не доказывает ни один из этих вариантов.
+Сравнить `entryScript` с опубликованным текущим bundle до выводов по новому исправлению: установленная PWA может ещё исполнять старый кэш. Если `iosShell=false` при `displayMode=true`, сломано определение установленного режима. Если низ shell/navigation/composer уходит ниже `visualHeight`, оболочка больше видимого окна. При открытой клавиатуре сравнить `bodyTop`, `visualPageTop`, верх shell и шапки: отрицательный `bodyTop` при нулевом `scrollY` означает системный сдвиг, который `scrollTo(0, 0)` не исправляет. Если shell и composer доходят до края, а пустой участок совпадает примерно с нижним safe-area inset, это не обрезка viewport: надо оценивать окраску фона и расстояние органов управления от системной полосы жестов. Участок экрана, который не входит в paintable viewport PWA, может принадлежать системе; CSS приложения не сможет его закрасить. Одна только экранная ширина или desktop screenshot не доказывает ни один из этих вариантов.
 
 Источники: [WebKit об установке из сторонних браузеров](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/), [WebKit об изменениях iOS 26](https://webkit.org/blog/17333/webkit-features-in-safari-26-0/), [Apple о выпуске iOS 27](https://developer.apple.com/news/releases/?id=09142026a), [WebKit о Safari 27 и Safari MCP](https://webkit.org/blog/18325/webkit-features-for-safari-27-0/), [Apple о симуляторах](https://developer.apple.com/documentation/safari-developer-tools/installing-xcode-and-simulators), [BrowserStack Live об установке PWA](https://www.browserstack.com/support/faq/live/features-live/how-can-i-progressive-web-app-pwa-specific-scenarios-on-devices-in-live).

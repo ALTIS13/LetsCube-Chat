@@ -109,7 +109,7 @@ export function MainLayout() {
     // itself paints there for a page that does not ask for the whole screen.
     //
     // `h-app` is `--kub-app-height`: 100dvh, with a 100vh fallback in the
-    // installed iPhone app until ChatWindow can measure visualViewport (D-111).
+    // installed iPhone app until PwaRuntime measures visualViewport (D-111).
     <div className="flex flex-col h-app w-screen overflow-hidden px-safe" data-ios-app-shell="">
       <DesktopUpdatePill />
       {/* Somebody calling, or being called. Outside the shell below rather than

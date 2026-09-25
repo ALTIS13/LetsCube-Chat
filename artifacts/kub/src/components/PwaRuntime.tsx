@@ -9,6 +9,48 @@ type ConnectionState = "hidden" | "offline" | "online";
 
 export function PwaRuntime() {
   usePwaServiceWorker();
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const viewport = window.visualViewport;
+    if (!root.hasAttribute("data-ios-standalone") || !viewport) return;
+
+    // Every full-height page reads this token. A ChatWindow-only measurement
+    // left the chat list's navigation beneath the installed app's lower band;
+    // a MainLayout-only measurement left tasks and public pages there too.
+    let restingHeight = viewport.height;
+    let restingWidth = viewport.width;
+    const update = () => {
+      const height = viewport.height;
+      if (!Number.isFinite(height) || height <= 0) return;
+      if (Math.abs(viewport.width - restingWidth) > 1) {
+        restingWidth = viewport.width;
+        restingHeight = height;
+      } else if (height >= restingHeight - 80) {
+        restingHeight = height;
+      }
+
+      root.style.setProperty("--kub-app-height", `${Math.round(height)}px`);
+      const keyboardVisible = Math.max(window.innerHeight - height, restingHeight - height) > 80;
+      const pageTop = Number.isFinite(viewport.pageTop) ? viewport.pageTop : 0;
+      const bodyTop = document.body.getBoundingClientRect().top;
+      const pan = keyboardVisible ? Math.max(0, Math.round(pageTop), Math.round(-bodyTop)) : 0;
+      root.style.setProperty("--kub-app-top", `${pan}px`);
+    };
+
+    update();
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+      root.style.removeProperty("--kub-app-height");
+      root.style.removeProperty("--kub-app-top");
+    };
+  }, []);
   return <ConnectionStatusBanner />;
 }
 

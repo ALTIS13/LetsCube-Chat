@@ -6542,6 +6542,20 @@ native black system band, if outside the PWA's paintable viewport, cannot be
 removed by moving the web shell; the result must be inspected on the tester's
 installed iPhone before this entry can be closed.
 
+**2026-09-25 list-screen follow-up, device result pending:** three newer private
+captures also show the bottom navigation capsule clipped on the chat list, while
+the conversation composer is visible above a dark lower band with the keyboard
+closed and remains above the keyboard when it opens. The screenshots contain no
+viewport geometry or active bundle identity, so they cannot establish whether
+the phone had loaded the previous chat-only fix. A new fixture regression first
+showed the list shell at 932px when only 872px was visible, and the search-keyboard
+pan left its top at -72px. The visual-viewport height and pan writer now lives in
+the globally mounted `PwaRuntime` rather than `ChatWindow`: it also covers the
+list, tasks and public full-height pages. The chat still owns only its composer
+safe-area decision. Chromium and desktop WebKit tests check the list's navigation
+at rest, search keyboard, chat return, and a public full-height route. This is
+source and synthetic-browser evidence, not a physical iPhone acceptance result.
+
 ## D-112 `[x]` In the Windows app the window's own buttons sit over the page's top-right controls, and take most of their clicks
 
 **Severity:** high for the Windows app. Reported by the owner on 2026-09-11 with a

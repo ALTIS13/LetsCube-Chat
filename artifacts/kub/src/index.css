@@ -311,7 +311,7 @@
      about 108pt above the bottom edge, against 46pt for a shell as tall as the
      screen, and the band was there before anything was typed and stayed after
      the app was opened again (D-111). `100vh` is the initial fallback; the
-     chat shell uses visualViewport.height once it is available. */
+     messenger shell uses visualViewport.height once it is available. */
   --kub-app-height: 100dvh;
 
   /* The chat screen's scroll edge: how much the conversation is frosted where
@@ -338,8 +338,8 @@ html[data-ios-standalone] {
 }
 
 /* iOS may pan the visual viewport without changing document scrollTop when the
-   keyboard appears. ChatWindow writes the measured pan only while its composer
-   is focused; moving the shell as one box keeps both header and dock visible. */
+   keyboard appears. PwaRuntime writes the measured pan for the messenger shell;
+   moving it as one box keeps both header and floating controls visible. */
 html[data-ios-standalone] [data-ios-app-shell] {
   position: relative;
   top: var(--kub-app-top, 0px);

@@ -268,8 +268,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const supabase = createClient();
   const [stagedAttachments, setStagedAttachments] = useState<StagedAttachment[]>([]);
   const [keyboardInset, setKeyboardInset] = useState(0);
-  /** The installed iPhone app with its keyboard up; its shell is always fitted to what is visible (D-111). */
-  const [shellFitsKeyboard, setShellFitsKeyboard] = useState(false);
+  /** The installed iPhone composer must not pad for the home indicator while the keyboard covers it. */
+  const [installedIosKeyboardVisible, setInstalledIosKeyboardVisible] = useState(false);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   const restingVisualHeightRef = useRef<number | null>(null);
   const stagedAttachmentsRef = useRef<StagedAttachment[]>([]);
@@ -290,32 +290,20 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   useEffect(() => {
     const visualViewport = window.visualViewport;
     const root = document.documentElement;
-    // The installed iPhone app. iOS does not resize it for the keyboard; it pans
-    // what is visible up over the page. Lifting the composer by the keyboard's
-    // height put it on the keys but took the chat header off the top of the
-    // screen, and on a shell iOS had already made short it left a band between
-    // the composer and the keys as well (D-111). There, the shell is fitted
-    // to what is visible and the keyboard pan is taken back, so the
-    // header stays at the top and the composer sits on the keys. Phones and
-    // browsers that resize for their keyboard keep the lift below.
+    // PwaRuntime owns the installed iPhone shell's height and pan for every
+    // screen. This chat only decides whether its composer still
+    // needs the home-indicator inset under the keyboard. Other mobile browsers
+    // keep lifting the composer by their keyboard inset.
     const installedIos = root.hasAttribute("data-ios-standalone");
-    const releaseShell = () => {
-      root.style.removeProperty("--kub-app-height");
-      root.style.removeProperty("--kub-app-top");
-      setShellFitsKeyboard(false);
-    };
     const updateKeyboardInset = () => {
       const mobile = window.innerWidth < 768;
       const composerHasFocus = Boolean(composerNode?.contains(document.activeElement));
       if (!mobile || !visualViewport) {
-        if (installedIos) releaseShell();
+        setInstalledIosKeyboardVisible(false);
         setKeyboardInset(0);
         return;
       }
       if (installedIos) {
-        // A Home Screen app can be given less visible height than 100vh even
-        // before the keyboard opens. Fit the shell to that real visible area.
-        root.style.setProperty("--kub-app-height", `${Math.round(visualViewport.height)}px`);
         if (!isComposerFocused || !composerHasFocus) {
           restingVisualHeightRef.current = visualViewport.height;
         }
@@ -324,13 +312,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         const restingHeight = restingVisualHeightRef.current ?? visualViewport.height;
         const keyboardVisible = isComposerFocused && composerHasFocus
           && Math.max(window.innerHeight - visualViewport.height, restingHeight - visualViewport.height) > 80;
-        // On iOS 26 the system can pan the document without changing scrollY;
-        // scrollTo(0, 0) cannot undo it. Follow the visual viewport instead.
-        const pan = keyboardVisible
-          ? Math.max(0, Math.round(visualViewport.pageTop), Math.round(-document.body.getBoundingClientRect().top))
-          : 0;
-        root.style.setProperty("--kub-app-top", `${pan}px`);
-        setShellFitsKeyboard(keyboardVisible);
+        setInstalledIosKeyboardVisible(keyboardVisible);
         setKeyboardInset(0);
         return;
       }
@@ -352,7 +334,6 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       visualViewport?.removeEventListener("scroll", updateKeyboardInset);
       window.removeEventListener("resize", updateKeyboardInset);
       window.removeEventListener("orientationchange", updateKeyboardInset);
-      if (installedIos) releaseShell();
     };
   }, [composerNode, isComposerFocused]);
 
@@ -1649,7 +1630,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           "--kub-keyboard-inset": `${keyboardInset}px`,
           // The keys cover the home indicator, so while they are up in the
           // installed iPhone app nothing in the conversation pads for it (D-111).
-          ...(shellFitsKeyboard ? { "--kub-safe-bottom": "0px" } : {}),
+          ...(installedIosKeyboardVisible ? { "--kub-safe-bottom": "0px" } : {}),
           "--kub-composer-height": `${composerHeight}px`,
           "--kub-chat-chrome-height": `${chromeHeight}px`,
           "--kub-message-list-bottom-inset": `${messageListBottomInset}px`,

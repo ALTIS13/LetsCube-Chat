@@ -124,6 +124,18 @@ async function openConversation(page: Page) {
   await page.waitForTimeout(800);
 }
 
+async function openChatList(page: Page) {
+  const now = new Date().toISOString();
+  await openFixture(page, {
+    me: ME,
+    chats: [chat(CHAT_ID, "private", null, now)],
+    memberships: [membership(CHAT_ID, ME, "owner", now), membership(CHAT_ID, ANYA, "member", now)],
+    messages: history(),
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("navigation", { name: "Навигация" })).toBeVisible();
+}
+
 function keyboard(page: Page, height: number, offsetTop = 0, shrinkLayout = false) {
   return page.evaluate(
     ([value, top, shrink]) =>
@@ -143,6 +155,7 @@ function geometry(page: Page) {
       null;
     const dock = document.querySelector<HTMLElement>('[data-testid="chat-composer-dock"]');
     const header = document.querySelector<HTMLElement>('[data-testid="chat-control-row"]');
+    const nav = document.querySelector<HTMLElement>('nav[aria-label="Навигация"]');
     return {
       token: getComputedStyle(document.documentElement).getPropertyValue("--kub-app-height").trim(),
       fitted: document.documentElement.style.getPropertyValue("--kub-app-height"),
@@ -151,6 +164,8 @@ function geometry(page: Page) {
       dockBottom: dock ? Math.round(dock.getBoundingClientRect().bottom) : null,
       dockPadding: dock ? getComputedStyle(dock).paddingBottom : null,
       headerTop: header ? Math.round(header.getBoundingClientRect().top) : null,
+      navTop: nav ? Math.round(nav.getBoundingClientRect().top) : null,
+      navBottom: nav ? Math.round(nav.getBoundingClientRect().bottom) : null,
       visualHeight: window.visualViewport?.height ?? null,
       visualTop: window.visualViewport?.offsetTop ?? null,
     };
@@ -184,6 +199,7 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
           ? ({ matches: true, media: query } as MediaQueryList)
           : nativeMatchMedia(query);
     });
+    await installKeyboardStandIn(page, SCREEN - 60);
     await page.goto("/");
 
     await expect(page.locator("html[data-ios-standalone]")).toHaveCount(1);
@@ -191,7 +207,24 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
       await page.evaluate(() =>
         getComputedStyle(document.documentElement).getPropertyValue("--kub-app-height").trim(),
       ),
-    ).toBe("100vh");
+    ).toBe(`${SCREEN - 60}px`);
+  });
+
+  test("a public page without a chat fits the installed app's shorter visible viewport", async ({
+    page,
+  }) => {
+    await emulateInstalledIosApp(page, INSETS);
+    await installKeyboardStandIn(page, SCREEN - 60);
+    await page.goto("/privacy", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByTestId("public-scroll-root")).toBeVisible();
+    await expect
+      .poll(async () =>
+        page
+          .getByTestId("public-scroll-root")
+          .evaluate((element) => Math.round(element.getBoundingClientRect().height)),
+      )
+      .toBe(SCREEN - 60);
   });
 
   test("the shell is as tall as the screen, and with the keys up it fits what is visible", async ({
@@ -259,6 +292,55 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
     expect(rest.dockPadding, "the home indicator still has its own padding").toBe(
       `${INSETS.bottom}px`,
     );
+  });
+
+  test("the chat list keeps every bottom navigation tab inside a shorter installed-app viewport", async ({
+    page,
+  }) => {
+    await emulateInstalledIosApp(page, INSETS);
+    await installKeyboardStandIn(page, SCREEN - 60);
+    await openChatList(page);
+
+    const rest = await geometry(page);
+    expect(rest.visualHeight).toBe(SCREEN - 60);
+    expect(rest.shellHeight, "the list shell fits the paintable area").toBe(SCREEN - 60);
+    expect(rest.navTop, "the navigation capsule remains on screen").toBeGreaterThanOrEqual(0);
+    expect(rest.navBottom, "no tab is cut by the system's lower band").toBeLessThanOrEqual(
+      SCREEN - 60,
+    );
+
+    const row = page.getByTestId("chat-list-item").filter({ hasText: ANYA.full_name });
+    await expect(row).toBeVisible();
+    await row.click();
+    await expect(
+      page.locator('[data-message-bubble="true"]').filter({ hasText: LATEST }),
+    ).toBeVisible();
+    await page.locator('[data-testid="chat-composer-dock"] textarea').focus();
+    await keyboard(page, KEYBOARD, 72);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await keyboard(page, 0);
+    await page.getByRole("button", { name: "Назад" }).click();
+    await expect(page.getByRole("navigation", { name: "Навигация" })).toBeVisible();
+    await expect.poll(async () => (await geometry(page)).shellHeight).toBe(SCREEN - 60);
+    expect((await geometry(page)).navBottom).toBeLessThanOrEqual(SCREEN - 60);
+  });
+
+  test("search keyboard pan keeps the shared chat-list shell visible and restores it on dismissal", async ({
+    page,
+  }) => {
+    await emulateInstalledIosApp(page, INSETS);
+    await installKeyboardStandIn(page, SCREEN - 60);
+    await openChatList(page);
+
+    await page.getByTestId("sidebar-search-input").focus();
+    await keyboard(page, KEYBOARD, 72, true);
+    await expect.poll(async () => (await geometry(page)).shellTop).toBe(0);
+    await expect.poll(async () => (await geometry(page)).shellHeight).toBe(SCREEN - KEYBOARD);
+    expect((await geometry(page)).navBottom).toBeLessThanOrEqual(SCREEN - KEYBOARD);
+
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await keyboard(page, 0);
+    await expect.poll(async () => (await geometry(page)).shellHeight).toBe(SCREEN - 60);
   });
 
   test("the keyboard's visual-viewport pan keeps the header and composer inside the visible area", async ({
