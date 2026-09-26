@@ -698,6 +698,20 @@ async function deliver(
   subscription: SubscriptionRow | undefined,
   webPushAppOrigin: string | undefined,
 ): Promise<"sent" | "failed" | "pruned" | "deferred"> {
+  let legacyPayload: SafeWebPushPayload;
+  let topic: string | null;
+  try {
+    legacyPayload = safePayload(row.payload);
+    topic = await createWebPushTopic(legacyPayload.tag);
+  } catch (error) {
+    await markOutbox(supabaseUrl, secretKey, claimToken, row.id, {
+      attempt_count: row.attempt_count + 1,
+      claim_token: null,
+      claimed_until: null,
+      last_error: `webpush:unknown:${readWebPushErrorReason(error) ?? "unknown"}`,
+    });
+    return "failed";
+  }
   const eligibility = await recheckWebPushDelivery(
     supabaseUrl,
     secretKey,
@@ -727,8 +741,6 @@ async function deliver(
   }
 
   try {
-    const legacyPayload = safePayload(row.payload);
-    const topic = await createWebPushTopic(legacyPayload.tag);
     await webpush.sendNotification(
       {
         endpoint: subscription.endpoint,

@@ -330,6 +330,60 @@ test("reset forgets every signature — no address outlives a session", async ()
   assert.equal(store.__debug().known, 0);
 });
 
+test("a signer response from before reset cannot replace the new session's address", async () => {
+  const scheduler = manualScheduler();
+  const answers: Array<(url: string) => void> = [];
+  const store = createSignedMediaUrlStore({
+    schedule: scheduler.schedule,
+    sign: (_bucket, paths) => new Promise((resolve) => {
+      answers.push((url) => resolve(paths.map((path) => ({ path, signedUrl: url }))));
+    }),
+  });
+
+  store.request(A);
+  await scheduler.run();
+  assert.equal(answers.length, 1);
+
+  store.reset();
+  store.request(A);
+  await scheduler.run();
+  assert.equal(answers.length, 2);
+
+  answers[1]("https://s/new-session");
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(store.get(A), "https://s/new-session");
+
+  answers[0]("https://s/old-session");
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(store.get(A), "https://s/new-session");
+});
+
+test("an account switch clears signatures but a token refresh for the same account does not", async () => {
+  const scheduler = manualScheduler();
+  const { calls, sign } = recordingSigner();
+  const store = createSignedMediaUrlStore({ sign, schedule: scheduler.schedule });
+
+  store.setAccount("account-a");
+  store.request(A);
+  await scheduler.run();
+  assert.equal(store.get(A), "https://s/sign/media/owner/a.jpg?token=t1");
+
+  store.setAccount("account-a");
+  assert.equal(store.get(A), "https://s/sign/media/owner/a.jpg?token=t1");
+  assert.equal(calls.length, 1);
+
+  store.setAccount("account-b");
+  assert.equal(store.__debug().known, 0);
+  store.request(A);
+  await scheduler.run();
+  assert.equal(store.get(A), "https://s/sign/media/owner/a.jpg?token=t2");
+
+  store.setAccount(null);
+  assert.equal(store.__debug().known, 0);
+});
+
 test("nothing is a null ref's problem", () => {
   const { sign } = recordingSigner();
   const store = createSignedMediaUrlStore({ sign, schedule: manualScheduler().schedule });

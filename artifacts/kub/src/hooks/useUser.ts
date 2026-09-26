@@ -7,6 +7,7 @@ import type { Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { createSingleFlight } from "@/lib/singleFlight";
+import { signedMediaUrls } from "@/lib/media/mediaUrl";
 
 const PROFILE_LOAD_ERROR = "Не удалось загрузить профиль. Проверьте соединение и попробуйте снова.";
 
@@ -170,6 +171,8 @@ export function useUser() {
     void loadSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // The parallel getSession() read may finish after a newer auth event.
+      signedMediaUrls().setAccount(session?.user.id ?? null);
       setUser(session?.user ?? null);
       if (session?.user) {
         supabase.realtime.setAuth(session.access_token);

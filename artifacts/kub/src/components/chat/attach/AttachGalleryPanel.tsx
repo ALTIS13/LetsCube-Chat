@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 import { AttachSelectionCircle } from "./AttachSelectionCircle";
 import { RAISED_TARGET, type AttachPick } from "./attachTypes";
 
+const PHOTO_DISABLED_SINK = "disabled:bg-black disabled:text-white/60 disabled:cursor-not-allowed";
+
 export interface AttachGalleryEntry {
   id: "camera" | "library";
   label: string;
@@ -190,7 +192,7 @@ export function AttachGalleryPanel({ entries, picks, selected, onToggle, onMove,
                   aria-label={`Переместить ${noun.toLowerCase()} ${index + 1} раньше`}
                   disabled={number === 1}
                   onClick={() => onMove(pick.id, -1)}
-                  className={cn("flex size-6 items-center justify-center rounded-full disabled:opacity-35", FOCUS_RING)}
+                  className={cn("flex size-6 items-center justify-center rounded-full", PHOTO_DISABLED_SINK, FOCUS_RING)}
                 >
                   <KubIcon name="chevronLeft" size={14} />
                 </button>
@@ -199,7 +201,7 @@ export function AttachGalleryPanel({ entries, picks, selected, onToggle, onMove,
                   aria-label={`Переместить ${noun.toLowerCase()} ${index + 1} позже`}
                   disabled={number === selected.length}
                   onClick={() => onMove(pick.id, 1)}
-                  className={cn("flex size-6 items-center justify-center rounded-full disabled:opacity-35", FOCUS_RING)}
+                  className={cn("flex size-6 items-center justify-center rounded-full", PHOTO_DISABLED_SINK, FOCUS_RING)}
                 >
                   <KubIcon name="chevronRight" size={14} />
                 </button>

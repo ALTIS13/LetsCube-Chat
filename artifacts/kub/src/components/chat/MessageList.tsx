@@ -1828,6 +1828,7 @@ const MessageRow = React.memo(function MessageRow({
   // same functions until the message, or what it may do, changes.
   const handlers = React.useMemo(() => ({
     onReaction: isLocalSend ? NOOP : (emoji: string) => actions.reaction(msg.id, emoji),
+    onBotInputSubmit: (text: string) => actions.submitBotInput(msg, text),
     onRetrySend: capabilities.retrySend && msg.failed ? () => actions.retrySend(msg) : undefined,
     onEditFailedSend: capabilities.editFailedSend && msg.failed ? () => actions.editFailedSend(msg) : undefined,
     onDiscardLocalMessage: capabilities.discardLocalMessage && isLocalSend
@@ -2185,7 +2186,7 @@ const MessageRow = React.memo(function MessageRow({
               authorChatRole={authorChatRole}
               botCommands={botCommands}
               botInputVisibleToAll={botInputVisibleToAll}
-              onBotInputSubmit={(text) => actions.submitBotInput(msg, text)}
+              onBotInputSubmit={handlers.onBotInputSubmit}
               deliveryState={deliveryState}
               groupReadInfo={groupReadInfo}
               onOpenGroupReadReceipts={handlers.onOpenGroupReadReceipts}

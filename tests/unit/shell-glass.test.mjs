@@ -360,7 +360,8 @@ const veiled = [
   // and the one hover it owns — D-215's dashed «Выдать роль» chip — went with
   // it. The pair still totals 20, which is the point of counting them per file
   // rather than across the tree.
-  ["components/chat/ChatInfoPanel.tsx", 19],
+  // 20 after the failed shared-media lookup gained its own retry action.
+  ["components/chat/ChatInfoPanel.tsx", 20],
   // The member card, extracted from the panel above by D-283 so a profile can
   // be opened without entering a conversation. One hover, D-215's.
   ["components/chat/MemberCard.tsx", 2],

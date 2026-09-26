@@ -108,6 +108,8 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
   const inFlight = new Set<string>();
   const listeners = new Set<() => void>();
   let flushScheduled = false;
+  let generation = 0;
+  let accountId: string | null | undefined;
 
   function emit(): void {
     for (const listener of [...listeners]) listener();
@@ -139,7 +141,10 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
   function scheduleFlush(): void {
     if (flushScheduled) return;
     flushScheduled = true;
-    schedule(() => void flush());
+    const scheduledGeneration = generation;
+    schedule(() => {
+      if (scheduledGeneration === generation) void flush(scheduledGeneration);
+    });
   }
 
   /** One bucket's worth of the queue, so a POST is never mixed across buckets. */
@@ -162,7 +167,7 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
     return { bucket, keys, paths };
   }
 
-  async function flush(): Promise<void> {
+  async function flush(flushGeneration: number): Promise<void> {
     flushScheduled = false;
     const batch = takeBatch();
     if (!batch) return;
@@ -170,6 +175,7 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
     let changed = false;
     try {
       const results = await sign(batch.bucket, batch.paths, ttlSeconds);
+      if (flushGeneration !== generation) return;
       const issuedAtMs = now();
       const byPath = new Map<string, SignedPathResult>();
       for (const result of results) byPath.set(result.path, result);
@@ -206,14 +212,32 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
       // "none" for a dropped connection would blank a conversation for the rest
       // of the session.
     } finally {
-      for (const key of batch.keys) inFlight.delete(key);
+      if (flushGeneration === generation) {
+        for (const key of batch.keys) inFlight.delete(key);
+      }
     }
 
     if (changed) emit();
     if (pending.size > 0) scheduleFlush();
   }
 
+  function clear(): void {
+    generation += 1;
+    known.clear();
+    pending.clear();
+    inFlight.clear();
+    flushScheduled = false;
+    emit();
+  }
+
   return {
+    /** A refreshed token for this account keeps its URLs; another account does not. */
+    setAccount(nextAccountId: string | null): void {
+      if (accountId === nextAccountId) return;
+      accountId = nextAccountId;
+      clear();
+    },
+
     /** Ask about an object. Cheap and idempotent; safe to call every render. */
     request(ref: MediaObjectRef | null | undefined): void {
       if (!ref) return;
@@ -263,14 +287,7 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
       };
     },
 
-    /** Test seam, and what a sign-out calls: no signature outlives a session. */
-    reset(): void {
-      known.clear();
-      pending.clear();
-      inFlight.clear();
-      flushScheduled = false;
-      emit();
-    },
+    reset: clear,
 
     /** Test seam. */
     __debug() {

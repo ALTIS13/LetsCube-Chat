@@ -48,3 +48,15 @@ Remaining gaps, in priority order:
 
 No exact Telegram or Discord cache limits were copied. The reference evidence
 is in `reference-clients.md` section 20.
+
+## 2026-09-27 signed-address checkpoint
+
+The in-memory signed-URL store now owns an account ID. It clears on account
+change or sign-out, preserves fresh entries on a token refresh for the same
+account, and rejects responses from requests started before a reset. The auth
+observer, not a parallel `getSession()` read, drives that boundary. A regression
+test reproduced the stale-response overwrite before the fix. This changes no
+stored media bytes, Storage policy, bucket visibility or native cache behavior.
+The managed account-scoped byte cache and physical authenticated Android save
+remain open; the public bucket and older embedded Android bundles also block
+claiming private-media rollout readiness.

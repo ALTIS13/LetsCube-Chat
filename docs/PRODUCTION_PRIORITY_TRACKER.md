@@ -2,6 +2,31 @@
 
 Status: active production-hardening tracker, updated 2026-09-25.
 
+**2026-09-27 iPhone device boundary:** MobileNext cloud iPhone 14 Pro Max,
+iOS 26.5: the installed Home Screen PWA opened the guest sign-in screen;
+the visible sign-in controls stayed above the keyboard, and returning from
+Home restored that screen. In an ordinary Safari tab, the same URL repeatedly
+showed the app's boot-recovery error, including in a new Private tab. Desktop
+WebKit at the matching viewport did not reproduce it. The device was released;
+Safari Web Inspector evidence, an authenticated synthetic chat, composer/safe
+area, attachments and push remain open. Do not treat Safari's boot error as a
+measured bottom-inset defect or the guest PWA check as chat acceptance.
+
+**2026-09-27 media session boundary (source candidate):** the signed-URL store
+now discards an in-flight answer from a previous auth session and clears its
+addresses when the account ID changes, without re-signing on a token refresh
+for the same account. The regression failed against the previous code, then
+focused tests, the full unit suite, workspace typecheck and a production-mode
+web build passed. This
+does **not** make the public `media` bucket private or add a managed byte cache.
+Before D-208's private-bucket switch, verify real-member signing and renewal,
+including generated previews, and account-switch behavior with an authenticated
+client; preserve compatibility with installed Android bundles. Five failures
+seen in the first full unit run were fixed or updated against verified new UI
+surfaces; the repeated full run exited successfully. Web Push now prepares its
+topic before the final read/foreground eligibility check, with a retry path if
+preparation fails. Edge deployment and live push delivery are separate proofs.
+
 **2026-09-25 shared-web candidate:** 2-10 picked visual items now carry one
 album ID and render as a responsive mosaic without losing per-item actions;
 new-device photo default is HD, with explicit SD retained. Shared-media/link
