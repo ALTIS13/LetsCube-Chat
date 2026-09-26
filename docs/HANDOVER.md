@@ -178,10 +178,11 @@ needs its own proof before implementation.
 **Current iPhone PWA checkpoint, 2026-09-27 (Codex):** the separate iOS/MacOS
 chat owns the Home Screen viewport correction. Tester screenshots place the
 clipped page edge at ≈873 of 932 pt. The shell fix was released in `c057d768`
-and the attachment fixed-anchor follow-up in `b7b4e6c3`; the installed
-document's exact bundle remains unverified. CSS guard hardening keeps iOS
-component styles layered, the attachment's keyboard inset independent from
-the shared safe-area token, and 48px touch areas intact. Local checks: 70/70
+and the attachment fixed-anchor follow-up in `b7b4e6c3`. CSS guard hardening
+was published in `d2686623`; the installed document's exact bundle remains
+unverified. The hardening keeps iOS component styles layered and the
+attachment's keyboard inset independent from the shared safe-area token, while
+preserving 48px touch areas. Local checks: 70/70
 focused unit, 44/44 viewport Chromium/WebKit, 25/25 applicable safe-area and
 10/10 Android/web boundary scenarios, plus typecheck and build. Next: relaunch
 the installed PWA online, inspect attachment controls with and without the

@@ -1,12 +1,14 @@
 # Проверка нижнего края iOS PWA
 
-Owner: LETSCUBE PWA. Stage: the published `b7b4e6c3` viewport fix is being hardened in an isolated worktree; the CSS-guard patch is locally verified but not yet integrated into `main`. Evidence: D-111 in `docs/INTERFACE_DEFECT_REGISTER.md` and the tests below. Blockers: LetsCube Main is using the shared release checkout, and the tester's installed iPhone has not supplied inspectable geometry or active JS bundle identity. Next: integrate after Main releases the git slot, then compare the real installed app at rest, with an attachment and keyboard open, after dismissal and after relaunch.
+Owner: LETSCUBE PWA. Stage: the viewport fix `b7b4e6c3` and CSS-guard hardening `d2686623` are published; the `d26866233a5d951e90e8ec319b55a59e46394b69` web image passed the health and replica-retirement check. Evidence: D-111 in `docs/INTERFACE_DEFECT_REGISTER.md`, the tests below, and the public content check below. Blocker: the tester's installed iPhone has not supplied inspectable geometry or active JS bundle identity. Next: compare the real installed app at rest, with an attachment and keyboard open, after dismissal and after relaunch.
 
 ## CSS-guard regression after the viewport release (2026-09-27)
 
 The published build left iOS component selectors unlayered, defined `--kub-safe-bottom` a second time on the attachment sheet, and used two runtime viewport tokens without CSS defaults. Four unit guards failed; moving the selectors into `@layer components` alone made the chat title 15px instead of 17px in both Chromium and WebKit. The local patch keeps `--kub-safe-bottom` single-source, gives only the attachment sheet a keyboard-specific inset token, provides runtime-token defaults, uses an `ios:` utility variant where iOS must override base Tailwind typography/positioning, and preserves 48px touch floors.
 
 Local evidence in the isolated worktree: 70/70 focused unit tests; 44/44 installed-viewport browser cases in Chromium and WebKit; 25/25 applicable safe-area cases (the other 25 are intentionally engine-skipped); 10/10 Android/web bottom-navigation cases at 360px and 390px; typecheck and Vite build with its own `sw.js build` marker. Synthetic fixture screenshots at 390px and 1440px in both themes were inspected. Mutation probes showed the title regressing to 15px, the More button to 44px, and a 30px keyboard gap when the corresponding new rules were disabled; each test returned green after restoration. These are local/browser results, not physical Home Screen acceptance or production proof.
+
+Production static proof for `d2686623`: after the old web replica exited, the public HTML referenced accessible JS/CSS assets and `sw.js` precached those same paths (`sw.js` build `fddb0c1fadc19058`). The prior source and bundle had `kub-ios-chat-list-title` but no `ios:text-base`; the new source and public JS have the reverse. This proves the deployed web bytes changed, not that an installed iPhone has activated the new bundle or that its system-owned strip is fixed.
 
 ## Что доступно на Windows 11
 
