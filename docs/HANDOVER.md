@@ -193,6 +193,16 @@ diagnose physical Safari without personal credentials, then inspect attachment
 controls and the lower edge in an authorised synthetic chat. The system-owned
 lower strip may remain outside DOM paint. See the [iPhone PWA viewport record](operations/ios-pwa-viewport-validation.md).
 
+**2026-09-27 web boot recovery checkpoint:** `37425e08` is deployed in the
+sole healthy web image `c7c220f3`. After a missing entry/boot error, explicit
+retry asks for a fresh document URL and removes its temporary nonce before the
+app starts. A stale-HTML/retired-entry fixture passed in dev and built bundles
+on desktop/mobile Chromium and mobile WebKit. This is not a physical Safari
+fix verdict. The Dockerfile still discards prior hashed assets on deploy; a
+durable asset-retention strategy is the next shared-web infrastructure stage.
+See the [tracker](PRODUCTION_PRIORITY_TRACKER.md) for the test and rollout
+boundary.
+
 **Current backend checkpoint, 2026-09-26 (Codex):** native FCM/WNS OS push
 payloads no longer carry sender, preview, avatar or task content across a
 rebindable device token. Exact-message routing and chat tags remain. Reviewed

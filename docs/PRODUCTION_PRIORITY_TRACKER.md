@@ -1,6 +1,6 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-09-25.
+Status: active production-hardening tracker, updated 2026-09-27.
 
 **2026-09-27 iPhone device boundary:** MobileNext cloud iPhone 14 Pro Max,
 iOS 26.5: the installed Home Screen PWA opened the guest sign-in screen;
@@ -11,6 +11,26 @@ WebKit at the matching viewport did not reproduce it. The device was released;
 Safari Web Inspector evidence, an authenticated synthetic chat, composer/safe
 area, attachments and push remain open. Do not treat Safari's boot error as a
 measured bottom-inset defect or the guest PWA check as chat acceptance.
+
+**2026-09-27 web boot recovery (deployed):** a fresh tab can name a hashed
+entry from an older HTML document after Coolify has retired that image. The
+current Dockerfile serves only its own `dist/public` and the web container has
+no shared asset mount. An explicit boot-error retry now loads the document with
+a one-use query nonce, then removes the nonce before the app reads the route;
+auth callback parameters, deep links, fragments, sessions and drafts remain.
+The stale-document regression failed on the previous controller, then 35/35
+focused unit, the full unit suite, 24/24 dev browser cases and 3/3 built-bundle
+browser cases passed across Chromium/WebKit. Workspace typecheck and production
+build passed; targeted Biome check passed, while the repository-wide lint still
+has pre-existing failures in unrelated files. Commit `37425e08` reached the
+sole healthy web image `c7c220f3e81c75db19c344a9937753db913286af`, whose
+HTML contains the new retry marker. This improves explicit recovery; it does
+not retain retired dynamic chunks, prevent the first failed load, or prove the
+old physical-Safari symptom is fixed. Next shared-web infrastructure step:
+design durable hashed-asset retention across deploys; iOS Safari diagnosis
+remains with the [PWA owner](operations/ios-pwa-viewport-validation.md). A
+production guest browser smoke was unavailable because the browser permission
+check failed, so only container/static and local fixture evidence is claimed.
 
 **2026-09-27 media session boundary (deployed):** the signed-URL store
 now discards an in-flight answer from a previous auth session and clears its
