@@ -407,6 +407,130 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
     });
   }
 
+  test("an attachment's send controls stay tappable above the clipped edge and keyboard", async ({ page }, testInfo) => {
+    const paintableHeight = SCREEN - 59;
+    await emulateInstalledIosApp(page, INSETS);
+    await installKeyboardStandIn(page, paintableHeight, paintableHeight);
+    await openConversation(page);
+
+    await page.evaluate((height) => {
+      const strip = document.createElement("div");
+      strip.dataset.testid = "ios-system-strip-fixture";
+      strip.style.cssText = `position:fixed;inset:auto 0 0;height:${height}px;background:#e8eff7;z-index:2147483647`;
+      document.body.appendChild(strip);
+    }, SCREEN - paintableHeight);
+
+    await page.getByRole("button", { name: "Прикрепить" }).click();
+    const sheet = page.getByTestId("attach-sheet");
+    await expect(sheet).toBeVisible();
+    const chooser = page.waitForEvent("filechooser");
+    await sheet.locator('[data-attach-entry="library"]').click();
+    await (await chooser).setFiles({
+      name: "fixture-pixel.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9F9E0SQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    });
+
+    const send = sheet.getByTestId("attach-send");
+    const hd = sheet.getByTestId("attach-hd");
+    await expect(send).toBeVisible();
+    await expect(hd).toBeVisible();
+
+    const readAction = (action: typeof send) => action.evaluate((button) => {
+      const rect = button.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return { bottom: rect.bottom, tappable: hit === button || button.contains(hit) };
+    });
+    await page.waitForTimeout(400);
+    const atRest = { send: await readAction(send), hd: await readAction(hd) };
+    const restingSheetBottom = await sheet.evaluate((node) => node.getBoundingClientRect().bottom);
+    if (process.env.KUB_CAPTURE_IOS_VIEWPORT === "1") {
+      await page.screenshot({ path: testInfo.outputPath("attach-rest.png") });
+    }
+
+    await sheet.getByTestId("attach-caption").focus();
+    await keyboard(page, KEYBOARD, 0, true);
+    await page.evaluate((top) => {
+      const keyboardBlocker = document.createElement("div");
+      keyboardBlocker.dataset.testid = "ios-keyboard-fixture";
+      keyboardBlocker.style.cssText = `position:fixed;inset:${top}px 0 0;background:#d8dce2;z-index:2147483647`;
+      document.body.appendChild(keyboardBlocker);
+    }, paintableHeight - KEYBOARD);
+    await expect.poll(async () => (await geometry(page)).shellHeight).toBe(paintableHeight - KEYBOARD);
+    await page.waitForTimeout(400);
+    const withKeyboard = { send: await readAction(send), hd: await readAction(hd) };
+    const keyboardSheetBottom = await sheet.evaluate((node) => node.getBoundingClientRect().bottom);
+    if (process.env.KUB_CAPTURE_IOS_VIEWPORT === "1") {
+      await page.screenshot({ path: testInfo.outputPath("attach-keyboard.png") });
+    }
+
+    for (const [state, edge, label] of [
+      [atRest, paintableHeight, "at rest"],
+      [withKeyboard, paintableHeight - KEYBOARD, "with keyboard"],
+    ] as const) {
+      for (const [name, action] of Object.entries(state)) {
+        expect.soft(action.bottom, `${name} stays fully above the blocked edge ${label}`).toBeLessThanOrEqual(edge);
+        expect.soft(action.tappable, `${name} receives a touch ${label}`).toBe(true);
+      }
+    }
+    expect(restingSheetBottom, "the sheet clears the home indicator at rest").toBeLessThanOrEqual(paintableHeight - 34);
+    expect(keyboardSheetBottom, "the home-indicator gap must not remain above the keyboard").toBeGreaterThanOrEqual(paintableHeight - KEYBOARD - 12);
+  });
+
+  test("an attachment does not double-compensate when fixed already anchors to the paintable edge", async ({ page }) => {
+    const paintableHeight = SCREEN - 59;
+    await emulateInstalledIosApp(page, INSETS);
+    await installKeyboardStandIn(page, paintableHeight, paintableHeight);
+    await openConversation(page);
+    // A transformed root gives fixed descendants the shorter containing block,
+    // while CSS 100vh still reflects the full 932px layout viewport.
+    await page.addStyleTag({ content: `html { height: ${paintableHeight}px !important; transform: translateZ(0) !important; }` });
+    const anchor = await page.evaluate(() => {
+      const probe = document.createElement("div");
+      probe.style.cssText = "position:fixed;bottom:0;left:0;width:0;height:0";
+      document.body.appendChild(probe);
+      const bottom = probe.getBoundingClientRect().bottom;
+      probe.remove();
+      window.dispatchEvent(new Event("resize"));
+      return bottom;
+    });
+    expect(anchor, "the fixture's fixed anchor really is the short viewport").toBeCloseTo(paintableHeight, 0);
+    await page.getByRole("button", { name: "Прикрепить" }).click();
+    const sheet = page.getByTestId("attach-sheet");
+    await expect(sheet).toBeVisible();
+    await page.waitForTimeout(400);
+    const bottom = await sheet.evaluate((node) => node.getBoundingClientRect().bottom);
+    expect(bottom, "the resting sheet retains only the home-indicator inset").toBeGreaterThanOrEqual(paintableHeight - 50);
+    expect(bottom).toBeLessThanOrEqual(paintableHeight - 34);
+
+    await keyboard(page, KEYBOARD, 0, false);
+    await expect.poll(async () => (await geometry(page)).shellHeight).toBe(paintableHeight - KEYBOARD);
+    await expect.poll(async () => sheet.evaluate((node) => node.getBoundingClientRect().bottom)).toBeGreaterThanOrEqual(paintableHeight - KEYBOARD - 12);
+    const keyboardBottom = await sheet.evaluate((node) => node.getBoundingClientRect().bottom);
+    expect(keyboardBottom, "the sheet follows the shorter keyboard canvas, not CSS 100vh").toBeGreaterThanOrEqual(paintableHeight - KEYBOARD - 12);
+    expect(keyboardBottom).toBeLessThanOrEqual(paintableHeight - KEYBOARD);
+  });
+
+  test("an attachment in a browser tab does not inherit the installed-app fixed offset", async ({ page }) => {
+    await openConversation(page);
+    await expect(page.locator("html[data-ios-standalone]")).toHaveCount(0);
+    // Browser toolbars can shorten 100dvh without moving fixed's bottom anchor.
+    await page.evaluate(() => document.documentElement.style.setProperty("--kub-paintable-height", "873px"));
+    await page.getByRole("button", { name: "Прикрепить" }).click();
+    const sheet = page.getByTestId("attach-sheet");
+    await expect(sheet).toBeVisible();
+    await page.waitForTimeout(400);
+    const { bottom, inset } = await sheet.evaluate((node) => ({
+      bottom: node.getBoundingClientRect().bottom,
+      inset: Number.parseFloat(getComputedStyle(node).bottom),
+    }));
+    expect(inset, "browser tabs use the original fixed-sheet inset").toBeCloseTo(8, 0);
+    expect(bottom).toBeCloseTo(SCREEN - 8, 0);
+  });
+
   test("the standalone chat keeps readable hierarchy and generous primary touch targets", async ({
     page,
   }) => {

@@ -17,12 +17,11 @@ const read = (relative) => readFileSync(new URL(`../../artifacts/kub/src/${relat
 const withoutComments = (source) =>
   source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1");
 
-test("the shell's height is one token: 100dvh at boot without a taller standalone 100vh override", () => {
+test("the shell and independent paintable-height tokens start at 100dvh without a standalone 100vh override", () => {
   const css = withoutComments(read("index.css"));
-  assert.match(
-    css,
-    /--kub-safe-left:\s*env\(safe-area-inset-left, 0px\);\s*--kub-app-height:\s*100dvh;/,
-    "the shell height token is gone from beside the safe-area tokens, or is no longer 100dvh",
+  assert.ok(
+    /--kub-safe-left:\s*env\(safe-area-inset-left, 0px\);\s*--kub-paintable-height:\s*100dvh;\s*--kub-app-height:\s*100dvh;/.test(css),
+    "the root viewport and shell tokens must both fall back to 100dvh beside the safe-area tokens",
   );
   assert.doesNotMatch(
     css,

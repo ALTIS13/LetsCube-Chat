@@ -472,7 +472,11 @@ export default function AttachSheet({
     // The keys cover the home indicator, so the larger of the two, never the sum
     // (rule 13); the sheet grows by it rather than its content shrinking.
     const inset = "max(var(--kub-keyboard-inset, 0px), var(--kub-safe-bottom))";
-    const available = `calc(100dvh - var(--kub-safe-top) - 0.75rem - ${inset} - 0.5rem)`;
+    // A fixed sheet may anchor below the iPhone's paintable canvas. Runtime
+    // measures that difference; elsewhere it is zero. The voice-call shell
+    // overrides --kub-app-height locally, so use the independent root token.
+    const viewportGap = "var(--kub-fixed-paintable-gap, 0px)";
+    const available = `calc(var(--kub-paintable-height) - var(--kub-safe-top) - 0.75rem - ${inset} - 0.5rem)`;
     const resting = `min(${available}, ${Math.round(ATTACH_SHEET_PHONE_REST_SHARE * 100)}dvh)`;
     frameStyle = {
       ...fittedSheetHeight({
@@ -482,7 +486,7 @@ export default function AttachSheet({
         available,
       }),
       transform: dragY > 0 ? `translateY(${Math.round(dragY)}px)` : undefined,
-      bottom: `calc(${inset} + 0.5rem)`,
+      bottom: `calc(${viewportGap} + ${inset} + 0.5rem)`,
     };
   } else {
     frameStyle = fittedSheetHeight({ ceiling: DESKTOP_CEILING, content: fit });
@@ -490,7 +494,7 @@ export default function AttachSheet({
 
   const frameClass = phone
     ? cn(
-        "fixed inset-x-2 z-40 flex flex-col overflow-hidden rounded-[2.125rem]",
+        "kub-attach-sheet fixed inset-x-2 z-40 flex flex-col overflow-hidden rounded-[2.125rem]",
         "starting:translate-y-full motion-safe:transition-[translate,height,transform] motion-safe:duration-300 motion-safe:ease-[cubic-bezier(.16,1,.3,1)]",
         dragging && "motion-safe:transition-none",
       )

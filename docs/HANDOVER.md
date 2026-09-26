@@ -175,18 +175,18 @@ Next bot stage: an explicitly scoped per-viewer temporary interface. It must
 not be represented as a private message row, and its privacy/runtime contract
 needs its own proof before implementation.
 
-**Current iPhone PWA checkpoint, 2026-09-26 (Codex):** the separate iOS/MacOS
-chat owns the Home Screen viewport correction. New tester screenshots place
-the clipped page edge at ≈873 of 932 pt; the prior `100vh` shell positions
-navigation and composer beneath it. Public assets contained the previous
-fix, but the installed document's exact bundle remains unverified. The revised
-code fits to paintable `innerHeight` before React and at rest, and to
-`visualViewport.height` with the keyboard. It passed 36/36 installed-viewport
-cases, 22 WebKit safe-area cases, and focused build/typecheck. The web image
-for `c057d768` is healthy; public HTML, JS, CSS and SW now carry this build.
-Next: fully relaunch the installed PWA while online and check the controls on
-a real iPhone; no reinstall should be needed. The system-owned lower strip
-may remain outside DOM paint. See the [iPhone PWA viewport record](operations/2026-09-26-ios-pwa-viewport-and-ergonomics.md).
+**Current iPhone PWA checkpoint, 2026-09-27 (Codex):** the separate iOS/MacOS
+chat owns the Home Screen viewport correction. Tester screenshots place the
+clipped page edge at ≈873 of 932 pt. The prior shell fix was released in
+`c057d768`; the installed document's exact bundle remains unverified. The
+attachment follow-up measures the actual fixed-position anchor separately
+from paintable `innerHeight`, so it clears that edge without lifting a sheet
+twice when iOS already anchors it there. Local viewport tests pass 42/42 in
+Chromium/WebKit; attachment tests pass 36/36 at 390/1440, with typecheck and
+production build green. Next: relaunch the installed PWA online, inspect the
+attachment controls with and without the keyboard, and confirm the active
+bundle on a real iPhone. The system-owned lower strip may remain outside DOM
+paint. See the [iPhone PWA viewport record](operations/ios-pwa-viewport-validation.md).
 
 **Current backend checkpoint, 2026-09-26 (Codex):** native FCM/WNS OS push
 payloads no longer carry sender, preview, avatar or task content across a

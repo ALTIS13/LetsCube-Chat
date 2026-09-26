@@ -28,6 +28,14 @@ export function PwaRuntime() {
     const viewport = window.visualViewport;
     if (!root.hasAttribute("data-ios-standalone") || !viewport) return;
 
+    // WebKit may anchor fixed elements either to the full CSS viewport or to
+    // the shorter paintable canvas. Measure that anchor instead of assuming
+    // 100vh describes it; otherwise a sheet can be lifted twice.
+    const fixedEdgeProbe = document.createElement("div");
+    fixedEdgeProbe.setAttribute("aria-hidden", "true");
+    fixedEdgeProbe.style.cssText = "position:fixed;left:0;bottom:0;width:0;height:0;visibility:hidden;pointer-events:none";
+    document.body.appendChild(fixedEdgeProbe);
+
     // Every full-height page reads this token. In some iOS Home Screen builds,
     // 100vh reaches the physical screen while the WebKit paintable viewport
     // ends about 60pt earlier. innerHeight is that paintable edge at rest;
@@ -55,7 +63,13 @@ export function PwaRuntime() {
       keyboardWasVisible = keyboardVisible;
       const appHeight = keyboardVisible ? height : window.innerHeight;
       if (!Number.isFinite(appHeight) || appHeight <= 0) return;
-      root.style.setProperty("--kub-app-height", `${Math.round(appHeight)}px`);
+      const measuredHeight = `${Math.round(appHeight)}px`;
+      root.style.setProperty("--kub-paintable-height", measuredHeight);
+      root.style.setProperty("--kub-app-height", measuredHeight);
+      const fixedEdge = fixedEdgeProbe.getBoundingClientRect().bottom;
+      const fixedGap = Number.isFinite(fixedEdge) ? Math.max(0, Math.round(fixedEdge - appHeight)) : 0;
+      root.style.setProperty("--kub-fixed-paintable-gap", `${fixedGap}px`);
+      root.toggleAttribute("data-ios-keyboard-open", keyboardVisible);
       const pageTop = Number.isFinite(viewport.pageTop) ? viewport.pageTop : 0;
       const bodyTop = document.body.getBoundingClientRect().top;
       const pan = keyboardVisible ? Math.max(0, Math.round(pageTop), Math.round(-bodyTop)) : 0;
@@ -73,7 +87,11 @@ export function PwaRuntime() {
       window.removeEventListener("resize", update);
       window.removeEventListener("orientationchange", update);
       root.style.removeProperty("--kub-app-height");
+      root.style.removeProperty("--kub-paintable-height");
+      root.style.removeProperty("--kub-fixed-paintable-gap");
       root.style.removeProperty("--kub-app-top");
+      root.removeAttribute("data-ios-keyboard-open");
+      fixedEdgeProbe.remove();
     };
   }, []);
   return <ConnectionStatusBanner />;

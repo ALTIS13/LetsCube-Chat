@@ -49,7 +49,9 @@
         // others 100dvh is short. PwaRuntime keeps this measurement current.
         var paintableHeight = window.innerHeight;
         if (Number.isFinite(paintableHeight) && paintableHeight > 0) {
-          root.style.setProperty("--kub-app-height", Math.round(paintableHeight) + "px");
+          var measuredHeight = Math.round(paintableHeight) + "px";
+          root.style.setProperty("--kub-paintable-height", measuredHeight);
+          root.style.setProperty("--kub-app-height", measuredHeight);
         }
       }
     </script>

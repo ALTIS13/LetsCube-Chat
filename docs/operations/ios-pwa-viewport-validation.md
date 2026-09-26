@@ -1,6 +1,6 @@
 # Проверка нижнего края iOS PWA
 
-Owner: LETSCUBE PWA. Stage: the list and chat shell now share a global visual-viewport measurement; local Chromium/WebKit regression green, real installed-iPhone proof pending. Evidence: D-111 in `docs/INTERFACE_DEFECT_REGISTER.md` and `tests/e2e/installed-ios-viewport.spec.ts`. Blocker: the new captures show the symptom but do not provide inspectable device geometry or the active JS bundle identity. Next: compare a real installed app at rest, with the keyboard open, after dismissal and after relaunch.
+Owner: LETSCUBE PWA. Stage: the shell uses paintable-height measurement, and the attachment sheet uses an independent fixed-anchor measurement; local viewport 42/42 and attachment 36/36 regressions green. Evidence: D-111 in `docs/INTERFACE_DEFECT_REGISTER.md` and `tests/e2e/installed-ios-viewport.spec.ts`. Blocker: the tester's installed iPhone has not supplied inspectable geometry or active JS bundle identity. Next: compare the real installed app at rest, with an attachment and keyboard open, after dismissal and after relaunch.
 
 ## Что доступно на Windows 11
 
@@ -34,11 +34,23 @@ Owner: LETSCUBE PWA. Stage: the list and chat shell now share a global visual-vi
     visualPageTop: viewport?.pageTop,
     bodyTop: Math.round(document.body.getBoundingClientRect().top),
     appHeightToken: getComputedStyle(document.documentElement).getPropertyValue('--kub-app-height').trim(),
+    paintableHeightToken: getComputedStyle(document.documentElement).getPropertyValue('--kub-paintable-height').trim(),
+    fixedPaintableGapToken: getComputedStyle(document.documentElement).getPropertyValue('--kub-fixed-paintable-gap').trim(),
     appTopToken: getComputedStyle(document.documentElement).getPropertyValue('--kub-app-top').trim(),
     safeBottomToken: getComputedStyle(document.documentElement).getPropertyValue('--kub-safe-bottom').trim(),
+    fixedAnchor: (() => {
+      const probe = document.createElement('div');
+      probe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;visibility:hidden';
+      document.body.appendChild(probe);
+      const bottom = Math.round(probe.getBoundingClientRect().bottom);
+      probe.remove();
+      return bottom;
+    })(),
     shell: box('[data-testid="desktop-app-shell"]'),
     navigation: box('[aria-label="Навигация"]'),
     composer: box('[data-testid="chat-composer-dock"]'),
+    attachmentSheet: box('[data-testid="attach-sheet"]'),
+    attachmentSend: box('[data-testid="attach-send"]'),
     composerPaddingBottom: (() => {
       const dock = document.querySelector('[data-testid="chat-composer-dock"]');
       return dock ? getComputedStyle(dock).paddingBottom : null;
@@ -46,6 +58,8 @@ Owner: LETSCUBE PWA. Stage: the list and chat shell now share a global visual-vi
   };
 })()
 ```
+
+`fixedAnchor` — независимо измеренный нижний якорь fixed-элементов. На iOS он может совпадать с полной CSS-высотой либо уже с короткой paintable-областью; разницу нельзя выводить из одного `100vh`. Для открытой панели проверить, что `attachmentSend.bottom` не уходит ниже доступного края, а при клавиатуре под панелью не остаётся старый отступ индикатора Home.
 
 Сравнить `entryScript` с опубликованным текущим bundle до выводов по новому исправлению: установленная PWA может ещё исполнять старый кэш. Если `iosShell=false` при `displayMode=true`, сломано определение установленного режима. Если низ shell/navigation/composer уходит ниже `visualHeight`, оболочка больше видимого окна. При открытой клавиатуре сравнить `bodyTop`, `visualPageTop`, верх shell и шапки: отрицательный `bodyTop` при нулевом `scrollY` означает системный сдвиг, который `scrollTo(0, 0)` не исправляет. Если shell и composer доходят до края, а пустой участок совпадает примерно с нижним safe-area inset, это не обрезка viewport: надо оценивать окраску фона и расстояние органов управления от системной полосы жестов. Участок экрана, который не входит в paintable viewport PWA, может принадлежать системе; CSS приложения не сможет его закрасить. Одна только экранная ширина или desktop screenshot не доказывает ни один из этих вариантов.
 

@@ -310,6 +310,7 @@
      make 100vh as tall as the physical screen even when the lower ~60pt are
      outside the WebKit paintable viewport. A short visualViewport alone does
      not prove that, so it controls the shell only with the keyboard open. */
+  --kub-paintable-height: 100dvh;
   --kub-app-height: 100dvh;
 
   /* The chat screen's scroll edge: how much the conversation is frosted where
@@ -333,6 +334,12 @@
 
 html[data-ios-standalone] {
   --kub-control-row-height: 3.75rem;
+}
+
+/* The keyboard covers the home indicator. Keep the attachment sheet's resting
+   inset at idle, but do not leave that inset as a dead gap above the keys. */
+html[data-ios-standalone][data-ios-keyboard-open] .kub-attach-sheet {
+  --kub-safe-bottom: 0px;
 }
 
 /* A Home Screen iPhone is used as a touch messenger, not a scaled desktop
