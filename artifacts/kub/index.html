@@ -156,6 +156,16 @@
         var root = document.documentElement;
         var surface = document.getElementById("kub-boot-recovery");
         var retry = document.getElementById("kub-boot-retry");
+        var retryParam = "__lc_boot_retry";
+        try {
+          var loadedUrl = new URL(window.location.href);
+          if (/^\d+$/.test(loadedUrl.searchParams.get(retryParam) || "")) {
+            loadedUrl.searchParams.delete(retryParam);
+            window.history.replaceState(window.history.state, "", loadedUrl.href);
+          }
+        } catch (e) {
+          // Recovery still works if this browser refuses history access.
+        }
         var finished = false;
         root.dataset.kubBootState = "loading";
         var timer = window.setTimeout(failed, 12000);
@@ -189,7 +199,13 @@
         retry.addEventListener("click", function () {
           // Keep auth callbacks, chat/message routes, sessions and drafts intact.
           retry.disabled = true;
-          window.location.reload();
+          try {
+            var nextUrl = new URL(window.location.href);
+            nextUrl.searchParams.set(retryParam, String(Date.now()));
+            window.location.replace(nextUrl.href);
+          } catch (e) {
+            window.location.reload();
+          }
         });
         window.addEventListener("error", error, true);
         window.addEventListener("unhandledrejection", failed);

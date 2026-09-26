@@ -67,6 +67,38 @@ for (const theme of ["dark", "light"] as const) {
   }
 }
 
+test("retry fetches the current document after a retired entry was named by stale HTML", async ({
+  page,
+}) => {
+  let staleDocuments = 0;
+  await page.route("**/login?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname !== "/login" || url.searchParams.has("__lc_boot_retry")) {
+      return route.continue();
+    }
+    staleDocuments += 1;
+    const response = await route.fetch();
+    const body = await response.text();
+    const currentEntry = body.match(/src="\/(?:src\/main\.tsx|assets\/index-[^"]+\.js)"/)?.[0];
+    expect(currentEntry).toBeTruthy();
+    return route.fulfill({
+      response,
+      body: body.replace(currentEntry!, 'src="/assets/retired-entry.js"'),
+    });
+  });
+  await page.route("**/assets/retired-entry.js", (route) =>
+    route.fulfill({ status: 404, contentType: "application/javascript", body: "" }),
+  );
+
+  await page.goto("/login?returnTo=%2Fchat%2Ffixture#retained", { waitUntil: "domcontentloaded" });
+  const retry = page.getByRole("button", { name: "Повторить загрузку", exact: true });
+  await expect(retry).toBeVisible({ timeout: 15_000 });
+  await retry.click();
+  await expect(page.getByTestId("auth-form-shell")).toBeVisible();
+  await expect(page).toHaveURL(/\/login\?returnTo=%2Fchat%2Ffixture#retained$/);
+  expect(staleDocuments).toBe(1);
+});
+
 test("a stalled entry offers recovery, then yields to a late successful render", async ({
   page,
 }) => {

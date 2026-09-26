@@ -94,8 +94,15 @@ function load({ source = controller, href = address, online = true, storageDenie
     replace(value) { this.href = value; },
     reload(...args) { effects.push(["reload", this.href, args]); },
   };
+  const history = {
+    state: null,
+    replaceState(_state, _title, value) {
+      effects.push(["history", value]);
+      currentUrl = new URL(value, currentUrl);
+    },
+  };
   const window = Object.assign(new Target(), {
-    location,
+    location, history,
     setTimeout(callback, delay = 0) {
       timers.set(++nextTimer, { callback, at: now + Number(delay) });
       return nextTimer;
@@ -264,8 +271,20 @@ function retentionContract(source = controller, href = address) {
   assert.equal(fixture.retry.disabled, true);
   fixture.retry.click();
   fixture.advance(120000);
-  assert.deepEqual(fixture.effects, [["reload", href, []]], "one explicit retry must reload the exact current location only");
-  assert.equal(fixture.window.location.href, href);
+  assert.equal(fixture.effects.length, 1, "one explicit retry must navigate once");
+  const [kind, destination] = fixture.effects[0];
+  assert.equal(kind, "navigate");
+  const next = new URL(destination, href);
+  const original = new URL(href);
+  assert.equal(next.pathname, original.pathname);
+  assert.equal(next.searchParams.get("returnTo"), original.searchParams.get("returnTo"));
+  assert.equal(next.searchParams.get("code"), original.searchParams.get("code"));
+  assert.equal(next.searchParams.get("next"), original.searchParams.get("next"));
+  assert.equal(next.hash, original.hash);
+  assert.match(next.searchParams.get("__lc_boot_retry") ?? "", /^\d+$/);
+  const restarted = load({ source, href: next.href });
+  assert.equal(restarted.window.location.href, href, "the new document must hide the nonce before React starts");
+  assert.deepEqual(restarted.effects, [["history", href]]);
   for (const data of fixture.storages) assert.deepEqual([...data], [["fixture-session", "keep-session"], ["fixture-draft", "keep-draft"]]);
 }
 
@@ -297,6 +316,20 @@ for (const [name, type, details] of [
 }
 
 test("repeated fatal events do not create retry/reload loops or discard sessions and drafts", () => retentionContract());
+test("retry escapes a stale HTML cache while retaining the route and callback data", () => {
+  const fixture = load();
+  fixture.advance(12000);
+  fixture.retry.click();
+  const navigation = fixture.effects.find(([kind]) => kind === "navigate");
+  assert.ok(navigation, "retry must navigate to a fresh document URL, not reload the stale cache key");
+  const next = new URL(navigation[1]);
+  const original = new URL(address);
+  assert.equal(next.pathname, original.pathname);
+  assert.equal(next.searchParams.get("returnTo"), original.searchParams.get("returnTo"));
+  assert.equal(next.hash, original.hash);
+  assert.match(next.searchParams.get("__lc_boot_retry") ?? "", /^\d+$/);
+  assert.equal(fixture.retry.disabled, true);
+});
 test("retry preserves an auth callback query and fragment byte for byte", () => {
   retentionContract(controller, "https://fixture.invalid/auth/callback?code=synthetic%2Bcode&next=%2Fchat%2Ffixture#access_token=synthetic-only");
 });
@@ -304,7 +337,9 @@ test("recovery and retry work when storage is inaccessible", () => {
   const fixture = load({ storageDenied: true });
   fixture.advance(12000);
   fixture.retry.click();
-  assert.deepEqual(fixture.effects, [["reload", address, []]]);
+  assert.equal(fixture.effects.length, 1);
+  assert.equal(fixture.effects[0][0], "navigate");
+  assert.match(new URL(fixture.effects[0][1]).searchParams.get("__lc_boot_retry") ?? "", /^\d+$/);
 });
 test("offline and online failures have safe distinct guidance", () => {
   const offline = load({ online: false });
@@ -419,7 +454,8 @@ const mutations = [
   ["failure clears local session", "function failed() {", "function failed() { window.localStorage.clear();", retentionContract],
   ["failure clears draft storage", "function failed() {", "function failed() { window.sessionStorage.clear();", retentionContract],
   ["failure automatically reloads", "function failed() {", "function failed() { window.location.reload();", retentionContract],
-  ["retry navigates away from callback and deep link", "window.location.reload();", 'window.location.href = "/";', retentionContract],
+  ["retry navigates away from callback and deep link", "window.location.replace(nextUrl.href);", 'window.location.href = "/";', retentionContract],
+  ["retry leaves the stale cache key intact", "nextUrl.searchParams.set(retryParam, String(Date.now()));", "", retentionContract],
   ["retry remains enabled for repeated activation", "retry.disabled = true;", "retry.disabled = false;", retentionContract],
 ];
 for (const [name, before, after, check] of mutations) {
