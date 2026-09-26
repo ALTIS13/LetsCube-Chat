@@ -62,13 +62,30 @@ the contract. This report records evidence separately from release status.
   the existing guarded rollout rather than introduce a misleading Test label;
   see [release channels](release-channels.md).
 
-## Release gates still open
+## Production release, 2026-09-27
 
-1. Commit and push only reviewed bot-viewer files after checking the shared
-   `main` index; preserve the iOS PWA owner's independent work.
-2. Verify healthy web, Bot Gateway and worker images at the reviewed commit.
-   The installed Android bundle remains a separate release and must retain its
-   existing keyboard fallback.
-3. Use an isolated QA bot and two QA accounts for a production canary: A sees
-   and presses the panel, B cannot read it, and edit/close/expiry revoke it.
-   Remove QA state afterwards. Until this passes, do not call the feature live.
+- The reviewed two-commit range `869469f7..229a65e2` was pushed to the review
+  branch and then `main`; the shared working tree was clean. The iOS PWA owner
+  continued in a separate worktree. Bot tests passed 303/303 again and server
+  tests passed 352/352 after the ACL correction.
+- Running web, worker and Bot Gateway containers each reported the full image
+  tag `229a65e251e288a0bbdc5ddb32f141dd82b0e409` and `healthy` after the
+  old replicas left service. The Bot Gateway required an explicit Coolify
+  deploy because its auto-deploy is disabled. The web entry asset
+  `/assets/index-BRoeOUjy.js` returned 200 from both the workstation and
+  server and contained the actor-panel RPC marker. Container tags and the
+  public asset are separate checks; a queued webhook alone proves neither.
+- An isolated production canary used a temporary group with two QA accounts
+  and the existing QA bot. The bot received the member's callback through
+  `getUpdates`, created a panel through the public Bot API, and only the member
+  who pressed could read it. The other group member read zero panels. Press,
+  edit and close succeeded through their real HTTP/RPC paths; the closed panel
+  disappeared. The QA message and group were deleted, and the bot token was
+  revoked with deletion requested. Expiry and stale delivery were covered by
+  the production rollback-only SQL smoke, not by waiting 15 minutes in this
+  HTTP canary.
+
+The shared web/backend feature is live. Android embeds its own web bundle and
+was not rebuilt here; its existing keyboard fallback remains. Physical iPhone
+PWA appearance and the nine unrelated full-unit failures remain separate QA
+work, not evidence that this canary covered those platforms.

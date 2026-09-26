@@ -2235,8 +2235,12 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     A verified backup preceded the production base migration. Its first
     rollback-only smoke found a SECURITY DEFINER owner/EXECUTE mismatch; a
     guarded, isolated-rehearsed grant to the delivery guard owner fixed it.
-    The updated production smoke passed and rolled back its QA data. Client and
-    worker deployment and a two-account canary remain open. The existing
+    The updated production smoke passed and rolled back its QA data. Web,
+    worker and Bot Gateway reached healthy `229a65e2` images; a two-account
+    group canary passed callback delivery, actor-only visibility, press,
+    edit and close, then deleted the QA group/message and revoked the bot
+    token. The shared web/backend stage is live; installed Android bundles
+    and physical iPhone PWA QA remain separate. The existing
     Windows Test channel does not isolate the shared web/backend/PWA, so the
     owner chose the established backup, guarded deploy and QA-canary path.
     [Release gates](operations/2026-09-27-bot-viewer-rollout.md).
