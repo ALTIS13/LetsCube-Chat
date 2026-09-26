@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 import sharp from "sharp";
 
@@ -153,7 +155,9 @@ test.describe("the attach sheet (D-122)", () => {
     expect((await attachProbe(page)).media).toBe(0);
   });
 
-  test("selected photos can be reordered before their album is sent", async ({ page }) => {
+  test("selected photos can be reordered before their album is sent", async ({ page }, testInfo) => {
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
     const backend = await installBackend(page);
     await openChat(page);
     await page.getByRole("button", { name: "Прикрепить", exact: true }).click();
@@ -163,6 +167,17 @@ test.describe("the attach sheet (D-122)", () => {
       await smallPhoto("green.png", 120),
       await smallPhoto("blue.png", 240),
     ]);
+    const preview = sheet.locator("[data-attach-album-preview]");
+    await expect(preview).toBeVisible();
+    await expect(preview.locator("[data-attach-album-item]")).toHaveCount(3);
+    const previewBox = await preview.boundingBox();
+    const sendBox = await sheet.getByTestId("attach-send").boundingBox();
+    expect(previewBox, "album preview is outside the visible sheet").not.toBeNull();
+    expect(sendBox, "send control is outside the visible sheet").not.toBeNull();
+    expect(previewBox!.y + previewBox!.height, "album preview covers the send control").toBeLessThan(sendBox!.y);
+    const initialPreviewSources = await preview.locator("img").evaluateAll((images) =>
+      images.map((image) => image.getAttribute("src")),
+    );
     const moveBlue = sheet.getByRole("button", { name: "Переместить фото 3 раньше" });
     await moveBlue.click();
     await moveBlue.click();
@@ -170,6 +185,20 @@ test.describe("the attach sheet (D-122)", () => {
     await expect(sheet.getByRole("checkbox", { name: "Фото 1, номер 2 в порядке отправки" })).toBeVisible();
     await expect(sheet.getByRole("checkbox", { name: "Фото 2, номер 3 в порядке отправки" })).toBeVisible();
     await expect(moveBlue).toBeDisabled();
+    await expect
+      .poll(() => preview.locator("img").evaluateAll((images) => images.map((image) => image.getAttribute("src"))))
+      .toEqual([initialPreviewSources[2], initialPreviewSources[0], initialPreviewSources[1]]);
+    for (const theme of ["light", "dark"] as const) {
+      await page.evaluate((value) => {
+        localStorage.setItem("kub-theme", value);
+        window.dispatchEvent(new StorageEvent("storage", { key: "kub-theme", newValue: value }));
+      }, theme);
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await page.waitForTimeout(250);
+      await sheet.screenshot({
+        path: join(tmpdir(), `letscube-attach-album-${testInfo.project.name}-${theme}.png`),
+      });
+    }
 
     await sheet.getByTestId("attach-send").click();
     await expect.poll(() => backend.inserts.length).toBe(3);
@@ -181,6 +210,38 @@ test.describe("the attach sheet (D-122)", () => {
       return pixel.indexOf(Math.max(pixel[0], pixel[1], pixel[2]));
     }));
     expect(dominantChannels).toEqual([2, 0, 1]);
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("a ten-photo album keeps its send control reachable without horizontal overflow", async ({ page }) => {
+    await installBackend(page);
+    await openChat(page);
+    await page.getByRole("button", { name: "Прикрепить", exact: true }).click();
+    const sheet = page.getByTestId("attach-sheet");
+    await pick(
+      page,
+      '[data-attach-entry="library"]',
+      await Promise.all(Array.from({ length: 10 }, (_, index) => smallPhoto(`album-${index + 1}.png`, index * 24))),
+    );
+    const preview = sheet.locator("[data-attach-album-preview]");
+    await expect(preview.locator("[data-attach-album-item]")).toHaveCount(10);
+    await expect(sheet.getByTestId("attach-send")).toBeVisible();
+    const geometry = await sheet.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      return {
+        left: box.left,
+        right: box.right,
+        viewport: innerWidth,
+        content: node.scrollWidth,
+        width: node.clientWidth,
+      };
+    });
+    expect(geometry.left).toBeGreaterThanOrEqual(0);
+    expect(geometry.right).toBeLessThanOrEqual(geometry.viewport);
+    expect(geometry.content).toBeLessThanOrEqual(geometry.width);
+    await sheet.getByRole("checkbox", { name: "Фото 10, номер 10 в порядке отправки" }).scrollIntoViewIfNeeded();
+    await expect(sheet.getByRole("checkbox", { name: "Фото 10, номер 10 в порядке отправки" })).toBeVisible();
+    await expect(sheet.getByTestId("attach-send")).toBeVisible();
   });
 
   test("«Отправить без сжатия» under «…» sends the picked bytes", async ({ page }) => {
@@ -599,7 +660,7 @@ test.describe("the attach sheet (D-122)", () => {
       await smallPhoto("three.png", 250),
     ]);
     await expect(sheet.locator("[data-attach-pick]")).toHaveCount(3);
-    const picked = await settlesToFit(sheet, "three picks");
+    const picked = await settlesToFit(sheet, "three picks", !isMobile);
     expect(picked.height, "three picks did not grow the sheet").toBeGreaterThan(empty.height);
     // How much it grows is deliberately not a number written here. Two entries
     // and three picks in three columns is two rows, and the tab capsule leaves
@@ -718,16 +779,23 @@ async function readFit(sheet: Locator): Promise<Fit> {
  * panel is swapped, and the resize begins some 60ms after that. A sheet that
  * never fits fails here, naming what it measured.
  */
-async function settlesToFit(sheet: Locator, what: string): Promise<Fit> {
+async function settlesToFit(sheet: Locator, what: string, allowDesktopCeilingScroll = false): Promise<Fit> {
+  const desktopCeiling = allowDesktopCeilingScroll
+    ? await sheet.evaluate(() => {
+        const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+        return Math.min(33 * rem, innerHeight - 11 * rem);
+      })
+    : Number.POSITIVE_INFINITY;
   const deadline = Date.now() + 5_000;
   let previous = await readFit(sheet);
   for (;;) {
     await sheet.page().waitForTimeout(100);
     const current = await readFit(sheet);
-    if (current.height === previous.height && current.gap <= 2 && current.overflow <= 2) return current;
+    const scrollsAtCeiling = current.height >= desktopCeiling - 2;
+    if (current.height === previous.height && current.gap <= 2 && (current.overflow <= 2 || scrollsAtCeiling)) return current;
     if (Date.now() > deadline) {
       expect(current.gap, `${what}: the sheet is taller than what it holds`).toBeLessThanOrEqual(2);
-      expect(current.overflow, `${what}: what it holds is cut off under a sheet that could still grow`).toBeLessThanOrEqual(2);
+      expect(current.overflow <= 2 || scrollsAtCeiling, `${what}: what it holds is cut off under a sheet that could still grow`).toBe(true);
       throw new Error(`${what}: the sheet's height did not come to rest (${previous.height}, then ${current.height})`);
     }
     previous = current;

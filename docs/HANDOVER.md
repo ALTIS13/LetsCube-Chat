@@ -135,11 +135,21 @@ whole deployment** — no bot has registered a command yet.
 payloads no longer carry sender, preview, avatar or task content across a
 rebindable device token. Exact-message routing and chat tags remain. Reviewed
 modules are mounted on the healthy Edge runtime; native packages were not cut
-and no live provider card was generated. Browser Web Push/PWA is a separate
-account-switch risk being coordinated with its owner. Album-level external push
+and no live provider card was generated. The Web Push/PWA account-switch fix
+was released separately by its owner; see the
+[Web Push rollout](operations/2026-09-26-web-push-account-privacy.md). Album-level external push
 aggregation remains the next backend stage; preserve individual notification
 rows and their exact read/navigation semantics. See the
 [rollout and limits](operations/2026-09-26-native-push-account-privacy.md).
+
+**Current shared-web checkpoint, 2026-09-26 (Codex):** the attachment sheet
+shows a compact 2-10 item album preview in the selected send order, while the
+original selection grid retains reorder/deselect controls. The desktop height
+regression found during QA is fixed. All 36 attachment-sheet tests pass across
+desktop/360px Chromium; the reorder, ten-item and height scenarios also pass
+in 390px WebKit. Typecheck and production build pass. Album-level external
+notification aggregation, private media cache and authenticated device QA are
+still separate work; do not infer them from this UI proof.
 
 **Current shared-web checkpoint, 2026-09-25 (Codex):** photo HD is the default
 on a new device; an explicit SD choice remains. A 2-10 visual selection now
@@ -148,7 +158,7 @@ actions. The hidden-message gate in shared media/links now fails closed. Focused
 fixture and build checks passed, and the live web image matched `d86eea8f`
 with its public bundle markers. Authenticated device acceptance is separate.
 The iPhone PWA viewport bugs were passed to its owner. Next: address
-album-level notifications/pre-send preview, private media cache and physical
+album-level notifications, private media cache and physical
 Android QA. Do not cut an Android APK without separate owner instruction.
 [QA and remaining limits](operations/2026-09-25-media-album-hd-qa.md).
 

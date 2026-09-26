@@ -1,5 +1,5 @@
 import { KubIcon, type KubIconName } from "@/components/kub";
-import { attachGalleryArrangement, selectionNumber } from "@/lib/attachSheet";
+import { attachGalleryArrangement, selectedInOrder, selectionNumber } from "@/lib/attachSheet";
 import { FOCUS_RING } from "@/lib/controlSurface";
 import { cn } from "@/lib/utils";
 import { AttachSelectionCircle } from "./AttachSelectionCircle";
@@ -48,6 +48,7 @@ interface AttachGalleryPanelProps {
  */
 export function AttachGalleryPanel({ entries, picks, selected, onToggle, onMove, reserveBottom }: AttachGalleryPanelProps) {
   const arrangement = attachGalleryArrangement(picks.length);
+  const albumPreview = selectedInOrder(picks, selected);
 
   if (arrangement === "tiles") {
     return (
@@ -81,6 +82,55 @@ export function AttachGalleryPanel({ entries, picks, selected, onToggle, onMove,
       className="grid grid-cols-3 gap-1.5 px-3"
       style={reserveBottom ? { paddingBottom: reserveBottom } : undefined}
     >
+      {albumPreview.length > 1 && (
+        <div
+          className="col-span-3 pb-1"
+          data-attach-album-preview=""
+          role="group"
+          aria-label={`Альбом, вложений: ${albumPreview.length}`}
+        >
+          <div className="mb-2 px-1 text-xs font-medium text-[color:var(--kub-muted)]">Альбом</div>
+          <div
+            className={cn(
+              "grid gap-1 overflow-hidden rounded-2xl bg-[var(--kub-inset)]",
+              albumPreview.length >= 5 ? "grid-cols-3" : "grid-cols-2",
+            )}
+            style={{ gridAutoRows: "3rem" }}
+          >
+            {albumPreview.map((pick, index) => (
+              <div
+                key={pick.id}
+                data-attach-album-item=""
+                role="img"
+                aria-label={`${pick.kind === "video" ? "Видео" : "Фото"} ${index + 1} из ${albumPreview.length}`}
+                className={cn(
+                  "relative min-w-0 overflow-hidden",
+                  albumPreview.length === 3 && index === 0 && "row-span-2",
+                )}
+              >
+                {pick.kind === "image" && pick.url ? (
+                  <img src={pick.url} alt="" draggable={false} className="h-full w-full object-cover" />
+                ) : pick.kind === "video" && pick.url ? (
+                  <video
+                    src={pick.url}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    aria-hidden="true"
+                    className="h-full w-full object-cover"
+                  />
+                ) : null}
+                <span className="absolute left-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-black/70 text-[11px] font-semibold text-white">
+                  {index + 1}
+                </span>
+                {pick.kind === "video" && (
+                  <KubIcon name="video" size={16} className="absolute bottom-1.5 left-1.5 text-white drop-shadow" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {entries.map((entry) => (
         <button
           key={entry.id}
