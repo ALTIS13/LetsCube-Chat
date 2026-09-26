@@ -67,8 +67,10 @@ test.describe("Android floating navigation and system gesture area", () => {
     await requireFixtureServer(request);
     await boot(page, true);
     const row = page.getByTestId("chat-list-item").first();
-    const title = row.locator(".kub-ios-chat-list-title");
-    const preview = row.locator(".kub-ios-chat-list-preview");
+    const title = row.getByText(OTHER.full_name, { exact: true });
+    const preview = row.getByText(/^Проверка \d+$/);
+    await expect(title).toBeVisible();
+    await expect(preview).toBeVisible();
     const sizes = await Promise.all([
       title.evaluate((node) => Number.parseFloat(getComputedStyle(node).fontSize)),
       preview.evaluate((node) => Number.parseFloat(getComputedStyle(node).fontSize)),

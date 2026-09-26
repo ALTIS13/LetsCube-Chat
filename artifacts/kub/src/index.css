@@ -3,6 +3,7 @@
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant ios (&:is(html[data-ios-standalone] *));
 
 /*
  * Inter, served by us rather than fetched from Google.
@@ -312,6 +313,13 @@
      not prove that, so it controls the shell only with the keyboard open. */
   --kub-paintable-height: 100dvh;
   --kub-app-height: 100dvh;
+  /* Runtime replaces these only when iOS reports a shorter fixed canvas or
+     pans the visible document. The attachment sheet may drop its own inset
+     while the keyboard covers the home indicator without changing the shared
+     safe-area token read by the rest of the application. */
+  --kub-attach-safe-bottom: var(--kub-safe-bottom);
+  --kub-fixed-paintable-gap: 0px;
+  --kub-app-top: 0px;
 
   /* The chat screen's scroll edge: how much the conversation is frosted where
      it passes under the capsules. Half the panel's blur — the edge's own fill
@@ -336,55 +344,38 @@ html[data-ios-standalone] {
   --kub-control-row-height: 3.75rem;
 }
 
-/* The keyboard covers the home indicator. Keep the attachment sheet's resting
-   inset at idle, but do not leave that inset as a dead gap above the keys. */
-html[data-ios-standalone][data-ios-keyboard-open] .kub-attach-sheet {
-  --kub-safe-bottom: 0px;
-}
+/* Installed iPhone adjustments belong below Tailwind utilities. The explicit
+   ios: utility variant handles properties that must override base utilities. */
+@layer components {
+  /* The keyboard covers the home indicator. Keep the attachment sheet's
+     resting inset at idle, but do not leave it as a gap above the keys. */
+  html[data-ios-standalone][data-ios-keyboard-open] .kub-attach-sheet {
+    --kub-attach-safe-bottom: 0px;
+  }
 
-/* A Home Screen iPhone is used as a touch messenger, not a scaled desktop
-   pane. Keep the message body at the reader's chosen size; strengthen the
-   surrounding hierarchy and the primary hit areas only in this shell. */
-html[data-ios-standalone] .kub-ios-chat-icon,
-html[data-ios-standalone] .kub-ios-composer-control {
-  min-width: 3rem;
-  width: 3rem;
-  height: 3rem;
-}
+  /* A Home Screen iPhone is used as a touch messenger, not a scaled desktop
+     pane. Keep the message body at the reader's chosen size; strengthen the
+     surrounding hierarchy and the primary hit areas only in this shell. */
+  html[data-ios-standalone] .kub-ios-chat-icon,
+  html[data-ios-standalone] .kub-ios-composer-control {
+    min-width: 3rem;
+    min-height: 3rem;
+    width: 3rem;
+    height: 3rem;
+  }
 
-html[data-ios-standalone] .kub-ios-chat-back {
-  width: auto;
-}
+  html[data-ios-standalone] .kub-ios-chat-back {
+    width: auto;
+  }
 
-html[data-ios-standalone] .kub-ios-chat-info,
-html[data-ios-standalone] .kub-ios-composer-inline-control {
-  min-height: 3rem;
-}
+  html[data-ios-standalone] .kub-ios-chat-info,
+  html[data-ios-standalone] .kub-ios-composer-inline-control {
+    min-height: 3rem;
+  }
 
-html[data-ios-standalone] .kub-ios-composer-inline-control {
-  min-width: 2.75rem;
-}
-
-html[data-ios-standalone] .kub-ios-composer-field-glass {
-  left: 3.5rem;
-  right: 3.5rem;
-}
-
-html[data-ios-standalone] .kub-ios-chat-title {
-  font-size: 1.0625rem;
-}
-
-html[data-ios-standalone] .kub-ios-chat-subtitle,
-html[data-ios-standalone] .kub-ios-chat-list-preview {
-  font-size: 0.875rem;
-}
-
-html[data-ios-standalone] .kub-ios-chat-list-title {
-  font-size: 1rem;
-}
-
-html[data-ios-standalone] .kub-ios-chat-list-preview {
-  line-height: 1.25rem;
+  html[data-ios-standalone] .kub-ios-composer-inline-control {
+    min-width: 2.75rem;
+  }
 }
 
 /* iOS may pan the visual viewport without changing document scrollTop when the

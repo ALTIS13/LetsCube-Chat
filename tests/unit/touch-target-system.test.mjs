@@ -351,8 +351,9 @@ const OPTED_IN = [
   {
     file: "artifacts/kub/src/components/chat/ChatHeader.tsx",
     what: "the chat's back control, which was 36x36 and is the only way back to the list on a phone",
-    // A 44pt capsule since the chat screen took option C, and still opted in.
-    expect: [/"kub-icon-action kub-interactive group\/capsule relative h-11 min-w-11 rounded-full/],
+    // The iOS rule shares a layer with other components, so h-11 and the
+    // minimum-width utility need literal 48px floors after utilities win.
+    expect: [/"(?=[^"\n]*\bkub-icon-action\b)(?=[^"\n]*\bkub-ios-chat-back\b)(?=[^"\n]*\bmin-h-12\b)(?=[^"\n]*\bmin-w-12\b)[^"\n]*"/],
   },
 ];
 

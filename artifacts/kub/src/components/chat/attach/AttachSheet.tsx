@@ -471,7 +471,7 @@ export default function AttachSheet({
   if (phone) {
     // The keys cover the home indicator, so the larger of the two, never the sum
     // (rule 13); the sheet grows by it rather than its content shrinking.
-    const inset = "max(var(--kub-keyboard-inset, 0px), var(--kub-safe-bottom))";
+    const inset = "max(var(--kub-keyboard-inset, 0px), var(--kub-attach-safe-bottom))";
     // A fixed sheet may anchor below the iPhone's paintable canvas. Runtime
     // measures that difference; elsewhere it is zero. The voice-call shell
     // overrides --kub-app-height locally, so use the independent root token.

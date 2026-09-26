@@ -177,16 +177,16 @@ needs its own proof before implementation.
 
 **Current iPhone PWA checkpoint, 2026-09-27 (Codex):** the separate iOS/MacOS
 chat owns the Home Screen viewport correction. Tester screenshots place the
-clipped page edge at ≈873 of 932 pt. The prior shell fix was released in
-`c057d768`; the installed document's exact bundle remains unverified. The
-attachment follow-up measures the actual fixed-position anchor separately
-from paintable `innerHeight`, so it clears that edge without lifting a sheet
-twice when iOS already anchors it there. Local viewport tests pass 42/42 in
-Chromium/WebKit; attachment tests pass 36/36 at 390/1440, with typecheck and
-production build green. Next: relaunch the installed PWA online, inspect the
-attachment controls with and without the keyboard, and confirm the active
-bundle on a real iPhone. The system-owned lower strip may remain outside DOM
-paint. See the [iPhone PWA viewport record](operations/ios-pwa-viewport-validation.md).
+clipped page edge at ≈873 of 932 pt. The shell fix was released in `c057d768`
+and the attachment fixed-anchor follow-up in `b7b4e6c3`; the installed
+document's exact bundle remains unverified. CSS guard hardening keeps iOS
+component styles layered, the attachment's keyboard inset independent from
+the shared safe-area token, and 48px touch areas intact. Local checks: 70/70
+focused unit, 44/44 viewport Chromium/WebKit, 25/25 applicable safe-area and
+10/10 Android/web boundary scenarios, plus typecheck and build. Next: relaunch
+the installed PWA online, inspect attachment controls with and without the
+keyboard, and confirm the active bundle on a real iPhone. The system-owned
+lower strip may remain outside DOM paint. See the [iPhone PWA viewport record](operations/ios-pwa-viewport-validation.md).
 
 **Current backend checkpoint, 2026-09-26 (Codex):** native FCM/WNS OS push
 payloads no longer carry sender, preview, avatar or task content across a

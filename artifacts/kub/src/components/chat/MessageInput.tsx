@@ -1516,7 +1516,7 @@ export function MessageInput({
           ) : (
             <>
           {/* The field's glass starts after each round button and its 8px gap. */}
-          <KubGlassLayer className="kub-ios-composer-field-glass left-[3.25rem] right-[3.25rem] rounded-[1.375rem] border border-[color:var(--glass-line)] group-has-[textarea:focus]/composer:border-[color:var(--kub-cyan)]" />
+          <KubGlassLayer className="left-[3.25rem] right-[3.25rem] ios:left-14 ios:right-14 rounded-[1.375rem] border border-[color:var(--glass-line)] group-has-[textarea:focus]/composer:border-[color:var(--kub-cyan)]" />
           <button
             onClick={() => { setShowAttach(!showAttach); setShowEmoji(false); }}
             className={cn(

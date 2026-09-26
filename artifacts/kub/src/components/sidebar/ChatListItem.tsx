@@ -307,7 +307,7 @@ export const ChatListItem = memo(function ChatListItem({
             ) : (
               <KubIcon name="user" size={13} className="flex-shrink-0 text-[color:var(--kub-muted)]" />
             )}
-            <span className="kub-ios-chat-list-title text-base sm:text-sm font-semibold truncate text-[color:var(--kub-text)]">
+            <span className="text-base sm:text-sm ios:text-base font-semibold truncate text-[color:var(--kub-text)]">
               {display.title}
             </span>
             {display.isBot && <BotTag />}
@@ -351,7 +351,7 @@ export const ChatListItem = memo(function ChatListItem({
         </div>
 
         <div className="flex min-w-0 items-center justify-between gap-2">
-          <span className="kub-ios-chat-list-preview block min-w-0 flex-1 truncate text-left text-sm leading-5 sm:text-xs sm:leading-4 text-[color:var(--kub-muted)]">
+          <span className="block min-w-0 flex-1 truncate text-left text-sm leading-5 sm:text-xs sm:leading-4 ios:text-sm ios:leading-5 text-[color:var(--kub-muted)]">
             {display.isSaved && !lastMsg ? "Сохранённые сообщения" : getMessagePreview()}
           </span>
 

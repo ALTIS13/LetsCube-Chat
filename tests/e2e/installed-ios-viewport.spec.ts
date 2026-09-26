@@ -348,6 +348,7 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
   for (const theme of ["light", "dark"] as const) {
     test(`a short iOS paintable viewport keeps the ${theme} list and composer above the clipped edge`, async ({ page }, testInfo) => {
       const paintableHeight = SCREEN - 59;
+      await page.setViewportSize({ width: 390, height: SCREEN });
       await emulateInstalledIosApp(page, INSETS);
       // iOS 26 can expose 100vh as the full 932 pt screen while both innerHeight
       // and visualViewport stop at 873 pt. The lower 59 pt are not paintable DOM.
@@ -568,6 +569,20 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
     const bounds = await row.boundingBox();
     expect(bounds).not.toBeNull();
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(430);
+  });
+
+  test("the standalone chat list keeps its type scale in narrow landscape", async ({ page }) => {
+    await page.setViewportSize({ width: 667, height: 375 });
+    await emulateInstalledIosApp(page, { top: 0, right: 59, bottom: 21, left: 59 });
+    await installKeyboardStandIn(page);
+    await openChatList(page);
+
+    const row = page.getByTestId("chat-list-item").filter({ hasText: ANYA.full_name });
+    const title = row.getByText(ANYA.full_name, { exact: true });
+    const preview = row.getByText(LATEST, { exact: true });
+    expect(await title.evaluate((element) => getComputedStyle(element).fontSize)).toBe("16px");
+    expect(await preview.evaluate((element) => getComputedStyle(element).fontSize)).toBe("14px");
+    expect(await preview.evaluate((element) => getComputedStyle(element).lineHeight)).toBe("20px");
   });
 
   test("larger standalone controls keep the composer usable on a narrow phone", async ({

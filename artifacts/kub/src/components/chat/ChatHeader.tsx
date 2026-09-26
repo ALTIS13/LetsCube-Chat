@@ -439,10 +439,10 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
             <button
               type="button"
               onClick={() => setSelectedChatId(null)}
-              // D-047: the only way back to the chat list on a phone, so a
-              // full 44pt target, which the capsule is at every pointer.
+              // D-047: the only way back to the chat list on a phone. Keep a
+              // 48px minimum even when h-11 wins over the iOS component rule.
               className={cn(
-                "kub-icon-action kub-interactive kub-ios-chat-icon kub-ios-chat-back group/capsule relative h-11 min-w-11 rounded-full px-2.5 text-[color:var(--kub-text)] md:hidden",
+                "kub-icon-action kub-interactive kub-ios-chat-icon kub-ios-chat-back group/capsule relative h-11 min-h-12 min-w-12 rounded-full px-2.5 text-[color:var(--kub-text)] md:hidden",
                 FOCUS_RING,
               )}
               aria-label="Назад"
@@ -481,14 +481,14 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
             </span>
             <span className="relative min-w-0 text-left">
               <span className="flex min-w-0 items-center gap-1.5">
-                <span className="kub-ios-chat-title block truncate text-[15px] font-semibold leading-tight text-[color:var(--kub-text)]">
+                <span className="block truncate text-[15px] ios:text-[17px] font-semibold leading-tight text-[color:var(--kub-text)]">
                   {name}
                 </span>
                 {display.isBot && <BotTag />}
               </span>
               {subtitle && (
                 <span className={cn(
-                  "kub-ios-chat-subtitle block truncate text-xs leading-tight",
+                  "block truncate text-xs ios:text-sm leading-tight",
                   isOnline ? "text-[color:var(--kub-online-text)]" : "text-[color:var(--kub-muted)]"
                 )}>
                   {subtitle}
