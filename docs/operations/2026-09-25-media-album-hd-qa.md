@@ -63,8 +63,9 @@ viewport fix belongs to the separate iOS/MacOS task.
 
 ## Remaining
 
-- Inserts remain individual. One notification per album, atomic group insertion
-  and a pre-send mosaic preview need separate backend/UX work.
+- Inserts remain individual. Album-level external push aggregation and atomic
+  group insertion need separate backend work. The pre-send mosaic preview was
+  subsequently shipped; see the current checkpoint in `docs/HANDOVER.md`.
 - Android 0.1.11/build 12 embeds an older web bundle. This web deploy does not
   update the installed APK; the next signed cut needs separate owner instruction,
   real Android gallery/album QA and artifact verification.

@@ -141,6 +141,9 @@ was released separately by its owner; see the
 aggregation remains the next backend stage; preserve individual notification
 rows and their exact read/navigation semantics. See the
 [rollout and limits](operations/2026-09-26-native-push-account-privacy.md).
+Its source/live design and activation gates are recorded in the
+[album push rollout plan](operations/2026-09-26-album-push-rollout-plan.md);
+no album push migration has been applied.
 
 **Current shared-web checkpoint, 2026-09-26 (Codex):** the attachment sheet
 shows a compact 2-10 item album preview in the selected send order, while the
