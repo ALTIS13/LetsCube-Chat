@@ -36,6 +36,11 @@ messages, no change to a bot's group privacy mode.
   `search_path`, authenticated EXECUTE, anon denied and no direct table read.
 - PostgREST returned HTTP 401 for anon and HTTP 200/`null` for an authenticated
   unknown UUID. No user message body or callback token was logged.
+- Commit `ef4aeea1` was pushed to `main`. The web rollover ended with only
+  image `l64kyyu1sysev2izzjjbizhe:ef4aeea17b2c75b13fdb3e59c90a9563f24f42b0`
+  running. The public entry script returned HTTP 200 and contained
+  `bot_callback_answer_for_actor` and the uncertain-press wording; the reader
+  name was absent from the preceding commit's source.
 - Browser regressions covered delayed answers, alert, older-server fallback,
   account change during both success and failure, two simultaneous buttons
   and a stalled press on desktop and mobile. The full bot surface suite passed
@@ -43,6 +48,10 @@ messages, no change to a bot's group privacy mode.
   Focused unit tests passed 57 cases, workspace typecheck passed, and the
   production web build completed with the project's existing bundle-size and
   source-map warnings.
+- The repository-wide unit run had 4160 passing, one skipped, and eight failing
+  checks in unchanged notification, push and CSS contract areas. None read the
+  callback or feedback files changed here; they remain a separate baseline
+  cleanup task, not a green whole-repository gate.
 
 ## Remaining limits
 
@@ -50,8 +59,8 @@ messages, no change to a bot's group privacy mode.
   source update, which makes the private answer deliberately unreadable. The
   client then acknowledges only that the press was sent. There is no private
   message row, persistent answer history, or text field in the bot interface.
-- The database reader is active independently of web rollout. Confirm the
-  running web image and public bundle after the client commit is deployed.
+- This verifies deployment, not a physical live bot's `answerCallbackQuery`
+  response displayed on a real device. That end-to-end canary remains open.
 - To roll back the new DB reader, use the reviewed rollback SQL in
   `.migration-backup/supabase/migrations/20260926150000_bot_callback_answer_for_actor.rollback.sql`
   after reverting the client. The additive DB function can also remain inert.

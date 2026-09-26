@@ -153,7 +153,8 @@ and detail endpoint passed authenticated 1440/390 checks. The owner also
 confirmed that Langame received an ordinary untagged group question and
 forwarded it. These are real-system proofs, not fixture deductions.
 The callback-answer reader is now applied in the DB with actor isolation; the
-web client change is in the release pipeline. See the
+web client commit `ef4aeea1` is deployed. The running web image and public
+bundle both carry it. See the
 [callback rollout](operations/2026-09-26-bot-callback-answer-rollout.md).
 Next bot stage: text input within an interface, then an explicitly scoped
 per-viewer temporary interface. Do not treat callback text as a private
