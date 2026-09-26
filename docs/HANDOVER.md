@@ -158,9 +158,17 @@ bundle both carry it. A disposable QA bot completed the live
 press/update/answer/actor-isolation path, then was returned to pending deletion.
 See the
 [callback rollout](operations/2026-09-26-bot-callback-answer-rollout.md).
-Next bot stage: text input within an interface, then an explicitly scoped
-per-viewer temporary interface. Do not treat callback text as a private
-message row.
+The inline text-input stage is deployed at `7d33fabb`. A bot may add
+`reply_markup.input_field_placeholder` under its callback buttons; submitting
+it sends an ordinary reply to that bot message. A group reply is visible to
+participants, and the UI says so. The database extracts the prompt into a
+separate column, preserving the old keyboard JSON for installed Android
+clients. The migration rehearsal, post-apply smoke, browser matrix, production
+build and healthy web/Bot Gateway images are recorded in the
+[inline-input rollout](operations/2026-09-26-bot-inline-input-rollout.md).
+Next bot stage: an explicitly scoped per-viewer temporary interface. It must
+not be represented as a private message row, and its privacy/runtime contract
+needs its own proof before implementation.
 
 **Current iPhone PWA checkpoint, 2026-09-26 (Codex):** the separate iOS/MacOS
 chat owns the Home Screen viewport correction. New tester screenshots place

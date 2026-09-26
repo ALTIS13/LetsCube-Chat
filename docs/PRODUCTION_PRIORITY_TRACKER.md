@@ -2057,7 +2057,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     DM list marks a bot, if it does.
 
 
-48. `[ ]` A bot should offer an interface, not demand a command. The owner's
+48. `[~]` A bot should offer an interface, not demand a command. The owner's
     direction of 2026-09-21, and it is a criticism of the reference rather than
     a request to copy it:
 
@@ -2091,7 +2091,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     | --- | --- |
     | buttons under a message (`{text, callback_data}`, `{text, url}`) | **exists** — `BotInlineKeyboard`, with a press path and an answer that can alert or toast |
     | a bot editing a message it already sent | **exists** — `editMessageText`, so a progress bar is already possible |
-    | **a text input inside the interface** | **missing** — buttons only |
+    | **a text input inside the interface** | **deployed 2026-09-26** — an optional prompt beneath callback buttons sends a normal reply to the bot message |
     | **a message visible to one person in a shared chat** | **missing entirely** |
 
     So the direction is nearer than it looks, and the two gaps are of very
@@ -2209,6 +2209,19 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     a complete private, temporary interface in a shared chat. Those two
     gaps keep item 48 open. See the
     [rollout](operations/2026-09-26-bot-callback-answer-rollout.md).
+
+    **2026-09-26 inline-input stage.** `sendMessage` accepts an optional,
+    bounded `reply_markup.input_field_placeholder` alongside the existing
+    callback keyboard. The prompt is stored separately, so old embedded
+    Android clients still render the original keyboard. The web interface
+    submits the text as an ordinary reply (`reply_to_id`) and warns in groups
+    that participants will see it. This closes the shared text-input gap,
+    **not** the private, temporary per-viewer interface. Both SQL migrations
+    were backed up, rehearsed and applied with post-apply smoke; the web and
+    Bot Gateway run healthy `7d33fabb` images. Browser fixtures exercise
+    private/group replies and existing button callbacks; no production bot
+    has yet been made to send the new prompt, so a live end-to-end bot-send
+    canary remains. [Rollout](operations/2026-09-26-bot-inline-input-rollout.md).
 
 
 49. `[x]` Public-route call controls, repaired 2026-09-21.
