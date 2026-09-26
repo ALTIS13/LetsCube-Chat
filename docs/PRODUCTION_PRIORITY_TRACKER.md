@@ -12,7 +12,7 @@ Safari Web Inspector evidence, an authenticated synthetic chat, composer/safe
 area, attachments and push remain open. Do not treat Safari's boot error as a
 measured bottom-inset defect or the guest PWA check as chat acceptance.
 
-**2026-09-27 media session boundary (source candidate):** the signed-URL store
+**2026-09-27 media session boundary (deployed):** the signed-URL store
 now discards an in-flight answer from a previous auth session and clears its
 addresses when the account ID changes, without re-signing on a token refresh
 for the same account. The regression failed against the previous code, then
@@ -25,7 +25,19 @@ client; preserve compatibility with installed Android bundles. Five failures
 seen in the first full unit run were fixed or updated against verified new UI
 surfaces; the repeated full run exited successfully. Web Push now prepares its
 topic before the final read/foreground eligibility check, with a retry path if
-preparation fails. Edge deployment and live push delivery are separate proofs.
+preparation fails. Commits `75c518b3` and `196654b1` reached `main`; the sole
+healthy web image is `196654b164056deb796bbcd02ab2563c82e519d6`, and its
+public `sw.js` points to `index-Dd_fcDhO.js`, which contains the new
+`setAccount` store method. The Edge entrypoint was backed up at
+`/srv/letscube/ops/edge-rollbacks/send-push-notifications-index-20260926T225321Z-75c518b3.ts`
+(old SHA-256 `048aefde045001841ba2d0abe5456408de85a9a05144f895bd269d75d62dc920`),
+then replaced with SHA-256
+`cdd7c4f310550a3812d946a3386f66a0d77c42a78bdd2d6aeabb729223797494` in the
+healthy Edge runtime. Direct unauthorised POST returned 401; no live provider
+delivery was generated. The iPhone guest result is recorded separately and does
+not accept authenticated chat or PWA push. Rollback is the verified backup
+restored atomically to the same `index.ts` mount, followed by restarting only
+`supabase-edge-functions` and checking its health and in-container hash.
 
 **2026-09-25 shared-web candidate:** 2-10 picked visual items now carry one
 album ID and render as a responsive mosaic without losing per-item actions;

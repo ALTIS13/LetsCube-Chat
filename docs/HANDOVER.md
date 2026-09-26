@@ -184,9 +184,13 @@ unverified. The hardening keeps iOS component styles layered and the
 attachment's keyboard inset independent from the shared safe-area token, while
 preserving 48px touch areas. Local checks: 70/70
 focused unit, 44/44 viewport Chromium/WebKit, 25/25 applicable safe-area and
-10/10 Android/web boundary scenarios, plus typecheck and build. Next: relaunch
-the installed PWA online, inspect attachment controls with and without the
-keyboard, and confirm the active bundle on a real iPhone. The system-owned
+10/10 Android/web boundary scenarios, plus typecheck and build. A short
+MobileNext physical iPhone 14 Pro Max guest smoke confirmed Home Screen launch
+and sign-in controls above the keyboard, but not the authenticated chat. Safari
+tabs on that device showed the app's boot-recovery error while desktop WebKit
+did not; the failed request and installed JS/SW identity are unknown. Next:
+diagnose physical Safari without personal credentials, then inspect attachment
+controls and the lower edge in an authorised synthetic chat. The system-owned
 lower strip may remain outside DOM paint. See the [iPhone PWA viewport record](operations/ios-pwa-viewport-validation.md).
 
 **Current backend checkpoint, 2026-09-26 (Codex):** native FCM/WNS OS push
@@ -203,6 +207,15 @@ Its source/live design and activation gates are recorded in the
 [album push rollout plan](operations/2026-09-26-album-push-rollout-plan.md);
 the album migrations and dispatcher are active. Physical-device delivery QA
 remains, and this does not imply iPhone PWA acceptance.
+
+**2026-09-27 shared-web/Edge checkpoint:** `196654b1` is the sole healthy web
+image; its public bundle carries the signed-media account boundary from
+`75c518b3`. The same source commit is mounted in the healthy Edge runtime:
+Web Push topic preparation now precedes the final read/foreground recheck.
+The full unit suite, workspace typecheck, server tests and production web build
+passed. A direct unauthorised Edge POST returned 401, but no provider delivery
+or authenticated media-account switch was exercised. See the
+[production tracker](PRODUCTION_PRIORITY_TRACKER.md) for hashes and rollback.
 
 **Current shared-web checkpoint, 2026-09-26 (Codex):** the attachment sheet
 shows a compact 2-10 item album preview in the selected send order, while the
