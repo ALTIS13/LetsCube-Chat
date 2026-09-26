@@ -39,11 +39,22 @@ the contract. This report records evidence separately from release status.
   chat-profile hover count and chat-header touch target. These are not counted
   as bot-panel acceptance; their owners need separate repairs. All 352 server
   tests passed. Do not describe the whole repository suite as green.
-- Production schema was queried read-only and matched the migration's expected
-  absent objects and existing delivery guard. A fresh full backup is
+- Production schema initially matched the migration's expected absent objects
+  and existing delivery guard. A fresh full backup is
   `/srv/letscube/backups/automated/20260927-001359`; its `SHA256SUMS`,
-  PostgreSQL custom-dump catalog and Storage archive listing passed. No
-  production SQL was applied by the checks above.
+  PostgreSQL custom-dump catalog and Storage archive listing passed. The base
+  migration was applied to production as `supabase_admin`, but its first
+  rollback-only smoke exposed a production-only ACL gap: the existing
+  `postgres`-owned SECURITY DEFINER delivery guard could not execute the new
+  `supabase_admin`-owned private validator. The smoke rolled back; no client
+  code had been deployed. A narrow follow-up migration grants EXECUTE only to
+  `postgres`, with guarded pre/poststate and a separate rollback. Both files
+  were rehearsed on the isolated restore, including revoke/reapply, and their
+  source, backup and server copies were hash-matched. The follow-up was then
+  applied to production as `supabase_admin`. Updated production smoke explicitly
+  checked the ACL and completed `bot_viewer_interface_smoke_ok` followed by
+  `ROLLBACK`. Neither `anon`, `authenticated` nor `service_role` can execute
+  the validator. The base and follow-up schema are live; app release is pending.
 - The existing Windows Test updater channel is not a staging environment for
   this feature: its shell still loads the production web origin; Android embeds
   a separately built web bundle, and iPhone PWA uses the same production site.
@@ -55,12 +66,9 @@ the contract. This report records evidence separately from release status.
 
 1. Commit and push only reviewed bot-viewer files after checking the shared
    `main` index; preserve the iOS PWA owner's independent work.
-2. Recheck the exact production schema and migration SHA-256 immediately before
-   one production apply. Confirm the backup still exists, then run the
-   post-apply rollback-only smoke with actor claims.
-3. Verify healthy web, Bot Gateway and worker images at the reviewed commit.
+2. Verify healthy web, Bot Gateway and worker images at the reviewed commit.
    The installed Android bundle remains a separate release and must retain its
    existing keyboard fallback.
-4. Use an isolated QA bot and two QA accounts for a production canary: A sees
+3. Use an isolated QA bot and two QA accounts for a production canary: A sees
    and presses the panel, B cannot read it, and edit/close/expiry revoke it.
    Remove QA state afterwards. Until this passes, do not call the feature live.

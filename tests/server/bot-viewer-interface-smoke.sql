@@ -36,6 +36,15 @@ declare
   v_role text;
   v_table text;
 begin
+  if not exists (
+    select 1 from pg_catalog.pg_proc p,
+      lateral pg_catalog.aclexplode(p.proacl) acl
+    where p.oid = 'private.bot_viewer_interface_valid(uuid)'::regprocedure
+      and acl.grantee = 'postgres'::regrole
+      and acl.privilege_type = 'EXECUTE'
+  ) then
+    raise exception 'delivery_guard_owner_cannot_execute_viewer_validator';
+  end if;
   foreach v_table in array array[
     'private.bot_callback_interface_grants',
     'private.bot_viewer_interfaces',

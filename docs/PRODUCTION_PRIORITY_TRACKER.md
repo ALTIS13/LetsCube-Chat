@@ -2226,13 +2226,17 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     Android visual confirmation remains separate.
     [Rollout](operations/2026-09-26-bot-inline-input-rollout.md).
 
-    **2026-09-27 private viewer panel V1.** A source-only implementation now
+    **2026-09-27 private viewer panel V1.** An implementation now
     offers a short-lived panel to the one member who pressed a bot callback;
     it is neither a group message nor private text input. The migration passed
     apply, actor/delivery smoke and rollback on an isolated restored database;
     bot tests passed 303/303 and the browser fixture matrix passed 60/60. A
     revoked panel is rechecked after webhook DNS validation before HTTP starts.
-    No production SQL or deploy has been performed for this stage. The existing
+    A verified backup preceded the production base migration. Its first
+    rollback-only smoke found a SECURITY DEFINER owner/EXECUTE mismatch; a
+    guarded, isolated-rehearsed grant to the delivery guard owner fixed it.
+    The updated production smoke passed and rolled back its QA data. Client and
+    worker deployment and a two-account canary remain open. The existing
     Windows Test channel does not isolate the shared web/backend/PWA, so the
     owner chose the established backup, guarded deploy and QA-canary path.
     [Release gates](operations/2026-09-27-bot-viewer-rollout.md).
