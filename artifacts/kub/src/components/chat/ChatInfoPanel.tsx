@@ -2802,8 +2802,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
                 it has no `chat_members` row, no role and no standing, so it
                 gets its own short list under the people rather than a row among
                 them (D-235). Everybody in the group sees which bots are here —
-                that is a fact about the room — and only the removal is the
-                administrator's, which `chat_bot_remove` decides for itself.
+                that is a fact about the room — and removal and privacy changes
+                belong to administrators, as their SQL functions enforce.
 
                 An empty list is drawn for an administrator and for nobody else:
                 it is how they learn a bot can be added at all, and it would be
@@ -2851,10 +2851,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
                             </span>
                             <BotTag />
                           </div>
-                          {/* The status slot, and the whole of the group's side
-                              of the privacy model: nobody here approves
-                              anything, so being told is the only thing a member
-                              can act on — by removing the bot. Every native
+                          {/* The status slot shows the current access to every
+                              member; administrators can change it below. Every native
                               Telegram client puts the same fact in the same
                               place, where a person's «был(а) недавно» goes,
                               rather than on a line of its own; see the header

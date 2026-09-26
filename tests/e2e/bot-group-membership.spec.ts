@@ -29,11 +29,9 @@ import {
  * a bot, so a role test on this side would be a second copy of a rule the
  * server already enforces, and the second copy is the one that drifts.
  *
- * It also pins the sentence. A bot always joins `restricted` —
- * `chat_bot_members_visibility_approval_check` forbids a `full` row without an
- * approver — so there is no one-step way to add one that reads everything, and
- * the screen has to say what the bot will and will not see **before** the
- * button is pressed, not in a tooltip and not afterwards.
+ * It also pins the sentence. A bot initially joins `restricted`; an
+ * administrator can explicitly widen access later. The add screen says what
+ * the bot will and will not see before the button is pressed.
  *
  * Everything is fictional and mocked on the DEV fixture host. No production
  * screen is rendered and no production data is fetched.
@@ -60,10 +58,7 @@ const HELPER = {
 };
 
 /**
- * A second bot, for D-276: two rows in one group that must say different
- * things. `privacy_mode: "full"` is not reachable on the deployment today —
- * nothing writes it — so this is what the surface will draw once a bot's owner
- * can turn the setting off, pinned now rather than after it ships.
+ * A second bot, for D-276: two rows in one group that say different things.
  */
 const SCRIBE = {
   id: "5bbbbbbb-1111-4111-8111-000000000002",
@@ -352,14 +347,11 @@ test("the group's own list shows the bot once it is in, marked as one", async ({
 });
 
 /**
- * D-276. The group's side of the privacy model is being told, and nothing else.
+ * D-276. Every member can see the bot's current privacy mode.
  *
  * Telegram puts a bot's privacy state on its row in the member list — «Users
  * can always see a bot's current privacy setting in the list of group members»
- * — and that is the whole of the group's half: nobody here approves anything,
- * so the only thing a member can act on is the fact. Before this the fact was
- * one paragraph over the whole list, which can state one rule for bots that are
- * allowed to be in two states.
+ * Administrators can also change it explicitly; ordinary members only read it.
  */
 test("each bot's row says what that bot can read, and two bots may disagree", async ({ page }) => {
   await openPanel(page, {
