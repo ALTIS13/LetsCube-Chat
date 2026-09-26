@@ -2872,7 +2872,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
                               aria-label={privacyMode === "full" ? BOT_RESTRICT_LABEL : BOT_GRANT_FULL_LABEL}
                               onClick={() => void handleBotPrivacy(bot, privacyMode)}
                               disabled={privacyBusyBotId !== null || removingBotId !== null}
-                              className="mt-1 inline-flex min-h-9 items-center rounded-md py-1 pr-2 text-xs font-medium text-[color:var(--kub-accent-text)] kub-raise-hover disabled:cursor-not-allowed disabled:opacity-50"
+                              className="mt-1 inline-flex min-h-11 items-center rounded-md py-1 pr-2 text-xs font-medium text-[color:var(--kub-accent-text)] kub-raise-hover disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               {privacyBusyBotId === bot.id ? "Сохраняем доступ…" : privacyMode === "full" ? BOT_RESTRICT_LABEL : BOT_GRANT_FULL_LABEL}
                             </button>

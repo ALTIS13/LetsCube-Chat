@@ -102,6 +102,7 @@ interface OpenOptions {
   joined?: Row[];
   /** A refusal `chat_bot_add` raises, e.g. `not_an_admin`. */
   addRaises?: string;
+  privacyRaises?: string;
   /** The deployment never took the migration. */
   doorMissing?: boolean;
   /**
@@ -122,6 +123,7 @@ async function openPanel(page: Page, options: OpenOptions = {}): Promise<Fixture
     available = [],
     joined = [],
     addRaises,
+    privacyRaises,
     doorMissing = false,
     invitePolicy = "owner_admin_only",
     theme = "dark",
@@ -173,6 +175,9 @@ async function openPanel(page: Page, options: OpenOptions = {}): Promise<Fixture
         return { body: true };
       }
       if (name === "chat_bot_set_privacy") {
+        if (privacyRaises) {
+          return { status: 403, body: { code: "42501", message: privacyRaises, details: null, hint: null } };
+        }
         const row = live.find((entry) => (entry as { bot?: { id?: string } }).bot?.id === body.p_bot_id);
         if (row) row.privacy_mode = body.p_full ? "full" : "restricted";
         return { body: true };
@@ -464,6 +469,18 @@ test("an ordinary group member cannot change bot visibility", async ({ page }) =
   });
   await expect(memberBots(page).getByRole("button", { name: "Дать доступ ко всем сообщениям" })).toHaveCount(0);
   expect(fixture.rpcBodies("chat_bot_set_privacy")).toEqual([]);
+});
+
+test("a refused privacy change keeps the narrow state and explains the failure", async ({ page }) => {
+  await openPanel(page, {
+    joined: [{ chat_id: GROUP, privacy_mode: "restricted", bot: HELPER }],
+    privacyRaises: "not_an_admin",
+  });
+  const row = memberBots(page).getByTestId("chat-info-bot");
+  await row.getByRole("button", { name: "Дать доступ ко всем сообщениям" }).click();
+  await page.getByRole("button", { name: "Дать доступ", exact: true }).click();
+  await expect(memberBots(page).getByTestId("chat-info-bot-error")).toBeVisible();
+  await expect(row.getByTestId("chat-info-bot-access")).toContainText("Видит только обращения к нему");
 });
 
 test("a group with no bots tells its administrator so, and tells nobody else", async ({ page }) => {
