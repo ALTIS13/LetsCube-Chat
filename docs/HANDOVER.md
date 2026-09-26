@@ -131,6 +131,18 @@ whole deployment** — no bot has registered a command yet.
 
 ## 4. Where to start
 
+**Current bot checkpoint, 2026-09-26 (Codex):** `d846d4c7` is deployed and
+healthy on both web and Bot Gateway. A group administrator can give a bot full
+access to future group messages; a later restriction purges queued message
+updates and rechecks polling/webhook delivery. `sendPhoto` accepts bounded
+inline image bytes as well as existing object and same-chat `file_id` modes.
+The Bot API page documents those modes, and the settings screen reports safe
+load errors with retry. A verified DB backup, transactional SQL rehearsal,
+post-apply smoke, 48 API unit tests and 72 focused browser cases are recorded
+in the [bot rollout](operations/2026-09-26-bot-privacy-photo-rollout.md).
+Next: controlled live inline-photo send with a disposable test bot/chat, then
+an authenticated owner retest of settings. Do not infer those from unit tests.
+
 **Current iPhone PWA checkpoint, 2026-09-26 (Codex):** the separate iOS/MacOS
 chat owns the Home Screen viewport correction. New tester screenshots place
 the clipped page edge at ≈873 of 932 pt; the prior `100vh` shell positions
