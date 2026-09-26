@@ -1,20 +1,35 @@
 # Album-level external push: rollout plan, 2026-09-26
 
-Owner: shared backend (Codex). Stage: additive schema applied with runtime
-disabled; Edge deployment and activation remain. The separate iOS/MacOS task
-owns iPhone PWA behavior.
+Owner: shared backend (Codex). Stage: Web/Android album enqueue and Edge
+dispatcher active; physical-device delivery QA remains. The separate iOS/MacOS
+task owns iPhone PWA behavior.
 
 ## Current checkpoint
 
-- Fresh full backup: `/srv/letscube/backups/automated/20260926-122324`,
-  verified by SHA-256 catalog and `pg_restore -l` before applying SQL.
+- Fresh full backups: `/srv/letscube/backups/automated/20260926-122324`
+  before the additive migration and `20260926-124635` before activation. Both
+  passed SHA-256 catalog and `pg_restore -l` checks.
 - Both migrations passed a live-schema transaction rehearsal ending in
   `ROLLBACK`. The trigger and album objects were unchanged after rehearsal.
-- `20260926085544_album_push_outbox.sql` was applied once. Live checks show
-  `enabled=false`, `legacy_wns_enabled=false`, zero album groups/outbox rows,
-  RLS on all five new tables, service-role-only claim RPC and unchanged trigger.
+- `20260926085544_album_push_outbox.sql` was applied first with `enabled=false`.
+  All five tables have RLS; only `service_role` can invoke the claim RPC. The
+  mounted Edge entry/module SHA-256 values are respectively `048aefde...c920`
+  and `12867543...7bf9a`; FCM, WNS, Web Push and native privacy modules match
+  the reviewed source. The Compose override added only
+  `ALBUM_PUSH_DISPATCH_ENABLED=1`; its former version and `index.ts` are saved
+  root-only in `/srv/letscube/backups/album-push-edge-20260926T094109Z`.
+- `20260926091149_album_push_activate.sql` was applied after the new Edge
+  returned healthy, an unauthenticated 401, a service-role RPC 200 with empty
+  queue and five cron HTTP 200/`album=idle` responses. Post-activation checks:
+  `enabled=true`, `legacy_wns_enabled=false`, one historical legacy key,
+  new trigger MD5 `1185af57abedc974ad4ebabaf57555a8`, zero album rows.
+  Three subsequent cron runs succeeded and returned HTTP 200/`album=idle`.
+- A live-schema two-part album was inserted through the normal message trigger
+  inside one transaction. It formed exactly one group with two members and an
+  album outbox target, without ordinary Web rows for those notifications. The
+  transaction ended in `ROLLBACK`; zero QA groups or queued rows remained.
 - Focused database tests: 14/14. Web/FCM/voice regression tests: 56/56.
-  No external provider or physical-device delivery is claimed yet.
+  No external provider acceptance or physical-device delivery is claimed yet.
 
 ## Current state
 
