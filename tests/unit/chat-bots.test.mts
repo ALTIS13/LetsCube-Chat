@@ -220,7 +220,7 @@ test("each privacy mode gets its own words, and the two are not the same sentenc
   assert.ok(restricted.includes("только"), "the restricted line does not say it is limited");
   assert.ok(!restricted.includes("все сообщения"), "the restricted line reads as full access");
   // `full` is the wide branch, and must not be hedged into sounding limited.
-  assert.ok(full.includes("все сообщения"), "the full line does not say it reads everything");
+  assert.ok(full.includes("все новые сообщения"), "the full line does not say it reads every new message");
   assert.ok(!full.includes("только"), "the full line reads as limited");
 });
 
@@ -287,7 +287,7 @@ test("the bot's line in the member list is its status slot: identity, then state
   // The shape a person's row has one line above — `Владелец группы · был(а)
   // недавно` — so the two read the same way.
   assert.equal(botMemberStatusLine(BOT, "restricted"), "@helper_bot · Видит только обращения к нему");
-  assert.equal(botMemberStatusLine(BOT, "full"), "@helper_bot · Видит все сообщения группы");
+  assert.equal(botMemberStatusLine(BOT, "full"), "@helper_bot · Видит все новые сообщения группы");
 
   // The handle stays, and it is not decoration: this product has no mention
   // autocomplete, `@никнейм` has to be typed for the bot to be delivered

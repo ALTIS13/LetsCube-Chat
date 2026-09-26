@@ -151,7 +151,7 @@ export function readBotPrivacyMode(value: unknown): BotPrivacyMode {
  * of both and repeating it twice on every row would drown the difference.
  */
 export const BOT_ACCESS_RESTRICTED = "Видит только обращения к нему";
-export const BOT_ACCESS_FULL = "Видит все сообщения группы";
+export const BOT_ACCESS_FULL = "Видит все новые сообщения группы";
 
 export function botAccessLabel(mode: BotPrivacyMode): string {
   return mode === "full" ? BOT_ACCESS_FULL : BOT_ACCESS_RESTRICTED;
@@ -200,8 +200,7 @@ export function botMemberStatusLine(bot: BotLike, mode: BotPrivacyMode): string 
 export const BOT_MEMBERS_HISTORY_NOTE =
   "Бот не видит сообщения до своего добавления или последнего изменения доступа.";
 
-export const BOT_GRANT_FULL_LABEL = "Дать доступ ко всем сообщениям";
-export const BOT_RESTRICT_LABEL = "Ограничить доступ бота";
+export const BOT_FULL_ACCESS_LABEL = "Читать все новые сообщения";
 export const BOT_PRIVACY_FAILED = "Не удалось изменить доступ бота. Попробуйте ещё раз.";
 
 /** The same fact, once it is done, because a success is also a place to say it. */
@@ -312,8 +311,7 @@ export const CHAT_BOT_MESSAGES: readonly string[] = [
   BOT_MEMBERS_EMPTY,
   BOT_VISIBILITY_NOTE,
   BOT_MEMBERS_HISTORY_NOTE,
-  BOT_GRANT_FULL_LABEL,
-  BOT_RESTRICT_LABEL,
+  BOT_FULL_ACCESS_LABEL,
   BOT_PRIVACY_FAILED,
   BOT_ACCESS_RESTRICTED,
   BOT_ACCESS_FULL,

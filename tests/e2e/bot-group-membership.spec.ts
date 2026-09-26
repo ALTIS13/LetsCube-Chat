@@ -373,11 +373,12 @@ test("each bot's row says what that bot can read, and two bots may disagree", as
     "@helper_bot · Видит только обращения к нему",
   );
   await expect(rows.nth(1).getByTestId("chat-info-bot-access")).toHaveText(
-    "@scribe_bot · Видит все сообщения группы",
+    "@scribe_bot · Видит все новые сообщения группы",
   );
-  // The status slot, not a line of its own: a bot's row has the same two lines
-  // a person's row has, and the second is where «был(а) недавно» goes.
-  await expect(rows.nth(0).locator("div.min-w-0 > div")).toHaveCount(2);
+  // The access state stays directly below the bot name, above the admin-only switch.
+  await expect(rows.nth(0).locator("div.min-w-0 > div").nth(1)).toHaveAttribute(
+    "data-testid", "chat-info-bot-access",
+  );
 
   // And it must actually be readable. `truncate` is an ellipsis, not an error,
   // so a line that outgrows the slot fails silently — which is what the first
@@ -442,20 +443,25 @@ test("a member sees which bots are in the room but is offered no way out for the
 });
 
 test("a group administrator explicitly grants and revokes full bot visibility", async ({ page }) => {
-  const fixture = await openPanel(page, { joined: [{ chat_id: GROUP, privacy_mode: "restricted", bot: HELPER }] });
+  const fixture = await openPanel(page, { myRole: "admin", joined: [{ chat_id: GROUP, privacy_mode: "restricted", bot: HELPER }] });
   const row = memberBots(page).getByTestId("chat-info-bot");
+  const fullAccess = row.getByRole("switch", { name: "Читать все новые сообщения боту «Помощник»" });
 
-  await row.getByRole("button", { name: "Дать доступ ко всем сообщениям" }).click();
+  await expect(fullAccess).toHaveAttribute("aria-checked", "false");
+  await fullAccess.click();
   await expect(page.locator(".kub-modal-panel")).toContainText("новые сообщения");
   expect(fixture.rpcBodies("chat_bot_set_privacy")).toEqual([]);
+  await expect(fullAccess).toHaveAttribute("aria-checked", "false");
   await page.getByRole("button", { name: "Дать доступ", exact: true }).click();
   await expect.poll(() => fixture.rpcBodies("chat_bot_set_privacy")).toEqual([
     { p_chat_id: GROUP, p_bot_id: HELPER.id, p_full: true },
   ]);
-  await expect(row.getByTestId("chat-info-bot-access")).toContainText("Видит все сообщения группы");
+  await expect(fullAccess).toHaveAttribute("aria-checked", "true");
+  await expect(row.getByTestId("chat-info-bot-access")).toContainText("Видит все новые сообщения группы");
 
-  await row.getByRole("button", { name: "Ограничить доступ бота" }).click();
+  await fullAccess.click();
   await expect.poll(() => fixture.rpcBodies("chat_bot_set_privacy")).toHaveLength(2);
+  await expect(fullAccess).toHaveAttribute("aria-checked", "false");
   await expect(row.getByTestId("chat-info-bot-access")).toContainText("Видит только обращения к нему");
 });
 
@@ -464,15 +470,19 @@ test("an open group panel refreshes bot visibility after another administrator c
     joined: [{ chat_id: GROUP, privacy_mode: "restricted", bot: HELPER }],
   });
   const access = memberBots(page).getByTestId("chat-info-bot-access");
+  const fullAccess = memberBots(page).getByRole("switch", { name: "Читать все новые сообщения боту «Помощник»" });
   await expect(access).toContainText("Видит только обращения к нему");
+  await expect(fullAccess).toHaveAttribute("aria-checked", "false");
 
   fixture.setRemotePrivacy("full");
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-  await expect(access).toContainText("Видит все сообщения группы");
+  await expect(access).toContainText("Видит все новые сообщения группы");
+  await expect(fullAccess).toHaveAttribute("aria-checked", "true");
 
   fixture.setRemotePrivacy("restricted");
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(access).toContainText("Видит только обращения к нему");
+  await expect(fullAccess).toHaveAttribute("aria-checked", "false");
 });
 
 test("an ordinary group member cannot change bot visibility", async ({ page }) => {
@@ -480,7 +490,7 @@ test("an ordinary group member cannot change bot visibility", async ({ page }) =
     myRole: "member",
     joined: [{ chat_id: GROUP, privacy_mode: "restricted", bot: HELPER }],
   });
-  await expect(memberBots(page).getByRole("button", { name: "Дать доступ ко всем сообщениям" })).toHaveCount(0);
+  await expect(memberBots(page).getByRole("switch", { name: "Читать все новые сообщения боту «Помощник»" })).toHaveCount(0);
   expect(fixture.rpcBodies("chat_bot_set_privacy")).toEqual([]);
 });
 
@@ -490,9 +500,11 @@ test("a refused privacy change keeps the narrow state and explains the failure",
     privacyRaises: "not_an_admin",
   });
   const row = memberBots(page).getByTestId("chat-info-bot");
-  await row.getByRole("button", { name: "Дать доступ ко всем сообщениям" }).click();
+  const fullAccess = row.getByRole("switch", { name: "Читать все новые сообщения боту «Помощник»" });
+  await fullAccess.click();
   await page.getByRole("button", { name: "Дать доступ", exact: true }).click();
   await expect(memberBots(page).getByTestId("chat-info-bot-error")).toBeVisible();
+  await expect(fullAccess).toHaveAttribute("aria-checked", "false");
   await expect(row.getByTestId("chat-info-bot-access")).toContainText("Видит только обращения к нему");
 });
 
@@ -541,17 +553,27 @@ test("typing narrows the bots the way it narrows the people", async ({ page }) =
     .toContain("зззз");
 });
 
-test("both surfaces, photographed in both themes", async ({ page }, info) => {
-  for (const theme of ["dark", "light"] as const) {
+for (const theme of ["dark", "light"] as const) {
+  test(`both bot surfaces in ${theme} theme`, async ({ page }, info) => {
     await openPanel(page, {
       available: [AVAILABLE_ROW],
       joined: [{ chat_id: GROUP, privacy_mode: "restricted", bot: HELPER }],
       theme,
     });
-    await expect(memberBots(page).getByTestId("chat-info-bot")).toHaveCount(1);
+    const row = memberBots(page).getByTestId("chat-info-bot");
+    await expect(row).toHaveCount(1);
+    const fullAccess = row.getByRole("switch", { name: "Читать все новые сообщения боту «Помощник»" });
+    await expect(fullAccess).toBeVisible();
     await page.screenshot({ path: shotPath(info, `group-bots-${theme}`), fullPage: false });
+    await fullAccess.click();
+    await page.getByRole("button", { name: "Дать доступ", exact: true }).click();
+    await expect(fullAccess).toHaveAttribute("aria-checked", "true");
+    await expect.poll(() => fullAccess.getByTestId("kub-switch-thumb").evaluate((node) =>
+      Math.round(node.getBoundingClientRect().left - node.parentElement!.getBoundingClientRect().left),
+    )).toBeGreaterThan(18);
+    await page.screenshot({ path: shotPath(info, `group-bots-full-${theme}`), fullPage: false });
     await openInvite(page);
     await expect(botSection(page)).toBeVisible();
     await page.screenshot({ path: shotPath(info, `invite-bots-${theme}`), fullPage: false });
-  }
-});
+  });
+}

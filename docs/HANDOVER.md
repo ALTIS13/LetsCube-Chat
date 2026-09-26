@@ -140,6 +140,11 @@ The Bot API page documents those modes, and the settings screen reports safe
 load errors with retry. A verified DB backup, transactional SQL rehearsal,
 post-apply smoke, 48 API unit tests and 72 focused browser cases are recorded
 in the [bot rollout](operations/2026-09-26-bot-privacy-photo-rollout.md).
+Follow-up: the group-admin control is now a direct switch in the Members list;
+a rollback-only live SQL smoke proved that an ordinary member's unaddressed
+new message is queued in full mode and excluded in restricted mode. Focused
+desktop/mobile Chromium and WebKit UI checks passed. No existing group bot was
+silently widened; the current live group remains restricted.
 Next: controlled live inline-photo send with a disposable test bot/chat, then
 an authenticated owner retest of settings. Do not infer those from unit tests.
 

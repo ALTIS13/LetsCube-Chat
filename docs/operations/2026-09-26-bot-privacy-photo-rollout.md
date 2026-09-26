@@ -57,6 +57,28 @@ Owner: backend and shared web. Source: `d846d4c7` on `main`.
 - An Android APK embeds its web bundle; this web deploy does not update Android.
   iPhone PWA layout belongs to the separate iOS/MacOS owner.
 
+## Group access follow-up
+
+- The existing production group bot remains `restricted`; access was not widened
+  on anybody's behalf. A group owner or administrator now has a switch directly
+  in the group's **Members > Bots** list. Enabling it still requires explicit
+  confirmation; the row says that the bot sees all **new** group messages, not
+  earlier history.
+- A rollback-only production SQL smoke impersonated an ordinary authenticated
+  group member. Its plain message without a mention, command or reply entered
+  the bot update queue in `full` mode and did not enter it in `restricted` mode.
+  The live `is_chat_admin` function admits both `owner` and `admin`; the browser
+  test exercises the `admin` role and denies an ordinary member the switch.
+- The switch and its status passed 21/21 focused Chromium/WebKit browser cases
+  at 1440/390, with both themes rendered and inspected. The broader Chromium
+  group-membership run passed 51/51 at 1440/390/360 before the final wording
+  refinement. Bot wording unit tests passed 21/21; web typecheck and production
+  build passed (`sw.js build b938b84f23a52874`, fixture configuration).
+- This proves the server's eligibility and queueing path. It does not prove an
+  external bot process consumed a webhook or polled the queued update. The
+  controlled live bot-token/photo and authenticated owner-settings checks above
+  remain open.
+
 ## Recovery
 
 - If the gateway photo path fails, redeploy the previously healthy gateway

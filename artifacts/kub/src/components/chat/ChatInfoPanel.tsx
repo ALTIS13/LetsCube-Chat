@@ -6,7 +6,7 @@ import { publicMediaObjectUrl } from "@/lib/media/mediaUrl";
 import { useMessageMediaUrl } from "@/hooks/useMediaObjectUrl";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
-import { KubBadge, KubButton, KubIcon, KubModal, KubNotice, KubStableSkeleton, type KubIconName } from "@/components/kub";
+import { KubBadge, KubButton, KubIcon, KubModal, KubNotice, KubStableSkeleton, KubSwitch, type KubIconName } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
@@ -48,8 +48,7 @@ import {
   BOT_MEMBERS_EMPTY,
   BOT_MEMBERS_HEADING,
   BOT_MEMBERS_HISTORY_NOTE,
-  BOT_GRANT_FULL_LABEL,
-  BOT_RESTRICT_LABEL,
+  BOT_FULL_ACCESS_LABEL,
   BOT_PRIVACY_FAILED,
   BOT_REMOVE_FAILED,
   BOT_REMOVE_LABEL,
@@ -2880,15 +2879,17 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
                             {botMemberStatusLine(bot, privacyMode)}
                           </div>
                           {isOwnerOrAdmin && (
-                            <button
-                              type="button"
-                              aria-label={privacyMode === "full" ? BOT_RESTRICT_LABEL : BOT_GRANT_FULL_LABEL}
-                              onClick={() => void handleBotPrivacy(bot, privacyMode)}
-                              disabled={privacyBusyBotId !== null || removingBotId !== null}
-                              className="mt-1 inline-flex min-h-11 items-center rounded-md py-1 pr-2 text-xs font-medium text-[color:var(--kub-accent-text)] kub-raise-hover disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {privacyBusyBotId === bot.id ? "Сохраняем доступ…" : privacyMode === "full" ? BOT_RESTRICT_LABEL : BOT_GRANT_FULL_LABEL}
-                            </button>
+                            <div className="mt-1 flex min-h-11 items-center justify-between gap-2">
+                              <span className="min-w-0 text-xs font-medium text-[color:var(--kub-text)]">
+                                {privacyBusyBotId === bot.id ? "Сохраняем доступ…" : BOT_FULL_ACCESS_LABEL}
+                              </span>
+                              <KubSwitch
+                                checked={privacyMode === "full"}
+                                aria-label={`${BOT_FULL_ACCESS_LABEL} боту «${botDisplayName(bot)}»`}
+                                onCheckedChange={() => void handleBotPrivacy(bot, privacyMode)}
+                                disabled={privacyBusyBotId !== null || removingBotId !== null}
+                              />
+                            </div>
                           )}
                         </div>
                         {isOwnerOrAdmin && (
