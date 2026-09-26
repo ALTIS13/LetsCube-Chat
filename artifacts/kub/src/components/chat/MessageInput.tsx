@@ -1583,7 +1583,7 @@ export function MessageInput({
           <button
             onClick={() => { setShowEmoji(!showEmoji); setShowAttach(false); }}
             className={cn(
-              "kub-interactive kub-ios-composer-control relative flex h-11 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors hover:text-[color:var(--kub-cyan)]",
+              "kub-interactive kub-ios-composer-control relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-colors hover:text-[color:var(--kub-cyan)]",
               FOCUS_RING,
               showEmoji ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]"
             )}
