@@ -25,42 +25,14 @@ import {
  *     that require owning the bot or sharing a live chat with it), and were
  *     never added to the compatibility layer. `types/database.ts` knows only
  *     `bots`.
- *   - `open_or_create_bot_chat` and `bot_callback_press` do not exist in the
- *     deployment **at all**, so adding them to a type file would be asserting
- *     something untrue about the schema.
+ *   - Bot RPCs are deployed outside the generated compatibility types.
  *
  * A generated type cannot describe any of that, so this module holds one
  * deliberately loose handle, in one place, and every row that leaves it is put
  * through a parser from `botChatSurfaces.ts` rather than trusted.
  *
- * **What the server half still owes this file**, measured rather than guessed —
- * see fact 4 in `botChatSurfaces.ts`:
- *
- *   `public.bot_callback_press(p_message_id uuid, p_data text)`, which exists
- *   since `20260914150000_bot_press_and_bot_chat.sql` and returns the
- *   **callback id** rather than the bot's answer. That is not a compromise:
- *   `private.bot_callback_answers` is revoked from every role including
- *   `service_role`, so there is no answer to return yet. `readCallbackAnswer`
- *   already falls back to «Готово» for anything that is not an object, which
- *   is the honest thing to say about a press that went through and has not
- *   been answered.
- *   `security definer`, granted to `authenticated`. It must mint the callback
- *   id itself and pass `auth.uid()` as the actor, then call the existing
- *   `public.bot_update_enqueue_internal(bot_id, 'callback_query', p_message_id,
- *   jsonb_build_object('callback_id', …, 'actor_id', auth.uid(), 'data', p_data))`.
- *   Taking the actor from the caller — which is what that function does today —
- *   is the reason its grant cannot simply be opened: one member of a chat could
- *   forge a press as another. It may answer `null`, or the bot's own
- *   `answerCallbackQuery` as `{"text": …, "show_alert": …}`.
- *
- *   `public.open_or_create_bot_chat(p_bot_id uuid) returns uuid`, the bot's
- *   counterpart of `open_or_create_private_chat`. `public.chat_bot_members` has
- *   SELECT and nothing else for `authenticated`, and no policy for any other
- *   verb, so a chat with a bot cannot be created from the client at all today.
- *
- * Until both exist, the surfaces degrade rather than lie: an existing bot chat
- * still opens and still lists its commands, and a press says plainly that the
- * buttons do not work yet.
+ * `bot_callback_press` returns a UUID. `bot_callback_answer_for_actor` reads
+ * the later answer without exposing the private answer table to the browser.
  */
 
 type PostgrestFailure = { code?: unknown; message?: unknown; details?: unknown } | null;
@@ -76,7 +48,9 @@ interface LooseFilter<T> extends PromiseLike<Answer<T>> {
 
 interface LooseClient {
   from(table: string): { select<T>(columns: string): LooseFilter<T> };
-  rpc<T>(name: string, args: Record<string, unknown>): PromiseLike<Answer<T>>;
+  rpc<T>(name: string, args: Record<string, unknown>): PromiseLike<Answer<T>> & {
+    abortSignal(signal: AbortSignal): PromiseLike<Answer<T>>;
+  };
 }
 
 function looseClient(): LooseClient {
@@ -234,15 +208,71 @@ export function resetBotCallbackDoor(): void {
 }
 
 export interface BotCallbackAnswer {
-  /** What the bot said about the press, or the product's own «Готово». */
+  /** What the bot said about the press, or the product's delivery confirmation. */
   readonly text: string;
   /** Telegram's `show_alert`: a sentence the person has to dismiss. */
   readonly alert: boolean;
 }
 
 export type BotCallbackResult =
-  | { readonly kind: "answered"; readonly answer: BotCallbackAnswer }
+  | { readonly kind: "answered"; readonly answer: BotCallbackAnswer; readonly accountId: string }
+  | { readonly kind: "cancelled" }
   | { readonly kind: "failed"; readonly failure: BotCallbackFailure; readonly message: string };
+
+const CALLBACK_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ANSWER_WAIT_MS = 3200;
+const ANSWER_POLL_MS = 400;
+const PRESS_WAIT_MS = 7000;
+const PRESS_OUTCOME_UNKNOWN = "Нет ответа о нажатии. Проверьте результат перед повтором.";
+
+async function currentAccountId(): Promise<string | null> {
+  try {
+    const { data, error } = await createClient().auth.getSession();
+    return error ? null : data.session?.user.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function pauseForAnswer(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const finish = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", finish);
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+    signal?.addEventListener("abort", finish, { once: true });
+  });
+}
+
+async function waitForCallbackAnswer(callbackId: string, signal?: AbortSignal): Promise<BotCallbackAnswer | null> {
+  const deadline = Date.now() + ANSWER_WAIT_MS;
+  while (!signal?.aborted && Date.now() < deadline) {
+    const request = new AbortController();
+    const remaining = deadline - Date.now();
+    const timeout = setTimeout(() => request.abort(), remaining);
+    const abort = () => request.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    try {
+      const { data, error } = await looseClient()
+        .rpc<unknown>("bot_callback_answer_for_actor", { p_callback_query_id: callbackId })
+        .abortSignal(request.signal);
+      if (error) return null;
+      if (data !== null && typeof data === "object" && !Array.isArray(data)) {
+        return readCallbackAnswer(data);
+      }
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+    }
+    await pauseForAnswer(Math.min(ANSWER_POLL_MS, Math.max(0, deadline - Date.now())), signal);
+  }
+  return null;
+}
 
 /**
  * Sends one press, and says what came back.
@@ -255,14 +285,40 @@ export type BotCallbackResult =
 export async function pressBotCallback(input: {
   messageId: string;
   callbackData: string;
+  signal?: AbortSignal;
 }): Promise<BotCallbackResult> {
   if (callbackDoor === "missing") {
     return { kind: "failed", failure: "missing", message: botCallbackFailureMessage("missing") };
   }
-  const { data, error } = await looseClient().rpc<unknown>("bot_callback_press", {
-    p_message_id: input.messageId,
-    p_data: input.callbackData,
-  });
+  const account = await currentAccountId();
+  if (!account) {
+    return { kind: "failed", failure: "failed", message: "Сеанс завершился. Войдите снова." };
+  }
+  if (input.signal?.aborted) return { kind: "cancelled" };
+  const request = new AbortController();
+  const abort = () => request.abort();
+  input.signal?.addEventListener("abort", abort, { once: true });
+  const timeout = setTimeout(abort, PRESS_WAIT_MS);
+  let pressResult: Answer<unknown>;
+  try {
+    pressResult = await looseClient().rpc<unknown>("bot_callback_press", {
+      p_message_id: input.messageId,
+      p_data: input.callbackData,
+    }).abortSignal(request.signal);
+  } catch {
+    if (input.signal?.aborted) return { kind: "cancelled" };
+    if (await currentAccountId() !== account) return { kind: "cancelled" };
+    return { kind: "failed", failure: "failed", message: PRESS_OUTCOME_UNKNOWN };
+  } finally {
+    clearTimeout(timeout);
+    input.signal?.removeEventListener("abort", abort);
+  }
+  if (input.signal?.aborted) return { kind: "cancelled" };
+  if (await currentAccountId() !== account) return { kind: "cancelled" };
+  if (request.signal.aborted) {
+    return { kind: "failed", failure: "failed", message: PRESS_OUTCOME_UNKNOWN };
+  }
+  const { data, error } = pressResult;
   if (error) {
     const failure = classifyBotCallbackFailure(error);
     if (failure === "missing") callbackDoor = "missing";
@@ -278,25 +334,27 @@ export async function pressBotCallback(input: {
       message: botCallbackFailureMessage(failure, mapPgError(error)),
     };
   }
-  return { kind: "answered", answer: readCallbackAnswer(data) };
+  if (input.signal?.aborted) return { kind: "cancelled" };
+  const answer = typeof data === "string" && CALLBACK_ID_PATTERN.test(data)
+    ? await waitForCallbackAnswer(data, input.signal)
+    : null;
+  if (input.signal?.aborted) return { kind: "cancelled" };
+  const currentAccount = await currentAccountId();
+  if (currentAccount !== account) return { kind: "cancelled" };
+  return { kind: "answered", answer: answer ?? { text: BOT_CALLBACK_DONE, alert: false }, accountId: account };
 }
 
 /**
- * `answerCallbackQuery` as it would come back through the wrapper.
- *
- * A bot is allowed to answer a press with nothing at all — Telegram's own
- * behaviour, and the reason this falls back to «Готово» rather than staying
- * silent: a press that produced no visible change and no word reads as a press
- * that did not register.
+ * The private answer reader returns an object even when the bot chose no text.
  */
 function readCallbackAnswer(data: unknown): BotCallbackAnswer {
   if (typeof data !== "object" || data === null || Array.isArray(data)) {
-    return { text: BOT_CALLBACK_DONE, alert: false };
+    return { text: "Ответ получен", alert: false };
   }
   const record = data as { text?: unknown; show_alert?: unknown };
   const text = typeof record.text === "string" ? record.text.trim() : "";
   return {
-    text: text.length > 0 ? text.slice(0, 200) : BOT_CALLBACK_DONE,
+    text: text.length > 0 ? text.slice(0, 200) : "Ответ получен",
     alert: record.show_alert === true,
   };
 }

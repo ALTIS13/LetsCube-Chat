@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KubIcon, KubModal } from "@/components/kub";
 import { KUB_APP_DIALOG_EVENT, type AppDialogRequest } from "@/lib/appDialogs";
+import { createClient } from "@/lib/supabase/client";
 
 export function AppDialogs() {
   const [queue, setQueue] = useState<AppDialogRequest[]>([]);
@@ -21,6 +22,21 @@ export function AppDialogs() {
     };
     window.addEventListener(KUB_APP_DIALOG_EVENT, handleDialog);
     return () => window.removeEventListener(KUB_APP_DIALOG_EVENT, handleDialog);
+  }, []);
+
+  useEffect(() => {
+    const { data: { subscription } } = createClient().auth.onAuthStateChange((_event, session) => {
+      const userId = session?.user.id ?? null;
+      setQueue((items) => {
+        const next = items.filter((item) => !item.ownerUserId || item.ownerUserId === userId);
+        if (next.length === items.length) return items;
+        for (const item of items) {
+          if (item.ownerUserId && item.ownerUserId !== userId) item.resolve(false);
+        }
+        return next;
+      });
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   /**

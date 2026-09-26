@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { KubIcon } from "@/components/kub";
 import { showActionFeedback } from "@/lib/actionFeedback";
@@ -40,8 +40,8 @@ import { cn } from "@/lib/utils";
  *     exactly two keys, `text` and `callback_data`. A `{text, url}` button
  *     cannot be stored, so drawing one would be drawing a shape this product
  *     has no way to produce.
- *   - **No optimistic answer.** The bot's reply to a press is what the wrapper
- *     returns; nothing is shown as done before it comes back.
+ *   - **No optimistic answer.** A press is acknowledged separately from the
+ *     bot's later answer, and those two states have different wording.
  *   - **No retry of its own.** A press is an event a bot may act on, so
  *     resending one without being asked could book the same shift twice.
  */
@@ -52,26 +52,42 @@ export function BotInlineKeyboard({
   messageId: string;
   keyboard: BotInlineKeyboardRows;
 }) {
-  const [pending, setPending] = useState<string | null>(null);
+  const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set());
+  const pendingRef = useRef(new Set<string>());
+  const requestsRef = useRef(new Set<AbortController>());
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      for (const request of requestsRef.current) request.abort();
+      requestsRef.current.clear();
+    };
+  }, []);
   /**
-   * The deployment has no door for a press (fact 4 of `botChatSurfaces.ts`).
-   *
-   * Seeded from the module flag so a keyboard scrolled into view after the
-   * first press already knows, and set again from this keyboard's own answer so
-   * that the one that was pressed updates without waiting for a re-render from
-   * elsewhere.
+   * A server without the press RPC cannot accept any button in this chat.
+   * Cache that capability after the first missing-function response.
    */
   const [doorMissing, setDoorMissing] = useState(() => botCallbackDoorMissing());
 
   const press = useCallback(
     async (key: string, callbackData: string) => {
-      if (pending !== null || doorMissing) return;
-      setPending(key);
+      if (pendingRef.current.has(key) || doorMissing) return;
+      pendingRef.current.add(key);
+      setPending(new Set(pendingRef.current));
+      const request = new AbortController();
+      requestsRef.current.add(request);
       try {
-        const result = await pressBotCallback({ messageId, callbackData });
+        const result = await pressBotCallback({ messageId, callbackData, signal: request.signal });
+        if (!mountedRef.current || result.kind === "cancelled") return;
         if (result.kind === "answered") {
-          if (result.answer.alert) showAppAlert(result.answer.text, "Бот");
-          else showActionFeedback({ kind: "info", title: result.answer.text, key: `bot-callback:${messageId}` });
+          if (result.answer.alert) showAppAlert(result.answer.text, "Бот", "alert", result.accountId);
+          else showActionFeedback({
+            kind: "info",
+            title: result.answer.text,
+            key: `bot-callback:${messageId}:${key}`,
+            ownerUserId: result.accountId,
+          });
           return;
         }
         if (result.failure === "missing") {
@@ -80,12 +96,12 @@ export function BotInlineKeyboard({
         }
         showActionFeedback({ kind: "error", title: result.message, key: `bot-callback:${messageId}:error` });
       } finally {
-        // Always, and before anything else can return early: a button left
-        // spinning after a failure is a press that was swallowed.
-        setPending(null);
+        requestsRef.current.delete(request);
+        pendingRef.current.delete(key);
+        if (mountedRef.current) setPending(new Set(pendingRef.current));
       }
     },
-    [doorMissing, messageId, pending],
+    [doorMissing, messageId],
   );
 
   return (
@@ -98,7 +114,7 @@ export function BotInlineKeyboard({
         <div key={rowIndex} className="flex min-w-0 gap-1">
           {row.map((button, buttonIndex) => {
             const key = botButtonKey(rowIndex, buttonIndex);
-            const busy = pending === key;
+            const busy = pending.has(key);
             return (
               <button
                 key={key}

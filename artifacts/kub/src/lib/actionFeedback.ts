@@ -13,6 +13,8 @@ export interface ActionFeedbackInput {
    * than stacking beside it: pressing a button twice is one result, not two.
    */
   key?: string;
+  /** Private feedback is removed when another account becomes active. */
+  ownerUserId?: string;
 }
 
 export interface ActionFeedbackItem extends ActionFeedbackInput {
@@ -39,6 +41,7 @@ const MAX_DETAIL = 160;
 export interface ActionFeedbackStore {
   show: (input: ActionFeedbackInput) => string;
   dismiss: (id: string) => void;
+  dismissForOtherAccount: (userId: string | null) => void;
   /** Drops whatever has outlived its duration, by the store's own clock. */
   prune: () => void;
   subscribe: (listener: () => void) => () => void;
@@ -98,6 +101,11 @@ export function createActionFeedbackStore(
     dismiss(id) {
       if (!items.some((item) => item.id === id)) return;
       commit(items.filter((item) => item.id !== id));
+    },
+
+    dismissForOtherAccount(userId) {
+      const next = items.filter((item) => !item.ownerUserId || item.ownerUserId === userId);
+      if (next.length !== items.length) commit(next);
     },
 
     prune() {

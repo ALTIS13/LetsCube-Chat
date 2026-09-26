@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { actionFeedback, type ActionFeedbackKind } from "@/lib/actionFeedback";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { KubIcon } from "./KubIcon";
 import type { KubIconName } from "./icons";
@@ -47,6 +48,13 @@ export function KubFeedbackViewport() {
     actionFeedback.getSnapshot,
     actionFeedback.getSnapshot,
   );
+
+  useEffect(() => {
+    const { data: { subscription } } = createClient().auth.onAuthStateChange((_event, session) => {
+      actionFeedback.dismissForOtherAccount(session?.user.id ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   // One timer for the whole queue rather than one per card: the store already
   // knows every expiry, so this only has to ask it to look again.

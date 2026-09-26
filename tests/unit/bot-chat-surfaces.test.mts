@@ -604,7 +604,7 @@ test("every sentence is one the person is meant to read", () => {
     assert.ok(message.trim().length > 0, "an empty sentence reaches the screen as silence");
     assert.equal(message, message.trim());
   }
-  assert.equal(BOT_CALLBACK_DONE, "Готово");
+  assert.equal(BOT_CALLBACK_DONE, "Запрос передан боту");
 });
 
 // ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ export interface AppDialogRequest {
   cancelLabel?: string;
   tone?: AppDialogTone;
   icon?: KubIconName;
+  ownerUserId?: string;
   resolve: (confirmed: boolean) => void;
 }
 
@@ -44,7 +45,12 @@ export function requestAppConfirm(options: {
   });
 }
 
-export function showAppAlert(message: string, title = "Сообщение", icon: KubIconName = "alert"): void {
+export function showAppAlert(
+  message: string,
+  title = "Сообщение",
+  icon: KubIconName = "alert",
+  ownerUserId?: string,
+): void {
   if (typeof window === "undefined") {
     console.warn(message);
     return;
@@ -58,6 +64,7 @@ export function showAppAlert(message: string, title = "Сообщение", icon
       confirmLabel: "Понятно",
       tone: "default",
       icon,
+      ownerUserId,
       resolve: () => undefined,
     },
   }));

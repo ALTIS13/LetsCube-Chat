@@ -114,6 +114,7 @@ declare
   v_prepared jsonb;
   v_webhook_info jsonb;
   v_admin_projection jsonb;
+  v_callback_view jsonb;
   v_eligibility record;
   v_current_token_prefix text;
   v_function regprocedure;
@@ -1546,6 +1547,32 @@ begin
     raise exception 'bot_callback_idempotency_failed';
   end if;
 
+  if not pg_catalog.has_function_privilege(
+    'authenticated', 'public.bot_callback_answer_for_actor(uuid)', 'EXECUTE'
+  ) or pg_catalog.has_function_privilege(
+    'anon', 'public.bot_callback_answer_for_actor(uuid)', 'EXECUTE'
+  ) then
+    raise exception 'bot_callback_reader_grant_invalid';
+  end if;
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_actor_id::text, true);
+  execute 'set local role authenticated';
+  select public.bot_callback_answer_for_actor(v_callback_id) into v_callback_view;
+  if v_callback_view is not null then
+    raise exception 'bot_callback_answer_leaked_to_other_chat_member';
+  end if;
+  execute 'reset role';
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_recipient_id::text, true);
+  execute 'set local role authenticated';
+  select public.bot_callback_answer_for_actor(v_callback_id) into v_callback_view;
+  if v_callback_view is distinct from pg_catalog.jsonb_build_object('text', 'Done', 'show_alert', true) then
+    raise exception 'bot_callback_answer_missing_for_presser';
+  end if;
+  select public.bot_callback_answer_for_actor(pg_catalog.gen_random_uuid()) into v_callback_view;
+  if v_callback_view is not null then
+    raise exception 'bot_callback_unknown_id_not_null';
+  end if;
+  execute 'reset role';
+
   update private.bot_updates queued
   set created_at = pg_catalog.now() - interval '11 minutes',
       expires_at = pg_catalog.now() - interval '1 minute'
@@ -1562,6 +1589,13 @@ begin
   ) then
     raise exception 'bot_callback_answer_cascade_deleted';
   end if;
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_recipient_id::text, true);
+  execute 'set local role authenticated';
+  select public.bot_callback_answer_for_actor(v_callback_id) into v_callback_view;
+  if v_callback_view is not null then
+    raise exception 'bot_callback_detached_answer_leaked';
+  end if;
+  execute 'reset role';
   select public.bot_callback_answer_internal(
     v_bot_id,
     v_callback_id,

@@ -2196,6 +2196,20 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     measured on the device this pass, because the pass's budget went to the
     floor. It needs §7's measurement before it is designed.
 
+    **2026-09-26 correction and partial completion.** The bot's
+    `answerCallbackQuery` writer already existed; the missing half was a
+    reader for the person who pressed the button. `bot_callback_press` returns
+    a UUID, not the answer, so the former client displayed «Готово» without
+    evidence. `bot_callback_answer_for_actor` now returns the private answer
+    only while the exact source update still exists and names that actor;
+    other accounts and detached answers get `null`. The client waits briefly
+    for that answer and otherwise says only that the request was sent. The
+    existing button and edit-message paths remain. This closes the small
+    one-person callback acknowledgement, **not** the requested text input or
+    a complete private, temporary interface in a shared chat. Those two
+    gaps keep item 48 open. See the
+    [rollout](operations/2026-09-26-bot-callback-answer-rollout.md).
+
 
 49. `[x]` Public-route call controls, repaired 2026-09-21.
     **2026-09-21:** deployed fixes and browser regressions cover the shared shell,

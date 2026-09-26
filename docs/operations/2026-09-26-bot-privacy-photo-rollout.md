@@ -77,7 +77,22 @@ Owner: backend and shared web. Source: `d846d4c7` on `main`.
 - This proves the server's eligibility and queueing path. It does not prove an
   external bot process consumed a webhook or polled the queued update. The
   controlled live bot-token/photo and authenticated owner-settings checks above
-  remain open.
+  were completed later the same day; see the follow-up below.
+
+## Live follow-up
+
+- A disposable QA bot used the documented `Authorization: Bot` header to send
+  a 39,848-byte public test icon through `sendPhoto`. An idempotent retry kept
+  one message; `getFile` returned bytes with the same SHA-256 as the source;
+  the QA recipient saw the `chat-media` image. The message and private chat
+  were removed, and the disposable bot's deletion was requested. This does
+  not use a real person's media or change Langame's bot.
+- An authenticated owner session loaded bot settings at 1440 and 390 pixels;
+  all four tabs were actionable and the detail request returned HTTP 200.
+- The owner independently confirmed that the real Langame bot received and
+  forwarded an ordinary group question without mention, reply or command.
+  The earlier `restricted` snapshot is therefore no longer the end state of
+  that test; this confirmation does not imply every bot is in full mode.
 
 ## Recovery
 

@@ -145,8 +145,19 @@ a rollback-only live SQL smoke proved that an ordinary member's unaddressed
 new message is queued in full mode and excluded in restricted mode. Focused
 desktop/mobile Chromium and WebKit UI checks passed. No existing group bot was
 silently widened; the current live group remains restricted.
-Next: controlled live inline-photo send with a disposable test bot/chat, then
-an authenticated owner retest of settings. Do not infer those from unit tests.
+The controlled live inline-photo send is complete: a disposable QA bot sent a
+39,848-byte public test icon, an idempotent retry returned the same message,
+`getFile` returned matching bytes, and the recipient saw the media row. The
+message/chat were removed and bot deletion requested. The owner-settings tabs
+and detail endpoint passed authenticated 1440/390 checks. The owner also
+confirmed that Langame received an ordinary untagged group question and
+forwarded it. These are real-system proofs, not fixture deductions.
+The callback-answer reader is now applied in the DB with actor isolation; the
+web client change is in the release pipeline. See the
+[callback rollout](operations/2026-09-26-bot-callback-answer-rollout.md).
+Next bot stage: text input within an interface, then an explicitly scoped
+per-viewer temporary interface. Do not treat callback text as a private
+message row.
 
 **Current iPhone PWA checkpoint, 2026-09-26 (Codex):** the separate iOS/MacOS
 chat owns the Home Screen viewport correction. New tester screenshots place
@@ -173,7 +184,8 @@ rows and their exact read/navigation semantics. See the
 [rollout and limits](operations/2026-09-26-native-push-account-privacy.md).
 Its source/live design and activation gates are recorded in the
 [album push rollout plan](operations/2026-09-26-album-push-rollout-plan.md);
-no album push migration has been applied.
+the album migrations and dispatcher are active. Physical-device delivery QA
+remains, and this does not imply iPhone PWA acceptance.
 
 **Current shared-web checkpoint, 2026-09-26 (Codex):** the attachment sheet
 shows a compact 2-10 item album preview in the selected send order, while the

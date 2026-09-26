@@ -34,21 +34,12 @@
  *      live chat with it. So the command menu needs nothing new from the
  *      server, and it is only reachable once the person is already in a chat
  *      with the bot.
- *   4. **Nothing an ordinary account may call delivers a button press.**
- *      `public.bot_update_enqueue_internal` is the only writer of
- *      `private.bot_updates`, its `callback_query` branch is already written
- *      and already checks that the actor is a member of the chat, and it is
- *      revoked from `authenticated` and granted only to `service_role`. It
- *      also takes the actor's id as an argument rather than reading
- *      `auth.uid()`, which is why opening that grant as it stands would let one
- *      member forge a press as another. The client therefore calls a wrapper,
- *      `bot_callback_press`. It **exists on the deployment** as of
- *      `20260914150000_bot_press_and_bot_chat.sql`, and `authenticated` holds
- *      EXECUTE on it — measured 2026-09-20, correcting a comment here that went
- *      on saying it did not. `classifyBotCallbackFailure` still recognises its
- *      absence and `BOT_CALLBACK_UNAVAILABLE` is still what a deployment without
- *      it would say, because the client cannot assume a migration ran.
- *      `lib/botCallback.ts` carries the exact shape the server half needs.
+ *   4. **A button press and its answer have different authorities.**
+ *      `bot_callback_press` takes `auth.uid()` and returns a callback UUID;
+ *      the internal queue writer stays service-only. The answer stays in
+ *      `private.bot_callback_answers`, with only the pressing account allowed
+ *      to retrieve it through `bot_callback_answer_for_actor`. Both client
+ *      calls tolerate a server that has not taken the corresponding migration.
  */
 
 import { INTERNALS_PATTERN, plainFailure } from "./plainMessages.ts";
@@ -742,7 +733,7 @@ export const BOT_CALLBACK_REFUSED = "Эту кнопку нажать нельз
 /** Pressed, and it did not go through. Worth pressing again, so it says so. */
 export const BOT_CALLBACK_FAILED = "Не удалось нажать кнопку. Попробуйте ещё раз.";
 /** The bot took the press and had nothing to say about it. */
-export const BOT_CALLBACK_DONE = "Готово";
+export const BOT_CALLBACK_DONE = "Запрос передан боту";
 
 /** The menu button beside the field, and its empty state. */
 export const BOT_COMMANDS_LABEL = "Команды";

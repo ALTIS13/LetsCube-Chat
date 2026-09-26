@@ -155,3 +155,15 @@ test("dismissing removes exactly the entry asked for", () => {
     ["Два"],
   );
 });
+
+test("an account change clears only feedback addressed to another account", () => {
+  const store = createActionFeedbackStore(() => 1000);
+  store.show({ kind: "info", title: "Ответ A", ownerUserId: "account-a" });
+  store.show({ kind: "info", title: "Ответ B", ownerUserId: "account-b" });
+  store.show({ kind: "info", title: "Общее" });
+
+  store.dismissForOtherAccount("account-b");
+  assert.deepEqual(store.getSnapshot().map((item) => item.title), ["Ответ B", "Общее"]);
+  store.dismissForOtherAccount(null);
+  assert.deepEqual(store.getSnapshot().map((item) => item.title), ["Общее"]);
+});

@@ -64,6 +64,7 @@ const CHAT_STARTED = "22222222-2222-4222-8222-00000000b001";
 const CHAT_FRESH = "22222222-2222-4222-8222-00000000b002";
 
 const KEYBOARD_MESSAGE = "55555555-5555-4555-8555-00000000b001";
+const CALLBACK_ID = "66666666-6666-4666-8666-00000000b001";
 const QUESTION = "Смена на завтра: 10:00–19:00, точка на Лесной. Подтвердите выход.";
 const GREETING = "Я присылаю смены и напоминания.";
 
@@ -96,9 +97,12 @@ const KEYBOARD = {
 };
 
 interface Options {
-  /** How `bot_callback_press` answers; absent leaves it answering `null`. */
+  /** The press returns a callback UUID, never the bot's later answer. */
   press?: { status?: number; body: unknown };
-  /** True makes the wrapper missing, as it is on the deployment today. */
+  /** Answers become visible to the pressing account on subsequent reads. */
+  answers?: unknown[];
+  answerMissing?: boolean;
+  /** Simulates a deployment that has not taken the press migration. */
   pressMissing?: boolean;
   /** Bots `search_public_bots` finds. */
   searchBots?: boolean;
@@ -117,6 +121,7 @@ interface Options {
 async function seed(page: Page, options: Options = {}): Promise<Fixture> {
   const commands = options.commands ?? COMMANDS;
   const botState = options.botState ?? BOT.state;
+  let answerReads = 0;
   return openFixture(page, {
     me: ME,
     chats: [
@@ -162,6 +167,11 @@ async function seed(page: Page, options: Options = {}): Promise<Fixture> {
       if (name === "bot_callback_press") {
         if (options.pressMissing) return missingFunction("bot_callback_press");
         return options.press ?? { body: null };
+      }
+      if (name === "bot_callback_answer_for_actor") {
+        if (options.answerMissing) return missingFunction("bot_callback_answer_for_actor");
+        const answers = options.answers ?? [];
+        return { body: answers[Math.min(answerReads++, answers.length - 1)] ?? null };
       }
       return undefined;
     },
@@ -225,7 +235,10 @@ test.describe("what a bot offers reaches the person", () => {
   });
 
   test("a press says so on its own button, and the bot's answer arrives as a confirmation", async ({ page }) => {
-    await seed(page, { press: { body: { text: "Смена подтверждена", show_alert: false } } });
+    const fixture = await seed(page, {
+      press: { body: CALLBACK_ID },
+      answers: [null, { text: "Смена подтверждена", show_alert: false }],
+    });
     // The press is held open from the test rather than delayed by a timer.
     // Measured first with a 600ms delay, and that version could not fail: every
     // Playwright assertion retries, so «the other button is still enabled» went
@@ -254,17 +267,186 @@ test.describe("what a bot offers reaches the person", () => {
 
     release();
     await expect(page.getByText("Смена подтверждена")).toBeVisible();
+    await expect.poll(() => fixture.rpcBodies("bot_callback_answer_for_actor").length).toBeGreaterThanOrEqual(2);
+    expect(fixture.rpcBodies("bot_callback_answer_for_actor")[0]).toEqual({ p_callback_query_id: CALLBACK_ID });
     await expect(pressed).toHaveAttribute("data-bot-keyboard-busy", "false");
     await expect(pressed).toBeEnabled();
+
+    await page.evaluate(async () => {
+      const { createClient } = await import("/src/lib/supabase/client.ts");
+      const { error } = await createClient().auth.signOut({ scope: "local" });
+      if (error) throw error;
+    });
+    await expect(page.getByText("Смена подтверждена")).toHaveCount(0);
   });
 
   test("an answer the bot asked to be acknowledged is a dialog, not a passing line", async ({ page }) => {
-    await seed(page, { press: { body: { text: "Смена уже занята", show_alert: true } } });
+    await seed(page, {
+      press: { body: CALLBACK_ID },
+      answers: [{ text: "Смена уже занята", show_alert: true }],
+    });
     await openBotChat(page, CHAT_STARTED);
 
     await page.locator('[data-bot-keyboard-button="0:0"]').click();
     const dialog = page.getByRole("dialog").filter({ hasText: "Смена уже занята" });
     await expect(dialog).toBeVisible();
+
+    await page.evaluate(async () => {
+      const { createClient } = await import("/src/lib/supabase/client.ts");
+      const { error } = await createClient().auth.signOut({ scope: "local" });
+      if (error) throw error;
+    });
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test("an older deployment without the answer reader confirms delivery without claiming the bot answered", async ({ page }) => {
+    await seed(page, { press: { body: CALLBACK_ID }, answerMissing: true });
+    await openBotChat(page, CHAT_STARTED);
+
+    await page.locator('[data-bot-keyboard-button="0:0"]').click();
+    await expect(page.getByText("Запрос передан боту")).toBeVisible();
+    await expect(page.getByText("Готово")).toHaveCount(0);
+  });
+
+  test("a late answer is not shown after the account changes", async ({ page }) => {
+    await seed(page, {
+      press: { body: CALLBACK_ID },
+      answers: [{ text: "Ответ прежнему аккаунту", show_alert: true }],
+    });
+    let releaseAnswer = () => {};
+    const heldAnswer = new Promise<void>((resolve) => { releaseAnswer = resolve; });
+    let answerStarted = () => {};
+    const started = new Promise<void>((resolve) => { answerStarted = resolve; });
+    await page.route("**/rest/v1/rpc/bot_callback_answer_for_actor", async (route) => {
+      answerStarted();
+      await heldAnswer;
+      await route.fallback();
+    });
+    await openBotChat(page, CHAT_STARTED);
+    await page.evaluate(async () => {
+      const { createClient } = await import("/src/lib/supabase/client.ts");
+      const client = createClient();
+      const getSession = client.auth.getSession.bind(client.auth);
+      (window as typeof window & { simulateNewAccount?: () => void }).simulateNewAccount = () => {
+        client.auth.getSession = async () => {
+          const result = await getSession();
+          if (!result.data.session) return result;
+          return {
+            ...result,
+            data: {
+              session: {
+                ...result.data.session,
+                user: { ...result.data.session.user, id: "11111111-1111-4111-8111-00000000b099" },
+              },
+            },
+          };
+        };
+      };
+    });
+
+    await page.locator('[data-bot-keyboard-button="0:0"]').click();
+    await started;
+    await page.evaluate(() => (window as typeof window & { simulateNewAccount?: () => void }).simulateNewAccount?.());
+    releaseAnswer();
+    await expect(page.locator('[data-bot-keyboard-button="0:0"]')).toHaveAttribute("data-bot-keyboard-busy", "false");
+    await expect(page.getByText("Ответ прежнему аккаунту")).toHaveCount(0);
+    await expect(page.getByText("Запрос передан боту")).toHaveCount(0);
+  });
+
+  test("a failed press does not show private feedback after the account changes", async ({ page }) => {
+    await seed(page, {
+      press: { status: 500, body: { code: "XX000", message: "upstream unavailable" } },
+    });
+    let releasePress = () => {};
+    const heldPress = new Promise<void>((resolve) => { releasePress = resolve; });
+    let pressStarted = () => {};
+    const started = new Promise<void>((resolve) => { pressStarted = resolve; });
+    await page.route("**/rest/v1/rpc/bot_callback_press", async (route) => {
+      pressStarted();
+      await heldPress;
+      await route.fallback();
+    });
+    await openBotChat(page, CHAT_STARTED);
+    await page.evaluate(async () => {
+      const { createClient } = await import("/src/lib/supabase/client.ts");
+      const client = createClient();
+      const getSession = client.auth.getSession.bind(client.auth);
+      (window as typeof window & { simulateNewAccount?: () => void }).simulateNewAccount = () => {
+        client.auth.getSession = async () => {
+          const result = await getSession();
+          if (!result.data.session) return result;
+          return {
+            ...result,
+            data: {
+              session: {
+                ...result.data.session,
+                user: { ...result.data.session.user, id: "11111111-1111-4111-8111-00000000b099" },
+              },
+            },
+          };
+        };
+      };
+    });
+
+    await page.locator('[data-bot-keyboard-button="0:0"]').click();
+    await started;
+    await page.evaluate(() => (window as typeof window & { simulateNewAccount?: () => void }).simulateNewAccount?.());
+    releasePress();
+    await expect(page.locator('[data-bot-keyboard-button="0:0"]')).toHaveAttribute("data-bot-keyboard-busy", "false");
+    await expect(page.getByText("upstream unavailable")).toHaveCount(0);
+  });
+
+  test("another button can send a separate press while the first is in flight", async ({ page }) => {
+    const fixture = await seed(page, {
+      press: { body: CALLBACK_ID },
+      answers: [
+        { text: "Ответ на вторую кнопку", show_alert: false },
+        { text: "Ответ на первую кнопку", show_alert: false },
+      ],
+    });
+    let releaseFirst = () => {};
+    const heldFirst = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    let pressCount = 0;
+    await page.route("**/rest/v1/rpc/bot_callback_press", async (route) => {
+      pressCount += 1;
+      if (pressCount === 1) await heldFirst;
+      await route.fallback();
+    });
+    await openBotChat(page, CHAT_STARTED);
+
+    const first = page.locator('[data-bot-keyboard-button="0:0"]');
+    const second = page.locator('[data-bot-keyboard-button="0:1"]');
+    await first.click();
+    await expect(first).toHaveAttribute("data-bot-keyboard-busy", "true");
+    await second.click();
+    await expect.poll(() => fixture.rpcBodies("bot_callback_press").length).toBe(1);
+    expect(fixture.rpcBodies("bot_callback_press")[0]).toEqual({
+      p_message_id: KEYBOARD_MESSAGE,
+      p_data: "shift:2026-09-15:no",
+    });
+    await expect(page.getByText("Ответ на вторую кнопку")).toBeVisible();
+    releaseFirst();
+    await expect.poll(() => fixture.rpcBodies("bot_callback_press").length).toBe(2);
+    await expect(page.getByText("Ответ на первую кнопку")).toBeVisible();
+    await expect(page.getByText("Ответ на вторую кнопку")).toBeVisible();
+  });
+
+  test("a stalled press stops spinning without silently retrying an uncertain action", async ({ page }) => {
+    await seed(page, { press: { body: CALLBACK_ID } });
+    let attempts = 0;
+    await page.route("**/rest/v1/rpc/bot_callback_press", async (route) => {
+      attempts += 1;
+      await new Promise((resolve) => setTimeout(resolve, 8500));
+      await route.fallback().catch(() => undefined);
+    });
+    await openBotChat(page, CHAT_STARTED);
+
+    const pressed = page.locator('[data-bot-keyboard-button="0:0"]');
+    await pressed.click();
+    await expect(pressed).toHaveAttribute("data-bot-keyboard-busy", "true");
+    await expect(page.getByText("Нет ответа о нажатии. Проверьте результат перед повтором.")).toBeVisible({ timeout: 10000 });
+    await expect(pressed).toHaveAttribute("data-bot-keyboard-busy", "false");
+    expect(attempts).toBe(1);
   });
 
   test("a failed press puts the button back and says why", async ({ page }) => {
