@@ -229,3 +229,20 @@ export async function removeChatBot(chatId: string, botId: string): Promise<BotM
   });
   return { ok: !error, error: error ?? null };
 }
+
+export async function setChatBotPrivacy(
+  chatId: string,
+  botId: string,
+  full: boolean,
+): Promise<BotMembershipChange> {
+  try {
+    const { error } = await looseClient().rpc<boolean>("chat_bot_set_privacy", {
+      p_chat_id: chatId,
+      p_bot_id: botId,
+      p_full: full,
+    });
+    return { ok: !error, error: error ?? null };
+  } catch {
+    return { ok: false, error: null };
+  }
+}

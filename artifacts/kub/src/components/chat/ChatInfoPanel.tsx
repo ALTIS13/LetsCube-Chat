@@ -42,11 +42,15 @@ import {
   type ChatBotMember,
   fetchChatBotMemberships,
   removeChatBot,
+  setChatBotPrivacy,
 } from "@/lib/chatBotMembership";
 import {
   BOT_MEMBERS_EMPTY,
   BOT_MEMBERS_HEADING,
   BOT_MEMBERS_HISTORY_NOTE,
+  BOT_GRANT_FULL_LABEL,
+  BOT_RESTRICT_LABEL,
+  BOT_PRIVACY_FAILED,
   BOT_REMOVE_FAILED,
   BOT_REMOVE_LABEL,
   BOT_REMOVING_LABEL,
@@ -55,6 +59,7 @@ import {
   botMembershipFailureMessage,
   chatBotPartner,
   type BotLike,
+  type BotPrivacyMode,
 } from "@/lib/chatBots";
 import { GroupInviteModal } from "./GroupInviteModal";
 import { VoiceChannelRow } from "./VoiceChannelRow";
@@ -544,6 +549,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
    */
   const [chatBots, setChatBots] = useState<readonly ChatBotMember[]>([]);
   const [removingBotId, setRemovingBotId] = useState<string | null>(null);
+  const [privacyBusyBotId, setPrivacyBusyBotId] = useState<string | null>(null);
   const [botError, setBotError] = useState<string | null>(null);
   /** Set when the member read was refused, so the tab can say so (D-168). */
   const [membersError, setMembersError] = useState<string | null>(null);
@@ -2171,6 +2177,34 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
     dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
   };
 
+  const handleBotPrivacy = async (bot: BotLike, currentMode: BotPrivacyMode) => {
+    if (privacyBusyBotId || removingBotId) return;
+    const full = currentMode !== "full";
+    if (full) {
+      const confirmed = await requestAppConfirm({
+        title: `Дать боту «${botDisplayName(bot)}» полный доступ?`,
+        description: "Бот будет получать все новые сообщения и вложения в этой группе. Сообщения до изменения доступа ему не откроются. Доступ можно снова ограничить.",
+        confirmLabel: "Дать доступ",
+        icon: "bot",
+      });
+      if (!confirmed) return;
+    }
+    setBotError(null);
+    setPrivacyBusyBotId(bot.id);
+    const result = await setChatBotPrivacy(chat.id, bot.id, full);
+    setPrivacyBusyBotId(null);
+    if (!result.ok) {
+      setBotError(botMembershipFailureMessage(result.error, BOT_PRIVACY_FAILED));
+      return;
+    }
+    setChatBots((members) => members.map((member) =>
+      member.bot.id === bot.id
+        ? { ...member, privacyMode: full ? "full" : "restricted" }
+        : member,
+    ));
+    dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
+  };
+
   const tabLabels: Record<Tab, string> = { info: "Сведения", members: words.membersTitle };
   // A hover is the «immediate» step of the shared scale, and it is a colour, so
   // nothing with a size moves. Taking the duration from the token rather than
@@ -2832,6 +2866,17 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
                           >
                             {botMemberStatusLine(bot, privacyMode)}
                           </div>
+                          {isOwnerOrAdmin && (
+                            <button
+                              type="button"
+                              aria-label={privacyMode === "full" ? BOT_RESTRICT_LABEL : BOT_GRANT_FULL_LABEL}
+                              onClick={() => void handleBotPrivacy(bot, privacyMode)}
+                              disabled={privacyBusyBotId !== null || removingBotId !== null}
+                              className="mt-1 inline-flex min-h-9 items-center rounded-md py-1 pr-2 text-xs font-medium text-[color:var(--kub-accent-text)] kub-raise-hover disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {privacyBusyBotId === bot.id ? "Сохраняем доступ…" : privacyMode === "full" ? BOT_RESTRICT_LABEL : BOT_GRANT_FULL_LABEL}
+                            </button>
+                          )}
                         </div>
                         {isOwnerOrAdmin && (
                           <button

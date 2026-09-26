@@ -39,9 +39,8 @@
  * That last clause is why the note ends with the history: a bot added today
  * cannot read yesterday, and nobody would guess it from the other three.
  *
- * A bot always enters a group `restricted`, and today it stays there: nothing
- * in this product writes `privacy_mode`, so `full` is a state the schema allows
- * and no code produces.
+ * A bot enters a group `restricted`. A group administrator may opt in to full
+ * visibility for future messages; switching modes resets the readable boundary.
  *
  * ── «Who is told, and where?» (D-276) ─────────────────────────────────────
  *
@@ -199,7 +198,11 @@ export function botMemberStatusLine(bot: BotLike, mode: BotPrivacyMode): string 
  * which nobody would guess from a label.
  */
 export const BOT_MEMBERS_HISTORY_NOTE =
-  "Переписку группы до своего добавления бот не увидит.";
+  "Бот не видит сообщения до своего добавления или последнего изменения доступа.";
+
+export const BOT_GRANT_FULL_LABEL = "Дать доступ ко всем сообщениям";
+export const BOT_RESTRICT_LABEL = "Ограничить доступ бота";
+export const BOT_PRIVACY_FAILED = "Не удалось изменить доступ бота. Попробуйте ещё раз.";
 
 /** The same fact, once it is done, because a success is also a place to say it. */
 export function botAddedMessage(name: string): string {
@@ -309,6 +312,9 @@ export const CHAT_BOT_MESSAGES: readonly string[] = [
   BOT_MEMBERS_EMPTY,
   BOT_VISIBILITY_NOTE,
   BOT_MEMBERS_HISTORY_NOTE,
+  BOT_GRANT_FULL_LABEL,
+  BOT_RESTRICT_LABEL,
+  BOT_PRIVACY_FAILED,
   BOT_ACCESS_RESTRICTED,
   BOT_ACCESS_FULL,
   BOT_ADD_FAILED,

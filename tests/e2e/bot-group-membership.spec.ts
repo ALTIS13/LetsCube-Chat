@@ -172,6 +172,11 @@ async function openPanel(page: Page, options: OpenOptions = {}): Promise<Fixture
         }
         return { body: true };
       }
+      if (name === "chat_bot_set_privacy") {
+        const row = live.find((entry) => (entry as { bot?: { id?: string } }).bot?.id === body.p_bot_id);
+        if (row) row.privacy_mode = body.p_full ? "full" : "restricted";
+        return { body: true };
+      }
       return undefined;
     },
   });
@@ -394,7 +399,7 @@ test("each bot's row says what that bot can read, and two bots may disagree", as
   // The paragraph above says only what holds for both, so it cannot be read as
   // a claim about either one.
   const note = memberBots(page).getByTestId("chat-info-bot-visibility");
-  await expect(note).toHaveText("Переписку группы до своего добавления бот не увидит.");
+  await expect(note).toHaveText("Бот не видит сообщения до своего добавления или последнего изменения доступа.");
 });
 
 test("a bot whose membership carries no privacy mode is shown as the narrow one", async ({
@@ -432,6 +437,33 @@ test("a member sees which bots are in the room but is offered no way out for the
     memberBots(page).getByTestId("chat-info-bot-remove"),
     "a member was offered the removal",
   ).toHaveCount(0);
+});
+
+test("a group administrator explicitly grants and revokes full bot visibility", async ({ page }) => {
+  const fixture = await openPanel(page, { joined: [{ chat_id: GROUP, privacy_mode: "restricted", bot: HELPER }] });
+  const row = memberBots(page).getByTestId("chat-info-bot");
+
+  await row.getByRole("button", { name: "Дать доступ ко всем сообщениям" }).click();
+  await expect(page.locator(".kub-modal-panel")).toContainText("новые сообщения");
+  expect(fixture.rpcBodies("chat_bot_set_privacy")).toEqual([]);
+  await page.getByRole("button", { name: "Дать доступ", exact: true }).click();
+  await expect.poll(() => fixture.rpcBodies("chat_bot_set_privacy")).toEqual([
+    { p_chat_id: GROUP, p_bot_id: HELPER.id, p_full: true },
+  ]);
+  await expect(row.getByTestId("chat-info-bot-access")).toContainText("Видит все сообщения группы");
+
+  await row.getByRole("button", { name: "Ограничить доступ бота" }).click();
+  await expect.poll(() => fixture.rpcBodies("chat_bot_set_privacy")).toHaveLength(2);
+  await expect(row.getByTestId("chat-info-bot-access")).toContainText("Видит только обращения к нему");
+});
+
+test("an ordinary group member cannot change bot visibility", async ({ page }) => {
+  const fixture = await openPanel(page, {
+    myRole: "member",
+    joined: [{ chat_id: GROUP, privacy_mode: "restricted", bot: HELPER }],
+  });
+  await expect(memberBots(page).getByRole("button", { name: "Дать доступ ко всем сообщениям" })).toHaveCount(0);
+  expect(fixture.rpcBodies("chat_bot_set_privacy")).toEqual([]);
 });
 
 test("a group with no bots tells its administrator so, and tells nobody else", async ({ page }) => {

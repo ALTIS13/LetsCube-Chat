@@ -241,10 +241,10 @@ test("the paragraph over the list claims nothing a single bot could contradict",
   // the clause every branch of `bot_can_receive_message` shares:
   // `messages.created_at >= chat_bot_members.joined_at`.
   const note = BOT_MEMBERS_HISTORY_NOTE.toLocaleLowerCase("ru-RU");
-  assert.ok(note.includes("не увидит"), "the paragraph never says what is excluded");
+  assert.ok(note.includes("не видит"), "the paragraph never says what is excluded");
   assert.ok(
-    note.includes("до своего добавления") || note.includes("до добавления"),
-    "the paragraph drops the history clause, which is the only thing it is for",
+    note.includes("до своего добавления") && note.includes("последнего изменения доступа"),
+    "the paragraph drops either history boundary",
   );
   // The per-bot claims belong on the rows. A paragraph repeating either of them
   // would be wrong for the other bot in the same group.
