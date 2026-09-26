@@ -42,13 +42,25 @@ transport was added.
   HTTP 200 and contains the group-visibility copy. The running gateway bundle
   contains `input_field_placeholder`. The worker and support-mail deployments
   also finished healthy after their API-server watch path changed.
+- A controlled production canary reused the isolated `qa_photo_*` bot and the
+  QA client's existing private chat. The bot sent the new prompt via the public
+  Bot API. The QA client read the stored row: exact prompt in the separate
+  column and only `inline_keyboard` in the legacy markup. The client sent a
+  text reply naming the bot message; `getUpdates` delivered that reply to the
+  bot. The QA reply and bot message were deleted from the interface. Token
+  revoke and deletion request succeeded, and an independent management read
+  confirmed `pending_delete` with no token. No user's conversation was used.
+  Two earlier canary attempts exposed only test-harness mistakes: the Bot API
+  requires `Authorization: Bot` rather than `Bearer`, and a PowerShell scalar
+  key was indexed as a character. Neither was a product rejection.
 
 ## Remaining proof and rollback
 
-- There has not yet been a live bot-send/user-reply canary with the new prompt.
-  A fixture POST and a rolled-back production database test are not that proof.
-  Do a controlled bot canary without using a user's existing conversation
-  before claiming end-to-end acceptance.
+- An older installed Android bundle has not been visually tested with this new
+  prompt. Its button compatibility is supported by the unchanged stored
+  markup contract and browser/database tests, not a physical-device result.
+- The private, temporary per-viewer interface is a distinct future stage; no
+  user-specific hidden message row or persistent private answer was added.
 - Revert the API/client first if necessary. The additive validator, storage
   column and normalization trigger can stay inert. To remove them, first check
   for stored prompts, then use the reviewed rollback scripts in reverse order.

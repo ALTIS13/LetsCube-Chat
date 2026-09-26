@@ -2219,9 +2219,12 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     **not** the private, temporary per-viewer interface. Both SQL migrations
     were backed up, rehearsed and applied with post-apply smoke; the web and
     Bot Gateway run healthy `7d33fabb` images. Browser fixtures exercise
-    private/group replies and existing button callbacks; no production bot
-    has yet been made to send the new prompt, so a live end-to-end bot-send
-    canary remains. [Rollout](operations/2026-09-26-bot-inline-input-rollout.md).
+    private/group replies and existing button callbacks. A controlled QA bot
+    then sent the new prompt through the public Bot API, the QA client read
+    it and replied, and the bot received that exact reply through `getUpdates`;
+    both test messages were removed and the token revoked. Older installed
+    Android visual confirmation remains separate.
+    [Rollout](operations/2026-09-26-bot-inline-input-rollout.md).
 
 
 49. `[x]` Public-route call controls, repaired 2026-09-21.

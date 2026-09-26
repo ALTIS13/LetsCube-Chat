@@ -166,6 +166,11 @@ separate column, preserving the old keyboard JSON for installed Android
 clients. The migration rehearsal, post-apply smoke, browser matrix, production
 build and healthy web/Bot Gateway images are recorded in the
 [inline-input rollout](operations/2026-09-26-bot-inline-input-rollout.md).
+A controlled live QA bot sent the prompt through the public Bot API; a QA
+client saw the separate prompt with the original keyboard, replied, and the
+bot received that reply via `getUpdates`. Both test messages were removed and
+the bot was returned to `pending_delete` without a token. Physical testing of
+an older installed Android bundle remains separate.
 Next bot stage: an explicitly scoped per-viewer temporary interface. It must
 not be represented as a private message row, and its privacy/runtime contract
 needs its own proof before implementation.
