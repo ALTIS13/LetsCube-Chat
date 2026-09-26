@@ -6,8 +6,9 @@ import test from "node:test";
  * D-111: the installed iPhone app's shell and keyboard, the source half.
  *
  * On a tester's iPhone 15 Pro Max the installed app left a band of about 60pt
- * under the composer from its first frame. The 100vh installed-app fallback
- * precedes a runtime visualViewport measurement. The layout and keyboard
+ * under the composer from its first frame. The 100vh installed-app height
+ * stays active at rest; a runtime visualViewport measurement takes over only
+ * while the keyboard is visible. The layout and keyboard
  * behaviour is covered by `tests/e2e/installed-ios-viewport.spec.ts` rather
  * than source-text checks; only a real device can reproduce iOS itself.
  */
@@ -25,7 +26,7 @@ test("the shell's height is one token: 100dvh, and 100vh in the installed iPhone
   );
   assert.match(
     css,
-    /html\[data-ios-standalone\]\s*\{\s*--kub-app-height:\s*100vh;\s*\}/,
+    /html\[data-ios-standalone\]\s*\{[^}]*--kub-app-height:\s*100vh;/,
     "the installed iPhone app no longer switches the shell to 100vh",
   );
   assert.match(css, /@utility h-app\s*\{\s*height:\s*var\(--kub-app-height\);\s*\}/, "h-app no longer reads the token");

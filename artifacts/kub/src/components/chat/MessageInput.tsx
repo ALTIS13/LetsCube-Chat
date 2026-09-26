@@ -1194,7 +1194,7 @@ export function MessageInput({
       onPointerCancel={handleRecorderPointerCancel}
       disabled={isAttachmentBusy}
       className={cn(
-        "kub-interactive group/capsule relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-all select-none touch-none",
+        "kub-interactive kub-ios-composer-control group/capsule relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-all select-none touch-none",
         FOCUS_RING,
         isAttachmentBusy
           ? "text-[color:var(--kub-muted)] opacity-60 cursor-not-allowed"
@@ -1515,12 +1515,12 @@ export function MessageInput({
             />
           ) : (
             <>
-          {/* 3.25rem is a round button and the gap beside it, on each side. */}
-          <KubGlassLayer className="left-[3.25rem] right-[3.25rem] rounded-[1.375rem] border border-[color:var(--glass-line)] group-has-[textarea:focus]/composer:border-[color:var(--kub-cyan)]" />
+          {/* The field's glass starts after each round button and its 8px gap. */}
+          <KubGlassLayer className="kub-ios-composer-field-glass left-[3.25rem] right-[3.25rem] rounded-[1.375rem] border border-[color:var(--glass-line)] group-has-[textarea:focus]/composer:border-[color:var(--kub-cyan)]" />
           <button
             onClick={() => { setShowAttach(!showAttach); setShowEmoji(false); }}
             className={cn(
-              "kub-interactive group/capsule relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-colors",
+              "kub-interactive kub-ios-composer-control group/capsule relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-colors",
               FOCUS_RING,
               showAttach ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-text)]"
             )}
@@ -1542,7 +1542,7 @@ export function MessageInput({
               data-bot-commands-open={showCommands ? "true" : "false"}
               onClick={() => { setShowCommands(!showCommands); setShowEmoji(false); setShowAttach(false); }}
               className={cn(
-                "kub-interactive relative ml-1 flex h-11 w-9 flex-shrink-0 items-center justify-center rounded-full transition-colors hover:text-[color:var(--kub-cyan)]",
+                "kub-interactive kub-ios-composer-inline-control relative ml-1 flex h-11 w-9 flex-shrink-0 items-center justify-center rounded-full transition-colors hover:text-[color:var(--kub-cyan)]",
                 FOCUS_RING,
                 showCommands ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]",
               )}
@@ -1583,7 +1583,7 @@ export function MessageInput({
           <button
             onClick={() => { setShowEmoji(!showEmoji); setShowAttach(false); }}
             className={cn(
-              "kub-interactive relative flex h-11 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors hover:text-[color:var(--kub-cyan)]",
+              "kub-interactive kub-ios-composer-control relative flex h-11 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors hover:text-[color:var(--kub-cyan)]",
               FOCUS_RING,
               showEmoji ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]"
             )}
@@ -1604,7 +1604,7 @@ export function MessageInput({
               onClick={handleSend}
               disabled={isAttachmentBusy}
               className={cn(
-                "kub-interactive relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-all",
+                "kub-interactive kub-ios-composer-control relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-all",
                 FOCUS_RING,
                 isAttachmentBusy
                   ? "text-[color:var(--kub-muted)] opacity-60 cursor-not-allowed"
@@ -1648,7 +1648,7 @@ export function MessageInput({
                 onPointerCancel={handleRecorderPointerCancel}
                 disabled={isAttachmentBusy}
                 className={cn(
-                  "kub-interactive group/capsule relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-all select-none touch-none",
+                  "kub-interactive kub-ios-composer-control group/capsule relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-all select-none touch-none",
                   FOCUS_RING,
                   isAttachmentBusy
                     ? "text-[color:var(--kub-muted)] opacity-60 cursor-not-allowed"

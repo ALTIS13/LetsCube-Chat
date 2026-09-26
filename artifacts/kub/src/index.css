@@ -310,8 +310,10 @@
      the first frame: on a tester's iPhone 15 Pro Max the composer's field ended
      about 108pt above the bottom edge, against 46pt for a shell as tall as the
      screen, and the band was there before anything was typed and stayed after
-     the app was opened again (D-111). `100vh` is the initial fallback; the
-     messenger shell uses visualViewport.height once it is available. */
+     the app was opened again (D-111). `100vh` fills the standalone shell at
+     rest; `PwaRuntime` fits the shell to visualViewport.height only while the
+     keyboard is open. iOS can report visualViewport short even without keys,
+     and using that resting number creates a second empty lower band. */
   --kub-app-height: 100dvh;
 
   /* The chat screen's scroll edge: how much the conversation is frosted where
@@ -335,6 +337,52 @@
 
 html[data-ios-standalone] {
   --kub-app-height: 100vh;
+  --kub-control-row-height: 3.75rem;
+}
+
+/* A Home Screen iPhone is used as a touch messenger, not a scaled desktop
+   pane. Keep the message body at the reader's chosen size; strengthen the
+   surrounding hierarchy and the primary hit areas only in this shell. */
+html[data-ios-standalone] .kub-ios-chat-icon,
+html[data-ios-standalone] .kub-ios-composer-control {
+  min-width: 3rem;
+  width: 3rem;
+  height: 3rem;
+}
+
+html[data-ios-standalone] .kub-ios-chat-back {
+  width: auto;
+}
+
+html[data-ios-standalone] .kub-ios-chat-info,
+html[data-ios-standalone] .kub-ios-composer-inline-control {
+  min-height: 3rem;
+}
+
+html[data-ios-standalone] .kub-ios-composer-inline-control {
+  min-width: 2.75rem;
+}
+
+html[data-ios-standalone] .kub-ios-composer-field-glass {
+  left: 3.5rem;
+  right: 3.5rem;
+}
+
+html[data-ios-standalone] .kub-ios-chat-title {
+  font-size: 1.0625rem;
+}
+
+html[data-ios-standalone] .kub-ios-chat-subtitle,
+html[data-ios-standalone] .kub-ios-chat-list-preview {
+  font-size: 0.875rem;
+}
+
+html[data-ios-standalone] .kub-ios-chat-list-title {
+  font-size: 1rem;
+}
+
+html[data-ios-standalone] .kub-ios-chat-list-preview {
+  line-height: 1.25rem;
 }
 
 /* iOS may pan the visual viewport without changing document scrollTop when the

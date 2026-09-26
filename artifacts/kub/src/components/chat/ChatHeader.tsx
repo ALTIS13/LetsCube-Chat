@@ -442,7 +442,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
               // D-047: the only way back to the chat list on a phone, so a
               // full 44pt target, which the capsule is at every pointer.
               className={cn(
-                "kub-icon-action kub-interactive group/capsule relative h-11 min-w-11 rounded-full px-2.5 text-[color:var(--kub-text)] md:hidden",
+                "kub-icon-action kub-interactive kub-ios-chat-icon kub-ios-chat-back group/capsule relative h-11 min-w-11 rounded-full px-2.5 text-[color:var(--kub-text)] md:hidden",
                 FOCUS_RING,
               )}
               aria-label="Назад"
@@ -464,7 +464,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
             onClick={onInfoOpen}
             data-testid="chat-header-info-button"
             className={cn(
-              "kub-interactive group/capsule relative flex h-11 min-w-0 max-w-full items-center gap-2 rounded-full py-1 pl-1 pr-4",
+              "kub-interactive kub-ios-chat-info group/capsule relative flex h-11 min-w-0 max-w-full items-center gap-2 rounded-full py-1 pl-1 pr-4",
               FOCUS_RING,
             )}
           >
@@ -481,14 +481,14 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
             </span>
             <span className="relative min-w-0 text-left">
               <span className="flex min-w-0 items-center gap-1.5">
-                <span className="block truncate text-[15px] font-semibold leading-tight text-[color:var(--kub-text)]">
+                <span className="kub-ios-chat-title block truncate text-[15px] font-semibold leading-tight text-[color:var(--kub-text)]">
                   {name}
                 </span>
                 {display.isBot && <BotTag />}
               </span>
               {subtitle && (
                 <span className={cn(
-                  "block truncate text-xs leading-tight",
+                  "kub-ios-chat-subtitle block truncate text-xs leading-tight",
                   isOnline ? "text-[color:var(--kub-online-text)]" : "text-[color:var(--kub-muted)]"
                 )}>
                   {subtitle}
@@ -510,7 +510,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
                 onClick={() => void handleCall()}
                 disabled={callStarting}
                 className={cn(
-                  "kub-icon-action kub-interactive group/capsule relative h-11 w-11 rounded-full text-[color:var(--kub-text)]",
+                  "kub-icon-action kub-interactive kub-ios-chat-icon group/capsule relative h-11 w-11 rounded-full text-[color:var(--kub-text)]",
                   callStarting && "cursor-not-allowed",
                   FOCUS_RING,
                 )}
@@ -527,7 +527,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
                 type="button"
                 onClick={() => { setShowMenu(!showMenu); setMuteChoiceOpen(false); }}
                 className={cn(
-                  "kub-icon-action kub-interactive group/capsule relative h-11 w-11 rounded-full text-[color:var(--kub-text)]",
+                  "kub-icon-action kub-interactive kub-ios-chat-icon group/capsule relative h-11 w-11 rounded-full text-[color:var(--kub-text)]",
                   FOCUS_RING,
                 )}
                 aria-label="Ещё"

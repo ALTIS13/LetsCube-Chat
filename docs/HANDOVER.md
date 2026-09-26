@@ -131,6 +131,16 @@ whole deployment** — no bot has registered a command yet.
 
 ## 4. Where to start
 
+**Current iPhone PWA checkpoint, 2026-09-26 (Codex):** the separate iOS/MacOS
+chat owns the Home Screen viewport and chat-ergonomics pass. Source and
+synthetic-browser QA are complete; production bundle confirmation and a
+physical iPhone remain the acceptance gates. The 60 px lower band was
+reproduced from an idle short `visualViewport`; the standalone shell now keeps
+`100vh` at rest and fits to the visual viewport only with the keyboard.
+Cross-platform text/touch findings were handed to LetsCube Main. Next: confirm
+the deployed bundle, then check the installed iPhone beside Safari. See the
+[iPhone PWA viewport record](operations/2026-09-26-ios-pwa-viewport-and-ergonomics.md).
+
 **Current backend checkpoint, 2026-09-26 (Codex):** native FCM/WNS OS push
 payloads no longer carry sender, preview, avatar or task content across a
 rebindable device token. Exact-message routing and chat tags remain. Reviewed

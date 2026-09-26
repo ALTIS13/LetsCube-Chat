@@ -28,9 +28,10 @@ export function PwaRuntime() {
     const viewport = window.visualViewport;
     if (!root.hasAttribute("data-ios-standalone") || !viewport) return;
 
-    // Every full-height page reads this token. A ChatWindow-only measurement
-    // left the chat list's navigation beneath the installed app's lower band;
-    // a MainLayout-only measurement left tasks and public pages there too.
+    // Every full-height page reads this token. At rest, keep the standalone
+    // 100vh fallback: iOS can report visualViewport shorter than the actual
+    // Home Screen canvas, which otherwise leaves a dead band under the dock.
+    // Only fit to visualViewport while the keyboard genuinely occupies it.
     let restingHeight = viewport.height;
     let restingWidth = viewport.width;
     const update = () => {
@@ -43,8 +44,12 @@ export function PwaRuntime() {
         restingHeight = height;
       }
 
-      root.style.setProperty("--kub-app-height", `${Math.round(height)}px`);
       const keyboardVisible = Math.max(window.innerHeight - height, restingHeight - height) > 80;
+      if (keyboardVisible) {
+        root.style.setProperty("--kub-app-height", `${Math.round(height)}px`);
+      } else {
+        root.style.removeProperty("--kub-app-height");
+      }
       const pageTop = Number.isFinite(viewport.pageTop) ? viewport.pageTop : 0;
       const bodyTop = document.body.getBoundingClientRect().top;
       const pan = keyboardVisible ? Math.max(0, Math.round(pageTop), Math.round(-bodyTop)) : 0;

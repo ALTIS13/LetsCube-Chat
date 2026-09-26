@@ -178,7 +178,9 @@ test.describe("installed iPhone app — WebKit, insets through the tokens", () =
     await page.setViewportSize(viewport);
     await emulateInstalledIosApp(page, insets);
     await page.goto("/privacy", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Политика конфиденциальности LETSCUBE" }),
+    ).toBeVisible();
 
     const planted = await page.evaluate(() => {
       const exposed = document.createElement("button");

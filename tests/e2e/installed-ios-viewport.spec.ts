@@ -21,8 +21,9 @@ import {
  * screen. Neither engine here is iOS. Chromium plays the installed app's flag and
  * its insets, and a stand-in for `visualViewport` plays the keyboard as iOS does:
  * what is visible shrinks and the page may pan. What these checks hold is the
- * product's half — fitting the shell before and during keyboard use, keeping
- * the header and composer visible, and restoring the home-indicator inset.
+ * product's half — filling the standalone screen at rest even if iOS reports
+ * a short visual viewport, fitting the keyboard when present, and preserving
+ * the home-indicator inset.
  */
 
 const INSETS: Insets = { top: 59, right: 0, bottom: 34, left: 0 };
@@ -172,13 +173,17 @@ function geometry(page: Page) {
   });
 }
 
+test.use({
+  viewport: { width: 430, height: SCREEN },
+  deviceScaleFactor: 3,
+  isMobile: true,
+  hasTouch: true,
+  screenshot: "off",
+  trace: "off",
+  video: "off",
+});
+
 test.describe("the installed iPhone app's shell and keyboard", () => {
-  test.use({
-    viewport: { width: 430, height: SCREEN },
-    deviceScaleFactor: 3,
-    isMobile: true,
-    hasTouch: true,
-  });
   test.beforeEach(async ({ request }) => {
     await requireFixtureServer(request);
   });
@@ -207,10 +212,10 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
       await page.evaluate(() =>
         getComputedStyle(document.documentElement).getPropertyValue("--kub-app-height").trim(),
       ),
-    ).toBe(`${SCREEN - 60}px`);
+    ).toBe("100vh");
   });
 
-  test("a public page without a chat fits the installed app's shorter visible viewport", async ({
+  test("a public page without a chat fills the installed app even when visualViewport is short", async ({
     page,
   }) => {
     await emulateInstalledIosApp(page, INSETS);
@@ -224,7 +229,7 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
           .getByTestId("public-scroll-root")
           .evaluate((element) => Math.round(element.getBoundingClientRect().height)),
       )
-      .toBe(SCREEN - 60);
+      .toBe(SCREEN);
   });
 
   test("the shell is as tall as the screen, and with the keys up it fits what is visible", async ({
@@ -235,7 +240,7 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
     await openConversation(page);
 
     const rest = await geometry(page);
-    expect(rest.token, "the installed app's shell height").toBe(`${SCREEN}px`);
+    expect(rest.token, "the installed app's shell height").toBe("100vh");
     expect(rest.shellHeight, "the shell is as tall as the screen").toBe(SCREEN);
     expect(rest.dockBottom, "the composer's dock reaches the bottom edge").toBe(SCREEN);
     expect(rest.dockPadding, "at rest the composer pads for the home indicator").toBe(
@@ -266,7 +271,7 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
       .poll(async () => (await geometry(page)).fitted, {
         message: "the shell's height was not given back",
       })
-      .toBe(`${SCREEN}px`);
+      .toBe("");
     expect((await geometry(page)).shellHeight, "the shell is as tall as the screen again").toBe(
       SCREEN,
     );
@@ -277,24 +282,83 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
       .toBe(`${INSETS.bottom}px`);
   });
 
-  test("a shorter installed-app visual viewport does not clip the composer at rest", async ({
+  test("a shorter visual viewport does not leave a band under the standalone composer", async ({
     page,
   }) => {
     await emulateInstalledIosApp(page, INSETS);
     await installKeyboardStandIn(page, SCREEN - 60);
     await openConversation(page);
 
-    await expect.poll(async () => (await geometry(page)).shellHeight).toBe(SCREEN - 60);
+    await expect.poll(async () => (await geometry(page)).shellHeight).toBe(SCREEN);
     const rest = await geometry(page);
-    expect(rest.dockBottom, "the whole composer stays inside the visible app area").toBe(
-      SCREEN - 60,
-    );
+    expect(rest.dockBottom, "the composer's dock reaches the standalone screen edge").toBe(SCREEN);
     expect(rest.dockPadding, "the home indicator still has its own padding").toBe(
       `${INSETS.bottom}px`,
     );
   });
 
-  test("the chat list keeps every bottom navigation tab inside a shorter installed-app viewport", async ({
+  test("the standalone chat keeps readable hierarchy and generous primary touch targets", async ({
+    page,
+  }) => {
+    await emulateInstalledIosApp(page, INSETS);
+    await installKeyboardStandIn(page, SCREEN - 60);
+    await openConversation(page);
+
+    const heading = page
+      .getByTestId("chat-header-info-button")
+      .getByText(ANYA.full_name, { exact: true });
+    expect(await heading.evaluate((element) => getComputedStyle(element).fontSize)).toBe("17px");
+    for (const name of ["Назад", "Ещё", "Прикрепить", "Эмодзи", "Голосовое"]) {
+      const box = await page.getByRole("button", { name, exact: true }).boundingBox();
+      expect(box?.width, `${name} touch width`).toBeGreaterThanOrEqual(48);
+      expect(box?.height, `${name} touch height`).toBeGreaterThanOrEqual(48);
+    }
+    const messageBody = page
+      .locator('[data-message-bubble="true"] .kub-message-text')
+      .filter({ hasText: LATEST });
+    expect(
+      await messageBody.first().evaluate((element) => getComputedStyle(element).fontSize),
+    ).toBe("16px");
+  });
+
+  test("the standalone chat list uses phone-readable title and preview sizes", async ({ page }) => {
+    await emulateInstalledIosApp(page, INSETS);
+    await installKeyboardStandIn(page, SCREEN - 60);
+    await openChatList(page);
+
+    const row = page.getByTestId("chat-list-item").filter({ hasText: ANYA.full_name });
+    const title = row.getByText(ANYA.full_name, { exact: true });
+    const preview = row.getByText(LATEST, { exact: true });
+    expect(await title.evaluate((element) => getComputedStyle(element).fontSize)).toBe("16px");
+    expect(await preview.evaluate((element) => getComputedStyle(element).fontSize)).toBe("14px");
+    const bounds = await row.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(430);
+  });
+
+  test("larger standalone controls keep the composer usable on a narrow phone", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: 693 });
+    await emulateInstalledIosApp(page, INSETS);
+    await installKeyboardStandIn(page);
+    await openConversation(page);
+
+    const attach = await page.getByRole("button", { name: "Прикрепить" }).boundingBox();
+    const recorder = await page.getByRole("button", { name: "Голосовое" }).boundingBox();
+    const field = await page.locator('[data-testid="chat-composer-dock"] textarea').boundingBox();
+    expect(attach).not.toBeNull();
+    expect(recorder).not.toBeNull();
+    expect(field).not.toBeNull();
+    expect(field!.width, "the field still accepts a legible short message").toBeGreaterThanOrEqual(
+      100,
+    );
+    expect(attach!.x).toBeGreaterThanOrEqual(0);
+    expect(recorder!.x + recorder!.width).toBeLessThanOrEqual(320);
+    expect(field!.x + field!.width).toBeLessThan(recorder!.x);
+  });
+
+  test("the chat list fills the installed-app screen despite a shorter visual viewport", async ({
     page,
   }) => {
     await emulateInstalledIosApp(page, INSETS);
@@ -303,11 +367,9 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
 
     const rest = await geometry(page);
     expect(rest.visualHeight).toBe(SCREEN - 60);
-    expect(rest.shellHeight, "the list shell fits the paintable area").toBe(SCREEN - 60);
+    expect(rest.shellHeight, "the list shell fills the standalone screen").toBe(SCREEN);
     expect(rest.navTop, "the navigation capsule remains on screen").toBeGreaterThanOrEqual(0);
-    expect(rest.navBottom, "no tab is cut by the system's lower band").toBeLessThanOrEqual(
-      SCREEN - 60,
-    );
+    expect(rest.navBottom, "no tab is cut by the home indicator").toBeLessThanOrEqual(SCREEN);
 
     const row = page.getByTestId("chat-list-item").filter({ hasText: ANYA.full_name });
     await expect(row).toBeVisible();
@@ -321,8 +383,8 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
     await keyboard(page, 0);
     await page.getByRole("button", { name: "Назад" }).click();
     await expect(page.getByRole("navigation", { name: "Навигация" })).toBeVisible();
-    await expect.poll(async () => (await geometry(page)).shellHeight).toBe(SCREEN - 60);
-    expect((await geometry(page)).navBottom).toBeLessThanOrEqual(SCREEN - 60);
+    await expect.poll(async () => (await geometry(page)).shellHeight).toBe(SCREEN);
+    expect((await geometry(page)).navBottom).toBeLessThanOrEqual(SCREEN);
   });
 
   test("search keyboard pan keeps the shared chat-list shell visible and restores it on dismissal", async ({
@@ -340,7 +402,7 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
 
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await keyboard(page, 0);
-    await expect.poll(async () => (await geometry(page)).shellHeight).toBe(SCREEN - 60);
+    await expect.poll(async () => (await geometry(page)).shellHeight).toBe(SCREEN);
   });
 
   test("the keyboard's visual-viewport pan keeps the header and composer inside the visible area", async ({
@@ -381,7 +443,7 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
 
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await keyboard(page, 0);
-    await expect.poll(async () => (await geometry(page)).dockBottom).toBe(SCREEN - 60);
+    await expect.poll(async () => (await geometry(page)).dockBottom).toBe(SCREEN);
   });
 
   test("a phone browser that is not the installed app still lifts the composer by the keys' height", async ({
@@ -400,5 +462,11 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
     const up = await geometry(page);
     expect(up.fitted, "the shell is fitted only in the installed app").toBe("");
     expect(up.token).toBe("100dvh");
+    expect(
+      await page
+        .getByTestId("chat-header-info-button")
+        .getByText(ANYA.full_name, { exact: true })
+        .evaluate((element) => getComputedStyle(element).fontSize),
+    ).toBe("15px");
   });
 });
