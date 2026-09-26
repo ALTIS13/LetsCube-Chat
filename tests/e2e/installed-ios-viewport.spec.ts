@@ -21,9 +21,9 @@ import {
  * screen. Neither engine here is iOS. Chromium plays the installed app's flag and
  * its insets, and a stand-in for `visualViewport` plays the keyboard as iOS does:
  * what is visible shrinks and the page may pan. What these checks hold is the
- * product's half — filling the standalone screen at rest even if iOS reports
- * a short visual viewport, fitting the keyboard when present, and preserving
- * the home-indicator inset.
+ * product's half — fitting the paintable screen at rest even when 100vh is
+ * taller, not mistaking a short visual viewport alone for a keyboard, fitting
+ * the keyboard when present, and preserving the home-indicator inset.
  */
 
 const INSETS: Insets = { top: 59, right: 0, bottom: 34, left: 0 };
@@ -47,20 +47,27 @@ function history(): Row[] {
 }
 
 /** A `visualViewport` the test moves, as iOS moves the real one for its keyboard. */
-async function installKeyboardStandIn(page: Page, initialVisibleHeight?: number) {
-  await page.addInitScript((visibleHeight) => {
+async function installKeyboardStandIn(page: Page, initialVisibleHeight?: number, initialLayoutHeight?: number) {
+  await page.addInitScript(({ visibleHeight, layoutHeight }) => {
     const events = new EventTarget();
     // Init scripts run before the mobile viewport meta tag is parsed. Read the
     // settled layout height lazily unless a shorter iOS viewport was requested.
     const nativeInnerHeight = Object.getOwnPropertyDescriptor(window, "innerHeight");
-    const state: { height: number | null; offsetTop: number; layoutHeight: number | null } = {
+    if (layoutHeight != null) {
+      Object.defineProperty(window, "innerHeight", {
+        configurable: true,
+        get: () => layoutHeight,
+      });
+    }
+    const state: { height: number | null; width: number | null; offsetTop: number; layoutHeight: number | null } = {
       height: visibleHeight ?? null,
+      width: null,
       offsetTop: 0,
       layoutHeight: null,
     };
     const viewport = {
       get width() {
-        return window.innerWidth;
+        return state.width ?? window.innerWidth;
       },
       get height() {
         return state.height ?? window.innerHeight;
@@ -88,6 +95,7 @@ async function installKeyboardStandIn(page: Page, initialVisibleHeight?: number)
     (
       window as unknown as {
         __keyboard: (height: number, offsetTop?: number, shrinkLayout?: boolean) => void;
+        __rotateKeyboard: (width: number, visibleHeight: number, offsetTop: number) => void;
       }
     ).__keyboard = (height: number, offsetTop = 0, shrinkLayout = false) => {
       state.layoutHeight ??= window.innerHeight;
@@ -96,6 +104,11 @@ async function installKeyboardStandIn(page: Page, initialVisibleHeight?: number)
         Object.defineProperty(window, "innerHeight", {
           configurable: true,
           get: () => state.height ?? state.layoutHeight,
+        });
+      } else if (layoutHeight != null) {
+        Object.defineProperty(window, "innerHeight", {
+          configurable: true,
+          get: () => layoutHeight,
         });
       } else if (nativeInnerHeight) {
         Object.defineProperty(window, "innerHeight", nativeInnerHeight);
@@ -110,13 +123,28 @@ async function installKeyboardStandIn(page: Page, initialVisibleHeight?: number)
       events.dispatchEvent(new Event("resize"));
       events.dispatchEvent(new Event("scroll"));
     };
-  }, initialVisibleHeight);
+    (
+      window as unknown as {
+        __rotateKeyboard: (width: number, visibleHeight: number, offsetTop: number) => void;
+      }
+    ).__rotateKeyboard = (width: number, visibleHeight: number, offsetTop: number) => {
+      state.width = width;
+      state.height = visibleHeight;
+      state.offsetTop = offsetTop;
+      Object.defineProperty(window, "innerHeight", { configurable: true, get: () => visibleHeight });
+      document.body.style.position = offsetTop ? "relative" : "";
+      document.body.style.top = offsetTop ? `${-offsetTop}px` : "";
+      events.dispatchEvent(new Event("resize"));
+      events.dispatchEvent(new Event("scroll"));
+    };
+  }, { visibleHeight: initialVisibleHeight, layoutHeight: initialLayoutHeight });
 }
 
-async function openConversation(page: Page) {
+async function openConversation(page: Page, theme: "light" | "dark" = "dark") {
   const now = new Date().toISOString();
   await openFixture(page, {
     me: ME,
+    theme,
     chats: [chat(CHAT_ID, "private", null, now)],
     memberships: [membership(CHAT_ID, ME, "owner", now), membership(CHAT_ID, ANYA, "member", now)],
     messages: history(),
@@ -125,10 +153,11 @@ async function openConversation(page: Page) {
   await page.waitForTimeout(800);
 }
 
-async function openChatList(page: Page) {
+async function openChatList(page: Page, theme: "light" | "dark" = "dark") {
   const now = new Date().toISOString();
   await openFixture(page, {
     me: ME,
+    theme,
     chats: [chat(CHAT_ID, "private", null, now)],
     memberships: [membership(CHAT_ID, ME, "owner", now), membership(CHAT_ID, ANYA, "member", now)],
     messages: history(),
@@ -188,6 +217,25 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
     await requireFixtureServer(request);
   });
 
+  test("the installed iPhone shell is fitted before the React entry executes", async ({ page }) => {
+    const paintableHeight = SCREEN - 59;
+    await emulateInstalledIosApp(page, INSETS);
+    await installKeyboardStandIn(page, paintableHeight, paintableHeight);
+    let blockedEntry = 0;
+    await page.route(/\/src\/main\.tsx(?:\?.*)?$/, (route) => {
+      blockedEntry += 1;
+      return route.abort("blockedbyclient");
+    });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    expect(blockedEntry, "the React entry must be blocked to test pre-hydration").toBeGreaterThan(0);
+    await expect(page.locator("html[data-ios-standalone]")).toHaveCount(1);
+    expect(await page.evaluate(() => document.documentElement.style.getPropertyValue("--kub-app-height"))).toBe(
+      `${paintableHeight}px`,
+    );
+    await expect(page.locator("#root")).toBeEmpty();
+  });
+
   test("standalone display mode marks the iPhone shell even when navigator.standalone is absent", async ({
     page,
   }) => {
@@ -212,7 +260,7 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
       await page.evaluate(() =>
         getComputedStyle(document.documentElement).getPropertyValue("--kub-app-height").trim(),
       ),
-    ).toBe("100vh");
+    ).toBe(`${SCREEN}px`);
   });
 
   test("a public page without a chat fills the installed app even when visualViewport is short", async ({
@@ -240,7 +288,7 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
     await openConversation(page);
 
     const rest = await geometry(page);
-    expect(rest.token, "the installed app's shell height").toBe("100vh");
+    expect(rest.token, "the installed app's shell height").toBe(`${SCREEN}px`);
     expect(rest.shellHeight, "the shell is as tall as the screen").toBe(SCREEN);
     expect(rest.dockBottom, "the composer's dock reaches the bottom edge").toBe(SCREEN);
     expect(rest.dockPadding, "at rest the composer pads for the home indicator").toBe(
@@ -271,7 +319,7 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
       .poll(async () => (await geometry(page)).fitted, {
         message: "the shell's height was not given back",
       })
-      .toBe("");
+      .toBe(`${SCREEN}px`);
     expect((await geometry(page)).shellHeight, "the shell is as tall as the screen again").toBe(
       SCREEN,
     );
@@ -296,6 +344,68 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
       `${INSETS.bottom}px`,
     );
   });
+
+  for (const theme of ["light", "dark"] as const) {
+    test(`a short iOS paintable viewport keeps the ${theme} list and composer above the clipped edge`, async ({ page }, testInfo) => {
+      const paintableHeight = SCREEN - 59;
+      await emulateInstalledIosApp(page, INSETS);
+      // iOS 26 can expose 100vh as the full 932 pt screen while both innerHeight
+      // and visualViewport stop at 873 pt. The lower 59 pt are not paintable DOM.
+      await installKeyboardStandIn(page, paintableHeight, paintableHeight);
+      await openChatList(page, theme);
+      await expect(page.locator(`html.${theme}`)).toHaveCount(1);
+      const conversation = page.getByTestId("chat-list-item").filter({ hasText: ANYA.full_name });
+      await expect(conversation).toBeVisible();
+
+      // Model the system-owned lower strip as an overlay: unlike ordinary DOM,
+      // it blocks hit testing and cannot be painted by the application.
+      await page.evaluate((height) => {
+        const strip = document.createElement("div");
+        strip.dataset.testid = "ios-system-strip-fixture";
+        strip.style.cssText = `position:fixed;inset:auto 0 0;height:${height}px;background:#e8eff7;z-index:2147483647`;
+        document.body.appendChild(strip);
+      }, SCREEN - paintableHeight);
+
+      const list = await geometry(page);
+      const cssVh = await page.evaluate(() => {
+        const probe = document.createElement("div");
+        probe.style.height = "100vh";
+        document.body.appendChild(probe);
+        const height = Math.round(probe.getBoundingClientRect().height);
+        probe.remove();
+        return height;
+      });
+      expect(cssVh, "the fixture must really have a taller CSS 100vh").toBe(SCREEN);
+      expect(list.visualHeight).toBe(paintableHeight);
+      expect(list.shellHeight, "the shell must fit the paintable canvas").toBe(paintableHeight);
+      expect(list.navBottom, "all navigation stays above the clipped edge").toBeLessThanOrEqual(paintableHeight);
+      expect(await page.getByRole("navigation", { name: "Навигация" }).locator("button").first().evaluate((button) => {
+        const rect = button.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return hit === button || button.contains(hit);
+      }), "a navigation tab remains tappable").toBe(true);
+      if (process.env.KUB_CAPTURE_IOS_VIEWPORT === "1") {
+        await page.screenshot({ path: testInfo.outputPath(`${theme}-list.png`) });
+      }
+
+      await conversation.click();
+      await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: LATEST })).toBeVisible();
+      expect((await geometry(page)).dockBottom, "the composer stays inside the paintable canvas").toBe(paintableHeight);
+      const attach = await page.getByRole("button", { name: "Прикрепить" }).boundingBox();
+      expect(attach?.y).toBeGreaterThanOrEqual(0);
+      expect(attach!.y + attach!.height, "the attachment control clears the strip").toBeLessThanOrEqual(paintableHeight);
+      if (process.env.KUB_CAPTURE_IOS_VIEWPORT === "1") {
+        await page.screenshot({ path: testInfo.outputPath(`${theme}-chat.png`) });
+      }
+
+      await page.locator('[data-testid="chat-composer-dock"] textarea').focus();
+      await keyboard(page, KEYBOARD);
+      await expect.poll(async () => (await geometry(page)).dockBottom).toBe(paintableHeight - KEYBOARD);
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await keyboard(page, 0);
+      await expect.poll(async () => (await geometry(page)).dockBottom).toBe(paintableHeight);
+    });
+  }
 
   test("the standalone chat keeps readable hierarchy and generous primary touch targets", async ({
     page,
@@ -427,6 +537,31 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
     await expect.poll(async () => (await geometry(page)).shellTop).toBe(0);
   });
 
+  test("rotation with an open keyboard keeps the panned chat header visible", async ({ page }) => {
+    await emulateInstalledIosApp(page, INSETS);
+    await installKeyboardStandIn(page);
+    await openConversation(page);
+
+    await page.locator('[data-testid="chat-composer-dock"] textarea').focus();
+    await keyboard(page, KEYBOARD, 72, true);
+    await expect.poll(async () => (await geometry(page)).shellTop).toBe(0);
+
+    // One iOS resize can change width and keyboard-shrunken inner/visual height
+    // together. The new height must not be learned as an idle baseline.
+    await page.evaluate(() => (
+      window as unknown as { __rotateKeyboard: (width: number, height: number, top: number) => void }
+    ).__rotateKeyboard(932, 210, 72));
+    await expect.poll(async () => (await geometry(page)).shellTop).toBe(0);
+    expect((await geometry(page)).dockBottom).toBe(210);
+
+    await page.locator('[data-testid="chat-composer-dock"] textarea').blur();
+    await page.evaluate(() => (
+      window as unknown as { __rotateKeyboard: (width: number, height: number, top: number) => void }
+    ).__rotateKeyboard(932, 430, 0));
+    await expect.poll(async () => (await geometry(page)).shellTop).toBe(0);
+    await expect.poll(async () => (await geometry(page)).dockBottom).toBe(430);
+  });
+
   test("a resized layout viewport still reveals the keyboard over a shorter installed-app screen", async ({
     page,
   }) => {
@@ -469,4 +604,20 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
         .evaluate((element) => getComputedStyle(element).fontSize),
     ).toBe("15px");
   });
+
+  for (const theme of ["light", "dark"] as const) {
+    test(`the ${theme} desktop shell keeps its 1440px chat layout`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await openConversation(page, theme);
+      await expect(page.locator(`html.${theme}`)).toHaveCount(1);
+      await expect(page.getByRole("navigation", { name: "Навигация" })).toBeHidden();
+      const desktop = await geometry(page);
+      expect(desktop.token).toBe("100dvh");
+      expect(desktop.shellHeight).toBe(900);
+      expect(desktop.dockBottom).toBe(900);
+      if (process.env.KUB_CAPTURE_IOS_VIEWPORT === "1") {
+        await page.screenshot({ path: testInfo.outputPath(`${theme}-desktop.png`) });
+      }
+    });
+  }
 });

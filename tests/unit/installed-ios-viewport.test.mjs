@@ -6,9 +6,9 @@ import test from "node:test";
  * D-111: the installed iPhone app's shell and keyboard, the source half.
  *
  * On a tester's iPhone 15 Pro Max the installed app left a band of about 60pt
- * under the composer from its first frame. The 100vh installed-app height
- * stays active at rest; a runtime visualViewport measurement takes over only
- * while the keyboard is visible. The layout and keyboard
+ * under the composer from its first frame. The 100dvh fallback is replaced
+ * by the paintable innerHeight at boot and at rest; visualViewport takes over
+ * only while the keyboard is visible. The layout and keyboard
  * behaviour is covered by `tests/e2e/installed-ios-viewport.spec.ts` rather
  * than source-text checks; only a real device can reproduce iOS itself.
  */
@@ -17,17 +17,17 @@ const read = (relative) => readFileSync(new URL(`../../artifacts/kub/src/${relat
 const withoutComments = (source) =>
   source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1");
 
-test("the shell's height is one token: 100dvh, and 100vh in the installed iPhone app", () => {
+test("the shell's height is one token: 100dvh at boot without a taller standalone 100vh override", () => {
   const css = withoutComments(read("index.css"));
   assert.match(
     css,
     /--kub-safe-left:\s*env\(safe-area-inset-left, 0px\);\s*--kub-app-height:\s*100dvh;/,
     "the shell height token is gone from beside the safe-area tokens, or is no longer 100dvh",
   );
-  assert.match(
+  assert.doesNotMatch(
     css,
     /html\[data-ios-standalone\]\s*\{[^}]*--kub-app-height:\s*100vh;/,
-    "the installed iPhone app no longer switches the shell to 100vh",
+    "100vh can extend below the iOS Home Screen paintable viewport",
   );
   assert.match(css, /@utility h-app\s*\{\s*height:\s*var\(--kub-app-height\);\s*\}/, "h-app no longer reads the token");
   assert.match(

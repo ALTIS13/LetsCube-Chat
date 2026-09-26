@@ -121,6 +121,7 @@ export interface RecordedRequest {
 
 export interface FixtureOptions {
   me: Person;
+  theme?: "light" | "dark";
   chats: Row[];
   memberships: Row[];
   messages: Row[];
@@ -200,8 +201,8 @@ export async function openFixture(page: Page, options: FixtureOptions): Promise<
     (url) => (url.protocol === "http:" || url.protocol === "https:") && url.hostname !== "127.0.0.1" && url.hostname !== "localhost",
     (route) => route.abort("blockedbyclient"),
   );
-  await page.addInitScript(({ user, now }) => {
-    localStorage.setItem("kub-theme", "dark");
+  await page.addInitScript(({ user, now, theme }) => {
+    localStorage.setItem("kub-theme", theme);
     localStorage.setItem(
       "kub-auth",
       JSON.stringify({
@@ -221,7 +222,7 @@ export async function openFixture(page: Page, options: FixtureOptions): Promise<
         },
       }),
     );
-  }, { user: me, now: EPOCH });
+  }, { user: me, now: EPOCH, theme: options.theme ?? "dark" });
 
   await page.route(`${FIXTURE_HOST}/**`, async (route) => {
     const request = route.request();

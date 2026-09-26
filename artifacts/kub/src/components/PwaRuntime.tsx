@@ -28,28 +28,34 @@ export function PwaRuntime() {
     const viewport = window.visualViewport;
     if (!root.hasAttribute("data-ios-standalone") || !viewport) return;
 
-    // Every full-height page reads this token. At rest, keep the standalone
-    // 100vh fallback: iOS can report visualViewport shorter than the actual
-    // Home Screen canvas, which otherwise leaves a dead band under the dock.
-    // Only fit to visualViewport while the keyboard genuinely occupies it.
+    // Every full-height page reads this token. In some iOS Home Screen builds,
+    // 100vh reaches the physical screen while the WebKit paintable viewport
+    // ends about 60pt earlier. innerHeight is that paintable edge at rest;
+    // visualViewport may be shorter even when the canvas is not, so use it
+    // only while the keyboard genuinely occupies the viewport.
     let restingHeight = viewport.height;
     let restingWidth = viewport.width;
+    let keyboardWasVisible = false;
     const update = () => {
       const height = viewport.height;
       if (!Number.isFinite(height) || height <= 0) return;
+      const active = document.activeElement;
+      const editableFocused = active instanceof HTMLElement
+        && (active.matches("input, textarea") || active.isContentEditable);
       if (Math.abs(viewport.width - restingWidth) > 1) {
         restingWidth = viewport.width;
-        restingHeight = height;
-      } else if (height >= restingHeight - 80) {
+        // A rotation can change width and the keyboard-shrunken heights in one
+        // event. Do not learn that keyboard height as the new idle baseline.
+        if (!keyboardWasVisible || !editableFocused) restingHeight = height;
+      } else if ((keyboardWasVisible && !editableFocused) || height >= restingHeight - 80) {
         restingHeight = height;
       }
 
       const keyboardVisible = Math.max(window.innerHeight - height, restingHeight - height) > 80;
-      if (keyboardVisible) {
-        root.style.setProperty("--kub-app-height", `${Math.round(height)}px`);
-      } else {
-        root.style.removeProperty("--kub-app-height");
-      }
+      keyboardWasVisible = keyboardVisible;
+      const appHeight = keyboardVisible ? height : window.innerHeight;
+      if (!Number.isFinite(appHeight) || appHeight <= 0) return;
+      root.style.setProperty("--kub-app-height", `${Math.round(appHeight)}px`);
       const pageTop = Number.isFinite(viewport.pageTop) ? viewport.pageTop : 0;
       const bodyTop = document.body.getBoundingClientRect().top;
       const pan = keyboardVisible ? Math.max(0, Math.round(pageTop), Math.round(-bodyTop)) : 0;

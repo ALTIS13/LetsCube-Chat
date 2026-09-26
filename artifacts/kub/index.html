@@ -42,7 +42,15 @@
       var standaloneDisplay = window.matchMedia
         && window.matchMedia("(display-mode: standalone)").matches;
       if (navigator.standalone === true || (iosWebApp && standaloneDisplay)) {
-        document.documentElement.setAttribute("data-ios-standalone", "");
+        var root = document.documentElement;
+        root.setAttribute("data-ios-standalone", "");
+        // Fit the first paint before React starts. In some iOS Home Screen
+        // builds 100vh is taller than WebKit's paintable innerHeight; in
+        // others 100dvh is short. PwaRuntime keeps this measurement current.
+        var paintableHeight = window.innerHeight;
+        if (Number.isFinite(paintableHeight) && paintableHeight > 0) {
+          root.style.setProperty("--kub-app-height", Math.round(paintableHeight) + "px");
+        }
       }
     </script>
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />

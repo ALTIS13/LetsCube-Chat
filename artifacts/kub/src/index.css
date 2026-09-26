@@ -305,15 +305,11 @@
   --kub-safe-left: env(safe-area-inset-left, 0px);
 
   /* The height of the application's shell, read through `h-app`. `100dvh`
-     follows a phone browser's toolbars as they come and go. The installed
-     iPhone app has no toolbars, and there iOS hands `100dvh` over short from
-     the first frame: on a tester's iPhone 15 Pro Max the composer's field ended
-     about 108pt above the bottom edge, against 46pt for a shell as tall as the
-     screen, and the band was there before anything was typed and stayed after
-     the app was opened again (D-111). `100vh` fills the standalone shell at
-     rest; `PwaRuntime` fits the shell to visualViewport.height only while the
-     keyboard is open. iOS can report visualViewport short even without keys,
-     and using that resting number creates a second empty lower band. */
+     follows a phone browser's toolbars and is the iOS fallback if the boot
+     measurement is unavailable. PwaRuntime uses innerHeight at rest in the installed iPhone app: iOS may
+     make 100vh as tall as the physical screen even when the lower ~60pt are
+     outside the WebKit paintable viewport. A short visualViewport alone does
+     not prove that, so it controls the shell only with the keyboard open. */
   --kub-app-height: 100dvh;
 
   /* The chat screen's scroll edge: how much the conversation is frosted where
@@ -336,7 +332,6 @@
 }
 
 html[data-ios-standalone] {
-  --kub-app-height: 100vh;
   --kub-control-row-height: 3.75rem;
 }
 
