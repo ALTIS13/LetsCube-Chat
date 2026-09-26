@@ -199,9 +199,12 @@ retry asks for a fresh document URL and removes its temporary nonce before the
 app starts. A stale-HTML/retired-entry fixture passed in dev and built bundles
 on desktop/mobile Chromium and mobile WebKit. This is not a physical Safari
 fix verdict. The Dockerfile still discards prior hashed assets on deploy; a
-durable asset-retention strategy is the next shared-web infrastructure stage.
-See the [tracker](PRODUCTION_PRIORITY_TRACKER.md) for the test and rollout
-boundary.
+durable asset-retention implementation is prepared in source and passed a
+two-release isolated Docker-volume check. The live Coolify web resource has no
+volume yet; its write API token currently returns 401. Attach and verify a
+named volume before claiming this protection is live. See the
+[runbook](operations/web-asset-retention.md) and
+[tracker](PRODUCTION_PRIORITY_TRACKER.md) for the activation boundary.
 
 **Current backend checkpoint, 2026-09-26 (Codex):** native FCM/WNS OS push
 payloads no longer carry sender, preview, avatar or task content across a

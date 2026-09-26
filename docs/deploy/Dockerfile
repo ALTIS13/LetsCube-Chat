@@ -191,6 +191,8 @@ FROM nginx:alpine AS runtime
 
 COPY docs/deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/artifacts/kub/dist/public /usr/share/nginx/html
+COPY --from=build /app/artifacts/kub/dist/public/assets /opt/letscube/release-assets
+COPY --chmod=755 docs/deploy/retain-web-assets.sh /docker-entrypoint.d/15-retain-web-assets.sh
 
 EXPOSE 80
 

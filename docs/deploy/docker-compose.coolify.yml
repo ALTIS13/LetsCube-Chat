@@ -1,5 +1,6 @@
-# Coolify-managed proxy compose for KUB.
-# Configure env values in the Coolify UI. Do not commit real .env files.
+# Compose example; the live web app currently uses docs/deploy/Dockerfile in
+# Coolify, not this Compose file. Configure env values in the Coolify UI.
+# Do not commit real .env files.
 
 services:
   kub-web:
@@ -18,6 +19,10 @@ services:
         BASE_PATH: ${BASE_PATH:-/}
     image: kub-web:latest
     restart: unless-stopped
+    environment:
+      LETSCUBE_REQUIRE_ASSET_VOLUME: "1"
+    volumes:
+      - letscube-web-assets:/usr/share/nginx/html/assets
     expose:
       - "80"
     healthcheck:
@@ -116,3 +121,6 @@ services:
       - "traefik.http.routers.letscube-bot-gateway.tls=true"
       - "traefik.http.routers.letscube-bot-gateway.service=letscube-bot-gateway"
       - "traefik.http.services.letscube-bot-gateway.loadbalancer.server.port=8098"
+
+volumes:
+  letscube-web-assets:
