@@ -7,6 +7,7 @@ import pinoHttp from "pino-http";
 import { BotApiError, toBotApiErrorResponse } from "#bot/errors";
 import {
   createBotMethodRouter,
+  exactAuthorizationHeader,
   type BotMethodHandlers,
 } from "#bot/methodRouter";
 import type { BotTokenRepository } from "#bot/repository";
@@ -79,9 +80,29 @@ export function createBotGatewayApp(input: {
       createBotManagementRouter(input.management),
     );
   }
+  const standardJson = express.json({ limit: "256kb", strict: true });
+  // Six MiB of photo bytes expands to eight MiB of base64 plus JSON fields.
+  const photoJson = express.json({ limit: "9mb", strict: true });
   app.post(
     "/bot/v1/:method",
-    express.json({ limit: "256kb", strict: true }),
+    async (request, response, next) => {
+      if (request.params.method !== "sendPhoto") return next();
+      try {
+        response.locals.botGatewayBot =
+          await input.tokenRepository.authenticateBotToken(
+            exactAuthorizationHeader(request),
+          );
+        next();
+      } catch (error) {
+        next(error);
+      }
+    },
+    (request, response, next) =>
+      (request.params.method === "sendPhoto" ? photoJson : standardJson)(
+        request,
+        response,
+        next,
+      ),
     createBotMethodRouter({
       handlers: input.handlers,
       tokenRepository: input.tokenRepository,
@@ -102,7 +123,9 @@ export function createBotGatewayApp(input: {
         ? (error as { type?: unknown }).type
         : undefined;
     const safeError =
-      status === 413 || type === "entity.too.large"
+      error instanceof BotApiError
+        ? error
+        : status === 413 || type === "entity.too.large"
         ? new BotApiError("payload_too_large")
         : status === 400 || error instanceof SyntaxError
           ? new BotApiError("validation_failed")

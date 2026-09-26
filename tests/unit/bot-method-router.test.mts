@@ -524,6 +524,9 @@ function createRepository(overrides: Partial<BotMethodRepository> = {}): {
       events.push("authorize");
       authorizations.push(input);
     },
+    async uploadPhoto() {
+      throw new Error("unexpected inline photo upload");
+    },
     async replaceCommands() {
       return { result: { commands: [] }, duplicate: false };
     },

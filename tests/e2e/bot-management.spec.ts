@@ -32,6 +32,22 @@ test.describe("authenticated bot management", () => {
     await installSupabaseFixture(page);
   });
 
+  test("bot settings name a safe load failure and recover on retry", async ({ page }) => {
+    await installManagementFixture(page);
+    let fail = true;
+    await page.route(`${API}/bots/${OWNER_BOT_ID}`, (route) => {
+      if (route.request().method() !== "GET" || !fail) return route.fallback();
+      return failure(route, 401, "unauthorized");
+    });
+    await page.goto(`/bots?bot=${OWNER_BOT_ID}`);
+    const detailPane = page.getByTestId("bots-detail-pane");
+    await expect(detailPane.getByRole("alert")).toContainText("Сессия истекла. Войдите снова.");
+    fail = false;
+    await detailPane.getByRole("button", { name: "Повторить" }).click();
+    await expect(detailPane).toContainText("Owner bot");
+    await expect(detailPane.getByRole("alert")).toHaveCount(0);
+  });
+
   test("creates and rotates a token without retaining it", async ({ page }) => {
     const consoleMessages: string[] = [];
     page.on("console", (message) => consoleMessages.push(message.text()));

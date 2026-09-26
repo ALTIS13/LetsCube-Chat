@@ -812,6 +812,21 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
 
   useEffect(() => {
     if (!isGroup) return;
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") void loadChatBots();
+    };
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    const timer = window.setInterval(refreshIfVisible, 20_000);
+    return () => {
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+      window.clearInterval(timer);
+    };
+  }, [isGroup, loadChatBots]);
+
+  useEffect(() => {
+    if (!isGroup) return;
     let timer: number | null = null;
     const scheduleRefresh = () => {
       if (timer) window.clearTimeout(timer);

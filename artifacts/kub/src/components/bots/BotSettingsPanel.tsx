@@ -314,26 +314,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
             </div>
           </Section>
 
-          {/* D-257, D-276. This box used to offer «Запросить полный доступ» and
-              «Отменить запрос». Nothing could answer either: `full_visibility_approved`
-              was read in three places and written in none — no action in this
-              client, no route in the API server, no approver in the database —
-              so «Запрошен полный доступ» was a permanent state that read like a
-              pending one, and one live group membership was sitting in it.
-
-              The owner's decision was Telegram's model, where a bot's privacy
-              is the bot owner's setting and the group's consent is the act of
-              adding it: there is nothing to approve afterwards. So the request
-              is gone rather than completed, and what is left here is a reading
-              of the state. The same words appear on the bot's row in each
-              group's member list, which is where the people it affects can see
-              them — `botAccessLabel` is the single source of both.
-
-              No control is drawn because none exists yet: nothing in this
-              product writes `privacy_mode`. When the owner's own switch is
-              built it belongs here, and it will need a write path that today's
-              schema has no room for. */}
-          <Section title="Приватность в группах" description="Бот видит только обращённые к нему сообщения. Участники каждой группы видят это в её списке ботов.">
+          <Section title="Приватность в группах" description="Для каждой группы доступ к новым сообщениям переключает её администратор в списке участников. Здесь показан текущий режим.">
             <div className="space-y-2">
               {detail.privacy.map((item) => (
                 <div key={item.chat_id} data-bot-privacy={item.privacy_mode} className="flex flex-col gap-2 border-b border-[color:var(--kub-rule)] py-3 sm:flex-row sm:items-center">

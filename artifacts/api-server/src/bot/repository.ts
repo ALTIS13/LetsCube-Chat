@@ -7,6 +7,7 @@ import {
   resolveBotAuthConfig,
   verifyBotTokenHash,
 } from "#bot/tokenAuth";
+import { MAX_INLINE_PHOTO_BYTES } from "#bot/schemas";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -27,6 +28,11 @@ type SignedUrlResult = {
   error: unknown;
 };
 
+type StorageUploadResult = {
+  data: { path?: unknown } | null;
+  error: unknown;
+};
+
 export interface BotServiceClient extends BotRpcClient {
   auth: {
     getUser(accessToken: string): PromiseLike<{
@@ -36,6 +42,11 @@ export interface BotServiceClient extends BotRpcClient {
   };
   storage: {
     from(bucket: string): {
+      upload(
+        objectPath: string,
+        bytes: Buffer,
+        options: { contentType: string; upsert: false },
+      ): PromiseLike<StorageUploadResult>;
       createSignedUrl(
         objectPath: string,
         expiresInSeconds: number,
@@ -116,6 +127,13 @@ export interface BotMethodRepository {
     mimeType: string;
     sizeBytes: number;
     expiresInSeconds: 60;
+  }): Promise<void>;
+  uploadPhoto(input: {
+    botId: string;
+    chatId: string;
+    objectPath: string;
+    mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+    bytes: Buffer;
   }): Promise<void>;
   replaceCommands(input: {
     botId: string;
@@ -338,6 +356,31 @@ const METHOD_BY_KIND: Record<BotMessageCommand["kind"], string> = {
 
 // A Supabase bucket id, and nothing that could be spliced into a storage path.
 const BUCKET_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const PHOTO_SUFFIX: Record<
+  "image/jpeg" | "image/png" | "image/webp" | "image/gif",
+  string
+> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+
+function uploadAlreadyExists(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const row = error as Record<string, unknown>;
+  const status = Number(row.status ?? row.statusCode);
+  const code = [row.statusCode, row.code, row.error].find(
+    (value) => typeof value === "string" && !/^\d+$/.test(value),
+  );
+  return (
+    (status === 409 &&
+      (code === "ResourceAlreadyExists" ||
+        code === "KeyAlreadyExists" ||
+        (code === undefined && row.statusCode === "409"))) ||
+    ((status === 400 || status === 409) && code === "Duplicate")
+  );
+}
 
 // `bot_file_lookup_internal` builds its result with `jsonb_strip_nulls`, so a
 // fact it does not know arrives as an ABSENT key rather than a null one. No
@@ -458,6 +501,41 @@ export function createBotMethodRepository(
         p_byte_size: input.sizeBytes,
         p_expires_in_seconds: input.expiresInSeconds,
       });
+    },
+
+    async uploadPhoto(input) {
+      const suffix = PHOTO_SUFFIX[input.mimeType];
+      const prefix = `${input.chatId.toLowerCase()}/bots/${input.botId.toLowerCase()}/`;
+      if (
+        !UUID_RE.test(input.botId) ||
+        !UUID_RE.test(input.chatId) ||
+        !suffix ||
+        !input.objectPath.startsWith(prefix) ||
+        !new RegExp(`^[0-9a-f]{64}\\.${suffix}$`).test(
+          input.objectPath.slice(prefix.length),
+        ) ||
+        !Buffer.isBuffer(input.bytes) ||
+        input.bytes.length < 1 ||
+        input.bytes.length > MAX_INLINE_PHOTO_BYTES
+      ) {
+        throw new BotApiError("internal_error");
+      }
+
+      let response: StorageUploadResult;
+      try {
+        response = await client.storage.from("chat-media").upload(
+          input.objectPath,
+          input.bytes,
+          { contentType: input.mimeType, upsert: false },
+        );
+      } catch {
+        throw internalError();
+      }
+      if (response.error) {
+        if (!uploadAlreadyExists(response.error)) throw internalError();
+      } else if (response.data?.path !== input.objectPath) {
+        throw internalError();
+      }
     },
 
     async replaceCommands(input) {

@@ -42,6 +42,9 @@ test.describe("public LETSCUBE Bot API documentation", () => {
       "retry_after",
       "callback_query",
       "групповая приватность",
+      "bytes_base64",
+      "file_id",
+      "Администратор группы может дать боту доступ",
     ]) {
       await expect(docs.getByText(requiredText, { exact: false }).first()).toBeVisible();
     }

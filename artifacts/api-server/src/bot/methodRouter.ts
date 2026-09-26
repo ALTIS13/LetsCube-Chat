@@ -146,9 +146,12 @@ export function createBotMethodRouter(input: {
         }
         longPollSignal = abortController.signal;
       }
-      const bot = await input.tokenRepository.authenticateBotToken(
-        exactAuthorizationHeader(request),
-      );
+      const bot =
+        method === "sendPhoto" && response.locals.botGatewayBot
+          ? (response.locals.botGatewayBot as AuthenticatedBot)
+          : await input.tokenRepository.authenticateBotToken(
+              exactAuthorizationHeader(request),
+            );
       const body = parseBotMethodInput(method, request.body);
       const context: BotMethodContext = { bot, requestId };
       if (longPollSignal) context.signal = longPollSignal;

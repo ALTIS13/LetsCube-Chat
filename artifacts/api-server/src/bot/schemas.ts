@@ -6,6 +6,7 @@ const idempotencyKeySchema = z
   .min(8)
   .max(128)
   .regex(/^[A-Za-z0-9._:-]+$/);
+export const MAX_INLINE_PHOTO_BYTES = 6 * 1024 * 1024;
 
 export const callbackButtonSchema = z
   .object({
@@ -90,26 +91,26 @@ export const sendMessageSchema = z
   })
   .strict();
 
+function mediaMessageFields(allowedMimeTypes: readonly string[]) {
+  return {
+    chat_id: uuidSchema,
+    media: storageObjectReferenceSchema
+      .refine(
+        (media) => allowedMimeTypes.includes(media.mime_type),
+        "media_mime_type_not_allowed",
+      )
+      .optional(),
+    // A file_id is the id of a readable message in the destination chat.
+    file_id: uuidSchema.optional(),
+    caption: z.string().min(1).max(4096).optional(),
+    ...optionalReplyFields,
+    idempotency_key: idempotencyKeySchema,
+  };
+}
+
 function mediaMessageSchema(allowedMimeTypes: readonly string[]) {
   return z
-    .object({
-      chat_id: uuidSchema,
-      media: storageObjectReferenceSchema
-        .refine(
-          (media) => allowedMimeTypes.includes(media.mime_type),
-          "media_mime_type_not_allowed",
-        )
-        .optional(),
-      // Telegram's shape: re-send a file by the identifier of a message the bot
-      // may already read. On LETSCUBE a `file_id` is that message's id — what
-      // `getFile` returns and what arrives in `attachment.file_id`. The
-      // resolution, and the rule that the message must be in this same chat,
-      // belong to the database; the gateway only forwards the identifier.
-      file_id: uuidSchema.optional(),
-      caption: z.string().min(1).max(4096).optional(),
-      ...optionalReplyFields,
-      idempotency_key: idempotencyKeySchema,
-    })
+    .object(mediaMessageFields(allowedMimeTypes))
     .strict()
     .superRefine((value, context) => {
       if ((value.media === undefined) === (value.file_id === undefined)) {
@@ -121,12 +122,51 @@ function mediaMessageSchema(allowedMimeTypes: readonly string[]) {
     });
 }
 
-const sendPhotoSchema = mediaMessageSchema([
+const photoMimeTypes = [
   "image/jpeg",
   "image/png",
   "image/webp",
   "image/gif",
-]);
+] as const;
+const sendPhotoSchema = z
+  .object({
+    ...mediaMessageFields(photoMimeTypes),
+    photo: z
+      .object({
+        mime_type: z.enum(photoMimeTypes),
+        bytes_base64: z
+          .string()
+          .min(4)
+          .max((MAX_INLINE_PHOTO_BYTES / 3) * 4)
+          .regex(/^[A-Za-z0-9+/]+={0,2}$/)
+          .refine((value) => value.length % 4 === 0),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const supplied = [value.media, value.file_id, value.photo].filter(
+      (item) => item !== undefined,
+    ).length;
+    if (supplied !== 1) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "media_file_id_or_photo_required",
+      });
+    }
+    if (
+      value.photo !== undefined &&
+      (value.topic_id !== undefined ||
+        value.reply_to_message_id !== undefined ||
+        value.reply_markup !== undefined)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "inline_photo_reply_not_supported",
+      });
+    }
+  });
 const sendVideoSchema = mediaMessageSchema(["video/mp4", "video/webm"]);
 const sendDocumentSchema = mediaMessageSchema(["application/pdf"]);
 const sendVoiceSchema = mediaMessageSchema([

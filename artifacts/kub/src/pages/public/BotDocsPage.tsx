@@ -8,6 +8,7 @@ import {
   BOT_CALLBACK_EXAMPLE,
   BOT_COMMANDS_EXAMPLE,
   BOT_ERROR_EXAMPLE,
+  BOT_PHOTO_EXAMPLE,
   BOT_SUCCESS_EXAMPLE,
   BOT_UPDATE_EXAMPLE,
 } from "@/content/botApiDocs";
@@ -167,6 +168,17 @@ export function BotDocsPage() {
                   </section>
                 ))}
               </div>
+              <div className="mt-7 grid gap-4 lg:grid-cols-2">
+                <CodeBlock title="sendPhoto: загрузка изображения" code={BOT_PHOTO_EXAMPLE} />
+                <p className="text-sm leading-7 text-[color:var(--kub-muted)]">
+                  Для загрузки передайте ровно одно поле: photo с MIME-типом и base64-байтами,
+                  media с уже загруженным объектом или file_id доступного боту сообщения из
+                  того же чата. Не передавайте URL изображения. Для фото из байтов сейчас
+                  поддерживаются подпись и ключ идемпотентности, но не ответ на сообщение,
+                  тема или кнопки. Входящие обновления содержат attachment.file_id; getFile
+                  выдаёт короткоживущую ссылку для чтения вложения.
+                </p>
+              </div>
             </DocSection>
 
             <DocSection id="commands-buttons" title="Команды и кнопки">
@@ -212,8 +224,9 @@ export function BotDocsPage() {
                 <p className="mt-2 text-sm leading-7 text-[color:var(--kub-muted)]">
                   По умолчанию включена групповая приватность: бот получает адресованные ему
                   команды, упоминания, ответы на его сообщения, callback-события и собственные
-                  события членства. Полный поток новых сообщений требует запроса владельца бота
-                  и отдельного одобрения администратора группы; история до вступления недоступна.
+                  события членства. Администратор группы может дать боту доступ ко всем новым
+                  сообщениям и вложениям в настройках участников чата и там же снова ограничить
+                  его. Уже написанная история боту не открывается.
                 </p>
               </div>
             </DocSection>

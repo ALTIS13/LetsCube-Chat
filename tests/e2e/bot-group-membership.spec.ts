@@ -112,7 +112,7 @@ interface OpenOptions {
   theme?: "light" | "dark";
 }
 
-async function openPanel(page: Page, options: OpenOptions = {}): Promise<Fixture> {
+async function openPanel(page: Page, options: OpenOptions = {}): Promise<Fixture & { setRemotePrivacy: (mode: "full" | "restricted") => void }> {
   const {
     myRole = "owner",
     available = [],
@@ -249,7 +249,12 @@ async function openPanel(page: Page, options: OpenOptions = {}): Promise<Fixture
     const root = document.documentElement;
     root.classList.toggle("dark", (root.dataset.theme ?? "") !== "light");
   });
-  return fixture;
+  return Object.assign(fixture, {
+    setRemotePrivacy(mode: "full" | "restricted") {
+      const row = live.find((entry) => (entry as { bot?: { id?: string } }).bot?.id === HELPER.id);
+      if (row) row.privacy_mode = mode;
+    },
+  });
 }
 
 async function openInvite(page: Page) {
@@ -452,6 +457,22 @@ test("a group administrator explicitly grants and revokes full bot visibility", 
   await row.getByRole("button", { name: "Ограничить доступ бота" }).click();
   await expect.poll(() => fixture.rpcBodies("chat_bot_set_privacy")).toHaveLength(2);
   await expect(row.getByTestId("chat-info-bot-access")).toContainText("Видит только обращения к нему");
+});
+
+test("an open group panel refreshes bot visibility after another administrator changes it", async ({ page }) => {
+  const fixture = await openPanel(page, {
+    joined: [{ chat_id: GROUP, privacy_mode: "restricted", bot: HELPER }],
+  });
+  const access = memberBots(page).getByTestId("chat-info-bot-access");
+  await expect(access).toContainText("Видит только обращения к нему");
+
+  fixture.setRemotePrivacy("full");
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(access).toContainText("Видит все сообщения группы");
+
+  fixture.setRemotePrivacy("restricted");
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(access).toContainText("Видит только обращения к нему");
 });
 
 test("an ordinary group member cannot change bot visibility", async ({ page }) => {

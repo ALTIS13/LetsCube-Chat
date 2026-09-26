@@ -8,7 +8,7 @@ import { BotSettingsPanel } from "@/components/bots/BotSettingsPanel";
 import { BotTokenDialog, type BotTokenDialogHandle } from "@/components/bots/BotTokenDialog";
 import { KubBadge, KubButton, KubEmptyState, KubHeader, KubIcon } from "@/components/kub";
 import { useBotDetail, useBots } from "@/hooks/useBots";
-import type { BotSummary } from "@/lib/botManagement";
+import { BotManagementError, type BotSummary } from "@/lib/botManagement";
 import { describeCreationBlock } from "@/lib/botCreationBlock";
 import { cn } from "@/lib/utils";
 
@@ -112,7 +112,7 @@ export function BotsPage() {
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-safe">
                 {detail.isLoading && <DetailSkeleton />}
-                {detail.isError && <div role="alert" className="m-4 rounded-md border border-[color:var(--kub-danger)]/40 p-4 text-sm sm:m-6"><div>Не удалось загрузить настройки бота.</div><KubButton variant="secondary" className="mt-3 min-h-11" onClick={() => void detail.refetch()}>Повторить</KubButton></div>}
+                {detail.isError && <div role="alert" className="m-4 rounded-md border border-[color:var(--kub-danger)]/40 p-4 text-sm sm:m-6"><div>{detail.error instanceof BotManagementError ? detail.error.message : "Не удалось загрузить настройки бота."}</div><KubButton variant="secondary" className="mt-3 min-h-11" onClick={() => void detail.refetch()}>Повторить</KubButton></div>}
                 {detail.data && <BotSettingsPanel detail={detail.data} onToken={(token) => tokenDialog.current?.show(token)} />}
               </div>
             </>

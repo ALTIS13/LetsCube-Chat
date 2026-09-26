@@ -117,9 +117,14 @@ export const BOT_API_METHOD_GROUPS: readonly BotApiMethodGroup[] = [
         input: "chat_id, text, idempotency_key",
       },
       {
-        name: "sendPhoto / sendVideo / sendDocument / sendVoice",
-        summary: "Отправка ранее разрешенного объекта chat-media.",
-        input: "chat_id, media, idempotency_key",
+        name: "sendPhoto",
+        summary: "Фото из JPEG, PNG, WebP или GIF до 6 МиБ: загрузка байтов, доступный объект chat-media или повторная отправка по file_id из того же чата.",
+        input: "chat_id, одно из photo / media / file_id, idempotency_key",
+      },
+      {
+        name: "sendVideo / sendDocument / sendVoice",
+        summary: "Отправка разрешенного объекта chat-media или повторная отправка по file_id из того же чата.",
+        input: "chat_id, одно из media / file_id, idempotency_key",
       },
       {
         name: "sendChatAction",
@@ -182,6 +187,16 @@ export const BOT_COMMANDS_EXAMPLE = `{
     { "command": "help", "description": "Доступные команды" }
   ],
   "idempotency_key": "commands-20260831-01"
+}`;
+
+export const BOT_PHOTO_EXAMPLE = `{
+  "chat_id": "11111111-1111-4111-8111-111111111111",
+  "photo": {
+    "mime_type": "image/png",
+    "bytes_base64": "<base64-содержимое PNG>"
+  },
+  "caption": "Готово",
+  "idempotency_key": "photo-20260926-01"
 }`;
 
 export const BOT_CALLBACK_EXAMPLE = `{
