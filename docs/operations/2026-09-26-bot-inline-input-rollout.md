@@ -37,8 +37,8 @@ transport was added.
   mobile WebKit. It checks private and group input, actual `messages` POST
   payloads, callback preservation and layout placement. The WebKit suite's
   final run passed 27/27; the focused new cases passed 6/6 after the last edit.
-- Commit `7d33fabb` is on `main`. The production web and Bot Gateway each run
-  a single healthy image tagged with that commit. The public web asset returns
+- Commit `7d33fabb` is on `main`. At the initial rollout, production web and
+  Bot Gateway each had a single healthy image tagged with that commit. The public web asset returns
   HTTP 200 and contains the group-visibility copy. The running gateway bundle
   contains `input_field_placeholder`. The worker and support-mail deployments
   also finished healthy after their API-server watch path changed.

@@ -243,6 +243,58 @@ const answerCallbackQuerySchema = z
   })
   .strict();
 
+const viewerButtonSchema = z
+  .object({
+    key: z.string().min(1).max(32).regex(/^[A-Za-z0-9._:-]+$/),
+    text: z.string().min(1).max(64),
+    callback_data: z.string().min(1).refine((value) => Buffer.byteLength(value, "utf8") <= 128),
+  })
+  .strict();
+
+export const viewerInterfaceStateSchema = z
+  .object({
+    title: z.string().min(1).max(64).refine((value) => value.trim().length > 0),
+    body: z.string().max(512).optional(),
+    progress: z.number().int().min(0).max(100).optional(),
+    buttons: z.array(z.array(viewerButtonSchema).min(1).max(6)).max(3).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const keys = new Set<string>();
+    let count = 0;
+    for (const row of value.buttons ?? []) {
+      for (const button of row) {
+        count += 1;
+        if (keys.has(button.key)) {
+          context.addIssue({ code: z.ZodIssueCode.custom, message: "duplicate_viewer_button_key" });
+        }
+        keys.add(button.key);
+      }
+    }
+    if (count > 6) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "too_many_viewer_buttons" });
+    }
+  });
+
+const setViewerInterfaceSchema = z
+  .object({
+    callback_query_id: uuidSchema,
+    state: viewerInterfaceStateSchema,
+    idempotency_key: idempotencyKeySchema,
+  })
+  .strict();
+
+const editViewerInterfaceSchema = z
+  .object({
+    interface_id: uuidSchema,
+    expected_version: z.number().int().min(1).max(2_147_483_647),
+    state: viewerInterfaceStateSchema,
+    idempotency_key: idempotencyKeySchema,
+  })
+  .strict();
+
+const closeViewerInterfaceSchema = editViewerInterfaceSchema.omit({ state: true });
+
 const webhookUrlSchema = z
   .string()
   .min(1)
@@ -321,6 +373,9 @@ export const botMethodSchemas = {
   setMyCommands: setMyCommandsSchema,
   getMyCommands: emptySchema,
   answerCallbackQuery: answerCallbackQuerySchema,
+  setViewerInterface: setViewerInterfaceSchema,
+  editViewerInterface: editViewerInterfaceSchema,
+  closeViewerInterface: closeViewerInterfaceSchema,
   setWebhook: setWebhookSchema,
   deleteWebhook: deleteWebhookSchema,
   getUpdates: getUpdatesSchema,

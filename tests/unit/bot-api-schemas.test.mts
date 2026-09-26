@@ -50,6 +50,9 @@ const EXPECTED_METHODS = [
   "setMyCommands",
   "getMyCommands",
   "answerCallbackQuery",
+  "setViewerInterface",
+  "editViewerInterface",
+  "closeViewerInterface",
   "setWebhook",
   "deleteWebhook",
   "getUpdates",
@@ -67,6 +70,75 @@ test("method registry is closed and every declared method has a strict schema", 
     /bot_method_not_found/,
   );
   assert.throws(() => parseBotMethodInput("getMe", { extra: true }));
+});
+
+test("viewer interface accepts bounded panel state for one callback", () => {
+  const state = {
+    title: "Processing",
+    body: "Step one",
+    progress: 25,
+    buttons: [[{ key: "cancel", text: "Cancel", callback_data: "stop:1" }]],
+  };
+  assert.deepEqual(
+    parseBotMethodInput("setViewerInterface", {
+      callback_query_id: MESSAGE_ID,
+      state,
+      idempotency_key: "panel:create:1",
+    }).state,
+    state,
+  );
+  assert.equal(
+    parseBotMethodInput("editViewerInterface", {
+      interface_id: MESSAGE_ID,
+      expected_version: 1,
+      state: { title: "Complete", progress: 100 },
+      idempotency_key: "panel:edit:1",
+    }).expected_version,
+    1,
+  );
+  assert.equal(
+    parseBotMethodInput("closeViewerInterface", {
+      interface_id: MESSAGE_ID,
+      expected_version: 2,
+      idempotency_key: "panel:close:1",
+    }).expected_version,
+    2,
+  );
+});
+
+test("viewer interface rejects ambiguous state and unbounded actions", () => {
+  const base = {
+    callback_query_id: MESSAGE_ID,
+    idempotency_key: "panel:reject:1",
+  };
+  const validButton = { key: "go", text: "Go", callback_data: "next" };
+  for (const state of [
+    { title: " ", buttons: [] },
+    { title: "T", html: "<script>" },
+    { title: "T", body: "x".repeat(513) },
+    { title: "T", progress: 101 },
+    { title: "T", progress: -1 },
+    { title: "T", progress: 0.5 },
+    { title: "T", buttons: [[validButton, { ...validButton }]] },
+    { title: "T", buttons: [[{ ...validButton, callback_data: "x".repeat(129) }]] },
+    { title: "T", buttons: [[{ ...validButton, callback_data: "🚀".repeat(33) }]] },
+    { title: "T", buttons: [Array.from({ length: 7 }, (_, index) => ({ ...validButton, key: `go${index}` }))] },
+    { title: "T", buttons: [[validButton], [validButton], [validButton], [validButton]] },
+  ]) {
+    assert.equal(
+      botMethodSchemas.setViewerInterface.safeParse({ ...base, state }).success,
+      false,
+      JSON.stringify(state),
+    );
+  }
+  assert.equal(
+    botMethodSchemas.setViewerInterface.safeParse({ ...base, state: { title: "T" }, viewer_id: CHAT_ID }).success,
+    false,
+  );
+  assert.equal(
+    botMethodSchemas.editViewerInterface.safeParse({ interface_id: MESSAGE_ID, expected_version: 0, state: { title: "T" }, idempotency_key: "panel:edit:2" }).success,
+    false,
+  );
 });
 
 test("sendMessage accepts bounded text and keyboard callback data", () => {

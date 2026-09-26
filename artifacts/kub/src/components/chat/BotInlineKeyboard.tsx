@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 
 import { KubIcon } from "@/components/kub";
 import { showActionFeedback } from "@/lib/actionFeedback";
@@ -10,9 +10,15 @@ import {
   botButtonKey,
   type BotInlineKeyboard as BotInlineKeyboardRows,
 } from "@/lib/botChatSurfaces";
-import { botCallbackDoorMissing, pressBotCallback } from "@/lib/botCallback";
+import {
+  botViewerAccountStillCurrent,
+  botViewerOriginalDoorMissing,
+  pressBotViewerOriginal,
+  waitForBotViewerAnswer,
+} from "@/lib/botViewerInterface";
 import { DISABLED_SINK, FOCUS_RING, PRESS_SINK_RAISED } from "@/lib/controlSurface";
 import { cn } from "@/lib/utils";
+import { BotViewerContext } from "./BotViewerPanel";
 
 /**
  * The buttons a bot laid out under its message (D-125).
@@ -63,55 +69,59 @@ export function BotInlineKeyboard({
     setDraft("");
   }, [inputFieldPlaceholder, messageId]);
   const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set());
+  const viewer = useContext(BotViewerContext);
   const pendingRef = useRef(new Set<string>());
-  const requestsRef = useRef(new Set<AbortController>());
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      for (const request of requestsRef.current) request.abort();
-      requestsRef.current.clear();
-    };
+    return () => { mountedRef.current = false; };
   }, []);
   /**
    * A server without the press RPC cannot accept any button in this chat.
    * Cache that capability after the first missing-function response.
    */
-  const [doorMissing, setDoorMissing] = useState(() => botCallbackDoorMissing());
+  const [doorMissing, setDoorMissing] = useState(() => botViewerOriginalDoorMissing());
 
   const press = useCallback(
     async (key: string, callbackData: string) => {
       if (pendingRef.current.has(key) || doorMissing) return;
       pendingRef.current.add(key);
       setPending(new Set(pendingRef.current));
-      const request = new AbortController();
-      requestsRef.current.add(request);
+      const signal = viewer?.signal();
       try {
-        const result = await pressBotCallback({ messageId, callbackData, signal: request.signal });
-        if (!mountedRef.current || result.kind === "cancelled") return;
-        if (result.kind === "answered") {
-          if (result.answer.alert) showAppAlert(result.answer.text, "Бот", "alert", result.accountId);
+        const result = await pressBotViewerOriginal(messageId, callbackData, signal);
+        if (result.kind === "cancelled" || signal?.aborted) return;
+        if (result.kind === "accepted") {
+          const [answer, panelReceived] = await Promise.all([
+            waitForBotViewerAnswer(result.callbackId, result.accountId, signal),
+            result.callbackId && viewer
+              ? viewer.waitForCallback(result.callbackId, result.accountId, signal)
+              : Promise.resolve(false),
+          ]);
+          if (signal?.aborted || (viewer ? !viewer.isCurrent(result.accountId) : !mountedRef.current) || !await botViewerAccountStillCurrent(result.accountId)) return;
+          if (panelReceived) return;
+          if (answer.alert) showAppAlert(answer.text, "Бот", "alert", result.accountId);
           else showActionFeedback({
             kind: "info",
-            title: result.answer.text,
+            title: answer.text,
             key: `bot-callback:${messageId}:${key}`,
             ownerUserId: result.accountId,
           });
           return;
         }
         if (result.failure === "missing") {
-          setDoorMissing(true);
+          if (mountedRef.current) setDoorMissing(true);
           return;
         }
-        showActionFeedback({ kind: "error", title: result.message, key: `bot-callback:${messageId}:error` });
+        if (!signal?.aborted && (viewer ? viewer.isCurrent() : mountedRef.current)) {
+          showActionFeedback({ kind: "error", title: result.message, key: `bot-callback:${messageId}:error` });
+        }
       } finally {
-        requestsRef.current.delete(request);
         pendingRef.current.delete(key);
         if (mountedRef.current) setPending(new Set(pendingRef.current));
       }
     },
-    [doorMissing, messageId],
+    [doorMissing, messageId, viewer],
   );
 
   return (
@@ -232,7 +242,7 @@ export function BotInlineKeyboard({
               aria-label="Отправить ответ боту"
               disabled={!onInputSubmit || !draft.trim()}
               className={cn(
-                "kub-interactive flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--kub-cyan)] text-white [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11",
+                "kub-interactive flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--kub-cyan)] text-[color:var(--kub-bg)] [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11",
                 FOCUS_RING,
                 DISABLED_SINK,
               )}

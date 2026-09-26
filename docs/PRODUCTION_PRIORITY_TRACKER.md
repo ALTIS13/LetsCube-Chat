@@ -2217,14 +2217,25 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     submits the text as an ordinary reply (`reply_to_id`) and warns in groups
     that participants will see it. This closes the shared text-input gap,
     **not** the private, temporary per-viewer interface. Both SQL migrations
-    were backed up, rehearsed and applied with post-apply smoke; the web and
-    Bot Gateway run healthy `7d33fabb` images. Browser fixtures exercise
+    were backed up, rehearsed and applied with post-apply smoke; the initial
+    web and Bot Gateway rollout reached healthy `7d33fabb` images. Browser fixtures exercise
     private/group replies and existing button callbacks. A controlled QA bot
     then sent the new prompt through the public Bot API, the QA client read
     it and replied, and the bot received that exact reply through `getUpdates`;
     both test messages were removed and the token revoked. Older installed
     Android visual confirmation remains separate.
     [Rollout](operations/2026-09-26-bot-inline-input-rollout.md).
+
+    **2026-09-27 private viewer panel V1.** A source-only implementation now
+    offers a short-lived panel to the one member who pressed a bot callback;
+    it is neither a group message nor private text input. The migration passed
+    apply, actor/delivery smoke and rollback on an isolated restored database;
+    bot tests passed 303/303 and the browser fixture matrix passed 60/60. A
+    revoked panel is rechecked after webhook DNS validation before HTTP starts.
+    No production SQL or deploy has been performed for this stage. The existing
+    Windows Test channel does not isolate the shared web/backend/PWA, so the
+    owner chose the established backup, guarded deploy and QA-canary path.
+    [Release gates](operations/2026-09-27-bot-viewer-rollout.md).
 
 
 49. `[x]` Public-route call controls, repaired 2026-09-21.

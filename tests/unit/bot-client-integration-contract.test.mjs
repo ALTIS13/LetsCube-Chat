@@ -76,7 +76,9 @@ test("shared notification adapters preserve actor and exact navigation fields", 
   assert.match(desktop, /senderAvatarUrl/);
   assert.match(browser, /parseMessageNotificationProjection/);
   assert.match(desktop, /messageProjection\.messageId|messageProjection\?\.messageId/);
-  for (const key of ["sender_kind", "sender_id", "bot_id", "sender_name", "sender_avatar_url"]) {
+  for (const key of ["chat_id", "message_id", "group_tag", "route"]) {
     assert.match(fcm, new RegExp(key));
   }
+  assert.match(fcm, /nativePushDisplay/);
+  assert.doesNotMatch(fcm, /sender_kind|sender_id|sender_name|sender_avatar_url|bot_id/);
 });

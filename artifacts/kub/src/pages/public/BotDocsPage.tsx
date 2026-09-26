@@ -11,6 +11,7 @@ import {
   BOT_PHOTO_EXAMPLE,
   BOT_SUCCESS_EXAMPLE,
   BOT_UPDATE_EXAMPLE,
+  BOT_VIEWER_INTERFACE_EXAMPLE,
 } from "@/content/botApiDocs";
 import { PublicPageShell } from "./PublicPageShell";
 
@@ -193,9 +194,20 @@ export function BotDocsPage() {
                 бота, а не приватным callback: в группе его увидят участники чата. Клиенты без
                 поддержки поля продолжают показывать кнопки.
               </p>
+              <p className="mt-3 text-sm leading-7 text-[color:var(--kub-muted)]">
+                После callback_query бот может открыть временную панель через setViewerInterface.
+                Её видит только нажавший человек: панель не становится сообщением, не вызывает
+                уведомление и исчезает не позднее чем через 15 минут. В ней доступны текст,
+                прогресс и до шести кнопок в трёх рядах. editViewerInterface и
+                closeViewerInterface требуют актуальную expected_version; изменение не продлевает
+                срок. Для старых клиентов также отправьте краткий answerCallbackQuery: они
+                сохраняют обычные кнопки, но приватную панель не показывают. Не запрашивайте
+                секреты через reply_markup.input_field_placeholder в группе: его ответ виден всем.
+              </p>
               <div className="mt-5 grid gap-5 xl:grid-cols-2">
                 <CodeBlock title="setMyCommands" code={BOT_COMMANDS_EXAMPLE} />
                 <CodeBlock title="sendMessage с полем и кнопками" code={BOT_CALLBACK_EXAMPLE} />
+                <CodeBlock title="setViewerInterface" code={BOT_VIEWER_INTERFACE_EXAMPLE} />
               </div>
             </DocSection>
 

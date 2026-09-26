@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, type CSSProperties, type DragEvent } from "react";
 import { ChatHeader } from "./ChatHeader";
+import { BotViewerContext, BotViewerPanel, useBotViewerPanels } from "./BotViewerPanel";
 import { PinnedMessage } from "./PinnedMessage";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
@@ -150,6 +151,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   // this chat does.
   const chat = useAppStore((s) => s.chats.find((c) => c.id === chatId));
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  const botViewer = useBotViewerPanels(chatId, userId);
   const markChatRead = useAppStore((s) => s.markChatRead);
   const setEditingMessage = useAppStore((s) => s.setEditingMessage);
   const setForwardingMessages = useAppStore((s) => s.setForwardingMessages);
@@ -1605,6 +1607,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
   return (
     <ChatMediaPlaybackProvider chatId={chatId} playlist={mediaPlaylist}>
+      <BotViewerContext.Provider value={botViewer.context}>
       <div
         // The pane paints no fill of its own. It used to paint --kub-chat-bg,
         // which never showed, and was the flat sheet behind the header and the
@@ -1919,6 +1922,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             }
           />
         </div>
+        <BotViewerPanel viewer={botViewer} />
       </div>
       {showInfo && chat && (
         <ChatInfoPanel
@@ -2024,6 +2028,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           } : undefined}
         />
       </div>
+      </BotViewerContext.Provider>
     </ChatMediaPlaybackProvider>
   );
 }

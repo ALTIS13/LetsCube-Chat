@@ -448,6 +448,7 @@ export async function deliverWebhook(input: {
   secret: string;
   resolver?: WebhookResolver;
   transport?: WebhookTransport;
+  beforeTransport?: () => Promise<WebhookDeliveryResult | null>;
   perHopTimeoutMs?: number;
 }): Promise<WebhookDeliveryResult> {
   const resolver = input.resolver ?? resolveWebhookHostname;
@@ -491,6 +492,10 @@ export async function deliverWebhook(input: {
 
     let response: WebhookTransportResult;
     try {
+      if (input.beforeTransport) {
+        const decision = await withinDeadline(input.beforeTransport(), hopDeadline);
+        if (decision) return decision;
+      }
       const remainingTimeoutMs = hopDeadline - Date.now();
       if (remainingTimeoutMs <= 0) {
         throw new WebhookTransportError("webhook_timeout");

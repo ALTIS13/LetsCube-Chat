@@ -25,6 +25,8 @@ export type PreparedWebhookClaim = {
   payload: Record<string, unknown>;
 };
 
+type ViewerDeliveryCheck = "allowed" | "revoked" | "stale";
+
 export interface WebhookWorkerRepository {
   claim(input: { limit: number; claimToken: string }): Promise<WebhookClaim[]>;
   prepare(input: {
@@ -32,6 +34,7 @@ export interface WebhookWorkerRepository {
     claimToken: string;
     webhookEpoch: number;
   }): Promise<PreparedWebhookClaim | null>;
+  recheckViewer(input: { attemptId: number; claimToken: string }): Promise<ViewerDeliveryCheck>;
   finish(input: {
     attemptId: number;
     claimToken: string;
@@ -40,6 +43,7 @@ export interface WebhookWorkerRepository {
     httpStatus: number | null;
   }): Promise<boolean>;
   cleanup(input: { now: string; limit: number }): Promise<unknown>;
+  cleanupViewer(input: { now: string; limit: number }): Promise<unknown>;
 }
 
 function safeInteger(value: unknown, minimum: number, maximum: number): number {
@@ -135,6 +139,16 @@ export function createWebhookWorkerRepository(
         payload: row.payload as Record<string, unknown>,
       };
     },
+    async recheckViewer(input) {
+      const value = await rpc(client, "bot_viewer_delivery_recheck_internal", {
+        p_attempt_id: input.attemptId,
+        p_claim_token: input.claimToken,
+      });
+      if (value !== "allowed" && value !== "revoked" && value !== "stale") {
+        throw new Error("webhook_worker_rpc_invalid");
+      }
+      return value;
+    },
     async finish(input) {
       const value = await rpc(client, "bot_delivery_finish_internal", {
         p_attempt_id: input.attemptId,
@@ -147,6 +161,12 @@ export function createWebhookWorkerRepository(
     },
     async cleanup(input) {
       return rpc(client, "bot_delivery_cleanup_internal", {
+        p_now: input.now,
+        p_limit: input.limit,
+      });
+    },
+    async cleanupViewer(input) {
+      return rpc(client, "bot_viewer_interface_cleanup_internal", {
         p_now: input.now,
         p_limit: input.limit,
       });
@@ -172,6 +192,12 @@ async function finishSafely(
   }
 }
 
+function hasViewerCallback(payload: Record<string, unknown>): boolean {
+  const callback = payload.callback_query;
+  return callback !== null && typeof callback === "object" && !Array.isArray(callback)
+    && Object.prototype.hasOwnProperty.call(callback, "viewer_interface_id");
+}
+
 export async function runWebhookDeliveryBatch(input: {
   repository: WebhookWorkerRepository;
   encryptionKey: Uint8Array;
@@ -182,6 +208,7 @@ export async function runWebhookDeliveryBatch(input: {
     url: string;
     payload: Record<string, unknown>;
     secret: string;
+    beforeTransport?: () => Promise<WebhookDeliveryResult | null>;
   }) => Promise<WebhookDeliveryResult>;
 }): Promise<WebhookBatchResult> {
   const result: WebhookBatchResult = {
@@ -227,12 +254,46 @@ export async function runWebhookDeliveryBatch(input: {
       continue;
     }
 
+    const beforeTransport = hasViewerCallback(prepared.payload)
+      ? async (): Promise<WebhookDeliveryResult | null> => {
+          let decision: ViewerDeliveryCheck;
+          try {
+            decision = await input.repository.recheckViewer({
+              attemptId: claim.attemptId,
+              claimToken: input.claimToken,
+            });
+          } catch {
+            return { kind: "retry", errorCode: "viewer_recheck_unavailable", httpStatus: null };
+          }
+          if (decision === "allowed") return null;
+          return decision === "revoked"
+            ? { kind: "dead_letter", errorCode: "privacy_revoked", httpStatus: null }
+            : { kind: "retry", errorCode: "viewer_claim_stale", httpStatus: null };
+        }
+      : undefined;
+    const earlyDecision = beforeTransport ? await beforeTransport() : null;
+    if (earlyDecision) {
+      const finished = await finishSafely(input.repository, {
+        attemptId: claim.attemptId,
+        claimToken: input.claimToken,
+        status: earlyDecision.kind,
+        errorCode: earlyDecision.errorCode,
+        httpStatus: earlyDecision.httpStatus,
+      });
+      if (finished) {
+        if (earlyDecision.kind === "dead_letter") result.deadLettered += 1;
+        else result.retried += 1;
+      }
+      continue;
+    }
+
     let delivery: WebhookDeliveryResult;
     try {
       delivery = await (input.deliver ?? deliverWebhook)({
         url: prepared.targetUrl,
         payload: { ...prepared.payload, update_id: claim.updateId },
         secret,
+        beforeTransport,
       });
     } catch {
       delivery = {
@@ -277,6 +338,7 @@ export function createWebhookWorkerRuntime(input: {
   let running = false;
   let timer: NodeJS.Timeout | undefined;
   let lastCleanupAt = 0;
+  let viewerCatchUpPending = false;
 
   const schedule = (): void => {
     if (stopped) return;
@@ -288,7 +350,8 @@ export function createWebhookWorkerRuntime(input: {
     running = true;
     try {
       const current = now();
-      if (current.getTime() - lastCleanupAt >= cleanupIntervalMs) {
+      const cleanupDue = current.getTime() - lastCleanupAt >= cleanupIntervalMs;
+      if (cleanupDue) {
         try {
           await input.repository.cleanup({
             now: current.toISOString(),
@@ -298,6 +361,34 @@ export function createWebhookWorkerRuntime(input: {
           // Retention failure must not starve due webhook delivery.
         }
         lastCleanupAt = current.getTime();
+      }
+      if (cleanupDue || viewerCatchUpPending) {
+        viewerCatchUpPending = false;
+        try {
+          const result = await input.repository.cleanupViewer({
+            now: current.toISOString(),
+            limit: 1_000,
+          });
+          if (result && typeof result === "object" && !Array.isArray(result)) {
+            const counts = result as Record<string, unknown>;
+            const grants = counts.grants_deleted;
+            const panels = counts.panels_deleted;
+            if (
+              typeof grants === "number" &&
+              Number.isInteger(grants) &&
+              grants >= 0 &&
+              grants <= 1_000 &&
+              typeof panels === "number" &&
+              Number.isInteger(panels) &&
+              panels >= 0 &&
+              panels <= 1_000
+            ) {
+              viewerCatchUpPending = grants === 1_000 || panels === 1_000;
+            }
+          }
+        } catch {
+          // Panel expiry is checked on reads; cleanup only reclaims storage.
+        }
       }
       await runWebhookDeliveryBatch({
         repository: input.repository,

@@ -157,6 +157,21 @@ export const BOT_API_METHOD_GROUPS: readonly BotApiMethodGroup[] = [
         summary: "Подтверждает нажатие callback-кнопки.",
         input: "callback_query_id, idempotency_key",
       },
+      {
+        name: "setViewerInterface",
+        summary: "Открывает на 15 минут приватную панель только для человека, нажавшего кнопку.",
+        input: "callback_query_id, state, idempotency_key",
+      },
+      {
+        name: "editViewerInterface",
+        summary: "Обновляет свою панель по текущей версии, не продлевая срок действия.",
+        input: "interface_id, expected_version, state, idempotency_key",
+      },
+      {
+        name: "closeViewerInterface",
+        summary: "Закрывает свою панель по текущей версии.",
+        input: "interface_id, expected_version, idempotency_key",
+      },
     ],
   },
   {
@@ -210,6 +225,19 @@ export const BOT_CALLBACK_EXAMPLE = `{
     "input_field_placeholder": "Или напишите ответ"
   },
   "idempotency_key": "confirmation-42"
+}`;
+
+export const BOT_VIEWER_INTERFACE_EXAMPLE = `{
+  "callback_query_id": "22222222-2222-4222-8222-222222222222",
+  "state": {
+    "title": "Подготовка отчёта",
+    "body": "Собираем данные",
+    "progress": 25,
+    "buttons": [[
+      { "key": "cancel", "text": "Отменить", "callback_data": "cancel:report:42" }
+    ]]
+  },
+  "idempotency_key": "report-panel-42"
 }`;
 
 export const BOT_UPDATE_EXAMPLE = `{

@@ -550,6 +550,15 @@ function createRepository(overrides: Partial<BotMethodRepository> = {}): {
     async answerCallback() {
       return { result: true, duplicate: false };
     },
+    async setViewerInterface() {
+      return { result: { interface_id: MESSAGE_ID, version: 1, expires_at: "2026-09-26T12:15:00Z" }, duplicate: false };
+    },
+    async editViewerInterface() {
+      return { result: { interface_id: MESSAGE_ID, version: 2, expires_at: "2026-09-26T12:15:00Z" }, duplicate: false };
+    },
+    async closeViewerInterface() {
+      return { result: { interface_id: MESSAGE_ID, version: 3, closed_at: "2026-09-26T12:10:00Z" }, duplicate: false };
+    },
     ...overrides,
   };
   return { repository, commands, authorizations, preflights, events };
@@ -761,6 +770,60 @@ test("commands and callback answers bind idempotency to a cryptographic fingerpr
     (calls[0] as any).requestFingerprint,
     (calls[1] as any).requestFingerprint,
   );
+});
+
+test("viewer methods bind the authenticated token and return no viewer or callback data", async (t) => {
+  const calls: Array<Record<string, unknown>> = [];
+  const { repository } = createRepository({
+    async setViewerInterface(input) {
+      calls.push(input);
+      return {
+        result: { interface_id: MESSAGE_ID, version: 1, expires_at: "2026-09-26T12:15:00Z", viewer_id: CHAT_ID, callback_data: "private" },
+        duplicate: false,
+      };
+    },
+    async editViewerInterface(input) {
+      calls.push(input);
+      return { result: { interface_id: MESSAGE_ID, version: 2, expires_at: "2026-09-26T12:15:00Z" }, duplicate: false };
+    },
+    async closeViewerInterface(input) {
+      calls.push(input);
+      return { result: { interface_id: MESSAGE_ID, version: 3, closed_at: "2026-09-26T12:10:00Z" }, duplicate: false };
+    },
+  });
+  const handlers = createTask3MethodHandlers({
+    repository,
+    fingerprint: (method, input) => createBotRequestFingerprint(PEPPER, method, input),
+    publishChatAction: async () => undefined,
+  });
+  const server = await listen(createTestApp(handlers));
+  t.after(() => close(server));
+  const payloads = [
+    ["setViewerInterface", { callback_query_id: CALLBACK_ID, state: { title: "Working", buttons: [[{ key: "stop", text: "Stop", callback_data: "secret" }]] }, idempotency_key: "viewer:set:1" }],
+    ["editViewerInterface", { interface_id: MESSAGE_ID, expected_version: 1, state: { title: "Done" }, idempotency_key: "viewer:edit:1" }],
+    ["closeViewerInterface", { interface_id: MESSAGE_ID, expected_version: 2, idempotency_key: "viewer:close:1" }],
+  ] as const;
+  for (const [method, payload] of payloads) {
+    const body = JSON.stringify(payload);
+    const response = await call(server, `/bot/v1/${method}`, {
+      method: "POST",
+      headers: { authorization: AUTHORIZATION, "content-type": "application/json", "content-length": Buffer.byteLength(body).toString() },
+      body,
+    });
+    assert.equal(response.status, 200, JSON.stringify(response));
+    assert.equal(JSON.stringify(response.body).includes("viewer_id"), false);
+    assert.equal(JSON.stringify(response.body).includes("callback_data"), false);
+    assert.equal(JSON.stringify(response.body).includes("private"), false);
+  }
+  assert.equal(calls.length, 3);
+  for (const call of calls) {
+    assert.equal(call.botId, BOT_ID);
+    assert.equal(call.tokenId, TOKEN_ID);
+    assert.match(String(call.requestFingerprint), /^[0-9a-f]{64}$/);
+  }
+  assert.equal(calls[0]?.callbackQueryId, CALLBACK_ID);
+  assert.equal(calls[1]?.expectedVersion, 1);
+  assert.equal(calls[2]?.expectedVersion, 2);
 });
 
 test("edit without reply_markup omits the key so SQL can normalize it to clear", async () => {

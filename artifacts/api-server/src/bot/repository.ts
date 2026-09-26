@@ -8,6 +8,7 @@ import {
   verifyBotTokenHash,
 } from "#bot/tokenAuth";
 import { MAX_INLINE_PHOTO_BYTES } from "#bot/schemas";
+import type { BotMethodInputMap } from "#bot/schemas";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -104,6 +105,26 @@ export type BotFileMetadata = {
   sizeBytes: number | null;
 };
 
+export type BotViewerActiveReceipt = {
+  interface_id: string;
+  version: number;
+  expires_at: string;
+};
+
+export type BotViewerClosedReceipt = {
+  interface_id: string;
+  version: number;
+  closed_at: string;
+};
+
+type BotViewerState = BotMethodInputMap["setViewerInterface"]["state"];
+type BotViewerWriteBase = {
+  botId: string;
+  tokenId: string;
+  idempotencyKey: string;
+  requestFingerprint: string;
+};
+
 export interface BotMethodRepository {
   getMe(botId: string): Promise<unknown>;
   preflightMediaCommand(input: {
@@ -160,6 +181,19 @@ export interface BotMethodRepository {
     idempotencyKey: string;
     requestFingerprint: string;
   }): Promise<BotOperationResult<boolean>>;
+  setViewerInterface(input: BotViewerWriteBase & {
+    callbackQueryId: string;
+    state: BotViewerState;
+  }): Promise<BotOperationResult<BotViewerActiveReceipt>>;
+  editViewerInterface(input: BotViewerWriteBase & {
+    interfaceId: string;
+    expectedVersion: number;
+    state: BotViewerState;
+  }): Promise<BotOperationResult<BotViewerActiveReceipt>>;
+  closeViewerInterface(input: BotViewerWriteBase & {
+    interfaceId: string;
+    expectedVersion: number;
+  }): Promise<BotOperationResult<BotViewerClosedReceipt>>;
 }
 
 type TokenLookupRow = {
@@ -297,7 +331,7 @@ export async function authenticateBotToken(
   return repository.authenticateBotToken(header);
 }
 
-function databaseError(error: unknown): BotApiError {
+function databaseError(error: unknown, method: string): BotApiError {
   const code =
     error && typeof error === "object" && "code" in error
       ? (error as { code?: unknown }).code
@@ -310,6 +344,11 @@ function databaseError(error: unknown): BotApiError {
       return new BotApiError("forbidden");
     case "23505":
       return new BotApiError("conflict");
+    case "40001":
+    case "54000":
+      return method.startsWith("bot_viewer_interface_")
+        ? new BotApiError("conflict")
+        : internalError();
     case "P0002":
       return new BotApiError("not_found");
     default:
@@ -328,7 +367,7 @@ async function callRpc(
   } catch {
     throw internalError();
   }
-  if (response.error) throw databaseError(response.error);
+  if (response.error) throw databaseError(response.error, name);
   return response.data;
 }
 
@@ -341,6 +380,48 @@ function operationResult<T>(value: unknown): BotOperationResult<T> {
     throw internalError();
   }
   return { result: row.result as T, duplicate: row.duplicate };
+}
+
+export function projectBotViewerReceipt(value: unknown, kind: "active"): BotViewerActiveReceipt;
+export function projectBotViewerReceipt(value: unknown, kind: "closed"): BotViewerClosedReceipt;
+export function projectBotViewerReceipt(
+  value: unknown,
+  kind: "active" | "closed",
+): BotViewerActiveReceipt | BotViewerClosedReceipt {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw internalError();
+  }
+  const row = value as Record<string, unknown>;
+  const timestamp = kind === "active" ? row.expires_at : row.closed_at;
+  if (
+    typeof row.interface_id !== "string" ||
+    !UUID_RE.test(row.interface_id) ||
+    typeof row.version !== "number" ||
+    !Number.isSafeInteger(row.version) ||
+    row.version < 1 ||
+    typeof timestamp !== "string" ||
+    !Number.isFinite(Date.parse(timestamp))
+  ) {
+    throw internalError();
+  }
+  return kind === "active"
+    ? { interface_id: row.interface_id, version: row.version, expires_at: timestamp }
+    : { interface_id: row.interface_id, version: row.version, closed_at: timestamp };
+}
+
+function viewerOperationResult(value: unknown, kind: "active"): BotOperationResult<BotViewerActiveReceipt>;
+function viewerOperationResult(value: unknown, kind: "closed"): BotOperationResult<BotViewerClosedReceipt>;
+function viewerOperationResult(
+  value: unknown,
+  kind: "active" | "closed",
+): BotOperationResult<BotViewerActiveReceipt | BotViewerClosedReceipt> {
+  const operation = operationResult<unknown>(value);
+  return {
+    result: kind === "active"
+      ? projectBotViewerReceipt(operation.result, "active")
+      : projectBotViewerReceipt(operation.result, "closed"),
+    duplicate: operation.duplicate,
+  };
 }
 
 const METHOD_BY_KIND: Record<BotMessageCommand["kind"], string> = {
@@ -610,6 +691,49 @@ export function createBotMethodRepository(
           p_idempotency_key: input.idempotencyKey,
           p_request_fingerprint: input.requestFingerprint,
         }),
+      );
+    },
+
+    async setViewerInterface(input) {
+      return viewerOperationResult(
+        await callRpc(client, "bot_viewer_interface_set_internal", {
+          p_bot_id: input.botId,
+          p_token_id: input.tokenId,
+          p_callback_query_id: input.callbackQueryId,
+          p_state: input.state,
+          p_idempotency_key: input.idempotencyKey,
+          p_request_fingerprint: input.requestFingerprint,
+        }),
+        "active",
+      );
+    },
+
+    async editViewerInterface(input) {
+      return viewerOperationResult(
+        await callRpc(client, "bot_viewer_interface_edit_internal", {
+          p_bot_id: input.botId,
+          p_token_id: input.tokenId,
+          p_interface_id: input.interfaceId,
+          p_expected_version: input.expectedVersion,
+          p_state: input.state,
+          p_idempotency_key: input.idempotencyKey,
+          p_request_fingerprint: input.requestFingerprint,
+        }),
+        "active",
+      );
+    },
+
+    async closeViewerInterface(input) {
+      return viewerOperationResult(
+        await callRpc(client, "bot_viewer_interface_close_internal", {
+          p_bot_id: input.botId,
+          p_token_id: input.tokenId,
+          p_interface_id: input.interfaceId,
+          p_expected_version: input.expectedVersion,
+          p_idempotency_key: input.idempotencyKey,
+          p_request_fingerprint: input.requestFingerprint,
+        }),
+        "closed",
       );
     },
   };

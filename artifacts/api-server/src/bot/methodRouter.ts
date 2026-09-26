@@ -9,6 +9,7 @@ import {
   createMessageHandlers,
   type BotChatActionPublisher,
 } from "#bot/methods/messages";
+import { createViewerInterfaceHandlers } from "#bot/methods/viewer";
 import type {
   AuthenticatedBot,
   BotMethodRepository,
@@ -64,6 +65,7 @@ export function createTask3MethodHandlers(input: {
       input.publishChatAction,
     ),
     ...createCommandHandlers(input.repository, input.fingerprint),
+    ...createViewerInterfaceHandlers(input.repository, input.fingerprint),
   };
 }
 

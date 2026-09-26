@@ -9,6 +9,7 @@ import {
   type BotDeliveryRepository,
 } from "../../artifacts/api-server/src/bot/updateDelivery.ts";
 import {
+  createWebhookWorkerRepository,
   runWebhookDeliveryBatch,
   type WebhookWorkerRepository,
 } from "../../artifacts/api-server/src/bot/webhookWorker.ts";
@@ -318,6 +319,12 @@ test("worker prepares each claim before dispatch and persists only bounded outco
     async cleanup() {
       return {};
     },
+    async cleanupViewer() {
+      return {};
+    },
+    async recheckViewer() {
+      return "allowed";
+    },
   };
   const result = await runWebhookDeliveryBatch({
     repository: workerRepository,
@@ -381,6 +388,12 @@ test("worker skips claims invalidated by webhook replacement before dispatch", a
     async cleanup() {
       return {};
     },
+    async cleanupViewer() {
+      return {};
+    },
+    async recheckViewer() {
+      return "allowed";
+    },
   };
   const result = await runWebhookDeliveryBatch({
     repository: workerRepository,
@@ -395,6 +408,129 @@ test("worker skips claims invalidated by webhook replacement before dispatch", a
   });
   assert.equal(delivered, 0);
   assert.deepEqual(result, { claimed: 1, delivered: 0, retried: 0, deadLettered: 0 });
+});
+
+test("viewer webhook recheck is bound to the claimed attempt", async () => {
+  const calls: unknown[] = [];
+  const repository = createWebhookWorkerRepository({
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return { data: "allowed", error: null };
+    },
+  });
+  assert.equal(await repository.recheckViewer({ attemptId: 31, claimToken: LEASE_ID }), "allowed");
+  assert.deepEqual(calls, [{
+    name: "bot_viewer_delivery_recheck_internal",
+    args: { p_attempt_id: 31, p_claim_token: LEASE_ID },
+  }]);
+});
+
+test("viewer callback is rechecked after prepare and immediately before HTTP dispatch", async () => {
+  for (const scenario of [
+    { name: "revoked", decision: "revoked", fails: false, status: "dead_letter", error: "privacy_revoked" },
+    { name: "stale claim", decision: "stale", fails: false, status: "retry", error: "viewer_claim_stale" },
+    { name: "unavailable", decision: "stale", fails: true, status: "retry", error: "viewer_recheck_unavailable" },
+    { name: "valid", decision: "allowed", fails: false, status: "delivered", error: null },
+  ] as const) {
+    const calls: string[] = [];
+    const workerRepository: WebhookWorkerRepository = {
+      async claim() {
+        return [{ attemptId: 31, botId: BOT_ID, updateId: 73, attemptCount: 1, webhookEpoch: 2 }];
+      },
+      async prepare() {
+        calls.push("prepare");
+        return {
+          targetUrl: "https://hooks.example.test/viewer",
+          secretCiphertext: "enc:v1:placeholder",
+          payload: { callback_query: { viewer_interface_id: "33333333-3333-4333-8333-333333333333" } },
+        };
+      },
+      async recheckViewer() {
+        calls.push("recheck");
+        if (scenario.fails) throw new Error("database unavailable");
+        return scenario.decision;
+      },
+      async finish(input) {
+        calls.push(`finish:${input.status}:${input.errorCode ?? "ok"}`);
+        return true;
+      },
+      async cleanup() { return {}; },
+      async cleanupViewer() { return {}; },
+    };
+    const result = await runWebhookDeliveryBatch({
+      repository: workerRepository,
+      encryptionKey: KEY,
+      claimToken: LEASE_ID,
+      batchSize: 1,
+      decryptSecret: () => TEST_WEBHOOK_SECRET,
+      deliver: async () => {
+        calls.push("deliver");
+        return { kind: "delivered", errorCode: null, httpStatus: 204 };
+      },
+    });
+    assert.deepEqual(calls, [
+      "prepare", "recheck", ...(scenario.decision === "allowed" ? ["deliver"] : []),
+      `finish:${scenario.status}:${scenario.error ?? "ok"}`,
+    ], scenario.name);
+    assert.deepEqual(result, {
+      claimed: 1,
+      delivered: scenario.decision === "allowed" ? 1 : 0,
+      retried: scenario.fails || scenario.decision === "stale" ? 1 : 0,
+      deadLettered: scenario.decision === "revoked" ? 1 : 0,
+    }, scenario.name);
+  }
+});
+
+test("viewer callback revoked during DNS validation never starts HTTP", async () => {
+  let viewerState: "allowed" | "revoked" = "allowed";
+  let rechecks = 0;
+  let requests = 0;
+  const workerRepository: WebhookWorkerRepository = {
+    async claim() {
+      return [{ attemptId: 31, botId: BOT_ID, updateId: 73, attemptCount: 1, webhookEpoch: 2 }];
+    },
+    async prepare() {
+      return {
+        targetUrl: "https://hooks.example.test/viewer",
+        secretCiphertext: "enc:v1:placeholder",
+        payload: { callback_query: { viewer_interface_id: "33333333-3333-4333-8333-333333333333" } },
+      };
+    },
+    async recheckViewer() {
+      rechecks += 1;
+      return viewerState;
+    },
+    async finish(input) {
+      assert.equal(input.status, "dead_letter");
+      assert.equal(input.errorCode, "privacy_revoked");
+      return true;
+    },
+    async cleanup() { return {}; },
+    async cleanupViewer() { return {}; },
+  };
+
+  const result = await runWebhookDeliveryBatch({
+    repository: workerRepository,
+    encryptionKey: KEY,
+    claimToken: LEASE_ID,
+    batchSize: 1,
+    decryptSecret: () => TEST_WEBHOOK_SECRET,
+    deliver: (request) => deliverWebhook({
+      ...request,
+      resolver: async () => {
+        viewerState = "revoked";
+        return [{ address: "93.184.216.34", family: 4 }];
+      },
+      transport: async () => {
+        requests += 1;
+        return { statusCode: 204 };
+      },
+    }),
+  });
+
+  assert.equal(rechecks, 2);
+  assert.equal(requests, 0);
+  assert.equal(result.deadLettered, 1);
 });
 
 test("a never-settling resolver cannot block later claims in the sequential worker batch", async () => {
@@ -438,6 +574,12 @@ test("a never-settling resolver cannot block later claims in the sequential work
     },
     async cleanup() {
       return {};
+    },
+    async cleanupViewer() {
+      return {};
+    },
+    async recheckViewer() {
+      return "allowed";
     },
   };
 
