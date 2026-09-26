@@ -36,6 +36,15 @@ messages, no change to a bot's group privacy mode.
   `search_path`, authenticated EXECUTE, anon denied and no direct table read.
 - PostgREST returned HTTP 401 for anon and HTTP 200/`null` for an authenticated
   unknown UUID. No user message body or callback token was logged.
+- A production canary reused only `qa_photo_*`: cancellation of pending deletion
+  left it paused as designed, then a fresh token and resume made it active. The
+  QA recipient opened its private chat, received an inline button, pressed it,
+  and saw `null` before the bot answered. `getUpdates` delivered that exact
+  callback to the bot; `answerCallbackQuery` wrote a unique text and
+  `show_alert=true`. The pressing account read both exact values, while the
+  separate owner account read `null`. The test message was deleted, the QA
+  chat hidden, and the bot returned to `pending_delete` without an active
+  token. Langame and other live bot conversations were not touched.
 - Commit `ef4aeea1` was pushed to `main`. The web rollover ended with only
   image `l64kyyu1sysev2izzjjbizhe:ef4aeea17b2c75b13fdb3e59c90a9563f24f42b0`
   running. The public entry script returned HTTP 200 and contained
@@ -59,8 +68,9 @@ messages, no change to a bot's group privacy mode.
   source update, which makes the private answer deliberately unreadable. The
   client then acknowledges only that the press was sent. There is no private
   message row, persistent answer history, or text field in the bot interface.
-- This verifies deployment, not a physical live bot's `answerCallbackQuery`
-  response displayed on a real device. That end-to-end canary remains open.
+- The production canary proves the live API and database path, but not the
+  answer's visual presentation on a physical device. Fixture-based desktop
+  and mobile browser checks cover that presentation.
 - To roll back the new DB reader, use the reviewed rollback SQL in
   `.migration-backup/supabase/migrations/20260926150000_bot_callback_answer_for_actor.rollback.sql`
   after reverting the client. The additive DB function can also remain inert.
