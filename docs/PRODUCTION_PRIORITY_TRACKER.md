@@ -26,8 +26,9 @@ has pre-existing failures in unrelated files. Commit `37425e08` reached the
 sole healthy web image `c7c220f3e81c75db19c344a9937753db913286af`, whose
 HTML contains the new retry marker. This improves explicit recovery; it does
 not retain retired dynamic chunks, prevent the first failed load, or prove the
-old physical-Safari symptom is fixed. Hashed-asset retention is prepared in
-source: an nginx pre-start hook atomically adds the new release's files to a
+old physical-Safari symptom is fixed. Hashed-asset retention source commit
+`242be7f1` is deployed to the sole healthy web image: an nginx pre-start hook
+atomically adds the new release's files to a
 persistent `/assets/` volume without changing old bytes. Focused tests and an
 isolated A-to-B Docker run on the production host passed, including matching
 SHA-256 for both files. The live web app still has no storage mount, so

@@ -1,6 +1,9 @@
 # Web hashed-asset retention
 
-Status: source ready, production storage attachment pending verification.
+Status: source commit `242be7f1` deployed to the sole healthy web image;
+production storage attachment pending. Its entrypoint script matches source
+SHA-256 `fdc3a58874155fc99a315a9027f1ca3cc03fc5d00f018a27ec760a93db04fcbe`.
+The running container still has zero mounts, so this is not active retention.
 
 The live `letscube-web` Coolify resource is a Dockerfile application, not
 `docs/deploy/docker-compose.coolify.yml`. Each image contains only its own
@@ -68,3 +71,10 @@ automated. A source deploy alone is not evidence that retention is active.
 Source checks: `node --test tests/unit/web-asset-retention.test.mjs` and
 `sh -n docs/deploy/retain-web-assets.sh`. Production acceptance additionally
 requires the two-build HTTPS and running-container mount checks above.
+
+The source rollout passed 7 focused tests, Compose syntax and `nginx -t`.
+An isolated A-to-B named-volume run on the production Docker host retained
+both files with matching SHA-256; its test volume and fixtures were removed.
+The public current asset returned `200` with immutable caching, and a missing
+asset returned `404`. Those checks do not substitute for a live mounted
+Coolify replacement rollout.

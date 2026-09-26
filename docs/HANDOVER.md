@@ -199,7 +199,7 @@ retry asks for a fresh document URL and removes its temporary nonce before the
 app starts. A stale-HTML/retired-entry fixture passed in dev and built bundles
 on desktop/mobile Chromium and mobile WebKit. This is not a physical Safari
 fix verdict. The Dockerfile still discards prior hashed assets on deploy; a
-durable asset-retention implementation is prepared in source and passed a
+durable asset-retention implementation is deployed at `242be7f1` and passed a
 two-release isolated Docker-volume check. The live Coolify web resource has no
 volume yet; its write API token currently returns 401. Attach and verify a
 named volume before claiming this protection is live. See the
