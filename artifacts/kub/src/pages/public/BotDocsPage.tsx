@@ -187,9 +187,15 @@ export function BotDocsPage() {
                 буквы и содержат до 32 символов. Callback-кнопка возвращает callback_query;
                 подтвердите обработку методом answerCallbackQuery.
               </p>
+              <p className="mt-3 text-sm leading-7 text-[color:var(--kub-muted)]">
+                Необязательное reply_markup.input_field_placeholder (1–64 символа) добавляет
+                поле ввода под кнопками. Текст из него отправляется обычным ответом на сообщение
+                бота, а не приватным callback: в группе его увидят участники чата. Клиенты без
+                поддержки поля продолжают показывать кнопки.
+              </p>
               <div className="mt-5 grid gap-5 xl:grid-cols-2">
                 <CodeBlock title="setMyCommands" code={BOT_COMMANDS_EXAMPLE} />
-                <CodeBlock title="sendMessage с кнопками" code={BOT_CALLBACK_EXAMPLE} />
+                <CodeBlock title="sendMessage с полем и кнопками" code={BOT_CALLBACK_EXAMPLE} />
               </div>
             </DocSection>
 

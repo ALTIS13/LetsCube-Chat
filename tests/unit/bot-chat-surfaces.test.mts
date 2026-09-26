@@ -48,6 +48,7 @@ import {
   parseBotCommands,
   readBotCommandMention,
   parseBotInlineKeyboard,
+  parseBotReplyMarkup,
 } from "../../artifacts/kub/src/lib/botChatSurfaces.ts";
 
 const button = (text: string, data: string) => ({ text, callback_data: data });
@@ -117,11 +118,23 @@ test("text is 1..64 characters and callback_data 1..128, counted as Postgres cou
   assert.equal(parseBotInlineKeyboard(markup([[button("🙂".repeat(65), "d")]])), null);
 });
 
-test("the markup is exactly one key, and not an oversized one", () => {
+test("an input prompt extends the keyboard without changing its buttons", () => {
+  const value = { ...markup([[button("Открыть", "open")]]), input_field_placeholder: "Вставьте ссылку" };
+  assert.deepEqual(parseBotReplyMarkup(value), {
+    keyboard: [[{ text: "Открыть", callbackData: "open" }]],
+    inputFieldPlaceholder: "Вставьте ссылку",
+  });
+  assert.deepEqual(parseBotInlineKeyboard(value), [[{ text: "Открыть", callbackData: "open" }]]);
+  for (const placeholder of ["", "x".repeat(65), 42, null]) {
+    assert.equal(parseBotReplyMarkup({ ...value, input_field_placeholder: placeholder }), null);
+  }
+});
+
+test("the markup accepts only known keys, and not an oversized value", () => {
   assert.equal(
     parseBotInlineKeyboard({ inline_keyboard: [[button("a", "a")]], keyboard: [] }),
     null,
-    "a second top-level key is refused, as jsonb_object_keys counting one is",
+    "unknown top-level keys are refused",
   );
   assert.equal(parseBotInlineKeyboard({ keyboard: [[button("a", "a")]] }), null);
   const fat = Array.from({ length: 8 }, () =>

@@ -75,7 +75,7 @@ const COMMANDS = [
 ];
 
 /** A bot's message: `user_id` null, `bot_id` set, no sender profile. */
-function botMessage(id: string, chatId: string, content: string, createdAt: string, markup: unknown = null): Row {
+function botMessage(id: string, chatId: string, content: string, createdAt: string, markup: unknown = null, inputPlaceholder: string | null = null): Row {
   return {
     ...message(id, chatId, ME, content, createdAt),
     user_id: null,
@@ -83,6 +83,7 @@ function botMessage(id: string, chatId: string, content: string, createdAt: stri
     bot_id: BOT_ID,
     bot: BOT,
     bot_reply_markup: markup,
+    bot_input_field_placeholder: inputPlaceholder,
   };
 }
 
@@ -95,6 +96,7 @@ const KEYBOARD = {
     [{ text: "Перенести", callback_data: "shift:2026-09-15:move" }],
   ],
 };
+const PROMPT_TEXT = "Во сколько сможете выйти?";
 
 interface Options {
   /** The press returns a callback UUID, never the bot's later answer. */
@@ -116,6 +118,9 @@ interface Options {
    * about.
    */
   botState?: string;
+  keyboardMarkup?: unknown;
+  inputFieldPlaceholder?: string;
+  startedChatType?: "private" | "group";
 }
 
 async function seed(page: Page, options: Options = {}): Promise<Fixture> {
@@ -125,12 +130,12 @@ async function seed(page: Page, options: Options = {}): Promise<Fixture> {
   return openFixture(page, {
     me: ME,
     chats: [
-      chat(CHAT_STARTED, "private", "Смены", AT),
+      chat(CHAT_STARTED, options.startedChatType ?? "private", "Смены", AT),
       chat(CHAT_FRESH, "private", "Напоминания", "2026-09-14T08:00:00.000Z"),
     ],
     memberships: [membership(CHAT_STARTED, ME, "owner", AT), membership(CHAT_FRESH, ME, "owner", AT)],
     messages: [
-      botMessage(KEYBOARD_MESSAGE, CHAT_STARTED, QUESTION, "2026-09-14T10:00:00.000Z", KEYBOARD),
+      botMessage(KEYBOARD_MESSAGE, CHAT_STARTED, QUESTION, "2026-09-14T10:00:00.000Z", options.keyboardMarkup ?? KEYBOARD, options.inputFieldPlaceholder ?? null),
       message("55555555-5555-4555-8555-00000000b002", CHAT_STARTED, ME, "Хорошо", "2026-09-14T10:05:00.000Z"),
       botMessage("55555555-5555-4555-8555-00000000b003", CHAT_FRESH, GREETING, "2026-09-14T09:30:00.000Z"),
     ],
@@ -232,6 +237,65 @@ test.describe("what a bot offers reaches the person", () => {
     // A finger's target, on the projects that emulate one.
     const coarse = await page.evaluate(() => window.matchMedia("(pointer: coarse)").matches);
     expect(first.height).toBeGreaterThanOrEqual(coarse ? 44 : 36);
+  });
+
+  test("a private bot prompt sends user text as a reply without pressing its keyboard", async ({ page }) => {
+    const fixture = await seed(page, {
+      inputFieldPlaceholder: PROMPT_TEXT,
+      press: { body: CALLBACK_ID },
+      answers: [{ text: "Ответ получен", show_alert: false }],
+    });
+    await openBotChat(page, CHAT_STARTED);
+
+    const keyboard = page.locator(`[data-message-id="${KEYBOARD_MESSAGE}"] [data-bot-keyboard="true"]`);
+    const prompt = keyboard.locator('[data-bot-input="true"]');
+    const field = prompt.locator('[data-bot-input-field="true"]');
+    await expect(prompt).toBeVisible();
+    await expect(field).toHaveAttribute("placeholder", PROMPT_TEXT);
+    await expect(keyboard.locator("[data-bot-keyboard-button]")).toHaveCount(3);
+    await expect(prompt.getByText("Ответ увидят участники чата")).toHaveCount(0);
+
+    const lastButton = (await keyboard.locator('[data-bot-keyboard-button="1:0"]').boundingBox())!;
+    const promptBox = (await prompt.boundingBox())!;
+    expect(promptBox.y).toBeGreaterThanOrEqual(lastButton.y + lastButton.height - 1);
+
+    await field.fill("  Смогу к 11:00  ");
+    await prompt.getByRole("button", { name: "Отправить ответ боту" }).click();
+    await expect.poll(() => fixture.restCalls("messages", "POST").length).toBe(1);
+    const posted = fixture.restCalls("messages", "POST")[0].body;
+    const row = (Array.isArray(posted) ? posted[0] : posted) as Record<string, unknown>;
+    expect(row).toMatchObject({
+      chat_id: CHAT_STARTED,
+      user_id: ME.id,
+      type: "text",
+      content: "Смогу к 11:00",
+      reply_to_id: KEYBOARD_MESSAGE,
+    });
+    expect(row).not.toHaveProperty("bot_id");
+    expect(fixture.rpcBodies("bot_callback_press")).toHaveLength(0);
+    await expect(field).toHaveValue("");
+
+    const callbackButton = keyboard.locator('[data-bot-keyboard-button="0:0"]');
+    await expect(callbackButton).toBeEnabled();
+    await callbackButton.click();
+    await expect.poll(() => fixture.rpcBodies("bot_callback_press").length).toBe(1);
+    expect(fixture.rpcBodies("bot_callback_press")[0]).toEqual({
+      p_message_id: KEYBOARD_MESSAGE,
+      p_data: "shift:2026-09-15:yes",
+    });
+    expect(fixture.restCalls("messages", "POST")).toHaveLength(1);
+  });
+
+  test("a prompted bot message in a group warns that the reply is visible to participants", async ({ page }) => {
+    await seed(page, { inputFieldPlaceholder: PROMPT_TEXT, startedChatType: "group" });
+    await openBotChat(page, CHAT_STARTED);
+
+    const prompt = page.locator(`[data-message-id="${KEYBOARD_MESSAGE}"] [data-bot-input="true"]`);
+    await expect(prompt.locator('[data-bot-input-field="true"]')).toHaveAttribute(
+      "placeholder",
+      PROMPT_TEXT,
+    );
+    await expect(prompt.getByText("Ответ увидят участники чата")).toBeVisible();
   });
 
   test("a press says so on its own button, and the bot's answer arrives as a confirmation", async ({ page }) => {
@@ -442,9 +506,11 @@ test.describe("what a bot offers reaches the person", () => {
     await openBotChat(page, CHAT_STARTED);
 
     const pressed = page.locator('[data-bot-keyboard-button="0:0"]');
+    const outcome = page.getByText("Нет ответа о нажатии. Проверьте результат перед повтором.")
+      .waitFor({ state: "visible", timeout: 15000 });
     await pressed.click();
     await expect(pressed).toHaveAttribute("data-bot-keyboard-busy", "true");
-    await expect(page.getByText("Нет ответа о нажатии. Проверьте результат перед повтором.")).toBeVisible({ timeout: 10000 });
+    await outcome;
     await expect(pressed).toHaveAttribute("data-bot-keyboard-busy", "false");
     expect(attempts).toBe(1);
   });

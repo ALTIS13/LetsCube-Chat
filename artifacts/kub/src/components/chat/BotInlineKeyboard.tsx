@@ -48,10 +48,20 @@ import { cn } from "@/lib/utils";
 export function BotInlineKeyboard({
   messageId,
   keyboard,
+  inputFieldPlaceholder,
+  inputVisibleToAll = false,
+  onInputSubmit,
 }: {
   messageId: string;
   keyboard: BotInlineKeyboardRows;
+  inputFieldPlaceholder?: string | null;
+  inputVisibleToAll?: boolean;
+  onInputSubmit?: (text: string) => boolean;
 }) {
+  const [draft, setDraft] = useState("");
+  useEffect(() => {
+    setDraft("");
+  }, [inputFieldPlaceholder, messageId]);
   const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set());
   const pendingRef = useRef(new Set<string>());
   const requestsRef = useRef(new Set<AbortController>());
@@ -191,6 +201,52 @@ export function BotInlineKeyboard({
           })}
         </div>
       ))}
+      {inputFieldPlaceholder && (
+        <form
+          data-bot-input="true"
+          className="mt-1 min-w-0"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const text = draft.trim();
+            if (!text || !onInputSubmit) return;
+            if (onInputSubmit(text)) setDraft("");
+          }}
+        >
+          <div className="flex min-w-0 items-center gap-1 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-message-in)] p-1">
+            <label htmlFor={`bot-input-${messageId}`} className="sr-only">Ответ боту</label>
+            <input
+              id={`bot-input-${messageId}`}
+              data-bot-input-field="true"
+              type="text"
+              value={draft}
+              maxLength={4096}
+              autoComplete="off"
+              enterKeyHint="send"
+              placeholder={inputFieldPlaceholder}
+              onChange={(event) => setDraft(event.target.value)}
+              disabled={!onInputSubmit}
+              className="min-h-9 min-w-0 flex-1 bg-transparent px-2 text-[14px] text-[color:var(--kub-text)] outline-none placeholder:text-[color:var(--kub-muted)] [@media(pointer:coarse)]:min-h-11"
+            />
+            <button
+              type="submit"
+              aria-label="Отправить ответ боту"
+              disabled={!onInputSubmit || !draft.trim()}
+              className={cn(
+                "kub-interactive flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--kub-cyan)] text-white [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11",
+                FOCUS_RING,
+                DISABLED_SINK,
+              )}
+            >
+              <KubIcon name="send" size={18} />
+            </button>
+          </div>
+          {inputVisibleToAll && (
+            <p className="px-1 pt-1 text-[12px] leading-snug text-[color:var(--kub-muted)]">
+              Ответ увидят участники чата
+            </p>
+          )}
+        </form>
+      )}
       {doorMissing && (
         // Said once, under the keyboard whose buttons it explains, rather than
         // as a toast per press: it is a statement about the deployment, and a

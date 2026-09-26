@@ -1203,6 +1203,7 @@ export function useMessages(
       topic_id: messageTopicId,
       user_id: user.id,
       bot_id: null,
+      bot_input_field_placeholder: null,
       bot_reply_markup: null,
       content: trimmedContent,
       type: input.type,

@@ -21,6 +21,7 @@ export const inlineKeyboardSchema = z
       .array(z.array(callbackButtonSchema).min(1).max(8))
       .min(1)
       .max(8),
+    input_field_placeholder: z.string().min(1).max(64).optional(),
   })
   .strict()
   .superRefine((value, context) => {

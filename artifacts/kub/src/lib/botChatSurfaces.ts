@@ -55,6 +55,11 @@ export interface BotInlineButton {
 
 export type BotInlineKeyboard = readonly (readonly BotInlineButton[])[];
 
+export interface BotReplyMarkup {
+  readonly keyboard: BotInlineKeyboard;
+  readonly inputFieldPlaceholder: string | null;
+}
+
 /** `jsonb_array_length(...) not between 1 and 8`, for rows and for buttons. */
 const MIN_KEYBOARD_ROWS = 1;
 const MAX_KEYBOARD_ROWS = 8;
@@ -64,6 +69,7 @@ const MAX_ROW_BUTTONS = 8;
 const MAX_BUTTON_TEXT = 64;
 /** `length(v_button->>'callback_data') not between 1 and 128`. */
 const MAX_CALLBACK_DATA = 128;
+const MAX_INPUT_PLACEHOLDER = 64;
 /** `octet_length(p_markup::text) > 16384`. */
 const MAX_MARKUP_BYTES = 16384;
 
@@ -114,19 +120,28 @@ function parseButton(value: unknown): BotInlineButton | null {
 }
 
 /**
- * `messages.bot_reply_markup` as rows of buttons, or null.
+ * Bot API markup as rows of buttons and an optional text prompt. Storage strips
+ * the prompt into its own column so older Android bundles still see the
+ * keyboard shape they know.
  *
- * Null for everything that is not exactly the one shape the database stores —
- * absent, the wrong type, an extra key beside `inline_keyboard`, an empty row,
+ * Null for everything outside the bounded bot markup shape —
+ * absent, the wrong type, an unknown key, an empty row,
  * a ninth button, a button carrying anything but `text` and `callback_data`.
  * There is no partial result: a keyboard the product cannot have produced is
  * not drawn at all, because half of a bot's question is worse than none of it.
  */
-export function parseBotInlineKeyboard(value: unknown): BotInlineKeyboard | null {
+export function parseBotReplyMarkup(value: unknown): BotReplyMarkup | null {
   if (!isPlainObject(value)) return null;
   const keys = Object.keys(value);
-  if (keys.length !== 1 || keys[0] !== "inline_keyboard") return null;
+  if (!keys.includes("inline_keyboard") || keys.length < 1 || keys.length > 2) return null;
+  if (keys.some((key) => key !== "inline_keyboard" && key !== "input_field_placeholder")) return null;
   if (markupByteLength(value) > MAX_MARKUP_BYTES) return null;
+  const placeholder = value.input_field_placeholder;
+  if (placeholder !== undefined && (
+    typeof placeholder !== "string" ||
+    characterLength(placeholder) < 1 ||
+    characterLength(placeholder) > MAX_INPUT_PLACEHOLDER
+  )) return null;
   const rows = value.inline_keyboard;
   if (!Array.isArray(rows)) return null;
   if (rows.length < MIN_KEYBOARD_ROWS || rows.length > MAX_KEYBOARD_ROWS) return null;
@@ -143,7 +158,11 @@ export function parseBotInlineKeyboard(value: unknown): BotInlineKeyboard | null
     }
     parsed.push(buttons);
   }
-  return parsed;
+  return { keyboard: parsed, inputFieldPlaceholder: placeholder ?? null };
+}
+
+export function parseBotInlineKeyboard(value: unknown): BotInlineKeyboard | null {
+  return parseBotReplyMarkup(value)?.keyboard ?? null;
 }
 
 /**

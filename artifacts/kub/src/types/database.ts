@@ -660,6 +660,8 @@ export interface Database {
           user_id: string | null
           bot_id: string | null
           bot_reply_markup: Json | null
+          /** Separate from markup so older Android bundles still render bot buttons. */
+          bot_input_field_placeholder: string | null
           content: string | null
           type: 'text' | 'image' | 'video' | 'audio' | 'file' | 'sticker' | 'system'
           media_bucket: string | null

@@ -53,7 +53,7 @@ import {
 } from "@/lib/messageActor";
 import { QuickReactionButton, ReactionChip } from "./MessageReactions";
 import { BotInlineKeyboard } from "./BotInlineKeyboard";
-import { parseBotInlineKeyboard } from "@/lib/botChatSurfaces";
+import { parseBotReplyMarkup } from "@/lib/botChatSurfaces";
 
 type TextLayoutKind = "short" | "regular" | "link" | "longToken" | "preformatted" | "media";
 type MetaPlacement = "inline" | "anchored";
@@ -115,6 +115,8 @@ interface MessageBubbleProps {
    * fix for the menu (D-244).
    */
   botCommands?: BotCommandsInText | null;
+  botInputVisibleToAll?: boolean;
+  onBotInputSubmit?: (text: string) => boolean;
 }
 
 function getMessageTextLayoutKind(type: MessageWithSender["type"], content: string): TextLayoutKind {
@@ -875,6 +877,8 @@ export function MessageBubble({
   messagesMap = {}, mediaVariant, senderAvatarVariant, deliveryState, groupReadInfo, onOpenGroupReadReceipts,
   authorChatRole = null,
   botCommands = null,
+  botInputVisibleToAll = false,
+  onBotInputSubmit,
 }: MessageBubbleProps) {
   // D-046. `.msg-appear` carries `will-change: opacity, transform` under a
   // comment saying the hint is dropped when the animation ends. Nothing dropped
@@ -1373,10 +1377,15 @@ export function MessageBubble({
    * `bot_id`, so this is the second gate rather than the first, and it is the
    * one that distinguishes a live bot from a dead one.
    */
-  const botKeyboard = useMemo(
-    () => (actor.kind === "bot" ? parseBotInlineKeyboard(message.bot_reply_markup) : null),
+  const botMarkup = useMemo(
+    () => (actor.kind === "bot" ? parseBotReplyMarkup(message.bot_reply_markup) : null),
     [actor.kind, message.bot_reply_markup],
   );
+  const storedPrompt = message.bot_input_field_placeholder;
+  const botInputPlaceholder = typeof storedPrompt === "string" &&
+    Array.from(storedPrompt).length >= 1 && Array.from(storedPrompt).length <= 64
+    ? storedPrompt
+    : botMarkup?.inputFieldPlaceholder ?? null;
 
   // Soft-delete: render an inert placeholder bubble in the same slot so the
   // surrounding date separators / scroll position stay stable.  No reply
@@ -1790,7 +1799,13 @@ export function MessageBubble({
               register's D-125 asked for. Outside the bubble's own box because
               the bubble measures its footer against its content, and a block of
               buttons inside it would be measured as text. */}
-          {botKeyboard && <BotInlineKeyboard messageId={message.id} keyboard={botKeyboard} />}
+          {botMarkup && <BotInlineKeyboard
+            messageId={message.id}
+            keyboard={botMarkup.keyboard}
+            inputFieldPlaceholder={isSelectionMode ? null : botInputPlaceholder}
+            inputVisibleToAll={botInputVisibleToAll}
+            onInputSubmit={isSelectionMode ? undefined : onBotInputSubmit}
+          />}
 
         </div>
       </div>

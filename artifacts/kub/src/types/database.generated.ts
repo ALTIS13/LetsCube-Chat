@@ -541,6 +541,7 @@ export type Database = {
       messages: {
         Row: {
           bot_id: string | null
+          bot_input_field_placeholder: string | null
           bot_reply_markup: Json | null
           chat_id: string
           client_message_id: string | null
@@ -563,6 +564,7 @@ export type Database = {
         }
         Insert: {
           bot_id?: string | null
+          bot_input_field_placeholder?: string | null
           bot_reply_markup?: Json | null
           chat_id: string
           client_message_id?: string | null
@@ -585,6 +587,7 @@ export type Database = {
         }
         Update: {
           bot_id?: string | null
+          bot_input_field_placeholder?: string | null
           bot_reply_markup?: Json | null
           chat_id?: string
           client_message_id?: string | null

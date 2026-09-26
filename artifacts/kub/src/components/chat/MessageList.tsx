@@ -81,6 +81,7 @@ import {
 interface MessageListProps {
   messages: MessageWithSender[];
   onReply: (msg: MessageWithSender) => void;
+  onBotInputSubmit?: (msg: MessageWithSender, text: string) => boolean;
   onJumpToReply?: (messageId: string) => void;
   onReaction: (messageId: string, emoji: string) => void;
   onEdit?: (msg: MessageWithSender) => void;
@@ -326,6 +327,7 @@ const SCROLLING_KEYS = new Set([
 export function MessageList({
   messages,
   onReply,
+  onBotInputSubmit,
   onJumpToReply,
   onReaction,
   onEdit,
@@ -540,7 +542,7 @@ export function MessageList({
    * memoised on exactly those.
    */
   const handlersRef = useRef({
-    onReply, onJumpToReply, onReaction, onEdit, onDelete, onHideForMe, onTogglePin, onForward,
+    onReply, onBotInputSubmit, onJumpToReply, onReaction, onEdit, onDelete, onHideForMe, onTogglePin, onForward,
     onRetrySend, onEditFailedSend, onDiscardLocalMessage, onOpenMedia,
   });
   // After every commit, and before any input can reach a row: an action only
@@ -548,7 +550,7 @@ export function MessageList({
   // layout effects. The callers pass inline arrows, so this changes every time.
   useLayoutEffect(() => {
     handlersRef.current = {
-      onReply, onJumpToReply, onReaction, onEdit, onDelete, onHideForMe, onTogglePin, onForward,
+      onReply, onBotInputSubmit, onJumpToReply, onReaction, onEdit, onDelete, onHideForMe, onTogglePin, onForward,
       onRetrySend, onEditFailedSend, onDiscardLocalMessage, onOpenMedia,
     };
   });
@@ -582,6 +584,7 @@ export function MessageList({
       setMenuLift(0);
       handlersRef.current.onReply(message);
     },
+    submitBotInput: (message, text) => handlersRef.current.onBotInputSubmit?.(message, text) ?? false,
     jumpToReply: (messageId) => handlersRef.current.onJumpToReply?.(messageId),
     reaction: (messageId, emoji) => handlersRef.current.onReaction(messageId, emoji),
     retrySend: (message) => handlersRef.current.onRetrySend?.(message),
@@ -1394,6 +1397,7 @@ export function MessageList({
         messageRefs={messageRefs}
         capabilities={rowCapabilities}
         actions={rowActions}
+        botInputVisibleToAll={chatType !== "private"}
         albumCompact={albumCompact}
       />
     );
@@ -1653,6 +1657,7 @@ function mediaMimeType(message: MessageWithSender): string | null {
 /** Everything a row can ask the list to do. One object for the life of the list. */
 interface MessageRowActions {
   reply: (message: MessageWithSender) => void;
+  submitBotInput: (message: MessageWithSender, text: string) => boolean;
   jumpToReply: (messageId: string) => void;
   reaction: (messageId: string, emoji: string) => void;
   retrySend: (message: MessageWithSender) => void;
@@ -1717,6 +1722,7 @@ interface MessageRowProps {
   messageRefs: React.MutableRefObject<Record<string, HTMLDivElement>> | undefined;
   capabilities: MessageRowCapabilities;
   actions: MessageRowActions;
+  botInputVisibleToAll: boolean;
   /** Null is the original bubble; albums keep this row's gestures and identity. */
   albumCompact: boolean | null;
 }
@@ -1809,6 +1815,7 @@ const MessageRow = React.memo(function MessageRow({
   messageRefs,
   capabilities,
   actions,
+  botInputVisibleToAll,
   albumCompact,
 }: MessageRowProps) {
   const isSystemMessage = msg.type === "system";
@@ -1919,7 +1926,7 @@ const MessageRow = React.memo(function MessageRow({
       gesture.moved = true;
       clearLongPress();
     }
-    if (selectionMode || gesture.longPressed || !gesture.maySwipe) return;
+    if (selectionMode || gesture.longPressed || gesture.content || !gesture.maySwipe) return;
     // Clearly horizontal, and in a direction this message offers. The row lets
     // the browser keep vertical panning (`touch-action: pan-y`), so a scroll
     // never reaches here as a swipe.
@@ -2177,6 +2184,8 @@ const MessageRow = React.memo(function MessageRow({
               senderAvatarVariant={senderAvatarVariant}
               authorChatRole={authorChatRole}
               botCommands={botCommands}
+              botInputVisibleToAll={botInputVisibleToAll}
+              onBotInputSubmit={(text) => actions.submitBotInput(msg, text)}
               deliveryState={deliveryState}
               groupReadInfo={groupReadInfo}
               onOpenGroupReadReceipts={handlers.onOpenGroupReadReceipts}

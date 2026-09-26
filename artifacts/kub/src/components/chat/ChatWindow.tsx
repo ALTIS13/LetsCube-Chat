@@ -1340,6 +1340,15 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     setReplyFocusKey((key) => key + 1);
   }, []);
 
+  const submitBotInput = useCallback((message: MessageWithSender, text: string) => {
+    if (!userId) {
+      showAppAlert("Войдите в аккаунт, чтобы отправлять сообщения.", "Сообщение");
+      return false;
+    }
+    void sendMessage(text, message.id);
+    return true;
+  }, [sendMessage, userId]);
+
   /**
    * A released recording is sent, not parked (D-130, audit row R6).
    *
@@ -1682,6 +1691,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             messages={conversation}
             loadReadTimes={readTimesLoader()}
             onReply={handleReply}
+            onBotInputSubmit={submitBotInput}
             onJumpToReply={handleJumpToReply}
             onReaction={toggleReaction}
             onEdit={(msg) => setEditingMessage(msg)}

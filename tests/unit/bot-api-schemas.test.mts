@@ -19,6 +19,21 @@ const MESSAGE_ID = "22222222-2222-4222-8222-222222222222";
 const BOT_ID = "33333333-3333-4333-8333-333333333333";
 const REQUEST_ID = "req_20260831_001";
 const TEST_WEBHOOK_SECRET = randomBytes(24).toString("base64url");
+const PLACEHOLDER_METHOD_INPUTS = [
+  [
+    "sendMessage",
+    { chat_id: CHAT_ID, text: "Hello", idempotency_key: "message:placeholder:1" },
+  ],
+  [
+    "editMessageText",
+    {
+      chat_id: CHAT_ID,
+      message_id: MESSAGE_ID,
+      text: "Updated",
+      idempotency_key: "edit:placeholder:1",
+    },
+  ],
+] as const;
 
 const EXPECTED_METHODS = [
   "getMe",
@@ -103,6 +118,57 @@ test("sendMessage rejects oversized or unknown input before database access", ()
   }
 });
 
+test("sendMessage and editMessageText accept optional input placeholders at the bounds", () => {
+  const inline_keyboard = [[{ text: "Open", callback_data: "open:1" }]];
+
+  for (const [method, input] of PLACEHOLDER_METHOD_INPUTS) {
+    for (const placeholder of ["x", "x".repeat(64)]) {
+      const parsed = parseBotMethodInput(method, {
+        ...input,
+        reply_markup: { inline_keyboard, input_field_placeholder: placeholder },
+      });
+      assert.equal(parsed.reply_markup?.input_field_placeholder, placeholder);
+      assert.deepEqual(parsed.reply_markup?.inline_keyboard, inline_keyboard);
+    }
+    const parsed = parseBotMethodInput(method, {
+      ...input,
+      reply_markup: { inline_keyboard },
+    });
+    assert.equal(parsed.reply_markup?.input_field_placeholder, undefined);
+  }
+});
+
+test("sendMessage and editMessageText reject invalid input placeholders and markup keys", () => {
+  const inline_keyboard = [[{ text: "Open", callback_data: "open:1" }]];
+
+  for (const [method, input] of PLACEHOLDER_METHOD_INPUTS) {
+    for (const placeholder of ["", "x".repeat(65), 42, null]) {
+      assert.throws(() =>
+        parseBotMethodInput(method, {
+          ...input,
+          reply_markup: { inline_keyboard, input_field_placeholder: placeholder },
+        }),
+      );
+    }
+    assert.throws(() =>
+      parseBotMethodInput(method, {
+        ...input,
+        reply_markup: { input_field_placeholder: "Type here" },
+      }),
+    );
+    assert.throws(() =>
+      parseBotMethodInput(method, {
+        ...input,
+        reply_markup: {
+          inline_keyboard,
+          input_field_placeholder: "Type here",
+          unexpected: true,
+        },
+      }),
+    );
+  }
+});
+
 test("inline keyboards reject serialized payloads over 16 KiB", () => {
   const oversizedMarkup = {
     inline_keyboard: Array.from({ length: 8 }, () =>
@@ -121,6 +187,32 @@ test("inline keyboards reject serialized payloads over 16 KiB", () => {
       reply_markup: oversizedMarkup,
     }),
   );
+});
+
+test("input placeholder still counts toward the 16 KiB keyboard limit", () => {
+  const inline_keyboard = Array.from({ length: 8 }, () =>
+    Array.from({ length: 8 }, () => ({
+      text: "x".repeat(64),
+      callback_data: "я".repeat(80),
+    })),
+  );
+  const withinLimit = { inline_keyboard };
+  const overLimit = {
+    inline_keyboard,
+    input_field_placeholder: "я".repeat(64),
+  };
+  assert.ok(Buffer.byteLength(JSON.stringify(withinLimit), "utf8") <= 16_384);
+  assert.ok(Buffer.byteLength(JSON.stringify(overLimit), "utf8") > 16_384);
+
+  for (const [method, input] of PLACEHOLDER_METHOD_INPUTS) {
+    assert.doesNotThrow(() =>
+      parseBotMethodInput(method, { ...input, reply_markup: withinLimit }),
+    );
+    assert.throws(
+      () => parseBotMethodInput(method, { ...input, reply_markup: overLimit }),
+      /inline_keyboard_too_large/,
+    );
+  }
 });
 
 test("media methods accept only approved Storage object references and never URLs", () => {

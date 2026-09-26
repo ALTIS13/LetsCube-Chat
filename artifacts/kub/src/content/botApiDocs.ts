@@ -113,8 +113,8 @@ export const BOT_API_METHOD_GROUPS: readonly BotApiMethodGroup[] = [
     methods: [
       {
         name: "sendMessage",
-        summary: "Текст до 4096 символов, ответ, тема и callback-кнопки.",
-        input: "chat_id, text, idempotency_key",
+        summary: "Текст до 4096 символов, ответ, тема, callback-кнопки и необязательное поле ввода.",
+        input: "chat_id, text, idempotency_key; необязательно: reply_to_message_id, reply_markup",
       },
       {
         name: "sendPhoto",
@@ -206,7 +206,8 @@ export const BOT_CALLBACK_EXAMPLE = `{
     "inline_keyboard": [[
       { "text": "Подтвердить", "callback_data": "confirm:42" },
       { "text": "Отмена", "callback_data": "cancel:42" }
-    ]]
+    ]],
+    "input_field_placeholder": "Или напишите ответ"
   },
   "idempotency_key": "confirmation-42"
 }`;
