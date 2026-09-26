@@ -1,5 +1,6 @@
 // @ts-types="npm:@types/web-push@3.6.4"
 import webpush from "npm:web-push@3.6.7";
+import { drainAlbumPush, type AlbumPushDependencies, type AlbumPushSummary } from "./album-dispatch.ts";
 import { buildFcmMessage, isPermanentFcmTokenError } from "./fcm.ts";
 import { drainVoicePush, isVoiceRequestAuthorized, voiceSummary } from "./voice-dispatch.ts";
 import {
@@ -140,12 +141,134 @@ Deno.serve(async (request: Request) => {
     nativeRows.data,
   );
 
+  const album = Deno.env.get("ALBUM_PUSH_DISPATCH_ENABLED") === "1"
+    ? await dispatchAlbumPush(supabaseUrl, secretKey, limit, webPushAppOrigin)
+    : undefined;
+  if (album?.status === "claim_failed" || album?.status === "claim_invalid") {
+    return json({ ok: false, error: "album_push_claim_failed", album }, 500);
+  }
+
   const voice = Deno.env.get("VOICE_PUSH_DISPATCH_ENABLED") === "1"
     ? isVoiceRequestAuthorized(request, Deno.env.get("KUB_PUSH_DISPATCH_TOKEN"))
       ? await dispatchVoice(body?.limit) : voiceSummary("unauthorized")
     : undefined;
-  return json({ ok: true, sent, failed, pruned, limit, native, ...(voice ? { voice } : {}) });
+  return json({ ok: true, sent, failed, pruned, limit, native, ...(album ? { album } : {}), ...(voice ? { voice } : {}) });
 });
+
+async function dispatchAlbumPush(
+  supabaseUrl: string,
+  secretKey: string,
+  limit: number,
+  webPushAppOrigin: string | undefined,
+): Promise<AlbumPushSummary> {
+  const subscriptions = new Map<string, SubscriptionRow>();
+  const devices = new Map<string, PushDeviceRow>();
+  let webLookupFailed = false;
+  let deviceLookupFailed = false;
+  let fcmAccessToken: Promise<string> | undefined;
+
+  const deps: AlbumPushDependencies = {
+    uuid: () => crypto.randomUUID(),
+    claim: async (claimLimit, claimToken) => {
+      const response = await restFetch(new URL("/rest/v1/rpc/album_push_claim", supabaseUrl), secretKey, {
+        method: "POST",
+        headers: { prefer: "return=representation" },
+        body: JSON.stringify({ p_limit: claimLimit, p_claim_token: claimToken }),
+      });
+      if (!response.ok) throw new Error("album_claim_failed");
+      const rows = await response.json() as Array<{ subscription_id?: string | null; device_id?: string | null }>;
+      if (!Array.isArray(rows)) return rows;
+      const subscriptionIds = [...new Set(rows.map((row) => row.subscription_id).filter((id): id is string => typeof id === "string"))];
+      const deviceIds = [...new Set(rows.map((row) => row.device_id).filter((id): id is string => typeof id === "string"))];
+      const web = await selectSubscriptions(supabaseUrl, secretKey, subscriptionIds);
+      const native = await selectPushDevices(supabaseUrl, secretKey, deviceIds);
+      webLookupFailed = !web.ok;
+      deviceLookupFailed = !native.ok;
+      if (web.ok) for (const item of web.data) subscriptions.set(item.id, item);
+      if (native.ok) for (const item of native.data) devices.set(item.id, item);
+      return rows;
+    },
+    recheck: async (id, claimToken) => {
+      const response = await restFetch(new URL("/rest/v1/rpc/album_push_recheck", supabaseUrl), secretKey, {
+        method: "POST",
+        headers: { prefer: "return=representation" },
+        body: JSON.stringify({ p_outbox_id: id, p_claim_token: claimToken }),
+      });
+      if (!response.ok) throw new Error("album_recheck_failed");
+      const rows = await response.json() as unknown;
+      return Array.isArray(rows) && rows.length === 1 ? rows[0] : null;
+    },
+    ack: async (id, claimToken, outcome, error) => {
+      const response = await restFetch(new URL("/rest/v1/rpc/album_push_ack", supabaseUrl), secretKey, {
+        method: "POST",
+        headers: { prefer: "return=representation" },
+        body: JSON.stringify({ p_outbox_id: id, p_claim_token: claimToken, p_outcome: outcome, p_error: error }),
+      });
+      return response.ok && await response.json() === true;
+    },
+    send: async (row, payload) => {
+      if (row.subscription_id) {
+        if (webLookupFailed) return { outcome: "release", error: "subscription_query_failed" };
+        const subscription = subscriptions.get(row.subscription_id);
+        if (!subscription || subscription.is_active === false) return { outcome: "gone", error: "subscription_missing" };
+        const safe = safePayload(payload);
+        try {
+          const topic = await createWebPushTopic(safe.tag);
+          await webpush.sendNotification(
+            { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
+            JSON.stringify(buildDeclarativeWebPushPayload(safe, webPushAppOrigin)),
+            { TTL: 60 * 60 * 24, urgency: getWebPushUrgency(safe.kind), ...(topic ? { topic } : {}) },
+          );
+          return { outcome: "sent" };
+        } catch (error) {
+          const status = typeof error === "object" && error ? (error as { statusCode?: number }).statusCode : undefined;
+          const reason = readWebPushErrorReason(error);
+          if (isPermanentWebPushSubscriptionError(status, reason)) {
+            await patchRow(supabaseUrl, secretKey, "push_subscriptions", subscription.id, {
+              is_active: false, updated_at: new Date().toISOString(),
+            });
+            return { outcome: "gone", error: `webpush:${status ?? "unknown"}` };
+          }
+          return { outcome: "retry", error: `webpush:${status ?? "unknown"}` };
+        }
+      }
+
+      if (deviceLookupFailed) return { outcome: "release", error: "device_query_failed" };
+      const device = row.device_id ? devices.get(row.device_id) : undefined;
+      if (!device || !device.enabled || device.revoked_at || device.provider !== "fcm") {
+        return { outcome: "gone", error: "device_inactive" };
+      }
+      const config = readFcmConfig();
+      if (!config) return { outcome: "release", error: "fcm_credentials_pending" };
+      try {
+        fcmAccessToken ??= getGoogleAccessToken(config);
+        const accessToken = await fcmAccessToken;
+        const response = await fetch(
+          `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(config.projectId)}/messages:send`,
+          {
+            method: "POST",
+            signal: AbortSignal.timeout(15000),
+            headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+            body: JSON.stringify(buildFcmMessage(payload, device.token, device.app_version)),
+          },
+        );
+        if (response.ok) return { outcome: "sent" };
+        const body = await readJson(response);
+        if (isPermanentFcmTokenError(response.status, body)) {
+          await patchRow(supabaseUrl, secretKey, "user_push_devices", device.id, {
+            enabled: false, revoked_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+          });
+          return { outcome: "gone", error: `fcm:${response.status}` };
+        }
+        return { outcome: "retry", error: `fcm:${response.status}:${readFcmErrorStatus(body)}`.slice(0, 160) };
+      } catch {
+        fcmAccessToken = undefined;
+        return { outcome: "retry", error: "fcm:network_error" };
+      }
+    },
+  };
+  return await drainAlbumPush(deps, limit);
+}
 
 async function dispatchVoice(limit: unknown) {
   const enabled = () => Deno.env.get("VOICE_PUSH_DISPATCH_ENABLED") === "1";
