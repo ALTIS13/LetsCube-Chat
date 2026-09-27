@@ -26,15 +26,33 @@ tested in this stage.
 - The production `storage.buckets` row for `media` still reads `public = true`.
   No storage policy, database row, Android bundle or native release changed.
 
+## Deployed-client follow-up
+
+- The opt-in read-only `tests/e2e/deployed-signed-media-live.spec.ts` passed
+  against `https://app.letscube.ru`: a QA member's signed chat-list avatar
+  loaded in Chromium at 1440px and 390px. On desktop, after sign-out and
+  sign-in as another QA account in the same page, a signed chat row exclusive
+  to the first account was absent and the second account's chat list loaded.
+  The test does not open or send messages. It uses
+  `KUB_QA_ALLOW_MUTATIONS=0`, disables screenshots/traces/video, and suppresses
+  Playwright's failure-time page snapshot. A synthetic failure proved the
+  snapshot guard: without it an error-context DOM snapshot was written; with
+  it no page snapshot was written. No production page capture was retained.
+- Read-only QA metadata found accessible examples of image, video and audio.
+  Signed `HEAD` requests returned 200 for each of those types. No QA role had
+  an accessible file attachment or group-chat avatar; those paths remain
+  unverified by this probe. No object bytes or personal content were retained.
+
 ## Limits and next gate
 
 The `signed` mode still permits a public-URL fallback. It measures signing
 without risking blank media on an installed client. It is **not** a privacy
 fix while the bucket remains public. The real-member probe covered one
-original object, two image variants and two avatar variants. It did not cover
-all formats, chat avatars, account-switch UI behavior, long-session refresh in
-an authenticated deployed browser, or upload performance. The local store and
-mode tests cover those mechanics in isolation, not production acceptance.
+original object, two image variants and two profile-avatar variants. The
+deployed UI/account-switch probe and image/video/audio signed HEADs add
+coverage, but not file attachments, group-chat avatars, long-session refresh
+in an authenticated deployed browser, or upload performance. The local store
+and mode tests cover those mechanics in isolation, not production acceptance.
 
 Before `signed-only` and a private bucket: verify representative message
 previews, chat and user avatars, downloads and refresh with authenticated web

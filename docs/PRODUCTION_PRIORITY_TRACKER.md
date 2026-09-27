@@ -8,10 +8,14 @@ contains that mode, one healthy container retains the guarded asset volume,
 and the previous hashed entry still returns 200. Read-only real-account QA
 proved member signing, outsider denial, short-link expiry and renewal for one
 original media object. The browser resolver also passed for two image and two
-avatar variants at 1440 and 390px. The bucket remains **public**, and the client
-can still fall back to public URLs. Other formats, chat avatars and deployed
-authenticated UI coverage are outstanding; private-bucket activation and
-Android remain blocked while Android work is on hold.
+profile-avatar variants at 1440 and 390px. A deployed opt-in browser check
+loaded a signed chat-list avatar on desktop/mobile and removed the first QA
+account's exclusive row after switching accounts in the same page. Signed
+image/video/audio HEADs returned 200. The bucket remains **public**, and the
+client can still fall back to public URLs. File media, group-chat avatars and
+deployed long-session refresh remain unverified; private-bucket activation and
+Android remain blocked while Android work is on hold. A063 is not needed for
+this web-only check; warn the owner before a later compatible-APK device gate.
 [Evidence, limits and rollback](operations/2026-09-27-signed-media-canary.md).
 
 **2026-09-27 iPhone device boundary:** MobileNext cloud iPhone 14 Pro Max,
