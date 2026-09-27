@@ -37,6 +37,11 @@ import {
  * screen is rendered and no production data is fetched.
  */
 
+// The synthetic backend is fulfilled by page.route, which WebKit bypasses after
+// a reload under a controlling service worker: the one test that opens the
+// panel twice found an empty chat list on its second visit.
+test.use({ serviceWorkers: "block" });
+
 const AT = "2026-09-18T09:00:00.000Z";
 const GROUP = "51111111-1111-4111-8111-000000000001";
 const LINE = "Собираемся в четверг";
