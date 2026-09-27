@@ -19,7 +19,7 @@ Read in this order:
    replaces them;
 5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–51) and the
    decisions log;
-6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-298, with its
+6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-318, with its
    measurement. Search it before filing anything.
 
 **Claude resumed from Codex, 2026-09-27 (evening).** Codex stopped at the
@@ -38,7 +38,30 @@ order was followed and closed:
   confirm. The flagged diagnostic used for it is removed (`ab68a192`);
 - a tester's report of the same day is in the register as D-313 – D-317; the
   contacts header under the status bar and the "second contact" it caused are
-  fixed (`1d517198`), the rest are open.
+  fixed (`1d517198`), and so are D-313 (a voice message keeps playing after
+  its chat is left, `c133c238`), D-316 (add to contacts from a card,
+  `96024009`) and D-314's first half (a pressed send is not cancelled by
+  leaving the chat, `fa1b107a`).
+
+**2026-09-28, the same session.** Deployed and verified by the running image:
+
+- item 42 — the Windows update offer is in the window's caption (`d3c3f737`);
+- item 51 — the reference-clients claims that named no client re-verdicted
+  (`5a317dff`);
+- item 40 — Discord's bar at the foot of the chat list (`dd514186`): the face
+  opens its own menu, mute and deafen work with no call and are kept, a
+  microphone chosen mid-call goes on the air in that call, and «Мой профиль»
+  no longer duplicates «Настройки». Read in Discord's bundle, reference-clients
+  §21;
+- the unconfigured half of the routing matrix was red — four components above
+  the configuration gate called `createClient()` — and is 21/21 again
+  (`b36e894a`);
+- D-318 — a profile read again in a conversation no longer lands on the empty
+  screen (`0eba67e9`);
+- D-314 closed — an attachment is in its conversation from the press, with
+  its picture and a ring for its upload, wherever the reader goes afterwards;
+  a failed one waits there with «Повторить». Read in Telegram Web A,
+  reference-clients §22.
 
 MobileNext works from this machine through `mobilecli` (the login lives in the
 Windows keyring); the account allows one device at a time, and some iPhone 14

@@ -17,6 +17,7 @@ import type { MessageDeliveryState } from "@/lib/messageDelivery";
 import { signedMediaUrls } from "@/lib/media/mediaUrl";
 import type { MessageWithSender } from "@/types/database";
 import { getVisibleMediaCaption } from "./MessageBubble";
+import { OutgoingUploadPercent, OutgoingUploadRing } from "./OutgoingUploadRing";
 
 const subscribeToMediaUrls = (listener: () => void) => signedMediaUrls().subscribe(listener);
 
@@ -33,6 +34,12 @@ interface MessageAlbumTileProps {
   onJumpToReply: (messageId: string) => void;
   onReaction: (messageId: string, emoji: string) => void;
   onOpenGroupReadReceipts: (messageId: string) => void;
+  /**
+   * An album photo still on its way, stopped from its ring (D-314). One that
+   * failed is not a tile at all — `groupVisibleMediaAlbums` lets a failed item
+   * out of its album, so its «Повторить» is the bubble's.
+   */
+  onCancelUpload?: (message: MessageWithSender) => void;
 }
 
 export const MessageAlbumTile = React.memo(function MessageAlbumTile({
@@ -48,6 +55,7 @@ export const MessageAlbumTile = React.memo(function MessageAlbumTile({
   onJumpToReply,
   onReaction,
   onOpenGroupReadReceipts,
+  onCancelUpload,
 }: MessageAlbumTileProps) {
   const { url: originalUrl, settled } = useMessageMediaSource(message);
   const uploadedPreviewUrl = useSyncExternalStore(
@@ -176,6 +184,20 @@ export const MessageAlbumTile = React.memo(function MessageAlbumTile({
           )}
         </div>
       </div>
+      {/* D-314: each photo of an album on its way has its own ring, as each
+          is its own upload; the tile stays where the delivered one will be. */}
+      {message.upload_progress !== undefined && <OutgoingUploadPercent progress={message.upload_progress ?? null} />}
+      {message.upload_progress !== undefined && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center" data-message-uploading="true">
+          <div className="pointer-events-auto">
+            <OutgoingUploadRing
+              progress={message.upload_progress ?? null}
+              onCancel={onCancelUpload && !isSelectionMode ? () => onCancelUpload(message) : undefined}
+              size={compact ? 32 : 40}
+            />
+          </div>
+        </div>
+      )}
       {readLabel && (
         <button
           type="button"

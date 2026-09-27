@@ -14,8 +14,13 @@ import sharp from "sharp";
  * What is pinned here, on each shape: a refused attachment does not strand the
  * ones after it and keeps its reason — naming the file, never guessing a limit
  * — and «Повторить»; uploads run side by side while the messages still arrive
- * in pick order, with rising `client_sent_at`; a small upload's bar claims no
+ * in pick order, with rising `client_sent_at`; a small upload's ring claims no
  * number; and a chat update that never answers holds nothing.
+ *
+ * Since D-314's Telegram half all of it is said by the message itself: a send
+ * puts each attachment in the conversation at the press, with its own preview
+ * and progress, and takes it out of the tray above the composer. A refusal
+ * and «Повторить» are on that message, wherever the reader has been since.
  *
  * And the iPhone photo path, with the canvas answering a request for WebP with
  * a PNG, as WebKit on Apple platforms does: a compressed photo goes as a JPEG
@@ -128,14 +133,17 @@ test.describe("the send path of photos and videos", () => {
     expect(uploadOf(backend, backend.inserts[0])?.name).toMatch(/^facade-image[.]/);
     expect(backend.inserts[0]?.content, "the first delivered item carries the caption").toBe(CAPTION);
 
-    const tile = page.getByTestId("staged-attachment-item").filter({ hasText: "clip.mp4" });
-    await expect(tile).toHaveCount(1);
+    // The refused one is a failed message in the conversation now, not a tile
+    // above the composer, and the tray is empty.
+    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
+    const failed = page.locator('[data-message-send-error="true"]').filter({ hasText: "clip.mp4" });
+    await expect(failed).toHaveCount(1);
     // The file, what the server said, and no limit it did not state: a 413 used
     // to read «Максимум 250 МБ», the client's own limit.
-    await expect(tile).toContainText("clip.mp4 — файл больше, чем принимает сервер.");
-    await expect(tile).not.toContainText("МБ после");
-    expect(await tile.innerText()).not.toMatch(/250|Максимум/);
-    await expect(tile.getByRole("button", { name: "Повторить отправку" })).toBeVisible();
+    await expect(failed).toContainText("clip.mp4 — файл больше, чем принимает сервер.");
+    await expect(failed).not.toContainText("МБ после");
+    expect(await failed.innerText()).not.toMatch(/250|Максимум/);
+    await expect(failed.getByRole("button", { name: "Повторить" })).toBeVisible();
     // The tile's one line is beside the size and shows next to nothing of a
     // sentence, so the reason is said where it can be read as well.
     const notice = page.getByRole("alert").filter({ hasText: "Вложение не отправлено" });
@@ -143,11 +151,11 @@ test.describe("the send path of photos and videos", () => {
     await expect(notice).toContainText("clip.mp4");
 
     refuse = false;
-    await tile.getByRole("button", { name: "Повторить отправку" }).click();
+    await failed.getByRole("button", { name: "Повторить" }).click();
     await expect.poll(() => backend.inserts.length).toBe(2);
     expect(uploadOf(backend, backend.inserts[1])?.name).toBe("clip.mp4");
     expect(backend.inserts[1]?.content, "retry must not send the delivered caption again").not.toBe(CAPTION);
-    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
+    await expect(page.locator('[data-message-send-error="true"]')).toHaveCount(0);
   });
 
   test("a failed album photo keeps its group on retry without repeating the caption", async ({ page }) => {
@@ -167,10 +175,10 @@ test.describe("the send path of photos and videos", () => {
     expect(second?.media_metadata).toMatchObject({ album_index: 1, album_count: 2 });
 
     refuseFirst = false;
-    await page.getByTestId("staged-attachment-item")
-      .filter({ hasText: "first-image" })
-      .getByRole("button", { name: "Повторить отправку" })
-      .click();
+    // The refused photo is a failed message of its own — a failed item leaves
+    // its album rather than hiding the rest — with its own «Повторить».
+    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
+    await page.locator('[data-message-send-error="true"]').getByRole("button", { name: "Повторить" }).click();
     await expect.poll(() => backend.inserts.length).toBe(2);
     const retried = backend.inserts[1];
     expect(retried?.content).not.toBe(CAPTION);
@@ -179,7 +187,7 @@ test.describe("the send path of photos and videos", () => {
       album_index: 0,
       album_count: 2,
     });
-    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
+    await expect(page.locator('[data-message-send-error="true"]')).toHaveCount(0);
   });
 
   /**
@@ -208,16 +216,18 @@ test.describe("the send path of photos and videos", () => {
     await expect(captionField, "the caption was typed before the send").toHaveValue(CAPTION);
     await sendPicked(page, 1);
 
-    const tile = page.getByTestId("staged-attachment-item");
-    const retry = tile.getByRole("button", { name: "Повторить отправку" });
+    const failed = page.locator('[data-message-send-error="true"]');
+    const retry = failed.getByRole("button", { name: "Повторить" });
     await expect(retry).toBeVisible();
     expect(backend.inserts.length, "nothing was inserted while the bytes were refused").toBe(0);
+    // The caption is on the message that is waiting to go, as it will be sent.
+    await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: CAPTION })).toHaveCount(1);
 
     // The connection is back and the file goes, exactly as he described it.
     cut = false;
     await retry.click();
     await expect.poll(() => backend.inserts.length).toBe(1);
-    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
+    await expect(failed).toHaveCount(0);
 
     expect(backend.inserts[0]?.content, "the retry sent the photo without its caption").toBe(CAPTION);
     await expect(
@@ -307,16 +317,18 @@ test.describe("the send path of photos and videos", () => {
     await sendPicked(page, 1);
     await expect.poll(() => backend.uploads.length).toBe(1);
 
-    const tile = page.getByTestId("staged-attachment-item");
-    const bar = tile.getByTestId("staged-attachment-upload-progress");
-    await expect(bar).toBeVisible();
-    await expect(bar).toHaveAttribute("role", "progressbar");
-    await expect(bar, "a multipart upload reports no bytes, so no number is claimed").not.toHaveAttribute("aria-valuenow");
-    await expect(tile).not.toContainText("%");
+    // On the message itself, in the conversation, from the press.
+    const placeholder = page.locator('[data-message-uploading="true"]');
+    const ring = placeholder.getByTestId("message-upload-progress");
+    await expect(ring).toBeVisible();
+    await expect(ring).toHaveAttribute("role", "progressbar");
+    await expect(ring, "a multipart upload reports no bytes, so no number is claimed").not.toHaveAttribute("aria-valuenow");
+    await expect(placeholder).not.toContainText("%");
+    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
 
     release();
     await expect.poll(() => backend.inserts.length).toBe(1);
-    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
+    await expect(placeholder).toHaveCount(0);
   });
 
   // D-314, from a tester on 2026-09-27: a file sent to upload stopped when he
@@ -350,6 +362,103 @@ test.describe("the send path of photos and videos", () => {
       .toBe(1);
     expect(backend.inserts[0]?.chat_id, "into the chat it was sent from").toBe(CHAT_ID);
     expect(backend.inserts[0]?.media_path).toBe(backend.uploads[0]?.path);
+  });
+
+  /**
+   * D-314's Telegram half, read in Telegram Web A (reference-clients §22): the
+   * message is in the conversation the moment «Отправить» is pressed, with the
+   * picture the sender picked and a ring for its upload, and the tray is empty.
+   * Nothing is inserted until the bytes are up, and then the row takes the
+   * placeholder's place rather than appearing beside it.
+   */
+  test("a send is in its conversation at the press, with its own picture", async ({ page }) => {
+    const backend = await installBackend(page);
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    backend.answer = async () => {
+      await held;
+      return null;
+    };
+    await openChat(page);
+
+    await pickPhotosOrVideos(page, [await testPhoto("porch.png", 200)]);
+    await page.getByTestId("attach-caption").fill(CAPTION);
+    await sendPicked(page, 1);
+    await expect.poll(() => backend.uploads.length).toBe(1);
+
+    const placeholder = page.locator('[data-message-uploading="true"]');
+    await expect(placeholder).toHaveCount(1);
+    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
+    const source = await placeholder.locator("img").first().getAttribute("src");
+    expect(source, "the placeholder shows the picked picture, from this device").toMatch(/^blob:/);
+    await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: CAPTION })).toHaveCount(1);
+    expect(backend.inserts.length, "nothing is inserted before the bytes are up").toBe(0);
+
+    release();
+    await expect.poll(() => backend.inserts.length).toBe(1);
+    await expect(placeholder).toHaveCount(0);
+    // One message, not the placeholder and the row side by side.
+    await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: CAPTION })).toHaveCount(1);
+  });
+
+  test("a send on its way is still in its conversation after the reader has been elsewhere", async ({ page }) => {
+    test.skip((page.viewportSize()?.width ?? 0) >= 768, "leaving a chat is its own screen on a phone");
+    const backend = await installBackend(page);
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    backend.answer = async () => {
+      await held;
+      return null;
+    };
+    await openChat(page);
+
+    await pickPhotosOrVideos(page, [await testPhoto("gate.png", 200)]);
+    await sendPicked(page, 1);
+    await expect.poll(() => backend.uploads.length).toBe(1);
+
+    await page.getByRole("button", { name: "Назад", exact: true }).click();
+    const row = page.getByTestId("chat-list-item").filter({ hasText: CHAT_NAME });
+    await expect(row).toBeVisible();
+    // Back into it: the send is where it was left, still on its way — the
+    // tester's complaint was that after leaving nothing showed it at all.
+    await row.click();
+    await expect(page.locator('[data-message-uploading="true"]')).toHaveCount(1);
+
+    release();
+    await expect.poll(() => backend.inserts.length).toBe(1);
+    await expect(page.locator('[data-message-uploading="true"]')).toHaveCount(0);
+  });
+
+  test("the ring stops a send, and nothing arrives afterwards", async ({ page }) => {
+    const backend = await installBackend(page);
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    backend.answer = async () => {
+      await held;
+      return null;
+    };
+    await openChat(page);
+
+    await pickPhotosOrVideos(page, [await testPhoto("porch.png", 200)]);
+    await sendPicked(page, 1);
+    await expect.poll(() => backend.uploads.length).toBe(1);
+    const placeholder = page.locator('[data-message-uploading="true"]');
+    await expect(placeholder).toHaveCount(1);
+
+    await placeholder.getByTestId("message-upload-cancel").click();
+    await expect(placeholder).toHaveCount(0);
+    // A small file is one request that cannot be taken back once sent, so the
+    // bytes may still land; what must not follow is the row.
+    release();
+    await page.waitForTimeout(1500);
+    expect(backend.inserts.length, "a stopped send inserted a message").toBe(0);
+    await expect(page.locator('[data-message-bubble="true"] img[src^="blob:"]')).toHaveCount(0);
   });
 
   test("an update of the chat that never answers does not hold the send", async ({ page }) => {

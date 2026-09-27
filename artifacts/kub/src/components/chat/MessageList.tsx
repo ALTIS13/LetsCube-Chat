@@ -2166,6 +2166,7 @@ const MessageRow = React.memo(function MessageRow({
                 onJumpToReply={actions.jumpToReply}
                 onReaction={actions.reaction}
                 onOpenGroupReadReceipts={actions.openGroupReadReceipts}
+                onCancelUpload={actions.discardLocalMessage}
               />
             ) : <MemoizedMessageBubble
               message={msg}

@@ -3131,3 +3131,67 @@ Where ours differs, with the reason:
 - **The panel spans the folder rail as well as the list.** The list can be
   dragged down to 66 points, which would leave room for the face alone;
   across the rail the narrowest panel keeps the face and both toggles.
+
+## 22. Subject 14 — an attachment on its way, 2026-09-28
+
+D-314's second half. A tester, 2026-09-27: a file sent to upload showed
+nothing once its chat was left. Telegram is the reference for a chat with
+media (CLAUDE.md §7), and the web client was read rather than remembered:
+**Telegram Web A**, `github.com/Ajaxy/telegram-tt` at `ea0d2261` (committed
+2026-09-22), read 2026-09-28. Telegram's other clients were not read —
+**UNESTABLISHED** there. Everything below is SHIPPED unless marked.
+
+### 22.1 What the client does
+
+- **The message is in the conversation before the upload.** `sendMessageLocal`
+  builds it (`buildLocalMessage`) and dispatches `newMessage` before
+  `uploadMedia` starts. A photo carries its local blob as the image; a video
+  plays its blob inline; a document carries `previewBlobUrl`.
+- **Progress lives in global state, not in a component.** `onProgress` fires
+  per 128 KB part; each call writes
+  `fileUploads.byMessageKey["msg<chat>-<localId>"]`, and the key survives the
+  swap to the server's message. The upload runs in the API worker, so opening
+  another chat does not stop it (INFERRED from where it runs).
+- **On the media:** a `ProgressSpinner` (an arc, 5% minimum, eased) with a close
+  icon in its centre, plus a rounded-percent badge on photos and videos.
+  Documents show «{current} / {total}» and no percent; a voice message gets a
+  ring around its play button and is not playable until sent (INFERRED).
+- **Cancel** is a press on the spinner: `cancelUploadMedia`, and the local
+  message is deleted. There is no «cancelled» state.
+- **Albums:** one local message per file, one `groupedId`, one spinner, percent
+  and cancel per tile; no combined progress.
+- **Failure:** only a failed final send marks the message
+  `messageSendingStateFailed` (a red «!»), and the only action offered is
+  «Delete» — there is no Resend or Retry anywhere in the client. An upload that
+  throws leaves the message on a clock with no error and no way to delete it
+  (INFERRED from the code path).
+- **The chat list** shows a clock for a pending last message. A reload loses
+  the upload; nothing resumes it.
+
+### 22.2 Ours, and where it differs on purpose
+
+Built the same day (`lib/outgoingMedia.ts`, `components/chat/OutgoingUploadRing.tsx`,
+the send in `ChatWindow`): the placeholder at the press with the picked
+picture, progress in the store so it survives leaving the chat, a ring with a
+× that takes the placeholder out and stops the upload, a percent over a
+picture when there is a real one, one ring per album tile, and the chat list's
+clock.
+
+Where ours differs, with the reason:
+
+- **«Повторить» stays.** Telegram Web A offers only «Delete», and leaves an
+  upload that failed stuck on a clock. Ours marks the placeholder failed with
+  the server's reason and keeps the file for a retry — which is D-286's whole
+  point: the tester's file had to go again, with its caption, once the VPN was
+  back.
+- **A number only when there is one.** A small file is one request whose
+  progress `fetch` does not report; its ring spins and claims nothing, the rule
+  D-114 set for the tray. Telegram's parts always report.
+- **A failed album photo leaves its album**, as it already did
+  (`groupVisibleMediaAlbums`), so its reason and «Повторить» are a bubble's
+  rather than a tile's.
+- **A voice message plays from the device while it uploads**; Telegram's local
+  voice has no blob to play.
+- **The chat list names the placeholder** as the last message even while its
+  chat is open. Telegram leaves the row alone until the send is confirmed; ours
+  shows it because the complaint was exactly that nothing did.

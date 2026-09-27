@@ -26,6 +26,7 @@ import {
 } from "@/lib/messageAckError";
 import { FORWARD_RPC, forwardInsertPayload, forwardRpcArgs, type ForwardMessageResult } from "@/lib/messageForward";
 import { MESSAGE_SELECT_WITH_JOINS } from "@/lib/messageProjection";
+import { buildOptimisticMessage, type SendableMessageType } from "@/lib/optimisticMessage";
 import {
   REACTION_LIMIT_RPC,
   SET_REACTION_RPC,
@@ -60,7 +61,6 @@ import {
 const MESSAGE_PAGE_SIZE = 100;
 const SEND_ACK_TIMEOUT_MS = 12_000;
 
-type SendableMessageType = Extract<MessageWithSender["type"], "text" | "image" | "video" | "audio" | "file">;
 
 type FetchMessagesOptions = {
   background?: boolean;
@@ -1197,38 +1197,22 @@ export function useMessages(
     const clientSentAt = input.clientSentAt ?? new Date().toISOString();
     const tempId = input.tempId ?? `tmp:${clientMessageId}`;
     const messageTopicId = input.topicId === undefined ? (topicIdRef.current ?? null) : input.topicId;
-    const optimistic: MessageWithSender = {
-      id: tempId,
-      chat_id: activeChatId,
-      topic_id: messageTopicId,
-      user_id: user.id,
-      bot_id: null,
-      bot_input_field_placeholder: null,
-      bot_reply_markup: null,
-      content: trimmedContent,
+    const optimistic = buildOptimisticMessage({
+      chatId: activeChatId,
+      topicId: messageTopicId,
+      user,
       type: input.type,
-      // Never anything else on a row a client wrote: the column is only ever
-      // set by `voice_call_stop`, on a `system` row nothing here can produce.
-      system_payload: null,
-      media_bucket: input.mediaBucket ?? null,
-      media_path: input.mediaPath ?? null,
-      media_url: input.mediaUrl ?? null,
-      reply_to_id: input.replyToId ?? null,
-      forwarded_from_id: input.forwardedFromId ?? null,
-      edited_at: null,
-      deleted_at: null,
-      pinned: false,
-      created_at: clientSentAt,
-      client_message_id: clientMessageId,
-      client_sent_at: clientSentAt,
-      media_metadata: input.mediaMetadata ?? null,
-      sender: user,
-      reactions: [],
-      pending: true,
-      checking: false,
-      failed: false,
-      send_error: null,
-    };
+      content: trimmedContent,
+      mediaBucket: input.mediaBucket,
+      mediaPath: input.mediaPath,
+      mediaUrl: input.mediaUrl,
+      replyToId: input.replyToId,
+      forwardedFromId: input.forwardedFromId,
+      mediaMetadata: input.mediaMetadata,
+      clientMessageId,
+      clientSentAt,
+      tempId,
+    });
 
     if (input.tempId) replaceMessage(activeChatId, tempId, optimistic);
     else addMessage(activeChatId, optimistic);
@@ -1352,6 +1336,8 @@ export function useMessages(
     clientMessageId?: string | null;
     clientSentAt?: string | null;
     mediaMetadata?: Json | null;
+    /** The placeholder this send put in the conversation at the press (D-314). */
+    tempId?: string;
   }) => {
     return sendLocalMessage({
       type: input.type,
@@ -1365,6 +1351,7 @@ export function useMessages(
       mediaMetadata: input.mediaMetadata,
       targetChatId: input.targetChatId ?? undefined,
       topicId: input.topicId,
+      tempId: input.tempId,
     });
   }, [sendLocalMessage]);
 

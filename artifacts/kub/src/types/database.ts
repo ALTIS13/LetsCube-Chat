@@ -2154,6 +2154,14 @@ export interface MessageWithSender extends Message {
   /** Local UI: friendly failed-send reason. Not persisted. */
   send_error?: string | null
   /**
+   * Local UI: an attachment still on its way to storage (D-314). Present only on
+   * the placeholder a send puts in the conversation when «Отправить» is pressed:
+   * 0..100 while the resumable path reports bytes, `null` while it waits or on a
+   * path that reports none. Absent on every other message, including the one
+   * that replaces the placeholder once the bytes are up. Not persisted.
+   */
+  upload_progress?: number | null
+  /**
    * Local UI: who wrote the original of a forwarded message, when the client
    * knows it another way. The preview fixture sets it; so may anything that
    * learns the origin without a read. It wins over the join below, because a

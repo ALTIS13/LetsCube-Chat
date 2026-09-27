@@ -53,6 +53,7 @@ import {
 } from "@/lib/messageActor";
 import { QuickReactionButton, ReactionChip } from "./MessageReactions";
 import { BotInlineKeyboard } from "./BotInlineKeyboard";
+import { OutgoingUploadLine, OutgoingUploadPercent, OutgoingUploadRing } from "./OutgoingUploadRing";
 import { parseBotReplyMarkup } from "@/lib/botChatSurfaces";
 
 type TextLayoutKind = "short" | "regular" | "link" | "longToken" | "preformatted" | "media";
@@ -1194,6 +1195,11 @@ export function MessageBubble({
   const hiddenReactionCount = overflowReactionEntries.reduce((total, group) => total + group.count, 0);
   const hasReactions = reactionEntries.length > 0;
   const isLocalSend = message.id.startsWith("tmp:") || Boolean(message.pending || message.checking || message.failed);
+  // D-314: an attachment still on its way to storage, shown where it will land.
+  const uploading = message.upload_progress !== undefined;
+  const uploadProgress = message.upload_progress ?? null;
+  // Its bytes never arrived: a placeholder, failed, with nothing stored behind it.
+  const outgoingPlaceholder = message.id.startsWith("tmp:") && message.type !== "text" && !message.media_path;
   const canReact = !isLocalSend;
 
   const canUseCompactReplyInline = canRenderCompactReplyInline(message, textLayoutKind, hasReactions);
@@ -1629,6 +1635,7 @@ export function MessageBubble({
               />
             ) : message.type === "image" && message.media_url ? (
               <MediaWithCaption caption={mediaCaption} bot={botCommandsInText}>
+                <UploadVeil uploading={uploading} progress={uploadProgress} onCancel={onDiscardLocalMessage}>
                 <MediaImage
                   url={imageDisplayUrl}
                   originalUrl={originalUrl}
@@ -1650,9 +1657,11 @@ export function MessageBubble({
                     onOpenMedia?.(message.id);
                   }}
                 />
+                </UploadVeil>
               </MediaWithCaption>
             ) : message.type === "video" && message.media_url ? (
               isRoundVideoMessage(message) ? (
+                <UploadVeil uploading={uploading} progress={uploadProgress} onCancel={onDiscardLocalMessage}>
                 <RoundVideoMessage
                   url={videoPlaybackUrl}
                   originalUrl={originalUrl}
@@ -1665,8 +1674,10 @@ export function MessageBubble({
                     onOpenMedia?.(message.id);
                   }}
                 />
+                </UploadVeil>
               ) : (
                 <MediaWithCaption caption={mediaCaption} bot={botCommandsInText}>
+                  <UploadVeil uploading={uploading} progress={uploadProgress} onCancel={onDiscardLocalMessage}>
                   <MediaVideo
                     url={videoPlaybackUrl}
                     originalUrl={originalUrl}
@@ -1679,18 +1690,27 @@ export function MessageBubble({
                       onOpenMedia?.(message.id);
                     }}
                   />
+                  </UploadVeil>
                 </MediaWithCaption>
               )
-            ) : message.type === "file" && message.media_url ? (
-              <a
-                href={originalUrl ?? undefined}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity text-[color:var(--kub-accent-text)]"
-              >
-                <KubIcon name="file" size={16} />
-                <span className="truncate max-w-[200px]">{message.content ?? "File"}</span>
-              </a>
+            ) : message.type === "file" && (message.media_url || outgoingPlaceholder) ? (
+              message.media_url ? (
+                <a
+                  href={originalUrl ?? undefined}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity text-[color:var(--kub-accent-text)]"
+                >
+                  <KubIcon name="file" size={16} />
+                  <span className="truncate max-w-[200px]">{message.content ?? "File"}</span>
+                </a>
+              ) : (
+                // A file still on its way has nothing to open yet (D-314).
+                <div className="flex items-center gap-2 text-sm text-[color:var(--kub-text)]">
+                  <KubIcon name="file" size={16} tone="muted" />
+                  <span className="truncate max-w-[200px]">{message.content ?? "Файл"}</span>
+                </div>
+              )
             ) : canUseCompactReplyInline ? (
               <div
                 data-message-text-flow="true"
@@ -1736,6 +1756,10 @@ export function MessageBubble({
               >
                 <FormattedText content={message.content ?? ""} bot={botCommandsInText} />
               </p>
+            )}
+
+            {uploading && (isVoiceMessage(message) || message.type === "file" || message.type === "audio") && (
+              <OutgoingUploadLine progress={uploadProgress} onCancel={onDiscardLocalMessage} />
             )}
 
             {message.failed && isMe && (
@@ -1996,6 +2020,37 @@ function MediaImage({
         </span>
       )}
     </button>
+  );
+}
+
+/**
+ * A picture or a video still on its way, with the ring over it (D-314).
+ *
+ * Outside a send it is only its children, so every other message renders
+ * exactly as it did; the wrapper exists only while there is a ring to place.
+ */
+function UploadVeil({
+  uploading,
+  progress,
+  onCancel,
+  children,
+}: {
+  uploading: boolean;
+  progress: number | null;
+  onCancel?: () => void;
+  children: ReactNode;
+}) {
+  if (!uploading) return <>{children}</>;
+  return (
+    <div className="relative" data-message-uploading="true">
+      {children}
+      <OutgoingUploadPercent progress={progress} />
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div className="pointer-events-auto">
+          <OutgoingUploadRing progress={progress} onCancel={onCancel} />
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -23786,7 +23786,7 @@ byte ranges): red before at the bar after leaving, green after on Chromium
 left, paused from the bar, back through the title, resumed from where it
 stopped.
 
-## D-314 `[ ]` An upload stops when you leave its chat, and a locked phone never finishes it
+## D-314 `[x]` An upload stops when you leave its chat, and a locked phone never finishes it
 
 2026-09-27, same voice message: a file sent to upload stops if the chat is
 left, and one started just before the phone was locked in a pocket never went.
@@ -23821,6 +23821,30 @@ that shows progress belongs to the chat on screen, so after leaving nothing
 shows the send until its row arrives. And a locked iPhone suspends the page:
 a large file's resumable upload retries on its own when the app is back, a
 small one's single request can fail with no tray left to retry it from.
+
+The Telegram half, 2026-09-28, read in Telegram Web A rather than remembered
+(reference-clients §22). Pressing «Отправить» now puts each attachment in its
+conversation at once — the picked picture, a ring for its upload with a × that
+stops it, a percent over a picture when the resumable path reports one, a ring
+per album tile — and takes it out of the tray. The progress is in the store,
+so it is there when the reader comes back from another chat, and the chat list
+shows the send with a clock. `lib/outgoingMedia.ts` keeps what a view that did
+not start the send needs: the file, its caption, reply, topic and place in the
+order, and how to stop its upload. A failed upload is a failed message with
+the server's reason and «Повторить» and «Удалить», retried from any view with
+its caption (D-286) — where Telegram Web A offers only «Удалить». That also
+closes the locked phone as far as a web page can: the page cannot upload while
+iOS has it suspended, but a send that failed there is waiting in its
+conversation with «Повторить», and a resumable one goes on by itself.
+
+`media-send-path.spec.ts` asserts it on the message rather than the tray: at
+the press the placeholder is there with a `blob:` picture and nothing is
+inserted; back from the chat list it is still there; the ring stops it and no
+row follows; the refused, album and caption retries go from the failed
+message. Three mutations — no placeholder, a cancel the insert ignores, the
+tray kept — each turn the spec red. `tests/unit/outgoing-media.test.mts` pins
+the registry. The tray's own in-flight states (its bar, «Повторить отправку»,
+«Отменить загрузку») are unreachable now and are left for a separate removal.
 
 ## D-315 `[x]` After the first contact, a second one could not be added
 
