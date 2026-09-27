@@ -17,9 +17,12 @@ tested in this stage.
 - A read-only QA member signed an original media object uploaded by a different
   member; its `HEAD` returned 200. A QA account outside the chat could not sign
   the same object. A five-second link worked before expiry, returned 400 after
-  six seconds, and a new signature returned 200. No media bytes or message
-  bodies were read into the report. The browser resolver passed on desktop and
-  mobile Chromium against the QA session before this production build.
+  six seconds, and a new signature returned 200. The same member signed both
+  ready image variants (`image_preview` and `image_thumb`); both returned 200,
+  while the outsider could sign neither. Two avatar variants also returned 200.
+  The opt-in browser resolver test passed for original, image and avatar paths
+  on desktop 1440px and mobile 390px Chromium. No media bytes or message bodies
+  were read into the report.
 - The production `storage.buckets` row for `media` still reads `public = true`.
   No storage policy, database row, Android bundle or native release changed.
 
@@ -28,10 +31,10 @@ tested in this stage.
 The `signed` mode still permits a public-URL fallback. It measures signing
 without risking blank media on an installed client. It is **not** a privacy
 fix while the bucket remains public. The real-member probe covered one
-original object; it did not establish production preview/avatar coverage,
-account-switch UI behavior, long-session refresh in an authenticated deployed
-browser, or upload performance. The local store and mode tests cover those
-mechanics in isolation, not production acceptance.
+original object, two image variants and two avatar variants. It did not cover
+all formats, chat avatars, account-switch UI behavior, long-session refresh in
+an authenticated deployed browser, or upload performance. The local store and
+mode tests cover those mechanics in isolation, not production acceptance.
 
 Before `signed-only` and a private bucket: verify representative message
 previews, chat and user avatars, downloads and refresh with authenticated web

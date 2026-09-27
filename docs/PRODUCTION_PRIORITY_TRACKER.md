@@ -7,10 +7,12 @@ builds with `VITE_MEDIA_SIGNED_URLS=signed` from `11a3bff9`. The served JS
 contains that mode, one healthy container retains the guarded asset volume,
 and the previous hashed entry still returns 200. Read-only real-account QA
 proved member signing, outsider denial, short-link expiry and renewal for one
-original media object. The bucket remains **public**, and the client can still
-fall back to public URLs. Preview/avatar and deployed authenticated UI coverage
-are outstanding; private-bucket activation and Android remain blocked while
-Android work is on hold. [Evidence, limits and rollback](operations/2026-09-27-signed-media-canary.md).
+original media object. The browser resolver also passed for two image and two
+avatar variants at 1440 and 390px. The bucket remains **public**, and the client
+can still fall back to public URLs. Other formats, chat avatars and deployed
+authenticated UI coverage are outstanding; private-bucket activation and
+Android remain blocked while Android work is on hold.
+[Evidence, limits and rollback](operations/2026-09-27-signed-media-canary.md).
 
 **2026-09-27 iPhone device boundary:** MobileNext cloud iPhone 14 Pro Max,
 iOS 26.5: the installed Home Screen PWA opened the guest sign-in screen;
