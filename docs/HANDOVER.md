@@ -22,6 +22,15 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-298, with its
    measurement. Search it before filing anything.
 
+**Latest checkpoint, 2026-09-27:** the shared web is deployed in D-208
+`signed` media URL canary mode from `11a3bff9`; one original media object
+passed real-member signing, outsider denial, expiry and renewal checks. The
+`media` bucket is still public and the signed mode has a public fallback, so
+this is readiness evidence, not the private-bucket privacy fix. The owner has
+put Android on hold; do not build, install or publish an APK. See the
+[canary record](operations/2026-09-27-signed-media-canary.md) and the current
+[priority tracker](PRODUCTION_PRIORITY_TRACKER.md) before advancing D-208.
+
 ---
 
 ## 1. What LETSCUBE is
