@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
 
 import { KubIcon } from "@/components/kub";
+import { CaptionUpdateButton } from "@/components/desktop/CaptionUpdateButton";
 import { getDesktopBridge, isDesktopApp } from "@/lib/platform/desktop";
 import { cn } from "@/lib/utils";
 
@@ -76,6 +77,9 @@ export function DesktopWindowChrome() {
       onMouseDown={startDrag}
       onDoubleClick={toggleMaximize}
     >
+      {/* Where Discord's desktop client puts its update arrow, and where the
+          owner asked for ours (tracker item 42). */}
+      <CaptionUpdateButton />
       <Control label="Свернуть" onClick={() => run((bridge) => bridge.minimize())}>
         <span className="h-px w-3 bg-current" aria-hidden="true" />
       </Control>

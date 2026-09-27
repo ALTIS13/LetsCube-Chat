@@ -550,7 +550,10 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       expect(pillBox!.height).toBeLessThanOrEqual(56);
       const windowControlsBox = await page.getByTestId("desktop-window-chrome").boundingBox();
       expect(windowControlsBox).toBeTruthy();
-      expect(pillBox!.y).toBeGreaterThanOrEqual(windowControlsBox!.y + windowControlsBox!.height);
+      // In the caption strip now, beside the window's own buttons (tracker item
+      // 42), rather than floating under it.
+      expect(pillBox!.y).toBeGreaterThanOrEqual(windowControlsBox!.y - 0.5);
+      expect(pillBox!.y + pillBox!.height).toBeLessThanOrEqual(windowControlsBox!.y + windowControlsBox!.height + 0.5);
       await page.screenshot({ path: testInfo.outputPath("desktop-update-success.png") });
       await expect(pill).toHaveCount(0, { timeout: 7_000 });
 

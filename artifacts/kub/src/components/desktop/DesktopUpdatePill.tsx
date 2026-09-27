@@ -1,124 +1,30 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { KubButton, KubIcon } from "@/components/kub";
 import { useDesktopUpdate } from "@/hooks/useDesktopUpdate";
-import { cn } from "@/lib/utils";
 
 const DESKTOP_VERSION_STORAGE_KEY = "letscube:desktop:last-installed-version";
 const UPDATE_SUCCESS_VISIBLE_MS = 4_200;
 
+/**
+ * A required shell update: the one offer that is not the caption's to make.
+ *
+ * Everything else this drew — an update available, downloading, installing or
+ * failed, the test channel, and «Обновление установлено» — is now drawn in the
+ * window's caption by `CaptionUpdateButton` (tracker item 42), beside the
+ * window's own buttons, where Discord's desktop client keeps its update arrow.
+ * A required update still blocks the window until it is installed.
+ */
 export function DesktopUpdatePill() {
   const update = useDesktopUpdate();
-  const [showUpdateSuccess, setShowUpdateSuccess] = useState(false);
-  const snapshot = update?.snapshot ?? null;
-
-  useEffect(() => {
-    if (snapshot?.channel !== "stable" || snapshot.phase !== "current") {
-      setShowUpdateSuccess(false);
-      return undefined;
-    }
-
-    try {
-      const previousVersion = window.localStorage.getItem(DESKTOP_VERSION_STORAGE_KEY);
-      window.localStorage.setItem(DESKTOP_VERSION_STORAGE_KEY, snapshot.installedVersion);
-      const versionChanged = Boolean(previousVersion && previousVersion !== snapshot.installedVersion);
-      setShowUpdateSuccess(versionChanged);
-      if (!versionChanged) return undefined;
-
-      const timeout = window.setTimeout(() => setShowUpdateSuccess(false), UPDATE_SUCCESS_VISIBLE_MS);
-      return () => window.clearTimeout(timeout);
-    } catch {
-      setShowUpdateSuccess(false);
-      return undefined;
-    }
-  }, [snapshot?.channel, snapshot?.installedVersion, snapshot?.phase]);
-
-  if (!update?.snapshot || !update.presentation) return null;
-
-  const { snapshot: activeSnapshot, presentation, commandPending } = update;
-  if (presentation.blocking) {
-    return (
-      <CriticalUpdateGate
-        title={presentation.title}
-        description={presentation.description}
-        pending={commandPending}
-        onInstall={() => void update.install()}
-      />
-    );
-  }
-
-  if (!presentation.persistent) {
-    if (!showUpdateSuccess) return null;
-    return (
-      <aside
-        className="desktop-update-pill desktop-update-pill--success"
-        role="status"
-        aria-live="polite"
-        data-testid="desktop-update-pill"
-        data-update-success="true"
-      >
-        <span className="desktop-update-pill__icon" aria-hidden="true">
-          <KubIcon name="checkCircle" size={17} />
-        </span>
-        <span className="min-w-0">
-          <strong className="block truncate text-xs font-semibold text-[color:var(--kub-text)]">
-            Обновление установлено
-          </strong>
-          <span className="block truncate text-[12px] text-[color:var(--kub-muted)]">
-            Версия {activeSnapshot.installedVersion} готова к работе
-          </span>
-        </span>
-      </aside>
-    );
-  }
-
-  const action = presentation.action;
+  if (!update?.snapshot || !update.presentation?.blocking) return null;
+  const { presentation, commandPending } = update;
   return (
-    <aside
-      className={cn("desktop-update-pill", activeSnapshot.channel === "test" && "desktop-update-pill--test")}
-      aria-live="polite"
-      data-testid="desktop-update-pill"
-      data-phase={activeSnapshot.phase}
-      data-channel={activeSnapshot.channel}
-    >
-      <span className="desktop-update-pill__icon" aria-hidden="true">
-        <KubIcon
-          name={activeSnapshot.phase === "failed" ? "warning" : activeSnapshot.phase === "downloading" ? "cloud" : "zap"}
-          size={17}
-        />
-      </span>
-      <span className="min-w-0 flex-1">
-        <strong className="block truncate text-xs font-semibold text-[color:var(--kub-text)]">
-          {presentation.title}
-        </strong>
-        <span className="block truncate text-[12px] text-[color:var(--kub-muted)]">
-          {presentation.description}
-        </span>
-        {presentation.progress !== null && (
-          <span
-            className="desktop-update-pill__progress"
-            role="progressbar"
-            aria-label="Загрузка обновления"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={presentation.progress}
-            aria-valuetext={`Загружено ${presentation.progress}%`}
-          >
-            <span style={{ width: `${presentation.progress}%` }} />
-          </span>
-        )}
-      </span>
-      {action && (
-        <button
-          type="button"
-          className="desktop-update-pill__action"
-          onClick={() => void (action === "install" ? update.install() : update.check())}
-          disabled={commandPending}
-          aria-label={action === "install" ? "Установить обновление" : "Повторить проверку"}
-        >
-          <KubIcon name={commandPending ? "spinner" : action === "install" ? "cloud" : "rotate"} size={15} />
-        </button>
-      )}
-    </aside>
+    <CriticalUpdateGate
+      title={presentation.title}
+      description={presentation.description}
+      pending={commandPending}
+      onInstall={() => void update.install()}
+    />
   );
 }
 

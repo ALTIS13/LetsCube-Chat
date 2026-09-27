@@ -8,6 +8,8 @@ import {
 } from "@/hooks/usePwa";
 import { useAppStore } from "@/store/app.store";
 import { markVoiceResumeInterrupted } from "@/lib/voiceResumeStorage";
+import { isDesktopApp } from "@/lib/platform/desktop";
+import { offerWebUpdate } from "@/lib/pwa/webUpdateOffer";
 import {
   APP_UPDATE_NOTICE_SHOWN_KEY,
   APP_UPDATE_QUIET_RESTART_KEY,
@@ -200,7 +202,14 @@ function PendingUpdate({
     setShowing(true);
   }, [showing]);
 
-  if (!showing) return null;
+  // The Windows app offers it in its caption, beside the window's buttons
+  // (tracker item 42); when to offer and when to restart quietly stay here.
+  const desktop = isDesktopApp();
+  useEffect(() => {
+    if (showing && desktop) offerWebUpdate(registration);
+  }, [desktop, registration, showing]);
+
+  if (!showing || desktop) return null;
   return <UpdateNotice registration={registration} />;
 }
 

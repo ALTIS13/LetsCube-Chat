@@ -1109,7 +1109,23 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     where item 39's surfaces end up being reached from, so the two should be
     designed together.
 
-42. `[ ]` The update notice moves to the window's own controls. The owner,
+42. `[x]` The update notice moves to the window's own controls — done 2026-09-28.
+    **What each shell gets.** The Windows app: one control in the caption,
+    left of minimise, where Discord's desktop client keeps its update arrow —
+    green when an update is ready (press installs), a progress ring while it
+    downloads, a warning when it failed (press asks again), «Тест» on the test
+    channel, «Обновление установлено» for a few seconds after one; a new web
+    build is offered there too, and the shell's installer comes first. In a
+    call, pressing asks first («Звонок прервётся»), as the web notice and
+    Discord's «Briefly leave voice?» do; the shell installer had not asked
+    before. A required update is still the blocking gate. A browser tab has no
+    window controls of ours, so the web keeps its pill in the notice band
+    (D-264), with the same throttle and quiet restart.
+    `desktop-update-caption.spec.ts` (6 checks, 5 of them red on the old
+    code); the Windows lifecycle specs keep the same test id and were updated
+    for the new position but need the owner's QA credentials to run.
+
+    The owner,
     2026-09-20: «уведомление об обновлении красиво убрать вправо-вверх рядом с
     кнопками действия с окном (пример с пк версии)», with a screenshot of
     Discord's desktop client where «Помощь» and the download arrow sit beside
@@ -2371,7 +2387,8 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     honest but surprising, and neither is free.
 
 50. `[x]` Whether a call record can be deleted — answered by measurement, 2026-09-27.
-    **Closed:** Discord's shipped client puts a call record (`CALL = 3`) in
+    **Closed:** Discord's shipped web/desktop client (one bundle; its Android
+    app was not read) puts a call record (`CALL = 3`) in
     `UNDELETABLE` and leaves it out of `FORWARDABLE` and `REPLYABLE`; ours
     already offers no menu on a `system` row and the database refuses deleting
     one. Nothing to build. Reading and evidence:
