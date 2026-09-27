@@ -553,6 +553,31 @@ component type. Recorded as an observation, not a plan.
 
 ---
 
+## 7a. A call record: what may be done with it — 2026-09-27, SHIPPED
+
+Read in Discord's web bundle `web.e223a2399a103bfa.js` on 2026-09-27, the
+message-type enum and the sets the client checks before offering an action:
+
+> `i[i.CALL=3]="CALL"`
+> `UNDELETABLE:new Set([1,2,3,4,5,21,35,56,57,64,68])`
+> `FORWARDABLE:new Set([0,19,20,23,35])`
+> `REPLYABLE:new Set([0,7,19,20,23,24,25,32,33,34,35,36,37,38,39,40,41,42,45,46])`
+
+So a call record (type 3) **cannot be deleted, forwarded or replied to**, for
+anybody. Discord has no «delete for me» at all, so there is no second answer to
+reconcile. The same set holds a member added or removed, a renamed conversation
+and a changed icon: the history of the room, which nobody edits.
+
+**Ours already matches, and was checked rather than assumed.** A `system` row
+opens no message menu and cannot be selected or replied to
+(`MessageList.tsx`, `canSelect = !msg.deleted_at && !isSystemMessage`); the
+database refuses it too: `delete_messages_for_everyone` refuses `system` rows
+in a private chat and lets a group member delete only their own, a direct
+`UPDATE` is limited to the author, and `voice_call_stop` writes the record with
+no `user_id` (`20260915160000_a_private_delete_is_not_a_staff_action.sql`
+records the production measurement; `20260918250000_a_call_says_so_in_the_private_chat.sql`
+the insert). Tracker item 50 is closed on this.
+
 ## 8. The rule: a control that cannot work must be absent, not inert
 
 This rule is ours, and it is repeatedly violated. It is worth stating with

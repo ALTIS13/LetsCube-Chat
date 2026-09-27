@@ -220,23 +220,18 @@ Next bot stage: an explicitly scoped per-viewer temporary interface. It must
 not be represented as a private message row, and its privacy/runtime contract
 needs its own proof before implementation.
 
-**Current iPhone PWA checkpoint, 2026-09-27 (Codex):** the separate iOS/MacOS
-chat owns the Home Screen viewport correction. Tester screenshots place the
-clipped page edge at ≈873 of 932 pt. The shell fix was released in `c057d768`
-and the attachment fixed-anchor follow-up in `b7b4e6c3`. CSS guard hardening
-was published in `d2686623`; the installed document's exact bundle remains
-unverified. The hardening keeps iOS component styles layered and the
-attachment's keyboard inset independent from the shared safe-area token, while
-preserving 48px touch areas. Local checks: 70/70
-focused unit, 44/44 viewport Chromium/WebKit, 25/25 applicable safe-area and
-10/10 Android/web boundary scenarios, plus typecheck and build. A short
-MobileNext physical iPhone 14 Pro Max guest smoke confirmed Home Screen launch
-and sign-in controls above the keyboard, but not the authenticated chat. Safari
-tabs on that device showed the app's boot-recovery error while desktop WebKit
-did not; the failed request and installed JS/SW identity are unknown. Next:
-diagnose physical Safari without personal credentials, then inspect attachment
-controls and the lower edge in an authorised synthetic chat. The system-owned
-lower strip may remain outside DOM paint. See the [iPhone PWA viewport record](operations/ios-pwa-viewport-validation.md).
+**iPhone PWA, 2026-09-27 (evening, Claude): D-111 is fixed** (`35a19e66`).
+Measured inside the installed app on rented iPhones: iOS 26 holds an installed
+app whose document exactly fits the screen in a "small" viewport a top inset
+short (innerHeight, the visual viewport and the fixed block 894 of 956 pt), and
+the strip below takes no touches; a document taller than that moves it to the
+large viewport. `html` and `body` of the installed app are now `100lvh`; the
+plain LETSCUBE icon showed no band on the public home and sign-in, touches in
+the old strip land, and the keyboard, rotation and relaunch hold. A signed-in
+chat is the tester's to confirm. Codex's earlier Safari-tab boot-recovery
+observation did not reproduce on four units that evening. The contacts header
+that sat under the status bar is fixed too (`1d517198`). See the
+[iPhone PWA viewport record](operations/ios-pwa-viewport-validation.md).
 
 **2026-09-27 web boot recovery checkpoint:** `37425e08` is deployed in the
 sole healthy web image `c7c220f3`. After a missing entry/boot error, explicit

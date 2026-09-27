@@ -2370,7 +2370,13 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     shell there and leaving the call when the route has no shell — the second is
     honest but surprising, and neither is free.
 
-50. `[ ]` Whether a call record can be deleted — an open question to the owner.
+50. `[x]` Whether a call record can be deleted — answered by measurement, 2026-09-27.
+    **Closed:** Discord's shipped client puts a call record (`CALL = 3`) in
+    `UNDELETABLE` and leaves it out of `FORWARDABLE` and `REPLYABLE`; ours
+    already offers no menu on a `system` row and the database refuses deleting
+    one. Nothing to build. Reading and evidence:
+    [reference-clients §7a](operations/reference-clients.md).
+
     **Recovered 2026-09-21** with item 49, same reason.
 
     The owner said on 2026-09-20: «удаление записи о звонке также сделай как у
