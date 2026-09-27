@@ -718,7 +718,7 @@ function runSearchCommand(
   commandId: string,
   helpers: {
     setLocation: (to: string) => void;
-    setMobileSection: (section: "chats" | "search" | "folders" | "profile") => void;
+    setMobileSection: (section: "chats" | "contacts" | "search" | "profile") => void;
     setSearchQuery: (query: string) => void;
     closeAfterOpen: () => void;
   },

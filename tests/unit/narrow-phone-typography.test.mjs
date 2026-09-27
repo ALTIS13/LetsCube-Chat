@@ -132,12 +132,12 @@ test("the bottom tab labels are sized to fit the narrowest phone", () => {
   const labels = [...withoutComments(destinations).matchAll(/label:\s*"([^"]+)"/g)].map((match) => match[1]);
   assert.equal(
     labels.length,
-    3,
-    `the tab bar has ${labels.length} labels; three is what remains after 2026-09-12 and D-120`,
+    4,
+    `the tab bar has ${labels.length} labels; contacts are now a distinct destination`,
   );
   const characters = labels.reduce((total, value) => total + value.length, 0);
   assert.ok(
-    characters <= 22,
-    `the tab labels total ${characters} characters; three labels measured 17 and 22 is the ceiling that keeps the padding intact`,
+    characters <= 28,
+    `the tab labels total ${characters} characters; the four labels must fit the expanded 328px capsule`,
   );
 });

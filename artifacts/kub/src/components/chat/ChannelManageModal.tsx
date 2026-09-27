@@ -261,6 +261,7 @@ export function ChannelManageModal({
         kind: draft.channelKind,
         name,
         categoryId,
+        ...(draft.channelKind === "voice" ? { maxParticipants: seats, speakRole } : {}),
       });
       if (created) closeDraft();
       return;

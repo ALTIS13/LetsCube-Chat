@@ -36,10 +36,10 @@
  */
 
 /** A section of the chat shell, which `app.store.ts` holds as `mobileSection`. */
-export type BottomNavSection = "chats" | "profile";
+export type BottomNavSection = "chats" | "contacts" | "profile";
 
 /** The icon names `KubIcon` is given. A subset of `KubIconName`, on purpose. */
-export type BottomNavIcon = "chatBubble" | "user" | "tasks";
+export type BottomNavIcon = "chatBubble" | "contact" | "user" | "tasks";
 
 /**
  * A destination, discriminated on `route`.
@@ -76,6 +76,7 @@ export type BottomNavDestination =
  */
 export const BOTTOM_NAV_DESTINATIONS: readonly BottomNavDestination[] = [
   { id: "chats", label: "Чаты", icon: "chatBubble", route: false, gated: false },
+  { id: "contacts", label: "Контакты", icon: "contact", route: false, gated: false },
   { id: "profile", label: "Профиль", icon: "user", route: false, gated: false },
   { id: "tasks", label: "Задачи", icon: "tasks", route: true, gated: true },
 ];

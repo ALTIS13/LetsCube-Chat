@@ -20,13 +20,13 @@ import {
 import { plainFailure } from "@/lib/plainMessages";
 
 /**
- * Loads and watches the topic list for a forum chat.
+ * Loads and watches a forum's topics or a group's text channels.
  *
  * Forum mode keeps `selectedTopicId = null` as the visible "Общие" stream.
  * That pseudo-topic shows legacy/general messages with `messages.topic_id IS NULL`.
  *
- * For non-forum chats the hook is a no-op: `topics` stays empty and
- * selectedTopicId stays null, so the rest of the UI behaves like before.
+ * A group can have text channels even when `is_forum` is false. Chats that
+ * are neither groups nor forums have no topic navigation.
  *
  * **A refused read is not a forum with no channels** (F-6). This hook read
  * `const { data } = await …` and wrote `data ?? []`, so a chat whose `topics`
@@ -37,11 +37,11 @@ import { plainFailure } from "@/lib/plainMessages";
  * and `ChatWindow` folds it into the rail's own `failed`, which has said this
  * for the rooms since 2026-09-14.
  */
-export function useTopics(chatId: string | null, isForum: boolean) {
+export function useTopics(chatId: string | null, hasTopicNavigation: boolean) {
   const supabase = useMemo(() => createClient(), []);
   const rt = useMemo(() => getRealtimeClient(), []);
   const [read, setRead] = useState<HeldList<Topic>>(() => heldListPending<Topic>());
-  const topics = read.rows;
+  const topics = useMemo(() => read.rows.filter((topic) => !topic.archived), [read.rows]);
   // Two slices, not the store. A selector-less read subscribes the chat window
   // that calls this hook to every change anywhere in the store, so every
   // message, receipt and read in the chat list rendered the open conversation
@@ -50,9 +50,9 @@ export function useTopics(chatId: string | null, isForum: boolean) {
   const setSelectedTopicId = useAppStore((s) => s.setSelectedTopicId);
 
   const fetchTopics = useCallback(async (options: { background?: boolean } = {}) => {
-    // Not a forum, or no chat open: there is nothing here to read, which is a
+    // No topic navigation, or no chat open: there is nothing here to read, which is a
     // different fact from a read that failed and must not be told as one.
-    if (!chatId || !isForum) { setRead(heldListCleared<Topic>()); return; }
+    if (!chatId || !hasTopicNavigation) { setRead(heldListCleared<Topic>()); return; }
     bumpFetch("useTopics");
     const background = options.background === true;
     setRead((previous) => heldListStarted(previous, { background }));
@@ -60,11 +60,10 @@ export function useTopics(chatId: string | null, isForum: boolean) {
       .from("topics")
       .select("*")
       .eq("chat_id", chatId)
-      .eq("archived", false)
       .order("is_general", { ascending: false }) // general first
       .order("position", { ascending: true });
     if (error) {
-      // The read said nothing about this forum's channels, so the channels are
+      // The read said nothing about this chat's channels, so the channels are
       // left exactly as they were and the surface is told the answer is old.
       // What the mapper made of it goes to the log, where somebody who can act
       // on a policy name reads it; the screen gets the product's sentence.
@@ -78,7 +77,7 @@ export function useTopics(chatId: string | null, isForum: boolean) {
       return;
     }
     setRead(heldListSucceeded((data ?? []) as Topic[], chatId));
-  }, [chatId, isForum, supabase]);
+  }, [chatId, hasTopicNavigation, supabase]);
 
   // Initial load + when chat changes.
   useEffect(() => { void fetchTopics(); }, [fetchTopics]);
@@ -86,7 +85,7 @@ export function useTopics(chatId: string | null, isForum: boolean) {
   // Keep legacy/general messages visible by default. If the selected topic was
   // removed, fall back to the pseudo-topic "Общие" (`selectedTopicId = null`).
   useEffect(() => {
-    if (!isForum) {
+    if (!hasTopicNavigation) {
       if (selectedTopicId !== null) setSelectedTopicId(null);
       return;
     }
@@ -95,12 +94,12 @@ export function useTopics(chatId: string | null, isForum: boolean) {
       setSelectedTopicId(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topics, isForum, selectedTopicId]);
+  }, [topics, hasTopicNavigation, selectedTopicId]);
 
   // Realtime: react to topic create / update / delete in this chat.
   // Three separate `.on` calls because supabase-js's typings disallow event="*".
   useEffect(() => {
-    if (!chatId || !isForum) return;
+    if (!chatId || !hasTopicNavigation) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const debouncedFetch = () => {
       if (timer) clearTimeout(timer);
@@ -126,7 +125,7 @@ export function useTopics(chatId: string | null, isForum: boolean) {
       rt.removeChannel(ch);
       unregisterChannel(channelName);
     };
-  }, [chatId, isForum, rt, fetchTopics]);
+  }, [chatId, hasTopicNavigation, rt, fetchTopics]);
 
   // ── Mutations ────────────────────────────────────────────────────────────
   const createTopic = useCallback(async (
@@ -167,6 +166,10 @@ export function useTopics(chatId: string | null, isForum: boolean) {
 
   return {
     topics,
+    /** An archived text channel still owns its retained messages. */
+    hasTextChannelHistory: read.subject === chatId && read.rows.some((topic) => !topic.is_general),
+    /** A successful, current read is required before an ordinary group may use the unscoped legacy stream. */
+    scopeKnown: read.loadedOnce && read.subject === chatId && !read.error,
     loading: read.loading,
     /** The refused read's sentence, or null. Already in a person's words. */
     error: read.error,

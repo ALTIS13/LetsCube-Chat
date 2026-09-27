@@ -22,7 +22,15 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-298, with its
    measurement. Search it before filing anything.
 
-**Latest checkpoint, 2026-09-27:** the shared web is deployed in D-208
+**Current checkpoint, 2026-09-27:** ordinary-member contacts, text-channel
+scope, voice-room creation and account-switch safeguards passed local QA
+(181 browser passes, 50 explicit skips, full unit/server suites). The additive
+contact migration is applied after backup and RLS checks; the web candidate is
+not yet claimed as deployed. The owner allows scoped cloud Android/iPhone QA,
+but no APK build/install/publication is part of this stage. See the
+[member-flow record](operations/2026-09-27-member-contacts-and-channels.md).
+
+**Previous checkpoint, 2026-09-27:** the shared web is deployed in D-208
 `signed` media URL canary mode. Real-member signing, outsider denial, expiry
 and renewal passed. A deployed read-only browser probe loaded a signed avatar
 at desktop/mobile widths and verified that signing into a different QA account

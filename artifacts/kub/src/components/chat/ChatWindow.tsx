@@ -167,13 +167,18 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const clearChatPanelRequest = useAppStore((s) => s.clearChatPanelRequest);
   const savedChat = chat ? isSavedChat(chat, userId) : false;
   const isForum = !!chat?.is_forum;
-  const { topics, createTopic, view: topicsView, refetch: refetchTopics } = useTopics(chatId, isForum);
+  const topicsEnabled = isForum || chat?.type === "group";
+  const { topics, hasTextChannelHistory, scopeKnown: topicScopeKnown, createTopic, view: topicsView, refetch: refetchTopics } = useTopics(chatId, topicsEnabled);
   const generalTopicIds = useMemo(
     () => topics.filter((topic) => topic.is_general).map((topic) => topic.id),
     [topics],
   );
-  const messageTopicId = isForum ? selectedTopicId : undefined;
-  const messageGeneralTopicIds = isForum ? generalTopicIds : EMPTY_GENERAL_TOPIC_IDS;
+  // Until chat metadata and its topics read answer, unseen channels are possible.
+  // Only a confirmed plain group that has never had text channels uses its legacy all-messages stream.
+  const topicScopeUnknown = !chat || (topicsEnabled && !topicScopeKnown);
+  const messageScoped = topicScopeUnknown || isForum || (topicsEnabled && hasTextChannelHistory);
+  const messageTopicId = messageScoped ? (topicScopeUnknown ? null : selectedTopicId) : undefined;
+  const messageGeneralTopicIds = messageScoped && !topicScopeUnknown ? generalTopicIds : EMPTY_GENERAL_TOPIC_IDS;
   const {
     messages, pinnedMessages, pinnedReady, loading, historyPending, historyError,
     loadingOlder, hasMoreOlder, olderError, isTyping,
@@ -1424,14 +1429,14 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   }, [ensureMessageLoaded, messages, scrollToMessage, showJumpNotice]);
 
   const handleSearchJump = useCallback((messageId: string, topicId?: string | null) => {
-    if (isForum && topicId !== undefined && (topicId ?? null) !== (selectedTopicId ?? null)) {
+    if (messageScoped && topicId !== undefined && (topicId ?? null) !== (selectedTopicId ?? null)) {
       setSelectedTopicId(topicId ?? null);
       pendingJumpRef.current = messageId;
       window.setTimeout(() => requestChatMessageJump(chatId, messageId), 250);
       return;
     }
     void handleJumpToReply(messageId);
-  }, [chatId, handleJumpToReply, isForum, selectedTopicId, setSelectedTopicId]);
+  }, [chatId, handleJumpToReply, messageScoped, selectedTopicId, setSelectedTopicId]);
 
   useEffect(() => {
     const handleGlobalJump = (event: Event) => {
@@ -1841,7 +1846,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             <ChatSearchBar
               chatId={chatId}
               currentTopicId={messageTopicId}
-              isForum={isForum}
+              isForum={messageScoped}
               messages={conversation}
               onClose={closeChatSearch}
               onJumpTo={handleSearchJump}

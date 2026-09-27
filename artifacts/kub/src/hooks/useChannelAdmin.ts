@@ -135,7 +135,7 @@ const EMPTY: ChannelAdminState = {
   busy: false,
 };
 
-export interface CreateChannelInput {
+export interface CreateChannelInput extends VoiceSettingsInput {
   kind: ChannelKind;
   name: string;
   categoryId?: string | null;
@@ -323,6 +323,10 @@ export function useChannelAdmin(chatId: string | null, enabled: boolean): Channe
         name,
         position: nextPosition(siblings),
         category_id: state.categoriesSupported ? input.categoryId ?? null : null,
+        ...(kind === "voice" ? {
+          max_participants: normalizeSeatLimit(input.maxParticipants),
+          speak_role: input.speakRole ?? "member",
+        } : {}),
       };
       const created = await run<ServerChannel | null>(CHANNEL_CREATE_FAILED, async () => {
         const { data, error } = await supabase

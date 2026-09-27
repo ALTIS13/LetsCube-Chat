@@ -557,7 +557,7 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     const labels = await bar
       .getByRole("button")
       .evaluateAll((elements) => elements.map((element) => element.getAttribute("aria-label") ?? ""));
-    expect(labels).toEqual(["Чаты", "Профиль", "Задачи"]);
+    expect(labels).toEqual(["Чаты", "Контакты", "Профиль", "Задачи"]);
 
     // And the screen that tab opened is not reachable from anywhere else: its
     // «Новая папка» footer is the one string only it ever drew.

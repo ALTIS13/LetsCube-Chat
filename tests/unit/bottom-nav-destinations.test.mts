@@ -46,14 +46,14 @@ function withoutComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1 ");
 }
 
-test("the capsule offers three destinations, and none of them is folders", () => {
+test("the capsule offers contacts as a destination, and no folder duplicate", () => {
   assert.deepEqual(
     BOTTOM_NAV_DESTINATIONS.map((entry) => entry.id),
-    ["chats", "profile", "tasks"],
+    ["chats", "contacts", "profile", "tasks"],
   );
   assert.deepEqual(
     BOTTOM_NAV_DESTINATIONS.map((entry) => entry.label),
-    ["Чаты", "Профиль", "Задачи"],
+    ["Чаты", "Контакты", "Профиль", "Задачи"],
   );
   // Stated twice on purpose, by id and by word: a tab reintroduced under
   // another name is the same defect, and the word is what the owner reported.
@@ -65,8 +65,8 @@ test("the capsule offers three destinations, and none of them is folders", () =>
 });
 
 test("the gate offers tasks only to an account that may see them", () => {
-  assert.deepEqual(bottomNavDestinations(false).map((entry) => entry.id), ["chats", "profile"]);
-  assert.deepEqual(bottomNavDestinations(true).map((entry) => entry.id), ["chats", "profile", "tasks"]);
+  assert.deepEqual(bottomNavDestinations(false).map((entry) => entry.id), ["chats", "contacts", "profile"]);
+  assert.deepEqual(bottomNavDestinations(true).map((entry) => entry.id), ["chats", "contacts", "profile", "tasks"]);
   // The gated one is last, so nothing a person aims at moves when a right
   // changes.
   assert.equal(BOTTOM_NAV_DESTINATIONS.filter((entry) => entry.gated).length, 1);
@@ -89,7 +89,7 @@ test("exactly one destination is a route rather than a section", () => {
       `\`mobileSection\` accepts '${absent}' again: ${union.trim()}`,
     );
   }
-  for (const present of ["chats", "profile"]) {
+  for (const present of ["chats", "contacts", "profile"]) {
     assert.match(union, new RegExp(`'${present}'`), `\`mobileSection\` no longer accepts '${present}'`);
   }
 });

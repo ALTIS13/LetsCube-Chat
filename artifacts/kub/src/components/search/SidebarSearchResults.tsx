@@ -23,6 +23,7 @@ import {
   clearTypeSyntax,
   SEARCH_SYNTAX_HINT_ID,
   SEARCH_SYNTAX_HINT_TEXT,
+  shouldShowSearchCommands,
   shouldOfferSearchSyntaxHint,
   typeFilterToDataType,
 } from "@/lib/searchQuery";
@@ -91,8 +92,10 @@ export function SidebarSearchResults({ query }: { query: string }) {
   });
 
   const commandResults = useMemo(
-    () => buildCommandResults({ query: parsed.query, type: parsed.filters.type, canAccessTasks, isStaff }),
-    [canAccessTasks, isStaff, parsed.query, parsed.filters.type],
+    () => shouldShowSearchCommands(parsed)
+      ? buildCommandResults({ query: parsed.query, type: parsed.filters.type, canAccessTasks, isStaff })
+      : [],
+    [canAccessTasks, isStaff, parsed],
   );
 
   const results = useMemo(() => {
@@ -147,7 +150,7 @@ export function SidebarSearchResults({ query }: { query: string }) {
     setActiveIndex(0);
   }, [parsed.query, parsed.filters.type, results.length]);
 
-  const showEmpty = parsed.query.length > 0 && !search.loading && results.length === 0;
+  const showEmpty = (parsed.query.length > 0 || parsed.hasAdvancedFilters) && !search.loading && results.length === 0;
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col" data-testid="sidebar-global-search-results">

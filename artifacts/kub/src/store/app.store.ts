@@ -89,8 +89,8 @@ interface AppState {
   // 'folders' went with D-120: the tab that set it opened a second folder
   // surface beside the strip at the top of the chat list. 'search' is a
   // one-shot focus signal rather than a screen — see `SidebarHeader`.
-  mobileSection: 'chats' | 'search' | 'profile'
-  setMobileSection: (section: 'chats' | 'search' | 'profile') => void
+  mobileSection: 'chats' | 'contacts' | 'search' | 'profile'
+  setMobileSection: (section: 'chats' | 'contacts' | 'search' | 'profile') => void
 
   // Reply/forward/edit state — composer-level UI flags
   replyToMessage: MessageWithSender | null
@@ -387,6 +387,9 @@ export const useAppStore = create<AppState>((set, get) => ({
    * ради которого всё это писалось, остаётся закрытым.
    */
   setCurrentUser: (user) => set((state) => {
+    if (state.currentUser && state.currentUser.id !== user?.id) {
+      return { currentUser: user, chats: [], selectedChatId: null, selectedTopicId: null };
+    }
     if (!user || !state.currentUser) return { currentUser: user };
     const unchanged = isHeartbeatOnlyProfileChange(
       state.currentUser as unknown as Record<string, unknown>,

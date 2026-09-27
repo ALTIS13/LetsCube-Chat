@@ -132,11 +132,14 @@ export function useChats() {
   const eventsDuringFetchRef = useRef<ChatListEvent[] | null>(null);
   /** Bumped when a full fetch starts, so a summary asked for before it knows its answer is the older one. */
   const fetchGenerationRef = useRef(0);
+  const latestFetchChatsRef = useRef<((options?: FetchChatsOptions) => Promise<void>) | null>(null);
   const refetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const summaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const summaryChatIdsRef = useRef(new Set<string>());
 
   const fetchChats = useCallback(async (options: FetchChatsOptions = {}) => {
+    const isCurrentAccount = () => (useAppStore.getState().currentUser?.id ?? null) === userId;
+    if (!isCurrentAccount()) return;
     const preserveActiveChat = Boolean(options.preserveActiveChat);
     if (!userId) {
       // Nobody is signed in. An empty list is the true answer here, and it is
@@ -163,6 +166,7 @@ export function useChats() {
         .from("chat_members")
         .select("chat_id, joined_at, last_read_at, last_delivered_at, hidden_at, cleared_at, pinned, pinned_at, pinned_order")
         .eq("user_id", userId);
+      if (!isCurrentAccount()) return;
 
       // A request that failed says nothing about the chats. Read as "no
       // memberships", it emptied the list and closed the open chat whenever a
@@ -204,6 +208,7 @@ export function useChats() {
         .select("*, members:chat_members(user_id, role, joined_at, last_read_at, last_delivered_at, profile:profiles(*))")
         .in("id", chatIds)
         .order("updated_at", { ascending: false });
+      if (!isCurrentAccount()) return;
 
       // `error` was not even destructured here, so this read's refusal left the
       // list exactly as it was and told nobody — and the memberships above had
@@ -218,6 +223,24 @@ export function useChats() {
         return;
       }
 
+      const contactAliasPromise = (async () => {
+        const aliases = new Map<string, string>();
+        const counterpartIds = Array.from(new Set(chatsData
+          .filter((chat) => chat.type === "private")
+          .map((chat) => (chat.members as { user_id: string }[] | null)
+            ?.find((member) => member.user_id !== userId)?.user_id)
+          .filter((id): id is string => Boolean(id))));
+        for (let offset = 0; offset < counterpartIds.length; offset += 100) {
+          const { data, error } = await supabase.from("user_contacts")
+            .select("contact_user_id,alias")
+            .eq("owner_user_id", userId)
+            .in("contact_user_id", counterpartIds.slice(offset, offset + 100));
+          if (error) break;
+          for (const row of data ?? []) if (row.alias) aliases.set(row.contact_user_id, row.alias);
+        }
+        return aliases;
+      })();
+
       const batchedSummaries = await fetchBatchedChatSummaries(supabase, chatIds);
       // Which of these chats hold a bot (D-236). One request for the whole
       // list, because the SELECT policy on `chat_bot_members` lets a member
@@ -226,6 +249,9 @@ export function useChats() {
       // map on a refusal, so a list that cannot read it looks exactly like a
       // list with no bots in it, which is what it looked like yesterday.
       const botsByChat = await fetchChatBots(chatIds);
+
+      const contactAliasByUser = await contactAliasPromise;
+      if (!isCurrentAccount()) return;
 
       const enriched: ChatWithLastMessage[] = await Promise.all(
         chatsData.map(async (chat) => {
@@ -243,7 +269,7 @@ export function useChats() {
               chat.members as { user_id: string; profile: Profile | null }[]
             )?.find((m) => m.user_id !== userId);
             if (other?.profile) {
-              displayName = other.profile.full_name ?? other.profile.username ?? chat.name;
+              displayName = contactAliasByUser.get(other.profile.id) ?? other.profile.full_name ?? other.profile.username ?? chat.name;
               displayAvatarUrl = other.profile.avatar_url ?? null;
               otherUser = other.profile;
             }
@@ -254,7 +280,8 @@ export function useChats() {
             isIncomingMessage(lastMsgData, userId) &&
             !isSavedChat(chat as unknown as ChatWithLastMessage, userId) &&
             (!myMembership?.last_delivered_at ||
-              new Date(lastMsgData.created_at).getTime() > new Date(myMembership.last_delivered_at).getTime())
+              new Date(lastMsgData.created_at).getTime() > new Date(myMembership.last_delivered_at).getTime()) &&
+            isCurrentAccount()
           ) {
             scheduleMarkChatDelivered(supabase, chat.id, lastMsgData.created_at);
           }
@@ -264,6 +291,7 @@ export function useChats() {
             name: displayName,
             avatar_url: displayAvatarUrl,
             other_user: otherUser,
+            contact_alias: otherUser ? contactAliasByUser.get(otherUser.id) ?? null : null,
             bots: botsByChat.get(chat.id) ?? [],
             last_message: lastMsgData ?? undefined,
             unread_count: unreadCount,
@@ -275,6 +303,7 @@ export function useChats() {
           } as ChatWithLastMessage;
         }),
       );
+      if (!isCurrentAccount()) return;
 
       const visibleChats = enriched.filter((chat) => {
         if (!chat.hidden_at) return true;
@@ -314,18 +343,19 @@ export function useChats() {
       setRead(listReadSucceeded(userId));
     } finally {
       eventsDuringFetchRef.current = null;
-      setRead(listReadEnded);
+      if (isCurrentAccount()) setRead(listReadEnded);
       fetchInFlightRef.current = false;
       if (fetchQueuedRef.current) {
         fetchQueuedRef.current = false;
         const preserveQueuedActiveChat = queuedPreserveActiveChatRef.current;
         queuedPreserveActiveChatRef.current = false;
         window.setTimeout(() => {
-          void fetchChats({ preserveActiveChat: preserveQueuedActiveChat });
+          void latestFetchChatsRef.current?.({ preserveActiveChat: preserveQueuedActiveChat });
         }, CHAT_REFETCH_DEBOUNCE_MS);
       }
     }
   }, [userId, supabase, setChats]);
+  latestFetchChatsRef.current = fetchChats;
 
   useEffect(() => {
     void fetchChats();
@@ -373,7 +403,11 @@ export function useChats() {
       bumpFetch("useChats:summary");
       const summaries = await fetchChatSummaries(supabase, ids, userId);
       // A full fetch that started meanwhile is the fresher answer.
-      if (generation !== fetchGenerationRef.current || fetchInFlightRef.current) return;
+      if (
+        (useAppStore.getState().currentUser?.id ?? null) !== userId ||
+        generation !== fetchGenerationRef.current ||
+        fetchInFlightRef.current
+      ) return;
       const current = useAppStore.getState().chats;
       const patched = applyChatSummaries(current, summaries);
       if (patched !== current) useAppStore.getState().setChats(sortChatsForSidebar(patched, userId));

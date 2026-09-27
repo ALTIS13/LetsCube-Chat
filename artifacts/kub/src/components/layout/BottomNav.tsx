@@ -50,7 +50,7 @@ export function BottomNav({ onSelect }: { onSelect?: (entry: BottomNavDestinatio
       // Android uses the stronger existing material: row text can pass under
       // this floating surface, but must not compete with its tab labels.
       className={cn(
-        "absolute inset-x-10 z-20 md:hidden flex items-center justify-around px-2 rounded-full border border-[color:var(--kub-border-color)]",
+        "absolute inset-x-4 z-20 md:hidden flex items-center justify-around px-2 rounded-full border border-[color:var(--kub-border-color)]",
         // On native Android the gesture area belongs below the floating
         // capsule, not inside it. Web/iOS retain their existing inset padding.
         nativeAndroid

@@ -12,6 +12,8 @@ import {
   type Row,
 } from "./helpers/messageActionsFixture";
 
+test.use({ screenshot: "off", video: "off", trace: "off" });
+
 /**
  * The channel rail, in a browser.
  *
@@ -98,6 +100,10 @@ interface Shape {
    * answers and the interface used to give the same one for both.
    */
   roomsFail?: boolean;
+  /** A refused categories read must not look like a group with no headings. */
+  categoriesFail?: boolean;
+  /** A deployment without the categories table still supports loose channels. */
+  categoriesMissing?: boolean;
   /**
    * A group with nothing in it at all: no headings, no topics, no rooms.
    *
@@ -171,7 +177,11 @@ function tablesFor(shape: Shape) {
   const roomsFail = shape.roomsFail === true;
   return (call: { resource: string; method: string }) => {
     if (call.method !== "GET") return undefined;
-    if (call.resource === "chat_channel_categories") return { status: 200, body: forum ? CATEGORIES : [] };
+    if (call.resource === "chat_channel_categories") {
+      if (shape.categoriesFail) return { status: 403, body: { code: "42501", message: "permission denied" } };
+      if (shape.categoriesMissing) return { status: 404, body: { code: "PGRST205", message: "table not in schema cache" } };
+      return { status: 200, body: forum ? CATEGORIES : [] };
+    }
     if (call.resource === "topics") return { status: 200, body: forum ? TOPICS : [] };
     if (call.resource === "voice_channels") {
       if (roomsFail) return { status: 500, body: { message: "upstream said no" } };
@@ -237,18 +247,28 @@ interface Opened {
  * couple two specs through a third file for four methods.
  */
 async function installLobbyTransport(page: Page, silenced: string[], oldBuild: string[] = []) {
-  // A real audio track, because a joined call is the point here.
+  // A real audio track where the runner supports one; otherwise a synthetic
+  // track is enough for this stubbed transport's joined-state UI.
   //
   // `openGroup`'s own microphone mock answers with an empty track list: it was
   // written so a click could be seen reaching the gateway, and the gateway
-  // refuses there, so the capture never had to be usable. A join that gets a
-  // token needs `getTracks()[0]` to be a real `MediaStreamTrack`, and an
-  // `AudioContext` destination is one — synthesized by the browser, no device
-  // and no permission prompt. Registered after that mock so this one wins.
+  // refuses there, so the capture never had to be usable. A granted join needs
+  // `getAudioTracks()[0]` to be present. Where Web Audio exists, an
+  // `AudioContext` destination provides a real track without a device or prompt.
+  // Registered after that mock so this one wins.
   await page.addInitScript(() => {
     const devices = navigator.mediaDevices ?? ({} as MediaDevices);
     Object.defineProperty(devices, "getUserMedia", {
       value: async () => {
+        if (typeof AudioContext === "undefined") {
+          // This runner has no Web Audio. The stand-in room only needs a
+          // stoppable track to exercise the rail's joined-state UI.
+          const track = { stop() {} } as MediaStreamTrack;
+          return {
+            getTracks: () => [track],
+            getAudioTracks: () => [track],
+          } as unknown as MediaStream;
+        }
         const context = new AudioContext();
         return context.createMediaStreamDestination().stream;
       },
@@ -501,6 +521,53 @@ test.describe("the channel rail", () => {
     await expect(page.getByTestId("channel-rail-retry")).toBeVisible();
   });
 
+  test("a member is warned when headings cannot be read", async ({ page }, testInfo) => {
+    const shape: Shape = { role: "member", categoriesFail: true };
+    const opened = await openGroup(page, shape);
+    const trigger = page.getByTestId("channel-rail-trigger");
+    if (await trigger.count()) await trigger.click();
+
+    // The topics query succeeds. Only the headings query is refused, so the
+    // channel stays reachable but its ungrouped appearance is not presented
+    // as the server's actual arrangement.
+    await expect(page.locator(`[data-testid="channel-rail-text"][data-channel-id="${TOPIC_DESIGN}"]`)).toBeVisible();
+    expect(opened.fixture.restCalls("chat_channel_categories", "GET").length).toBeGreaterThan(0);
+    await expect(page.getByTestId("channel-rail-unreadable")).toContainText("Не удалось загрузить каналы.");
+    await expect(page.getByTestId("channel-rail-retry")).toBeVisible();
+    await expect(page.getByTestId("channel-rail-manage")).toHaveCount(0);
+
+    for (const theme of ["dark", "light"] as const) {
+      await page.evaluate((value) => {
+        const root = document.documentElement;
+        root.classList.toggle("dark", value === "dark");
+        root.classList.toggle("light", value === "light");
+        root.setAttribute("data-theme", value);
+        root.style.colorScheme = value;
+      }, theme);
+      await page.waitForFunction(() =>
+        document.getAnimations().every((animation) => animation.playState !== "running"),
+      );
+      await page.getByTestId("channel-rail-list").screenshot({
+        path: `output/server-channel-rail/category-refusal-${theme}-${testInfo.project.name}.png`,
+      });
+    }
+
+    shape.categoriesFail = false;
+    await page.getByTestId("channel-rail-retry").click();
+    await expect(page.getByTestId("channel-rail-heading")).toHaveText(["Текстовые", "Голосовые"]);
+    await expect(page.getByTestId("channel-rail-unreadable")).toHaveCount(0);
+    expect(opened.fixture.restCalls("chat_channel_categories", "GET").length).toBeGreaterThan(1);
+  });
+
+  test("missing categories schema leaves a member's text channels usable", async ({ page }) => {
+    await openGroup(page, { role: "member", categoriesMissing: true });
+    const trigger = page.getByTestId("channel-rail-trigger");
+    if (await trigger.count()) await trigger.click();
+
+    await expect(page.locator(`[data-testid="channel-rail-text"][data-channel-id="${TOPIC_DESIGN}"]`)).toBeVisible();
+    await expect(page.getByTestId("channel-rail-unreadable")).toHaveCount(0);
+  });
+
   test("uncategorised channels stand above the headings, text above voice", async ({ page }, testInfo) => {
     test.skip(!paneIsWide(testInfo), "one shape is enough for an order");
     await openGroup(page);
@@ -715,6 +782,8 @@ test.describe("the channel rail", () => {
     test.skip(!paneIsWide(testInfo), "the permission does not depend on width");
     await openGroup(page, { role: "member" });
     await expect(page.getByTestId("channel-rail")).toBeVisible();
+    await expect(page.getByTestId("channel-rail-heading")).toHaveText(["Текстовые", "Голосовые"]);
+    await expect(page.locator(`[data-testid="channel-rail-text"][data-channel-id="${TOPIC_DESIGN}"]`)).toBeVisible();
     await expect(page.getByTestId("channel-rail-manage")).toHaveCount(0);
   });
 
@@ -910,9 +979,7 @@ test.describe("moderating somebody in a voice room", () => {
     await expect(page.getByTestId("channel-rail-list")).toBeVisible();
   }
 
-  test("the owner may act on a member, and a plain member may act on nobody", async ({
-    page,
-  }, testInfo) => {
+  test("the owner may act on a member", async ({ page }, testInfo) => {
     const wide = paneIsWide(testInfo);
     await openGroup(page, { role: "owner" });
     await showRail(page, wide);
@@ -920,7 +987,10 @@ test.describe("moderating somebody in a voice room", () => {
     // Petr is a member and Anna an administrator: an owner may silence both.
     await expect(occupant(page, PETR.id)).toHaveAttribute("data-moderatable", "true");
     await expect(occupant(page, ANNA.id)).toHaveAttribute("data-moderatable", "true");
+  });
 
+  test("a plain member may act on nobody", async ({ page }, testInfo) => {
+    const wide = paneIsWide(testInfo);
     // And a row that offers nothing is not a button at all — no hover, no
     // cursor, no focus stop. Asserted on the tag rather than on the attribute,
     // because the attribute is what the component claims and the tag is what

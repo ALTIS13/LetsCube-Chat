@@ -611,7 +611,9 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
    * rather than a stuck button.
    */
   const mediaCursorRef = useRef(0);
+  const mediaLoadGenerationRef = useRef(0);
   const linkCursorRef = useRef(0);
+  const linkLoadGenerationRef = useRef(0);
   /**
    * The last automatic request came back with nothing.
    *
@@ -868,17 +870,19 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
    * Returns how many rows the server handed over, which is the only honest
    * answer to «is there any point asking again». The count of rows that reached
    * the list is not: a page can be entirely hidden rows and still sit in front
-   * of a hundred more.
+   * of a hundred more. Null means a newer reset superseded this page.
    */
   const loadMedia = useCallback(async (
     reset = false,
     kind: MessageMediaKind | null = null,
-  ): Promise<number> => {
+  ): Promise<number | null> => {
     if (!currentUserId) {
+      mediaLoadGenerationRef.current += 1;
       setMedia([]);
       setMediaHasMore(false);
       return 0;
     }
+    const generation = reset ? ++mediaLoadGenerationRef.current : mediaLoadGenerationRef.current;
     setLoadingMedia(true);
     if (reset) {
       setMedia([]);
@@ -918,6 +922,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
     // gone wrong. The cause still goes to the console, where somebody who can
     // act on it reads it; the surface says only what the reader can do.
     if (error) {
+      if (generation !== mediaLoadGenerationRef.current) return null;
       console.error("[chat-info] media page failed", error);
       setMediaFailed(true);
       setLoadingMedia(false);
@@ -928,6 +933,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
       const rawPage = data as Message[];
       received = rawPage.length;
       const hiddenIds = await fetchHiddenMessageIdSet(supabase, rawPage.map((item) => item.id));
+      if (generation !== mediaLoadGenerationRef.current) return null;
       if (hiddenIds === null) {
         setMediaFailed(true);
         setLoadingMedia(false);
@@ -941,6 +947,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
       });
       setMediaHasMore(received >= MEDIA_PAGE_SIZE);
     }
+    if (generation !== mediaLoadGenerationRef.current) return null;
     setMediaFailed(false);
     setLoadingMedia(false);
     return received;
@@ -952,12 +959,14 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
    * Deliberately additive and soft-failing: if this query is rejected the
    * «Ссылки» section simply never appears and every other section still works.
    */
-  const loadLinks = useCallback(async (reset = false): Promise<number> => {
+  const loadLinks = useCallback(async (reset = false): Promise<number | null> => {
     if (!currentUserId) {
+      linkLoadGenerationRef.current += 1;
       setLinks([]);
       setLinksHasMore(false);
       return 0;
     }
+    const generation = reset ? ++linkLoadGenerationRef.current : linkLoadGenerationRef.current;
     setLoadingLinks(true);
     if (reset) {
       setLinks([]);
@@ -970,6 +979,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
       .eq("chat_id", chat.id)
       .eq("user_id", currentUserId)
       .maybeSingle();
+    if (generation !== linkLoadGenerationRef.current) return null;
     // A single deliberately loose `ilike`: the pattern carries no `,` `:` or
     // `/` for a filter parser to trip over, and `extractFirstLink` does the
     // exact match on the client, so a row containing the word "http" and no
@@ -987,6 +997,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
     const { data, error } = await query
       .order("created_at", { ascending: false })
       .range(start, start + LINK_PAGE_SIZE - 1);
+    if (generation !== linkLoadGenerationRef.current) return null;
     if (error || !data) {
       // Same defect as the media page above, and the same repair: the «Ссылки»
       // section used to disappear silently when its query was refused, so a
@@ -1002,6 +1013,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
     }
     const rows = data as Message[];
     const hiddenIds = await fetchHiddenMessageIdSet(supabase, rows.map((item) => item.id));
+    if (generation !== linkLoadGenerationRef.current) return null;
     if (hiddenIds === null) {
       setLinksFailed(true);
       setLoadingLinks(false);
@@ -1133,7 +1145,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
       title: next ? "Включить режим топиков?" : "Выключить режим топиков?",
       description: next
         ? "Все будущие сообщения можно будет отправлять в общий раздел или выбранный топик."
-        : "Топики останутся в базе, но чат вернётся к обычному отображению.",
+        : "Топики и сообщения сохранятся. Текстовые каналы останутся доступными; если их нет, группа вернётся к обычному виду.",
       confirmLabel: next ? "Включить" : "Выключить",
       icon: "hash",
     });

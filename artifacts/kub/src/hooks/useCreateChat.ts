@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/app.store";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import { mapPgError } from "@/lib/errors";
 import { CHAT_OPEN_FAILED, CHAT_OPEN_SIGNED_OUT, plainFailure } from "@/lib/plainMessages";
+import { sanitizePostgrestSearch } from "@/lib/searchQuery";
 import type { Profile } from "@/types/database";
 
 export function useCreateChat() {
@@ -68,16 +69,22 @@ export function useCreateChat() {
 
   const searchUsers = useCallback(
     async (query: string): Promise<Profile[]> => {
-      if (!query.trim() || !userId) return [];
+      const safe = sanitizePostgrestSearch(query);
+      if (!safe || !userId) return [];
 
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
         .neq("id", userId)
-        .or(`full_name.ilike.%${query}%,username.ilike.%${query}%`)
+        .or(`full_name.ilike.%${safe}%,username.ilike.%${safe}%`)
         .limit(20);
 
-      if (error) console.error("searchUsers error:", error);
+      if (error) {
+        console.error("searchUsers error:", error);
+        setError("Не удалось найти людей. Проверьте соединение и попробуйте снова.");
+      } else {
+        setError(null);
+      }
       return (data as Profile[]) ?? [];
     },
     [userId, supabase]

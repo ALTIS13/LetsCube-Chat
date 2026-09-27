@@ -4,7 +4,7 @@ import { selectRussianPluralForm } from "./messageMediaSections.ts";
 
 type DisplayChat = Pick<
   ChatWithLastMessage,
-  "id" | "name" | "type" | "description" | "created_by" | "members" | "other_user" | "bots"
+  "id" | "name" | "type" | "description" | "created_by" | "members" | "other_user" | "contact_alias" | "bots"
 >;
 
 export interface ChatDisplayInfo {
@@ -38,9 +38,10 @@ export function isSavedChatLikeName(name: string | null | undefined): boolean {
 export function isSavedChat(chat: DisplayChat, currentUserId?: string | null): boolean {
   if (!isSavedChatLikeName(chat.name)) return false;
   const members = chat.members ?? [];
-  if (!currentUserId) return members.length <= 1;
+  if (members.length > 1) return false;
+  if (!currentUserId) return true;
   const hasCurrentUser = members.some((member) => member.user_id === currentUserId);
-  return chat.created_by === currentUserId || (hasCurrentUser && members.length <= 1);
+  return chat.created_by === currentUserId || hasCurrentUser;
 }
 
 /** «1 участник», «3 участника», «5 участников»: Russian takes the form from the last two digits. */
@@ -85,7 +86,7 @@ export function getChatDisplayInfo(
       (chat.members as (ChatMember & { profile?: Profile | null })[] | undefined)
         ?.find((member) => member.user_id !== currentUserId)?.profile ??
       null;
-    const title = otherUser?.full_name ?? otherUser?.username ?? chat.name ?? "Личный чат";
+    const title = chat.contact_alias?.trim() || otherUser?.full_name || otherUser?.username || chat.name || "Личный чат";
     return {
       title,
       subtitle: "Личный чат",

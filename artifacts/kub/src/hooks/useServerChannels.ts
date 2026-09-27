@@ -15,6 +15,7 @@ import {
   type VoiceChannelRow,
 } from "@/lib/channelRail";
 import { classifyVoiceChannelWriteError } from "@/lib/voiceChannel";
+import { classifyChannelWriteError } from "@/lib/serverChannelVocabulary";
 
 /**
  * A group's channels — every one of them — and who is in each room.
@@ -153,7 +154,8 @@ export function useServerChannels(
       // error is. The categories table is read the same way for the same
       // reason — the rail still draws without it, so its absence alone must
       // not be reported as a failed read.
-      const failed = Boolean(channelRead.error) && supported;
+      const categoriesMissing = Boolean(categoryRead.error) && classifyChannelWriteError(categoryRead.error) === "missing";
+      const failed = (Boolean(channelRead.error) && supported) || (Boolean(categoryRead.error) && !categoriesMissing);
       const categories = categoryRead.error
         ? []
         : ((categoryRead.data as unknown as ChannelCategoryRow[] | null) ?? []).map(categoryFromRow);

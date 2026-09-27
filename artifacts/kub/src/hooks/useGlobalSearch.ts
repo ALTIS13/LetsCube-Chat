@@ -10,6 +10,7 @@ import {
   mediaLabelForMessage,
   messageIsMediaSearchTarget,
   messageMatchesHasFilter,
+  sanitizePostgrestSearch,
   searchFiltersToRpc,
   type ParsedSearchFilters,
 } from "@/lib/searchQuery";
@@ -684,15 +685,6 @@ async function fetchFallbackLocations(
     rank: scoreText([location.name, location.address, location.description].filter(Boolean).join(" "), searchableNeedle(query)),
     source: "fallback",
   }));
-}
-
-function sanitizePostgrestSearch(value: string): string {
-  return value
-    .trim()
-    .replace(/^@+/, "")
-    .replace(/[,%()]/g, " ")
-    .replace(/\s+/g, " ")
-    .slice(0, 80);
 }
 
 function hasAdvancedSearchFilters(filters?: ParsedSearchFilters): boolean {

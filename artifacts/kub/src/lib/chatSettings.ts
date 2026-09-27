@@ -49,7 +49,7 @@ export interface ChatSettingsRow {
 export interface ChatSettingsInput {
   /** «group» or «channel»; a private conversation has no settings screen. */
   type: string | null | undefined;
-  /** Whether topics are on. Groups only. */
+  /** Whether the group's forum mode is on; text channels may exist either way. */
   isForum: boolean;
   /**
    * What the chat says about who may invite, or null when nothing could be read
@@ -93,8 +93,8 @@ export function adminCountValue(count: number): string {
  * The rows, in the order the reference puts them: what the group is, then who
  * it holds, then what is in it, then the one destructive thing at the foot.
  *
- * Topics are a group's setting and not a channel's, and only its owner may turn
- * them on — the same rule the panel already applied where the switch used to
+ * Forum mode is a group's setting and not a channel's, and only its owner may
+ * turn it on — the same rule the panel already applied where the switch used to
  * live. Deleting is the owner's alone.
  */
 export function chatSettingsRows(input: ChatSettingsInput): ChatSettingsRow[] {
@@ -117,8 +117,8 @@ export function chatSettingsRows(input: ChatSettingsInput): ChatSettingsRow[] {
   if (isGroup) {
     rows.push({
       id: "topics",
-      label: "Топики",
-      value: input.isForum ? "Включены" : "Выключены",
+      label: "Режим топиков",
+      value: input.isForum ? "Включён" : "Выключен",
       kind: "toggle",
       editable: input.isOwner,
     });

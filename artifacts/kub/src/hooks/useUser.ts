@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { RealtimeChannel, User } from "@supabase/supabase-js";
 import type { Profile } from "@/types/database";
@@ -89,6 +89,7 @@ export function useUser() {
   const [retryNonce, setRetryNonce] = useState(0);
   const setCurrentUser = useAppStore((s) => s.setCurrentUser);
   const supabase = createClient();
+  const activeUserIdRef = useRef<string | null>(null);
 
   const loadProfileOnce = useCallback(async (userId: string): Promise<boolean> => {
     let data: Profile | null = null;
@@ -106,12 +107,14 @@ export function useUser() {
       }
     }
 
+    if (activeUserIdRef.current !== userId) return false;
     if (data) {
       setCurrentUser(data);
       return true;
     }
 
     const authUser = await supabase.auth.getUser();
+    if (activeUserIdRef.current !== userId || authUser.data.user?.id !== userId) return false;
     const meta = authUser.data.user?.user_metadata;
     const newProfile = {
       id: userId,
@@ -130,7 +133,7 @@ export function useUser() {
       .select("*")
       .single();
 
-    if (!inserted) return false;
+    if (!inserted || activeUserIdRef.current !== userId) return false;
     setCurrentUser(inserted as Profile);
     return true;
   }, [setCurrentUser, supabase]);
@@ -144,27 +147,29 @@ export function useUser() {
 
   useEffect(() => {
     let cancelled = false;
+    let authEventSeen = false;
 
     const loadSession = async () => {
       setLoading(true);
       setLoadingError(null);
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
-        if (cancelled) return;
+        if (cancelled || authEventSeen) return;
         if (error) throw error;
 
+        activeUserIdRef.current = session?.user.id ?? null;
         setUser(session?.user ?? null);
         if (session?.user) {
           supabase.realtime.setAuth(session.access_token);
           const ok = await fetchProfile(session.user.id);
-          if (!cancelled && !ok) setLoadingError(PROFILE_LOAD_ERROR);
+          if (!cancelled && !authEventSeen && !ok) setLoadingError(PROFILE_LOAD_ERROR);
         } else {
           setCurrentUser(null);
         }
       } catch {
-        if (!cancelled) setLoadingError(PROFILE_LOAD_ERROR);
+        if (!cancelled && !authEventSeen) setLoadingError(PROFILE_LOAD_ERROR);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && !authEventSeen) setLoading(false);
       }
     };
 
@@ -172,6 +177,8 @@ export function useUser() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       // The parallel getSession() read may finish after a newer auth event.
+      authEventSeen = true;
+      activeUserIdRef.current = session?.user.id ?? null;
       signedMediaUrls().setAccount(session?.user.id ?? null);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -189,13 +196,13 @@ export function useUser() {
         }
         void fetchProfile(session.user.id)
           .then((ok) => {
-            if (!ok && shouldBlockUiForProfile) setLoadingError(PROFILE_LOAD_ERROR);
+            if (activeUserIdRef.current === session.user.id && !ok && shouldBlockUiForProfile) setLoadingError(PROFILE_LOAD_ERROR);
           })
           .catch(() => {
-            if (shouldBlockUiForProfile) setLoadingError(PROFILE_LOAD_ERROR);
+            if (activeUserIdRef.current === session.user.id && shouldBlockUiForProfile) setLoadingError(PROFILE_LOAD_ERROR);
           })
           .finally(() => {
-            if (shouldBlockUiForProfile) setLoading(false);
+            if (activeUserIdRef.current === session.user.id && shouldBlockUiForProfile) setLoading(false);
           });
       } else {
         supabase.realtime.setAuth(null);
@@ -206,6 +213,7 @@ export function useUser() {
 
     return () => {
       cancelled = true;
+      activeUserIdRef.current = null;
       subscription.unsubscribe();
     };
   }, [fetchProfile, retryNonce, setCurrentUser, supabase]);

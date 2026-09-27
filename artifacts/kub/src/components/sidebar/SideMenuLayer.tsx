@@ -45,6 +45,7 @@ import { cn } from "@/lib/utils";
 interface SideMenuLayerProps {
   onClose: () => void;
   onOpenSettings: () => void;
+  onOpenContacts: () => void;
   onOpenNewGroup: () => void;
   onOpenSaved: () => void;
 }
@@ -57,7 +58,7 @@ type Row = {
   action: () => void;
 };
 
-export function SideMenuLayer({ onClose, onOpenSettings, onOpenNewGroup, onOpenSaved }: SideMenuLayerProps) {
+export function SideMenuLayer({ onClose, onOpenSettings, onOpenContacts, onOpenNewGroup, onOpenSaved }: SideMenuLayerProps) {
   const currentUser = useAppStore((s) => s.currentUser);
   const [, setLocation] = useLocation();
   const signOut = useSignOut();
@@ -95,6 +96,7 @@ export function SideMenuLayer({ onClose, onOpenSettings, onOpenNewGroup, onOpenS
     // deliberately not done here.
     { icon: "profile", label: "Мой профиль", action: () => { onClose(); onOpenSettings(); } },
     { icon: "bookmark", label: "Избранное", action: () => { onClose(); onOpenSaved(); } },
+    { icon: "contact", label: "Контакты", action: () => { onClose(); onOpenContacts(); } },
     { icon: "group", label: "Новая группа", action: () => { onClose(); onOpenNewGroup(); } },
     { icon: "bot", label: "Мои боты", action: go("/bots") },
     ...(canAccessTasks ? [{ icon: "tasks" as const, label: "Задачи", accent: true, action: go("/tasks") } satisfies Row] : []),

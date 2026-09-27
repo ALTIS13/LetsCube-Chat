@@ -14,6 +14,7 @@ import { SideMenuLayer } from "./SideMenuLayer";
 import { ChatList } from "./ChatList";
 import { NewChatModal } from "./NewChatModal";
 import { NewGroupModal } from "./NewGroupModal";
+import { ContactsPanel } from "@/components/contacts/ContactsPanel";
 import { FolderEditModal } from "./FolderEditModal";
 import { SettingsSurface } from "@/components/settings/SettingsSurface";
 import { openSavedMessagesChat } from "@/lib/savedMessages";
@@ -194,6 +195,7 @@ export function Sidebar() {
           {/* What a strip of avatars has no room for. The rules in index.css
               fade and close this as `--kub-chat-list-narrow` goes to 1, so the
               list keeps narrowing continuously instead of switching mode. */}
+          {mobileSection === "contacts" ? <ContactsPanel /> : <>
           <div data-kub-list-chrome="" className="relative shrink-0">
             <SidebarHeader
               onNewChat={() => setShowNewChat(true)}
@@ -271,6 +273,8 @@ export function Sidebar() {
             </div>
           )}
 
+          </>}
+
           {/* The running call, at the foot of the column — Discord's position,
               and in the flow rather than over the list. A bar floating above it
               would cover the last rows, and holding room for it by padding the
@@ -328,6 +332,7 @@ export function Sidebar() {
         <SideMenuLayer
           onClose={() => setSideMenuOpen(false)}
           onOpenSettings={openSettingsPanel}
+          onOpenContacts={() => setMobileSection("contacts")}
           onOpenNewGroup={() => setShowNewGroup(true)}
           onOpenSaved={() => {
             void openSavedMessagesChat({ userId, setSelectedChatId, onRefetch: refetch });

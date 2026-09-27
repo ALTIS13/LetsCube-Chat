@@ -134,6 +134,7 @@ export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSear
   const menuItems: MenuItem[] = [
     { icon: "group",    label: "Новая группа", action: () => { setMenuOpen(false); setShowNewGroup(true); } },
     { icon: "bookmark", label: "Избранное",    action: openSavedMessages },
+    { icon: "contact", label: "Контакты", action: () => { setMenuOpen(false); setMobileSection("contacts"); } },
     { icon: "bot",      label: "Мои боты",     action: () => { setMenuOpen(false); setLocation("/bots"); } },
     ...(canAccessTasks
       ? [{ icon: "tasks" as const, label: "Задачи", accent: true, action: () => { setMenuOpen(false); setLocation("/tasks"); } } satisfies MenuItem]

@@ -399,6 +399,39 @@ export interface Database {
           }
         ]
       }
+      user_contacts: {
+        Row: {
+          owner_user_id: string
+          contact_user_id: string
+          alias: string | null
+          created_at: string
+        }
+        Insert: {
+          owner_user_id: string
+          contact_user_id: string
+          alias?: string | null
+          created_at?: string
+        }
+        Update: {
+          alias?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_contacts_owner_user_id_fkey"
+            columns: ["owner_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_contacts_contact_user_id_fkey"
+            columns: ["contact_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       registration_invites: {
         Row: {
           id: string
@@ -2087,6 +2120,7 @@ export interface ChatWithLastMessage extends Chat {
   unread_count?: number
   members?: (ChatMember & { profile: Profile })[]
   other_user?: Profile  // for private chats
+  contact_alias?: string | null  // this viewer's private name for the other person
   /**
    * The bots currently in this chat, live memberships only (D-235, D-236).
    *

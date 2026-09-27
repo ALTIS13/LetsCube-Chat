@@ -105,7 +105,7 @@ interface MessageInputProps {
   replyTo: MessageWithSender | null;
   onCancelReply: () => void;
   onSend: (content: string) => void | boolean | Promise<unknown>;
-  onEdit?: (messageId: string, newContent: string) => Promise<void>;
+  onEdit?: (messageId: string, newContent: string) => Promise<{ ok: boolean; error: string | null }>;
   onSendVoice?: (blob: Blob, durationMs: number, mimeType: string) => void | Promise<void>;
   onSendVideoMessage?: (blob: Blob, durationMs: number, mimeType: string) => void | Promise<void>;
   onTyping?: () => void;
@@ -187,6 +187,7 @@ export function MessageInput({
   bot = null,
 }: MessageInputProps) {
   const [text, setText] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
   /** The «Команды» button's own list. «/» opens the same list without it. */
@@ -401,6 +402,7 @@ export function MessageInput({
 
   useEffect(() => {
     if (!isEditing || !editingMessage) return;
+    setEditError(null);
     if (preEditTextRef.current === null) preEditTextRef.current = text;
     setText(editingMessage.content ?? "");
     setTimeout(() => textareaRef.current?.focus(), 0);
@@ -426,6 +428,7 @@ export function MessageInput({
   }, [focusRequestKey, isEditing, replyTo]);
 
   const exitEditMode = useCallback(() => {
+    setEditError(null);
     setEditingMessage(null);
     setText(preEditTextRef.current ?? "");
     preEditTextRef.current = null;
@@ -907,8 +910,18 @@ export function MessageInput({
     if (!trimmed && !hasAttachments && !hasForwardDraft) return;
     if (isEditing && editingMessage && onEdit) {
       if (!trimmed) return;
-      await onEdit(editingMessage.id, trimmed);
+      setEditError(null);
+      let result: { ok: boolean; error: string | null };
+      try {
+        result = await onEdit(editingMessage.id, trimmed);
+      } catch {
+        result = { ok: false, error: "Проверьте соединение и повторите попытку." };
+      }
       if (!composerSendScope.isActive(sendToken)) return;
+      if (!result.ok) {
+        setEditError(`Не удалось сохранить изменение. ${result.error ?? "Повторите попытку."}`);
+        return;
+      }
       setEditingMessage(null);
       setText(preEditTextRef.current ?? "");
       preEditTextRef.current = null;
@@ -1332,6 +1345,7 @@ export function MessageInput({
             </button>
           </div>
         )}
+        {isEditing && editError && <p role="alert" className="mb-2 px-3 text-xs text-[color:var(--kub-danger-text)]">{editError}</p>}
 
         {!isEditing && forwardDraft && hasForwardDraft && (
           // Telegram's forward bar: what will be forwarded with the next send.
@@ -1610,7 +1624,7 @@ export function MessageInput({
                   ? "text-[color:var(--kub-muted)] opacity-60 cursor-not-allowed"
                   : "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan hover:brightness-110"
               )}
-              aria-label="Отправить"
+              aria-label={isEditing ? "Сохранить изменения" : "Отправить"}
             >
               {isAttachmentBusy ? (
                 <>

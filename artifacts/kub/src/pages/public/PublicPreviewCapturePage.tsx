@@ -17,6 +17,8 @@ import {
 } from "@/components/chat/MessageSelectionChrome";
 import { PinnedMessage } from "@/components/chat/PinnedMessage";
 import { SideMenuLayer } from "@/components/sidebar/SideMenuLayer";
+import { ContactsPanel } from "@/components/contacts/ContactsPanel";
+import { BottomNav } from "@/components/layout/BottomNav";
 import { SidebarHeader } from "@/components/sidebar/SidebarHeader";
 import { KubGlassLayer } from "@/components/kub";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
@@ -29,6 +31,7 @@ import { mediaDayLabel } from "@/lib/sharedMediaBrowsing";
 import { useAppStore } from "@/store/app.store";
 import { cn } from "@/lib/utils";
 import type { MessageWithSender } from "@/types/database";
+import type { UserContact } from "@/lib/userContacts";
 import {
   isPublicPreviewCaptureEnabled,
   PUBLIC_PREVIEW_READY_ATTRIBUTE,
@@ -94,10 +97,17 @@ function sendNothing() {
  */
 const previewFolders: FolderRailTab[] = [{ id: null, name: "Все", emoji: null }];
 
+const previewContacts: UserContact[] = [
+  { contact_user_id: "contact-a", alias: "Аня · дизайн", profile: { id: "contact-a", full_name: "Анна Сергеева", username: "anna_design", avatar_url: null, profile_frame: null } },
+  { contact_user_id: "contact-b", alias: null, profile: { id: "contact-b", full_name: "Борис Иванов", username: "boris", avatar_url: null, profile_frame: null } },
+  { contact_user_id: "contact-c", alias: null, profile: { id: "contact-c", full_name: "Мария", username: "maria", avatar_url: null, profile_frame: null } },
+];
+
 export default function PublicPreviewCapturePage() {
   const [fixture, setFixture] = useState<PublicPreviewFixture | null>(null);
   const [error, setError] = useState<string | null>(null);
   const setCurrentUser = useAppStore((state) => state.setCurrentUser);
+  const setMobileSection = useAppStore((state) => state.setMobileSection);
   const setChats = useAppStore((state) => state.setChats);
   const setSelectedChatId = useAppStore((state) => state.setSelectedChatId);
   const setEditingMessage = useAppStore((state) => state.setEditingMessage);
@@ -156,12 +166,13 @@ export default function PublicPreviewCapturePage() {
         return;
       }
       setCurrentUser(previewCurrentUser(injected));
+      if (new URLSearchParams(window.location.search).get("surface") === "contacts") setMobileSection("contacts");
       setMessages(previewMessages(injected));
       setFixture(injected);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
-  }, [setCurrentUser]);
+  }, [setCurrentUser, setMobileSection]);
 
   // The real components read the chat list and the selection from the store,
   // exactly as the application does.
@@ -219,6 +230,7 @@ export default function PublicPreviewCapturePage() {
     setMessages((current) =>
       current.map((message) => (message.id === messageId ? { ...message, content, edited_at: now } : message)),
     );
+    return { ok: true, error: null };
   }, []);
 
   /**
@@ -249,6 +261,17 @@ export default function PublicPreviewCapturePage() {
   }
 
   if (!fixture || !activeChat) return null;
+
+  if (new URLSearchParams(window.location.search).get("surface") === "contacts") {
+    return <div className="flex h-app w-screen overflow-hidden px-safe" {...{ [PUBLIC_PREVIEW_READY_ATTRIBUTE]: "true" }}>
+      <div className="relative flex h-full w-full flex-col border-r border-[color:var(--kub-rule)] md:w-[400px]">
+        <KubGlassLayer />
+        <div className="relative flex min-h-0 flex-1 flex-col pt-window-top"><ContactsPanel previewContacts={previewContacts} /></div>
+        <BottomNav />
+      </div>
+      <div className="hidden flex-1 md:block" />
+    </div>;
+  }
 
   return (
     <div
@@ -455,6 +478,7 @@ export default function PublicPreviewCapturePage() {
         <SideMenuLayer
           onClose={() => setSideMenuOpen(false)}
           onOpenSettings={() => undefined}
+          onOpenContacts={() => undefined}
           onOpenNewGroup={() => undefined}
           onOpenSaved={() => undefined}
         />

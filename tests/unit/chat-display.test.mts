@@ -132,6 +132,22 @@ test("a conversation with a person is never marked as a bot", () => {
   assert.equal(info.subtitle, "Личный чат");
 });
 
+test("a viewer's private contact name wins over the public profile in chat chrome", () => {
+  const chat = {
+    id: "chat",
+    name: "Ольга Мишина",
+    type: "private" as const,
+    description: null,
+    created_by: "me",
+    members: [{ user_id: "me" }, { user_id: "other" }],
+    other_user: { id: "other", full_name: "Ольга Мишина" },
+    contact_alias: "Коллега Оля",
+    bots: [],
+  };
+  assert.equal(getChatDisplayInfo(chat as never, "me").title, "Коллега Оля");
+  assert.equal(chat.other_user.full_name, "Ольга Мишина");
+});
+
 test("«Избранное» wins over everything, and is not a bot", () => {
   const chat = {
     id: "chat",
@@ -147,4 +163,22 @@ test("«Избранное» wins over everything, and is not a bot", () => {
   assert.equal(info.isSaved, true);
   assert.equal(info.isBot, false);
   assert.equal(info.title, "Избранное");
+});
+
+test("a two-person private chat named by the contact alias is not Saved Messages", () => {
+  const chat = {
+    id: "private-chat",
+    name: "Избранное",
+    type: "private" as const,
+    description: null,
+    created_by: "me",
+    members: [{ user_id: "me" }, { user_id: "other" }],
+    other_user: { id: "other", full_name: "Другой участник" },
+    contact_alias: "Избранное",
+    bots: [],
+  };
+  const info = getChatDisplayInfo(chat as never, "me");
+  assert.equal(info.isSaved, false);
+  assert.equal(info.title, "Избранное");
+  assert.equal(info.subtitle, "Личный чат");
 });

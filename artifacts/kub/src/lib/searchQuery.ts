@@ -29,6 +29,21 @@ export interface ParsedSearchQuery {
   hasAdvancedFilters: boolean;
 }
 
+export function shouldShowSearchCommands(parsed: ParsedSearchQuery): boolean {
+  return !parsed.hasAdvancedFilters &&
+    (parsed.filters.type === "all" || parsed.filters.type === "command");
+}
+
+export function sanitizePostgrestSearch(value: string): string {
+  return value
+    .trim()
+    .replace(/^@+/, "")
+    .replace(/[,%()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
+
 const FILTER_TOKEN_RE = /(?:^|\s)(type|from|in|has|before|after):(?:"([^"]*)"|'([^']*)'|(\S+))/gi;
 const ENTITY_ALIASES: Record<string, SearchEntityFilter | SearchHasFilter> = {
   all: "all",

@@ -41,7 +41,8 @@ test("every in-app shell takes its height from the token", () => {
     ["components/layout/MainLayout.tsx", 1],
     ["pages/tasks/TasksPage.tsx", 3],
     ["pages/bots/BotsPage.tsx", 1],
-    ["pages/public/PublicPreviewCapturePage.tsx", 1],
+    // The fixture has alternative chat and contacts shells; both need the iOS height token.
+    ["pages/public/PublicPreviewCapturePage.tsx", 2],
   ]) {
     const source = withoutComments(read(file));
     const found = (source.match(/\bh-app\b/g) ?? []).length;

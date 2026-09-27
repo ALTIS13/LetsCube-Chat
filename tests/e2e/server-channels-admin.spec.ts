@@ -426,6 +426,25 @@ test("a second voice room is one form away, and the insert carries its heading",
   ]);
 });
 
+test("a new voice room saves its chosen seat limit and speaking role", async ({ page }) => {
+  const fixture = await openDialog(page, seedStore(), "admin");
+
+  await page.getByTestId("channel-create-open").click();
+  const form = page.getByTestId("channel-create-form");
+  await form.getByTestId("channel-create-kind-voice").click();
+  await form.getByTestId("channel-create-name").fill("Тихая комната");
+  await form.getByTestId("channel-create-seats").fill("4");
+  await form.getByTestId("channel-create-speak-admin").click();
+  await form.getByTestId("channel-create-submit").click();
+  await expect(form).toHaveCount(0);
+
+  const inserts = fixture.restCalls("voice_channels", "POST");
+  expect(inserts).toHaveLength(1);
+  expect(inserts[0].body).toMatchObject({ max_participants: 4, speak_role: "admin" });
+  const room = page.getByTestId("channel-manage-row").filter({ hasText: "Тихая комната" });
+  await expect(room.getByTestId("channel-row-summary")).toHaveText("4 места · Только администраторы");
+});
+
 test("a room's seats and who may speak are saved as the columns that hold them", async ({ page }, info) => {
   const store = seedStore();
   const fixture = await openDialog(page, store);

@@ -1,5 +1,22 @@
 # QA Results
 
+## 2026-09-27 - Ordinary Member Contacts And Channel Candidate
+
+The private contacts migration was applied after a verified production backup,
+transaction rehearsal and owner/other-user RLS checks. Live read-only metadata
+confirms RLS plus four contact policies and a member-scoped topics SELECT that
+does not hide archived topics. The web candidate adds contact search/aliases,
+normal-member text-channel reading, archived-channel isolation, voice-room form
+settings, account-switch guards and edit-refusal feedback. Scoped review found
+and red/green tests closed one cross-account preview leak and three wrong-scope
+issues. Typecheck, production web build (`sw.js build 4c4d83a28da2db11`), API
+build, full unit/server suites and synthetic Chromium 1440/390 plus WebKit 390
+passed: **181 passed, 50 explicit platform skips, zero failures**. Contact and
+edit-error pixels at 1440/390 in both themes were inspected. The voice rail
+uses a synthetic room, not physical WebRTC; WebKit fixture reload blocks service
+workers, not installed-PWA reload. No authenticated production UI or Android
+release acceptance is claimed. [Evidence and remaining gates](operations/2026-09-27-member-contacts-and-channels.md).
+
 ## 2026-09-25 - Android 0.1.11 And Media/Profile Web Rollout
 
 Signed Stable APK 0.1.11/build 12 is public and independently verified at

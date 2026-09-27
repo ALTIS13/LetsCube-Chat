@@ -68,9 +68,13 @@ test("a channel's people are its subscribers, on the row that names them", () =>
   assert.equal(row(group({ members: 12 }), "members")?.value, "12 участников");
 });
 
-test("topics say which way they are, because the row is read at a glance", () => {
-  assert.equal(row(group({ isForum: true }), "topics")?.value, "Включены");
-  assert.equal(row(group({ isForum: false }), "topics")?.value, "Выключены");
+test("the topics row names the mode, not whether text channels exist", () => {
+  const enabled = row(group({ isForum: true }), "topics");
+  const disabled = row(group({ isForum: false }), "topics");
+  assert.equal(enabled?.label, "Режим топиков");
+  assert.equal(enabled?.value, "Включён");
+  assert.equal(disabled?.label, "Режим топиков");
+  assert.equal(disabled?.value, "Выключен");
 });
 
 test("a media row appears only once something has been counted", () => {

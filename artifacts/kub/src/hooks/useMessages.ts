@@ -1389,12 +1389,21 @@ export function useMessages(
   // with the freshly-joined data, so no manual store push is needed here.
   const editMessage = useCallback(async (messageId: string, newContent: string) => {
     const trimmed = newContent.trim();
-    if (!chatId || !trimmed) return;
-    const { error } = await supabase
-      .from("messages")
-      .update({ content: trimmed, edited_at: new Date().toISOString() })
-      .eq("id", messageId);
-    if (error) console.error("Edit error:", error);
+    if (!chatId || !trimmed) return { ok: false, error: "Введите текст сообщения." };
+    try {
+      const { data, error } = await supabase
+        .from("messages")
+        .update({ content: trimmed, edited_at: new Date().toISOString() })
+        .eq("id", messageId)
+        .eq("chat_id", chatId)
+        .select("id")
+        .maybeSingle();
+      if (error) return { ok: false, error: mapPgError(error) };
+      if (data?.id !== messageId) return { ok: false, error: "Сообщение недоступно для редактирования." };
+      return { ok: true, error: null };
+    } catch {
+      return { ok: false, error: "Проверьте соединение и повторите попытку." };
+    }
   }, [chatId, supabase]);
 
   // ── Delete (soft) ───────────────────────────────────────────────────────

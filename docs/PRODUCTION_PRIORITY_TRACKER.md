@@ -2,6 +2,16 @@
 
 Status: active production-hardening tracker, updated 2026-09-27.
 
+**2026-09-27 ordinary-user flow candidate (local QA passed):** a private contact
+list, working group text-channel scope for ordinary participants including
+archived-channel isolation, a saved voice-room create form, stale-account read
+guards and visible edit failures are implemented. The contact migration passed
+backed-up production apply and owner-scoped RLS checks. Typecheck, web/API
+builds, full unit/server suites and the 181-pass/50-explicit-skip synthetic
+browser matrix passed; scoped review findings were repaired with red/green
+regressions. No web deploy or Android rebuild is claimed yet. See the
+[member-flow record](operations/2026-09-27-member-contacts-and-channels.md).
+
 **2026-09-27 D-208 signed-media web canary (deployed):** production web now
 builds with `VITE_MEDIA_SIGNED_URLS=signed` from `11a3bff9`. The served JS
 contains that mode, one healthy container retains the guarded asset volume,
