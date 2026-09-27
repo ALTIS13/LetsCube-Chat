@@ -1,10 +1,10 @@
 # Web hashed-asset retention
 
-Status: the named production volume is attached and the startup mount guard is
-active in the sole healthy web container. The source is commit `fa9af510`;
-the entrypoint script matches source SHA-256
+Status: production retention is active and passed a two-distinct-build HTTPS
+check on 2026-09-27. The named volume and startup mount guard are present in
+the sole healthy web container at commit `99ac9162`. The entrypoint script
+matches source SHA-256
 `fdc3a58874155fc99a315a9027f1ca3cc03fc5d00f018a27ec760a93db04fcbe`.
-Retention across two distinct production builds is not yet proven.
 
 The live `letscube-web` Coolify resource is a Dockerfile application, not
 `docs/deploy/docker-compose.coolify.yml`. Each image contains only its own
@@ -69,9 +69,16 @@ both in the mounted directory and over HTTPS; a missing asset returned 404.
 After setting `LETSCUBE_REQUIRE_ASSET_VOLUME=1`, deployment
 `f7e1ifrmu2ml1r3nkka9gyq2` finished with one healthy replacement container,
 the same mounted volume and guard, and the same asset hash and immutable HTTPS
-cache header. The prior container was removed. The remaining acceptance gate is
-an actual subsequent web build with a different hashed entry: verify that both
-old and new asset URLs remain byte-identical to their respective image files.
+cache header. The prior container was removed. Subsequent source commit
+`99ac9162` triggered webhook deployment `fr18u8rncnw3sc70wh51kffj`, which
+finished with one healthy container and the same guarded mount. Its `/` entry
+is `/assets/index-BpF3U0bR.js`. Both old and new asset URLs returned 200 over
+HTTPS with `public, max-age=31536000, immutable`; their SHA-256 values matched
+the mounted bytes: old `c78a76308370bacf85afa1200ddc0959383559a1c5fa260441296b84f5280533`,
+new `6e23155e4af9bff3a60f4ad52c9cdba7b38b14b56794554268ee3c6e2239ba40`.
+At this checkpoint the volume held 8 files (7.2 MB), with 66 GB free on the
+host filesystem. This proves retention for these two builds; it is not a
+general claim about future volume health or unbounded growth.
 
 ## Failure and rollback
 

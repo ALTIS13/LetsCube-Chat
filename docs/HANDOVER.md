@@ -201,10 +201,11 @@ on desktop/mobile Chromium and mobile WebKit. This is not a physical Safari
 fix verdict. A durable asset-retention implementation is deployed at `242be7f1` and passed a
 two-release isolated Docker-volume check. On 2026-09-27 the Coolify owner-team
 write token was renewed; the live Dockerfile app gained a named `/assets/`
-volume and the mandatory mount guard. Two same-source redeploys finished with
-one healthy container and matching mounted/HTTPS asset SHA-256. The running MCP
-process still holds its old environment until a Codex restart; the direct API
-works. Retention across two different production builds remains unproved. See the
+volume and the mandatory mount guard. Two same-source redeploys and then a
+different-source webhook deploy at `99ac9162` finished with one healthy
+container. Both old and new hashed JS files remained byte-identical over HTTPS
+and in the volume, with immutable cache headers. The running MCP process still
+holds its old environment until a Codex restart; the direct API works. See the
 [runbook](operations/web-asset-retention.md) and
 [tracker](PRODUCTION_PRIORITY_TRACKER.md) for the activation boundary.
 
