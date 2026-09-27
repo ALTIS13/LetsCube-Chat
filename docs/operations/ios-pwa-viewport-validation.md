@@ -1,6 +1,24 @@
 # Проверка нижнего края iOS PWA
 
-Owner: LETSCUBE PWA. Stage: the viewport fix `b7b4e6c3` and CSS-guard hardening `d2686623` are published, but D-111 remains open after four newer tester images. Evidence: D-111 in `docs/INTERFACE_DEFECT_REGISTER.md`, the tests below, anonymous pixel geometry and three guest-only physical-iPhone smokes including the temporary lower-edge probe. Blocker: the installed messenger's active bundle and actual shell/composer geometry are unknown; the manifest-free probe's DOM-hit-test result cannot be transferred to that installed app without measurement. Next: measure `innerHeight`, `100vh`, `--kub-app-height`, shell/composer bottom and a lower-edge touch in the installed LETSCUBE container; fix only the branch the actual app proves.
+Owner: LETSCUBE PWA. Stage: D-111 fixed and verified on physical iPhones (`35a19e66`, 2026-09-27). Evidence: the installed-app measurement below, D-111 in `docs/INTERFACE_DEFECT_REGISTER.md`, and the tests it names. Blocker: none for the guest screens; a signed-in chat cannot be checked on a shared cloud phone. Next: the tester confirms the chat and composer on his own iPhone.
+
+## The installed app measured from inside, and the fix (2026-09-27, evening)
+
+MobileNext cannot evaluate JavaScript in an iOS web view (`mobilecli webview` answers that it is not supported on iOS), but it reads text on the screen. So the app itself was made to show its geometry: a temporary script loaded only with `?kub-viewport-diagnostic=1`, with `index.html` pointing the manifest at a copy whose `start_url` kept the flag, so the Add to Home Screen sheet offered "LETSCUBE QA" at the flagged URL and the installed app opened with it. It reported numbers, five stripes each drawn to a different claimed height, and where touches landed; nothing else.
+
+On iPhone 17 Pro Max units (`iPhone18,2`, iOS 26.3.1), in the installed app (`navigator.standalone` true, `display-mode: standalone` true):
+
+| moment | innerHeight | clientHeight | visual viewport | fixed `inset:0` | vh / lvh | svh | dvh | `--kub-app-height` |
+|---|---|---|---|---|---|---|---|---|
+| parse time (index.html) | 956 | 956 | 956 | — | — | — | — | — |
+| ~10 s at rest | 894 | 894 | 894 | 0–894 | 956 | 894 | 894 | 894px |
+| with content taller than 894 | 956 | 894 | 956 | 0–956 | 956 | 894 | 956 | 956px |
+
+The safe-area insets were 62 top and 34 bottom. In the short ("small") state the page is drawn from the top, the bottom 62 pt show the page background — the band, `#050B18` in dark and `#E9EFF6` in light, exactly as the tester photographed — and touches at y=910 and 945 were not received while 600 was. With a 1400 px absolutely positioned stripe present, iOS switched to the "large" state: all five stripes reached 956 and touches at 910 and 945 were recorded. A 1400 px *fixed* layer alone did not switch it. `clientHeight` stayed 894 in both states, so `html`/`body` at `100%` both are the fitting document and would clip a correct shell. The earlier manifest-free probe read `innerHeight=932` because it was, at that moment, in the large state; that is why its y=890 touch arrived.
+
+The candidate — `html` and `body` of the installed app at `100lvh` — was applied live from the diagnostic before any user got it: the large state at once and after 30 s; no band on the public home or the sign-in screen; touches at 600, 910 and 945; keyboard open (shell 570 = visual viewport, pan 175 compensated by `--kub-app-top`) and closed (back to 956 after 3 s and 15 s); landscape (440) and back (956). Shipped as `35a19e66` and checked again as users install it (the plain LETSCUBE icon, no flag): 0 uniform bottom rows on the public home after 30 s, on the sign-in screen after 20 s, and after a relaunch. `PwaRuntime` still follows `innerHeight` at rest, so if iOS ever returns to the small state the shell ends where touches still land.
+
+Four physical units were used in all, each released right after its session; two more had no control agent (they asked for a provisioning profile) and were released unused, without installing anything. No account was entered and no conversation was on screen. The diagnostic, its manifest copy and its gate spec were removed afterwards, with the running image and the public bytes as proof.
 
 ## Physical Home Screen guest smoke (2026-09-27)
 

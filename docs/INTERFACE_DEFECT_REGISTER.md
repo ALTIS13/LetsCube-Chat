@@ -6463,7 +6463,7 @@ and they scroll up, then the frames run. Red before the fix, the reader at 2098p
 put at 4195px; green in three runs of three after. The source half is in
 `tests/unit/message-history-anchoring.test.mjs`.
 
-## D-111 `[ ]` The installed iPhone app leaves an empty band under the composer, and it stays when the keyboard opens
+## D-111 `[x]` The installed iPhone app leaves an empty band under the composer, and it stays when the keyboard opens
 
 **Severity:** high. Reported by the owner on 2026-09-11 with a tester's screenshots,
 on the web build production has run since 07:03 Moscow time that day (`45971c6`);
@@ -6555,6 +6555,42 @@ list, tasks and public full-height pages. The chat still owns only its composer
 safe-area decision. Chromium and desktop WebKit tests check the list's navigation
 at rest, search keyboard, chat return, and a public full-height route. This is
 source and synthetic-browser evidence, not a physical iPhone acceptance result.
+
+**Measured and fixed, 2026-09-27.** The band was not a strip the page cannot
+paint. Through a temporary diagnostic that the installed LETSCUBE app itself
+rendered as text (MobileNext cannot run JavaScript in an iOS web view but reads
+the screen), on iPhone 17 Pro Max units running iOS 26.3.1:
+
+- at parse time `innerHeight`, `clientHeight` and the visual viewport are the
+  whole 956 pt screen;
+- within seconds, with a document that exactly fits, iOS moves to a *small*
+  viewport: `innerHeight`, the visual viewport, the fixed containing block and
+  `dvh` 894 — the screen less its 62 pt top inset — while `vh`/`lvh` stay 956
+  and the web view still covers all 956. The page is drawn from the top, so its
+  last 62 pt show the page background, and touches at y=910 and 945 reach
+  nothing. `PwaRuntime` followed `innerHeight`, the shell became 894: the band.
+  The tester's 58 pt on a 932 pt screen is the 59 pt inset of that model;
+- a document taller than that small viewport moves iOS to the *large* one: 956
+  for all of them, the strip painted and pressable. `html` and `body` at `100%`
+  were exactly the fitting document.
+
+The fix holds `html` and `body` of the installed app at `100lvh`. It was tried
+live on the device before shipping and then verified as shipped (`35a19e66`),
+on the plain LETSCUBE icon as users install it: the large state at once and
+after 30 s, no band on the public home and the sign-in screen (0 uniform bottom
+rows, 62 pt before), touches at 600/910/945 recorded, the keyboard opening
+(shell = visual viewport, 570, pan 175 compensated) and closing (back to 956),
+rotation to landscape and back, and a relaunch. `PwaRuntime` still follows
+`innerHeight`, so if iOS ever falls back to the small viewport the shell ends
+where touches still land. Four units in all, each released after its session;
+two others had no control agent and were released unused.
+
+Not verified on a device: a signed-in chat and composer, because an account is
+never entered on a shared cloud phone. The shell there reads the same token and
+sits in the same `body`; the tester's phone is the check. The diagnostic, its
+manifest copy and its gate spec were removed after the fix, with the running
+image and the public bytes as proof. Details:
+`docs/operations/ios-pwa-viewport-validation.md`.
 
 ## D-112 `[x]` In the Windows app the window's own buttons sit over the page's top-right controls, and take most of their clicks
 

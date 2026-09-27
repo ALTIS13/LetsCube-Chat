@@ -22,32 +22,13 @@
       // LETSCUBE is installable as a PWA only on iPhone/iPad. Android and
       // Windows use dedicated packages and therefore do not receive a manifest.
       (function () {
-        // Temporary D-111 diagnostic, removed with its fix: only the exact
-        // flag installs a copy of the manifest whose start_url keeps the flag,
-        // and loads a script that shows the installed app's geometry.
-        var diagnostic = false;
-        try {
-          diagnostic = new URLSearchParams(location.search).get("kub-viewport-diagnostic") === "1";
-        } catch (error) {}
-        window.__kubViewportDiagnosticRequested = diagnostic;
-        if (diagnostic) {
-          window.__kubViewportBoot = {
-            inner: window.innerHeight,
-            client: document.documentElement.clientHeight,
-            vv: window.visualViewport ? Math.round(window.visualViewport.height) : null,
-          };
-          var probe = document.createElement("script");
-          probe.src = "/__qa/viewport-diagnostic.js";
-          probe.async = true;
-          document.head.appendChild(probe);
-        }
         var ua = navigator.userAgent || "";
         var ios = /iPhone|iPod|iPad/i.test(ua)
           || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
         if (!ios) return;
         var manifest = document.createElement("link");
         manifest.rel = "manifest";
-        manifest.href = diagnostic ? "/__qa/viewport-diagnostic.json" : "/manifest.json";
+        manifest.href = "/manifest.json";
         document.head.appendChild(manifest);
       })();
     </script>

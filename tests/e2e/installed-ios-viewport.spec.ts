@@ -350,16 +350,19 @@ test.describe("the installed iPhone app's shell and keyboard", () => {
       const paintableHeight = SCREEN - 59;
       await page.setViewportSize({ width: 390, height: SCREEN });
       await emulateInstalledIosApp(page, INSETS);
-      // iOS 26 can expose 100vh as the full 932 pt screen while both innerHeight
-      // and visualViewport stop at 873 pt. The lower 59 pt are not paintable DOM.
+      // iOS 26's small viewport, measured for D-111: innerHeight and the visual
+      // viewport stop a top inset short (873 of 932 here) while 100vh stays at
+      // the screen, and the lower strip takes no touches. The app now holds the
+      // large viewport with its root at 100lvh; this keeps the fallback safe if
+      // iOS ever returns to the small one.
       await installKeyboardStandIn(page, paintableHeight, paintableHeight);
       await openChatList(page, theme);
       await expect(page.locator(`html.${theme}`)).toHaveCount(1);
       const conversation = page.getByTestId("chat-list-item").filter({ hasText: ANYA.full_name });
       await expect(conversation).toBeVisible();
 
-      // Model the system-owned lower strip as an overlay: unlike ordinary DOM,
-      // it blocks hit testing and cannot be painted by the application.
+      // Model the small viewport's lower strip as an overlay: there it takes no
+      // touches, and what shows through it is only the page background.
       await page.evaluate((height) => {
         const strip = document.createElement("div");
         strip.dataset.testid = "ios-system-strip-fixture";
