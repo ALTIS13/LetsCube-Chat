@@ -86,6 +86,7 @@
       "auth " + box(".kub-auth-shell") + " shell " + box("[data-ios-app-shell]"),
       "entry " + entry() + " path " + location.pathname,
       "touch " + (touches.length ? touches.slice(-6).join(" ") : "-"),
+      "try " + candidateState() + " doc " + Math.round(document.documentElement.scrollHeight),
     ];
   }
 
@@ -98,7 +99,7 @@
     + "border-radius:6px;padding:4px 6px;font:11px/1.3 ui-monospace,Menlo,monospace;pointer-events:auto";
   var text = document.createElement("div");
   var controls = document.createElement("div");
-  controls.style.cssText = "display:flex;gap:6px;margin-top:4px";
+  controls.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;margin-top:4px";
   panel.appendChild(text);
   panel.appendChild(controls);
 
@@ -136,7 +137,30 @@
     update("tap");
   });
 
+  // Two candidate fixes, applied live so they can be judged on the device
+  // before either ships. A: the root chain as tall as the large viewport.
+  // B: a 1px sentinel just below it, so the document always overflows.
+  var candidateA = false;
+  var sentinel = document.createElement("div");
+  sentinel.setAttribute("aria-hidden", "true");
+  sentinel.style.cssText = "position:absolute;left:0;top:100lvh;width:1px;height:1px;pointer-events:none";
+  function candidateState() {
+    return "A " + (candidateA ? "on" : "off") + " B " + (sentinel.isConnected ? "on" : "off");
+  }
+
   var collapsed = false;
+  button("A", function (b) {
+    candidateA = !candidateA;
+    var value = candidateA ? "100lvh" : "";
+    document.documentElement.style.height = value;
+    document.body.style.height = value;
+    b.textContent = candidateA ? "A: да" : "A";
+  });
+  button("B", function (b) {
+    if (sentinel.isConnected) sentinel.remove();
+    else document.body.appendChild(sentinel);
+    b.textContent = sentinel.isConnected ? "B: да" : "B";
+  });
   button("Полосы", function (b) {
     var on = stripes.style.display === "none";
     stripes.style.display = on ? "block" : "none";
