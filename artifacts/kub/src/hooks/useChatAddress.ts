@@ -52,6 +52,7 @@ export function useChatAddress(): void {
   const [location, navigate] = useLocation();
   const selectedChatId = useAppStore((state) => state.selectedChatId);
   const setSelectedChatId = useAppStore((state) => state.setSelectedChatId);
+  const accountId = useAppStore((state) => state.currentUser?.id ?? null);
   const agreed = useRef<ChatAddressState | null>(null);
   const [unverifiedChatId, setUnverifiedChatId] = useState<string | null>(null);
   // A preview or receipt in another chat cannot change address validation.
@@ -63,6 +64,16 @@ export function useChatAddress(): void {
   });
 
   useEffect(() => {
+    // An account being read again is not somebody closing their conversation.
+    // `setCurrentUser(null)` clears the selection with the account, and a
+    // reconcile against the old agreement would read that as a close and send
+    // the address to «/» — so a profile reload in a conversation landed on the
+    // empty screen. Forgetting the agreement instead lets the account's return
+    // read the address afresh, and the conversation it names opens again.
+    if (accountId === null) {
+      agreed.current = null;
+      return;
+    }
     const next: ChatAddressState = { location, selectedChatId };
     const action = reconcileChatAddress(agreed.current, next);
 
@@ -99,7 +110,7 @@ export function useChatAddress(): void {
         return () => timers.forEach((timer) => window.clearTimeout(timer));
       }
     }
-  }, [location, navigate, selectedChatId, setSelectedChatId]);
+  }, [accountId, location, navigate, selectedChatId, setSelectedChatId]);
 
   // A conversation named by a URL is taken on trust until the list can answer
   // for it. Once the list has loaded and still does not hold it, the server is

@@ -23865,3 +23865,23 @@ real sidebar mount: red before (the add button's top at 8 px), green after on
 WebKit and Chromium at 390, with `expectClearOfHardware` over the whole screen;
 the contacts surface passes 12/12 at 390 and 1440 in both themes, and the
 desktop header does not move. Device check pending with the D-111 session.
+
+## D-318 `[x]` A profile read again in a conversation lands on the empty screen
+
+2026-09-28, found by a red test rather than a report:
+`voice-shell-bar.spec.ts` «a loading /chat/… keeps call controls» had gone red
+at `d3c3f737` and failed the same way on that revision's own code. The
+sequence it drives is an account read again with the same person: the store's
+`setCurrentUser(null)` clears the selected conversation with the account, and
+`useChatAddress`, still mounted, reconciled against its old agreement — the
+address unchanged, the selection gone — and read that as somebody closing the
+conversation, so it sent the address to «/». When the profile came back the
+conversation was shut and the call's capsule with it; the call itself went on,
+drawn only by the bar.
+
+`useChatAddress` now forgets its agreement while there is no account, so the
+account's return reads the address afresh and the conversation it names opens
+again — «where you were is product state». The spec is green at 1440 and 390,
+and so are `chat-address.spec.ts`, `use-chats-account-race.spec.ts`, the voice
+resume and routing specs (155 passed). Removing the guard turns the spec red
+again, which is the state it was found in.
