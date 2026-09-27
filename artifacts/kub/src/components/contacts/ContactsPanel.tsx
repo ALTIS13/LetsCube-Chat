@@ -78,10 +78,17 @@ export function ContactsPanel({ previewContacts }: { previewContacts?: UserConta
 
   return (
     <section aria-label="Контакты" data-testid="contacts-panel" className="flex min-h-0 flex-1 flex-col text-[color:var(--kub-text)]">
-      <div className="flex shrink-0 items-center gap-2 border-b border-[color:var(--kub-rule)] px-3 py-2">
+      {/* The top of the window, as the chat list's header clears it: on the
+          installed iPhone without this the title sat on the clock and the add
+          button beside the battery, where the status bar takes the touch — and
+          once one contact existed that button was the only way to add another
+          (D-315, D-317). */}
+      <div className="shrink-0 border-b border-[color:var(--kub-rule)] pt-window-top">
+      <div className="flex items-center gap-2 px-3 py-2">
         <button type="button" onClick={() => setMobileSection("chats")} aria-label="Назад к чатам" className={cn("kub-icon-action hidden h-10 w-10 items-center justify-center rounded-md text-[color:var(--kub-muted)] kub-raise-hover md:flex", FOCUS_RING)}><KubIcon name="back" size={18} /></button>
         <h2 className="min-w-0 flex-1 truncate text-base font-semibold">Контакты</h2>
         <button type="button" onClick={() => { setActionError(null); setAddOpen(true); }} aria-label="Добавить контакт" title="Добавить контакт" className={cn("kub-icon-action flex h-11 w-11 items-center justify-center rounded-md text-[color:var(--kub-accent-text)] kub-raise-hover", FOCUS_RING)}><KubIcon name="userPlus" size={20} /></button>
+      </div>
       </div>
       <div className="shrink-0 px-3 py-2">
         <label className={cn("kub-field flex h-10 items-center gap-2 rounded-md bg-[var(--kub-inset)] px-3", FOCUS_RING_WITHIN)}>

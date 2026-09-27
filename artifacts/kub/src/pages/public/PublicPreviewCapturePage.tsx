@@ -266,7 +266,7 @@ export default function PublicPreviewCapturePage() {
     return <div className="flex h-app w-screen overflow-hidden px-safe" {...{ [PUBLIC_PREVIEW_READY_ATTRIBUTE]: "true" }}>
       <div className="relative flex h-full w-full flex-col border-r border-[color:var(--kub-rule)] md:w-[400px]">
         <KubGlassLayer />
-        <div className="relative flex min-h-0 flex-1 flex-col pt-window-top"><ContactsPanel previewContacts={previewContacts} /></div>
+        <div className="relative flex min-h-0 flex-1 flex-col"><ContactsPanel previewContacts={previewContacts} /></div>
         <BottomNav />
       </div>
       <div className="hidden flex-1 md:block" />

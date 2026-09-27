@@ -23715,3 +23715,60 @@ sharing and failed preparation retain the truthful download action. Video keeps
 download to avoid eager large-file fetches. Fixture checks pass in Chromium and
 desktop WebKit at 390px for share and fallback. Availability of “Save Image”
 inside the actual iOS sheet and physical-device behavior remain unverified.
+
+## D-313 `[ ]` A voice message stops when you leave its chat
+
+2026-09-27, from a tester's voice message. In Telegram a voice message keeps
+playing after you go to another chat, so a six-minute message can be heard
+while you write to somebody else; ours closes the moment the chat is left.
+Telegram is the reference here (chat with media viewing). Not yet measured:
+whether the desktop player bar, which outlives a chat switch on Windows, and
+the phone behave differently, and what the phone's player is tied to. Next:
+read what unmounts the player on the phone, then adopt Telegram's mechanic — a
+playback that belongs to the application, with its own bar and a way back to
+the message.
+
+## D-314 `[ ]` An upload stops when you leave its chat, and a locked phone never finishes it
+
+2026-09-27, same voice message: a file sent to upload stops if the chat is
+left, and one started just before the phone was locked in a pocket never went.
+Two parts, to be kept apart. Leaving the chat is ours: the upload must belong
+to the application, not to the chat's view. A locked iPhone suspends a Home
+Screen web app, so the page cannot upload in the background at all; what is
+achievable is that the upload resumes by itself when the app is back, which is
+what a resumable upload exists for. Not yet measured which part the tester hit.
+
+## D-315 `[x]` After the first contact, a second one could not be added
+
+2026-09-27, tester, installed iPhone app: the first contact was added through
+«Добавить контакт», which searches everybody; after that the same search
+"only found my contacts", and adding a second was not possible. Measured in
+the code, it was not a second search: the button in the empty state is the
+only one in the middle of the screen, it disappears with the first contact,
+and what remains is the header's add button — which sat under the status bar
+(D-317) — and the contacts filter, which by design searches only one's own
+contacts. So the tester was left with the filter. Fixed with D-317; the
+regression test adds a second contact with one already present.
+
+## D-316 `[ ]` A person's profile has no way to add them to contacts
+
+2026-09-27, tester: "зайдя в твой профиль — сохранить как контакт не могу".
+Measured: `useUserContacts` is read only by `ContactsPanel`; no profile surface
+offers it. Telegram's profile has «Добавить в контакты» (and «Изменить» /
+«Удалить контакт» once added); Discord's has «Добавить в друзья» on the card.
+To add on the full card first, since `tests/unit/profile-tier.test.mts` requires
+everything on the compact card to exist on the full one.
+
+## D-317 `[x]` On the installed iPhone the contacts header sits under the status bar
+
+2026-09-27, tester's screenshot: «Контакты» drawn over the clock and the add
+button beside the battery, visible and not pressable. The chat list's header
+clears that edge with `pt-window-top`; `ContactsPanel`'s header had nothing, and
+the synthetic preview wrapped the panel in its own `pt-window-top`, which is
+why no captured frame ever showed it. The header now carries `pt-window-top`
+itself and the preview wrapper no longer does. A new check in
+`contacts-member-flow.spec.ts` emulates the installed app (59/34 insets) on the
+real sidebar mount: red before (the add button's top at 8 px), green after on
+WebKit and Chromium at 390, with `expectClearOfHardware` over the whole screen;
+the contacts surface passes 12/12 at 390 and 1440 in both themes, and the
+desktop header does not move. Device check pending with the D-111 session.

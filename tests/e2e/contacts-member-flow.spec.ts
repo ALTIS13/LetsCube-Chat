@@ -8,6 +8,7 @@ import {
   requireFixtureServer,
   type Row,
 } from "./helpers/messageActionsFixture";
+import { emulateInstalledIosApp, expectClearOfHardware, type Insets } from "./helpers/ios-standalone";
 
 const ME = person("11111111-1111-4111-8111-0000000000a1", "Тестовый участник", "participant");
 const PEER = person("11111111-1111-4111-8111-0000000000a2", "Другой участник", "other_user");
@@ -94,4 +95,51 @@ test("an ordinary member manages a contact independently of the chat", async ({ 
   await expect(page.getByTestId("contacts-panel").getByText("Другой участник")).toBeVisible();
   expect(contacts).toHaveLength(1);
   expect(contacts[0].alias).toBeNull();
+});
+
+// D-315 and D-317, from a tester's iPhone on 2026-09-27. In the installed app
+// the panel's header sat under the status bar: «Контакты» over the clock, and
+// the add button beside the battery where the status bar takes the touch. Once
+// one contact existed the empty state's button was gone, so that unreachable
+// icon was the only way to add a second, and the tester read the contacts
+// filter as a search that had stopped finding people. The chat list's header
+// clears the same edge with pt-window-top; this one had nothing.
+test("in the installed iPhone app the contacts header clears the status bar and adds a second contact", async ({ page, request }) => {
+  await requireFixtureServer(request);
+  const insets: Insets = { top: 59, right: 0, bottom: 34, left: 0 };
+  await page.setViewportSize({ width: 390, height: 844 });
+  await emulateInstalledIosApp(page, insets);
+  const contacts: Row[] = [{ owner_user_id: ME.id, contact_user_id: PEER.id, alias: null, created_at: AT }];
+  await openFixture(page, {
+    me: ME,
+    people: [PEER],
+    chats: [chat(CHAT_ID, "private", null, AT)],
+    memberships: [membership(CHAT_ID, ME, "member", AT), membership(CHAT_ID, PEER, "member", AT)],
+    messages: [],
+    rest: ({ resource, method }) => {
+      if (resource !== "user_contacts") return undefined;
+      if (method === "GET") return { status: 200, body: [...contacts] };
+      return undefined;
+    },
+  });
+
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "Навигация" }).getByRole("button", { name: "Контакты" }).click();
+  const panel = page.getByTestId("contacts-panel");
+  await expect(panel.getByText("Другой участник")).toBeVisible();
+  await expect(panel.getByText("Контактов пока нет")).toHaveCount(0);
+
+  const add = panel.getByRole("button", { name: "Добавить контакт" });
+  await expect(add).toHaveCount(1);
+  const reach = await add.evaluate((button) => {
+    const rect = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return { top: rect.top, pressable: hit === button || button.contains(hit) };
+  });
+  expect(reach.top, "the add button starts below the status bar").toBeGreaterThanOrEqual(insets.top);
+  expect(reach.pressable, "the add button takes the touch").toBe(true);
+  await expectClearOfHardware(page, insets, "contacts, one contact, installed iPhone");
+
+  await add.click();
+  await expect(page.getByRole("dialog", { name: "Добавить контакт" })).toBeVisible();
 });
