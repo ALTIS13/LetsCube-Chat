@@ -1,8 +1,6 @@
 "use client";
 
-import { useAppStore } from "@/store/app.store";
 import { KubIcon, KubTooltip } from "@/components/kub";
-import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { FOCUS_RING_INSET, PRESS_SINK } from "@/lib/controlSurface";
 import { FOLDER_RAIL_WIDTH } from "@/lib/desktopChatList";
 import { cn } from "@/lib/utils";
@@ -64,7 +62,6 @@ export function FolderRail({
   onOpenSideMenu,
   sideMenuOpen,
 }: FolderRailProps) {
-  const currentUser = useAppStore((s) => s.currentUser);
 
   return (
     // From `md` only: a phone has the bottom capsule and the horizontal strip,
@@ -101,13 +98,13 @@ export function FolderRail({
               PRESS_SINK,
             )}
           >
-            {currentUser ? (
-              <UserAvatar user={currentUser} size="sm" />
-            ) : (
-              <span className="text-[color:var(--kub-muted)]">
-                <KubIcon name="menu" size={18} />
-              </span>
-            )}
+            {/* The menu's glyph, not the person's face: the face is the panel's
+                at the foot of the column now (tracker item 40), and one face
+                twice down one edge reads as two different accounts. Telegram
+                Desktop, whose menu this layer is, draws three lines here. */}
+            <span className="text-[color:var(--kub-muted)]">
+              <KubIcon name="menu" size={18} />
+            </span>
           </button>
         </KubTooltip>
       </div>

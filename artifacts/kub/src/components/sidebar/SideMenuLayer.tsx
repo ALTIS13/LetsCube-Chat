@@ -60,6 +60,7 @@ type Row = {
 
 export function SideMenuLayer({ onClose, onOpenSettings, onOpenContacts, onOpenNewGroup, onOpenSaved }: SideMenuLayerProps) {
   const currentUser = useAppStore((s) => s.currentUser);
+  const openUserProfile = useAppStore((s) => s.openUserProfile);
   const [, setLocation] = useLocation();
   const signOut = useSignOut();
   const { resolvedTheme, setTheme } = useTheme();
@@ -89,12 +90,18 @@ export function SideMenuLayer({ onClose, onOpenSettings, onOpenContacts, onOpenN
   };
 
   const rows: Row[] = [
-    // Today this and «Настройки» land on the same surface: a person's own
-    // profile is the first block of the settings dialog and there is no
-    // self-profile view to open. Giving them separate destinations is the
-    // profile stage's work — one component that re-dresses itself — and is
-    // deliberately not done here.
-    { icon: "profile", label: "Мой профиль", action: () => { onClose(); onOpenSettings(); } },
+    // Your own profile as others see it — the full card, whose own button is
+    // «Редактировать профиль». Until tracker item 40 this and «Настройки»
+    // opened the same screen, which is the duplication the owner named
+    // («кнопка мой профиль и настройки по сути дублируют друг друга»).
+    {
+      icon: "profile",
+      label: "Мой профиль",
+      action: () => {
+        onClose();
+        if (currentUser) openUserProfile(currentUser.id, "named");
+      },
+    },
     { icon: "bookmark", label: "Избранное", action: () => { onClose(); onOpenSaved(); } },
     { icon: "contact", label: "Контакты", action: () => { onClose(); onOpenContacts(); } },
     { icon: "group", label: "Новая группа", action: () => { onClose(); onOpenNewGroup(); } },

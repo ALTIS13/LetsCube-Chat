@@ -7,9 +7,11 @@ import {
   AUDIO_SETTINGS_STORAGE_KEY,
   buildAudioTrackConstraints,
   getAudioSettings,
+  type AudioSettings,
 } from "@/hooks/useAudioSettings";
 import { playCallSoundOnce } from "@/lib/callSoundPlayer";
 import { createVoiceRoomSoundDriver } from "@/lib/voiceRoomSoundDriver";
+import { voiceSelfControlSound } from "@/lib/voiceRoomSound";
 import { microphonePermissionHelp } from "@/lib/platform/capabilities";
 import {
   MIC_GATE_CLOSED,
@@ -59,6 +61,16 @@ import {
 import { loadVoiceRoom, type VoiceRoom } from "@/hooks/voiceRoom";
 import type { AuthRuntimeSnapshot } from "@/lib/authRuntime";
 import { clearVoiceResume } from "@/lib/voiceResumeStorage";
+import {
+  chooseHeadphones,
+  chooseMicrophone,
+  micMutedBy,
+  readVoiceSelfAudio,
+  VOICE_SELF_AUDIO_DEFAULT,
+  VOICE_SELF_AUDIO_STORAGE_KEY,
+  writeVoiceSelfAudio,
+  type VoiceSelfAudio,
+} from "@/lib/voiceSelfAudio";
 
 /**
  * The call, and the one place it lives.
@@ -191,9 +203,11 @@ const IDLE: VoiceCallState = {
   deafened: false,
   canPublish: true,
   // False here is what clears a revocation at both ends of a call's life: every
-  // join publishes `{ ...IDLE, phase: "joining" }`, every leave publishes
-  // `IDLE`, and both failure paths spread it too. So one call's force-mute
+  // join publishes `{ ...idle(), phase: "joining" }`, every leave publishes
+  // `idle()`, and both failure paths spread it too. So one call's force-mute
   // cannot survive into the next, and there is no separate reset to forget.
+  // `micMuted` and `deafened` are the exception on purpose: `idle()` fills them
+  // from the person's own choice, which does outlive a call (item 40).
   speechRevoked: false,
   // Cleared with the call at both ends of its life, like `speechRevoked` above
   // and for the same reason: one call's blocked playback is not the next call's.
@@ -207,7 +221,43 @@ const IDLE: VoiceCallState = {
   refusalCode: null,
 };
 
-let state: VoiceCallState = IDLE;
+/**
+ * The person's own mute and deafen, kept across calls and reloads (item 40).
+ *
+ * Discord's panel works whether or not you are in a call, and the next call
+ * starts the way you left it; `lib/voiceSelfAudio.ts` holds the rule. Only a
+ * press writes this — never a moderator's silence, which is somebody else's
+ * decision about one call.
+ */
+let selfAudio: VoiceSelfAudio = loadSelfAudio();
+
+function loadSelfAudio(): VoiceSelfAudio {
+  if (typeof window === "undefined") return VOICE_SELF_AUDIO_DEFAULT;
+  try {
+    return readVoiceSelfAudio(window.localStorage.getItem(VOICE_SELF_AUDIO_STORAGE_KEY));
+  } catch {
+    // Storage that throws — a private window with site data blocked — is a
+    // person who has chosen nothing yet, which is open and hearing.
+    return VOICE_SELF_AUDIO_DEFAULT;
+  }
+}
+
+function storeSelfAudio(next: VoiceSelfAudio): void {
+  selfAudio = next;
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(VOICE_SELF_AUDIO_STORAGE_KEY, writeVoiceSelfAudio(next));
+  } catch {
+    // Kept for this session only. The press still took effect.
+  }
+}
+
+/** The state between calls: `IDLE`, carrying the person's own choice. */
+function idle(): VoiceCallState {
+  return { ...IDLE, micMuted: micMutedBy(selfAudio), deafened: selfAudio.deafened };
+}
+
+let state: VoiceCallState = idle();
 const listeners = new Set<() => void>();
 
 /**
@@ -399,6 +449,27 @@ export function currentVoiceRoom(): VoiceRoom | null {
   return room;
 }
 let capture: MediaStream | null = null;
+/**
+ * What the running capture was asked for, or null with none: the device and
+ * the three processing switches, which are everything `buildAudioTrackConstraints`
+ * turns into a request.
+ *
+ * What `followInputDevice` compares a new choice against — a microphone, or
+ * the panel's «Чистый голос» / «Без обработки» — so either reaches the call it
+ * was made in. Set by the join and by every swap, cleared with the capture.
+ */
+let captureInputChoice: string | null = null;
+
+function inputCaptureKey(settings: AudioSettings): string {
+  return [
+    settings.selectedInputDeviceId,
+    settings.echoCancellation,
+    settings.noiseSuppression,
+    settings.autoGainControl,
+  ].join("|");
+}
+/** Swaps run one after another, so two quick choices never hold two captures. */
+let inputSwaps: Promise<void> = Promise.resolve();
 
 /* ── The four sounds a channel makes ───────────────────────────────────────
  *
@@ -507,11 +578,37 @@ function forgetSpeakers() {
   publishSpeakers([]);
 }
 
+/**
+ * A press in another tab, reaching this one.
+ *
+ * Only between calls. A call keeps what its own controls say — the other tab
+ * is not in it — and picks the stored choice up again when it ends.
+ */
+function followSelfAudioElsewhere(event: StorageEvent): void {
+  if (event.key !== VOICE_SELF_AUDIO_STORAGE_KEY) return;
+  selfAudio = readVoiceSelfAudio(event.newValue);
+  if (callUnderway()) return;
+  const next = idle();
+  if (state.micMuted === next.micMuted && state.deafened === next.deafened) return;
+  patch({ micMuted: next.micMuted, deafened: next.deafened });
+}
+
 function subscribe(listener: () => void): () => void {
+  if (listeners.size === 0 && typeof window !== "undefined") {
+    window.addEventListener("storage", followSelfAudioElsewhere);
+  }
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
+    if (listeners.size === 0 && typeof window !== "undefined") {
+      window.removeEventListener("storage", followSelfAudioElsewhere);
+    }
   };
+}
+
+/** Whether a call is being joined or is running, so a press belongs to it. */
+function callUnderway(): boolean {
+  return state.phase === "joining" || state.phase === "connected" || state.phase === "reconnecting";
 }
 
 const snapshot = () => state;
@@ -734,6 +831,7 @@ export async function resumeVoiceAudio(): Promise<void> {
 }
 
 function stopCapture() {
+  captureInputChoice = null;
   if (!capture) return;
   stopStream(capture);
 }
@@ -1123,6 +1221,7 @@ function watchMicrophoneGate(mine: number): void {
     gateSettings = readGateSettings();
     syncLevelSource();
     evaluateGate();
+    followInputDevice(mine);
   };
   const onStorage = (event: StorageEvent) => {
     if (event.key === AUDIO_SETTINGS_STORAGE_KEY) apply();
@@ -1136,6 +1235,64 @@ function watchMicrophoneGate(mine: number): void {
     stopKeys();
   };
   apply();
+}
+
+/**
+ * A microphone chosen during the call, put on the air in the call (item 40).
+ *
+ * Queued rather than run at once: the settings event fires on every change —
+ * a slider dragged fires it dozens of times — and each check is only a
+ * comparison, but two real swaps racing would hold two captures and could end
+ * on the older choice.
+ */
+function followInputDevice(mine: number): void {
+  inputSwaps = inputSwaps.then(() => swapToChosenMicrophone(mine)).catch(() => undefined);
+}
+
+async function swapToChosenMicrophone(mine: number): Promise<void> {
+  const target = room;
+  if (!target || mine !== generation || captureInputChoice === null) return;
+  const settings = getAudioSettings();
+  if (inputCaptureKey(settings) === captureInputChoice) return;
+  let next: MediaStream;
+  try {
+    next = await captureMicrophone(mine, settings);
+  } catch {
+    // The chosen device would not open. The call keeps the microphone it has:
+    // a device choice must never end a conversation. The choice is not
+    // recorded, so choosing it again asks again.
+    return;
+  }
+  const track = next.getAudioTracks()[0] ?? null;
+  const stale = () => mine !== generation || room !== target;
+  if (!track || stale()) {
+    stopStream(next);
+    return;
+  }
+  let taken = false;
+  try {
+    taken = await target.replaceMicrophone(track);
+  } catch {
+    taken = false;
+  }
+  if (!taken || stale()) {
+    stopStream(next);
+    return;
+  }
+  const previous = capture;
+  capture = next;
+  captureInputChoice = inputCaptureKey(settings);
+  if (previous) stopStream(previous);
+  // The level source measured a clone of the old track; the next reading has
+  // to come from the new one. And `heard` is a fact about a capture, so a
+  // microphone nobody has heard yet starts unheard.
+  levelSource?.close();
+  levelSource = null;
+  micLevel = 0;
+  noInput = MIC_NO_INPUT_CLEAR;
+  if (state.noInputWarning) patch({ noInputWarning: false });
+  syncLevelSource();
+  evaluateGate();
 }
 
 /** Safe to call twice, during a join, and when there was never a call. */
@@ -1180,8 +1337,8 @@ export function holdVoiceTalk(down: boolean): void {
  * and falling back to the default microphone is better than telling somebody
  * their microphone is missing when it is only a different one.
  */
-async function captureMicrophone(mine: number): Promise<MediaStream> {
-  const constraints = buildAudioTrackConstraints(getAudioSettings());
+async function captureMicrophone(mine: number, settings = getAudioSettings()): Promise<MediaStream> {
+  const constraints = buildAudioTrackConstraints(settings);
   try {
     return await navigator.mediaDevices.getUserMedia({ audio: constraints });
   } catch (error) {
@@ -1250,7 +1407,7 @@ function fail(refusal: string, refusalCode: VoiceGatewayRefusalCode | null = nul
   mutedBeforeDeafened = false;
   selfUserId = null;
   publish({
-    ...IDLE,
+    ...idle(),
     phase: "failed",
     channelId: state.channelId,
     chatId: state.chatId,
@@ -1274,6 +1431,19 @@ export interface VoiceJoinRequest {
    * event loop, in a room they did not choose to rejoin.
    */
   micMuted?: boolean;
+  /**
+   * A call between two people — placed or answered through the ring — rather
+   * than a room somebody walked into.
+   *
+   * Discord clears self-mute and self-deafen, and stores the cleared state,
+   * when a direct call is joined, and keeps both for a server's voice channel
+   * (read in its web bundle, build 621195: `VOICE_CHANNEL_SELECT` with no
+   * guild). The reason is the press: answering somebody is asking to talk to
+   * them, and a call answered deafened is a call in which nobody is heard. So
+   * a call between two people starts open and hearing; a room starts the way
+   * the panel was left (tracker item 40).
+   */
+  oneToOne?: boolean;
 }
 
 /**
@@ -1304,13 +1474,23 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
   audioEverBlocked = false;
   micSilence = MIC_SILENCE_CLEAR;
   enterStage("microphone");
+  // The person's own mute and deafen, as they left them (item 40). Read again
+  // rather than trusted from memory: another tab may have pressed since. The
+  // resume's record joins the mute, never the stored choice — it may be a
+  // moderator's silence, and that is not theirs to keep.
+  selfAudio = loadSelfAudio();
+  if (request.oneToOne === true && (selfAudio.muted || selfAudio.deafened)) {
+    storeSelfAudio(VOICE_SELF_AUDIO_DEFAULT);
+  }
+  mutedBeforeDeafened = selfAudio.muted || request.micMuted === true;
   publish({
-    ...IDLE,
+    ...idle(),
     phase: "joining",
     channelId: request.channelId,
     chatId: request.chatId,
     channelName: request.channelName,
-    micMuted: request.micMuted === true,
+    micMuted: mutedBeforeDeafened || selfAudio.deafened,
+    deafened: selfAudio.deafened,
   });
 
   callOwnerId = requestedOwnerId ?? null;
@@ -1325,8 +1505,9 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
   }
 
   let stream: MediaStream;
+  const captureSettings = getAudioSettings();
   try {
-    stream = await captureMicrophone(mine);
+    stream = await captureMicrophone(mine, captureSettings);
   } catch (error) {
     if (mine !== generation) return;
     const code = classifyMicrophoneError(error);
@@ -1343,6 +1524,7 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
     return;
   }
   capture = stream;
+  captureInputChoice = inputCaptureKey(captureSettings);
 
   enterStage("token");
   const { outcome, selfUserId: identity } = await requestVoiceToken(request.channelId, mine);
@@ -1481,7 +1663,7 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
         joiningRoom = null;
         callOwnerId = null;
         selfUserId = null;
-        publish({ ...IDLE, phase: "failed", refusal: "Звонок прерван." });
+        publish({ ...idle(), phase: "failed", refusal: "Звонок прерван." });
       },
     });
   } catch {
@@ -1509,7 +1691,14 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
   // hook can see only the entry to this stage; `media` and `publish` arrive
   // through `onJoinStage` because they happen inside one await.
   enterStage("signal");
+  // What the transport was told before the join, so the connected step can
+  // tell it again if a press during the join changed the answer.
+  const deafenedAtJoin = state.deafened;
+  let mutedAtJoin = state.micMuted;
   try {
+    // Before the join, so somebody who left themselves deafened never hears
+    // the room start: the seam keeps the value for people not there yet.
+    if (deafenedAtJoin) await opened.setDeafened(true);
     // A token that may not publish still joins and still hears. What it must
     // not do is hand the SFU a track it would refuse, so the capture is
     // released here rather than held open with the microphone light on for a
@@ -1522,11 +1711,11 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
       // it. A call in «Рация» that published first and closed second would be
       // audible for the length of one event loop, which is the one moment
       // nobody is watching for.
-      const joinMuted = request.micMuted === true;
+      mutedAtJoin = state.micMuted;
       gateSettings = readGateSettings();
       gate = nextMicGate(MIC_GATE_CLOSED, {
         activation: gateSettings.activation,
-        muted: joinMuted,
+        muted: mutedAtJoin,
         held: false,
         level: 0,
         threshold: gateSettings.threshold,
@@ -1541,7 +1730,7 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
       // Before the join, for the reason the comment above gives about the
       // gate: a self-mute applied after publishing is a self-mute that was not
       // in force for the first packets.
-      if (joinMuted) await opened.setMuted(true);
+      if (mutedAtJoin) await opened.setMuted(true);
       if (mine !== generation) {
         stopStream(stream);
         void opened.leave().catch(() => undefined);
@@ -1586,8 +1775,13 @@ export async function joinVoiceChannel(request: VoiceJoinRequest): Promise<void>
     phase: "connected",
     canPublish: outcome.grant.canPublish,
     refusal: null,
-    micMuted: request.micMuted === true,
   });
+  // A press during the join changed what the person wants after the transport
+  // had been told. The state is the answer; the transport is told once more.
+  if (state.deafened !== deafenedAtJoin) void opened.setDeafened(state.deafened).catch(() => undefined);
+  if (outcome.grant.canPublish && state.micMuted !== mutedAtJoin) {
+    void opened.setMuted(state.micMuted).catch(() => undefined);
+  }
   // The stored choice, reaching a call for the first time. After the patch, so
   // that a refusal lands on a capsule which already exists: a sentence about a
   // call has nowhere to appear while the capsule still says «Подключаемся…».
@@ -1619,9 +1813,34 @@ export async function leaveVoiceCall(): Promise<void> {
   selfUserId = null;
   // Terminal teardown must not leave a saved call until a later React effect.
   clearVoiceResume();
-  publish(IDLE);
+  publish(idle());
   callOwnerId = null;
   if (open) await open.leave().catch(() => undefined);
+}
+
+/**
+ * A press with no call: the state follows the stored choice, and the press is
+ * answered with the blip a call's controls make.
+ *
+ * The call's own blips come from `roomSound`, which reads them off the state
+ * and stays silent between calls — joining muted is a state, not a press, and
+ * its reset on every departure is what keeps a leave from sounding like an
+ * unmute. A press between calls is still a press, and `voiceSelfControlSound`
+ * already says why one that produces silence is a defect. Discord sounds its
+ * deafen and undeafen with no call at all (build 621195); deafen is asked
+ * first, as the driver asks it, so a microphone press that also brings the
+ * room back makes one sound rather than two.
+ */
+function settleBetweenCalls(): void {
+  const before = state;
+  const next = idle();
+  if (before.micMuted === next.micMuted && before.deafened === next.deafened) return;
+  patch({ micMuted: next.micMuted, deafened: next.deafened });
+  const enabled = getAudioSettings().callSoundEnabled;
+  const blip =
+    voiceSelfControlSound({ silenced: next.deafened, previous: before.deafened, enabled }) ??
+    voiceSelfControlSound({ silenced: next.micMuted, previous: before.micMuted, enabled });
+  if (blip !== null) void playCallSoundOnce(blip).catch(() => undefined);
 }
 
 /**
@@ -1633,13 +1852,22 @@ export async function leaveVoiceCall(): Promise<void> {
  * Undeafening does **not** unmute — somebody who was muted before they
  * deafened stays muted, and the state remembers which.
  *
- * Optimistic in the same direction as the mute above, and for the same reason:
+ * It works with no call at all (item 40): the choice is the person's, kept
+ * for the next call, which starts deafened. During a join the state moves and
+ * the connected step tells the transport.
+ *
+ * Optimistic in the same direction as the mute below, and for the same reason:
  * the thing a person is trying to do is stop hearing something *now*. On a
  * refusal the flag goes back, because «заглушено» over audio that is still
  * playing is the lie this ordering exists to avoid.
  */
 export async function setVoiceDeafened(deafened: boolean): Promise<void> {
-  if (!room) return;
+  const beforeSelf = selfAudio;
+  storeSelfAudio(chooseHeadphones(selfAudio, deafened));
+  if (!callUnderway()) {
+    settleBetweenCalls();
+    return;
+  }
   const beforeDeafened = state.deafened;
   const beforeMuted = state.micMuted;
   // Remembered before the patch, so undeafening restores what was true rather
@@ -1647,14 +1875,17 @@ export async function setVoiceDeafened(deafened: boolean): Promise<void> {
   const mutedNext = deafened ? true : mutedBeforeDeafened;
   if (deafened) mutedBeforeDeafened = beforeMuted;
   patch({ deafened, micMuted: mutedNext });
+  const target = room;
+  if (!target) return;
   try {
-    await room.setDeafened(deafened);
-    if (mutedNext !== beforeMuted) await room.setMuted(mutedNext);
+    await target.setDeafened(deafened);
+    if (mutedNext !== beforeMuted) await target.setMuted(mutedNext);
     // The mute that deafening implies reaches the gate as well: an unmute on
     // the way back out must not leave a «Рация» call transmitting with nothing
     // held, and the seam's own re-application only knows the value this pushes.
     evaluateGate();
   } catch {
+    storeSelfAudio(beforeSelf);
     patch({ deafened: beforeDeafened, micMuted: beforeMuted });
   }
 }
@@ -1668,13 +1899,29 @@ export async function setVoiceDeafened(deafened: boolean): Promise<void> {
  * the state goes back, which is the only honest way round: saying «выключён»
  * over a microphone that is still publishing is the failure this ordering has
  * to avoid.
+ *
+ * **Turning the microphone on while deafened brings the room back too.** The
+ * press means «I want to talk», and a microphone opened for somebody who still
+ * cannot hear the room is the state deafening exists to prevent. Until item 40
+ * this path opened the microphone and left the person deafened.
+ *
+ * Like deafening, it works with no call at all and is kept for the next one.
  */
 export async function setVoiceMuted(muted: boolean): Promise<void> {
-  if (!room) return;
-  const before = state.micMuted;
-  patch({ micMuted: muted });
+  const beforeSelf = selfAudio;
+  const undeafen = !muted && state.deafened;
+  storeSelfAudio(chooseMicrophone(selfAudio, muted));
+  if (!callUnderway()) {
+    settleBetweenCalls();
+    return;
+  }
+  const before = { micMuted: state.micMuted, deafened: state.deafened };
+  patch(undeafen ? { micMuted: muted, deafened: false } : { micMuted: muted });
+  const target = room;
+  if (!target) return;
   try {
-    await room.setMuted(muted);
+    if (undeafen) await target.setDeafened(false);
+    await target.setMuted(muted);
     // And the gate is re-evaluated against the new mute. On the way in it is
     // belt and braces — the SDK's own mute disables the track — and on the way
     // out it is the whole of the correctness: `setTrackMuted(false)` re-enables
@@ -1682,7 +1929,8 @@ export async function setVoiceMuted(muted: boolean): Promise<void> {
     // to be closed again with nothing held.
     evaluateGate();
   } catch {
-    patch({ micMuted: before });
+    storeSelfAudio(beforeSelf);
+    patch(before);
     evaluateGate();
   }
 }

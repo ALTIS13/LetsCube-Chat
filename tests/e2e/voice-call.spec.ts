@@ -2402,10 +2402,19 @@ test("the capsule and the row, photographed in both themes", async ({
 
     await action(page).click();
     await expect(action(page)).toHaveText("Выйти");
+    // Item 40: a room starts the way the last call was left, so the second pass
+    // arrives muted — asserted, because it is the mechanic — and is opened
+    // again for the photograph of a live call.
+    const capsuleMute = page.getByTestId("voice-capsule-mute");
+    await expect(capsuleMute).toHaveAttribute("data-muted", theme === "dark" ? "false" : "true");
+    if (theme === "light") {
+      await capsuleMute.click();
+      await expect(capsuleMute).toHaveAttribute("data-muted", "false");
+    }
     await page.screenshot({ path: shot(`connected-${theme}`) });
 
-    await page.getByTestId("voice-capsule-mute").click();
-    await expect(page.getByTestId("voice-capsule-mute")).toHaveAttribute("data-muted", "true");
+    await capsuleMute.click();
+    await expect(capsuleMute).toHaveAttribute("data-muted", "true");
     await page.screenshot({ path: shot(`muted-${theme}`) });
 
     await openInfo(page);
@@ -3259,6 +3268,13 @@ for (const theme of ["dark", "light"] as const) {
 
 /** The bar the person can actually see. Two are mounted; one at most is shown. */
 const bar = (page: Page) => page.locator('[data-testid="voice-call-bar"]:visible');
+/**
+ * The microphone outside the capsule. On a phone it is the bar's; from `md` the
+ * column's bar leaves it to the panel directly under it (tracker item 40), as
+ * Discord's connection panel leaves it to the account panel.
+ */
+const outsideMute = (page: Page) =>
+  page.locator('[data-testid="voice-call-bar-mute"]:visible, [data-testid="user-panel-mute"]:visible');
 
 /** Take this client's publish permission away from inside the transport. */
 async function revokeSpeech(page: Page, allowed: boolean | null): Promise<void> {
@@ -3320,7 +3336,7 @@ test("a call in a conversation with no voice channel is visible and can be left"
   expect(clipped.state.scroll).toBeLessThanOrEqual(clipped.state.client + 1);
 
   // The controls reach the same transport the capsule's do.
-  await bar(page).getByTestId("voice-call-bar-mute").click();
+  await outsideMute(page).click();
   await expect.poll(async () => (await probe(page)).muted).toEqual([true]);
   await expect(bar(page).getByTestId("voice-call-bar-state")).toHaveText("Микрофон выключен");
 
@@ -3436,7 +3452,7 @@ test("a moderator's silence reaches the bar, and the microphone stops being pres
   await expect(bar(page).getByTestId("voice-call-bar-state")).toHaveText(
     "Модератор выключил ваш микрофон",
   );
-  const mute = bar(page).getByTestId("voice-call-bar-mute");
+  const mute = outsideMute(page);
   // Drawn and inert, not absent: a control that disappears reads as a feature
   // that went away.
   await expect(mute).toBeVisible();
@@ -3451,7 +3467,7 @@ test("a moderator's silence reaches the bar, and the microphone stops being pres
   await expect(bar(page)).toHaveAttribute("data-voice-tone", "danger");
   await revokeSpeech(page, true);
   await expect(bar(page)).toHaveAttribute("data-voice-tone", "live");
-  await expect(bar(page).getByTestId("voice-call-bar-mute")).toBeEnabled();
+  await expect(outsideMute(page)).toBeEnabled();
 });
 
 /* ── A silence, and what lifting it gives back ────────────────────────────────

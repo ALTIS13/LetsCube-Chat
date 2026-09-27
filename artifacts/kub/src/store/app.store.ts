@@ -311,9 +311,20 @@ interface AppState {
    * is the one a person is looking for.
    */
   settingsOpen: boolean
-  openSettings: () => void
+  /**
+   * Where the settings screen opens, when it was asked for one place in it.
+   *
+   * Only «Звук» today: the panel's device menus end in «Настройки звука», the
+   * way Discord's end in «Voice Settings» (tracker item 40), and a link that
+   * lands on the top of a long screen is a link to the wrong place. Cleared by
+   * every other way in and by closing.
+   */
+  settingsFocus: SettingsFocus | null
+  openSettings: (focus?: SettingsFocus) => void
   closeSettings: () => void
 }
+
+export type SettingsFocus = "audio"
 
 
 function compareMessages(a: MessageWithSender, b: MessageWithSender): number {
@@ -718,13 +729,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   closeChatSearch: () => set((state) => (state.chatSearch === null ? state : { chatSearch: null })),
 
   settingsOpen: false,
-  openSettings: () =>
+  settingsFocus: null,
+  openSettings: (focus) =>
     set((state) => (
-      state.settingsOpen && state.chatSearch === null
+      state.settingsOpen && state.chatSearch === null && state.settingsFocus === (focus ?? null)
         ? state
-        : { settingsOpen: true, chatSearch: null }
+        : { settingsOpen: true, chatSearch: null, settingsFocus: focus ?? null }
     )),
-  closeSettings: () => set((state) => (state.settingsOpen ? { settingsOpen: false } : state)),
+  closeSettings: () => set((state) => (state.settingsOpen ? { settingsOpen: false, settingsFocus: null } : state)),
 }))
 
 /**

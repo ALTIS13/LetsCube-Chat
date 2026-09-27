@@ -17,6 +17,7 @@ import { NewGroupModal } from "./NewGroupModal";
 import { ContactsPanel } from "@/components/contacts/ContactsPanel";
 import { ListPlaybackBar } from "@/components/chat/ChatMediaPlayback";
 import { FolderEditModal } from "./FolderEditModal";
+import { UserPanel } from "./UserPanel";
 import { SettingsSurface } from "@/components/settings/SettingsSurface";
 import { openSavedMessagesChat } from "@/lib/savedMessages";
 import { SidebarSearchResults } from "@/components/search/SidebarSearchResults";
@@ -305,6 +306,11 @@ export function Sidebar() {
           <VoiceElsewhereBar placement="column" />
         </div>
       </div>
+
+      {/* Discord's bar, across the rail and the list (tracker item 40): the face
+          opens its own menu, the microphone and the headphones toggle in place,
+          the gear opens settings. From `md`; `UserPanel` says why it spans. */}
+      <UserPanel />
 
       {showNewChat && (
         <NewChatModal onClose={() => setShowNewChat(false)} onRefetch={refetch} />

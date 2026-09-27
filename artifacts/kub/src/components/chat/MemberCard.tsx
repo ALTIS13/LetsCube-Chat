@@ -76,6 +76,7 @@ export function MemberCard({
   mutualChats = null,
   onOpenMutualChat,
   contact = null,
+  onEditProfile,
 }: {
   member: MemberRow;
   isSelf: boolean;
@@ -118,6 +119,16 @@ export function MemberCard({
    * room you are standing in reads as a mistake.
    */
   mutualChats?: MutualChats | null;
+  /**
+   * Your own card's primary action, where one is offered (tracker item 40).
+   *
+   * «Открыть чат» with yourself is refused on this card, and until item 40 the
+   * refused button was the whole of your own card's footer. Discord's own
+   * profile, opened on yourself, offers «Edit Profile» in that place — so where
+   * the opener can reach the editor, the card offers it instead of a button
+   * that can never be pressed.
+   */
+  onEditProfile?: () => void;
   /** Opens one of them. Absent means the rows are not pressable. */
   onOpenMutualChat?: (chatId: string) => void;
   /**
@@ -280,20 +291,32 @@ export function MemberCard({
         </div>
       )}
       <div className="mt-6 flex w-full max-w-xs flex-col gap-2">
-        <KubButton
-          variant="primary"
-          fullWidth
-          // Your own row opens your own card, because hiding it would make the
-          // list inconsistent for exactly one reader. The action that makes no
-          // sense there is the one that is refused, not the card.
-          disabled={isSelf}
-          loading={opening}
-          leftIcon={<KubIcon name="chatBubble" size={14} />}
-          onClick={onOpenChat}
-          data-testid="member-card-open-chat"
-        >
-          Открыть чат
-        </KubButton>
+        {isSelf && onEditProfile ? (
+          <KubButton
+            variant="primary"
+            fullWidth
+            leftIcon={<KubIcon name="edit" size={14} />}
+            onClick={onEditProfile}
+            data-testid="member-card-edit-profile"
+          >
+            Редактировать профиль
+          </KubButton>
+        ) : (
+          <KubButton
+            variant="primary"
+            fullWidth
+            // Your own row opens your own card, because hiding it would make the
+            // list inconsistent for exactly one reader. The action that makes no
+            // sense there is the one that is refused, not the card.
+            disabled={isSelf}
+            loading={opening}
+            leftIcon={<KubIcon name="chatBubble" size={14} />}
+            onClick={onOpenChat}
+            data-testid="member-card-open-chat"
+          >
+            Открыть чат
+          </KubButton>
+        )}
         {contact && !isSelf && (contact.saved ? (
           <p
             className="flex min-h-9 items-center justify-center gap-1.5 text-sm text-[color:var(--kub-muted)]"

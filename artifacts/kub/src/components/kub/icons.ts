@@ -46,6 +46,7 @@ import {
   GearSix,
   HandWaving,
   Hash,
+  Headphones,
   Headset,
   Heart,
   IdentificationBadge,
@@ -108,6 +109,7 @@ import {
   type Icon as PhosphorIcon,
   type IconWeight,
 } from "@phosphor-icons/react";
+import { HeadphonesSlash } from "./composedIcons";
 
 export type KubIconName =
   | "activity"
@@ -159,6 +161,8 @@ export type KubIconName =
   | "gesture"
   | "group"
   | "hash"
+  | "headphones"
+  | "headphonesSlash"
   | "headset"
   | "heart"
   | "help"
@@ -305,6 +309,11 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   gesture: { Icon: HandWaving },
   group: { Icon: UsersThree },
   hash: { Icon: Hash },
+  // Discord's deafen control (tracker item 40): headphones, crossed out while
+  // the room is silenced. The slashed twin is composed in `composedIcons.tsx`
+  // because Phosphor ships none.
+  headphones: { Icon: Headphones },
+  headphonesSlash: { Icon: HeadphonesSlash },
   // A voice channel, everywhere outside a call: the row in the information
   // panel, the capsule under the chat header, and the chat list count of
   // slice 3. A headset rather than a telephone, because this is a room you

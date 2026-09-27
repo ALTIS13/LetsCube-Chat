@@ -98,6 +98,7 @@ export function UserProfileOverlay() {
   const escalated = useAppStore((s) => s.profileOverlayEscalated);
   const escalate = useAppStore((s) => s.escalateUserProfile);
   const close = useAppStore((s) => s.closeUserProfile);
+  const openSettings = useAppStore((s) => s.openSettings);
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const presenceNow = usePresenceNow();
   const viewportWidth = useViewportWidth();
@@ -255,6 +256,10 @@ export function UserProfileOverlay() {
           contact={contacts.list.isSuccess
             ? { saved: savedContact, adding: contacts.add.isPending, onAdd: () => void addContact() }
             : null}
+          onEditProfile={() => {
+            close();
+            openSettings();
+          }}
         />
       )}
     </div>

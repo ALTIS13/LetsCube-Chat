@@ -3019,3 +3019,115 @@ the old automatic path. Android 10+ explicit photo/video save now targets
 document picker. This is a destination for user-saved files, **not** a managed
 private media cache. The remaining cache and transfer-feedback gaps are in
 `2026-09-25-media-navigation-audit.md`.
+
+## 21. Subject 13 — the panel at the foot of the channel list, 2026-09-28
+
+Tracker item 40. The owner, 2026-09-20: «кнопка мой профиль и настройки по сути
+дублируют друг друга, тогда лучше перенять подход к интерфейсу от discord».
+Read in Discord's web bundle, **build 621195**, stable, version hash
+`ab3e028aa56c2fb15f99297e1abb80b92d8466a8`, main bundle
+`web.e223a2399a103bfa.js`, on 2026-09-28, with the en-US and ru string tables
+read in full (26,654 keys), so every label below is exact in both languages.
+The desktop app runs the same bundle; the phone app is a different program
+and was not read — **UNESTABLISHED there** (§1, §17.1).
+
+### 21.1 What the bundle shows. SHIPPED unless marked
+
+**The bar is three things.** The face and name open the account popout
+(«Управление профилем и статусом»), the microphone and headphones toggle in
+place, and the gear opens settings — «Настройки пользователя». The gear goes
+straight to Voice & Video while a call is **connected**; a right-click on it
+opens a menu of every settings section.
+
+**Mute and deafen work with no call.** Neither action checks for a voice
+connection. Both are kept in `localStorage` under `MediaEngineStore`, not in
+the synced user settings, and the key is not per account (surviving a logout
+is INFERRED).
+
+- Deafen flips only the deafen flag. The effective mute includes it, so a
+  deafened person reads as muted everywhere, and undeafening gives back the
+  microphone as it was.
+- The microphone pressed while deafened un-deafens **and** unmutes:
+  `(i=!r&&!i)||(r=!1)`.
+- A server voice channel starts with both flags as they were left; they are
+  read at send time into the voice-state packet.
+- **A direct call clears both, and stores the cleared state,** on joining
+  (`VOICE_CHANNEL_SELECT` with no guild id).
+- Sounds: deafen and undeafen play on every change, call or no call. Mute and
+  unmute play once microphone permission exists; any of them is silenced by the
+  notification settings. A microphone press that also un-deafens plays one sound.
+- The web client alone shows the microphone muted after every load until it is
+  pressed, because its media engine starts disabled and the first press asks
+  for the microphone. That is a limit of its web engine, not a design.
+
+**The chevrons are always drawn**, 16 × 32. The chevron's click, its
+right-click and a right-click on the button itself all open the same menu.
+
+| menu | rows, in order |
+| --- | --- |
+| microphone | Устройство ввода ▸ · Профиль ввода ▸ (Изоляция голоса, Студия, Пользовательский) · Громкость микрофона · Входная чувствительность (in voice only) · Режим рации (only with a key bound) · Настройки голоса |
+| headphones | Устройство вывода ▸ · Громкость звука (200 on desktop, 100 on web) · Spatial Audio (experiment, English only) · Настройки голоса |
+
+Chevron tooltips are «Настройки ввода» and «Настройки вывода», and for five
+seconds after a device change in voice they read «Ввод переключён на …».
+
+**The account popout.** Its header holds the banner, the avatar (which opens
+the full profile), a custom-status bubble, and the name with «Копировать имя
+пользователя» on hover. Then two groups:
+
+1. «Редактировать профиль», the status row, and Badges, Clips and Orbs where
+   those apply. The status submenu is В сети, Неактивен, Не беспокоить and
+   Невидимый; only the last three take a duration — 15 минут, 1 час, 8 часов,
+   24 часа, 3 дня, Навсегда. Item 37 needs this.
+2. «Переключение между учётными записями», and «Копировать ID пользователя»
+   with developer mode only.
+
+**In a call** the connection panel sits directly above the account panel. It
+carries status, the channel link, noise suppression, «Отключиться», camera,
+screen share, activities and soundboard — **and no mute or deafen**, which
+stay in the account panel below it. The account panel's second line reads
+«В голосовом чате».
+
+Not established: what the server does with the voice-state packet sent outside
+a call; whether the page's own context menu is suppressed; the experiments
+behind Badges, Clips and Orbs; and the phone apps.
+
+### 21.2 Ours, and where it differs on purpose
+
+Built the same day as `components/sidebar/UserPanel.tsx`,
+`lib/voiceSelfAudio.ts` and the call hook, and taken from the reading rather
+than from memory:
+
+- the three zones; mute and deafen with no call, kept across reloads; the
+  coupling and the microphone-while-deafened rule; a room starting the way the
+  panel was left and a call between two people (the ring) starting open and
+  hearing; the blips between calls; the chevrons, their right-click and their
+  «Настройки ввода» / «Настройки вывода»; the gear going to «Звук» in a
+  connected call; «Редактировать профиль» leading the face's menu, the header
+  opening the full profile and copying the username; and the connection panel
+  — our column's call bar — giving mute and deafen to the panel from `md`.
+
+Where ours differs, with the reason:
+
+- **No status row, no durations.** Presence statuses are item 37 and do not
+  exist yet; a row that cannot work is absent (§8).
+- **No volume sliders.** Our microphone gain does not reach a call
+  (`AUDIO_GAIN_HINT`) and there is no call-wide output volume, so either slider
+  would move nothing a call carries. «Входная чувствительность» and «Режим
+  рации» stay in settings, one press away through «Настройки звука».
+- **The devices are listed in the menu rather than behind a submenu.** A
+  submenu inside a 256-point menu at the foot of the window has nowhere to open
+  but over the chat, and the lists are short.
+- **The menus' words are the settings screen's** — «Микрофон», «Вывод звука»,
+  «Обработка» (Чистый голос, Без обработки), «Настройки звука» — rather than
+  Discord's «Устройство ввода» and «Профиль ввода», so the two surfaces that
+  choose a device say the same thing. The tooltips keep our capsule's words,
+  «Выключить микрофон» and «Заглушить звук», for the same reason.
+- **The microphone is not shown muted after a load.** Discord web's is, and
+  only because its engine needs a press to start; ours asks for the microphone
+  at the join, where the prompt belongs.
+- **«В разговоре» rather than «В голосовом чате»**: it is what our call bar
+  already says about the same call.
+- **The panel spans the folder rail as well as the list.** The list can be
+  dragged down to 66 points, which would leave room for the face alone;
+  across the rail the narrowest panel keeps the face and both toggles.

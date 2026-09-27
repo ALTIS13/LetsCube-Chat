@@ -1073,7 +1073,22 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     the wide end, both themes, and show what wraps, clips or collapses, rather
     than declaring it fits.
 
-40. `[ ]` The bottom bar: three things, not two that duplicate each other.
+40. `[x]` The bottom bar: three things, not two that duplicate each other —
+    done 2026-09-28. `components/sidebar/UserPanel.tsx`, at the foot of the
+    whole left region from `md`: the face opens its own menu («Редактировать
+    профиль» first; the header opens the full profile and copies the
+    username), the microphone and the headphones toggle in place with a chevron
+    each for the device and the processing, and the gear opens settings — on
+    «Звук» while a call is connected. Mute and deafen now work with no call and
+    are kept across calls and reloads (`lib/voiceSelfAudio.ts`); a room starts
+    the way the panel was left, a call between two people starts open and
+    hearing, and a microphone chosen mid-call goes on the air in that call
+    (`VoiceRoom.replaceMicrophone`). «Мой профиль» in the side list opens the
+    profile, whose own button on yourself is «Редактировать профиль»; the
+    column's call bar gives its mute and deafen to the panel from `md`. Each
+    mechanic was read in Discord's bundle, build 621195, and the places ours
+    differs are argued in reference-clients §21. The status menu with its
+    durations is still item 37's.
     The owner, 2026-09-20: «кнопка мой профиль и настройки по сути дублируют
     друг друга, тогда лучше перенять подход к интерфейсу от discord». Discord
     is the reference by CLAUDE.md §7, and he supplied the screenshots.

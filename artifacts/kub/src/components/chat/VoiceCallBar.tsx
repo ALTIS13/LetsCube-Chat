@@ -349,10 +349,19 @@ export function VoiceCallBar({
               </span>
             </button>
 
+            {/* From `md` the column's mute and deafen belong to the panel under
+                it (tracker item 40): Discord's connection panel carries neither,
+                because its account panel, directly below, carries both — and
+                two pairs of the same two controls sixty points apart is the
+                duplication the owner asked to lose. The phone has no panel, so
+                there the bar keeps them. */}
             <button
               type="button"
               onClick={() => void setVoiceDeafened(!view.deafened)}
-              className="kub-voice-call-bar__extra group/capsule relative h-8 w-8 shrink-0 rounded-full"
+              className={cn(
+                "kub-voice-call-bar__extra group/capsule relative h-8 w-8 shrink-0 rounded-full",
+                column && "md:hidden",
+              )}
               aria-pressed={view.deafened}
               aria-label={view.deafened ? "Включить звук" : "Заглушить звук"}
               title={view.deafened ? "Включить звук" : "Заглушить звук"}
@@ -362,7 +371,7 @@ export function VoiceCallBar({
               <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />
               <span className="relative flex h-full w-full items-center justify-center">
                 <KubIcon
-                  name={view.deafened ? "muted" : "volume"}
+                  name={view.deafened ? "headphonesSlash" : "headphones"}
                   size={15}
                   tone={view.deafened ? "danger" : "default"}
                 />
@@ -380,6 +389,7 @@ export function VoiceCallBar({
               disabled={view.speechRevoked}
               className={cn(
                 "kub-voice-call-bar__extra group/capsule relative h-8 w-8 shrink-0 rounded-full",
+                column && "md:hidden",
                 view.speechRevoked && "cursor-not-allowed",
               )}
               aria-pressed={view.muted}

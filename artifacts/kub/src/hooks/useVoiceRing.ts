@@ -347,7 +347,7 @@ export async function startVoiceRing(input: {
   oneToOneChannelId = channelId;
   recompute();
 
-  await joinVoiceChannel({ channelId, chatId: input.chatId, channelName: input.who });
+  await joinVoiceChannel({ channelId, chatId: input.chatId, channelName: input.who, oneToOne: true });
   if (auth !== voiceAuthGenerationSnapshot()) return authChanged();
   const call = voiceCallSnapshot();
   if (call.phase === "failed" && call.channelId === channelId) {
@@ -385,7 +385,7 @@ export async function answerVoiceRing(ring: VoiceRingRow, who: string): Promise<
   // than on the echo of it.
   answeredLocally.set(ring.channelId, Date.now());
   recompute();
-  await joinVoiceChannel({ channelId: ring.channelId, chatId: ring.chatId, channelName: who });
+  await joinVoiceChannel({ channelId: ring.channelId, chatId: ring.chatId, channelName: who, oneToOne: true });
   if (auth !== voiceAuthGenerationSnapshot()) return authChanged();
   const call = voiceCallSnapshot();
   if (call.phase === "failed" && call.channelId === ring.channelId) {

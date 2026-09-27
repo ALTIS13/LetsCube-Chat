@@ -22,6 +22,7 @@ import {
   settingsRailVisible,
 } from "@/lib/settingsSurface";
 import { cn } from "@/lib/utils";
+import { useAppStore } from "@/store/app.store";
 
 /**
  * Settings are an overlay from `md` (D-285). On phones the menu opens a sheet,
@@ -126,6 +127,21 @@ export function SettingsOverlay({
     if (!screen.ready) return;
     syncActive();
   }, [screen.ready, filtering, syncActive]);
+
+  /**
+   * Opened on one place — the panel's «Настройки звука» (tracker item 40) —
+   * and landed on it. The screen has already opened the row; this brings it to
+   * the top of the pane, once, where the first reading of the pane happens.
+   */
+  const focus = useAppStore((s) => s.settingsFocus);
+  useLayoutEffect(() => {
+    if (!screen.ready || !focus) return;
+    const scroller = scrollRef.current;
+    const row = scroller?.querySelector<HTMLElement>(`[data-testid='settings-open-${focus}']`);
+    if (!scroller || !row) return;
+    scroller.scrollTop += row.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 8;
+    syncActive();
+  }, [focus, screen.ready, syncActive]);
 
   const jump = (id: SettingsSectionId) => {
     const scroller = scrollRef.current;

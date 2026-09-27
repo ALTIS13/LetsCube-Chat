@@ -191,7 +191,11 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
    */
   const [saveFailure, setSaveFailure] = useState<ProfileSaveFailure | null>(null);
   const [saved, setSaved] = useState(false);
-  const [openSections, setOpenSections] = useState<ReadonlySet<DisclosureId>>(() => new Set());
+  // Opened on «Звук» from the panel's device menus (tracker item 40): that row
+  // starts open. Read once — which row is open is the reader's from then on.
+  const [openSections, setOpenSections] = useState<ReadonlySet<DisclosureId>>(() =>
+    new Set<DisclosureId>(useAppStore.getState().settingsFocus === "audio" ? ["audio"] : []),
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Whether the «Отменить изменения?» question is already on screen (D-136).
   // Escape reaches this screen and the dialog alike — `KubModal` listens on the

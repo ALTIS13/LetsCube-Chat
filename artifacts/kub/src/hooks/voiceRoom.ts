@@ -152,6 +152,24 @@ export interface VoiceRoom {
    */
   setOutputDevice(deviceId: string): Promise<boolean>;
   /**
+   * Put a different microphone on the air without leaving the call.
+   *
+   * The input half of `setOutputDevice`, and it existed nowhere until tracker
+   * item 40: the capture was taken once, at the join, so a microphone chosen
+   * during a call — in settings, which the voice proposal calls the call's
+   * settings screen — reached the next call and never this one. Discord's
+   * panel changes it from the chevron beside the microphone, in the call.
+   *
+   * The hook captures the new track itself, as the join does, because it owns
+   * the capture's lifetime. This only swaps what the publication sends and
+   * keeps the rest — the publication, the SDK's mute, the gate — so the room
+   * sees the same participant with a different microphone.
+   *
+   * `false` when nothing was swapped: the caller keeps the old capture on the
+   * air and must stop the new one.
+   */
+  replaceMicrophone(microphone: MediaStreamTrack): Promise<boolean>;
+  /**
    * Ask the browser to let this call's audio through, after it refused.
    *
    * A browser sounds nothing until the document has been touched, and a join
@@ -708,6 +726,31 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
     async setMicrophoneOpen(open) {
       microphoneOpen = open;
       applyMicrophoneOpen();
+    },
+    async replaceMicrophone(microphone) {
+      if (!published) return false;
+      if (room.localParticipant.getTrackPublication(Track.Source.Microphone)) {
+        try {
+          // The sender swaps in place, and the SDK carries its own mute onto
+          // the new track (`enabled = !this.isMuted` in `setMediaStreamTrack`,
+          // livekit-client 2.22.3). `true` keeps the capture ours to stop.
+          await published.replaceTrack(microphone, true);
+        } catch {
+          return false;
+        }
+        // It knows nothing of the gate, so the gate goes back on exactly as
+        // after an unmute: a «Рация» call must not come out of a swap open.
+        applyMicrophoneOpen();
+        return true;
+      }
+      // No publication: a moderator's silence took it away, and `setMuted(false)`
+      // republishes `published` when the permission comes back. There is no
+      // sender to swap, so the held track itself is replaced, mute and all.
+      const wasMuted = published.isMuted;
+      published = new LocalAudioTrack(microphone, undefined, true);
+      if (wasMuted) await published.mute();
+      applyMicrophoneOpen();
+      return true;
     },
     async setDeafened(next) {
       deafened = next;

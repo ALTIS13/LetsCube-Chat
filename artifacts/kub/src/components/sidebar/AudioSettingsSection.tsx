@@ -14,6 +14,7 @@ import {
   type AudioProcessingMode,
 } from "@/hooks/useAudioSettings";
 import { supportsAudioOutputSelection } from "@/lib/audioOutput";
+import { readAudioDevices } from "@/hooks/useAudioDevices";
 import { callSoundReadiness, primeCallSounds } from "@/lib/callSoundPlayer";
 import {
   CALL_SOUND_HINT,
@@ -96,11 +97,7 @@ type SinkAudioContext = AudioContext & {
   setSinkId?: (sinkId: string) => Promise<void>;
 };
 
-interface AudioDeviceOption {
-  deviceId: string;
-  label: string;
-  kind: MediaDeviceKind;
-}
+type AudioDeviceOption = AudioDeviceChoice;
 
 export function AudioSettingsSection() {
   const { settings, updateSettings, resetSettings } = useAudioSettings();
@@ -151,23 +148,12 @@ export function AudioSettingsSection() {
   const outputSelectionSupported = supportsAudioOutputSelection();
 
   const refreshDevices = useCallback(async () => {
-    if (!navigator.mediaDevices?.enumerateDevices) return;
     try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const inputs = devices
-        .filter((device) => device.kind === "audioinput")
-        .map((device, index) => ({
-          deviceId: device.deviceId || `${DEFAULT_AUDIO_DEVICE_ID}-${index}`,
-          label: device.label || `Микрофон ${index + 1}`,
-          kind: device.kind,
-        }));
-      const outputs = devices
-        .filter((device) => device.kind === "audiooutput")
-        .map((device, index) => ({
-          deviceId: device.deviceId || `${DEFAULT_AUDIO_DEVICE_ID}-${index}`,
-          label: device.label || `Устройство вывода ${index + 1}`,
-          kind: device.kind,
-        }));
+      // One reading for both surfaces that list devices — this screen and the
+      // panel's chevrons (item 40) — so the two never name a device differently.
+      const listed = await readAudioDevices();
+      if (!listed) return;
+      const { inputs, outputs } = listed;
       setInputDevices(inputs);
       setOutputDevices(outputs);
 

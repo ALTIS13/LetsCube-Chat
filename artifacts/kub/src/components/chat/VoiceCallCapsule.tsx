@@ -411,7 +411,7 @@ export function VoiceCallCapsule({
             <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />
             <span className="relative flex h-full w-full items-center justify-center">
               <KubIcon
-                name={view.deafened ? "muted" : "volume"}
+                name={view.deafened ? "headphonesSlash" : "headphones"}
                 size={15}
                 tone={view.deafened ? "danger" : "default"}
               />
