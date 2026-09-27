@@ -307,10 +307,13 @@
 
   /* The height of the application's shell, read through `h-app`. `100dvh`
      follows a phone browser's toolbars and is the iOS fallback if the boot
-     measurement is unavailable. PwaRuntime uses innerHeight at rest in the installed iPhone app: iOS may
-     make 100vh as tall as the physical screen even when the lower ~60pt are
-     outside the WebKit paintable viewport. A short visualViewport alone does
-     not prove that, so it controls the shell only with the keyboard open. */
+     measurement is unavailable. PwaRuntime uses innerHeight at rest in the
+     installed iPhone app. The root rule for `html[data-ios-standalone]` below
+     keeps iOS in its large viewport, where innerHeight is the whole screen; if
+     it ever falls back to the small one, innerHeight is still the right answer,
+     because there the lower strip takes no touches (D-111). A short
+     visualViewport alone does not prove a keyboard, so it controls the shell
+     only with the keyboard open. */
   --kub-paintable-height: 100dvh;
   --kub-app-height: 100dvh;
   /* Runtime replaces these only when iOS reports a shorter fixed canvas or
@@ -1197,6 +1200,24 @@ html[data-ios-standalone] [data-ios-app-shell] {
 html, body {
   height: 100%;
   overflow: hidden;
+}
+
+/* D-111. An installed iPhone app whose document exactly fits the screen is
+   held by iOS 26 in a "small" viewport that leaves out the top inset:
+   measured on three iPhone 17 Pro Max units (iOS 26.3.1) through the flagged
+   diagnostic, innerHeight, the visual viewport, the fixed containing block and
+   dvh settle at 894 of 956 pt a few seconds after launch, while lvh stays 956
+   and the web view still covers the whole screen. The page is drawn from the
+   top, so its last 62 pt are left to the page background (the band testers
+   photographed) and take no touches. Once the document is taller than that
+   small viewport WebKit moves to the large one: 956 for all of them, the strip
+   painted and pressable. With the root held at 100lvh it moved at once and
+   stayed through 30 s at rest, the keyboard opening and closing, and a
+   rotation, and the band was gone. 100% first for engines without lvh. */
+html[data-ios-standalone],
+html[data-ios-standalone] body {
+  height: 100%;
+  height: 100lvh;
 }
 
 @layer components {

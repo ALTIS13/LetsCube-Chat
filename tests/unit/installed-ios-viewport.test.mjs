@@ -54,3 +54,24 @@ test("every in-app shell takes its height from the token", () => {
     );
   }
 });
+
+test("the installed iPhone app's root is held at the large viewport's height", () => {
+  // D-111, measured on three iPhone 17 Pro Max units (iOS 26.3.1): while the
+  // document fits the screen, iOS keeps the installed app in a small viewport
+  // 62 pt short, whose lower strip takes no touches; a root taller than that
+  // moves it to the large one. html and body at 100% are that fitting root.
+  const css = withoutComments(read("index.css"));
+  const newline = String.fromCharCode(10);
+  const selector = ["html[data-ios-standalone],", "html[data-ios-standalone] body {"].join(newline);
+  const start = css.indexOf(selector);
+  assert.notEqual(start, -1, "html and body of the installed app need their own height rule");
+  const block = css.slice(start, css.indexOf("}", start));
+  const fallback = block.indexOf("height: 100%;");
+  const large = block.indexOf("height: 100lvh;");
+  assert.notEqual(large, -1, "the installed app's root must be 100lvh tall, or iOS keeps it in the small viewport");
+  assert.ok(fallback !== -1 && fallback < large, "100% is the fallback for engines without lvh and must come first");
+  assert.ok(
+    css.indexOf(selector) > css.indexOf("html, body {"),
+    "the installed-app rule must follow the generic root rule it narrows",
+  );
+});

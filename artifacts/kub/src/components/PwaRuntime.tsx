@@ -36,11 +36,13 @@ export function PwaRuntime() {
     fixedEdgeProbe.style.cssText = "position:fixed;left:0;bottom:0;width:0;height:0;visibility:hidden;pointer-events:none";
     document.body.appendChild(fixedEdgeProbe);
 
-    // Every full-height page reads this token. In some iOS Home Screen builds,
-    // 100vh reaches the physical screen while the WebKit paintable viewport
-    // ends about 60pt earlier. innerHeight is that paintable edge at rest;
-    // visualViewport may be shorter even when the canvas is not, so use it
-    // only while the keyboard genuinely occupies the viewport.
+    // Every full-height page reads this token. innerHeight is the edge that
+    // takes touches at rest: in iOS 26's small viewport it stops a top inset
+    // short of the screen and the strip below it takes none, which index.css
+    // prevents by holding the root at 100lvh; in the large viewport it is the
+    // whole screen (D-111, measured). visualViewport may be shorter even when
+    // the canvas is not, so use it only while the keyboard genuinely occupies
+    // the viewport.
     let restingHeight = viewport.height;
     let restingWidth = viewport.width;
     let keyboardWasVisible = false;

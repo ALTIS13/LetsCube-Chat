@@ -63,9 +63,9 @@
       if (navigator.standalone === true || (iosWebApp && standaloneDisplay)) {
         var root = document.documentElement;
         root.setAttribute("data-ios-standalone", "");
-        // Fit the first paint before React starts. In some iOS Home Screen
-        // builds 100vh is taller than WebKit's paintable innerHeight; in
-        // others 100dvh is short. PwaRuntime keeps this measurement current.
+        // Fit the first paint before React starts. At parse time innerHeight
+        // is the whole screen (measured for D-111), while 100dvh can be short.
+        // PwaRuntime keeps this measurement current.
         var paintableHeight = window.innerHeight;
         if (Number.isFinite(paintableHeight) && paintableHeight > 0) {
           var measuredHeight = Math.round(paintableHeight) + "px";
