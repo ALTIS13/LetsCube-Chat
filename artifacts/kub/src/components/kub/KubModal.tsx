@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties, type ReactNode, type Ref } from "react";
+import { useEffect, useId, useRef, type CSSProperties, type ReactNode, type Ref } from "react";
 import { createPortal } from "react-dom";
 import { KubIcon } from "./KubIcon";
 import { isTopModalLayer, popModalLayer, pushModalLayer } from "@/lib/modalStack";
@@ -82,6 +82,7 @@ export function KubModal({
   testId,
   closeTestId,
 }: KubModalProps) {
+  const titleId = useId();
   const pointerStartedInsideRef = useRef(false);
 
   useEffect(() => {
@@ -196,6 +197,7 @@ export function KubModal({
         )}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
         style={style}
         ref={panelRef}
         data-testid={testId}
@@ -217,7 +219,7 @@ export function KubModal({
               )}
               <div className="min-w-0">
                 {title && (
-                  <h2 className="text-base font-semibold text-[color:var(--kub-text)] truncate">
+                  <h2 id={titleId} className="text-base font-semibold text-[color:var(--kub-text)] truncate">
                     {title}
                   </h2>
                 )}

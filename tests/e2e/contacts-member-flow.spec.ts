@@ -78,6 +78,7 @@ test("an ordinary member manages a contact independently of the chat", async ({ 
   await expect.poll(() => fixture.restCalls("user_contacts", "DELETE").length).toBe(1);
 
   await panel.getByRole("button", { name: "Добавить контакт" }).first().click();
+  await expect(page.getByRole("dialog", { name: "Добавить контакт" })).toBeVisible();
   await page.getByRole("textbox", { name: "Найти человека" }).fill("@other_user");
   await page.getByRole("button", { name: /Другой участник/ }).click();
   await expect(panel.getByText("Другой участник")).toBeVisible();
