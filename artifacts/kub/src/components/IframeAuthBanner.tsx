@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { KubIcon } from "@/components/kub";
 
 function isReplitHost(hostname: string): boolean {
@@ -41,6 +41,9 @@ export function IframeAuthBanner() {
       return;
     }
 
+    // Above the configuration gate, like `PwaRuntime`: nothing to ask of a
+    // build that has no Supabase configuration, and asking would throw.
+    if (!isSupabaseConfigured()) return;
     let cancelled = false;
     const supabase = createClient();
     supabase.auth.getSession().then(({ data }) => {

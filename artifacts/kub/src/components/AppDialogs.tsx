@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KubIcon, KubModal } from "@/components/kub";
 import { KUB_APP_DIALOG_EVENT, type AppDialogRequest } from "@/lib/appDialogs";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 export function AppDialogs() {
   const [queue, setQueue] = useState<AppDialogRequest[]>([]);
@@ -25,6 +25,10 @@ export function AppDialogs() {
   }, []);
 
   useEffect(() => {
+    // Above the configuration gate, like `PwaRuntime`: on a build without
+    // Supabase configuration `createClient()` throws, and there is no account
+    // whose dialogs could need dismissing.
+    if (!isSupabaseConfigured()) return undefined;
     const { data: { subscription } } = createClient().auth.onAuthStateChange((_event, session) => {
       const userId = session?.user.id ?? null;
       setQueue((items) => {

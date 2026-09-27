@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { actionFeedback, type ActionFeedbackKind } from "@/lib/actionFeedback";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { KubIcon } from "./KubIcon";
 import type { KubIconName } from "./icons";
@@ -50,6 +50,10 @@ export function KubFeedbackViewport() {
   );
 
   useEffect(() => {
+    // Mounted above the configuration gate: without Supabase configuration
+    // `createClient()` throws, and a throw here takes the configuration screen
+    // and the public pages down with it. No account, no account change.
+    if (!isSupabaseConfigured()) return undefined;
     const { data: { subscription } } = createClient().auth.onAuthStateChange((_event, session) => {
       actionFeedback.dismissForOtherAccount(session?.user.id ?? null);
     });

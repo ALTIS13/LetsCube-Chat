@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import { usePwaServiceWorker } from "@/hooks/usePwa";
 import { isNativeAndroid, isNativeApp } from "@/lib/platform/capabilities";
 import { isDesktopApp } from "@/lib/platform/desktop";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 type ConnectionState = "hidden" | "offline" | "online";
@@ -12,6 +12,12 @@ type ConnectionState = "hidden" | "offline" | "online";
 export function PwaRuntime() {
   usePwaServiceWorker();
   useEffect(() => {
+    // Mounted above the configuration gate in `App.tsx`, so it has to ask:
+    // `createClient()` throws on a build with no Supabase configuration, and a
+    // throw here replaces the configuration screen and every public page with
+    // «Произошла ошибка интерфейса». Nobody can be signed in on such a build,
+    // so there is no account change to follow.
+    if (!isSupabaseConfigured()) return;
     if (isNativeApp() || isDesktopApp() || !("serviceWorker" in navigator)) return;
     let previousUserId: string | null = null;
     const { data: { subscription } } = createClient().auth.onAuthStateChange((event, session) => {
