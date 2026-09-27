@@ -6,8 +6,12 @@ bundle does not receive a web deploy. A063 is not needed for this stage.
 
 ## Current stage
 
-Candidate in the shared worktree; do not describe it as deployed until the
-running web container and served assets are checked against the reviewed commit.
+Web source commit `050cdda9` reached the sole healthy Coolify web container
+`050cdda924836176da8a0d8181bd8902e2a8f645`; the prior replica retired.
+The public HTML selected `/assets/index-Of1HcE04.js`, which contains the new
+contact, channel and edit-feedback markers. A retained older entry returned
+200 without the new contact/edit markers. A subsequent documentation-only
+commit may rebuild the same web source and needs its own image check.
 
 ## Changes and evidence
 
@@ -49,13 +53,15 @@ Rendered 1440/390 contact and edit-error states were inspected in both themes.
 Live read-only metadata confirms four owner-scoped `user_contacts` policies
 with RLS enabled and `topics` SELECT guarded by `is_chat_member`, without an
 archive predicate.
+
 No signed-in production screenshot or personal data was captured. The live
 authenticated member flow and physical Android client are not claimed by the
 local fixture. Phone discovery remains governed by the existing verified-phone
 privacy gate; the contact list does not expose phone numbers.
 
-Next action: inspect the exact outgoing commit and imports, then publish the
-web commit. Verify the running image SHA and served content in both directions.
-An authenticated ordinary-member production UI pass is still separate from
-fixture evidence. Continue D-208 media privacy separately; do not make the
-bucket private while the older Android bundle remains in circulation.
+Next action: verify the docs-only follow-up deployment reached its intended
+image without changing the web behavior. An authenticated ordinary-member
+production UI pass is still separate from fixture evidence. The current
+Android APK embeds an older web bundle and was not rebuilt here. Continue
+D-208 media privacy separately; do not make the bucket private while the
+older Android bundle remains in circulation.

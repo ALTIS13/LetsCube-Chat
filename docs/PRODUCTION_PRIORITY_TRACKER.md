@@ -2,14 +2,17 @@
 
 Status: active production-hardening tracker, updated 2026-09-27.
 
-**2026-09-27 ordinary-user flow candidate (local QA passed):** a private contact
+**2026-09-27 ordinary-user flow (web deployed):** a private contact
 list, working group text-channel scope for ordinary participants including
 archived-channel isolation, a saved voice-room create form, stale-account read
 guards and visible edit failures are implemented. The contact migration passed
 backed-up production apply and owner-scoped RLS checks. Typecheck, web/API
 builds, full unit/server suites and the 181-pass/50-explicit-skip synthetic
 browser matrix passed; scoped review findings were repaired with red/green
-regressions. No web deploy or Android rebuild is claimed yet. See the
+regressions. Source commit `050cdda9` reached the sole healthy web image, and
+the public entry contains its contact/channel/edit markers while a retained
+older entry does not. No Android rebuild or authenticated production member
+flow is claimed. See the
 [member-flow record](operations/2026-09-27-member-contacts-and-channels.md).
 
 **2026-09-27 D-208 signed-media web canary (deployed):** production web now

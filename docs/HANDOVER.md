@@ -25,9 +25,10 @@ Read in this order:
 **Current checkpoint, 2026-09-27:** ordinary-member contacts, text-channel
 scope, voice-room creation and account-switch safeguards passed local QA
 (181 browser passes, 50 explicit skips, full unit/server suites). The additive
-contact migration is applied after backup and RLS checks; the web candidate is
-not yet claimed as deployed. The owner allows scoped cloud Android/iPhone QA,
-but no APK build/install/publication is part of this stage. See the
+contact migration is applied after backup and RLS checks; web source commit
+`050cdda9` reached the sole healthy container and its public asset markers
+were verified. The owner allows scoped cloud Android/iPhone QA, but no APK
+build/install/publication is part of this stage. See the
 [member-flow record](operations/2026-09-27-member-contacts-and-channels.md).
 
 **Previous checkpoint, 2026-09-27:** the shared web is deployed in D-208

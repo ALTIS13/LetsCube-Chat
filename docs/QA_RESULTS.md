@@ -1,6 +1,6 @@
 # QA Results
 
-## 2026-09-27 - Ordinary Member Contacts And Channel Candidate
+## 2026-09-27 - Ordinary Member Contacts And Channel Web Rollout
 
 The private contacts migration was applied after a verified production backup,
 transaction rehearsal and owner/other-user RLS checks. Live read-only metadata
@@ -14,8 +14,11 @@ build, full unit/server suites and synthetic Chromium 1440/390 plus WebKit 390
 passed: **181 passed, 50 explicit platform skips, zero failures**. Contact and
 edit-error pixels at 1440/390 in both themes were inspected. The voice rail
 uses a synthetic room, not physical WebRTC; WebKit fixture reload blocks service
-workers, not installed-PWA reload. No authenticated production UI or Android
-release acceptance is claimed. [Evidence and remaining gates](operations/2026-09-27-member-contacts-and-channels.md).
+workers, not installed-PWA reload. Source commit `050cdda9` reached the sole
+healthy Coolify web image; the public entry asset contains the new contact,
+channel and edit markers, while an older retained asset does not. No
+authenticated production UI or Android release acceptance is claimed.
+[Evidence and remaining gates](operations/2026-09-27-member-contacts-and-channels.md).
 
 ## 2026-09-25 - Android 0.1.11 And Media/Profile Web Rollout
 
