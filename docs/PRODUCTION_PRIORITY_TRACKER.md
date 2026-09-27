@@ -2410,7 +2410,11 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     that «delete for me» and «delete for both» are separate answers that may both
     be right.
 
-51. `[ ]` Re-verdict the reference-clients claims that do not name a client.
+51. `[x]` Re-verdict the reference-clients claims that do not name a client —
+    done 2026-09-28. The ten were found: they are §11's tables «10a» and «10b»
+    of `reference-clients.md`, committed in `dfe6c76c` on 2026-09-20. The
+    re-verdicts, with what stays UNESTABLISHED and how to settle it, are in
+    [reference-clients §11](operations/reference-clients.md) and in place.
     **Recovered 2026-09-21** with items 49 and 50, same reason, and recorded
     honestly as incompletely remembered.
 

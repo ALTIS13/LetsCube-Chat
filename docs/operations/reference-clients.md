@@ -81,10 +81,14 @@ The consequences run through every section below:
   `discord_game_utils`, `discord_utils`, `discord_spellcheck`, `discord_rpc`,
   `discord_dispatch`, `discord_cloudsync`, `discord_erlpack`, `discord_zstd`,
   `discord_sekrit`, `discord_vigilante`, `discord_modules`, `discord_desktop_core`.
-- **Discord mobile is a different application.** Nothing read out of the web
-  bundle says anything about it. Most of our unqualified «Discord» claims turn
-  out to be true of the renderer (web plus desktop) and false or unknown on
-  mobile — see section 11.
+- **Discord mobile is a different application.** Almost nothing read out of
+  the web bundle says anything about it. Most of our unqualified «Discord»
+  claims turn out to be true of the renderer (web plus desktop) and false or
+  unknown on mobile — see section 11. *A lead, not a finding (re-verdicted
+  2026-09-28, item 51; this line said «Nothing»):* the profile enum `R7` in
+  section 15.1 names `ACTION_SHEET` and `YOU_SCREEN`, which read as phone
+  surfaces, so some profile code may be shared with the phone app.
+  UNESTABLISHED; only a read of the Android app itself would settle it.
 
 Telegram is the opposite shape: **Desktop (tdesktop), Android, iOS, macOS,
 Web A and Web K are six separate codebases**, two of which — the webapps — are
@@ -104,7 +108,7 @@ and desktop)» or «Discord mobile». When quoting Telegram, name the one client
 | | browser | PWA (iPhone/iPad) | Tauri (Windows) | Android APK |
 | --- | --- | --- | --- | --- |
 | Rendering | the page | the page, standalone | WebView2. `frontendDist` bundles **only** the startup shell; the main window navigates to the remote `https://app.letscube.ru/` | Android WebView (Capacitor 8.3.4) |
-| Native bridge | none | none | **26 Rust commands** (SHIPPED, see below) | Capacitor plugins: `@capacitor/app`, `geolocation`, `push-notifications` |
+| Native bridge | none | none | **28 Rust commands** (SHIPPED, see below) | Capacitor's `@capacitor/app`, `geolocation`, `push-notifications`, plus two plugins of ours registered in `MainActivity`: `VoiceCalls` (8 methods — incoming-call ring binding and pending call actions, not audio) and `MediaExport` (`save`) |
 | Window chrome | browser's | none | **ours** — `decorations: false`, custom titlebar, min 960x640, default 1360x860 |  system |
 | Tray | no | no | **yes** — `TrayIconBuilder` | n/a |
 | Autostart | no | no | **yes** — `desktop_get_autostart` / `desktop_set_autostart` | n/a |
@@ -112,8 +116,10 @@ and desktop)» or «Discord mobile». When quoting Telegram, name the one client
 | Identity | — | — | `ru.letscube.messenger`, NSIS, current-user install | `com.kub.messenger` |
 
 The Tauri shell is **not** «a browser tab in a frame». SHIPPED, from
-`windows-tauri/src-tauri/src/lib.rs:1888`, the commands already exposed to the
-page:
+`windows-tauri/src-tauri/src/lib.rs:2040`, the 28 commands already exposed to
+the page (*re-verdicted 2026-09-28, item 51:* the table said 26 and this line
+`:1888`; the list below always named 28, and the table left out the APK's two
+plugins of ours):
 
 `retry_main`, `startup_accept_peer_change`, `begin_startup_qa`,
 `desktop_get_update_state`, `desktop_get_update_channel`,
@@ -135,7 +141,9 @@ worth one.**
 
 What is conspicuously **absent** from that list, and relevant below: no audio or
 voice command, no global hotkey registration, no raw socket, no media encoder,
-no filesystem streaming.
+no filesystem streaming. Nor is there a plugin for it: `Cargo.toml` carries
+deep-link, opener, single-instance and updater, and no
+`tauri-plugin-global-shortcut`.
 
 ### Theirs
 
@@ -156,20 +164,48 @@ where it needs something only one operating system offers.
 | Mechanism | browser | PWA | Tauri | Android | Why |
 | --- | --- | --- | --- | --- | --- |
 | System audio processing bypass / device-level DSP | no | no | native-possible | native-possible | needs a platform audio API (WASAPI, AudioRecord), not `getUserMedia` |
-| Global hotkey (push-to-talk with the window unfocused) | **no** | **no** | native-possible | native-possible | a page only receives keys while focused. This is why Telegram's webapps have no push-to-talk |
+| Global hotkey (push-to-talk with the window unfocused) | **no** | **no** | native-possible — `tauri-plugin-global-shortcut`, not in `Cargo.toml` today | **UNESTABLISHED** — see below | a page only receives keys while focused. Whether Telegram's webapps have an *in-page* push-to-talk is UNESTABLISHED (section 13) |
 | Socket options / QoS DSCP marking | **no** | **no** | native-possible | native-possible | a page cannot set IP TOS bits; the browser owns the socket |
-| Raw UDP / a real STUN probe | **no** | **no** | native-possible | native-possible | `fetch` and `WebSocket` cannot reach a media port. See D-231 |
+| Raw UDP socket | **no** | **no** | native-possible | native-possible | a page has no socket, and `fetch` and `WebSocket` cannot reach a media port |
+| STUN probe | yes, WebRTC | yes, WebRTC | yes, WebRTC | yes, WebRTC | ICE gathering against a STUN server, as D-231's control arm did. **Nobody can probe this deployment's media port**: its UDP mux drops a binding request without a known ICE session, from a page or a raw socket alike. See D-231 |
 | Tray, autostart, window chrome | no | no | **shipped** | n/a | a process outside the page |
-| Per-application audio capture / loopback | no | no | native-possible | no | needs a system hook (`discord_hook` is Discord's) |
-| Exact encoder cost before encoding | no | no | native-possible | native-possible | `VideoEncoder.isConfigSupported` answers yes/no; `MediaCodec` answers with numbers. See D-175 |
-| Streaming upload while still encoding | no | no | native-possible | native-possible | needs a real filesystem and a streaming HTTP body. See D-176 |
-| Audio above 100% gain without a gesture-gated `AudioContext` | no | no | native-possible | native-possible | the autoplay policy is relaxable at shell level. See D-227 |
+| Per-application audio capture / loopback | **likely partly** — see below | no | native-possible | **likely yes** — see below | Discord's is a system hook (`discord_hook`) |
+| Exact encoder cost before encoding | no | no | **UNESTABLISHED** | **UNESTABLISHED** | `VideoEncoder.isConfigSupported` answers yes/no. See D-175 in section 11 |
+| Streaming upload while still encoding | **UNESTABLISHED** | **UNESTABLISHED** | **UNESTABLISHED** | **UNESTABLISHED** | likely bound by our TUS upload rather than by the surface. See D-176 in section 11 |
+| Per-person volume above 100% | **likely yes** | **likely yes** | **likely yes** | **likely yes** | not the autoplay policy: joining is a click. The cost is routing the call through `webAudioMix`. See D-227 in section 11 |
 | Signed, blocking, self-installing update | no | no | **shipped** | store/APK | see section 9 |
 | Mic / camera / screen capture | yes | partly | yes | yes | `getUserMedia`, `getDisplayMedia` |
 | Push when closed | service worker | service worker | native-possible | FCM | |
 
 **Read the «no» columns as «not on this surface», never as «not in this
 product».** That is the failure mode section 11 documents.
+
+**Re-verdicted 2026-09-28 (item 51): the opposite failure was in this table
+too** — capabilities placed on the native shells without the page being asked.
+What changed, with the original wording:
+
+- *«Raw UDP / a real STUN probe»* was one row, native-possible on both shells.
+  A raw socket is native-only; a STUN probe is page-possible everywhere. And
+  D-231's own table was already the raw-socket probe: the mux stays silent to
+  anybody without a session, so the honest pre-call test needs the server —
+  D-231 in section 11.
+- *Global hotkey* was «native-possible» on Android, and its reason said «This
+  is why Telegram's webapps have no push-to-talk», which section 13 records as
+  UNESTABLISHED. On Android the likely limit is that an app gets no key events
+  while another is in front unless it runs an accessibility service, leaving a
+  headset-button handler as the realistic extra; a probe in the APK — does a
+  key reach it with another app in front — would settle it. The phone clients'
+  own push-to-talk is under D-232 in section 11.
+- *Per-application audio capture* was «no» for the browser and for Android.
+  Likely wrong on both: Chromium's screen share can carry a tab's audio, and on
+  Windows the system's, and Android 10+ has `AudioPlaybackCapture`. Settle with
+  a screen share asking for system audio in Edge and in the Tauri WebView2, and
+  an `AudioPlaybackCapture` probe in the APK.
+- *Exact encoder cost*, *streaming upload* and *audio above 100% gain* were
+  native-possible on both shells, for reasons — «`MediaCodec` answers with
+  numbers», «a real filesystem and a streaming HTTP body», «the autoplay policy
+  is relaxable at shell level» — that section 11 re-verdicts under D-175, D-176
+  and D-227.
 
 ---
 
@@ -227,6 +263,14 @@ true`, `bypassSystemInputProcessing: true`, `silenceWarning: true`,
 
 Note `noiseSuppression: false` with `noiseCancellation: true` — Discord's
 default is Krisp on, browser noise suppression off.
+
+**Re-verdicted 2026-09-28 (item 51):** that is the shared default object, not
+what every client runs. On web Krisp is conditional and
+`AUDIO_BYPASS_SYSTEM_INPUT_PROCESSING` does not exist (the table above), so as
+written the default describes the desktop client, and `STUDIO`'s bypass below
+is desktop-only. Whether the web client offers the presets at all is
+**UNESTABLISHED**: read the preset control's predicate in module 460773 of chunk
+922757.
 
 Discord also ships **voice presets** (SHIPPED): `CUSTOM`, `VOICE_ISOLATION` and
 `STUDIO`. `STUDIO` sets voice-activity mode with threshold -84, and turns echo
@@ -413,13 +457,21 @@ beside a column with `min-width: 300px` and simply **clips**, because
 `.content_e9e3ed` is `overflow: hidden`. Discord solves phones, by UA, and
 leaves narrow desktop windows broken.
 
-This matters to us twice. We have no UA gate to lean on — a Tauri window and a
-browser tab are the same renderer at the same width — and we ship a 768px
+This matters to us twice. We have no UA gate to lean on, and we ship a 768px
 switch to a sheet that Discord has no equivalent of. **So where we differ from
 Discord here we are differing from something it did not solve**, not from a
 decision it made. D-285 folds the rail into the content below an 860px panel
 and keeps the dim clickable down to the 768 switch; both are places Discord
 clips or goes full-bleed.
+
+**Re-verdicted 2026-09-28 (item 51):** the first sentence said «a Tauri window
+and a browser tab are the same renderer at the same width». The same renderer,
+not the same width: the desktop window cannot be narrower than 960
+(`minWidth`/`minHeight` 960x640 in `tauri.conf.json`, applied by
+`WebviewWindowBuilder::from_config` in `build_main_window`), and at 960 the
+panel is 880 (`settingsOverlayWidth`). So the fold below an 860 panel and the
+768 switch never run in the desktop app; narrow settings are a browser and PWA
+problem.
 
 What could not be established: the original source filenames (`.css.map` and
 `.js.map` are not served — they return the SPA shell), the computed pixel
@@ -465,7 +517,7 @@ that matters most. This section is Discord's.
 
 | | |
 | --- | --- |
-| What it says today | **`APP`**. OFFICIAL — Discord's own developer documentation says apps «appear in servers with an `APP` tag» |
+| What it says today | **`APP`** in English. OFFICIAL — Discord's own developer documentation says apps «appear in servers with an `APP` tag». **Re-verdicted 2026-09-28 (item 51):** this row said only `APP`, from the English documentation. **Discord Android 345.9 in Russian draws «✓ БОТ»** after a bot's name, measured on its profile — MEASURED ON DEVICE, section 19.2. What Discord web says in Russian is UNESTABLISHED: look the badge's key up in the web bundle's `ru` locale chunk, by section 15.6's method |
 | It used to say | `BOT` |
 | When it changed | **April 2024**, around the 17th. SHIPPED behaviour, **COMMUNITY** dating — a cluster of support-forum posts asking for it to be changed back, all dated 17 to 19 April 2024 |
 | First-party announcement | **UNESTABLISHED, leaning strongly to none.** It is absent from Discord's April 2024 patch notes — which mention the tag only in a bug fix and still call it «Bot» — absent from May 2024, and absent from the September 2024 apps launch post. The rename is only ever documented retroactively, as a fact of the current UI |
@@ -555,18 +607,28 @@ component type. Recorded as an observation, not a plan.
 
 ## 7a. A call record: what may be done with it — 2026-09-27, SHIPPED
 
-Read in Discord's web bundle `web.e223a2399a103bfa.js` on 2026-09-27, the
-message-type enum and the sets the client checks before offering an action:
+Read in Discord's web bundle `web.e223a2399a103bfa.js` on 2026-09-27. **No
+`BUILD_NUMBER` was recorded for that read** (noted 2026-09-28, item 51), so it
+is not build 615980, whose main bundle was `web.d793fc00a2d44795.js`, and the
+provenance line at the top of this file does not cover it. The message-type
+enum and the sets the client checks before offering an action:
 
 > `i[i.CALL=3]="CALL"`
 > `UNDELETABLE:new Set([1,2,3,4,5,21,35,56,57,64,68])`
 > `FORWARDABLE:new Set([0,19,20,23,35])`
 > `REPLYABLE:new Set([0,7,19,20,23,24,25,32,33,34,35,36,37,38,39,40,41,42,45,46])`
 
-So a call record (type 3) **cannot be deleted, forwarded or replied to**, for
-anybody. Discord has no «delete for me» at all, so there is no second answer to
-reconcile. The same set holds a member added or removed, a renamed conversation
-and a changed icon: the history of the room, which nobody edits.
+So in Discord's web and desktop client — one bundle — a call record (type 3)
+**cannot be deleted, forwarded or replied to**, for anybody. **Discord's
+Android app is a different program and was not read: UNESTABLISHED there.**
+What would settle it is Discord's developer documentation, whose Message Types
+table is expected to say which types can be deleted: if it marks type 3 as not
+deletable, that is a server rule and holds on Android too. It has not been read
+— Cloudflare refuses scripted fetches (section 12) — so this stays
+UNESTABLISHED until it is read in a real browser. Discord has no «delete for
+me» at all, so there is no second answer to reconcile. The same set holds a
+member added or removed, a renamed conversation and a changed icon: the history
+of the room, which nobody edits.
 
 **Ours already matches, and was checked rather than assumed.** A `system` row
 opens no message menu and cannot be selected or replied to
@@ -643,12 +705,22 @@ engine can be replaced without shipping a new host. That is the shape that makes
 a native audio module maintainable, and it is worth knowing before anyone
 proposes bundling one into our NSIS installer as a monolith.
 
-**Our desktop updater already has the concept the web cannot have.** D-264 got
-this right and it is the model for the whole document: no web build can declare
-itself required, so the blocking signal belongs beside the desktop's, which
-already has `critical_update_required` and a blocking gate. That is a constraint
-stated per-surface, with the capability located on the surface that has it,
-rather than written off. Every entry in section 11 should have read like it.
+**Our desktop updater already has a required-update state; the web does not
+have one yet.** D-264 got this right and it is the model for the whole document:
+no web build can declare itself required *today*, so the blocking signal belongs
+beside the desktop's, which already has `critical_update_required` and a
+blocking gate. That is a constraint stated per-surface, with the capability
+located on the surface that has it, rather than written off. Every entry in
+section 11 should have read like it.
+
+**Re-verdicted 2026-09-28 (item 51):** this paragraph was headed «the concept
+the web cannot have» and dropped D-264's «today» and its «Adding it for the web
+is separate work». Nothing stops the web: Discord web's own version file
+carries `required` (below, `{"hash":…,"required":false}`), and a required build
+takes the same click path. So a required-update state is possible in the
+browser and the PWA, shipped on Tauri, and buildable on Android, whose release
+catalogue already parses `mandatory` and `minimumSupportedVersion`
+(`lib/releaseCatalog.ts`) and renders neither.
 
 ### Telegram's updaters, per client — INHERITED
 
@@ -852,7 +924,8 @@ last had open **in that server**, across a reload.
 This distinction is recorded separately because getting it wrong is what put a
 false choice in front of the owner. A first read of the bundle established the
 **boot** case and was written up as though it were the whole behaviour; the
-owner, who uses the client daily, described the opposite for the **open** case.
+owner, who uses Discord daily (on which client is not recorded — see case 2),
+described the opposite for the **open** case.
 Both are true. A reference that names only one of two events is a reference that
 will be quoted as a rule.
 
@@ -870,6 +943,13 @@ SHIPPED, because the code that would do it was looked for and not found: both
 paths converge on the same `M` (an in-app open arrives through the action map
 entry `CHANNEL_SELECT: x`), and `M` has no branch that derives a position from
 unread state.
+
+**Re-verdicted 2026-09-28 (item 51): which client he observed is UNESTABLISHED
+too.** This section said «the owner, who uses the client daily». His phone runs
+Discord Android 345.9 (section 16), while the code was searched in web build
+615980, so the report and the search may be about two programs. Settle by
+asking him, or by reproducing case 2 on the desktop client and on Android
+separately.
 
 **What the bundle does show for case 2, SHIPPED, and it is a different
 mechanism.** In `M`:
@@ -983,14 +1063,23 @@ reconnect; and the server holding that voice state long enough for it to arrive.
 Only the first is ours to build. The third is not observable from the bundle —
 see section 13.
 
+**Re-verdicted 2026-09-28 (item 51):** all three are read from the web
+renderer. Which client the owner's «5 минут» comes from is UNESTABLISHED, as in
+case 2 above; if it is the Android app, none of this bundle's constants need
+govern what he sees. The same two settling steps apply.
+
 ### Where ours differs from Discord's deliberately, and the reason
 
 Two differences, both departures, both argued rather than preferred. CLAUDE.md
 section 7 makes Discord the reference for this subject, so a departure owes a
 reason here.
 
-**1. We reload without a click; Discord never does.** The reason is that their
-click is cheap and ours is not. Discord's reload returns you to the same channel
+**1. We reload without a click; Discord's web client never does.** *(Re-verdicted
+2026-09-28, item 51: this said «Discord never does», and the read above is the
+web renderer's. Whether Discord desktop's host ever restarts itself for an
+update without a click is UNESTABLISHED; settle by watching the desktop client
+while its host version moves.)* The reason is that their click is cheap and
+ours is not. Discord's reload returns you to the same channel
 — the URL says which — and to the same voice channel, if you were in one within
 the last five minutes. Ours returns you to the chat list and ends your call.
 When accepting an update costs that much, people do not accept it, which is
@@ -1107,21 +1196,34 @@ shape as ours. That has its own section: see section 9.
 
 ### Capabilities absent from both webapps, with the mechanism
 
-| Capability | Desktop / Android | Webapps | Mechanism |
-| --- | --- | --- | --- |
-| Separate updater process | tdesktop builds a second executable (`Updater`) | none | a running process cannot replace its own binary |
-| Tray icon and unread badge | yes | none in the browser; **Telegram Air adds it back** | no web API for a tray |
-| **OS-global keyboard shortcuts** | yes, customizable via a shipped defaults file | Web K has an **in-page** shortcuts tab only; neither can bind OS-global keys | browser keybindings are page-scoped |
-| Biometric unlock of the local passcode | Windows Hello, Touch ID, Apple Watch; Android fingerprint | passcode keyed from the typed string only | platform biometric APIs |
-| Native spellcheck | yes | browser-native only | OS dictionary APIs |
-| Sending live GPS to a bot | **Android only** | neither | see the bot table below |
+| Capability | Desktop (tdesktop) | Android | Webapps | Mechanism |
+| --- | --- | --- | --- | --- |
+| Separate updater process | builds a second executable (`Updater`) | not its own — the direct APK installs a full APK through a FileProvider; the Play build never checks (section 9) | none | a running process cannot replace its own binary |
+| Tray icon and unread badge | yes | n/a — no tray | none in the browser; **Telegram Air adds it back** | no web API for a tray |
+| **OS-global keyboard shortcuts** | yes, customizable via a shipped defaults file | no | Web K has an **in-page** shortcuts tab only; neither can bind OS-global keys | browser keybindings are page-scoped |
+| Biometric unlock of the local passcode | Windows Hello; Touch ID and Apple Watch on its macOS build | fingerprint | passcode keyed from the typed string only | platform biometric APIs |
+| Native spellcheck | yes | not read | browser-native only | OS dictionary APIs |
+| Sending live GPS to a bot | **no** — refused in so many words (below) | **yes** | neither | see the bot table below |
+
+**Re-verdicted 2026-09-28 (item 51):** the second column was one «Desktop /
+Android» column, which read as if both clients had every entry. The tray,
+OS-global shortcuts and the separate updater are tdesktop's. So are all three
+unlock methods — SHIPPED, tdesktop `dev`,
+`Telegram/Resources/langs/lang.strings`, read 2026-09-28:
+`lng_settings_use_winhello`, `lng_settings_use_touchid`,
+`lng_settings_use_applewatch` — so Touch ID and Apple Watch are tdesktop's macOS
+build, not the separate macOS client. Telegram iOS and macOS (TelegramSwift)
+were not read for any row: UNESTABLISHED there.
 
 **And one that cuts the other way, which is why «native» is not a synonym for
 «capable»: Telegram Desktop has no secret chats.** Zero paths in the whole `dev`
 tree match `secret` or `encrypted` across 6,291 blobs; Android has
-`SecretChatHelper.java`. Device-bound E2E chats exist on **Android and iOS
-only** — the *desktop* client lacks them too. That is a native-versus-native
-line, not a web-versus-native one.
+`SecretChatHelper.java`. Device-bound E2E chats exist on **Android and iOS**
+— the *desktop* client lacks them too. That is a native-versus-native line, not
+a web-versus-native one. *(Re-verdicted 2026-09-28, item 51: this said
+«Android and iOS only»; the separate macOS client was not checked —
+UNESTABLISHED there. Settle with a content grep of `overtake/TelegramSwift` for
+secret-chat code.)*
 
 Telegram also ships a first-party admission of a desktop gap:
 `lng_bot_share_location_unavailable` — «Sorry, location sharing is currently
@@ -1139,7 +1241,11 @@ The bot label itself is a plain lowercase word in both native clients: Desktop
 `lng_status_bot` is `"bot"`, Android's `Bot` string is `bot`. Desktop also has a
 screen-reader-only `lng_sr_bot_verified_badge` = «Verified Bot», and an explicit
 **show/hide reply-keyboard control** (`lng_bot_keyboard_show` /
-`lng_bot_keyboard_hide`) that is a desktop idiom with no mobile equivalent.
+`lng_bot_keyboard_hide`). *(Re-verdicted 2026-09-28, item 51: this called it «a
+desktop idiom with no mobile equivalent», which was never checked. Whether
+Telegram Android's composer has a bot-keyboard toggle is UNESTABLISHED; settle
+by searching `ChatActivityEnterView` at 12.10.3, or with a demo bot that sends a
+reply keyboard.)*
 
 **Reply markup does not render the same.** Read from the two decisive files —
 Web A's `ApiKeyboardButton` union and Web K's render switch:
@@ -1152,14 +1258,23 @@ Web A's `ApiKeyboardButton` union and Web K's render switch:
 | **userProfile** | yes | **no** | — | — |
 | **requestGeoLocation** | **no** | **no** | **refused outright** | **yes** |
 
+Telegram iOS and macOS were not read for this table (noted 2026-09-28, item
+51): UNESTABLISHED there. Settle with one demo bot that sends each button type,
+opened on an iPhone and on a Mac.
+
 Both webapps **degrade rather than break**: Web A has an explicit `unsupported`
 button type rendered as a **disabled** button; Web K's switch has a `default`
 case. Worth noting against section 8 — Telegram's webapps choose *inert* where
 Discord's renderer chooses *hidden* or *explained*.
 
 **Carry this into our bot work.** If a bot's reply markup depends on
-`requestGeoLocation` it silently degrades on every surface except Android, and
-Telegram Desktop refuses it in so many words.
+`requestGeoLocation` it silently degrades on every Telegram client read except
+Android, and Telegram Desktop refuses it in so many words. **For us it is not a
+constraint** (re-verdicted 2026-09-28, item 51; this said «every surface»):
+`navigator.geolocation` works in the browser and the iPhone PWA, and the APK
+ships `@capacitor/geolocation` — `lib/platform/geolocation.ts` uses both. In
+the Tauri shell's WebView2 it is UNESTABLISHED: settle by asking for a position
+in the desktop build and seeing whether a prompt and a position come back.
 
 ### Updates, per client
 
@@ -1197,6 +1312,17 @@ When in doubt, copy its shape.
 
 ## 11. The pass over what we have already written
 
+**Re-verdicted 2026-09-28 (tracker item 51).** Tables 10a and 10b below are the
+ten claims item 51 recorded as not written down; they were committed with this
+file in `dfe6c76c` on 2026-09-20, and each row now carries its re-verdict in
+place. The second table's verdicts moved capabilities to the native shells
+without testing the browser. Three of them — D-261, D-227 and D-176 — are
+possible in the page on all four surfaces (D-227 and D-176 as the likely answer,
+each row naming the measurement that settles it); D-231 is limited by the
+server on every surface; and D-175's exact figure is possible nowhere as
+stated. In the first table D-071's row is retired, and each claim about
+Discord's phone app is now cited to a measurement or marked UNESTABLISHED.
+
 A scan of `docs/INTERFACE_DEFECT_REGISTER.md` (214 matching lines),
 `docs/PRODUCTION_PRIORITY_TRACKER.md`, `docs/operations/voice.md` and the last
 120 commit messages. **Nothing below has been rewritten.** The verdicts are
@@ -1211,11 +1337,11 @@ verdict rather than merely improving the sourcing:
 
 | Where | Claim | Verdict |
 | --- | --- | --- |
-| Register D-269 | «Its channel sidebar does not collapse at all» | **Survives, and is better than it looks.** Verified independently against build 615980: the collapse is in the source and `&& !1`-ed off. Add «web and desktop» — it is one bundle. It is **false of Discord mobile**, where the channel list is a swipe-away drawer, and the entry's rhetorical payload about the owner asking for something the reference lacks does not survive that |
+| Register D-269 | «Its channel sidebar does not collapse at all» | **Survives, and is better than it looks.** Verified independently against build 615980: the collapse is in the source and `&& !1`-ed off. Add «web and desktop» — it is one bundle. **Re-verdicted 2026-09-28 (item 51):** this cell went on to call the claim «false of Discord mobile, where the channel list is a swipe-away drawer», so that the entry's point about the owner asking for something the reference lacks «does not survive». Nothing in this file measured that. **UNESTABLISHED on Discord Android**, and the entry's point with it; settle on the owner's phone with Discord 345.9 — whether the channel list can be put away, and how |
 | Register D-270 | «Discord's whole left region stops at 432px; its default is 375px total» | **Numbers confirmed exactly**, including the 355px channel list and the 76px rail. But see section 5: 432 is a product decision applied identically to web and desktop with no viewport term, so it should be put to the owner as «Discord chose 432», not «Discord's maximum» |
-| Register D-267 | «Discord keeps [deafen] in the user area at all times» | **Qualify to web and desktop.** The user area is a renderer surface. Discord mobile has no persistent user area carrying deafen; against mobile our in-call-only deafen is parity, not a shortfall |
-| Register D-232 | «Discord and Telegram both answer this with a gate and a hold key» | **Survives only for the native clients.** The mechanism is certain: a page cannot bind an OS-global key, so on any web surface a hold key works only while the window is focused — a materially different feature. Confirmed for Telegram: neither webapp can bind global keys, and Web K's shortcuts tab is in-page only. **Whether the webapps ship an in-page push-to-talk at all is UNESTABLISHED.** Either way «Рация» was shipped as parity with something the reference has in full only where it has a native process. Our Tauri and Android builds could have the real thing; our browser and PWA cannot |
-| Tracker D-071 | «no hover actions at all, as in Telegram» | **Does not survive.** Telegram Desktop, Web A and Web K all have hover actions. Only the touch clients do not. The decision retired a lane and a line of layout on the desktop shell on the strength of «as in Telegram», meaning «as in Telegram on a phone» |
+| Register D-267 | «Discord keeps [deafen] in the user area at all times» | **Qualify to web and desktop.** The user area is a renderer surface. On Discord Android 345.9 the bottom band is avatar, name and status plus one notifications button, and the audio controls live in a strip that exists only while a voice connection does — MEASURED ON DEVICE, section 17.1 — so against Android our in-call-only deafen is parity, not a shortfall. **Re-verdicted 2026-09-28 (item 51):** this cell said «Discord mobile has no persistent user area carrying deafen» with no evidence mark; the measurement is Android's, and Discord iOS was not read |
+| Register D-232 | «Discord and Telegram both answer this with a gate and a hold key» | **Survives only for the native clients.** The mechanism is certain: a page cannot bind an OS-global key, so on any web surface a hold key works only while the window is focused — a materially different feature. Confirmed for Telegram: neither webapp can bind global keys, and Web K's shortcuts tab is in-page only. **Whether the webapps ship an in-page push-to-talk at all is UNESTABLISHED.** Either way «Рация» was shipped as parity with something the reference has in full only where it has a native process. Our browser and PWA cannot have the real thing. **Re-verdicted 2026-09-28 (item 51):** this cell ended «Our Tauri and Android builds could have the real thing». On Tauri a global hold key is buildable with `tauri-plugin-global-shortcut`, which `Cargo.toml` does not carry today. On Android that is likely overstated (section 3's note). And on phones the references' push-to-talk is probably an in-app hold, which would make our on-screen «Говорить» parity there — **UNESTABLISHED** until measured on the owner's phone: Telegram 12.10.3's hold in a muted voice chat, and Discord 345.9's voice input modes |
+| ~~Tracker D-071~~ | ~~«no hover actions at all, as in Telegram»~~ | **Retired 2026-09-28 (item 51): stale when it was written.** The row said the claim «does not survive», because Telegram Desktop, Web A and Web K all have hover actions and only the touch clients do not. But the owner had already rejected that decision on 2026-09-11, with screenshots of Telegram Android and Telegram Desktop (register D-071, «The concept was wrong»), and what shipped is Telegram Desktop's hover reaction button, named so at `MessageBubble.tsx:1551` |
 
 Honourable mention: the register contains, 200 lines apart, «their client
 transcodes and their server does not» (D-176) and the WebCodecs work (D-175)
@@ -1230,7 +1356,11 @@ badge on a bot's message (D-263), badges on profile cards (D-168), member-list
 ordering (D-168), name colouring in the message list (D-216), popout stacking
 order (D-215), the voice-mode vocabulary and slider bottom end (D-232), the
 250ms / 10% thresholds (D-217), account badges absent from the member list
-(D-213), the bar at the foot of the chat-list column (D-225).
+(D-213), the bar at the foot of the chat-list column (D-225). *Informational,
+2026-09-28 (item 51):* D-225 puts its phone band at the top, Telegram's
+position, while voice is Discord's area (CLAUDE.md §7); Discord Android 345.9
+draws its voice strip at the bottom of the home screen, above the user band
+(section 17.1). What it shows inside an open conversation was not measured.
 
 ### 10b. Capabilities written off because a browser cannot
 
@@ -1240,16 +1370,18 @@ was never asked.
 
 | Where | Constraint as stated | Written off |
 | --- | --- | --- |
-| Register D-231 | «And the browser cannot reach the media ports any other way» | **The entire pre-call connection test.** The entry's stated purpose is «so that nobody builds the dialogue later», and its body does not contain the words Tauri, Android, native, desktop or APK once. A Rust command can send a real STUN binding request to the media port; Android can too. On two of four surfaces the honest test is buildable |
-| Register D-175 | «A browser cannot ask its encoder what it will really spend. Android can» | **The exact byte count on the video quality slider.** The entry names Android as the client that can, and never asks whether **our** Android APK could bridge `MediaCodec`. The estimate was measured 6x wrong on incompressible footage |
-| Register D-176 | «A browser cannot do this today with WebCodecs the way a native client does» | **Uploading parts while the encoder is still producing them** — which the same paragraph calls «one thing worth copying outright». Both native shells can |
-| Register D-227 | a suspended `AudioContext` with no gesture is a call with no sound, «so the range is 0..100%» | **The upper half of the per-person volume slider.** The autoplay-gesture policy is relaxable at shell level. Discord's 0..200% is reachable on both native shells and was capped globally |
-| Register D-261 | the option space enumerated as the browser's own constraints plus a paid add-on | **A noise processor we control.** Android exposes `NoiseSuppressor` and `AcousticEchoCanceler`; a bundled RNNoise-class processor is a third option on Tauri. The entry's own finding — that a constraint is a request and `getUserMedia` may ignore it — is the argument for exactly that |
+| Register D-231 | «And the browser cannot reach the media ports any other way» | **The entire pre-call connection test.** The entry's stated purpose is «so that nobody builds the dialogue later», and its body does not contain the words Tauri, Android, native, desktop or APK once. **Re-verdicted 2026-09-28 (item 51): the conclusion was wrong in the other direction.** It said «A Rust command can send a real STUN binding request to the media port; Android can too. On two of four surfaces the honest test is buildable.» D-231's own table already was that probe, from a raw socket: `7882/udp` stayed silent because the LiveKit UDP mux drops a request whose ICE ufrag it does not know, and a native process has none either. The limit is the server, on every surface: the honest test needs a gateway-minted probe token and a WebRTC join (D-231, «A genuine pre-call test is possible but needs a server change»), and with those it works from the page on all four |
+| Register D-175 | «A browser cannot ask its encoder what it will really spend. Android can» | **The exact byte count on the video quality slider.** The entry names Android as the client that can, and never asks whether **our** Android APK could bridge `MediaCodec`. The estimate was measured 6x wrong on incompressible footage. **Re-verdicted 2026-09-28 (item 51): UNESTABLISHED on every surface.** This row assumed a bridged `MediaCodec` would give the exact number. No surface is established to have the size before encoding: the Telegram Android figure D-175 cites, version unnamed, is likely derived from a bitrate asked of the hardware — still bitrate × duration, which is what missed 6x. Settle by reading `extractRealEncoderBitrate` in Telegram Android 12.10.3, and by encoding D-175's noise clip with `bitrateMode: "constant"` |
+| Register D-176 | «A browser cannot do this today with WebCodecs the way a native client does» | **Uploading parts while the encoder is still producing them** — which the same paragraph calls «one thing worth copying outright». **Re-verdicted 2026-09-28 (item 51):** this cell ended «Both native shells can», and section 3 gave the reason as a real filesystem and a streaming HTTP body. Telegram's mechanism is independent numbered parts (`upload.saveBigFilePart`), which needs neither. The likely limit is our TUS upload (`tus-js-client` in `lib/resumableStorageUpload.ts`): it wants the length at creation unless the server offers `creation-defer-length`, and an ordinary MP4 goes back to patch its header after the last frame, which an append-only upload cannot follow — a fragmented MP4 does not. That limit binds the native shells equally. **UNESTABLISHED**: settle with an `OPTIONS` request to the Storage TUS endpoint (its `Tus-Extension` header), and by checking whether the worker's ffprobe path accepts a fragmented MP4 |
+| Register D-227 | a suspended `AudioContext` with no gesture is a call with no sound, «so the range is 0..100%» | **The upper half of the per-person volume slider.** **Re-verdicted 2026-09-28 (item 51):** this cell said «The autoplay-gesture policy is relaxable at shell level. Discord's 0..200% is reachable on both native shells and was capped globally». The autoplay policy is likely not the constraint on any surface: joining is a click, and the call already runs `startAudio` and reports `canPlaybackAudio` (`primeAudio` in `hooks/voiceRoom.ts`). D-227's real costs are routing the call through `webAudioMix` and the output-device branch under it, the same on all four. And «Discord's 200%» names no client. Settle by enabling `webAudioMix` in a dev build and hearing a 2x setting, and by reading the per-user slider maximum in Discord web build 615980 |
+| Register D-261 | the option space enumerated as the browser's own constraints plus a paid add-on | **A noise processor we control.** The entry's own finding — that a constraint is a request and `getUserMedia` may ignore it — is the argument for exactly that. **Re-verdicted 2026-09-28 (item 51):** this cell placed it on the native shells — «Android exposes `NoiseSuppressor` and `AcousticEchoCanceler`; a bundled RNNoise-class processor is a third option on Tauri». It works in the page on all four surfaces: an RNNoise-class WebAssembly model in an `AudioWorklet`, and Discord web itself runs Krisp conditionally (section 4). Android's `NoiseSuppressor` is likely the costlier route, because the effect attaches to a native recording session; whether it can reach the WebView's capture at all is UNESTABLISHED — settle by trying to attach it to that capture |
 
 A caveat that keeps this honest: **both native shells are WebViews.** «The
 browser cannot» is usually right about the rendering layer. What they have that
-the PWA does not is the **bridge** — and section 2 shows the bridge is already
-26 commands deep. None of the five entries above considered it.
+the PWA does not is the **bridge** — and section 2 shows the Tauri bridge is
+already 28 commands deep (this said 26 until 2026-09-28), beside two plugins of
+ours in the APK. None of the five entries above considered it; this table, in
+turn, did not ask the page.
 
 **The fix in each case is not to build the thing. It is to say which surface it
 is missing from.** D-264's update paragraph is the template.
@@ -1355,7 +1487,8 @@ here because they bear on our bot work:
 2. Telegram's clients are **six codebases**. Name the one you mean. Its own
    platform docs describe bots as uniform across them, and they are not.
 3. Our four surfaces are a browser, a PWA and **two WebViews with a native
-   bridge**. The bridge is 26 commands deep already.
+   bridge**. The Tauri bridge is 28 commands deep already, and the APK carries
+   two plugins of ours (corrected 2026-09-28 from «26 commands»).
 4. **Telegram Air is the precedent**: Telegram wrapped its own web client in
    Tauri to get a tray, a badge and native notifications back. Our shell is the
    same idea, and ahead of theirs on notification routing. **Like Air, our shell
@@ -1506,9 +1639,12 @@ small surface as a centred modal and a review against the rendered pixels caught
 it. Worth stating plainly here, because the reading above describes *what* the
 two surfaces are and never said *where* the small one stands.
 
-Discord's popout appears beside the thing you pressed — an avatar, a username, a
-mention chip. The conversation behind it is neither moved nor dimmed, and the
-message the reader was in the middle of stays lit. That is not decoration:
+Discord's popout, on web and desktop, appears beside the thing you pressed — an
+avatar, a username, a mention chip. *(Re-verdicted 2026-09-28, item 51: this
+said «Discord's popout» unqualified; section 17.7 found that Discord Android has
+no popout, and a press opens the full profile.)* The conversation behind it is
+neither moved nor dimmed, and the message the reader was in the middle of stays
+lit. That is not decoration:
 **it is the entire reason the small tier is cheaper than the large one.** The
 popout exists for the glance — a name goes past, a second of context is wanted,
 and reading continues — and a centred card takes the eye to the middle of the
@@ -1587,7 +1723,11 @@ What is worth taking, in order, and each is a mechanic rather than an object:
 4. **The escalation as one explicit control** that closes the small surface and
    opens the large one. Discord hides it in the overflow menu on the popout and
    promotes it to a full-width button on the sidebar — the same string, placed
-   by how much room there is. At 390 that argues for the button.
+   by how much room there is. At 390 there is no small surface to escalate
+   from: Discord Android opens the full profile directly (section 17.7), and so
+   does ours below 768 (`profileTier.ts`). *(Re-verdicted 2026-09-28, item 51:
+   this said «At 390 that argues for the button», reasoning from the web
+   client's sidebar.)*
 5. **Tabs only for lists.** Bio, roles and the note belong in the body; the
    tabs are Mutual Friends and Mutual Servers, which are lists, plus the
    activity surfaces. Our card already stacks the group's roles above LETSCUBE's
@@ -1605,9 +1745,10 @@ external accounts and a friends graph. «Mutual servers» has an honest analogue
 
 ### 15.2 «Глубина функционала не соответствует»: the row menu
 
-**Discord's DM row menu, in shipped order. SHIPPED**, module **385913** (chunk
-439778) for a 1:1 DM, `navId:"user-context"`, `aria-label:"User Settings
-Actions"`. Right-click and the kebab share one handler (module 715069) and
+**Discord's DM row menu, in shipped order — web and desktop, one bundle.
+SHIPPED**, module **385913** (chunk 439778) for a 1:1 DM,
+`navId:"user-context"`, `aria-label:"User Settings Actions"`. Right-click and
+the kebab share one handler (module 715069) and
 differ only in the impression name. Group DMs get module **4027**
 (`navId:"gdm-context"`). Each has a second variant for the **Favorites**
 pseudo-server, `guildId === "373"` (module 349828).
@@ -1645,7 +1786,11 @@ developer affordance behind a setting rather than in front of everybody.
 #### Ours, and the separation the owner asked for
 
 Ours, read at `00b8e86e`. Right click, a 520 ms long press, or the `ContextMenu`
-key from a focused row; same list, two containers.
+key from a focused row; same list, two containers. **The long press has no
+reference reading behind it** (re-verdicted 2026-09-28, item 51): the list
+above is Discord's right-click and kebab, and Discord Android's long-press sheet
+on a DM row was not measured — UNESTABLISHED; settle on the owner's phone with
+Discord 345.9.
 
 | conversation | entries, in order |
 | --- | --- |
@@ -1658,8 +1803,10 @@ key from a focused row; same list, two containers.
 
 - **«Пометить как прочитанное».** `mark_chat_read` and
   `mark_chat_read_through` exist and are called from inside a conversation; the
-  row draws an unread badge to 99+; **no menu entry writes it**. Discord leads
-  its menu with this one, and it is the single cheapest entry on this page.
+  row draws an unread badge to 99+; **no menu entry writes it**. Discord's web
+  and desktop menu leads with this one (this said «Discord leads its menu»
+  until 2026-09-28; its Android sheet is unmeasured, see above), and it is the
+  single cheapest entry on this page.
   Its opposite — «Отметить непрочитанным» — is a product decision, because it
   needs a watermark the row can be drawn from rather than a write.
 - **«Позвонить».** Voice exists and the conversation's header carries the
@@ -1701,7 +1848,7 @@ take, not a gap to close.
 
 ### 15.3 «Поиск удобно показывает что можно сделать»: two searches
 
-#### Discord's in-chat search. SHIPPED
+#### Discord's in-chat search, web and desktop. SHIPPED
 
 **Twelve filters parse; nine are offered; three are unreachable.** The grammar
 is module **304578**, and the filter words are *localised strings* rather than
@@ -1846,7 +1993,10 @@ reader will otherwise re-derive them:
   `parsed.chips.length === 0`** — it *removes* what somebody typed and offers
   nothing. The phone's `ChatSearchBar` is a bare field with the placeholder
   «Поиск в чате…»: no chips, no hint, no menu. **The mechanism is wired and the
-  affordance does not exist**, which is precisely the owner's complaint.
+  affordance does not exist**, which is precisely the owner's complaint. What
+  the phone's version should draw has no reference reading behind it
+  (re-verdicted 2026-09-28, item 51): Discord Android's in-chat search was not
+  measured — UNESTABLISHED; settle on the owner's phone with Discord 345.9.
 - **Our grammar** (`lib/searchQuery.ts`) has six filters — `type:`, `from:`,
   `in:`, `has:` (file, link, image, video, audio), `before:`, `after:` — with
   quoted values and an alias table. Against Discord's twelve we are missing
@@ -1870,7 +2020,8 @@ reader will otherwise re-derive them:
    so an empty field is an offer and not a dump.
 3. **A «Ещё фильтры» surface.** Discord's is a modal with seven fields, a
    «Clear Filters (N)» counter and a repeatable date row capped at four. At 390
-   ours would be a sheet.
+   ours would be a sheet — our shape, not a reading of Discord's phone app (see
+   above).
 4. **The quick switcher's empty state**, which is the honest answer to «Куда
    отправимся?»: recent conversations, then unread, then mentions, with the
    current one skipped and headers the keyboard steps over. **Drafts is a
@@ -2099,11 +2250,15 @@ reason rather than a preference:
    half opens a modal, and a modal appearing under a finger that is still
    moving is the wrong kind of surprise.
 
-**One thing neither client can have**, and it is the likeliest reason Telegram
-left the direction alone: a swipe that begins inside the system's
+**One thing the operating system takes first**, and it is the likeliest reason
+Telegram left the direction alone: a swipe that begins inside the system's
 gesture-navigation edge is the operating system's back, not the app's. That
-falls on the right-hand gesture of a left-aligned bubble, and nothing in a web
-view can take it back.
+falls on the right-hand gesture of a left-aligned bubble. **It can be taken
+back in the APK, and not in the browser or the PWA**:
+`View.setSystemGestureExclusionRects` is reachable from the Capacitor shell,
+within Android's 200dp per edge (16.5). *(Re-verdicted 2026-09-28, item 51:
+this was headed «One thing neither client can have» and ended «nothing in a web
+view can take it back», which 16.5 supersedes.)*
 
 ### 16.4 The correction — the right direction was never free
 
@@ -2221,11 +2376,19 @@ above** the band, full width, about 81 px tall. So on a phone the three zones
 become two plus a drill-down, and the audio controls live with the call rather
 than with the identity.
 
-**The update notice: the question does not exist on a phone, and saying so is
-the answer.** Both apps update through Google Play. There is no in-app
-update-and-reload path to compare with the web client's, and the two-layer
-update problem of section 9 has no mobile form. **UNESTABLISHED by design** —
-nothing was measured because there is nothing there to measure.
+**The update notice: for the two Play installs on this phone the question does
+not exist.** Both apps update through Google Play, so there is no in-app
+update-and-reload path to compare with the web client's. **UNESTABLISHED by
+design** — nothing was measured because there is nothing there to measure.
+
+**Re-verdicted 2026-09-28 (item 51):** this was headed «the question does not
+exist on a phone, and saying so is the answer», which is true only of Play
+installs. Ours is a sideloaded APK, so the comparable reference is Telegram's
+direct APK — it checks over MTProto with a 24-hour throttle and installs a full
+APK (section 9) — and ours already compares its installed version with the
+release catalogue (`useReleaseCatalog.ts:70-86`, shown as «Доступно
+обновление» in settings). The two-layer problem of section 9 still has no form
+in our APK, which bundles its web content (`capacitor.config.ts`, `webDir`).
 
 **The profile.** Not established on the phone. The web finding (a popout and a
 full modal sharing one store) was not re-tested here, and item 36's design
@@ -2273,6 +2436,12 @@ six tabs and still says «шум из чатов».
 | cost to create a category | none — it is the data model | 6 steps per folder, by hand |
 | what a category holds at volume | a scrolling column of 48dp avatars | a scrolling list of 70dp rows |
 | bots | no category of their own | **a first-class type switch** |
+
+*Re-verdicted 2026-09-28 (item 51):* the Telegram column is Telegram Android
+12.10.3. Item 47 also ships on desktop, and Telegram Desktop's folder layout was
+not read — UNESTABLISHED there; settle by opening Telegram Desktop 7.2.9's
+folder settings and recording where folders are drawn and what one costs to
+build.
 
 **The trade, stated rather than resolved — and §7 does not settle it.** §7 gives
 folders to Telegram and the shell to Discord, and this question is on the seam,
@@ -2367,6 +2536,12 @@ nothing outside the message. **For us the staged reading is that Discord's
 in-message components are the reachable next step and Telegram's Web App is a
 platform decision**, and §7 leaves bots contested on purpose — the owner rates
 Discord's implementation higher «из-за большей кастомизации и удобства».
+
+*Re-verdicted 2026-09-28 (item 51):* everything in this subsection is Telegram
+Android 12.10.3. Items 43 and 48 also ship on desktop, and Telegram Desktop's
+Web App window was not read — UNESTABLISHED there; settle by opening
+`@DurgerKingBot`'s menu button in Telegram Desktop 7.2.9 and recording the
+window it opens.
 
 ### 17.4 Two side effects of this pass, recorded so nobody hunts them
 
@@ -2546,17 +2721,24 @@ reaching for and nothing told him it existed.
 **What was not, and is the owner's to settle:** the memory. Ours resets every
 send, and `AttachSheet` carries a note saying so deliberately, because D-119's
 objection was to a quality question that was asked every time *and* then applied
-for ever. Telegram's answer is the middle one — never asked, remembered when
-chosen — and the tester's own words («с включенной настройкой HD») say he
-expected ours to behave that way. Recorded in the tracker under item 46 rather
-than changed here.
+for ever. Telegram Android 12.10.3's answer is the middle one — never asked,
+remembered when chosen — and the tester's own words («с включенной настройкой
+HD») say he expected ours to behave that way. Recorded in the tracker under item
+46 rather than changed here.
+
+*Named 2026-09-28 (item 51):* D-119's «as in Telegram» for «Файл» and this
+section's «Telegram» are two clients. The «Файл» shape came from Telegram iOS
+and is not re-verified (18.4); the memory was measured on Telegram Android
+12.10.3. And since D-119's amendment of 2026-09-21 ours remembers the state too
+(`kub:photo-resolution:v1` in `lib/mediaQuality.ts`), so the paragraph above is
+history.
 
 ### 18.4 What this pass did not establish
 
 - **Telegram's «send as file» path on Android** was not measured: reaching it
   means long-pressing the send button with a photograph selected, and a misread
-  there sends somebody's picture. The iOS shape D-119 was built from stands
-  unre-verified.
+  there sends somebody's picture. The Telegram iOS shape D-119's «Файл» was
+  built from, version unnamed, stands unre-verified.
 - **The viewer's paging behaviour at the far end of a long chat** — whether
   Telegram loads more media when a finger runs past what it holds — was not
   measured; only that its count is the whole chat's.
@@ -2821,8 +3003,12 @@ describes a managed local cache with size and retention controls. The Android
 [DownloadController source](https://github.com/DrKLO/Telegram/blob/master/TMessagesProj/src/main/java/org/telegram/messenger/DownloadController.java)
 separates automatic download rules by network and media type. These sources
 establish the mechanics, not exact current thresholds on the owner's phone.
-No exact Discord receive-side auto-download threshold was established; do not
-attribute one to it.
+*Re-verdicted 2026-09-28 (item 51):* as far as these sources go, per-network
+presets are the phone clients' mechanic — the `DownloadController` source is
+Android's. Whether Telegram Desktop keys automatic download by network at all is
+UNESTABLISHED; settle in Telegram Desktop 7.2.9's automatic media download
+settings. No exact Discord receive-side auto-download threshold was
+established; do not attribute one to it.
 
 LETSCUBE's 2026-09-25 source audit found that available compressed previews
 already render automatically. A known large original without a preview also
