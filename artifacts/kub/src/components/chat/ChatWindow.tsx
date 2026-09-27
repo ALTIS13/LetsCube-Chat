@@ -126,6 +126,7 @@ import {
   transitionStagedAttachmentChat,
   type StagedUploadScopeToken,
 } from "@/lib/stagedUploadWorkflow";
+import { runCommittedStagedSendAttempt } from "@/lib/committedSend";
 import { describeUploadFailure, uploadFailureFeedback, uploadFailureMessage } from "@/lib/uploadFailure";
 import { ATTACHMENT_UPLOAD_CONCURRENCY, captionCarrierId, nextClientSentAt, runOrderedSend } from "@/lib/attachmentSendQueue";
 import { prepareMediaAlbumTargets } from "@/lib/mediaAlbumSend";
@@ -354,12 +355,19 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     draftRestore?.id,
   ]);
 
+  // D-314. What is still running at a chat change is a send somebody pressed,
+  // so leaving the chat does not cancel it; an account change does, since the
+  // row would otherwise go out as whoever signed in next.
+  const abortUploadsIfAccountChanged = useCallback(() => {
+    if (useAppStore.getState().currentUser?.id !== userId) void uploadRegistry.abortAll();
+  }, [uploadRegistry, userId]);
+
   useLayoutEffect(() => {
     const staleAttachments = transitionStagedAttachmentChat(
       uploadScope,
       chatId,
       stagedAttachmentsRef,
-      () => { void uploadRegistry.abortAll(); },
+      abortUploadsIfAccountChanged,
     );
     staleAttachments.forEach(revokeAttachmentPreview);
     setStagedAttachments((current) => current.length ? [] : current);
@@ -371,12 +379,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       const abandonedAttachments = clearStagedAttachmentChat(
         uploadScope,
         stagedAttachmentsRef,
-        () => { void uploadRegistry.abortAll(); },
+        abortUploadsIfAccountChanged,
       );
       abandonedAttachments.forEach(revokeAttachmentPreview);
       cancelledAttachmentIdsRef.current.clear();
     };
-  }, [chatId, uploadRegistry, uploadScope]);
+  }, [abortUploadsIfAccountChanged, chatId, uploadScope]);
 
   useEffect(() => {
     if (!chatPanelRequest || chatPanelRequest.chatId !== chatId) return;
@@ -1007,7 +1015,6 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     if (
       attachment.uncompressed &&
       attachment.previewFile &&
-      uploadScope.isActive(scopeToken) &&
       !cancelledAttachmentIdsRef.current.has(attachment.id)
     ) {
       // `.preview.webp`, or `.preview.jpg` from an engine that cannot write WebP.
@@ -1049,6 +1056,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     }
 
     const scopeToken = uploadScope.capture();
+    // D-314: from the press on, this send belongs to the chat and the topic it
+    // was pressed in and to the account that pressed it, not to what is on
+    // screen when the upload finishes.
+    const sendChatId = scopeToken.chatId;
+    const sendTopicId = messageTopicId;
+    const sameAccount = () => useAppStore.getState().currentUser?.id === userId;
     const captionText = caption.trim();
     const targets = prepareMediaAlbumTargets(selectStagedAttachmentsForSend(
       explicitTargets ?? stagedAttachmentsRef.current,
@@ -1117,7 +1130,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     // order and the concurrency are decided in `lib/attachmentSendQueue.ts`.
     await runOrderedSend(targets, {
       concurrency: ATTACHMENT_UPLOAD_CONCURRENCY,
-      isActive: () => uploadScope.isActive(scopeToken),
+      isActive: sameAccount,
       isWanted: (attachment) => !cancelledAttachmentIdsRef.current.has(attachment.id),
       upload: (attachment) => attachment.uploaded
         ? Promise.resolve(attachment.uploaded)
@@ -1163,10 +1176,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         previousSentAt = clientSentAt;
         const captionSentWithAttachment = Boolean(captionText) && !sentAny;
         const content = getStagedAttachmentMessageContent(attachment, captionSentWithAttachment ? captionText : null);
-        const sendResult = await runScopedStagedSendAttempt(
-          uploadScope,
-          scopeToken,
+        const sendResult = await runCommittedStagedSendAttempt(
+          sameAccount,
           () => sendMediaMessage({
+            targetChatId: sendChatId,
+            topicId: sendTopicId,
             type: getStagedAttachmentMessageType(attachment),
             content,
             mediaBucket: uploaded.bucket,
@@ -1206,7 +1220,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
     if (sentAny) setReplyTo(null);
     return sentAny;
-  }, [replyTo?.id, removeStagedAttachment, sendMediaMessage, sendMessage, updateStagedAttachment, uploadScope, uploadStagedAttachment, userId]);
+  }, [messageTopicId, replyTo?.id, removeStagedAttachment, sendMediaMessage, sendMessage, updateStagedAttachment, uploadScope, uploadStagedAttachment, userId]);
 
   const retryStagedAttachment = useCallback((attachmentId: string) => {
     // With the caption the send was asked for, not without it (D-286).

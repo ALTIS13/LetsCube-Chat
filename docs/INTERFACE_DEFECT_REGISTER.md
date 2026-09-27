@@ -23796,6 +23796,32 @@ Screen web app, so the page cannot upload in the background at all; what is
 achievable is that the upload resumes by itself when the app is back, which is
 what a resumable upload exists for. Not yet measured which part the tester hit.
 
+The first part, fixed the same evening. Measured in the code: `ChatWindow`
+aborted every registered upload when the chat changed or unmounted, and the
+row was written only if the chat on screen was still the one the send was
+pressed in (`runScopedStagedSendAttempt`, `runOrderedSend`'s `isActive`) —
+because `sendLocalMessage` wrote to `chatIdRef.current`, the chat on screen,
+so a late row would otherwise have gone to the wrong chat. Now a pressed send
+names its chat and topic (`targetChatId`, `topicId`, both already supported by
+`sendLocalMessage`) and is kept going when the chat is left; the preview of an
+original still uploads. What stops it is an account change: uploads are
+aborted when the account differs, and `lib/committedSend.ts` refuses the row
+(a unit test pins it; removing the check turns it red). A draft that was never
+sent is still discarded with its chat.
+
+`media-send-path.spec.ts` holds the upload, leaves the chat on a phone, then
+lets it finish: red before (no row), green after on WebKit and Chromium 390,
+with the row in the chat it was sent from; the send-path, attach-sheet and
+send-without-compression specs pass on three projects (attach-sheet:416 on
+WebKit failed once and passed 3 of 3 on repeat).
+
+Still open: the Telegram half — the message shown at once in its chat as
+«отправляется», with its progress, wherever the reader goes. Today the tray
+that shows progress belongs to the chat on screen, so after leaving nothing
+shows the send until its row arrives. And a locked iPhone suspends the page:
+a large file's resumable upload retries on its own when the app is back, a
+small one's single request can fail with no tray left to retry it from.
+
 ## D-315 `[x]` After the first contact, a second one could not be added
 
 2026-09-27, tester, installed iPhone app: the first contact was added through

@@ -319,6 +319,39 @@ test.describe("the send path of photos and videos", () => {
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
   });
 
+  // D-314, from a tester on 2026-09-27: a file sent to upload stopped when he
+  // left the chat. Pressing «Отправить» commits it: the upload and the row now
+  // belong to that send, not to the chat on screen, so leaving does not cancel
+  // them — and the row still goes to the chat it was sent from, which is why
+  // the send had been tied to the open chat in the first place.
+  test("a send keeps going after its chat is left, into the chat it was sent from", async ({ page }) => {
+    test.skip((page.viewportSize()?.width ?? 0) >= 768, "leaving a chat is its own screen on a phone");
+    const backend = await installBackend(page);
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    backend.answer = async () => {
+      await held;
+      return null;
+    };
+    await openChat(page);
+
+    await pickPhotosOrVideos(page, [await testPhoto("gate.png", 200)]);
+    await sendPicked(page, 1);
+    await expect.poll(() => backend.uploads.length).toBe(1);
+
+    await page.getByRole("button", { name: "Назад", exact: true }).click();
+    await expect(page.getByTestId("chat-list-item").filter({ hasText: CHAT_NAME })).toBeVisible();
+    release();
+
+    await expect
+      .poll(() => backend.inserts.length, { message: "the message went although its chat had been left" })
+      .toBe(1);
+    expect(backend.inserts[0]?.chat_id, "into the chat it was sent from").toBe(CHAT_ID);
+    expect(backend.inserts[0]?.media_path).toBe(backend.uploads[0]?.path);
+  });
+
   test("an update of the chat that never answers does not hold the send", async ({ page }) => {
     const backend = await installBackend(page);
     backend.holdChatUpdates = true;

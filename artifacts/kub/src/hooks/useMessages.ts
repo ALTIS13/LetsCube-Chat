@@ -1337,6 +1337,13 @@ export function useMessages(
 
   const sendMediaMessage = useCallback(async (input: {
     type: Extract<SendableMessageType, "image" | "video" | "audio" | "file">;
+    /**
+     * The chat the send was pressed in (D-314). Without it the row goes to the
+     * chat on screen when the upload finishes, which after leaving is another.
+     */
+    targetChatId?: string | null;
+    /** That chat's topic at the press; undefined keeps the open topic's. */
+    topicId?: string | null;
     content: string | null;
     mediaUrl: string;
     mediaBucket?: string | null;
@@ -1356,6 +1363,8 @@ export function useMessages(
       clientMessageId: input.clientMessageId ?? null,
       clientSentAt: input.clientSentAt ?? null,
       mediaMetadata: input.mediaMetadata,
+      targetChatId: input.targetChatId ?? undefined,
+      topicId: input.topicId,
     });
   }, [sendLocalMessage]);
 
