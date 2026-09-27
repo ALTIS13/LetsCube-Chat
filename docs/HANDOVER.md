@@ -22,6 +22,29 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-298, with its
    measurement. Search it before filing anything.
 
+**Claude resumed from Codex, 2026-09-27 (evening).** Codex stopped at the
+[checkpoint it left](operations/2026-09-27-claude-resume-after-codex.md); its
+order was followed and closed:
+
+- the temporary `/__qa/ios-paintability.html` probe is gone (`957b0baf`), proven
+  by the running image and the public bytes;
+- the KubModal accessible-name candidate shipped (`7898909b`): every dialog is
+  now named by its title; the deployed read-only member smoke that failed on it
+  is committed and is the owner's to run, since it signs in;
+- **D-111 is fixed** (`35a19e66`), measured inside the installed app on rented
+  iPhones: iOS 26 holds an installed app whose document fits the screen in a
+  "small" viewport a top inset short; the root at `100lvh` keeps it in the large
+  one. Verified on the plain LETSCUBE icon; a signed-in chat is the tester's to
+  confirm. The flagged diagnostic used for it is removed (`ab68a192`);
+- a tester's report of the same day is in the register as D-313 – D-317; the
+  contacts header under the status bar and the "second contact" it caused are
+  fixed (`1d517198`), the rest are open.
+
+MobileNext works from this machine through `mobilecli` (the login lives in the
+Windows keyring); the account allows one device at a time, and some iPhone 14
+Pro Max units have no control agent. `docs/operations/ios-pwa-viewport-validation.md`
+has the method.
+
 **Current checkpoint, 2026-09-27:** ordinary-member contacts, text-channel
 scope, voice-room creation and account-switch safeguards passed local QA
 (181 browser passes, 50 explicit skips, full unit/server suites). The additive
