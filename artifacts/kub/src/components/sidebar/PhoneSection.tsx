@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { requestAppConfirm } from "@/lib/appDialogs";
 import { phoneRemovalPrompt } from "@/lib/settingsPrompts";
 import { createClient } from "@/lib/supabase/client";
@@ -44,6 +44,7 @@ const CODE_DELIVERY_UNAVAILABLE_MESSAGE = PHONE_CODE_UNAVAILABLE;
  * an OTP secret or privileged Auth key.
  */
 export function PhoneSection() {
+  const codeInputId = useId();
   const supabase = createClient();
   const currentUser = useAppStore((s) => s.currentUser);
 
@@ -209,7 +210,6 @@ export function PhoneSection() {
     setStage("code-sent");
     setNow(Date.now());
     setResendAvailableAt(nextResendAt);
-    setInfo(`Код отправлен на номер ${normalised}`);
   };
 
   const verifyCode = async () => {
@@ -292,7 +292,7 @@ export function PhoneSection() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1">
             <span className="text-xs font-semibold text-[color:var(--kub-accent-text)]">Телефон</span>
-            {storedPhone && (
+            {storedPhone && !dirty && stage === "idle" && (
               verified ? (
                 <KubBadge tone="online" dot>Подтверждён</KubBadge>
               ) : (
@@ -318,7 +318,7 @@ export function PhoneSection() {
               {PHONE_FORMAT_HINT}
             </div>
           )}
-          {storedPhone && !dirty && (
+          {storedPhone && !dirty && stage === "idle" && (
             <div className="text-[12px] mt-1 text-[color:var(--kub-muted)]">
               Сохранённый номер: {storedPhone}
               {verifiedAtLabel ? ` · подтверждён ${verifiedAtLabel}` : ""}
@@ -329,16 +329,20 @@ export function PhoneSection() {
 
       {stage === "code-sent" && (
         <div className="px-4 pt-0 pb-3 border-t border-[color:var(--kub-rule)]">
-          <label className="text-[12px] font-semibold uppercase tracking-wider mt-3 mb-1.5 block text-[color:var(--kub-accent-text)]">
+          <p className="mt-3 text-xs text-[color:var(--kub-muted)]">
+            Код отправлен на номер {normalised}
+          </p>
+          <label htmlFor={codeInputId} className="text-[12px] font-semibold uppercase tracking-wider mt-3 mb-1.5 block text-[color:var(--kub-accent-text)]">
             Код подтверждения (4 цифры)
           </label>
           <input
+            id={codeInputId}
             inputMode="numeric"
             pattern="[0-9]{4}"
+            autoComplete="one-time-code"
             maxLength={4}
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
-            placeholder="1234"
             className={cn(
               "w-full rounded-xl px-3 py-2 text-sm tracking-[0.4em] text-center outline-none",
               "bg-[var(--kub-surface-3)] text-[color:var(--kub-text)]",
@@ -380,17 +384,21 @@ export function PhoneSection() {
             >
               Отмена
             </KubButton>
-            <KubButton
-              variant="secondary"
-              size="sm"
-              onClick={sendCode}
-              loading={busy === "send"}
-              disabled={resendSeconds > 0 || !dirty || !isValid}
-            >
-              {resendSeconds > 0
-                ? `Повторно через ${formatResendCountdown(resendSeconds)}`
-                : "Отправить код повторно"}
-            </KubButton>
+            {resendSeconds > 0 ? (
+              <span className="text-xs text-[color:var(--kub-muted)]">
+                Повторная отправка через {formatResendCountdown(resendSeconds)}
+              </span>
+            ) : (
+              <KubButton
+                variant="secondary"
+                size="sm"
+                onClick={sendCode}
+                loading={busy === "send"}
+                disabled={!dirty || !isValid}
+              >
+                Отправить код повторно
+              </KubButton>
+            )}
           </>
         ) : stage === "unsupported" ? (
           <KubButton
@@ -416,7 +424,7 @@ export function PhoneSection() {
             </KubButton>
           </>
         )}
-        {storedPhone && (
+        {storedPhone && stage !== "code-sent" && (
           <KubButton
             variant="ghost"
             size="sm"

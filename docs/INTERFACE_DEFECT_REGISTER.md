@@ -8490,7 +8490,7 @@ category on the device permission again.
 
 **Audit rows:** settings-profile B6, F3; top-10 item 6.
 
-## D-138 `[ ]` The phone code step looks already filled in, and calls the number confirmed while it is being changed
+## D-138 `[x]` The phone code step looks already filled in, and calls the number confirmed while it is being changed
 
 **Severity:** medium. Found by the settings audit; rendered (frame p09).
 
@@ -8508,8 +8508,8 @@ the step.
 
 **Audit rows:** settings-profile D3 (with D2); top-10 item 8.
 
-**Verified against the shipped code on 2026-09-15 and still open — three of its
-four complaints stand, the fourth is overstated.** Left for its own batch: the
+**Historical verification on 2026-09-15 — three of its
+four complaints stood, the fourth was overstated.** Left for its own batch: the
 fix is a redesign of the code step on a different surface from the administration
 work this batch covers, and it needs its own frames.
 
@@ -8531,9 +8531,18 @@ Overstated: «whether a code went in» *is* said — `sendCode` sets «Код о
 calls `reset()` first, so a wrong code replaces that line with an error and the
 number the code went to is gone from the screen.
 
-One thing to settle before building the proposal's four digit cells with
-auto-submit: the gateway limits attempts, so an auto-submitted typo spends one.
-Telegram's behaviour is the proposal; the cost of it here has not been measured.
+**Fixed 2026-09-27.** The saved-number badge and details appear only while the
+unchanged number is idle; the delete action is hidden during code entry. The
+code field has no digit placeholder, is labelled for assistive technology and
+supports one-time-code autofill. Its single persistent line names the target
+number even after an invalid-code error. The two-minute resend countdown is
+text, replaced by a button when it expires. Four separate cells and automatic
+submission were not adopted: the gateway limits verification attempts, so a
+single accidental fourth digit should not spend one. The explicit confirm
+button remains. A mocked, mutation-free Playwright regression failed on the
+old badge and on the disappearing target, then passed on desktop Chromium,
+mobile Chromium and mobile WebKit. The test attaches a cropped synthetic phone
+section screenshot; it does not call the real delivery provider.
 
 ## D-139 `[x]` A location found in search, and a ban notification, lead to a refusal or a bounce
 
