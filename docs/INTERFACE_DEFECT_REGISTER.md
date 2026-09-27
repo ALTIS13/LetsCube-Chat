@@ -23752,7 +23752,7 @@ download to avoid eager large-file fetches. Fixture checks pass in Chromium and
 desktop WebKit at 390px for share and fallback. Availability of “Save Image”
 inside the actual iOS sheet and physical-device behavior remain unverified.
 
-## D-313 `[ ]` A voice message stops when you leave its chat
+## D-313 `[x]` A voice message stops when you leave its chat
 
 2026-09-27, from a tester's voice message. In Telegram a voice message keeps
 playing after you go to another chat, so a six-minute message can be heard
@@ -23763,6 +23763,28 @@ the phone behave differently, and what the phone's player is tied to. Next:
 read what unmounts the player on the phone, then adopt Telegram's mechanic — a
 playback that belongs to the application, with its own bar and a way back to
 the message.
+
+Measured in the code the same evening: `ChatMediaPlaybackProvider` was created
+by `ChatWindow`, closed whatever played when `chatId` changed, and paused its
+element on unmount; and a voice message played through the bubble's own
+`<audio>`, which leaves the document with the chat. Fixed by Telegram's
+mechanic: the player belongs to the application (`AppMediaPlaybackProvider`
+in `MainLayout`); a chat's provider only registers the open chat and its
+playlist. When a bubble that is playing unmounts, a layout-effect cleanup —
+which runs before the element is removed, and removal is what pauses it —
+hands the sound to the player's own element at the same second, rate and
+volume. The bar stays with the reader: in the other chat's header on a
+computer, over the chat list on a phone, and its title opens the message's
+chat. Back in the chat, the bubble presses the same playback instead of
+starting its copy from 0:00. A video, and a draft previewed in the composer,
+still end with their chat.
+
+`voice-playback-continuity.spec.ts` plays a generated tone from the test's own
+HTTP server (WebKit loads media past `page.route`, and will not play without
+byte ranges): red before at the bar after leaving, green after on Chromium
+1440, WebKit and Chromium 390 — still playing and advancing after the chat is
+left, paused from the bar, back through the title, resumed from where it
+stopped.
 
 ## D-314 `[ ]` An upload stops when you leave its chat, and a locked phone never finishes it
 

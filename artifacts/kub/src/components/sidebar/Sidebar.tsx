@@ -15,6 +15,7 @@ import { ChatList } from "./ChatList";
 import { NewChatModal } from "./NewChatModal";
 import { NewGroupModal } from "./NewGroupModal";
 import { ContactsPanel } from "@/components/contacts/ContactsPanel";
+import { ListPlaybackBar } from "@/components/chat/ChatMediaPlayback";
 import { FolderEditModal } from "./FolderEditModal";
 import { SettingsSurface } from "@/components/settings/SettingsSurface";
 import { openSavedMessagesChat } from "@/lib/savedMessages";
@@ -203,6 +204,12 @@ export function Sidebar() {
               searchTucked={searchTucked}
               onUntuckSearch={() => setSearchTucked(false)}
             />
+            {/* A voice message still playing after its chat was left (D-313):
+                Telegram keeps its player over the chat list. Only while no
+                chat is open, because an open one carries the same bar in its
+                own header — and in a component of its own, so the list does
+                not re-render with every tick of the playback. */}
+            <ListPlaybackBar />
             {/* Below `md` only. The folder rail above is `hidden … md:flex`,
                 so without this gate the same folders were drawn twice from
                 `md` upward — once down the rail and once across this strip,

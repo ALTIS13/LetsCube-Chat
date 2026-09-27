@@ -1,6 +1,6 @@
 "use client";
 
-import { type ChangeEvent, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type PointerEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { KubIcon } from "@/components/kub";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
@@ -186,7 +186,35 @@ export function AudioMessage({ url, unavailable = false, duration = 0, isMe, pla
 
   useEffect(() => stopProgressLoop, [stopProgressLoop]);
 
+  // D-313. Leaving the chat unmounts this bubble and its <audio>; if that is
+  // what is playing, the player carries on from the same second on its own
+  // element. A layout effect's cleanup runs before the element leaves the
+  // document, which is what pauses it — so the player can still read that it
+  // was playing.
+  const detachRef = useRef(mediaPlayback.detach);
+  const playbackItemIdRef = useRef(playbackItem?.id ?? null);
+  detachRef.current = mediaPlayback.detach;
+  playbackItemIdRef.current = playbackItem?.id ?? null;
+  useLayoutEffect(() => () => {
+    const element = audioRef.current;
+    const itemId = playbackItemIdRef.current;
+    if (element && itemId) detachRef.current(itemId, element);
+  }, []);
+
+  /** Whether the player is playing this message on its own element, not this bubble's. */
+  const playingElsewhere = () => Boolean(
+    playbackItem
+    && mediaPlayback.isCurrent(playbackItem.id)
+    && !mediaPlayback.isActiveElement(audioRef.current),
+  );
+
   const toggle = () => {
+    if (playbackItem && playingElsewhere()) {
+      // Back in the chat while the player still has this message: press what
+      // it is playing rather than start this bubble's copy from 0:00.
+      mediaPlayback.toggle(playbackItem);
+      return;
+    }
     const audio = audioRef.current;
     if (!audio || !audioSrc || loadError) return;
     if (playing) {
@@ -250,12 +278,16 @@ export function AudioMessage({ url, unavailable = false, duration = 0, isMe, pla
   };
 
   const commitSeek = useCallback((nextTime: number) => {
+    if (playbackItem && mediaPlayback.isCurrent(playbackItem.id) && !mediaPlayback.isActiveElement(audioRef.current)) {
+      mediaPlayback.seek(nextTime);
+      return;
+    }
     const audio = audioRef.current;
     if (!audio || durationSeconds <= 0) return;
     const safeTime = clampTime(nextTime, durationSeconds);
     audio.currentTime = safeTime;
     setCurrentTime(safeTime);
-  }, [durationSeconds]);
+  }, [durationSeconds, mediaPlayback, playbackItem]);
 
   const handleSeekChange = (e: ChangeEvent<HTMLInputElement>) => {
     const nextTime = Number(e.currentTarget.value);
@@ -324,7 +356,7 @@ export function AudioMessage({ url, unavailable = false, duration = 0, isMe, pla
       <button
         onClick={toggle}
         disabled={!canPlayAudio}
-        aria-label={playing ? "Пауза" : "Воспроизвести"}
+        aria-label={displayPlaying ? "Пауза" : "Воспроизвести"}
         className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all hover:brightness-110 bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan disabled:bg-[var(--kub-inset)] disabled:shadow-none disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed disabled:hover:brightness-100"
       >
         {displayPlaying ? <KubIcon name="pause" size={16} /> : <KubIcon name="play" size={16} className="ml-0.5" />}

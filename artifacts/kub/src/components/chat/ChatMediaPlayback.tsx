@@ -18,6 +18,7 @@ import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { cn } from "@/lib/utils";
 import { replacePlaybackItemUrl } from "@/lib/mediaQuality";
 import { coarsePointer } from "@/lib/pointer";
+import { safeOpenChat } from "@/lib/safeOpenChat";
 import {
   AUDIO_SETTINGS_KEY,
   PLAYBACK_RATES,
@@ -67,10 +68,35 @@ interface ChatMediaPlaybackContextValue {
   replaceCurrentItemUrl: (itemId: string, nextUrl: string, options?: { suppressCurrentError?: boolean }) => void;
   canNext: boolean;
   canPrevious: boolean;
+  /**
+   * D-313. The bubble's element is going away with its chat: carry on from the
+   * same second on the player's own. A no-op unless this is the application's
+   * player and the element is the one playing.
+   */
+  detach: (itemId: string, element: HTMLMediaElement) => void;
+  /** Whether this element is the one the player drives right now. */
+  isActiveElement: (element: HTMLMediaElement | null) => boolean;
+  /** The chat on screen, as far as the application's player knows; null outside one. */
+  openChatId: string | null;
+  /** Present on the application's player only: a chat announces itself and its media. */
+  registerChat?: (chatId: string, playlist: ChatMediaPlaybackItem[]) => void;
+  leaveChat?: (chatId: string) => void;
 }
+
+const EMPTY_PLAYLIST: ChatMediaPlaybackItem[] = [];
 
 const ChatMediaPlaybackContext = createContext<ChatMediaPlaybackContextValue | null>(null);
 
+/**
+ * A conversation's media player.
+ *
+ * Mounted once for the application (D-313), a chat's `ChatMediaPlaybackProvider`
+ * only tells it which chat is open and what that chat can play, so a voice
+ * message keeps going when its chat is left — Telegram's behaviour, which the
+ * tester asked for: a long one can be heard while writing to somebody else.
+ * Where nothing wraps a chat (a fixture, a capture page), the chat's provider
+ * is a player of its own again, exactly as before.
+ */
 export function ChatMediaPlaybackProvider({
   chatId,
   playlist,
@@ -78,6 +104,53 @@ export function ChatMediaPlaybackProvider({
 }: {
   chatId: string;
   playlist: ChatMediaPlaybackItem[];
+  children: ReactNode;
+}) {
+  const outer = useContext(ChatMediaPlaybackContext);
+  if (outer?.registerChat && outer.leaveChat) {
+    return (
+      <ChatPlaylistRegistration register={outer.registerChat} leave={outer.leaveChat} chatId={chatId} playlist={playlist}>
+        {children}
+      </ChatPlaylistRegistration>
+    );
+  }
+  return <MediaPlaybackEngine chatId={chatId} playlist={playlist}>{children}</MediaPlaybackEngine>;
+}
+
+/** The application's player, around everything that can show a chat. */
+export function AppMediaPlaybackProvider({ children }: { children: ReactNode }) {
+  return <MediaPlaybackEngine appLevel>{children}</MediaPlaybackEngine>;
+}
+
+function ChatPlaylistRegistration({
+  register,
+  leave,
+  chatId,
+  playlist,
+  children,
+}: {
+  register: (chatId: string, playlist: ChatMediaPlaybackItem[]) => void;
+  leave: (chatId: string) => void;
+  chatId: string;
+  playlist: ChatMediaPlaybackItem[];
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    register(chatId, playlist);
+  }, [register, chatId, playlist]);
+  useEffect(() => () => leave(chatId), [leave, chatId]);
+  return <>{children}</>;
+}
+
+function MediaPlaybackEngine({
+  chatId: chatIdProp = null,
+  playlist: playlistProp = EMPTY_PLAYLIST,
+  appLevel = false,
+  children,
+}: {
+  chatId?: string | null;
+  playlist?: ChatMediaPlaybackItem[];
+  appLevel?: boolean;
   children: ReactNode;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -89,6 +162,17 @@ export function ChatMediaPlaybackProvider({
   const suppressedErrorItemIdRef = useRef<string | null>(null);
   const [activeElement, setActiveElement] = useState<HTMLMediaElement | null>(null);
   const [currentItem, setCurrentItem] = useState<ChatMediaPlaybackItem | null>(null);
+  const currentItemRef = useRef<ChatMediaPlaybackItem | null>(null);
+  // The application's player learns the open chat and each chat's media from
+  // the chats themselves; a chat's own player was given them.
+  const [registered, setRegistered] = useState<{
+    openChatId: string | null;
+    playlists: Record<string, ChatMediaPlaybackItem[]>;
+  }>({ openChatId: null, playlists: {} });
+  const chatId = appLevel ? registered.openChatId : chatIdProp;
+  const playlist = appLevel
+    ? (currentItem ? registered.playlists[currentItem.chatId] ?? EMPTY_PLAYLIST : EMPTY_PLAYLIST)
+    : playlistProp;
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -155,7 +239,17 @@ export function ChatMediaPlaybackProvider({
   }, [playbackSettings]);
 
   useEffect(() => {
-    if (!currentItem || currentItem.chatId === chatId || currentItem.isStaged) return;
+    currentItemRef.current = currentItem;
+  }, [currentItem]);
+
+  // A voice message or a track goes on when its chat is left (D-313); a video
+  // is a picture and ends with the chat it is drawn in, and so does a draft
+  // being previewed in the composer.
+  useEffect(() => {
+    if (!currentItem || currentItem.chatId === chatId) return;
+    const audible = (currentItem.kind === "voice" || currentItem.kind === "audio") && !currentItem.isStaged;
+    if (audible) return;
+    if (!appLevel && currentItem.isStaged) return;
     close();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId, currentItem?.chatId]);
@@ -348,6 +442,62 @@ export function ChatMediaPlaybackProvider({
     setError(null);
   }, [activeElement, stopProgressLoop]);
 
+  const registerChat = useCallback((openChatId: string, items: ChatMediaPlaybackItem[]) => {
+    setRegistered((previous) => ({ openChatId, playlists: { ...previous.playlists, [openChatId]: items } }));
+  }, []);
+
+  const leaveChat = useCallback((leftChatId: string) => {
+    setRegistered((previous) => (previous.openChatId === leftChatId ? { ...previous, openChatId: null } : previous));
+  }, []);
+
+  const detach = useCallback((itemId: string, element: HTMLMediaElement) => {
+    if (!appLevel) return;
+    const item = currentItemRef.current;
+    if (!item || item.id !== itemId || activeElementRef.current !== element) return;
+    if (item.kind !== "voice" && item.kind !== "audio") return;
+    const own = audioRef.current;
+    if (!own || own === element) return;
+    // Read before anything else: removing a media element from the document
+    // pauses it, and this runs while it is still in place.
+    const wasPlaying = !element.paused && !element.ended;
+    const at = finiteTime(element.currentTime);
+    const source = element.currentSrc || element.src || item.url;
+    element.pause();
+    if (own.src !== source) own.src = source;
+    try {
+      own.currentTime = at;
+    } catch {
+      // Before metadata some engines refuse; the listener below puts it back.
+    }
+    own.addEventListener("loadedmetadata", () => {
+      if (Math.abs(finiteTime(own.currentTime) - at) > 0.5) {
+        try {
+          own.currentTime = at;
+        } catch {
+          // Leaves it at the start, which is the old behaviour.
+        }
+      }
+    }, { once: true });
+    own.playbackRate = element.playbackRate;
+    own.volume = element.volume;
+    void applyAudioOutputDevice(own, settings.selectedOutputDeviceId);
+    activeElementRef.current = own;
+    setActiveElement(own);
+    if (!wasPlaying) {
+      setIsPlaying(false);
+      return;
+    }
+    void own.play().catch((error) => {
+      setIsPlaying(false);
+      reportError(error, { category: "media_playback_failed", mediaKind: item.kind, staged: false });
+    });
+  }, [appLevel, settings.selectedOutputDeviceId]);
+
+  const isActiveElement = useCallback(
+    (element: HTMLMediaElement | null) => Boolean(element) && activeElementRef.current === element,
+    [],
+  );
+
   const closeIfCurrent = useCallback((itemId: string) => {
     if (currentItem?.id === itemId) close();
   }, [close, currentItem?.id]);
@@ -390,7 +540,18 @@ export function ChatMediaPlaybackProvider({
     replaceCurrentItemUrl,
     canNext,
     canPrevious,
+    detach,
+    isActiveElement,
+    openChatId: chatId,
+    registerChat: appLevel ? registerChat : undefined,
+    leaveChat: appLevel ? leaveChat : undefined,
   }), [
+    appLevel,
+    chatId,
+    detach,
+    isActiveElement,
+    leaveChat,
+    registerChat,
     activate,
     canNext,
     canPrevious,
@@ -453,6 +614,9 @@ export function useChatMediaPlayback() {
       replaceCurrentItemUrl: noop,
       canNext: false,
       canPrevious: false,
+      detach: noop,
+      isActiveElement: () => false,
+      openChatId: null,
     } satisfies ChatMediaPlaybackContextValue;
   }
   return context;
@@ -464,6 +628,7 @@ export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } 
   if (!item) return null;
 
   const duration = playback.duration || (item.durationMs ? item.durationMs / 1000 : 0);
+  const elsewhere = item.chatId !== playback.openChatId;
   const elapsedLabel = formatMediaTime(playback.currentTime);
   const durationLabel = duration > 0 ? formatMediaTime(duration) : "--:--";
 
@@ -490,7 +655,24 @@ export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } 
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
-              <div className="truncate text-sm font-semibold text-[color:var(--kub-text)]">{item.title}</div>
+              {elsewhere ? (
+                // Telegram's player bar takes you to the message's chat: the
+                // title is the way back (D-313).
+                <button
+                  type="button"
+                  data-testid="chat-media-playback-source"
+                  onClick={() => void safeOpenChat(item.chatId, {
+                    unavailableMessage: "Чат недоступен или был удалён.",
+                    unavailableTitle: "Чат недоступен",
+                  })}
+                  className="truncate text-left text-sm font-semibold text-[color:var(--kub-text)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+                  title="Открыть чат с этим сообщением"
+                >
+                  {item.title}
+                </button>
+              ) : (
+                <div className="truncate text-sm font-semibold text-[color:var(--kub-text)]">{item.title}</div>
+              )}
               {item.isStaged && (
                 <span className="shrink-0 rounded-full bg-[var(--kub-surface-3)] px-2 py-0.5 text-[12px] font-medium text-[color:var(--kub-muted)]">
                   предпросмотр
@@ -589,6 +771,17 @@ export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } 
       </div>
     </div>
   );
+}
+
+/**
+ * The bar over the chat list while a voice message plays with no chat open
+ * (D-313) — Telegram keeps its player there. Its own component so that only it
+ * follows the playback's many updates; the list does not subscribe.
+ */
+export function ListPlaybackBar() {
+  const playback = useChatMediaPlayback();
+  if (playback.openChatId !== null) return null;
+  return <ChatMediaPlaybackBar compact />;
 }
 
 export function VideoCircleProgressRing({

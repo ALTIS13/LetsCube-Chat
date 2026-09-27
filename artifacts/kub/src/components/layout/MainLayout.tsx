@@ -17,6 +17,7 @@ import { BotProfileOverlay } from "@/components/profile/BotProfileOverlay";
 import { useDesktopUpdate } from "@/hooks/useDesktopUpdate";
 import { useChatAddress } from "@/hooks/useChatAddress";
 import { cn } from "@/lib/utils";
+import { AppMediaPlaybackProvider } from "@/components/chat/ChatMediaPlayback";
 
 /**
  * Top-level shell. On <md, the layout is a one-pane drawer:
@@ -111,145 +112,147 @@ export function MainLayout() {
     // `h-app` is `--kub-app-height`: 100dvh as a fallback, then the installed
     // iPhone boot script and PwaRuntime fit it to the paintable innerHeight or
     // an open keyboard (D-111).
-    <div className="flex flex-col h-app w-screen overflow-hidden px-safe" data-ios-app-shell="">
-      <DesktopUpdatePill />
-      {/* Somebody calling, or being called. Outside the shell below rather than
-          inside a pane, because it belongs to no conversation: a ring reaches
-          every device the person is signed in on and has to be answerable from
-          the chat list, from another chat, and from a full-screen photograph.
+    <AppMediaPlaybackProvider>
+      <div className="flex flex-col h-app w-screen overflow-hidden px-safe" data-ios-app-shell="">
+        <DesktopUpdatePill />
+        {/* Somebody calling, or being called. Outside the shell below rather than
+            inside a pane, because it belongs to no conversation: a ring reaches
+            every device the person is signed in on and has to be answerable from
+            the chat list, from another chat, and from a full-screen photograph.
 
-          Here rather than inside the panes because on a phone it is a band in
-          the flow: the whole shell moves down by its height and nothing is
-          covered — measured, after a fixed card at 390 sat over the chat
-          header's back button, which on a phone is the only way out of a
-          conversation (D-047). It is a band at every width, not a card from
-          `md`: photographed at 1440, the fixed card sat across the
-          conversation's date separator and its «НОВЫЕ СООБЩЕНИЯ» mark. It draws
-          nothing when nothing is ringing. */}
-      <VoiceCallRing />
-      <div
-        className="flex min-h-0 flex-1 flex-col overflow-hidden"
-        data-testid="desktop-app-shell"
-        aria-hidden={updateBlocking ? true : undefined}
-        inert={updateBlocking ? true : undefined}
-      >
-        {/* No bar above the panes. Telegram Desktop's window begins with the
-            rail and ours does too since 2026-09-12: a band carrying the
-            LETSCUBE wordmark sat here, which both pushed the folder rail below
-            the window's top edge and drew the mark a second time beside the
-            one in the list's top row. The owner chose to remove it.
-
-            What it also carried has moved rather than gone: the window's own
-            buttons, its drag region and its double click to maximise are
-            `DesktopWindowChrome`, which every other surface already used, and
-            the 44px it held the panes clear of those buttons by is now
-            `--kub-window-caption`, padded out of each pane's own top through
-            `pt-window-top`. See `DesktopWindowChrome`. */}
-        {/* The running call, on a phone, where the chat list column it is
-            docked to is not on screen.
-
-            `md:hidden` and not a JavaScript width check: `useIsMobile()` reads
-            `< 768` and agrees with `md:` at every width, but it starts
-            `undefined` and resolves in an effect, so a bar gated on it would
-            appear a frame late on every phone. The store flag below is not a
-            width at all — it is whether a conversation is open — so the two
-            gates answer different questions and cannot disagree about one.
-
-            Above the panes rather than over them: this is Telegram's position
-            on a phone, it pushes the conversation down rather than covering its
-            header, and it needs no room reserved anywhere. On a computer the
-            same component is docked at the foot of the chat list column
-            instead — see `Sidebar`. Exactly one of the two is ever visible, and
-            `voice-call-bar-one-visible` in the e2e pins that. */}
-        {isMobileChatOpen && (
-          <div className="md:hidden">
-            <VoiceCallBar placement="top" />
-            {/* The other band, for a conversation running on another of this
-                person's devices — the state this whole feature exists for,
-                since the device being picked up is usually the phone. At most
-                one of the two is drawn; the rule is in
-                `lib/voiceElsewhere.ts`. */}
-            <VoiceElsewhereBar placement="top" />
-          </div>
-        )}
-
+            Here rather than inside the panes because on a phone it is a band in
+            the flow: the whole shell moves down by its height and nothing is
+            covered — measured, after a fixed card at 390 sat over the chat
+            header's back button, which on a phone is the only way out of a
+            conversation (D-047). It is a band at every width, not a card from
+            `md`: photographed at 1440, the fixed card sat across the
+            conversation's date separator and its «НОВЫЕ СООБЩЕНИЯ» mark. It draws
+            nothing when nothing is ringing. */}
+        <VoiceCallRing />
         <div
-          // No reservation here, deliberately. Padding on this box shrinks the
-          // panes and leaves a band of the application's own ground under the
-          // capsule — the bar gone and its hole still there, in the shape of
-          // the bar. The owner saw exactly that on 2026-09-12. The room
-          // belongs INSIDE the scroller instead, as end padding, so content
-          // passes under the capsule and is seen around it.
-          // `relative` for the resizer, which hangs off the region's right
-          // border rather than standing between the panes as a column of its
-          // own. See `ChatListResizer`.
-          className="relative flex flex-1 overflow-hidden"
-          data-kub-panes=""
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
+          data-testid="desktop-app-shell"
+          aria-hidden={updateBlocking ? true : undefined}
+          inert={updateBlocking ? true : undefined}
         >
+          {/* No bar above the panes. Telegram Desktop's window begins with the
+              rail and ours does too since 2026-09-12: a band carrying the
+              LETSCUBE wordmark sat here, which both pushed the folder rail below
+              the window's top edge and drew the mark a second time beside the
+              one in the list's top row. The owner chose to remove it.
+
+              What it also carried has moved rather than gone: the window's own
+              buttons, its drag region and its double click to maximise are
+              `DesktopWindowChrome`, which every other surface already used, and
+              the 44px it held the panes clear of those buttons by is now
+              `--kub-window-caption`, padded out of each pane's own top through
+              `pt-window-top`. See `DesktopWindowChrome`. */}
+          {/* The running call, on a phone, where the chat list column it is
+              docked to is not on screen.
+
+              `md:hidden` and not a JavaScript width check: `useIsMobile()` reads
+              `< 768` and agrees with `md:` at every width, but it starts
+              `undefined` and resolves in an effect, so a bar gated on it would
+              appear a frame late on every phone. The store flag below is not a
+              width at all — it is whether a conversation is open — so the two
+              gates answer different questions and cannot disagree about one.
+
+              Above the panes rather than over them: this is Telegram's position
+              on a phone, it pushes the conversation down rather than covering its
+              header, and it needs no room reserved anywhere. On a computer the
+              same component is docked at the foot of the chat list column
+              instead — see `Sidebar`. Exactly one of the two is ever visible, and
+              `voice-call-bar-one-visible` in the e2e pins that. */}
+          {isMobileChatOpen && (
+            <div className="md:hidden">
+              <VoiceCallBar placement="top" />
+              {/* The other band, for a conversation running on another of this
+                  person's devices — the state this whole feature exists for,
+                  since the device being picked up is usually the phone. At most
+                  one of the two is drawn; the rule is in
+                  `lib/voiceElsewhere.ts`. */}
+              <VoiceElsewhereBar placement="top" />
+            </div>
+          )}
+
           <div
-            // The whole left region: the 72pt folder rail and the chat list
-            // beside it, both inside the one sheet of glass `Sidebar` paints.
-            // The resizer measures from this box's left edge, so the rail's
-            // width is already in the arithmetic.
-            //
-            // The 360/380/400 breakpoint triple that used to be here is gone.
-            // A person sets the width by dragging and it is remembered;
-            // `--kub-chat-list-width` carries it, written straight onto the
-            // document by `ChatListResizer` so a drag costs no React render.
-            data-kub-left-region=""
-            className={cn(
-              // No z-index here on purpose. An earlier revision gave this
-              // column `z-10` so the sidebar's shadow would fall on the chat
-              // pane; that made the column a stacking context, and every dialog
-              // the sidebar opens — settings, new chat, folders — was clamped
-              // inside it and rendered underneath the top bar. The shadow is
-              // not worth that. `Sidebar` paints its material from a positioned
-              // layer, which already draws over the non-positioned pane beside
-              // it.
-              "kub-left-region h-full flex-shrink-0 flex-col border-r border-[color:var(--kub-border-color)]",
-              "md:flex",
-              // No `w-full` here. A utility beats a class in `@layer
-              // components` (rule 10), so `w-full` silently won over
-              // `.kub-left-region`'s width and the column stayed 1367px wide
-              // through every drag — measured. The width is the class's, at
-              // both widths.
-              isMobileChatOpen ? "hidden" : "flex",
-            )}
+            // No reservation here, deliberately. Padding on this box shrinks the
+            // panes and leaves a band of the application's own ground under the
+            // capsule — the bar gone and its hole still there, in the shape of
+            // the bar. The owner saw exactly that on 2026-09-12. The room
+            // belongs INSIDE the scroller instead, as end padding, so content
+            // passes under the capsule and is seen around it.
+            // `relative` for the resizer, which hangs off the region's right
+            // border rather than standing between the panes as a column of its
+            // own. See `ChatListResizer`.
+            className="relative flex flex-1 overflow-hidden"
+            data-kub-panes=""
           >
-            <Sidebar />
+            <div
+              // The whole left region: the 72pt folder rail and the chat list
+              // beside it, both inside the one sheet of glass `Sidebar` paints.
+              // The resizer measures from this box's left edge, so the rail's
+              // width is already in the arithmetic.
+              //
+              // The 360/380/400 breakpoint triple that used to be here is gone.
+              // A person sets the width by dragging and it is remembered;
+              // `--kub-chat-list-width` carries it, written straight onto the
+              // document by `ChatListResizer` so a drag costs no React render.
+              data-kub-left-region=""
+              className={cn(
+                // No z-index here on purpose. An earlier revision gave this
+                // column `z-10` so the sidebar's shadow would fall on the chat
+                // pane; that made the column a stacking context, and every dialog
+                // the sidebar opens — settings, new chat, folders — was clamped
+                // inside it and rendered underneath the top bar. The shadow is
+                // not worth that. `Sidebar` paints its material from a positioned
+                // layer, which already draws over the non-positioned pane beside
+                // it.
+                "kub-left-region h-full flex-shrink-0 flex-col border-r border-[color:var(--kub-border-color)]",
+                "md:flex",
+                // No `w-full` here. A utility beats a class in `@layer
+                // components` (rule 10), so `w-full` silently won over
+                // `.kub-left-region`'s width and the column stayed 1367px wide
+                // through every drag — measured. The width is the class's, at
+                // both widths.
+                isMobileChatOpen ? "hidden" : "flex",
+              )}
+            >
+              <Sidebar />
+            </div>
+
+            {/* Not gated on `isMobileChatOpen`: on a computer both panes are on
+                screen with a chat open and the handle has to stay. It hides
+                itself below `md`, where there is one pane and nothing to drag. */}
+            <ChatListResizer />
+
+            <div
+              className={cn(
+                "flex-1 h-full overflow-hidden",
+                isMobileChatOpen ? "flex" : "hidden md:flex",
+              )}
+            >
+              {selectedChatId ? <ChatWindow chatId={selectedChatId} /> : <WelcomeScreen />}
+            </div>
           </div>
 
-          {/* Not gated on `isMobileChatOpen`: on a computer both panes are on
-              screen with a chat open and the handle has to stay. It hides
-              itself below `md`, where there is one pane and nothing to drag. */}
-          <ChatListResizer />
-
-          <div
-            className={cn(
-              "flex-1 h-full overflow-hidden",
-              isMobileChatOpen ? "flex" : "hidden md:flex",
-            )}
-          >
-            {selectedChatId ? <ChatWindow chatId={selectedChatId} /> : <WelcomeScreen />}
-          </div>
+          {/* Absolutely placed against this column, which is why the column is
+              `relative`. Not against the viewport: a `fixed` capsule would
+              ignore the column entirely, and this product has already been
+              bitten by a stacking context clamping what a pane opens. */}
+          {!isMobileChatOpen && mobileSection !== "profile" && <BottomNav />}
         </div>
-
-        {/* Absolutely placed against this column, which is why the column is
-            `relative`. Not against the viewport: a `fixed` capsule would
-            ignore the column entirely, and this product has already been
-            bitten by a stacking context clamping what a pane opens. */}
-        {!isMobileChatOpen && mobileSection !== "profile" && <BottomNav />}
+        {/* A person, opened from a row or a face rather than from a conversation
+            (D-283). Mounted on the shell and not inside a pane: the chat list
+            lives in one column and the conversation in the other, and the whole
+            point of this surface is that asking who somebody is does not move
+            the reader between them. `KubModal` portals to the body, so its place
+            in this tree costs nothing but its lifetime. */}
+        <UserProfileOverlay />
+        {/* The other card. Only one is ever open; the store closes each when
+            the other opens, because they occupy the same place (D-263). */}
+        <BotProfileOverlay />
       </div>
-      {/* A person, opened from a row or a face rather than from a conversation
-          (D-283). Mounted on the shell and not inside a pane: the chat list
-          lives in one column and the conversation in the other, and the whole
-          point of this surface is that asking who somebody is does not move
-          the reader between them. `KubModal` portals to the body, so its place
-          in this tree costs nothing but its lifetime. */}
-      <UserProfileOverlay />
-      {/* The other card. Only one is ever open; the store closes each when
-          the other opens, because they occupy the same place (D-263). */}
-      <BotProfileOverlay />
-    </div>
+    </AppMediaPlaybackProvider>
   );
 }
