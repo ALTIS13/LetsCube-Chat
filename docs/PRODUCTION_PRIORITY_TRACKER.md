@@ -31,10 +31,15 @@ old physical-Safari symptom is fixed. Hashed-asset retention source commit
 atomically adds the new release's files to a
 persistent `/assets/` volume without changing old bytes. Focused tests and an
 isolated A-to-B Docker run on the production host passed, including matching
-SHA-256 for both files. The live web app still has no storage mount, so
-retention is **not active**. Coolify write API and the available local token
-returned 401; the browser permission check also blocked UI access. Activation
-requires a working Coolify write credential or owner-attached volume. See the
+SHA-256 for both files. On 2026-09-27 the Coolify owner-team write token was
+renewed, the live Dockerfile app gained a named `/assets/` volume, and two
+same-source redeploys finished with one healthy container. The mount guard is
+active. The mounted current JS and HTTPS response have the same SHA-256 and
+immutable cache headers; a missing asset is 404. The running MCP process still
+has its old environment until Codex restarts, but the direct API works. The
+**remaining production proof** is a subsequent build with a different hashed
+entry serving both old and new bytes. The browser permission check still blocks
+production UI automation. See the
 [activation and rollback runbook](operations/web-asset-retention.md). iOS Safari
 diagnosis remains with the [PWA owner](operations/ios-pwa-viewport-validation.md). A
 production guest browser smoke was unavailable because the browser permission

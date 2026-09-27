@@ -198,11 +198,13 @@ sole healthy web image `c7c220f3`. After a missing entry/boot error, explicit
 retry asks for a fresh document URL and removes its temporary nonce before the
 app starts. A stale-HTML/retired-entry fixture passed in dev and built bundles
 on desktop/mobile Chromium and mobile WebKit. This is not a physical Safari
-fix verdict. The Dockerfile still discards prior hashed assets on deploy; a
-durable asset-retention implementation is deployed at `242be7f1` and passed a
-two-release isolated Docker-volume check. The live Coolify web resource has no
-volume yet; its write API token currently returns 401. Attach and verify a
-named volume before claiming this protection is live. See the
+fix verdict. A durable asset-retention implementation is deployed at `242be7f1` and passed a
+two-release isolated Docker-volume check. On 2026-09-27 the Coolify owner-team
+write token was renewed; the live Dockerfile app gained a named `/assets/`
+volume and the mandatory mount guard. Two same-source redeploys finished with
+one healthy container and matching mounted/HTTPS asset SHA-256. The running MCP
+process still holds its old environment until a Codex restart; the direct API
+works. Retention across two different production builds remains unproved. See the
 [runbook](operations/web-asset-retention.md) and
 [tracker](PRODUCTION_PRIORITY_TRACKER.md) for the activation boundary.
 

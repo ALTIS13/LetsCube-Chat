@@ -1,9 +1,10 @@
 # Web hashed-asset retention
 
-Status: source commit `242be7f1` deployed to the sole healthy web image;
-production storage attachment pending. Its entrypoint script matches source
-SHA-256 `fdc3a58874155fc99a315a9027f1ca3cc03fc5d00f018a27ec760a93db04fcbe`.
-The running container still has zero mounts, so this is not active retention.
+Status: the named production volume is attached and the startup mount guard is
+active in the sole healthy web container. The source is commit `fa9af510`;
+the entrypoint script matches source SHA-256
+`fdc3a58874155fc99a315a9027f1ca3cc03fc5d00f018a27ec760a93db04fcbe`.
+Retention across two distinct production builds is not yet proven.
 
 The live `letscube-web` Coolify resource is a Dockerfile application, not
 `docs/deploy/docker-compose.coolify.yml`. Each image contains only its own
@@ -53,8 +54,24 @@ an already-running tab's old chunks available.
    `https://app.letscube.ru`; both must return exact bytes and immutable cache
    headers. Do not declare retention active before this two-build proof.
 
-The Coolify write connector must authenticate before steps 3 and 5 can be
-automated. A source deploy alone is not evidence that retention is active.
+On 2026-09-27 the owner-team Coolify write token was renewed with `read/write`
+scope and a 90-day expiration. The running MCP process still holds its old
+environment; use the verified direct API until the Codex app restarts. The
+token value is stored only in the Windows user environment, not this repo.
+
+Steps 3-5 were performed against the Dockerfile application at `fa9af510`.
+Coolify storage `l64kyyu1sysev2izzjjbizhe-letscube-web-assets` has an empty
+host path, destination `/usr/share/nginx/html/assets`, and the preview suffix
+enabled. Deployment `dz476mhuvho580ea1guxv3m6` finished with the named
+volume mounted read-write. The entry asset `/assets/index-Dd_fcDhO.js` had
+SHA-256 `c78a76308370bacf85afa1200ddc0959383559a1c5fa260441296b84f5280533`
+both in the mounted directory and over HTTPS; a missing asset returned 404.
+After setting `LETSCUBE_REQUIRE_ASSET_VOLUME=1`, deployment
+`f7e1ifrmu2ml1r3nkka9gyq2` finished with one healthy replacement container,
+the same mounted volume and guard, and the same asset hash and immutable HTTPS
+cache header. The prior container was removed. The remaining acceptance gate is
+an actual subsequent web build with a different hashed entry: verify that both
+old and new asset URLs remain byte-identical to their respective image files.
 
 ## Failure and rollback
 
