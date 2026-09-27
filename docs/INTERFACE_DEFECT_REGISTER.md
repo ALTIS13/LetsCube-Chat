@@ -23786,7 +23786,7 @@ and what remains is the header's add button — which sat under the status bar
 contacts. So the tester was left with the filter. Fixed with D-317; the
 regression test adds a second contact with one already present.
 
-## D-316 `[ ]` A person's profile has no way to add them to contacts
+## D-316 `[x]` A person's profile has no way to add them to contacts
 
 2026-09-27, tester: "зайдя в твой профиль — сохранить как контакт не могу".
 Measured: `useUserContacts` is read only by `ContactsPanel`; no profile surface
@@ -23794,6 +23794,15 @@ offers it. Telegram's profile has «Добавить в контакты» (and 
 «Удалить контакт» once added); Discord's has «Добавить в друзья» on the card.
 To add on the full card first, since `tests/unit/profile-tier.test.mts` requires
 everything on the compact card to exist on the full one.
+
+Fixed the same evening: the full card now offers «Добавить в контакты» under
+«Открыть чат» (Discord's placement beside «Message»), and once the person is a
+contact says «В контактах» with nothing to press. It is drawn only after the
+reader's list is known, never on one's own card, and not in a group's member
+panel, which passes nothing. Two checks in `profile-two-tier.spec.ts` (add
+from the card, then the saved state; a saved contact shown as one) were red
+before and are green on Chromium 1440, WebKit and Chromium 390; the whole file
+36/36. Frames at 390 and 1440 in both themes were looked at.
 
 ## D-317 `[x]` On the installed iPhone the contacts header sits under the status bar
 

@@ -24,6 +24,7 @@ import { useViewportWidth } from "@/hooks/useViewportWidth";
 import { getUserPresenceState } from "@/lib/presence";
 import { usePresenceNow } from "@/hooks/usePresenceNow";
 import { useCreateChat } from "@/hooks/useCreateChat";
+import { useUserContacts } from "@/hooks/useUserContacts";
 import { showAppAlert } from "@/lib/appDialogs";
 import { CHAT_OPEN_FAILED } from "@/lib/plainMessages";
 
@@ -128,6 +129,20 @@ export function UserProfileOverlay() {
     );
     return built.shown.length ? built : null;
   }, [badges.rows, tier, userId]);
+
+  // D-316: the full card is where a person can be kept. The list is the
+  // reader's own and is cached for the Contacts screen as well, so opening a
+  // card does not cost a second query when that screen has already read it.
+  const contacts = useUserContacts({ enabled: Boolean(userId) && tier === "full" });
+  const savedContact = Boolean(userId && contacts.list.data?.some((row) => row.contact_user_id === userId));
+  const addContact = useCallback(async () => {
+    if (!userId) return;
+    try {
+      await contacts.add.mutateAsync(userId);
+    } catch {
+      showAppAlert("Не удалось добавить контакт. Повторите попытку.", "Контакты");
+    }
+  }, [contacts.add, userId]);
 
   const openChat = useCallback(async () => {
     if (!userId) return;
@@ -237,6 +252,9 @@ export function UserProfileOverlay() {
           onOpenMutualChat={(chatId) => void openMutualChat(chatId)}
           opening={opening}
           onOpenChat={() => void openChat()}
+          contact={contacts.list.isSuccess
+            ? { saved: savedContact, adding: contacts.add.isPending, onAdd: () => void addContact() }
+            : null}
         />
       )}
     </div>

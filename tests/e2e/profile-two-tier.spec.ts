@@ -99,11 +99,14 @@ function seed(filler = 0): { chats: Row[]; memberships: Row[]; messages: Row[] }
   };
 }
 
-async function boot(page: Page, filler = 0) {
+type Rest = Parameters<typeof openFixture>[1]["rest"];
+
+async function boot(page: Page, filler = 0, rest?: Rest) {
   return openFixture(page, {
     me: ME,
     people: [ANNA],
     ...seed(filler),
+    rest,
     rpc: (name, body) => {
       if (name === "search_chat_messages") return missingFunction(name);
       if (name === "profile_badges") return { body: BADGES };
@@ -527,5 +530,59 @@ test.describe("the person behind the conversation, on two surfaces", () => {
     const faces = page.getByTestId("message-author-avatar");
     // Her message is the only one, and she is a person.
     await expect(faces).toHaveCount(1);
+  });
+});
+
+
+/**
+ * D-316, from a tester on 2026-09-27: "зайдя в твой профиль — сохранить как
+ * контакт не могу". No profile surface offered it; contacts could only be added
+ * from the Contacts screen. Telegram's profile says «Добавить в контакты» until
+ * the person is one; Discord's card puts «Add Friend» beside «Message» and then
+ * shows the state. So: the full card offers it, and afterwards says so.
+ */
+test.describe("adding the person to contacts from their card", () => {
+  test.beforeEach(async ({ request }) => {
+    await requireFixtureServer(request);
+  });
+
+  test("the full card adds a person who is not a contact, then says they are one", async ({ page }) => {
+    const contacts: Row[] = [];
+    const fixture = await boot(page, 0, ({ resource, method, body }) => {
+      if (resource !== "user_contacts") return undefined;
+      if (method === "GET") return { status: 200, body: [...contacts] };
+      if (method === "POST") {
+        contacts.push({ ...(body as Row), alias: null, created_at: AT });
+        return { status: 201, body: [] };
+      }
+      return undefined;
+    });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const menu = await openRowMenu(page, ANNA.full_name);
+    await menu.getByText("Открыть профиль", { exact: true }).click();
+    const overlay = page.getByTestId("user-profile-overlay");
+    await expect(overlay).toHaveAttribute("data-profile-surface", "full");
+
+    const add = overlay.getByTestId("member-card-add-contact");
+    await expect(add).toHaveText("Добавить в контакты");
+    await add.click();
+    await expect.poll(() => fixture.restCalls("user_contacts", "POST").length).toBe(1);
+    expect(contacts[0]).toMatchObject({ owner_user_id: ME.id, contact_user_id: ANNA.id });
+    await expect(overlay.getByTestId("member-card-contact-saved")).toHaveText("В контактах");
+    await expect(add).toHaveCount(0);
+  });
+
+  test("a person already in contacts is shown as one, with nothing to press", async ({ page }) => {
+    await boot(page, 0, ({ resource, method }) => {
+      if (resource !== "user_contacts") return undefined;
+      if (method === "GET") return { status: 200, body: [{ owner_user_id: ME.id, contact_user_id: ANNA.id, alias: null, created_at: AT }] };
+      return undefined;
+    });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const menu = await openRowMenu(page, ANNA.full_name);
+    await menu.getByText("Открыть профиль", { exact: true }).click();
+    const overlay = page.getByTestId("user-profile-overlay");
+    await expect(overlay.getByTestId("member-card-contact-saved")).toHaveText("В контактах");
+    await expect(overlay.getByTestId("member-card-add-contact")).toHaveCount(0);
   });
 });

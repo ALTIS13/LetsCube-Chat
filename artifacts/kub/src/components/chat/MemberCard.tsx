@@ -75,6 +75,7 @@ export function MemberCard({
   onOpenChat,
   mutualChats = null,
   onOpenMutualChat,
+  contact = null,
 }: {
   member: MemberRow;
   isSelf: boolean;
@@ -119,6 +120,15 @@ export function MemberCard({
   mutualChats?: MutualChats | null;
   /** Opens one of them. Absent means the rows are not pressable. */
   onOpenMutualChat?: (chatId: string) => void;
+  /**
+   * The reader's contacts, as far as this person goes (D-316). Telegram's
+   * profile offers «Добавить в контакты» until they are one; Discord's card
+   * puts the same act beside «Message» and then shows the state. Absent where
+   * the card is not the place for it — inside a group's own panel — and while
+   * the list is still unknown, so nobody is offered to add someone who
+   * already is a contact.
+   */
+  contact?: { saved: boolean; adding: boolean; onAdd: () => void } | null;
 }) {
   return (
     <div
@@ -269,7 +279,7 @@ export function MemberCard({
           )}
         </div>
       )}
-      <div className="mt-6 w-full max-w-xs">
+      <div className="mt-6 flex w-full max-w-xs flex-col gap-2">
         <KubButton
           variant="primary"
           fullWidth
@@ -284,6 +294,26 @@ export function MemberCard({
         >
           Открыть чат
         </KubButton>
+        {contact && !isSelf && (contact.saved ? (
+          <p
+            className="flex min-h-9 items-center justify-center gap-1.5 text-sm text-[color:var(--kub-muted)]"
+            data-testid="member-card-contact-saved"
+          >
+            <KubIcon name="check" size={14} />
+            В контактах
+          </p>
+        ) : (
+          <KubButton
+            variant="secondary"
+            fullWidth
+            loading={contact.adding}
+            leftIcon={<KubIcon name="userPlus" size={14} />}
+            onClick={contact.onAdd}
+            data-testid="member-card-add-contact"
+          >
+            Добавить в контакты
+          </KubButton>
+        ))}
       </div>
     </div>
   );
