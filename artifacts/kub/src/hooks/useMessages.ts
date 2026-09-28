@@ -20,13 +20,9 @@ import {
   type ListReadProgress,
 } from "@/lib/listReadState";
 import { scheduleMarkChatDelivered, scheduleMarkChatRead } from "@/lib/deliveryReceipts";
-import {
-  createMessageSendTimeoutContext,
-  getMessageAckUserMessage,
-  sanitizeMessageAckError,
-} from "@/lib/messageAckError";
 import { FORWARD_RPC, forwardInsertPayload, forwardRpcArgs, type ForwardMessageResult } from "@/lib/messageForward";
 import { MESSAGE_SELECT_WITH_JOINS } from "@/lib/messageProjection";
+import { appOutbox } from "@/lib/outbox/appOutbox";
 import { buildOptimisticMessage, type SendableMessageType } from "@/lib/optimisticMessage";
 import {
   REACTION_LIMIT_RPC,
@@ -60,7 +56,6 @@ import {
 } from "@/lib/deletedMessages";
 
 const MESSAGE_PAGE_SIZE = 100;
-const SEND_ACK_TIMEOUT_MS = 12_000;
 
 
 type FetchMessagesOptions = {
@@ -130,7 +125,6 @@ interface SendMessageAck {
   timedOut: boolean;
 }
 
-type TimeoutResult = { timedOut: true };
 
 type EnsureMessageLoadedResult =
   | { ok: true; message: MessageWithSender }
@@ -677,21 +671,6 @@ export function useMessages(
     return { ok: true, message: visibleMessage };
   }, [addMessage, rememberHiddenMessageIds, supabase]);
 
-  const fetchMessageByClientId = useCallback(async (
-    targetChatId: string,
-    targetUserId: string,
-    clientMessageId: string,
-  ): Promise<MessageWithSender | null> => {
-    const { data } = await supabase
-      .from("messages")
-      .select(MESSAGE_SELECT_WITH_JOINS)
-      .eq("chat_id", targetChatId)
-      .eq("user_id", targetUserId)
-      .eq("client_message_id", clientMessageId)
-      .maybeSingle();
-    return data ? data as unknown as MessageWithSender : null;
-  }, [supabase]);
-
   useEffect(() => {
     if (!chatId) return;
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -1116,94 +1095,9 @@ export function useMessages(
     return () => document.removeEventListener("visibilitychange", markReadWhenVisible);
   }, [chatId, userId, supabase]);
 
-  const insertMessageWithAck = useCallback(async (
-    input: Required<Pick<SendMessageInput, "type" | "content">> & {
-      targetChatId: string;
-      userId: string;
-      topicId: string | null;
-      mediaBucket: string | null;
-      mediaPath: string | null;
-      mediaUrl: string | null;
-      replyToId: string | null;
-      forwardedFromId: string | null;
-      clientMessageId: string;
-      clientSentAt: string;
-      mediaMetadata?: Json | null;
-    },
-  ): Promise<SendMessageAck> => {
-    const basePayload = {
-      chat_id: input.targetChatId,
-      topic_id: input.topicId,
-      user_id: input.userId,
-      content: input.content,
-      type: input.type,
-      media_bucket: input.mediaBucket,
-      media_path: input.mediaPath,
-      media_url: input.mediaUrl,
-      reply_to_id: input.replyToId,
-      forwarded_from_id: input.forwardedFromId,
-      client_message_id: input.clientMessageId,
-      client_sent_at: input.clientSentAt,
-    };
-    const payload = input.mediaMetadata === undefined
-      ? basePayload
-      : { ...basePayload, media_metadata: input.mediaMetadata };
-
-    let insertPromise = supabase
-      .from("messages")
-      .insert(payload)
-      .select(MESSAGE_SELECT_WITH_JOINS)
-      .single();
-
-    let result = await withTimeout(insertPromise, SEND_ACK_TIMEOUT_MS);
-    if (isTimeoutResult(result)) {
-      return { data: null, error: null, timedOut: true };
-    }
-
-    if (result.error && input.mediaMetadata !== undefined && isMissingMediaMetadataError(result.error)) {
-      insertPromise = supabase
-        .from("messages")
-        .insert(basePayload)
-        .select(MESSAGE_SELECT_WITH_JOINS)
-        .single();
-      result = await withTimeout(insertPromise, SEND_ACK_TIMEOUT_MS);
-      if (isTimeoutResult(result)) {
-        return { data: null, error: null, timedOut: true };
-      }
-    }
-
-    if (result.data) {
-      return { data: result.data as unknown as MessageWithSender, error: null, timedOut: false };
-    }
-
-    const existing = await fetchMessageByClientId(input.targetChatId, input.userId, input.clientMessageId);
-    return { data: existing, error: result.error, timedOut: false };
-  }, [fetchMessageByClientId, supabase]);
-
-  /**
-   * Moves the chat's `updated_at` up to a message that was just confirmed.
-   *
-   * Not awaited, and nothing waits for it. The send path used to await it before
-   * resolving, so each attachment of a send waited one more round trip before
-   * the next could be inserted, and a slow `chats` request held the whole send.
-   * Nothing depends on it landing first:
-   * - no trigger writes `chats.updated_at` on a message insert, and only an
-   *   owner or an admin may write it (`Chat admins update chat`), so for any
-   *   other member this request was already a no-op;
-   * - `public.chats` is not in the realtime publication (see `useChats`), so no
-   *   client hears it land;
-   * - the list is ordered by each chat's last message (`sortChatsForSidebar`),
-   *   and this client put that message in the store before this is called.
-   * `.lt` keeps two of these that land out of order from moving it back.
-   */
-  const touchChatUpdatedAt = useCallback((targetChatId: string, at: string) => {
-    void supabase
-      .from("chats")
-      .update({ updated_at: at })
-      .eq("id", targetChatId)
-      .lt("updated_at", at)
-      .then(() => undefined, () => undefined);
-  }, [supabase]);
+  // The insert, its acknowledgement and the chat's `updated_at` live in the
+  // outbox since tracker item 52 (`lib/outbox/appOutbox.ts`): every row is
+  // kept on the device before its first attempt, and a retry is the same code.
 
   const sendLocalMessage = useCallback(async (input: SendMessageInput) => {
     const user = currentUserRef.current;
@@ -1236,64 +1130,42 @@ export function useMessages(
     else addMessage(activeChatId, optimistic);
     updateChatLastMessage(activeChatId, optimistic);
 
-    const ack = await insertMessageWithAck({
-      targetChatId: activeChatId,
+    // Tracker item 52: onto the device first, then out. Offline the bubble
+    // keeps its clock and the outbox sends it, in order, once the connection
+    // answers — after a restart too. Red is only for a refusal.
+    const outcome = await appOutbox.enqueue({
+      clientMessageId,
       userId: user.id,
+      chatId: activeChatId,
+      topicId: messageTopicId,
       type: input.type,
-      content: trimmedContent,
+      content: trimmedContent ?? null,
+      replyToId: input.replyToId ?? null,
+      forwardedFromId: input.forwardedFromId ?? null,
       mediaBucket: input.mediaBucket ?? null,
       mediaPath: input.mediaPath ?? null,
       mediaUrl: input.mediaUrl ?? null,
-      replyToId: input.replyToId ?? null,
-      forwardedFromId: input.forwardedFromId ?? null,
-      topicId: messageTopicId,
-      clientMessageId,
+      ...(input.mediaMetadata === undefined ? {} : { mediaMetadata: input.mediaMetadata }),
       clientSentAt,
-      mediaMetadata: input.mediaMetadata,
+      tempId,
+      attempts: 0,
+      nextAttemptAt: 0,
     });
 
-    if (ack.data) {
-      replaceMessage(activeChatId, tempId, ack.data);
-      updateChatLastMessage(activeChatId, ack.data);
-      touchChatUpdatedAt(activeChatId, ack.data.created_at);
+    if (outcome.kind === "sent") {
       // A send that went through is the only thing that can prove a refusal is
       // over, so it is what clears it.
       setActionRefusal(null);
-      return ack.data;
+      return outcome.row;
     }
 
-    if (ack.timedOut) {
-      reportError(
-        new Error("message_send_ack_timeout"),
-        createMessageSendTimeoutContext(input.type, Boolean(input.mediaUrl)),
-      );
-      const checkingMessage: MessageWithSender = {
-        ...optimistic,
-        pending: false,
-        checking: true,
-        failed: false,
-        send_error: null,
-      };
-      replaceMessage(activeChatId, tempId, checkingMessage);
-      updateChatLastMessage(activeChatId, checkingMessage);
-      await delay(1_200);
-      const existing = await fetchMessageByClientId(activeChatId, user.id, clientMessageId);
-      if (existing) {
-        replaceMessage(activeChatId, tempId, existing);
-        updateChatLastMessage(activeChatId, existing);
-        touchChatUpdatedAt(activeChatId, existing.created_at);
-        return existing;
-      }
-      const failedMessage: MessageWithSender = {
-        ...optimistic,
-        pending: false,
-        checking: false,
-        failed: true,
-        send_error: "Не удалось подтвердить отправку. Проверьте соединение и повторите.",
-      };
-      replaceMessage(activeChatId, tempId, failedMessage);
-      updateChatLastMessage(activeChatId, failedMessage);
-      return null;
+    if (outcome.kind === "waiting") {
+      // Committed rather than failed: it is on the device and will go. The
+      // callers that ask whether a send was accepted — the attachment queue
+      // above all, which would otherwise mark a file that is only waiting for
+      // the network as failed — read the waiting row as yes.
+      const waiting = (useAppStore.getState().messages[activeChatId] ?? []).find((message) => message.id === tempId);
+      return waiting ?? optimistic;
     }
 
     // A blocked sender's insert fails with a row-level-security error, and the
@@ -1301,33 +1173,16 @@ export function useMessages(
     // which describes the machine's answer rather than what happened. The one
     // sentence the product says for this is `BLOCKED_SEND_REFUSAL`, and it is
     // decided by chat type and SQLSTATE alone (`blockedSendRefusal`), never by
-    // reading the Postgres text onto the screen.
+    // reading the Postgres text onto the screen. The outbox has already turned
+    // the bubble red with the same sentence (`refusalSentence`).
     const refusal = blockedSendRefusal({
       chatType: useAppStore.getState().chats.find((item) => item.id === activeChatId)?.type ?? null,
-      error: ack.error,
+      error: outcome.error as Parameters<typeof blockedSendRefusal>[0]["error"],
     });
     setActionRefusal(refusal);
-    const friendlySendError = refusal ?? getMessageAckUserMessage(ack.error);
-    const safeAckError = sanitizeMessageAckError(ack.error);
-    console.error("[messages] send failed.", safeAckError.code, safeAckError.name);
-    reportError(safeAckError.error, {
-      category: "message_send_failed",
-      errorCode: safeAckError.code,
-      errorName: safeAckError.name,
-      type: input.type,
-      hasMedia: Boolean(input.mediaUrl),
-    });
-    const failedMessage: MessageWithSender = {
-      ...optimistic,
-      pending: false,
-      checking: false,
-      failed: true,
-      send_error: friendlySendError,
-    };
-    replaceMessage(activeChatId, tempId, failedMessage);
-    updateChatLastMessage(activeChatId, failedMessage);
+    console.error("[messages] send refused.");
     return null;
-  }, [addMessage, fetchMessageByClientId, insertMessageWithAck, replaceMessage, touchChatUpdatedAt, updateChatLastMessage]);
+  }, [addMessage, replaceMessage, updateChatLastMessage]);
 
   const sendMessage = useCallback(async (content: string, replyToId?: string) => {
     return sendLocalMessage({
@@ -1395,6 +1250,10 @@ export function useMessages(
   const discardLocalMessage = useCallback((messageId: string) => {
     const activeChatId = chatIdRef.current;
     if (!activeChatId) return;
+    // Out of the outbox too, or it would go the moment the connection answers.
+    const held = (useAppStore.getState().messages[activeChatId] ?? []).find((message) => message.id === messageId);
+    const clientId = held?.client_message_id ?? (messageId.startsWith("tmp:") ? messageId.slice(4) : null);
+    if (clientId) void appOutbox.discard(clientId);
     removeMessage(activeChatId, messageId);
   }, [removeMessage]);
 
@@ -1900,27 +1759,6 @@ function needsJoinedRow(message: MessageWithSender): boolean {
   // A forward needs its source read before it can say who wrote the original.
   if (message.forwarded_from_id && !message.forwarded_from) return true;
   return Boolean(message.user_id && !message.sender);
-}
-
-function isTimeoutResult<T>(value: T | TimeoutResult): value is TimeoutResult {
-  return Boolean(value && typeof value === "object" && "timedOut" in value);
-}
-
-function isMissingMediaMetadataError(error: unknown): boolean {
-  const record = error as { code?: unknown; message?: unknown; details?: unknown } | null;
-  const text = `${String(record?.code ?? "")} ${String(record?.message ?? "")} ${String(record?.details ?? "")}`.toLowerCase();
-  return text.includes("media_metadata") && (text.includes("column") || text.includes("schema cache") || text.includes("pgrst204") || text.includes("42703"));
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T | TimeoutResult> {
-  return Promise.race<T | TimeoutResult>([
-    Promise.resolve(promise),
-    new Promise<TimeoutResult>((resolve) => window.setTimeout(() => resolve({ timedOut: true }), ms)),
-  ]);
 }
 
 function sortPinnedMessages(messages: MessageWithSender[]): MessageWithSender[] {

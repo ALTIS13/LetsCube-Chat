@@ -2556,7 +2556,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     «Telegram» without saying *which client and build*, and every «cannot» whose
     reason is the browser. Re-verdict each against the shell it actually ships in.
 
-52. `[ ]` Messages written without a connection are kept and sent when it
+52. `[~]` Messages written without a connection are kept and sent when it
     returns — tester's report, 2026-09-28 (voice notes in the owner's chat,
     read from the database and transcribed locally). Two people said the same
     on their first day: offline a message cannot be written so that it goes
@@ -2574,6 +2574,32 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     is not the network's. A design question, not the owner's: a queued message
     takes its server time when it lands, so it may move below messages that
     arrived meanwhile — Telegram shows it where it was written until it is sent.
+    **Text shipped 2026-09-28; files and voice notes next.** Every row a send
+    makes — text, and a media row once its bytes are up — goes through one
+    outbox (`lib/outbox/`): kept in IndexedDB *before* its first attempt, then
+    sent; answered «sent» it leaves the device, unanswered it keeps its clock
+    and is retried after 2, 5, 10, 30, 60 s and at once on `online`, on a
+    network change that stranded something (item 53) and on the return to the
+    app; refused — the server answered and said no — it turns red with the
+    sentence the send path always used and leaves the outbox. A chat's messages
+    go in the order they were written: a later one never overtakes an earlier
+    one still waiting. After a restart the waiting bubbles come back in their
+    conversations and go by themselves, once — the unique `client_message_id`
+    makes a retry of a landed attempt read the row back instead of writing a
+    second. «Удалить» on a waiting message takes it out of the outbox too.
+    The attachment queue reads a waiting row as accepted, so a file whose row is
+    only waiting for the network is not marked failed in the tray.
+    Evidence: `tests/unit/outbox.test.mts` (10 cases) and
+    `tests/e2e/offline-outbox.spec.ts` — offline the bubble keeps its clock and
+    no «Повторить», it goes when the browser says `online`; a reload with the
+    network still down brings it back and it is inserted once; three go in
+    order; a refusal is red at once. A mutation that reads every failure as a
+    refusal — the old behaviour — turns the first three red and leaves the
+    fourth green.
+    **Still open:** a voice note or a file whose *upload* fails still lives only
+    in memory (`lib/outgoingMedia.ts`): it keeps «Повторить» until the app
+    closes, and a restart loses it — the tester's «перезаписать вообще». Its
+    bytes go into the same database next, with the upload retried by itself.
 
 53. `[~]` The application recovers by itself when the network changes under it
     — same report. «Если меняется IP… приходится перезапускать мессенджер»:
