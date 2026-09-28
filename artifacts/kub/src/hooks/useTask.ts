@@ -10,6 +10,7 @@ import type {
   Profile,
   TaskChecklistItem,
   TaskEventWithActor,
+  TaskReminder,
   TaskWithPeople,
 } from "@/types/database";
 
@@ -22,6 +23,9 @@ export function useTask(taskId: string | null) {
   const [events, setEvents] = useState<TaskEventWithActor[]>([]);
   // Tracker item 62: the task's checklist, in its own order.
   const [checklist, setChecklist] = useState<TaskChecklistItem[]>([]);
+  // Tracker item 66: the reminders the reader set, and those set for them as
+  // the assignee — the table's policy reads nothing else.
+  const [reminders, setReminders] = useState<TaskReminder[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = useMemo(() => createClient(), []);
   const rt = useMemo(() => getRealtimeClient(), []);
@@ -35,7 +39,7 @@ export function useTask(taskId: string | null) {
     }
     bumpFetch("useTask");
     setLoading(true);
-    const [taskRes, eventsRes, checklistRes] = await Promise.all([
+    const [taskRes, eventsRes, checklistRes, remindersRes] = await Promise.all([
       supabase
         .from("tasks")
         .select(
@@ -56,6 +60,11 @@ export function useTask(taskId: string | null) {
         .select("*")
         .eq("task_id", taskId)
         .order("position", { ascending: true }),
+      supabase
+        .from("task_reminders")
+        .select("*")
+        .eq("task_id", taskId)
+        .order("remind_at", { ascending: true }),
     ]);
 
     if (taskRes.error || !taskRes.data) {
@@ -71,6 +80,7 @@ export function useTask(taskId: string | null) {
     }
     // A refused read keeps what was on screen rather than drawing an empty list.
     if (!checklistRes.error) setChecklist((checklistRes.data ?? []) as TaskChecklistItem[]);
+    if (!remindersRes.error) setReminders((remindersRes.data ?? []) as TaskReminder[]);
     setEvents(
       (eventsRes.data ?? []).map((r) => ({
         ...(r as TaskEventWithActor),
@@ -136,5 +146,5 @@ export function useTask(taskId: string | null) {
     };
   }, [taskId, rt, fetchTask]);
 
-  return { task, events, checklist, loading, refetch: fetchTask };
+  return { task, events, checklist, reminders, loading, refetch: fetchTask };
 }

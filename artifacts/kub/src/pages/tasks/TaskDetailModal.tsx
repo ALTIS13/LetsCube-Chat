@@ -36,6 +36,7 @@ import {
 } from "./taskMeta";
 import { TaskAssignModal } from "./TaskAssignModal";
 import { TaskChecklist } from "./TaskChecklist";
+import { TaskReminders } from "./TaskReminders";
 import { TaskConfirmModal } from "./TaskConfirmModal";
 import { TaskDeleteModal } from "./TaskDeleteModal";
 import { TaskFormModal } from "./TaskFormModal";
@@ -75,7 +76,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
   // task RPC knows anything about permissions (D-202, and `lib/taskActionAccess.ts`).
   const { allowed: isManagerOrAdmin } = useMatchesIsManagerOrAdmin();
   const { softDeleteTask } = useTaskSoftDelete();
-  const { task, events, checklist, loading, refetch } = useTask(taskId);
+  const { task, events, checklist, reminders, loading, refetch } = useTask(taskId);
   const {
     recurrence,
     status: recurrenceStatus,
@@ -411,6 +412,17 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
           // The person doing the work ticks it off (tracker item 62), on a
           // task still open, as `task_checklist_set_done` allows.
           canTick={canEdit || (!taskIsDeleted && isAssignee && !["confirmed", "cancelled"].includes(task.status))}
+          onChanged={refetch}
+        />
+
+        <TaskReminders
+          taskId={task.id}
+          reminders={reminders}
+          currentUserId={currentUser?.id ?? null}
+          // Whoever may hold a reminder on the task, as `task_reminder_add`
+          // asks: those who may edit it, and its assignee (tracker item 66).
+          canRemind={canEdit || (!taskIsDeleted && isAssignee && !["confirmed", "cancelled"].includes(task.status))}
+          assigneeName={task.assignee_id && !isAssignee ? task.assignee?.full_name ?? "исполнитель" : null}
           onChanged={refetch}
         />
 

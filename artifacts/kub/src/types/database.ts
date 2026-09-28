@@ -1293,6 +1293,32 @@ export interface Database {
           }
         ]
       }
+      /** Tracker item 66: `20260928190000_task_reminders.sql`. Written only through the two functions. */
+      task_reminders: {
+        Row: {
+          id: string
+          task_id: string
+          created_by: string
+          recipient: "author" | "assignee"
+          remind_at: string
+          note: string | null
+          status: "pending" | "sent" | "skipped" | "failed"
+          delivered_at: string | null
+          delivered_to: string | null
+          created_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "task_reminders_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       task_events: {
         Row: {
           id: string
@@ -1665,6 +1691,14 @@ export interface Database {
       }
       task_checklist_remove: {
         Args: { p_item_id: string }
+        Returns: void
+      }
+      task_reminder_add: {
+        Args: { p_task_id: string; p_remind_at: string; p_recipient?: "author" | "assignee"; p_note?: string | null }
+        Returns: string
+      }
+      task_reminder_remove: {
+        Args: { p_reminder_id: string }
         Returns: void
       }
       task_cancel: {
@@ -2147,6 +2181,7 @@ export type Task = Database['public']['Tables']['tasks']['Row']
 export type TaskRecurrence = Database['public']['Tables']['task_recurrences']['Row']
 export type TaskEvent = Database['public']['Tables']['task_events']['Row']
 export type TaskChecklistItem = Database['public']['Tables']['task_checklist_items']['Row']
+export type TaskReminder = Database['public']['Tables']['task_reminders']['Row']
 export type TaskRecurrenceEvent = Database['public']['Tables']['task_recurrence_events']['Row']
 export type ProfileContact = Database['public']['Tables']['profile_contacts']['Row']
 export type Notification = Database['public']['Tables']['notifications']['Row']

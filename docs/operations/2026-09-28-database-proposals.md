@@ -78,7 +78,13 @@ own edit rule for writing, and the table in the realtime publication.
 private task's contents. The rehearsal checks it against every visibility
 combination the task function knows.
 
-## 4. Reminders on a task (item 66)
+## 4. Reminders on a task (item 66) — applied 2026-09-28
+
+Approved with the rest and applied the same day, with two departures written
+out in [the rollout record](2026-09-28-owner-approved-database-changes.md): a
+reminder is read by its author and its recipient rather than by every reader
+of the task, and pg_cron in the database delivers it rather than a poll in the
+worker.
 
 **Change:** `public.task_reminders (id, task_id, remind_at, created_by,
 delivered_at)`, the same RLS as item 3, and a delivery path: the worker already

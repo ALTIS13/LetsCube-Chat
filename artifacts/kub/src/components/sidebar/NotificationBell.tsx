@@ -31,6 +31,7 @@ import type { GroupInviteStatus } from "@/lib/groupInvites";
 import type { Notification } from "@/types/database";
 import { parseMessageNotificationProjection } from "@/lib/messageNotificationProjection";
 import { sanctionNoticeTarget } from "@/lib/sanctions";
+import { reminderNotificationBody } from "@/lib/taskReminders";
 
 type NotificationTarget =
   | { kind: "chat"; chatId: string }
@@ -947,6 +948,19 @@ function formatNotification(item: Notification, inviteStatus?: GroupInviteStatus
         title: "Задача отклонена",
         body: title ? `«${truncateText(title)}» отклонена` : "Задача отклонена.",
       };
+    case "task_reminder":
+      // Tracker item 66: the moment somebody chose, with their note.
+      return {
+        icon: "clock",
+        typeLabel: "Задача",
+        title: "Напоминание",
+        body: truncateText(
+          reminderNotificationBody(
+            title ? truncateText(title, 60) : undefined,
+            payloadString(item.payload, "note"),
+          ),
+        ),
+      };
     case "chat_added":
       return {
         icon: "chatRect",
@@ -1039,7 +1053,8 @@ function navigateTarget(
     case "task_assigned":
     case "task_waiting_confirmation":
     case "task_confirmed":
-    case "task_rejected": {
+    case "task_rejected":
+    case "task_reminder": {
       const taskId = payloadString(item.payload, "task_id");
       return { kind: "tasks", taskId };
     }

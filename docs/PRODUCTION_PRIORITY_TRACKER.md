@@ -3027,12 +3027,21 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     mutants that keep the text after a send or never give it back go red),
     `attach-caption-handoff.test.mts`.
 
-66. `[ ]` Task reminders — «например стоит задача с выполнением на месяц…
+66. `[x]` Task reminders — «например стоит задача с выполнением на месяц…
     комплектующие придут только через неделю и тогда надо напоминание, что пора
     приступать делать. А потом будет вторая поставка… и опять надо
     напоминание». Several reminders per task, at chosen moments, delivered as
     the task notifications already are. Needs storage and a scheduler — §10
     for the database half.
+    **Done 2026-09-28**, on the owner's approval: `task_reminders`, two
+    functions and the pg_cron job `letscube-task-reminders`, which writes a
+    `task_reminder` notification every minute a reminder falls due — backup,
+    rehearsal, apply, smoke and the job's health query in
+    `operations/2026-09-28-owner-approved-database-changes.md`. A reminder goes
+    to its author («Мне») or to whoever holds the task when it fires
+    («Исполнителю»), with an optional note; its push reads «Напоминание» and
+    opens the task. Evidence: `task-reminders.test.mts`, `task-reminders.spec`
+    at 1440 and 390.
 
 67. `[ ]` A task taken by several people together — «есть задачи которые два
     человека ведут параллельно». Assignees become a set rather than one person;

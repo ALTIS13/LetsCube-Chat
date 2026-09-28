@@ -313,6 +313,10 @@ test("the perimeter count only ever shrinks", () => {
   // `bg-[var(--kub-inset)]` and both are aimed at — the well and the target
   // rule 11 keeps an edge for — and each is drawn exactly as the comment
   // field of the same modal is.
+  //
+  // Still 200 after the task reminders (tracker item 66): their moment and
+  // note share the checklist's field well, `pages/tasks/taskFieldWell.ts`, one
+  // class list rather than a copy, so they add nothing here.
   assert.ok(total <= 200, `perimeters on the sheet-edge colour grew to ${total}; the ceiling is 200`);
 });
 

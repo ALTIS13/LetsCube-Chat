@@ -12,6 +12,7 @@ import {
 } from "@/lib/taskChecklist";
 import { cn } from "@/lib/utils";
 import type { TaskChecklistItem } from "@/types/database";
+import { TASK_FIELD_WELL } from "./taskFieldWell";
 
 const FOCUS_RING =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]";
@@ -201,10 +202,7 @@ export function TaskChecklist({ taskId, items, canEdit, canTick, onChanged }: Ta
             onChange={(event) => setDraft(event.currentTarget.value)}
             placeholder="Добавить пункт"
             aria-label="Новый пункт чек-листа"
-            className={cn(
-              "min-w-0 flex-1 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)]",
-              FOCUS_RING,
-            )}
+            className={cn(TASK_FIELD_WELL, "flex-1", FOCUS_RING)}
           />
           <KubButton type="submit" variant="secondary" size="md" disabled={busy || !draft.trim()}>
             Добавить
