@@ -144,6 +144,7 @@ import {
   rememberOutgoing,
 } from "@/lib/outgoingMedia";
 import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
+import { useChannelPreviews } from "@/hooks/useChannelPreviews";
 import type { Json, MessageWithSender } from "@/types/database";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
 
@@ -467,6 +468,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   );
   const call = useVoiceCall();
   const serverChannels = useServerChannels(voiceEnabled ? chatId : null, voiceEnabled, topics);
+  // Each text channel's last line for the channel list (tracker item 54).
+  const channelPreviews = useChannelPreviews(voiceEnabled ? chatId : null, serverChannels.groups, generalTopicIds, userId);
   const voice = useVoiceChannel(serverChannels, call.channelId);
   // Whether this group gets the rail instead of the topic strip: anything at
   // all besides the one general channel. Read here rather than in the rail's
@@ -673,6 +676,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   }, [chat?.name, chatId, myRole]);
   const railProps = {
     groups: serverChannels.groups,
+    previews: channelPreviews,
     currentTextChannelId: railTextChannelId,
     occupantsOf,
     faces: voiceDirectory.faces,

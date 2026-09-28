@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
+import { emitChannelActivity } from "@/lib/channelActivity";
 import type { Json, MessageWithSender, Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
@@ -880,6 +881,9 @@ export function useMessages(
           const localClearedAt = clearedAtRef.current;
           const clearedAtMs = localClearedAt ? new Date(localClearedAt).getTime() : null;
           if (clearedAtMs && new Date(payload.new.created_at).getTime() <= clearedAtMs) return;
+          // Every channel's rows, before the one on screen is picked: the
+          // channel list keeps each channel's last line from them (item 54).
+          if (!hiddenMessageIdsRef.current.has(payload.new.id)) emitChannelActivity(payload.new);
           // Filter by topic — ignore messages from other topics in the same chat.
           if (
             topicIdRef.current !== undefined &&

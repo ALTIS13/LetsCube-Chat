@@ -2659,7 +2659,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     the socket is down, and a confirmation on a real Android phone switching a
     VPN — the report's own case, which no emulator here reproduces.
 
-54. `[ ]` A server's channels show what is happening in them — same report,
+54. `[~]` A server's channels show what is happening in them — same report,
     with two screenshots forwarded from a second tester comparing Telegram's
     topic list with our «Каналы» drawer. Никитос: «он совершенно прав… ты не
     видишь вот этих каналов в формате последнего сообщения… тебе надо будет
@@ -2675,6 +2675,26 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     marks the others read; a per-channel read state and a summary RPC are §10
     work — backup, rehearsal, and the owner's word before it is applied. The
     preview half can be read with today's schema and ships first.
+    **The preview half shipped 2026-09-28.** Each text channel in the column
+    and in the phone's sheet carries Telegram's topic line under its name —
+    the author's first name, what they wrote, and the time beside the name —
+    as Telegram's group previews print a sender («Анна: Смена закрыта», not a
+    full name eating a 224px column). `useChannelPreviews` reads each
+    channel's newest lines once when the list is shown, under the history's own
+    rules: nothing from before this reader cleared the chat, never a message
+    they hid for themselves, never a deleted one. It is kept current from the
+    open conversation's socket, which already hears every channel of the chat
+    and dropped the others (`lib/channelActivity.ts` hands them over; no second
+    subscription). Evidence: `channel-preview.test.mts` (6 cases),
+    `channel-previews.spec.ts` at 1440 and 390 — the three lines as written,
+    and a message in another channel changing that channel's line without
+    opening it; cutting the hand-over turns the second red. The rail spec now
+    reads a channel's own name without its line.
+    **Next, in order:** the phone's entry into a server as the channel list
+    itself — Telegram's forum and Discord's server both open on the list, where
+    ours opens the general channel with the list behind a capsule; the voice
+    rows restyled in the product's material with the people inside them; and
+    the unread half, which needs the database and the owner's word.
 
 55. `[x]` No «переслано» notice when the forward has already taken you there —
     same report. Forwarding from one chat to another opens the destination, and

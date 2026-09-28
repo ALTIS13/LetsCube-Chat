@@ -23,6 +23,8 @@ import {
 import { canManageChannels, voiceJoinVerdict, type ChannelGroup, type ServerChannel } from "@/lib/serverChannels";
 import { VOICE_ELSEWHERE_MOVE, VOICE_ELSEWHERE_PROMISE } from "@/lib/voiceElsewhere";
 import type { VoiceParticipant } from "@/lib/voiceChannel";
+import type { ChannelPreview } from "@/lib/channelPreview";
+import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
@@ -122,6 +124,11 @@ export interface ChannelRailProps {
   failed?: boolean;
   /** Asks for the read again. Absent draws no retry. */
   onRetry?: () => void;
+  /**
+   * Each text channel's last line, by channel id (tracker item 54,
+   * `useChannelPreviews`). Absent or missing a channel draws the row as a name.
+   */
+  previews?: ReadonlyMap<string, ChannelPreview>;
 }
 
 /** The list itself, shared by the column and the sheet. */
@@ -141,6 +148,7 @@ function ChannelRailList({
   onManageChannels,
   failed,
   onRetry,
+  previews,
 }: ChannelRailProps) {
   const [collapsed, setCollapsed] = useState<readonly string[]>([]);
   const canManage = canManageChannels(role);
@@ -250,6 +258,7 @@ function ChannelRailList({
                   channel={channel}
                   active={channel.id === currentTextChannelId}
                   onSelect={onSelectText}
+                  preview={previews?.get(channel.id) ?? null}
                 />
               ) : (
                 <VoiceChannelRailRow
@@ -307,14 +316,23 @@ const CHOSEN_ROW =
   "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] hover:bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] text-[color:var(--kub-accent-text)]";
 const RESTING_ROW = "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] kub-raise-hover";
 
+/**
+ * A text channel: its name, and — once `useChannelPreviews` has read it — the
+ * last line said in it, Telegram's topic row (tracker item 54). «Анна: Смена
+ * закрыта» under the name and the time beside it answer «has anything
+ * happened in there» without opening it, which is the whole of the report:
+ * «тебе надо будет протыкивать каждый канал вручную».
+ */
 function TextChannelRow({
   channel,
   active,
   onSelect,
+  preview,
 }: {
   channel: ServerChannel;
   active: boolean;
   onSelect: (channel: ServerChannel) => void;
+  preview: ChannelPreview | null;
 }) {
   return (
     <button
@@ -338,11 +356,25 @@ function TextChannelRow({
         />
       )}
       {channel.emoji ? (
-        <span className="w-[15px] shrink-0 text-center text-[13px] leading-none">{channel.emoji}</span>
+        <span className={cn("w-[15px] shrink-0 text-center text-[13px] leading-none", preview && "self-start pt-[3px]")}>{channel.emoji}</span>
       ) : (
-        <KubIcon name="hash" size={15} className="shrink-0" />
+        <KubIcon name="hash" size={15} className={cn("shrink-0", preview && "self-start mt-[3px]")} />
       )}
-      <span className="min-w-0 flex-1 truncate text-left">{channel.name}</span>
+      <span className="flex min-w-0 flex-1 flex-col text-left">
+        <span className="flex min-w-0 items-baseline gap-2">
+          <span className="min-w-0 flex-1 truncate">{channel.name}</span>
+          {preview && (
+            <span className="shrink-0 text-[11px] tabular-nums text-[color:var(--kub-muted)]" data-testid="channel-rail-preview-time">
+              {formatTime(preview.at)}
+            </span>
+          )}
+        </span>
+        {preview && (
+          <span className="mt-0.5 min-w-0 truncate text-xs text-[color:var(--kub-muted)]" data-testid="channel-rail-preview">
+            <span className="font-medium text-[color:var(--kub-accent-text)]">{preview.sender}:</span> {preview.text}
+          </span>
+        )}
+      </span>
     </button>
   );
 }

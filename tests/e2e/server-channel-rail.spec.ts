@@ -485,7 +485,16 @@ async function drawnOrder(page: Page): Promise<string[]> {
       document.querySelectorAll(
         '[data-testid="channel-rail-list"] [data-testid="channel-rail-text"], [data-testid="channel-rail-list"] [data-testid="channel-rail-voice"], [data-testid="channel-rail-list"] [data-testid="channel-rail-heading"]',
       ),
-    ).map((element) => (element.textContent ?? "").replace(/\s+/gu, " ").trim()),
+    ).map((element) => {
+      // A text channel's own words, not its last line: since item 54 the row
+      // also carries who wrote there last and when, which is not the order
+      // this reads.
+      const copy = element.cloneNode(true) as Element;
+      copy
+        .querySelectorAll('[data-testid="channel-rail-preview"], [data-testid="channel-rail-preview-time"]')
+        .forEach((node) => node.remove());
+      return (copy.textContent ?? "").replace(/\s+/gu, " ").trim();
+    }),
   );
 }
 

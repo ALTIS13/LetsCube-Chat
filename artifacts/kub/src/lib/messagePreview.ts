@@ -1,5 +1,7 @@
-import { callRecordPreview } from "@/lib/callRecord";
-import type { Message } from "@/types/database";
+// Relative, with the extension, so `node --test` reaches this module too
+// (the channel list's previews, tracker item 54, are unit-tested through it).
+import { callRecordPreview } from "./callRecord.ts";
+import type { Message } from "../types/database.ts";
 
 type PreviewMessage = Pick<Message, "type" | "content" | "media_url" | "deleted_at"> & {
   media_metadata?: Message["media_metadata"];
