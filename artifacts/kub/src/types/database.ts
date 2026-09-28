@@ -2162,6 +2162,13 @@ export interface MessageWithSender extends Message {
    */
   upload_progress?: number | null
   /**
+   * Local UI: an attachment whose upload found no network, or that a restart
+   * put back from the device (tracker item 52). It waits with its clock rather
+   * than turning red, and its conversation sends it again on its own when the
+   * connection answers. Not persisted on the server.
+   */
+  upload_waiting?: boolean
+  /**
    * Local UI: who wrote the original of a forwarded message, when the client
    * knows it another way. The preview fixture sets it; so may anything that
    * learns the origin without a read. It wins over the join below, because a

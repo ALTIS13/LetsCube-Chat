@@ -2596,10 +2596,28 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     order; a refusal is red at once. A mutation that reads every failure as a
     refusal — the old behaviour — turns the first three red and leaves the
     fourth green.
-    **Still open:** a voice note or a file whose *upload* fails still lives only
-    in memory (`lib/outgoingMedia.ts`): it keeps «Повторить» until the app
-    closes, and a restart loses it — the tester's «перезаписать вообще». Its
-    bytes go into the same database next, with the upload retried by itself.
+    **Files and voice notes, the same day.** An attachment on its way is written
+    to the device at the press (`lib/outbox/outgoingMediaStorage.ts`, its own
+    IndexedDB database) with its file, caption, reply, chat, topic and place,
+    and removed when its row is in or its placeholder is taken away; an account
+    change clears it from memory and the screen but leaves it on the device for
+    the account that sent it. An upload nobody answered — the connection gone,
+    not a server that said no — now waits with its clock instead of turning red
+    with «Повторить», and its conversation sends it again by itself when it is
+    opened and at every moment the connection may be back; a restart puts it
+    back in its conversation, with a fresh preview, from the device. So a voice
+    note is never recorded twice. Evidence: `outgoing-media-persistence.test.mts`
+    (limit, what is written, per account, the hooks following memory);
+    `media-send-path.spec.ts` gains «an upload the network does not answer waits
+    with its clock and goes by itself» and «…survives a restart and goes after
+    it», at 1440 and 390 — a mutant without the waiting branch turns both red,
+    one that keeps nothing on the device turns only the restart red.
+    **What remains, deliberately:** a waiting attachment goes when *its*
+    conversation is open — the upload lives in that conversation's view, and
+    moving it out to run in the background, as Telegram does, is the next step
+    rather than part of this one; files over 25 MB are kept in memory only, not
+    written a second time to the device; and a storage *answer* of 502/503 still
+    reads as the server's (red, «Повторить»), where a row's does not.
 
 53. `[~]` The application recovers by itself when the network changes under it
     — same report. «Если меняется IP… приходится перезапускать мессенджер»:

@@ -41,14 +41,31 @@ const entries = new Map<string, OutgoingMediaEntry>();
 const aborts = new Map<string, () => void>();
 const cancelled = new Set<string>();
 
+/**
+ * Where entries are kept across a restart (tracker item 52): installed by the
+ * application for the signed-in account, absent in the unit suite. Memory stays
+ * the source of truth for this page; the device only has to outlive it.
+ */
+export interface OutgoingPersistence {
+  save(entry: OutgoingMediaEntry): void;
+  drop(tempId: string): void;
+}
+
+let persistence: OutgoingPersistence | null = null;
+
+export function persistOutgoingWith(next: OutgoingPersistence | null): void {
+  persistence = next;
+}
+
 /** The id a placeholder has, the same one the row that replaces it is matched by. */
 export function outgoingTempId(clientMessageId: string): string {
   return `tmp:${clientMessageId}`;
 }
 
-export function rememberOutgoing(entry: OutgoingMediaEntry): void {
+export function rememberOutgoing(entry: OutgoingMediaEntry, { persist = true }: { persist?: boolean } = {}): void {
   entries.set(entry.tempId, entry);
   cancelled.delete(entry.attachment.id);
+  if (persist) persistence?.save(entry);
 }
 
 export function outgoingEntry(tempId: string): OutgoingMediaEntry | null {
@@ -59,7 +76,10 @@ export function outgoingEntry(tempId: string): OutgoingMediaEntry | null {
 export function forgetOutgoing(tempId: string): OutgoingMediaEntry | null {
   const entry = entries.get(tempId) ?? null;
   entries.delete(tempId);
-  if (entry) aborts.delete(entry.attachment.id);
+  if (entry) {
+    aborts.delete(entry.attachment.id);
+    persistence?.drop(tempId);
+  }
   return entry;
 }
 
@@ -77,13 +97,17 @@ export function releaseOutgoingAbort(attachmentId: string, abort: () => void): v
  * that would follow it either way. Answers the entry, so the caller can take
  * the placeholder out and free its preview.
  */
-export function cancelOutgoing(tempId: string): OutgoingMediaEntry | null {
+export function cancelOutgoing(
+  tempId: string,
+  { keepOnDevice = false }: { keepOnDevice?: boolean } = {},
+): OutgoingMediaEntry | null {
   const entry = entries.get(tempId) ?? null;
   if (!entry) return null;
   cancelled.add(entry.attachment.id);
   const abort = aborts.get(entry.attachment.id);
   aborts.delete(entry.attachment.id);
   entries.delete(tempId);
+  if (!keepOnDevice) persistence?.drop(tempId);
   try {
     abort?.();
   } catch {
@@ -103,6 +127,19 @@ export function isOutgoingCancelled(attachmentId: string): boolean {
  */
 export function cancelAllOutgoing(): OutgoingMediaEntry[] {
   const all = [...entries.values()];
-  for (const entry of all) cancelOutgoing(entry.tempId);
+  // Kept on the device, under the account that sent them: the next account
+  // must not see them, and the one that sent them must find them when it
+  // comes back (tracker item 52).
+  for (const entry of all) cancelOutgoing(entry.tempId, { keepOnDevice: true });
   return all;
+}
+
+/** This conversation's entries, for sending again what waited for the network. */
+export function outgoingEntriesForChat(chatId: string): OutgoingMediaEntry[] {
+  return [...entries.values()].filter((entry) => entry.chatId === chatId);
+}
+
+/** Whether this attachment's upload is running now. */
+export function isOutgoingUploading(attachmentId: string): boolean {
+  return aborts.has(attachmentId);
 }

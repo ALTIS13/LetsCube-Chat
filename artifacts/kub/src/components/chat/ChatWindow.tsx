@@ -105,7 +105,6 @@ import {
   createStagedVideoMessageAttachment,
   createStagedVoiceAttachment,
   revokeAttachmentPreview,
-  stagedAttachmentTextContent,
   validateStagedAttachment,
   type StagedAttachment,
   type StagedAttachmentUpload,
@@ -130,18 +129,21 @@ import { runCommittedStagedSendAttempt } from "@/lib/committedSend";
 import { describeUploadFailure, uploadFailureFeedback, uploadFailureMessage } from "@/lib/uploadFailure";
 import { ATTACHMENT_UPLOAD_CONCURRENCY, captionCarrierId, nextClientSentAt, runOrderedSend } from "@/lib/attachmentSendQueue";
 import { prepareMediaAlbumTargets } from "@/lib/mediaAlbumSend";
-import { buildOptimisticMessage } from "@/lib/optimisticMessage";
+import { attachmentMessageContent, attachmentMessageType, buildAttachmentPlaceholder } from "@/lib/attachmentPlaceholder";
 import {
   cancelAllOutgoing,
   cancelOutgoing,
   forgetOutgoing,
   holdOutgoingAbort,
   isOutgoingCancelled,
+  isOutgoingUploading,
+  outgoingEntriesForChat,
   outgoingEntry,
   outgoingTempId,
   releaseOutgoingAbort,
   rememberOutgoing,
 } from "@/lib/outgoingMedia";
+import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
 import type { Json, MessageWithSender } from "@/types/database";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
 
@@ -1171,22 +1173,16 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         clientSentAt,
       });
       if (author) {
-        const placeholder: MessageWithSender = {
-          ...buildOptimisticMessage({
-            chatId: sendChatId,
-            topicId: sendTopicId ?? null,
-            user: author,
-            type: getStagedAttachmentMessageType(attachment),
-            content: getStagedAttachmentMessageContent(attachment, carried),
-            mediaUrl: attachment.previewUrl,
-            replyToId,
-            mediaMetadata: buildAttachmentMediaMetadata(attachment, null) as Json | undefined,
-            clientMessageId: attachment.clientMessageId,
-            clientSentAt,
-            tempId,
-          }),
-          upload_progress: null,
-        };
+        const placeholder = buildAttachmentPlaceholder({
+          chatId: sendChatId,
+          topicId: sendTopicId ?? null,
+          user: author,
+          attachment,
+          caption: carried,
+          replyToId,
+          clientSentAt,
+          tempId,
+        });
         useAppStore.getState().addMessage(sendChatId, placeholder);
         useAppStore.getState().updateChatLastMessage(sendChatId, placeholder);
       }
@@ -1239,6 +1235,18 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           status: failure.status,
           limitBytes: failure.limitBytes,
         });
+        // Unanswered: the network's, not the file's. It waits with its clock
+        // and this conversation sends it again by itself when the connection
+        // answers (tracker item 52) — Telegram's outbox, where a voice note
+        // never has to be recorded twice. No notice: nothing has failed yet.
+        if (failure.reason === "network") {
+          patchOutgoingPlaceholder(sendChatId, outgoingTempId(attachment.clientMessageId), (message) => {
+            const { upload_progress: _progress, ...rest } = message;
+            return { ...rest, pending: true, failed: false, send_error: null, upload_waiting: true };
+          });
+          updateStagedAttachment(attachment.id, (current) => ({ ...current, status: "failed", progress: null, error: null }));
+          return;
+        }
         // The placeholder says so, with the reason, and keeps «Повторить»:
         // the file is held by `outgoingMedia` until it is sent or discarded.
         patchOutgoingPlaceholder(sendChatId, outgoingTempId(attachment.clientMessageId), (message) => {
@@ -1348,6 +1356,40 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     }
     void retryMessageSend(message);
   }, [retryMessageSend, sendStagedAttachments]);
+
+  /**
+   * Files and voice notes of this conversation that waited for the network —
+   * an upload nobody answered, or one a restart put back from the device — go
+   * again by themselves: when the conversation opens, and at every moment the
+   * connection may be back (tracker item 52). One at a time per placeholder:
+   * the flag is cleared before the send, and the send puts a fresh placeholder
+   * in its place.
+   */
+  useEffect(() => {
+    const sendWaiting = () => {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+      const messages = useAppStore.getState().messages[chatId] ?? [];
+      for (const entry of outgoingEntriesForChat(chatId)) {
+        if (isOutgoingUploading(entry.attachment.id)) continue;
+        const shown = messages.find((message) => message.id === entry.tempId);
+        if (!shown?.upload_waiting) continue;
+        useAppStore.getState().updateMessage(chatId, { ...shown, upload_waiting: false });
+        retrySend(shown);
+      }
+    };
+    sendWaiting();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") sendWaiting();
+    };
+    window.addEventListener("online", sendWaiting);
+    window.addEventListener(CONNECTION_REVIVED_EVENT, sendWaiting);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("online", sendWaiting);
+      window.removeEventListener(CONNECTION_REVIVED_EVENT, sendWaiting);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [chatId, retrySend]);
 
   /** «Удалить» on a failed message, and «Отменить» on one still uploading. */
   const discardSend = useCallback((message: MessageWithSender) => {
@@ -2199,22 +2241,10 @@ function filesFromDataTransfer(dataTransfer: DataTransfer): File[] {
   return Array.from(dataTransfer.files ?? []).filter((file) => file instanceof File);
 }
 
-function getStagedAttachmentMessageType(attachment: StagedAttachment): "image" | "video" | "audio" | "file" {
-  if (attachment.kind === "voice") return "audio";
-  if (attachment.kind === "video_message") return "video";
-  if (attachment.kind === "image" || attachment.kind === "video" || attachment.kind === "audio") return attachment.kind;
-  return "file";
-}
-
-function getStagedAttachmentMessageContent(attachment: StagedAttachment, caption: string | null): string {
-  if (attachment.kind === "voice") {
-    return `🎤 Голосовое сообщение (${formatVoiceDurationLabel(attachment.durationMs ?? 0)})`;
-  }
-  if (attachment.kind === "video_message") {
-    return `Видео-сообщение (${formatVoiceDurationLabel(attachment.durationMs ?? 0)})`;
-  }
-  return stagedAttachmentTextContent(attachment.kind, caption, attachment.name);
-}
+// In `lib/attachmentPlaceholder.ts` since tracker item 52, where a restart's
+// restore builds the same placeholder; the local names are kept.
+const getStagedAttachmentMessageType = attachmentMessageType;
+const getStagedAttachmentMessageContent = attachmentMessageContent;
 
 /**
  * Change a placeholder where it stands, in whichever conversation it is (D-314).
@@ -2251,13 +2281,6 @@ function getStagedAttachmentMediaMetadata(
 ): Json | null | undefined {
   // Built in `lib/mediaCompression.ts`, where the unit suite can reach it.
   return buildAttachmentMediaMetadata(attachment, uploaded) as Json | undefined;
-}
-
-function formatVoiceDurationLabel(durationMs: number): string {
-  const totalSec = Math.max(1, Math.round(durationMs / 1000));
-  const minutes = Math.floor(totalSec / 60).toString().padStart(2, "0");
-  const seconds = (totalSec % 60).toString().padStart(2, "0");
-  return `${minutes}:${seconds}`;
 }
 
 function createMediaPlaybackItem(

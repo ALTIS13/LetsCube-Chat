@@ -60,7 +60,8 @@ const STORAGE_UNREACHABLE = {
 };
 
 type PickedFile = { name: string; mimeType: string; buffer: Buffer };
-type StorageAnswer = { status: number; body: unknown };
+/** An answer, or `"unreachable"`: no answer at all, the connection gone. */
+type StorageAnswer = { status: number; body: unknown } | "unreachable";
 type Upload = {
   path: string;
   /** The name of the file the page handed to storage: compressed photos carry their encoder's extension. */
@@ -234,6 +235,66 @@ test.describe("the send path of photos and videos", () => {
       page.locator('[data-message-bubble="true"]').filter({ hasText: CAPTION }),
       "the delivered message shows the caption",
     ).toHaveCount(1);
+  });
+
+  /**
+   * Tracker item 52: «если у тебя голосовуха не отправляется — перезаписать
+   * вообще». An upload nobody answered — the connection gone, not a server that
+   * said no — waits with its clock rather than turning red, and goes by itself
+   * when the connection answers. A voice note takes this same path; a photo is
+   * what the attach sheet can pick here.
+   */
+  test("an upload the network does not answer waits with its clock and goes by itself", async ({ page }) => {
+    const backend = await installBackend(page);
+    let unreachable = true;
+    backend.answer = () => (unreachable ? "unreachable" : null);
+    await openChat(page);
+
+    await pickPhotosOrVideos(page, [await testPhoto("facade.png", 30)]);
+    await page.getByTestId("attach-caption").fill(CAPTION);
+    await sendPicked(page, 1);
+
+    const placed = page.locator('[data-message-bubble="true"]').filter({ hasText: CAPTION });
+    await expect(placed).toHaveCount(1);
+    await expect.poll(() => backend.uploads.length).toBeGreaterThan(0);
+    // Not red, and no «Повторить»: nothing has refused it.
+    await page.waitForTimeout(800);
+    await expect(page.locator('[data-message-send-error="true"]')).toHaveCount(0);
+    await expect(placed.locator("[data-message-delivery-slot]").getByRole("img", { name: "Отправляется" })).toBeVisible();
+    expect(backend.inserts.length).toBe(0);
+
+    // The connection answers: it goes, with its caption, once.
+    unreachable = false;
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect.poll(() => backend.inserts.length).toBe(1);
+    expect(backend.inserts[0]?.content).toBe(CAPTION);
+    await expect(page.locator('[data-message-send-error="true"]')).toHaveCount(0);
+  });
+
+  test("an upload waiting for the network survives a restart and goes after it", async ({ page }) => {
+    const backend = await installBackend(page);
+    let unreachable = true;
+    backend.answer = () => (unreachable ? "unreachable" : null);
+    await openChat(page);
+
+    await pickPhotosOrVideos(page, [await testPhoto("facade.png", 30)]);
+    await page.getByTestId("attach-caption").fill(CAPTION);
+    await sendPicked(page, 1);
+    const placed = page.locator('[data-message-bubble="true"]').filter({ hasText: CAPTION });
+    await expect(placed.locator("[data-message-delivery-slot]").getByRole("img", { name: "Отправляется" })).toBeVisible();
+
+    // The application is closed and opened again with the connection still down.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: GREETING })).toBeVisible();
+    await expect(placed, "a restart lost the photo").toHaveCount(1);
+    expect(backend.inserts.length).toBe(0);
+
+    unreachable = false;
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect.poll(() => backend.inserts.length).toBe(1);
+    expect(backend.inserts[0]?.content).toBe(CAPTION);
+    await page.waitForTimeout(800);
+    expect(backend.inserts.length, "the photo went twice").toBe(1);
   });
 
   /**
@@ -956,6 +1017,7 @@ async function installBackend(page: Page): Promise<Backend> {
       backend.uploads.push(upload);
       const answer = await backend.answer(upload);
       upload.answeredAt = Date.now();
+      if (answer === "unreachable") return route.abort("internetdisconnected");
       if (answer) return json(route, answer.body, answer.status);
       if (handed?.base64) stored.set(objectPath, { type: handed.type, bytes: Buffer.from(handed.base64, "base64") });
       return json(route, { Id: `object-${backend.uploads.length}`, Key: `media/${objectPath}` });

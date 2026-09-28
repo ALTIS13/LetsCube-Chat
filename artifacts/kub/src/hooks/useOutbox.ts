@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
+import { buildAttachmentPlaceholder } from "@/lib/attachmentPlaceholder";
 import { appOutbox } from "@/lib/outbox/appOutbox";
+import { keepOutgoingMediaFor, restoreOutgoingMedia } from "@/lib/outbox/appOutgoingMedia";
 import { buildOptimisticMessage } from "@/lib/optimisticMessage";
 import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
 import { useAppStore } from "@/store/app.store";
@@ -22,6 +24,32 @@ export function useOutbox(): void {
   useEffect(() => {
     if (!userId) return undefined;
     let active = true;
+    // Files and voice notes on their way are kept on the device for this
+    // account from here on, and what a restart left there comes back.
+    keepOutgoingMediaFor(userId);
+    void restoreOutgoingMedia(userId).then((waiting) => {
+      if (!active) return;
+      const store = useAppStore.getState();
+      const user = store.currentUser;
+      if (!user || user.id !== userId) return;
+      for (const entry of waiting) {
+        store.addMessage(entry.chatId, {
+          ...buildAttachmentPlaceholder({
+            chatId: entry.chatId,
+            topicId: entry.topicId ?? null,
+            user,
+            attachment: entry.attachment,
+            caption: entry.caption,
+            replyToId: entry.replyToId,
+            clientSentAt: entry.clientSentAt,
+            tempId: entry.tempId,
+          }),
+          // With its clock: its conversation sends it once it is open and the
+          // connection answers (`ChatWindow`).
+          upload_waiting: true,
+        });
+      }
+    });
 
     void appOutbox.start(userId).then((waiting) => {
       if (!active) return;
@@ -66,6 +94,7 @@ export function useOutbox(): void {
       window.removeEventListener(CONNECTION_REVIVED_EVENT, retry);
       document.removeEventListener("visibilitychange", onVisibility);
       appOutbox.stop();
+      keepOutgoingMediaFor(null);
     };
   }, [userId]);
 }
