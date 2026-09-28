@@ -8,6 +8,7 @@ import {
   parseByteCount,
   uploadFailureFeedback,
   uploadFailureMessage,
+  uploadMayWait,
 } from "../../artifacts/kub/src/lib/uploadFailure.ts";
 
 /**
@@ -149,6 +150,22 @@ test("the message names the file, says what the server said, and never guesses a
     assert.ok(!message.includes(" МБ"), `a number can lose its unit: ${message}`);
     assert.ok(!message.includes(" до "), `«до» can be left at the end of a line: ${message}`);
   }
+});
+
+test("a gateway's 502, 503 or 504 judged nothing about the file: it waits and goes again by itself (item 52)", () => {
+  for (const status of [502, 503, 504]) {
+    const failure = describeUploadFailure(storageError(status, String(status), "The storage service is unreachable"));
+    assert.equal(failure.reason, "unavailable", String(status));
+    assert.equal(uploadMayWait(failure), true, String(status));
+  }
+  // Nobody answering waits too; anything the storage itself decided does not.
+  assert.equal(uploadMayWait(describeUploadFailure(new TypeError("Failed to fetch"))), true);
+  for (const status of [400, 403, 413, 415, 500]) {
+    assert.equal(uploadMayWait(describeUploadFailure(storageError(status, String(status), "no"))), false, String(status));
+  }
+  // Where a surface does show it, it says what it is, not «ошибка 503».
+  const shown = uploadFailureMessage("facade.png", { reason: "unavailable", status: 503, limitBytes: null });
+  assert.ok(shown.includes("временно недоступен") && !shown.includes("503"), shown);
 });
 
 test("a limit reads rounded down, and a byte count is only a positive whole number", () => {

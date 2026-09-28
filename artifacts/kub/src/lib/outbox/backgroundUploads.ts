@@ -20,7 +20,14 @@
 import type { MessageWithSender } from "../../types/database.ts";
 import type { OutgoingMediaEntry } from "../outgoingMedia.ts";
 import type { StagedAttachmentUpload } from "../stagedAttachments.ts";
-import type { UploadFailure } from "../uploadFailure.ts";
+import { uploadMayWait, type UploadFailure } from "../uploadFailure.ts";
+
+/**
+ * How often what waits is tried when nothing says the connection is back: a
+ * storage that answered 503 comes back without the device ever going offline,
+ * and no `online` announces it.
+ */
+export const WAITING_UPLOAD_SWEEP_MS = 30_000;
 
 export interface BackgroundUploadDeps {
   /** The signed-in account now. A change stops the sender between two steps. */
@@ -102,8 +109,9 @@ export function createBackgroundUploadSender(deps: BackgroundUploadDeps): Backgr
       } catch (error) {
         if (deps.cancelled(entry.attachment.id)) continue;
         const failure = deps.describe(error);
-        if (failure.reason === "network") {
-          // Still nobody answering: back to waiting, with its clock.
+        if (uploadMayWait(failure)) {
+          // Still nobody answering, or the storage still down: back to
+          // waiting, with its clock.
           deps.patch(entry.chatId, entry.tempId, (message) => {
             const { upload_progress: _progress, ...rest } = message;
             return { ...rest, pending: true, failed: false, send_error: null, upload_waiting: true };

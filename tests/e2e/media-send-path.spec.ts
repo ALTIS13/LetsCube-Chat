@@ -58,6 +58,16 @@ const STORAGE_UNREACHABLE = {
   error: "Service Unavailable",
   message: "The storage service is unreachable",
 };
+/**
+ * A refusal the storage itself answered. A 503 waits and goes by itself since
+ * tracker item 52, so the checks that need a red placeholder with «Повторить»
+ * are refused with this instead.
+ */
+const STORAGE_FAILED = {
+  statusCode: "500",
+  error: "Internal Server Error",
+  message: "The object could not be stored",
+};
 
 type PickedFile = { name: string; mimeType: string; buffer: Buffer };
 /** An answer, or `"unreachable"`: no answer at all, the connection gone. */
@@ -163,7 +173,7 @@ test.describe("the send path of photos and videos", () => {
     const backend = await installBackend(page);
     let refuseFirst = true;
     backend.answer = (upload) => refuseFirst && upload.name.startsWith("first")
-      ? { status: 503, body: STORAGE_UNREACHABLE }
+      ? { status: 500, body: STORAGE_FAILED }
       : null;
     await openChat(page);
 
@@ -208,7 +218,10 @@ test.describe("the send path of photos and videos", () => {
   test("a caption survives the retry of a send whose upload was cut off", async ({ page }) => {
     const backend = await installBackend(page);
     let cut = true;
-    backend.answer = () => (cut ? { status: 503, body: STORAGE_UNREACHABLE } : null);
+    // Refused rather than unreachable: an unreachable storage waits and goes by
+    // itself since item 52, and what this pins is the caption across the
+    // retry a person presses.
+    backend.answer = () => (cut ? { status: 500, body: STORAGE_FAILED } : null);
     await openChat(page);
 
     await pickPhotosOrVideos(page, [await testPhoto("facade.png", 30)]);
@@ -335,6 +348,36 @@ test.describe("the send path of photos and videos", () => {
     // And its conversation shows it sent, not waiting and not twice.
     await page.getByTestId("chat-list-item").filter({ hasText: CHAT_NAME }).click();
     await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: CAPTION })).toHaveCount(1);
+    await expect(page.locator('[data-message-send-error="true"]')).toHaveCount(0);
+  });
+
+  /**
+   * Tracker item 52, the gateway's half: a 503 from in front of the storage
+   * judged nothing about the file, so it waits with its clock like an upload
+   * nobody answered, and goes when the service is back — where it used to turn
+   * red. The device never went offline, so no `online` says it is back; the
+   * return to the app is one of the moments that try again.
+   */
+  test("an upload the storage answers 503 to waits, and goes when the storage is back", async ({ page }) => {
+    const backend = await installBackend(page);
+    let down = true;
+    backend.answer = () => (down ? { status: 503, body: STORAGE_UNREACHABLE } : null);
+    await openChat(page);
+
+    await pickPhotosOrVideos(page, [await testPhoto("facade.png", 30)]);
+    await page.getByTestId("attach-caption").fill(CAPTION);
+    await sendPicked(page, 1);
+    const placed = page.locator('[data-message-bubble="true"]').filter({ hasText: CAPTION });
+    await expect.poll(() => backend.uploads.length).toBeGreaterThan(0);
+    await page.waitForTimeout(800);
+    await expect(page.locator('[data-message-send-error="true"]'), "a 503 turned it red").toHaveCount(0);
+    await expect(placed.locator("[data-message-delivery-slot]").getByRole("img", { name: "Отправляется" })).toBeVisible();
+    expect(backend.inserts.length).toBe(0);
+
+    down = false;
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await expect.poll(() => backend.inserts.length).toBe(1);
+    expect(backend.inserts[0]?.content).toBe(CAPTION);
     await expect(page.locator('[data-message-send-error="true"]')).toHaveCount(0);
   });
 

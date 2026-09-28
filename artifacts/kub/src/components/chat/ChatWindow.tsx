@@ -118,7 +118,7 @@ import {
   type StagedUploadScopeToken,
 } from "@/lib/stagedUploadWorkflow";
 import { runCommittedStagedSendAttempt } from "@/lib/committedSend";
-import { describeUploadFailure, uploadFailureFeedback, uploadFailureMessage } from "@/lib/uploadFailure";
+import { describeUploadFailure, uploadFailureFeedback, uploadFailureMessage, uploadMayWait } from "@/lib/uploadFailure";
 import { ATTACHMENT_UPLOAD_CONCURRENCY, captionCarrierId, nextClientSentAt, runOrderedSend } from "@/lib/attachmentSendQueue";
 import { prepareMediaAlbumTargets } from "@/lib/mediaAlbumSend";
 import { attachmentMessageContent, attachmentMessageType, buildAttachmentPlaceholder } from "@/lib/attachmentPlaceholder";
@@ -138,6 +138,7 @@ import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
 import { useChannelPreviews } from "@/hooks/useChannelPreviews";
 import type { Json, MessageWithSender } from "@/types/database";
 import { uploadAttachmentBytes } from "@/lib/attachmentUpload";
+import { WAITING_UPLOAD_SWEEP_MS } from "@/lib/outbox/backgroundUploads";
 
 interface ChatWindowProps {
   chatId: string;
@@ -1216,11 +1217,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           status: failure.status,
           limitBytes: failure.limitBytes,
         });
-        // Unanswered: the network's, not the file's. It waits with its clock
-        // and this conversation sends it again by itself when the connection
-        // answers (tracker item 52) — Telegram's outbox, where a voice note
-        // never has to be recorded twice. No notice: nothing has failed yet.
-        if (failure.reason === "network") {
+        // Unanswered, or the storage down in front of it: the network's or the
+        // service's, not the file's. It waits with its clock and goes again by
+        // itself — from here, or from the background when this chat is closed
+        // (tracker item 52) — Telegram's outbox, where a voice note never has
+        // to be recorded twice. No notice: nothing has failed yet.
+        if (uploadMayWait(failure)) {
           patchOutgoingPlaceholder(sendChatId, outgoingTempId(attachment.clientMessageId), (message) => {
             const { upload_progress: _progress, ...rest } = message;
             return { ...rest, pending: true, failed: false, send_error: null, upload_waiting: true };
@@ -1362,10 +1364,14 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     const onVisibility = () => {
       if (document.visibilityState === "visible") sendWaiting();
     };
+    // And on a clock, as the background sender does for closed chats: a
+    // storage that answered 503 comes back with no event to say so.
+    const sweep = window.setInterval(sendWaiting, WAITING_UPLOAD_SWEEP_MS);
     window.addEventListener("online", sendWaiting);
     window.addEventListener(CONNECTION_REVIVED_EVENT, sendWaiting);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
+      window.clearInterval(sweep);
       window.removeEventListener("online", sendWaiting);
       window.removeEventListener(CONNECTION_REVIVED_EVENT, sendWaiting);
       document.removeEventListener("visibilitychange", onVisibility);

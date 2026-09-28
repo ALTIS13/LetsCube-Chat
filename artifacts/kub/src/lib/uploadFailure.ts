@@ -25,6 +25,12 @@ export type UploadFailureReason =
   | "unsupported_type"
   /** No answer came back at all: the connection dropped or timed out. */
   | "network"
+  /**
+   * An answer, but from in front of the storage rather than from it: 502, 503
+   * or 504. Nothing about the file was judged, and the same upload is expected
+   * to go once the service is back.
+   */
+  | "unavailable"
   /** There was no session to upload with, or the server answered 401. */
   | "session"
   | "unknown";
@@ -158,6 +164,7 @@ function reasonFor(input: {
   if (codes.includes(413)) return "too_large";
   if (codes.includes(415)) return "unsupported_type";
   if (codes.includes(401)) return "session";
+  if (codes.some((code) => code === 502 || code === 503 || code === 504)) return "unavailable";
   if (TOO_LARGE_WORDS.some((word) => input.message.includes(word))) return "too_large";
   if (UNSUPPORTED_TYPE_WORDS.some((word) => input.message.includes(word))) return "unsupported_type";
   if (input.status === null && unanswered(input.record, input.error, input.message)) return "network";
@@ -175,6 +182,16 @@ function unanswered(record: UnknownRecord | null, error: unknown, message: strin
   if (record && "originalRequest" in record && !responseOf(record)) return true;
   if (message.trim() === SAFARI_NETWORK_MESSAGE) return true;
   return NETWORK_WORDS.some((word) => message.includes(word));
+}
+
+/**
+ * Whether a chat's attachment waits and goes again by itself rather than
+ * turning red (tracker item 52): nobody answered, or what answered stood in
+ * front of the storage and said it was down. A row the outbox sends reads a
+ * 502 or 503 the same way; an upload used to turn red on one.
+ */
+export function uploadMayWait(failure: UploadFailure): boolean {
+  return failure.reason === "network" || failure.reason === "unavailable";
 }
 
 /** A limit as a person reads it, rounded down so it is never overstated. */
@@ -206,6 +223,8 @@ export function uploadFailureMessage(fileName: string, failure: UploadFailure): 
       return `${subject} сервер не принимает файлы такого типа.`;
     case "network":
       return `${subject} не удалось загрузить: прервалась связь. Проверьте соединение и нажмите «Повторить».`;
+    case "unavailable":
+      return `${subject} сервер временно недоступен. Нажмите «Повторить» чуть позже.`;
     case "session":
       return `${subject} не удалось загрузить: сессия истекла. Войдите снова.`;
     default:

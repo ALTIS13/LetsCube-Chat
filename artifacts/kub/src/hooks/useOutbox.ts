@@ -3,14 +3,12 @@
 import { useEffect } from "react";
 import { buildAttachmentPlaceholder } from "@/lib/attachmentPlaceholder";
 import { appBackgroundUploads } from "@/lib/outbox/appBackgroundUploads";
+import { WAITING_UPLOAD_SWEEP_MS } from "@/lib/outbox/backgroundUploads";
 import { appOutbox } from "@/lib/outbox/appOutbox";
 import { keepOutgoingMediaFor, restoreOutgoingMedia } from "@/lib/outbox/appOutgoingMedia";
 import { buildOptimisticMessage } from "@/lib/optimisticMessage";
 import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
 import { useAppStore } from "@/store/app.store";
-
-/** How often a waiting upload is tried when nothing else says the connection is back. */
-const WAITING_UPLOAD_SWEEP_MS = 30_000;
 
 /**
  * Starts the outbox for the signed-in account (tracker item 52).

@@ -2665,9 +2665,19 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     turns one red), and `media-send-path.spec` «an upload waiting for the
     network goes when it answers, with nobody in its chat» at 390 — red without
     the sender's run on `online`.
+    **And a gateway's answer waits too.** A 502, 503 or 504 comes from in front
+    of the storage and judges nothing about the file, so it is a new reason,
+    `unavailable`, which waits with its clock like an upload nobody answered
+    (`uploadMayWait`) — a row the outbox sends always read it that way, and an
+    upload turned red on it. Since the device stays online while the storage
+    comes back, an open chat's waiting uploads are tried every half minute as
+    well as on the moments above. Evidence: `upload-failure.test.mts`; and
+    `media-send-path.spec` «an upload the storage answers 503 to waits, and goes
+    when the storage is back» at 1440 and 390 — red with a 503 read as a
+    refusal. The two checks that needed a red placeholder are refused with a
+    500 now.
     **What remains, deliberately:** files over 25 MB are kept in memory only,
-    not written a second time to the device; and a storage *answer* of 502/503
-    still reads as the server's (red, «Повторить»), where a row's does not.
+    not written a second time to the device.
 
 53. `[~]` The application recovers by itself when the network changes under it
     — same report. «Если меняется IP… приходится перезапускать мессенджер»:
