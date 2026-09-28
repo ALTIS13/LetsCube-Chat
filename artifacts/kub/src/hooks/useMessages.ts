@@ -47,6 +47,7 @@ import { blockedSendRefusal } from "@/lib/personalModeration";
 import { heldRowsGoneFromPage, mergeMessagesById } from "@/lib/messageMerge";
 import { isMissingRpcError, rpcAvailability } from "@/lib/rpcAvailability";
 import { clearedAtCache } from "@/lib/clearedAtCache";
+import { hiddenMessagesLive } from "@/lib/hiddenMessagesLive";
 import {
   DELETE_FOR_EVERYONE_RPC,
   deletionBatches,
@@ -364,6 +365,7 @@ export function useMessages(
         const nextHasMoreOlder = rawFetched.length > MESSAGE_PAGE_SIZE;
         let existing = useAppStore.getState().messages[chatId] ?? EMPTY_MESSAGES;
         const checkedIds = new Set(getMessageAndReplyIds([...fetched, ...existing]));
+        const hiddenReadAt = Date.now();
         const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, [...checkedIds]);
         if (!isCurrent()) return;
         if (!fetchedHiddenIds) {
@@ -390,6 +392,7 @@ export function useMessages(
           return;
         }
         rememberHiddenMessageIds(fetchedHiddenIds);
+        hiddenMessagesLive.markVerified(chatId, checkedIds, hiddenReadAt);
         const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
         const visibleFetched = sanitizeHiddenReplies(
           fetched.filter((message) => !effectiveHiddenIds.has(message.id)),
@@ -440,6 +443,20 @@ export function useMessages(
   const fetchMessagesRef = useRef(fetchMessages);
   fetchMessagesRef.current = fetchMessages;
 
+  // Tracker item 58: a hide or an unhide made on another device, heard for
+  // this chat on the account's hides channel. The list has already taken a
+  // hidden row out of the store; this conversation also stops drawing it if
+  // it arrives again, and reads an unhidden one back.
+  useEffect(() => hiddenMessagesLive.subscribe((event) => {
+    if (event.chatId !== chatIdRef.current) return;
+    const next = new Set(hiddenMessageIdsRef.current);
+    if (event.hidden) next.add(event.messageId);
+    else next.delete(event.messageId);
+    hiddenMessageIdsRef.current = next;
+    setHiddenMessageIds(next);
+    if (!event.hidden) void fetchMessagesRef.current({ background: true });
+  }), []);
+
   useEffect(() => {
     if (!chatId || !userId) return;
     const cached = useAppStore.getState().messages[chatId] ?? [];
@@ -450,10 +467,15 @@ export function useMessages(
       // the hidden ids are asked of the rows already held — so they are asked
       // together, one round trip instead of two in a row. The mark is usually
       // answered without a request at all while the membership channel is
-      // live (`clearedAtCache.setLive`).
+      // live (`clearedAtCache.setLive`). The hidden ids need no request either
+      // when every row held was verified while this account's hides channel
+      // was live (`lib/hiddenMessagesLive.ts`): a hide made since was heard.
+      const heldIds = getMessageAndReplyIds(cached);
+      const hiddenReadAt = Date.now();
+      const heard = hiddenMessagesLive.canSkip(chatId, heldIds);
       const [mark, hidden] = await Promise.all([
         loadClearedAt(supabase, chatId, userId),
-        fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(cached)),
+        heard ? Promise.resolve(new Set<string>()) : fetchHiddenMessageIdSet(supabase, heldIds),
       ]);
       if (!active) return;
       if (mark === undefined) {
@@ -469,6 +491,7 @@ export function useMessages(
         return;
       }
       rememberHiddenMessageIds(hidden);
+      if (!heard) hiddenMessagesLive.markVerified(chatId, heldIds, hiddenReadAt);
       const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...hidden]);
       const visible = sanitizeHiddenReplies(cached.filter((message) => {
         if (effectiveHiddenIds.has(message.id)) return false;
@@ -618,10 +641,13 @@ export function useMessages(
         return { loaded: 0 };
       }
 
-      const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(fetched));
+      const olderIds = getMessageAndReplyIds(fetched);
+      const hiddenReadAt = Date.now();
+      const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, olderIds);
       if (chatIdRef.current !== activeChatId || topicIdRef.current !== activeTopicId || historyRequestGenerationRef.current !== historyGeneration) return { loaded: 0 };
       if (!fetchedHiddenIds) throw new Error("hidden_message_ids_unavailable");
       rememberHiddenMessageIds(fetchedHiddenIds);
+      hiddenMessagesLive.markVerified(activeChatId, olderIds, hiddenReadAt);
       const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
       const visibleFetched = sanitizeHiddenReplies(fetched.filter((message) => {
         if (effectiveHiddenIds.has(message.id)) return false;
@@ -919,6 +945,7 @@ export function useMessages(
           // active chat from missing a message that the sidebar already saw.
           addMessage(payload.new.chat_id, provisional);
           updateChatLastMessage(payload.new.chat_id, provisional);
+          hiddenMessagesLive.markVerified(payload.new.chat_id, [payload.new.id], Date.now());
           if (user && isIncomingMessage(payload.new, user.id)) {
             // Receipt state follows what was rendered, not the optional joined
             // enrichment below. That fetch can legitimately lag Realtime under

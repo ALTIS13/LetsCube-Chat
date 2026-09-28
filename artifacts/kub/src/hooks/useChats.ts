@@ -40,6 +40,7 @@ import { CHATS_UNAVAILABLE, plainFailure } from "@/lib/plainMessages";
 import { isIncomingMessage } from "@/lib/messageActor";
 import { MESSAGE_LAST_MESSAGE_SELECT } from "@/lib/messageProjection";
 import { clearedAtCache } from "@/lib/clearedAtCache";
+import { hiddenMessagesLive, readHideEvent } from "@/lib/hiddenMessagesLive";
 import { subscribeByTable } from "@/lib/realtimeTableChannels";
 import {
   createResumeRevalidationGate,
@@ -639,9 +640,42 @@ export function useChats() {
         revalidateWhenSubscribed(status);
       });
     registerChannel(membershipChannelName);
+
+    // Tracker item 58: this account's hides, heard as they happen on its own
+    // private topic (`20260928220000_hides_heard_live.sql`). Trusted only once
+    // the ping sent after the join has come back through it — see
+    // `lib/hiddenMessagesLive.ts` — so a deaf channel never stands in for a read.
+    const hidesChannelName = `hides:${userId}`;
+    const hidesChannel = rt
+      .channel(hidesChannelName, { config: { private: true } })
+      .on("broadcast", { event: "ping" }, () => hiddenMessagesLive.pingReturned())
+      .on("broadcast", { event: "hide" }, (message: { payload?: unknown }) => {
+        const event = readHideEvent(message.payload);
+        if (!event) return;
+        hiddenMessagesLive.heard(event);
+        if (event.hidden) useAppStore.getState().removeMessage(event.chatId, event.messageId);
+        // The line under the chat's name may have been that message, or may be again.
+        scheduleSummary(event.chatId);
+      })
+      .subscribe((status: string) => {
+        if (import.meta.env.DEV) console.debug("[hides]", userId, status);
+        if (status !== "SUBSCRIBED") {
+          hiddenMessagesLive.lost();
+          return;
+        }
+        hiddenMessagesLive.joined();
+        void supabase.rpc("hides_live_ping").then(({ error }) => {
+          if (error) hiddenMessagesLive.lost();
+        });
+      });
+    registerChannel(hidesChannelName);
+
     // A socket found dead, or a device gone offline, has heard nothing since:
     // the marks go back to being read, until the channel joins again.
-    const notLive = () => clearedAtCache.setLive(false);
+    const notLive = () => {
+      clearedAtCache.setLive(false);
+      hiddenMessagesLive.lost();
+    };
     window.addEventListener(CONNECTION_REVIVED_EVENT, notLive);
     window.addEventListener("offline", notLive);
 
@@ -654,6 +688,9 @@ export function useChats() {
       unregisterChannel(receiptsChannelName);
       rt.removeChannel(membershipChannel);
       unregisterChannel(membershipChannelName);
+      rt.removeChannel(hidesChannel);
+      unregisterChannel(hidesChannelName);
+      hiddenMessagesLive.lost();
       window.removeEventListener(CONNECTION_REVIVED_EVENT, notLive);
       window.removeEventListener("offline", notLive);
       clearedAtCache.setLive(false);

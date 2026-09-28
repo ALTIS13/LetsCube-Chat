@@ -1293,6 +1293,33 @@ export interface Database {
           }
         ]
       }
+      /** Tracker item 67: `20260929100000_task_coassignees.sql`. Written only through `task_set_coassignees`. */
+      task_coassignees: {
+        Row: {
+          task_id: string
+          user_id: string
+          added_by: string | null
+          added_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "task_coassignees_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_coassignees_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       /** Tracker item 66: `20260928190000_task_reminders.sql`. Written only through the two functions. */
       task_reminders: {
         Row: {
@@ -1701,6 +1728,25 @@ export interface Database {
       }
       task_reminder_remove: {
         Args: { p_reminder_id: string }
+        Returns: void
+      }
+      /** Tracker item 67: the whole list of a task's co-executors. */
+      task_set_coassignees: {
+        Args: { p_task_id: string; p_user_ids: string[] }
+        Returns: void
+      }
+      /** Tracker item 54: `20260929090000_channel_reads.sql`. */
+      channel_unread_counts: {
+        Args: { p_chat_id: string }
+        Returns: { channel: string; unread: number }[]
+      }
+      mark_channel_read: {
+        Args: { p_chat_id: string; p_channel: string; p_read_through: string }
+        Returns: void
+      }
+      /** Tracker item 58: a ping on the caller's own hides topic (`20260928220000_hides_heard_live.sql`). */
+      hides_live_ping: {
+        Args: Record<string, never>
         Returns: void
       }
       task_cancel: {
@@ -2232,6 +2278,8 @@ export interface TaskWithPeople extends Task {
   route_admin?: Profile | null
   /** The list's embed of the checklist, only what its progress needs (tracker item 62). */
   checklist?: Pick<TaskChecklistItem, "done">[] | null
+  /** The co-executors beside the assignee, with their profiles (tracker item 67). */
+  coassignees?: { user_id: string; profile?: Profile | null }[] | null
 }
 
 export interface TaskEventWithActor extends TaskEvent {

@@ -9,6 +9,7 @@ import {
   requireFixtureServer,
   type Row,
 } from "./helpers/messageActionsFixture";
+import { RealtimeFixture } from "./helpers/realtime-fixture";
 
 /**
  * Coming back to a conversation left a moment ago (tracker item 58, D-322).
@@ -37,7 +38,10 @@ test.beforeEach(async ({ request }) => {
   await requireFixtureServer(request);
 });
 
-async function boot(page: Page) {
+/** How many pings reached a hides channel: the live test waits for one before measuring. */
+let pingsDelivered = 0;
+
+async function boot(page: Page, realtime?: RealtimeFixture) {
   const messages: Row[] = [];
   for (let i = 0; i < 12; i += 1) {
     messages.push(
@@ -62,8 +66,19 @@ async function boot(page: Page) {
       membership(B, BORIS, "member", AT),
     ],
     messages,
-    rpc: (name) => (name === "search_chat_messages" ? missingFunction(name) : undefined),
+    rpc: (name) => {
+      if (name === "search_chat_messages") return missingFunction(name);
+      // The database answers the ping on this account's own topic (item 58).
+      if (name === "hides_live_ping" && realtime) {
+        setTimeout(() => {
+          pingsDelivered += realtime.broadcast("hides:", "ping", { ping: true });
+        }, 30);
+        return { body: null };
+      }
+      return undefined;
+    },
   });
+  if (realtime) await realtime.install(page);
   await page.goto("/", { waitUntil: "domcontentloaded" });
   return messages;
 }
@@ -139,4 +154,50 @@ test("a message deleted for both while its private chat was closed does not come
   // outlive it.
   await expect(bubble(page, "Строка А 8")).toHaveCount(0, { timeout: 8_000 });
   await expect(bubble(page, "Строка А 7")).toBeVisible();
+});
+
+test("with this account's hides heard live, coming back draws at once and a hide made elsewhere is heard", async ({ page }) => {
+  // Tracker item 58, the last round trip. The account's hides are broadcast
+  // on its own private topic, so once that channel is proved live — its own
+  // ping came back through it — the rows held need no hidden-ids read before
+  // they are drawn.
+  const realtime = new RealtimeFixture();
+  const messages = await boot(page, realtime);
+  await expect.poll(() => realtime.isJoined("hides:")).toBe(true);
+  await expect.poll(() => pingsDelivered, { message: "the ping never came back" }).toBeGreaterThan(0);
+  await visitAndLeave(page);
+  // Every hidden-ids read slowed well past the bar below: a return that
+  // waited for one could not meet it.
+  await page.route("**/rest/v1/message_hidden_for_users**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    await route.fallback();
+  });
+  const clicked = Date.now();
+  await rowOf(page, "Анна").click();
+  await bubble(page, "Строка А 12").waitFor({ state: "visible", timeout: 10_000 });
+  const painted = Date.now() - clicked;
+  expect(painted, `the held rows waited ${painted} ms for a read the channel made needless`).toBeLessThan(1_000);
+
+  // A line hidden «for me» on the reader's phone: heard, and gone.
+  const target = messages.find((row) => row.content === "Строка А 11")!;
+  // By its exact line: a bubble's text runs into its time, so «Строка А 1»
+  // sent at 11:47 also contains «Строка А 11».
+  const line = page.getByText("Строка А 11", { exact: true });
+  await expect(line).toBeVisible();
+  const reached = realtime.broadcast("hides:", "hide", { message_id: target.id, chat_id: A, hidden: true });
+  expect(reached, "no hides channel was joined").toBeGreaterThan(0);
+  await expect(line, "a hide heard live was not applied").toHaveCount(0);
+  await expect(bubble(page, "Строка А 12")).toBeVisible();
+
+  // And one hidden while this chat is closed: the return draws without a
+  // read, so the held copy itself must have lost it.
+  await backToList(page);
+  await rowOf(page, "Борис").click();
+  await expect(bubble(page, "Строка Б")).toBeVisible();
+  const closed = messages.find((row) => row.content === "Строка А 10")!;
+  expect(realtime.broadcast("hides:", "hide", { message_id: closed.id, chat_id: A, hidden: true })).toBeGreaterThan(0);
+  await backToList(page);
+  await rowOf(page, "Анна").click();
+  await bubble(page, "Строка А 12").waitFor({ state: "visible", timeout: 10_000 });
+  await expect(page.getByText("Строка А 10", { exact: true }), "a hide heard while the chat was closed flashed back").toHaveCount(0);
 });

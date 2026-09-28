@@ -384,7 +384,13 @@ export async function openFixture(page: Page, options: FixtureOptions): Promise<
         (before === null || String(row.created_at) < before),
       );
       if ((request.headers().prefer ?? "").includes("count=")) {
-        return json(route, [], 200, { "access-control-expose-headers": "Content-Range", "content-range": `*/${rows.length}` });
+        // The list's unread count asks for rows after the reader's own read
+        // mark. Ignored, every re-read of the list counted the whole chat as
+        // unread — a return then took the «arrived while closed» path, which a
+        // real database never sends it down (item 58).
+        const after = createdAt?.startsWith("gt.") ? decodeURIComponent(createdAt.slice(3)) : null;
+        const counted = after === null ? rows : rows.filter((row) => String(row.created_at) > after);
+        return json(route, [], 200, { "access-control-expose-headers": "Content-Range", "content-range": `*/${counted.length}` });
       }
       if ((url.searchParams.get("order") ?? "").startsWith("created_at.desc")) {
         rows = [...rows].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));

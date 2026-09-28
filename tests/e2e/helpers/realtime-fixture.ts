@@ -86,6 +86,24 @@ export class RealtimeFixture {
     return delivered;
   }
 
+  /**
+   * A broadcast on every joined channel whose topic contains `part`, as the
+   * server relays one the database sent with `realtime.send`. Returns the
+   * number of channels it reached.
+   */
+  broadcast(part: string, event: string, payload: Record<string, unknown>): number {
+    let delivered = 0;
+    for (const socket of this.sockets) {
+      if (!socket.open) continue;
+      for (const channel of socket.channels.values()) {
+        if (!channel.topic.includes(part)) continue;
+        delivered += 1;
+        socket.ws.send(JSON.stringify([channel.joinRef, null, channel.topic, "broadcast", { type: "broadcast", event, payload }]));
+      }
+    }
+    return delivered;
+  }
+
   private refusing = false;
 
   /**
