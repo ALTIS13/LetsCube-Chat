@@ -84,6 +84,11 @@ export interface AttachSheetProps {
   onSendLocation: (latitude: number, longitude: number) => void;
   /** A desktop has no camera app behind `capture`; its webcam dialog stands in. */
   onOpenWebcam?: () => void;
+  /**
+   * What was typed in the composer before the sheet opened: its caption, as in
+   * Telegram (tracker item 65). Read once, when the sheet opens.
+   */
+  initialCaption?: string;
 }
 
 /**
@@ -117,6 +122,7 @@ export default function AttachSheet({
   onSendMedia,
   onSendLocation,
   onOpenWebcam,
+  initialCaption = "",
 }: AttachSheetProps) {
   const baseId = useId();
   const titleId = `${baseId}-title`;
@@ -129,7 +135,7 @@ export default function AttachSheet({
   const [gallerySelected, setGallerySelected] = useState<string[]>([]);
   const [files, setFiles] = useState<AttachPick[]>([]);
   const [filesSelected, setFilesSelected] = useState<string[]>([]);
-  const [caption, setCaption] = useState("");
+  const [caption, setCaption] = useState(initialCaption);
   const [menuOpen, setMenuOpen] = useState(false);
   // Remembered between sends, per device, since 2026-09-21. The tester called
   // ours «настройка HD», which is what a person calls a control that looks like

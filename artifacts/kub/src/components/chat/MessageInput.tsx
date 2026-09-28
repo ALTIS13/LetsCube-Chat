@@ -69,6 +69,7 @@ import {
   type BotCommand,
 } from "@/lib/botChatSurfaces";
 import { locationMessageText, type AttachIncoming, type AttachSendRequest } from "@/lib/attachSheet";
+import { textAfterSheet, textForSheet } from "@/lib/attachCaptionHandoff";
 import { ComposerRecordingRow, type ComposerRecordingPreview } from "./ComposerRecordingRow";
 import {
   lockProgress,
@@ -190,6 +191,12 @@ export function MessageInput({
   const [editError, setEditError] = useState<string | null>(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
+  /**
+   * The composer's text while the attach sheet holds it as its caption
+   * (tracker item 65, `lib/attachCaptionHandoff.ts`); null when it holds none.
+   * A send spends it; any other way out gives it back.
+   */
+  const [heldForSheet, setHeldForSheet] = useState<string | null>(null);
   /** The «Команды» button's own list. «/» opens the same list without it. */
   const [showCommands, setShowCommands] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -251,6 +258,8 @@ export function MessageInput({
   const editingMessage = useAppStore((s) => s.editingMessage);
   const setEditingMessage = useAppStore((s) => s.setEditingMessage);
   const isEditing = editingMessage !== null && editingMessage.chat_id === chatId;
+  const isEditingRef = useRef(isEditing);
+  isEditingRef.current = isEditing;
   const muteState = useMuteState(chatId);
 
   /**
@@ -312,6 +321,9 @@ export function MessageInput({
     setShowVoice(false);
     setShowCamera(false);
     setShowVideoMessage(false);
+    // The sheet goes with the chat: its caption was typed for the chat it was
+    // opened in, and must never be sent into the next one (item 65).
+    setShowAttach(false);
     setVoiceHoldActive(false);
     setHoldRecorderState(null);
     setVideoAutoStart(false);
@@ -335,6 +347,8 @@ export function MessageInput({
     if (typeof window === "undefined") return;
     const saved = localStorage.getItem(draftKey(chatId));
     setText(saved ?? "");
+    // What the sheet held was saved as the previous chat's draft, below.
+    setHeldForSheet(null);
     preEditTextRef.current = null;
     setEditingMessage(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -343,9 +357,21 @@ export function MessageInput({
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (isEditing) return;
-    if (text) localStorage.setItem(draftKey(chatId), text);
+    // While the sheet holds the text it is still this chat's draft: a reload
+    // with the sheet open must not lose it.
+    const draft = heldForSheet === null ? text : textAfterSheet(heldForSheet, text);
+    if (draft) localStorage.setItem(draftKey(chatId), draft);
     else localStorage.removeItem(draftKey(chatId));
-  }, [text, chatId, isEditing]);
+  }, [text, heldForSheet, chatId, isEditing]);
+
+  // Any way out of the sheet but a send gives the composer its text back, as
+  // Telegram Desktop's cancel does; a send has already spent it.
+  useEffect(() => {
+    if (showAttach || heldForSheet === null) return;
+    const held = heldForSheet;
+    setHeldForSheet(null);
+    setText((current) => textAfterSheet(held, current));
+  }, [showAttach, heldForSheet]);
 
   useEffect(() => () => onFocusChange?.(false), [onFocusChange]);
 
@@ -413,6 +439,7 @@ export function MessageInput({
     if (!draftOverride) return;
     setEditingMessage(null);
     preEditTextRef.current = null;
+    setHeldForSheet(null);
     setText(draftOverride.text);
     setShowEmoji(false);
     setShowAttach(false);
@@ -869,7 +896,20 @@ export function MessageInput({
 
   // ── the attach sheet (D-122) ──────────────────────────────────────────────
 
+  // Item 65: what was typed before the sheet opened is its caption, as in both
+  // Telegrams — Desktop moves the field's text into the send box, Android
+  // seeds the sheet's caption from it — so it is neither sent separately nor
+  // lost to one of the two.
+  const takeTextForSheet = useCallback(() => {
+    const taken = textForSheet(textareaRef.current?.value ?? "", isEditingRef.current);
+    if (taken === null) return;
+    setHeldForSheet((held) => held ?? taken);
+    setText("");
+  }, []);
+
   const sendFromSheet = useCallback((request: AttachSendRequest) => {
+    // The caption carried the composer's text; sent, it is spent.
+    setHeldForSheet(null);
     setShowAttach(false);
     if (onSendMedia) {
       void onSendMedia(request);
@@ -898,8 +938,9 @@ export function MessageInput({
   useEffect(() => {
     if (!incomingMedia) return;
     setShowEmoji(false);
+    takeTextForSheet();
     setShowAttach(true);
-  }, [incomingMedia]);
+  }, [incomingMedia, takeTextForSheet]);
 
   const handleSend = useCallback(async () => {
     const sendToken = composerSendScope.capture();
@@ -1321,6 +1362,7 @@ export function MessageInput({
             if (sheetWebcamShot) setSheetWebcamShot(null);
             else onIncomingMediaTaken?.();
           }}
+          initialCaption={heldForSheet ?? ""}
           onClose={() => setShowAttach(false)}
           onSendMedia={sendFromSheet}
           onSendLocation={sendLocationFromSheet}
@@ -1532,7 +1574,11 @@ export function MessageInput({
           {/* The field's glass starts after each round button and its 8px gap. */}
           <KubGlassLayer className="left-[3.25rem] right-[3.25rem] ios:left-14 ios:right-14 rounded-[1.375rem] border border-[color:var(--glass-line)] group-has-[textarea:focus]/composer:border-[color:var(--kub-cyan)]" />
           <button
-            onClick={() => { setShowAttach(!showAttach); setShowEmoji(false); }}
+            onClick={() => {
+              if (!showAttach) takeTextForSheet();
+              setShowAttach(!showAttach);
+              setShowEmoji(false);
+            }}
             className={cn(
               "kub-interactive kub-ios-composer-control group/capsule relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-colors",
               FOCUS_RING,

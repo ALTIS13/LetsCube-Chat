@@ -155,6 +155,86 @@ test.describe("the attach sheet (D-122)", () => {
     expect((await attachProbe(page)).media).toBe(0);
   });
 
+  // Tracker item 65: «если начать писать, а потом выбрать фото для загрузки. У
+  // телеги ты тогда автоматом падаешь в поле подписи под фото со своим
+  // набранным уже текстом. А здесь либо отправлять по отдельности, либо
+  // слетит что-то одно из двух».
+  test("what was typed before the sheet opened is the photo's caption, lines and all, and the send spends it", async ({ page }) => {
+    const backend = await installBackend(page);
+    await openChat(page);
+    const composer = page.locator('textarea[placeholder="Сообщение…"]');
+    const typed = "Витрина после монтажа\nсвет ещё не включали";
+    await composer.fill(typed);
+
+    const sheet = await openSheet(page);
+    // Moved, not copied: on a computer the composer stays on screen under the
+    // sheet, and the same words twice would be two things to send.
+    await expect(composer).toHaveValue("");
+    const facade = await testPhoto("facade.png", 30);
+    await pick(page, '[data-attach-entry="library"]', [facade]);
+    await expect(sheet.getByTestId("attach-caption")).toHaveValue(typed);
+
+    await sheet.getByTestId("attach-send").click();
+    await expect(sheet).toHaveCount(0);
+    await expect.poll(() => backend.inserts.length).toBe(1);
+    expect(backend.inserts[0]).toMatchObject({ type: "image", content: typed });
+    // Spent: not left behind to go a second time as a message of its own.
+    await expect(composer).toHaveValue("");
+    expect(await page.evaluate((id) => localStorage.getItem(`kub:draft:${id}`), CHAT_ID)).toBeNull();
+  });
+
+  test("closing the sheet without sending gives the composer back what it had", async ({ page }) => {
+    const backend = await installBackend(page);
+    await openChat(page);
+    const composer = page.locator('textarea[placeholder="Сообщение…"]');
+    await composer.fill("Витрина после монтажа");
+
+    // Opened and closed with nothing picked.
+    let sheet = await openSheet(page);
+    await expect(composer).toHaveValue("");
+    // Held, it is still the chat's draft: a reload now would not lose it.
+    expect(await page.evaluate((id) => localStorage.getItem(`kub:draft:${id}`), CHAT_ID)).toBe("Витрина после монтажа");
+    await page.keyboard.press("Escape");
+    await expect(sheet).toHaveCount(0);
+    await expect(composer).toHaveValue("Витрина после монтажа");
+
+    // Picked, the caption changed, then the pick cancelled: Telegram Desktop's
+    // cancel puts back the text the field had, not the caption as edited.
+    sheet = await openSheet(page);
+    await pick(page, '[data-attach-entry="library"]', [await testPhoto("facade.png", 30)]);
+    const caption = sheet.getByTestId("attach-caption");
+    await expect(caption).toHaveValue("Витрина после монтажа");
+    await caption.fill("Совсем другая подпись");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Отменить выбор", exact: true }).click();
+    await expect(sheet).toHaveCount(0);
+    await expect(composer).toHaveValue("Витрина после монтажа");
+    expect(backend.inserts, "a cancelled sheet sent something").toHaveLength(0);
+  });
+
+  test("the caption field grows with its lines, and Shift+Enter starts one where Enter sends", async ({ page }) => {
+    const backend = await installBackend(page);
+    await openChat(page);
+    const sheet = await openSheet(page);
+    await pick(page, '[data-attach-entry="library"]', [await testPhoto("facade.png", 30)]);
+    const caption = sheet.getByTestId("attach-caption");
+    const oneLine = await caption.evaluate((node) => node.getBoundingClientRect().height);
+    expect(oneLine, "one line is the field's resting height").toBe(44);
+
+    await caption.click();
+    await page.keyboard.type("Первая строка");
+    await page.keyboard.press("Shift+Enter");
+    await page.keyboard.type("вторая");
+    await expect(caption).toHaveValue("Первая строка\nвторая");
+    expect(backend.inserts, "Shift+Enter sent").toHaveLength(0);
+    await expect.poll(() => caption.evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThan(oneLine);
+
+    await page.keyboard.press("Enter");
+    await expect(sheet).toHaveCount(0);
+    await expect.poll(() => backend.inserts.length).toBe(1);
+    expect(backend.inserts[0]).toMatchObject({ content: "Первая строка\nвторая" });
+  });
+
   test("selected photos can be reordered before their album is sent", async ({ page }, testInfo) => {
     const pageErrors: string[] = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));

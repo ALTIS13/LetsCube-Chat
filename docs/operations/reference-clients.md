@@ -3288,3 +3288,54 @@ Where ours differs, with the reason:
 - **The chat list names the placeholder** as the last message even while its
   chat is open. Telegram leaves the row alone until the send is confirmed; ours
   shows it because the complaint was exactly that nothing did.
+
+## 23. Subject 15 — text typed before an attachment, 2026-09-28
+
+Tracker item 65. A tester, 2026-09-28: «если начать писать, а потом выбрать
+фото для загрузки. У телеги ты тогда автоматом падаешь в поле подписи под фото
+со своим набранным уже текстом. А здесь либо отправлять по отдельности, либо
+слетит что-то одно из двух». Telegram is the reference for a chat with media.
+Two clients were read from source on 2026-09-28, not recalled; iOS and Web
+were not read — **UNESTABLISHED** there.
+
+### 23.1 What the clients do. SHIPPED
+
+- **Telegram Desktop**, `telegramdesktop/tdesktop`, branch `dev`,
+  `Telegram/SourceFiles/history/history_widget.cpp`,
+  `HistoryWidget::confirmSendingFiles(PreparedList&&, …)`: the field's text
+  with its formatting and its cursor are taken, the `SendFilesBox` is built
+  with that text as its caption, and **the field is emptied**
+  (`_field->setTextWithTags({})`). The box's cancel callback puts **the text
+  the field had** back, with the cursor and selection as they were — not the
+  caption as edited in the box. In edit mode the same entry replaces the
+  message's media instead (`EditCaptionBox::StartMediaReplace`).
+- **Telegram for Android**, `DrKLO/Telegram`, branch `master`,
+  `ChatActivity.openAttachMenu()`: the attach sheet's comment view is set from
+  the field's text (`getCommentView().setText(getFieldText())`); **the field
+  keeps it**. The sheet's send path in the delegate ends with
+  `chatActivityEnterView.setFieldText("")`. A sheet dismissed without sending
+  leaves the field as it was.
+
+Both, then: the typed text is the attachment's caption; a send spends it; any
+other way out leaves the field with the text it had before.
+
+### 23.2 Ours, and where it differs on purpose
+
+`lib/attachCaptionHandoff.ts`, `MessageInput`, `AttachSheet`: the paperclip,
+and a pasted or dropped picture, move the composer's text into the sheet as
+its caption; a send spends it; every other way out — the ×, Escape, the dim,
+a location sent instead, a recording started — gives the composer back what it
+had, Desktop's cancel. Edit mode takes nothing.
+
+- **Desktop's move, not Android's copy.** Our computer's sheet is a panel above
+  a composer that stays on screen; a copy would show the same words in two
+  fields, both looking sendable.
+- **Held text is still the chat's draft.** Desktop's box is modal and cannot
+  outlive its chat; ours can be reloaded under, so the text stays saved as the
+  draft while the sheet holds it.
+- **The sheet closes with its chat.** Desktop's modal box makes a chat switch
+  impossible; ours was not modal, and a caption typed for one chat must never
+  be sent into the next.
+- **The caption became a field of lines**, as both Telegrams' are: a one-line
+  input drops every line break it is handed, which was the loss the report is
+  about in another form.

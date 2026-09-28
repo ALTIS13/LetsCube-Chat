@@ -2839,12 +2839,23 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     тебя сейчас в работе». On a computer, in the folder rail beside the menu,
     alongside the section row item 41 added; decide which of the two stays.
 
-65. `[ ]` Text typed before an attachment becomes its caption — «если начать
+65. `[x]` Text typed before an attachment becomes its caption — «если начать
     писать, а потом выбрать фото для загрузки. У телеги ты тогда автоматом
     падаешь в поле подписи под фото со своим набранным уже текстом. А здесь
     либо отправлять по отдельности, либо слетит что-то одно из двух».
     Telegram's mechanic, adopted as described: the composer's text moves into
     the attach sheet's caption field and leaves the composer.
+    **Done 2026-09-28**, after reading both Telegrams' source rather than
+    trusting a recollection (`reference-clients.md` §23): Desktop moves the
+    field's text into the send box and its cancel puts the original back;
+    Android seeds the sheet's caption and empties the field on send. Ours moves
+    (a computer's composer stays on screen under the sheet), a send spends the
+    text, every other way out returns what the composer had, the held text
+    stays the chat's draft, the sheet closes with its chat so a caption never
+    crosses into another, and the caption is now a field of lines — a one-line
+    input dropped every line break. Evidence: `attach-sheet.spec` (three tests;
+    mutants that keep the text after a send or never give it back go red),
+    `attach-caption-handoff.test.mts`.
 
 66. `[ ]` Task reminders — «например стоит задача с выполнением на месяц…
     комплектующие придут только через неделю и тогда надо напоминание, что пора
@@ -3062,6 +3073,28 @@ copies of themselves; those were moved into the same backup.
 hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
+
+### 2026-09-28 — `letscube-web` through `2c0c36ef`, nine deploys in one day
+
+Every push to `main` today was followed by the same two checks, read rather
+than assumed: the web container `l64kyyu1sysev2izzjjbizhe` running the commit's
+full SHA as its image tag, alone and healthy, and a marker string of the change
+found in the live bundle. For `2c0c36ef` the marker (`channel-rail-leave`) was
+also shown absent before the push, beside a control (`channel-rail-preview`)
+present both times.
+
+| commit | items |
+| --- | --- |
+| `8e35a435` | 41 — the shell's sections |
+| `49b13e7c`, `91d2c589`, `595fa4fd`, `43fa5326` | 55, 56, 53 — forward notice, bottom edge, network change |
+| `956839ed`, `e97f9ae8` | 52 — the outbox, text and media |
+| `84f8abcf` | 54 — each channel's last line |
+| `2c0c36ef` | 54, 59, 61, 69 — a phone opens a server on its list; previews read once |
+
+Gates at `2c0c36ef`: typecheck clean in all four packages, unit 4290/4290,
+production build proved by its `sw.js build` and `built in` lines, and the
+Playwright specs the change reaches at 1440 and 390 — 309 and 362 in two
+rounds, all green. Rollback: redeploy `84f8abcf` through Coolify.
 
 ### 2026-09-19 — the voice evening: a media server, two client fixes, and the sounds
 
