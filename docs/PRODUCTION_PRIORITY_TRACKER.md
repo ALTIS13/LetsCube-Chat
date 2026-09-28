@@ -1172,6 +1172,20 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     where item 39's surfaces end up being reached from, so the two should be
     designed together.
 
+    **Read 2026-09-28, not built — and the reading changes the size of it.**
+    Discord's web bundle (build 621195) draws its home rows as navigation rows,
+    each a route with an icon and a word — Friends, Library
+    (`APPLICATION_LIBRARY`), Message Requests, Family Center, the shop
+    (`COLLECTIBLES_SHOP`) — conditionally, above the direct messages, and a row
+    opens its page **in the main area while the lists stay**. Ours cannot do
+    that yet: `/bots` and `/tasks` are routes outside `MainLayout` (`App.tsx`),
+    so either one replaces the whole window. Moving their doors into the list
+    without moving the pages into the shell would be half the mechanic — the
+    rows would lead somewhere the rows are not. So the item is the shell first
+    (the sections rendered in the main area beside the lists), then the rows,
+    and the phone, which Discord's mobile app answers differently, measured
+    separately.
+
 42. `[x]` The update notice moves to the window's own controls — done 2026-09-28.
     **What each shell gets.** The Windows app: one control in the caption,
     left of minimise, where Discord's desktop client keeps its update arrow —

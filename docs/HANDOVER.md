@@ -72,7 +72,17 @@ order was followed and closed:
   three times, and coming back to the tab no longer renders the conversation:
   the redundant gate, the topic scope a chat started from nothing, the general
   topic ids held by identity, a channel rejoined on every scope change, and a
-  bot panel read that replaced equal state every fifteen seconds.
+  bot panel read that replaced equal state every fifteen seconds (`85d7ffac`);
+- item 36 b's fourth entry, «Пригласить в группу», a step listing the groups
+  the person is not in (`446a0159`);
+- D-266 and D-267 — a person in a call opens the same menu on the rail, the
+  capsule's faces and the information panel's voice room, with «Профиль» and
+  a per-person «Заглушить для себя» kept apart from the volume as Discord keeps
+  `localMutes` apart from `localVolumes` (`bba38aa9`);
+- D-182 closed by measurement: the settings are a window since `7d1513b4`, so
+  the list's search no longer unmounts them (`fafe6ec0`);
+- item 38's first half — a badge's line is its own card — and D-321, found with
+  it: every tooltip opened inside a panel was painted under it (`f0300988`).
 
 A full fixture regression was run at `0eba67e9` against a throwaway worktree of
 the pre-session baseline `1c066e8b`. Everything red at `0eba67e9` was red on the
