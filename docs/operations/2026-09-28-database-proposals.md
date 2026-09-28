@@ -66,7 +66,7 @@ their bodies are re-issued whole).
 mistake would be, so the rehearsal replays every existing call shape against a
 copy.
 
-## 3. A checklist inside a task (item 62)
+## 3. A checklist inside a task (item 62) — applied 2026-09-28
 
 **Change:** `public.task_checklist_items (id uuid, task_id uuid references
 tasks on delete cascade, text text check (length between 1 and 500), done

@@ -8,6 +8,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import type {
   Chat,
   Profile,
+  TaskChecklistItem,
   TaskEventWithActor,
   TaskWithPeople,
 } from "@/types/database";
@@ -19,6 +20,8 @@ import type {
 export function useTask(taskId: string | null) {
   const [task, setTask] = useState<TaskWithPeople | null>(null);
   const [events, setEvents] = useState<TaskEventWithActor[]>([]);
+  // Tracker item 62: the task's checklist, in its own order.
+  const [checklist, setChecklist] = useState<TaskChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = useMemo(() => createClient(), []);
   const rt = useMemo(() => getRealtimeClient(), []);
@@ -32,7 +35,7 @@ export function useTask(taskId: string | null) {
     }
     bumpFetch("useTask");
     setLoading(true);
-    const [taskRes, eventsRes] = await Promise.all([
+    const [taskRes, eventsRes, checklistRes] = await Promise.all([
       supabase
         .from("tasks")
         .select(
@@ -48,6 +51,11 @@ export function useTask(taskId: string | null) {
         .select("*, actor:profiles!task_events_actor_id_fkey(*)")
         .eq("task_id", taskId)
         .order("created_at", { ascending: true }),
+      supabase
+        .from("task_checklist_items")
+        .select("*")
+        .eq("task_id", taskId)
+        .order("position", { ascending: true }),
     ]);
 
     if (taskRes.error || !taskRes.data) {
@@ -61,6 +69,8 @@ export function useTask(taskId: string | null) {
         chat: (row as { chat?: Chat | null }).chat ?? null,
       });
     }
+    // A refused read keeps what was on screen rather than drawing an empty list.
+    if (!checklistRes.error) setChecklist((checklistRes.data ?? []) as TaskChecklistItem[]);
     setEvents(
       (eventsRes.data ?? []).map((r) => ({
         ...(r as TaskEventWithActor),
@@ -109,6 +119,8 @@ export function useTask(taskId: string | null) {
       [
         { event: "*", schema: "public", table: "tasks", filter: `id=eq.${taskId}`, handler: debouncedFetch },
         { event: "INSERT", schema: "public", table: "task_events", filter: `task_id=eq.${taskId}`, handler: debouncedFetch },
+        // REPLICA IDENTITY FULL, as the other two, so a removal is heard too.
+        { event: "*", schema: "public", table: "task_checklist_items", filter: `task_id=eq.${taskId}`, handler: debouncedFetch },
       ],
       (name, status) => {
         if (import.meta.env.DEV) console.debug("[tasks:detail]", name, status);
@@ -124,5 +136,5 @@ export function useTask(taskId: string | null) {
     };
   }, [taskId, rt, fetchTask]);
 
-  return { task, events, loading, refetch: fetchTask };
+  return { task, events, checklist, loading, refetch: fetchTask };
 }

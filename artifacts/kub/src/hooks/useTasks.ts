@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
+import { subscribeByTable } from "@/lib/realtimeTableChannels";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { mapPgError } from "@/lib/errors";
 import {
   heldListCleared,
@@ -82,7 +84,8 @@ export function useTasks(filter: TasksFilter, options: { enabled?: boolean } = {
       .select(
         `*,
          assignee:profiles!tasks_assignee_id_fkey(*),
-         creator:profiles!tasks_created_by_fkey(*)`,
+         creator:profiles!tasks_created_by_fkey(*),
+         checklist:task_checklist_items(done)`,
       )
       // Sort by urgency first (enum order is low<normal<high<urgent in the
       // DB, so DESC gives urgent → low), then by recency so two tasks of
@@ -146,18 +149,26 @@ export function useTasks(filter: TasksFilter, options: { enabled?: boolean } = {
       if (timer) clearTimeout(timer);
       timer = setTimeout(fetchTasks, 250);
     };
-    const channelName = `tasks:user:${userId}:${filter.mine}`;
-    const channel = rt
-      .channel(channelName)
-      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, debounced)
-      .subscribe((status: string) => {
-        if (import.meta.env.DEV) console.debug("[tasks:user]", userId, status);
-      });
-    registerChannel(channelName);
+    // One channel per table (`lib/realtimeTableChannels.ts`): the tasks, and
+    // their checklists, whose progress the cards show (tracker item 62).
+    const channels = subscribeByTable<typeof debounced, RealtimeChannel>(
+      rt,
+      `tasks:user:${userId}:${filter.mine}`,
+      [
+        { event: "*", schema: "public", table: "tasks", handler: debounced },
+        { event: "*", schema: "public", table: "task_checklist_items", handler: debounced },
+      ],
+      (name, status) => {
+        if (import.meta.env.DEV) console.debug("[tasks:user]", name, status);
+      },
+    );
+    for (const { name } of channels) registerChannel(name);
     return () => {
       if (timer) clearTimeout(timer);
-      rt.removeChannel(channel);
-      unregisterChannel(channelName);
+      for (const { name, channel } of channels) {
+        rt.removeChannel(channel);
+        unregisterChannel(name);
+      }
     };
   }, [userId, enabled, rt, fetchTasks, filter.mine]);
 

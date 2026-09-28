@@ -35,6 +35,7 @@ import {
   getTaskDeadlineState,
 } from "./taskMeta";
 import { TaskAssignModal } from "./TaskAssignModal";
+import { TaskChecklist } from "./TaskChecklist";
 import { TaskConfirmModal } from "./TaskConfirmModal";
 import { TaskDeleteModal } from "./TaskDeleteModal";
 import { TaskFormModal } from "./TaskFormModal";
@@ -74,7 +75,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
   // task RPC knows anything about permissions (D-202, and `lib/taskActionAccess.ts`).
   const { allowed: isManagerOrAdmin } = useMatchesIsManagerOrAdmin();
   const { softDeleteTask } = useTaskSoftDelete();
-  const { task, events, loading, refetch } = useTask(taskId);
+  const { task, events, checklist, loading, refetch } = useTask(taskId);
   const {
     recurrence,
     status: recurrenceStatus,
@@ -402,6 +403,16 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
             {task.description}
           </p>
         )}
+
+        <TaskChecklist
+          taskId={task.id}
+          items={checklist}
+          canEdit={canEdit}
+          // The person doing the work ticks it off (tracker item 62), on a
+          // task still open, as `task_checklist_set_done` allows.
+          canTick={canEdit || (!taskIsDeleted && isAssignee && !["confirmed", "cancelled"].includes(task.status))}
+          onChanged={refetch}
+        />
 
         <div className="rounded-2xl p-3 kub-raise">
           <div className="flex flex-wrap items-start justify-between gap-3">

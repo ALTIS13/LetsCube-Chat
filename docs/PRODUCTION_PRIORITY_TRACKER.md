@@ -2959,12 +2959,19 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     removed but reduced to Discord's vocabulary — the small «+» a heading
     already carries, «Создать канал» in its title, no labelled row.
 
-62. `[ ]` A task can hold a checklist — «прописать пункты и отмечать какие
+62. `[x]` A task can hold a checklist — «прописать пункты и отмечать какие
     пункты уже сделал, чтобы в итоге закрыть большую задачу». Items without
     their own deadlines or assignees: a list inside the task, ticked off.
     Telegram's own checklist message is the model to read first. Needs a place
     in the database (a column or a table) — §10, the owner's word before it is
     applied.
+    **Done 2026-09-28**, on the owner's approval: `task_checklist_items` and
+    four functions that ask the task's own edit rule and let the assignee tick
+    — backup, rehearsal, apply and smoke in
+    `operations/2026-09-28-owner-approved-database-changes.md`. The detail
+    shows «Чек-лист» with «1 из 2» and a bar, points added, ticked, renamed by
+    pressing them and removed; the card shows «1/2». Evidence:
+    `task-checklist.test.mts`, `task-checklist.spec` at 1440 and 390.
 
 63. `[x]` One field for who a task goes to — «Получатель» («Менеджер локации»)
     and «Тип назначения» («Пул менеджеров») read as the same question: «по

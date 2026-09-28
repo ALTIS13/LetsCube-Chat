@@ -1,5 +1,6 @@
 "use client";
 
+import { checklistProgress } from "@/lib/taskChecklist";
 import { formatTaskPeriod } from "@/lib/taskPeriod";
 import type { ReactNode } from "react";
 import type { TaskWithPeople } from "@/types/database";
@@ -33,6 +34,7 @@ export function TaskCard({ task, nowMs, onClick, selected = false, selectionCont
   const isRecurringOccurrence = Boolean(task.recurrence_template_task_id);
   const isDeleted = Boolean(task.deleted_at);
   const deadline = getTaskDeadlineState(task, nowMs);
+  const checklist = checklistProgress(task.checklist);
 
   return (
     <div
@@ -119,6 +121,13 @@ export function TaskCard({ task, nowMs, onClick, selected = false, selectionCont
           {deadline.badgeLabel && (
             <KubBadge tone={deadline.tone} pill>
               {deadline.badgeLabel}
+            </KubBadge>
+          )}
+          {checklist && (
+            // Tracker item 62: how much of its checklist is done.
+            <KubBadge tone={checklist.done === checklist.total ? "online" : "muted"} pill>
+              <KubIcon name="checklist" size={11} className="mr-1" />
+              <span data-testid="task-checklist-badge" className="tabular-nums">{checklist.done}/{checklist.total}</span>
             </KubBadge>
           )}
           {isDeleted && (

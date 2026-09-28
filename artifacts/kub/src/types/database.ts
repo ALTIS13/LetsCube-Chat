@@ -1267,6 +1267,32 @@ export interface Database {
           }
         ]
       }
+      /** Tracker item 62: `20260928180000_task_checklist.sql`. Written only through the four functions. */
+      task_checklist_items: {
+        Row: {
+          id: string
+          task_id: string
+          text: string
+          done: boolean
+          position: number
+          created_by: string | null
+          done_by: string | null
+          done_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "task_checklist_items_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       task_events: {
         Row: {
           id: string
@@ -1623,6 +1649,22 @@ export interface Database {
       }
       task_reject: {
         Args: { p_task_id: string; p_reason: string }
+        Returns: void
+      }
+      task_checklist_add: {
+        Args: { p_task_id: string; p_text: string }
+        Returns: string
+      }
+      task_checklist_rename: {
+        Args: { p_item_id: string; p_text: string }
+        Returns: void
+      }
+      task_checklist_set_done: {
+        Args: { p_item_id: string; p_done: boolean }
+        Returns: void
+      }
+      task_checklist_remove: {
+        Args: { p_item_id: string }
         Returns: void
       }
       task_cancel: {
@@ -2104,6 +2146,7 @@ export type Mute = Database['public']['Tables']['mutes']['Row']
 export type Task = Database['public']['Tables']['tasks']['Row']
 export type TaskRecurrence = Database['public']['Tables']['task_recurrences']['Row']
 export type TaskEvent = Database['public']['Tables']['task_events']['Row']
+export type TaskChecklistItem = Database['public']['Tables']['task_checklist_items']['Row']
 export type TaskRecurrenceEvent = Database['public']['Tables']['task_recurrence_events']['Row']
 export type ProfileContact = Database['public']['Tables']['profile_contacts']['Row']
 export type Notification = Database['public']['Tables']['notifications']['Row']
@@ -2150,6 +2193,8 @@ export interface TaskWithPeople extends Task {
   chat?: Chat | null
   location?: Location | null
   route_admin?: Profile | null
+  /** The list's embed of the checklist, only what its progress needs (tracker item 62). */
+  checklist?: Pick<TaskChecklistItem, "done">[] | null
 }
 
 export interface TaskEventWithActor extends TaskEvent {

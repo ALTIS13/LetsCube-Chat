@@ -304,7 +304,16 @@ test("the perimeter count only ever shrinks", () => {
   // the one already counted here rather than a third vocabulary.
   // 198 after the bot reply input well, the floating bot-viewer panel, and the
   // album media tile each added one justified edge; none is an inner divider.
-  assert.ok(total <= 198, `perimeters on the sheet-edge colour grew to ${total}; the ceiling is 198`);
+  // The task form's «Начало» (tracker item 68) is inside that 198: a field
+  // beside «Срок», drawn as «Срок» is.
+  //
+  // 200 since 2026-09-28, raised by argument and by exactly two: the task
+  // checklist's fields (tracker item 62), «Добавить пункт» and the field a
+  // point turns into while it is renamed. Both are wells on
+  // `bg-[var(--kub-inset)]` and both are aimed at — the well and the target
+  // rule 11 keeps an edge for — and each is drawn exactly as the comment
+  // field of the same modal is.
+  assert.ok(total <= 200, `perimeters on the sheet-edge colour grew to ${total}; the ceiling is 200`);
 });
 
 /**

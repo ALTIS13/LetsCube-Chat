@@ -52,3 +52,41 @@ testers asked for most.
   period on the card, the row and the detail, and «Начнётся через …» for a
   period not begun. Evidence: `task-period.test.mts`, `task-period.spec` at
   1440 and 390.
+
+## 2. A checklist inside a task — tracker item 62
+
+- **Migration** `supabase/migrations/20260928180000_task_checklist.sql`
+  (SHA-256 `DC0D420133EBF42882728230E00709CDFBC278C4D5478CFD85721BD8A0C8E0DB`),
+  rollback `…_task_checklist.rollback.sql`
+  (`9E26340DFE18AE58B4E857D3C64248BA369FDA06E9382571999C5FA670B5C199`); both
+  copied byte-identical into `.migration-backup/`.
+- **What it does:** `public.task_checklist_items` (text 1–500 characters,
+  trimmed; `done` consistent with `done_at` and `done_by`; a position), read by
+  exactly who reads the task — the policy is `task_events select scoped`'s,
+  written out — and written by nobody directly: `task_checklist_add`,
+  `…_rename`, `…_set_done` and `…_remove`, each through
+  `_task_checklist_assert_can_change`, which asks `task_update_v3`'s rule (the
+  creator, staff, or an administrator of the task's location) and lets the
+  assignee tick too; nothing changes on a confirmed, cancelled or deleted task.
+  At most 100 points. The table is in `supabase_realtime` with REPLICA IDENTITY
+  FULL, as `tasks` and `task_events` are. Unlike the hides of entry 1, a DELETE
+  here reaching a subscriber RLS was not asked about carries a random item id
+  and, under a `task_id` filter, the fact that a task lost a point — the same
+  property `tasks` and `task_events` already have, and nothing of the text.
+- **Backup:** `/srv/letscube/backups/automated/20260928-222615`, `SHA256SUMS`
+  verified, `pg_restore --list` has `public.tasks` and `task_create_v4`.
+- **Rehearsal** (rolled back), as a staff account and as an ordinary one the
+  task is assigned to: three points added — trimmed, positions 1, 2, 3 — one
+  renamed, one removed, an empty one refused as `checklist_text_invalid`; the
+  assignee reads them, ticks one (with `done_by`), is refused `forbidden` on
+  adding and removing, and unticking clears `done_at` and `done_by`; the task
+  cancelled, a tick refused as `task_locked`; a direct INSERT refused
+  `insufficient_privilege`. Passed.
+- **Applied** as `postgres`; post-apply smoke the same, rolled back, passed;
+  no rows, 58 tasks, the table published.
+- **Client:** `lib/taskChecklist.ts`, `pages/tasks/TaskChecklist.tsx` under
+  the description in the task's detail — add, tick (drawn before its answer,
+  taken back on a refusal), rename by pressing the text, remove — and «1/2» on
+  the card; the detail and the list hear the table live. Evidence:
+  `task-checklist.test.mts`, `task-checklist.spec` at 1440 and 390 (a mutant
+  without the assignee's tick turns the assignee's check red).

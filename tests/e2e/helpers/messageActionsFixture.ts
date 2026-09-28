@@ -148,7 +148,15 @@ export interface FixtureOptions {
    * a spec asks for SQLSTATE 23505 on a second report, or for the
    * row-level-security refusal a blocked sender's insert really gets.
    */
-  rest?: (call: { resource: string; method: string; body: unknown }) => { status: number; body: unknown } | undefined;
+  rest?: (call: {
+    resource: string;
+    method: string;
+    body: unknown;
+    /** Whether the client asked for one object rather than a list (`.single()` / `.maybeSingle()`). */
+    single?: boolean;
+    /** The query string, for a spec that answers by filter. */
+    search?: string;
+  }) => { status: number; body: unknown } | undefined;
 }
 
 export interface Fixture {
@@ -242,7 +250,7 @@ export async function openFixture(page: Page, options: FixtureOptions): Promise<
     if (method === "OPTIONS") return route.fulfill({ status: 204 });
     // A refusal the spec asked for, before anything else answers. It is checked
     // after the call is recorded, so a spec can still assert what was sent.
-    const failure = isRest ? options.rest?.({ resource, method, body }) : undefined;
+    const failure = isRest ? options.rest?.({ resource, method, body, single, search: url.search }) : undefined;
     if (failure) return json(route, failure.body, failure.status);
     if (url.pathname === "/auth/v1/user") {
       return json(route, { id: me.id, aud: "authenticated", role: "authenticated", email: "message-actions-qa@example.invalid", user_metadata: { full_name: me.full_name }, app_metadata: {}, created_at: EPOCH });
