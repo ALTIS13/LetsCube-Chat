@@ -23940,12 +23940,20 @@ chat and back» measure `GET messages:list` 3, `message_hidden_for_users` 4,
 `messages:pinned` 2; «coming back from away» renders the conversation 3 times
 for a revalidation that changed nothing.
 
-Read, not yet measured step by step: `useMessages`' open effect and the cached
-check both depend on `fetchMessages`, whose identity follows `topicId` and
-`generalTopicIds`. On a reopen the chat's topic scope starts unknown
-(`messageTopicId` null) and resolves in two steps — the scope, then the general
-topic ids — and each step is a new `fetchMessages`, so each re-runs the open
-effect's «same chat, channel already live» branch. The likely repair is to
-carry the topic scope the previous open already resolved, so a reopen starts
-with it known; it touches the text-channel scope rules, so it is left for its
-own change with the spec as its measure.
+Measured the same day, by tracing every `fetchMessages` call of the reopen
+in the spec's private chat: an «open» fetch and the channel-join revalidation
+— and the open fetch is not an accident. `fdbb6d72` (2026-09-24, «Guard chat
+history privacy») added `clearedAtCache.hasFresh` to the open effect's cached
+branch: a reopen whose «cleared for me» answer is older than three seconds is
+read again whole, so a history cleared on another device is not shown from the
+store. That is a decision about somebody's data, and the spec's «fetched once»
+predates it; the two have to be reconciled by a decision, not by the spec.
+
+The rest is a group's: its topic scope lives in the chat window's own state, so
+a reopen starts with the scope unknown and resolves it in steps, each a new
+`fetchMessages`. A module cache of the last topics read per reader and chat,
+with a background refresh, and the general topic ids held by value, were tried
+and measured: the counts moved (3 to 2 in one of the two tests) and did not
+reach the spec's 1, so the attempt was reverted rather than shipped half-proven
+into the text-channel scope rules. The spec's render count for a revalidation
+that changed nothing (3 against 0) was not looked into.
