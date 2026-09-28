@@ -10,6 +10,7 @@ import {
   type Fixture,
   type Row,
 } from "./helpers/messageActionsFixture";
+import { sendFromField } from "./helpers/composerSend";
 
 /**
  * A bot in a group, and the two surfaces that took it for a bot chat
@@ -289,7 +290,7 @@ test.describe("a bot in a group", () => {
     // And what actually goes on the wire, because the field is only half the
     // claim: the composer trims, and the delivery rule is anchored at the start
     // of the trimmed content.
-    await field.press("Enter");
+    await sendFromField(field);
     await expect.poll(() => fixture.restCalls("messages", "POST").length).toBeGreaterThan(0);
     expect(sentContent(fixture)).toBe("/shift@shiftbot");
   });

@@ -9,6 +9,7 @@ import {
   type Fixture,
   type Row,
 } from "./helpers/messageActionsFixture";
+import { sendFromField } from "./helpers/composerSend";
 
 /**
  * D-263's three complaints, each pressed rather than described.
@@ -262,7 +263,7 @@ test.describe("a command in the conversation, and one typed whole (D-263)", () =
 
     const field = page.locator("textarea");
     await field.fill("/shift");
-    await field.press("Enter");
+    await sendFromField(field);
 
     await expect.poll(() => fixture.restCalls("messages", "POST").length).toBe(1);
     expect(sentContent(fixture)).toBe("/shift@shiftbot");
@@ -274,7 +275,7 @@ test.describe("a command in the conversation, and one typed whole (D-263)", () =
 
     const field = page.locator("textarea");
     await field.fill("/shift 12 марта");
-    await field.press("Enter");
+    await sendFromField(field);
 
     await expect.poll(() => fixture.restCalls("messages", "POST").length).toBe(1);
     // The authoriser's own `([[:space:]]|$)` is what makes this form arrive.
@@ -288,19 +289,19 @@ test.describe("a command in the conversation, and one typed whole (D-263)", () =
     const field = page.locator("textarea");
     // Not a registered command: a joke in a group stays a joke.
     await field.fill("/report");
-    await field.press("Enter");
+    await sendFromField(field);
     await expect.poll(() => fixture.restCalls("messages", "POST").length).toBe(1);
     expect(sentContent(fixture, 0)).toBe("/report");
 
     // Not at position 0, which is the only place the authoriser looks.
     await field.fill("напиши /shift сам");
-    await field.press("Enter");
+    await sendFromField(field);
     await expect.poll(() => fixture.restCalls("messages", "POST").length).toBe(2);
     expect(sentContent(fixture, 1)).toBe("напиши /shift сам");
 
     // Already addressed, to somebody else. They meant that bot.
     await field.fill("/shift@otherbot");
-    await field.press("Enter");
+    await sendFromField(field);
     await expect.poll(() => fixture.restCalls("messages", "POST").length).toBe(3);
     expect(sentContent(fixture, 2)).toBe("/shift@otherbot");
   });
@@ -326,7 +327,7 @@ test.describe("a command in the conversation, and one typed whole (D-263)", () =
     // The menu is shut here too, which is the same rule seen from the other end.
     await field.fill("/shift");
     await expect(page.getByTestId("bot-command-menu")).toHaveCount(0);
-    await field.press("Enter");
+    await sendFromField(field);
 
     await expect.poll(() => fixture.restCalls("messages", "PATCH").length).toBe(1);
     const body = fixture.restCalls("messages", "PATCH")[0].body as Record<string, unknown>;
@@ -341,7 +342,7 @@ test.describe("a command in the conversation, and one typed whole (D-263)", () =
 
     const field = page.locator("textarea");
     await field.fill("/shift");
-    await field.press("Enter");
+    await sendFromField(field);
 
     await expect.poll(() => fixture.restCalls("messages", "POST").length).toBe(1);
     expect(sentContent(fixture)).toBe("/shift");

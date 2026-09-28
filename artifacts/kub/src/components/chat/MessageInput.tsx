@@ -25,6 +25,7 @@ import { useMuteState } from "@/hooks/useMuteState";
 import { useHint } from "@/hooks/useHint";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { coarsePointer } from "@/lib/pointer";
+import { enterSendsHere } from "@/lib/composerEnter";
 import { KubGlassLayer, KubHint, KubIcon } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
@@ -1040,7 +1041,9 @@ export function MessageInput({
       }
       return;
     }
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !isComposing) {
+    // On a phone Enter is a line break and the arrow sends, as in Telegram
+    // (tracker item 71, `lib/composerEnter.ts`); elsewhere Enter sends.
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !isComposing && enterSendsHere()) {
       e.preventDefault();
       if (!isAttachmentBusy && (hasText || hasAttachments || hasForwardDraft)) void handleSend();
       return;

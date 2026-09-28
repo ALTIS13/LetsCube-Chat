@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, type KeyboardEvent } from "react";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { DISABLED_SINK, DISABLED_SINK_FILLED, FOCUS_RING, FOCUS_RING_WITHIN, PRESS_FILLED } from "@/lib/controlSurface";
 import { photoSendQualityBadge, photoSendQualitySentence } from "@/lib/mediaQuality";
+import { enterSendsHere } from "@/lib/composerEnter";
 import { cn } from "@/lib/utils";
 
 interface AttachSendBarProps {
@@ -48,9 +49,10 @@ export function AttachSendBar({ sendLabel, caption, onCaptionChange, onSend, hdA
     field.style.height = `${Math.min(field.scrollHeight, CAPTION_MAX_HEIGHT)}px`;
   }, [caption]);
 
-  // Enter sends and Shift+Enter starts a line, the composer's own rule.
+  // The composer's own rule: Enter sends and Shift+Enter starts a line, and on
+  // a phone Enter starts a line and the arrow sends (tracker item 71).
   const handleCaptionKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing || !enterSendsHere()) return;
     event.preventDefault();
     if (!busy) onSend();
   };

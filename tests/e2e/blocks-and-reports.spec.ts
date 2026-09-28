@@ -13,6 +13,7 @@ import {
   type Fixture,
   type Row,
 } from "./helpers/messageActionsFixture";
+import { sendFromField } from "./helpers/composerSend";
 
 /**
  * A person can refuse another person, and can report a message or a person.
@@ -318,7 +319,7 @@ test.describe("the refusal a blocked sender gets", () => {
 
     const text = "Ещё раз здравствуйте";
     await page.getByPlaceholder("Сообщение…").fill(text);
-    await page.getByPlaceholder("Сообщение…").press("Enter");
+    await sendFromField(page.getByPlaceholder("Сообщение…"));
 
     const refusal = page.getByTestId("composer-refusal");
     await expect(refusal).toBeVisible({ timeout: 20_000 });

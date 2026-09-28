@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 import sharp from "sharp";
+import { sendFromField } from "./helpers/composerSend";
 
 /**
  * D-122: the attach sheet does its job in place, as Telegram's does.
@@ -212,7 +213,7 @@ test.describe("the attach sheet (D-122)", () => {
     expect(backend.inserts, "a cancelled sheet sent something").toHaveLength(0);
   });
 
-  test("the caption field grows with its lines, and Shift+Enter starts one where Enter sends", async ({ page }) => {
+  test("the caption field grows with its lines, and Shift+Enter starts one where Enter sends — on a phone the arrow sends", async ({ page }) => {
     const backend = await installBackend(page);
     await openChat(page);
     const sheet = await openSheet(page);
@@ -229,7 +230,8 @@ test.describe("the attach sheet (D-122)", () => {
     expect(backend.inserts, "Shift+Enter sent").toHaveLength(0);
     await expect.poll(() => caption.evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThan(oneLine);
 
-    await page.keyboard.press("Enter");
+    // Item 71: on a phone Enter starts a line there too, and the arrow sends.
+    await sendFromField(caption, sheet.locator('[data-attach-send-bar="floating"] button').last());
     await expect(sheet).toHaveCount(0);
     await expect.poll(() => backend.inserts.length).toBe(1);
     expect(backend.inserts[0]).toMatchObject({ content: "Первая строка\nвторая" });

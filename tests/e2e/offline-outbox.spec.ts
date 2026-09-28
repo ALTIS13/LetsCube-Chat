@@ -7,6 +7,7 @@ import {
   person,
   requireFixtureServer,
 } from "./helpers/messageActionsFixture";
+import { sendFromField } from "./helpers/composerSend";
 
 /**
  * Tracker item 52. Two testers, on their first day: a message written without a
@@ -82,7 +83,7 @@ const state = (page: Page, text: string, name: "Отправляется" | "Н�
 async function write(page: Page, text: string) {
   const composer = page.getByPlaceholder("Сообщение…").first();
   await composer.fill(text);
-  await composer.press("Enter");
+  await sendFromField(composer);
 }
 
 test.describe("messages written without a connection (item 52)", () => {

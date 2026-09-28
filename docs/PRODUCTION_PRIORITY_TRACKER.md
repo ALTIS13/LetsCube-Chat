@@ -3103,6 +3103,23 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     `chat-top-card.test.mts`, `chat-top-card.spec` at 1440 and 390, renders
     of both themes.
 
+71. `[x]` On a phone the keyboard's Enter starts a new line and does not send —
+    the owner, 2026-09-28: «по кнопке enter в клавиатуре телефона не отправку
+    сообщения, а перенос по строке как в telegram». Ours sent on Enter
+    everywhere. Telegram Web A decides it in `MessageInput.tsx` (Ajaxy/
+    telegram-tt master, read 2026-09-28): `isSendShortcut` answers false
+    whenever `isMobileDevice` — its phone layout under iOS or Android — so the
+    keyboard's Enter is a line break and the arrow sends; anywhere else Enter
+    sends and Shift+Enter breaks the line. **Done the same day**
+    (`lib/composerEnter.ts`): the composer and the attach sheet's caption ask
+    `enterSendsHere()` — an iOS or Android browser (an iPad asking for the
+    desktop site included) in the phone layout below `md` — and a computer, or
+    a tablet in the wide layout, keeps Enter to send. Evidence:
+    `composer-enter.test.mts`; `composer-enter.spec` at 390 (Enter starts a
+    line, nothing goes until the arrow, the two lines go as one message) and at
+    1440 (Enter sends, Shift+Enter breaks); six specs that sent by pressing
+    Enter at 390 now send the way the device does (`helpers/composerSend.ts`).
+
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
 `main` `17a1c47` to `245e4d9`, 32 commits, on the owner's standing permission to deploy without him.
