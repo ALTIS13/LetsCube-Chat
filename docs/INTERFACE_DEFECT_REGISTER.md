@@ -11377,7 +11377,7 @@ projects when the timestamp check is removed.
 
 ---
 
-## D-182 `[ ]` A global search takes the settings screen off the column and drops what was typed
+## D-182 `[x]` A global search takes the settings screen off the column and drops what was typed
 
 **Severity: medium**, and the same defect D-136 records reaching the same screen by a
 road that is not a door.
@@ -11404,6 +11404,16 @@ its state across the swap instead: either the column keeps `SettingsPanel` mount
 hidden while a query is showing, or the three fields are lifted out of the component
 that the swap unmounts. That is a decision about how the column swaps its body, so it
 belongs with the settings parity work rather than with a confirmation.
+
+**Gone since 2026-09-20, and measured rather than assumed, 2026-09-28.** `7d1513b4`
+took the settings out of the list column into a window of their own, so the swap
+this entry describes no longer has them to unmount: the column's body is the search
+results or the list, and the settings are a `KubModal` above both. Measured by the
+same road the entry took, at 1440: «Максим Орлов-Тестов» typed into «Имя», Ctrl+K,
+«Смета» typed — the header's field holds the query, so the swap happened, and the
+settings are on screen with the typed name. Pinned as «the chat list's own search does
+not take the settings with it (D-182)» in `settings-exit-confirmations.spec.ts`; a
+computer's road only, since a phone has no shortcut and its sheet covers the field.
 
 ## D-183 `[x]` Voice calls one thing by two names on the same card
 

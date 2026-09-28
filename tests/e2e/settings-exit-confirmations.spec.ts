@@ -290,6 +290,27 @@ test.describe("D-136: leaving settings with something typed", () => {
     }
   });
 
+  test("the chat list's own search does not take the settings with it (D-182)", async ({ page }) => {
+    // D-182 was measured when the settings were the list column's body: one
+    // character in the header's search swapped that body for the results and
+    // unmounted the screen with the typed name in it. Since `7d1513b4` the
+    // settings are a window of their own and the swap no longer reaches them —
+    // this is the measurement that says so, by the same road: Ctrl+K, which
+    // belongs to that field, and a query typed into it. A computer's road: a
+    // phone has no shortcut, and its sheet covers the field.
+    test.skip(isPhone(page), "Ctrl+K and the header's search behind the settings are a computer's");
+    await boot(page);
+    await openSettings(page);
+    await page.getByTestId("settings-field-name").fill("Максим Орлов-Тестов");
+    await page.keyboard.press("Control+k");
+    await page.keyboard.type("Смета");
+    // The query really went into the list's field, so the swap really happened…
+    await expect(page.getByTestId("sidebar-search-input")).toHaveValue("Смета");
+    // …and the settings, with what was typed in them, are still there.
+    await expect(page.getByTestId("settings-field-name")).toBeVisible();
+    await expect(page.getByTestId("settings-field-name")).toHaveValue("Максим Орлов-Тестов");
+  });
+
   test("«Отменить» closes the screen and writes nothing", async ({ page }, info) => {
     const fixture = await boot(page);
     await stampTheme(page, "light");
