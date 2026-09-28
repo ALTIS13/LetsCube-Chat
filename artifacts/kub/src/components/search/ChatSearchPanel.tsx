@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { KubIcon } from "@/components/kub";
 import { SearchFilterChips } from "@/components/search/SearchShared";
+import { SearchFilterOffer } from "@/components/search/SearchFilterOffer";
 import { useChatMessageSearch } from "@/hooks/useChatMessageSearch";
 import { requestChatMessageJump } from "@/lib/chatJumpEvents";
 import { chatSearchResultTitle, formatSearchDate } from "@/lib/chatMessageSearch";
@@ -54,6 +55,7 @@ export function ChatSearchPanel({ chatId }: { chatId: string }) {
   const held = useAppStore((s) => s.messages[chatId]);
   const selectedTopicId = useAppStore((s) => s.selectedTopicId);
   const closeChatSearch = useAppStore((s) => s.closeChatSearch);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const chat = useMemo(() => chats.find((item) => item.id === chatId) ?? null, [chats, chatId]);
   const isForum = Boolean(chat?.is_forum);
@@ -124,6 +126,7 @@ export function ChatSearchPanel({ chatId }: { chatId: string }) {
         <div className="kub-field h-9 min-w-0 gap-2 rounded-lg bg-[var(--kub-inset)] px-3 transition-all focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]">
           <KubIcon name="search" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
           <input
+            ref={inputRef}
             autoFocus
             data-testid="chat-search-input"
             type="text"
@@ -142,6 +145,16 @@ export function ChatSearchPanel({ chatId }: { chatId: string }) {
           />
         </div>
       </div>
+
+      {/* Item 36 c: the grammar this search already reads, offered under the
+          field — the filters when it is empty, a filter's values while it is
+          being typed — as Discord's in-chat search does (§15.3). */}
+      <SearchFilterOffer
+        chatId={chatId}
+        query={query}
+        onChangeQuery={setQuery}
+        onPicked={() => inputRef.current?.focus()}
+      />
 
       {canSearch && (
         <div className="flex flex-shrink-0 items-center gap-1 px-3 pt-2">

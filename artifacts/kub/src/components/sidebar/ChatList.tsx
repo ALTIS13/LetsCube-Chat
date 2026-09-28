@@ -28,6 +28,12 @@ import {
   type ChatMuteOptionId,
 } from "@/lib/chatMute";
 import type { ChatWithLastMessage } from "@/types/database";
+import { scheduleMarkChatRead } from "@/lib/deliveryReceipts";
+import { usePersonalBlocks } from "@/hooks/usePersonalModeration";
+import { BLOCK_LABEL, UNBLOCK_LABEL, blockPrompt, unblockPrompt } from "@/lib/personalModeration";
+import { voiceCallOffer } from "@/lib/voiceRing";
+import { voiceCallSnapshot } from "@/hooks/useVoiceCall";
+import { startVoiceRing, voiceRingsSnapshot } from "@/hooks/useVoiceRing";
 
 interface ChatListProps {
   chats: ChatWithLastMessage[];
@@ -75,6 +81,10 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
   const chatMutes = useChatMutes();
   const requestChatPanel = useAppStore((s) => s.requestChatPanel);
   const openUserProfile = useAppStore((s) => s.openUserProfile);
+  const markChatRead = useAppStore((s) => s.markChatRead);
+  // Who this reader has blocked, for the row's «Заблокировать» and for the
+  // call it must not offer (item 36 b).
+  const blocks = usePersonalBlocks();
   const [openMenu, setOpenMenu] = useState<ChatMenuState | null>(null);
   /** Whether the open menu has stepped into the durations. */
   const [muteChoiceOpen, setMuteChoiceOpen] = useState(false);
@@ -373,6 +383,24 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
       },
     ];
 
+    // Item 36 b. Discord's direct-message menu leads with «Mark As Read»
+    // (reference-clients §15.2), and ours had every piece of it but the entry:
+    // the row draws the unread count and `mark_chat_read_through` is what the
+    // conversation itself calls. Only while there is something unread — an
+    // entry that would do nothing is not drawn. Read through the newest message
+    // the row knows of, the same watermark reading it would have set.
+    if ((chat.unread_count ?? 0) > 0) {
+      actions.push({
+        id: "mark-read",
+        icon: "doubleCheck",
+        label: "Пометить как прочитанное",
+        run: () => {
+          markChatRead(chat.id);
+          scheduleMarkChatRead(supabase, chat.id, chat.last_message?.created_at ?? null);
+        },
+      });
+    }
+
     // Both of these used to open a second profile surface of their own — a
     // modal with a different shape, different contents and its own subset of
     // these very actions. There is one contact card now, the same one the chat
@@ -398,6 +426,34 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
         icon: "profile",
         label: "Открыть профиль",
         run: () => openUserProfile(userId),
+      });
+    }
+
+    // «Start a Call», beside the profile, where Discord's menu has it (§15.2).
+    // The offer is the header's own rule — `voiceCallOffer` — read at the
+    // moment the menu opens, so the row never offers a call the header would
+    // refuse: not to somebody blocked, not from inside another call, not while
+    // this conversation is already ringing. The call opens its conversation, as
+    // the header's does.
+    const callOffer = voiceCallOffer({
+      chatType: chat.type,
+      isSaved,
+      otherUserId: profileTarget.kind === "person" ? profileTarget.userId : null,
+      selfId: currentUser?.id,
+      iBlockedThem: profileTarget.kind === "person" && blocks.ids.has(profileTarget.userId),
+      callChannelId: voiceCallSnapshot().channelId,
+      ringingHere: voiceRingsSnapshot().some((ring) => ring.chatId === chat.id),
+    });
+    if (callOffer.offered) {
+      actions.push({
+        id: "call",
+        icon: "phone",
+        label: callOffer.label,
+        run: async () => {
+          onChatSelect(chat.id);
+          const outcome = await startVoiceRing({ chatId: chat.id, who: display.title });
+          if (!outcome.ok) showActionFeedback({ kind: "error", title: outcome.refusal, key: "voice-ring" });
+        },
       });
     }
 
@@ -465,6 +521,47 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
           run: () => movePinnedChat(chat.id, "down"),
         });
       }
+    }
+
+    // «Block», before the mute entries as in Discord's menu (§15.2). Asked
+    // first, in the words `blockPrompt` gives every surface, because what it
+    // stops is narrower than the word suggests.
+    if (profileTarget.kind === "person") {
+      const person = profileTarget.userId;
+      const blocked = blocks.ids.has(person);
+      actions.push({
+        id: "block",
+        icon: blocked ? "unban" : "ban",
+        label: blocked ? UNBLOCK_LABEL : BLOCK_LABEL,
+        danger: !blocked,
+        run: async () => {
+          const words = blocked ? unblockPrompt(display.title) : blockPrompt(display.title);
+          const confirmed = await requestAppConfirm({
+            title: words.title,
+            description: words.description,
+            confirmLabel: words.confirmLabel,
+            cancelLabel: words.cancelLabel,
+            tone: "danger",
+            icon: blocked ? "unban" : "ban",
+          });
+          if (!confirmed) return;
+          const other = chat.other_user ?? null;
+          const result = blocked
+            ? await blocks.unblock(person)
+            : await blocks.block({
+                id: person,
+                fullName: other?.full_name ?? display.title,
+                username: other?.username ?? null,
+                avatarUrl: other?.avatar_url ?? null,
+                createdAt: new Date().toISOString(),
+              });
+          showActionFeedback(
+            result.ok
+              ? { kind: "success", title: blocked ? "Пользователь разблокирован" : "Пользователь заблокирован", key: "personal-block" }
+              : { kind: "error", title: result.error ?? "", key: "personal-block" },
+          );
+        },
+      });
     }
 
     for (const action of muteActions) actions.push(action);
@@ -589,9 +686,11 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
     return actions;
   }, [
     applyMute,
+    blocks,
     chatMutes,
     clearChatLocally,
     currentUser?.id,
+    markChatRead,
     movePinnedChat,
     muteChoiceOpen,
     onChatSelect,

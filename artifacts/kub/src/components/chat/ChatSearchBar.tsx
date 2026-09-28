@@ -1,7 +1,9 @@
 "use client";
 
 import { KubGlassLayer, KubIcon } from "@/components/kub";
+import { useRef } from "react";
 import { SearchFilterChips } from "@/components/search/SearchShared";
+import { SearchFilterOffer } from "@/components/search/SearchFilterOffer";
 import { useChatMessageSearch } from "@/hooks/useChatMessageSearch";
 import { formatSearchDate } from "@/lib/chatMessageSearch";
 import { SEARCH_LOADED_MESSAGES_ONLY } from "@/lib/plainMessages";
@@ -49,6 +51,7 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
     allTopics,
     setAllTopics,
   } = useChatMessageSearch({ chatId, currentTopicId, isForum, messages, onJumpTo });
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   return (
     // A panel floating under the header, as the pinned capsule does, rather
@@ -61,6 +64,7 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
       <div className="flex items-center gap-2 px-3 py-2">
         <KubIcon name="search" size={14} className="text-[color:var(--kub-muted)]" />
         <input
+          ref={inputRef}
           autoFocus
           type="text"
           placeholder="Поиск в чате…"
@@ -109,6 +113,15 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
       </div>
 
       <SearchFilterChips parsed={parsed} query={query} onChangeQuery={setQuery} compact />
+
+      {/* Item 36 c, the phone's form of the same offer as the column's. */}
+      <SearchFilterOffer
+        chatId={chatId}
+        query={query}
+        onChangeQuery={setQuery}
+        onPicked={() => inputRef.current?.focus()}
+        compact
+      />
 
       <div className="flex flex-wrap items-center gap-2 px-3 pb-2 text-[12px] text-[color:var(--kub-muted)]">
         {isForum && (

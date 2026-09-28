@@ -1820,6 +1820,19 @@ Discord 345.9.
 - **«Открыть в новой вкладке».** Newly meaningful: a conversation has an
   address as of `054bf8ee`, so this is now a link rather than a wish.
 
+**Built 2026-09-28, three of the five** (tracker item 36 b), each where
+Discord's menu has it: «Пометить как прочитанное» right after «Открыть» and
+only while the row shows something unread, written without opening the
+conversation; «Позвонить» right after «Открыть профиль», offered by the
+header's own rule so the two cannot disagree; «Заблокировать» /
+«Разблокировать» ahead of the notification entries (Discord's group 7 before
+group 8), asked first with the header's own prompt. **Not built:** «Пригласить
+в группу» needs each group's invite policy and the person's state in it — a
+submenu with its own refusals, its own piece of work; «Открыть в новой
+вкладке» means something only in a browser tab. The header keeps its own
+order, in which «Заблокировать» follows «Очистить историю у себя»; Discord has
+no such header menu to measure it against.
+
 **Discord's object model, not a gap in ours** — and this is the distinction the
 owner asked for in point b:
 
@@ -1922,6 +1935,32 @@ typed**. `from`/`mentions` list people (with `@me` hoisted when the typed text
 prefixes «me»); `in` lists channels with the current one hoisted; `has` and
 `authorType` list their fixed sets; the date filters show a calendar; `pinned:`
 offers literally `true` and `false`.
+
+#### Ours, built 2026-09-28 (tracker item 36 c)
+
+Taken: the empty field's rows, each a filter with its syntax under it; a press
+that inserts the prefix and does not search; completions inside a `from:`
+(the conversation's members, found by name or никнейм) and inside a `has:`
+(its fixed set). The same offer serves the column from `md` and the phone's
+capsule. Only the four filters our parser reads are offered — `in:` has no
+meaning inside one conversation, and `mentions:` is not in our grammar.
+
+Where ours deliberately differs, and why:
+
+- **No space after the colon**, in the insert and in the hints. Discord's
+  insert is `${prefix} ` and its grammar takes `from: user`; ours ends a value
+  at the first space, so Discord's spelling here would be a query for words.
+  `tests/unit/search-filter-offer.test.mts` parses every hint and requires a
+  chip of its own filter back.
+- **Ours searches as you type; Discord's on Enter.** So a filter still being
+  typed at the end — no value yet, an open quote, a value that does not read
+  yet (`has:фо`, `before:2026-0`) — is not searched for. Measured before the
+  fix: pressing `from:` put the literal «from:» into the search and answered
+  «ничего не найдено» under the offer. A finished token nothing reads is still
+  words, as it always was.
+- **The words we print are accepted typed out.** The `has:` offer says Фото,
+  Видео, Файл, Ссылка, Аудио and matches them as you type, so the parser takes
+  them as aliases of `image`, `video`, `file`, `link`, `audio`.
 
 #### Discord's quick switcher. SHIPPED
 

@@ -45,6 +45,8 @@ export function sanitizePostgrestSearch(value: string): string {
 }
 
 const FILTER_TOKEN_RE = /(?:^|\s)(type|from|in|has|before|after):(?:"([^"]*)"|'([^']*)'|(\S+))/gi;
+/** A filter at the very end with no value yet, or with its quote still open. */
+const PENDING_FILTER_RE = /(?:^|\s)(?:type|from|in|has|before|after):(?:"[^"]*|'[^']*)?$/i;
 const ENTITY_ALIASES: Record<string, SearchEntityFilter | SearchHasFilter> = {
   all: "all",
   user: "user",
@@ -70,6 +72,13 @@ const ENTITY_ALIASES: Record<string, SearchEntityFilter | SearchHasFilter> = {
   video: "video",
   audio: "audio",
   voice: "audio",
+  // The words the offer under the in-chat field shows for `has:` (item 36 c),
+  // so that typing one out reads the same as pressing it.
+  фото: "image",
+  видео: "video",
+  файл: "file",
+  ссылка: "link",
+  аудио: "audio",
 };
 const HAS_VALUES = new Set<SearchHasFilter>(["file", "link", "image", "video", "audio"]);
 
@@ -84,57 +93,34 @@ export function parseAdvancedSearchQuery(rawQuery: string, selectedType: SearchE
   };
   const chips: ParsedSearchChip[] = [];
   const removals: Array<[number, number]> = [];
+  // What is still being typed at the very end is not searched for (item 36 c).
+  // A filter with nothing after it yet, or with its quote still open, is cut
+  // off before the tokens are read; one whose value does not read yet —
+  // `has:фо`, `before:2026-0` — is taken out below. Pressing a filter offered
+  // under the in-chat field inserts exactly such a prefix, and Discord's own
+  // press inserts it without searching; without this the field searched for
+  // the literal word «from:» and answered «ничего не найдено» under the offer.
+  // What is cut is a suffix, so every range still indexes `rawQuery`.
+  const pending = PENDING_FILTER_RE.exec(rawQuery);
+  const text = pending ? rawQuery.slice(0, pending.index) : rawQuery;
 
-  for (const match of rawQuery.matchAll(FILTER_TOKEN_RE)) {
+  for (const match of text.matchAll(FILTER_TOKEN_RE)) {
     const key = match[1].toLowerCase() as ParsedSearchChip["key"];
     const rawValue = (match[2] ?? match[3] ?? match[4] ?? "").trim();
     const tokenStart = match.index ?? 0;
     const leadingWhitespace = match[0].match(/^\s+/)?.[0].length ?? 0;
     const start = tokenStart + leadingWhitespace;
     const end = tokenStart + match[0].length;
-    if (!rawValue) continue;
-
-    if (key === "type") {
-      const normalized = normalizeEntityFilter(rawValue);
-      if (!normalized) continue;
-      if (isHasFilter(normalized)) {
-        filters.type = "message";
-        addHasFilter(filters, normalized);
-        chips.push(makeChip("has", normalized, start, end));
-      } else {
-        filters.type = normalized;
-        chips.push(makeChip("type", normalized, start, end));
-      }
-      removals.push([start, end]);
-      continue;
-    }
-
-    if (key === "has") {
-      const values = rawValue.split(",").map((value) => normalizeEntityFilter(value)).filter(isHasFilter);
-      if (values.length === 0) continue;
-      for (const value of values) addHasFilter(filters, value);
-      chips.push(makeChip("has", values.join(","), start, end));
-      removals.push([start, end]);
-      continue;
-    }
-
-    if (key === "before" || key === "after") {
-      const normalizedDate = normalizeDate(rawValue);
-      if (!normalizedDate) continue;
-      filters[key] = normalizedDate;
-      chips.push(makeChip(key, normalizedDate, start, end));
-      removals.push([start, end]);
-      continue;
-    }
-
-    if (key === "from" || key === "in") {
-      filters[key] = rawValue.replace(/^@+/, "").trim();
-      chips.push(makeChip(key, filters[key]!, start, end));
-      removals.push([start, end]);
-    }
+    const chip = rawValue ? readFilterToken(filters, key, rawValue, start, end) : null;
+    if (chip) chips.push(chip);
+    // A token nothing accepts stays in the text as words — unless it is the
+    // last thing typed, when it is a value not finished yet.
+    if (chip || end === rawQuery.length) removals.push([start, end]);
   }
 
-  const query = removeRanges(rawQuery, removals).trim().replace(/\s+/g, " ");
+  const query = removeRanges(text, removals)
+    .trim()
+    .replace(/\s+/g, " ");
   return {
     raw: rawQuery,
     query,
@@ -301,6 +287,48 @@ function isHasFilter(value: SearchEntityFilter | SearchHasFilter | null): value 
 
 function addHasFilter(filters: ParsedSearchFilters, value: SearchHasFilter) {
   if (!filters.has.includes(value)) filters.has.push(value);
+}
+
+/** Applies one token to the filters and returns its chip, or null when its value does not read. */
+function readFilterToken(
+  filters: ParsedSearchFilters,
+  key: ParsedSearchChip["key"],
+  rawValue: string,
+  start: number,
+  end: number,
+): ParsedSearchChip | null {
+  if (key === "type") {
+    const normalized = normalizeEntityFilter(rawValue);
+    if (!normalized) return null;
+    if (isHasFilter(normalized)) {
+      filters.type = "message";
+      addHasFilter(filters, normalized);
+      return makeChip("has", normalized, start, end);
+    }
+    filters.type = normalized;
+    return makeChip("type", normalized, start, end);
+  }
+
+  if (key === "has") {
+    const values = rawValue.split(",").map((value) => normalizeEntityFilter(value)).filter(isHasFilter);
+    if (values.length === 0) return null;
+    for (const value of values) addHasFilter(filters, value);
+    return makeChip("has", values.join(","), start, end);
+  }
+
+  if (key === "before" || key === "after") {
+    const normalizedDate = normalizeDate(rawValue);
+    if (!normalizedDate) return null;
+    filters[key] = normalizedDate;
+    return makeChip(key, normalizedDate, start, end);
+  }
+
+  if (key === "from" || key === "in") {
+    filters[key] = rawValue.replace(/^@+/, "").trim();
+    return makeChip(key, filters[key]!, start, end);
+  }
+
+  return null;
 }
 
 function makeChip(key: ParsedSearchChip["key"], value: string, start: number, end: number): ParsedSearchChip {

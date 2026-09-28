@@ -968,9 +968,39 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     the general form: **a reference client's configuration is evidence about
     its mechanism, not about its result.**
 
-    **b and c are untouched** and remain as §15.2 and §15.3 left them: the row
-    menu's depth, and the two searches. Item 38's badges draw these same chips
-    and still wait on it.
+    **b, and the in-chat half of c, are built, 2026-09-28** — decided under the
+    same standing instruction, each entry traced to §15.2 or §15.3 of
+    `reference-clients.md`, which now carries what was taken and why ours
+    differs where it does.
+
+    - **b: three of the five entries** §15.2 found we had the machinery for,
+      each in Discord's position. «Пометить как прочитанное» right after
+      «Открыть», only while the row shows something unread, written through
+      the conversation's own `scheduleMarkChatRead` without opening it;
+      «Позвонить» right after «Открыть профиль», offered by the header's own
+      `voiceCallOffer` so the two cannot disagree; «Заблокировать» /
+      «Разблокировать» ahead of the notification entries, asked first.
+      **Not built:** «Пригласить в группу», which needs each group's invite
+      policy and the person's state in it — a submenu with its own refusals,
+      and the next piece of this item; «Открыть в новой вкладке», which means
+      something only in a browser tab.
+    - **c, in-chat: the field offers its own grammar.** The empty field lists
+      `from:`, `has:`, `before:`, `after:` with their syntax; a press inserts
+      the prefix and does not search; a `from:` being typed completes the
+      conversation's members, a `has:` its five kinds. Column and phone capsule
+      alike. **Found while building it:** ours searches as you type, so pressing
+      `from:` searched for the word «from:» and answered «ничего не найдено»
+      under the offer — a filter still being typed is now not searched for.
+      Hints are spelled with no space after the colon, because our grammar,
+      unlike Discord's, ends a value at a space.
+    - Pinned by `tests/unit/search-filter-offer.test.mts` (four mutations, four
+      reds), `tests/e2e/chat-search-filters.spec.ts` and
+      `tests/e2e/chat-row-menu.spec.ts` at 1440 and 390; rendered at both
+      widths in both themes before commit.
+
+    **c's other half — the global search's ideas from Discord's quick switcher —
+    is not started.** §15.3 carries the reading. Item 38's badges draw these
+    same chips and still wait on it.
 
     Not established, and recorded as such: what Discord's DM **row** itself
     draws (this pass followed the menu, the profile and the searches; the
