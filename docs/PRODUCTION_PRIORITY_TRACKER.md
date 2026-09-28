@@ -2649,12 +2649,25 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     with its clock and goes by itself» and «…survives a restart and goes after
     it», at 1440 and 390 — a mutant without the waiting branch turns both red,
     one that keeps nothing on the device turns only the restart red.
-    **What remains, deliberately:** a waiting attachment goes when *its*
-    conversation is open — the upload lives in that conversation's view, and
-    moving it out to run in the background, as Telegram does, is the next step
-    rather than part of this one; files over 25 MB are kept in memory only, not
-    written a second time to the device; and a storage *answer* of 502/503 still
-    reads as the server's (red, «Повторить»), where a row's does not.
+    **And from the background, the same day.** A waiting attachment went only
+    from its own conversation's view, so one recorded offline and left behind
+    sat with its clock until somebody went back. The bytes now go up in
+    `lib/attachmentUpload.ts`, which a view and `lib/outbox/backgroundUploads.ts`
+    both run: at start, on `online`, on a network change, on the return to the
+    app and every half minute while anything waits, the background sender
+    uploads what waits in every conversation whose view is not mounted, oldest
+    first in each, and hands the row to the outbox. A mounted view keeps its
+    own (`holdChatView`), and the placeholder's `upload_waiting`, cleared before
+    anything is awaited, is the claim, so nothing has two senders. A cut holds
+    that conversation back for the pass rather than letting what came after it
+    overtake; a refusal is red with its reason and the next still goes.
+    Evidence: `background-uploads.test.mts` (7 cases; a sender without the hold
+    turns one red), and `media-send-path.spec` «an upload waiting for the
+    network goes when it answers, with nobody in its chat» at 390 — red without
+    the sender's run on `online`.
+    **What remains, deliberately:** files over 25 MB are kept in memory only,
+    not written a second time to the device; and a storage *answer* of 502/503
+    still reads as the server's (red, «Повторить»), where a row's does not.
 
 53. `[~]` The application recovers by itself when the network changes under it
     — same report. «Если меняется IP… приходится перезапускать мессенджер»:

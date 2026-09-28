@@ -34,7 +34,6 @@ import {
   topicIdForChannel,
 } from "@/lib/channelRail";
 import { listReadFailed } from "@/lib/listReadState";
-import { publicMediaObjectUrl } from "@/lib/media/mediaUrl";
 import type { ServerChannel } from "@/lib/serverChannels";
 import {
   joinVoiceChannel,
@@ -57,7 +56,7 @@ import { mediaOriginality } from "@/lib/mediaOriginality";
 import { mediaDayLabel } from "@/lib/sharedMediaBrowsing";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
 import { useAppStore } from "@/store/app.store";
-import { createClient, getSupabasePublicUrl } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/client";
 import { KubButton, KubEmptyState, KubIcon } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
 import { settleActionFeedback, showActionFeedback } from "@/lib/actionFeedback";
@@ -88,7 +87,6 @@ import {
   buildAttachmentMediaMetadata,
   originalLimitMessage,
   originalPreviewDimensions,
-  originalPreviewPath,
   planAttachmentPreparation,
   shouldBuildOriginalPreview,
   type IncomingFilesSource,
@@ -98,9 +96,7 @@ import { useIncomingMediaFiles } from "@/hooks/useIncomingMediaFiles";
 import type { AttachSendRequest } from "@/lib/attachSheet";
 import { recordingMinimumMs } from "@/lib/recordingGesture";
 import {
-  CHAT_MEDIA_BUCKET,
   MAX_STAGED_ATTACHMENTS,
-  chatAttachmentUploadPath,
   createStagedAttachment,
   createStagedVideoMessageAttachment,
   createStagedVoiceAttachment,
@@ -109,10 +105,6 @@ import {
   type StagedAttachment,
   type StagedAttachmentUpload,
 } from "@/lib/stagedAttachments";
-import {
-  shouldUseResumableUpload,
-  startResumableStorageUpload,
-} from "@/lib/resumableStorageUpload";
 import {
   createStagedUploadHandleRegistry,
   createStagedUploadScope,
@@ -134,19 +126,18 @@ import {
   cancelAllOutgoing,
   cancelOutgoing,
   forgetOutgoing,
-  holdOutgoingAbort,
+  holdChatView,
   isOutgoingCancelled,
   isOutgoingUploading,
   outgoingEntriesForChat,
   outgoingEntry,
   outgoingTempId,
-  releaseOutgoingAbort,
   rememberOutgoing,
 } from "@/lib/outgoingMedia";
 import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
 import { useChannelPreviews } from "@/hooks/useChannelPreviews";
 import type { Json, MessageWithSender } from "@/types/database";
-import { cacheControlFor } from "@/lib/mediaCacheControl";
+import { uploadAttachmentBytes } from "@/lib/attachmentUpload";
 
 interface ChatWindowProps {
   chatId: string;
@@ -1043,89 +1034,29 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   ): Promise<StagedAttachmentUpload> => {
     if (!userId) throw new Error("auth");
     const sourceChatId = scopeToken.chatId;
-    const path = chatAttachmentUploadPath(sourceChatId, userId, attachment);
-    const contentType = attachment.mimeType || attachment.file.type || "application/octet-stream";
-    let uploadedPath = path;
-
-    if (shouldUseResumableUpload(attachment.file.size)) {
-      const handle = startResumableStorageUpload({
-        supabaseClient: supabase,
-        supabaseUrl: getSupabasePublicUrl(),
-        file: attachment.file,
-        bucketName: CHAT_MEDIA_BUCKET,
-        objectName: path,
-        contentType,
-        onProgress: (progress) => {
-          if (
-            cancelledAttachmentIdsRef.current.has(attachment.id) ||
-            isOutgoingCancelled(attachment.id)
-          ) return;
-          // D-314: the placeholder in the conversation, whichever chat is on
-          // screen; the tray only while this view is still the chat's.
-          patchOutgoingPlaceholder(sourceChatId, outgoingTempId(attachment.clientMessageId), (message) => ({
-            ...message,
-            upload_progress: progress,
-          }));
-          if (!uploadScope.isActive(scopeToken)) return;
-          updateStagedAttachment(attachment.id, (current) => ({ ...current, progress }));
-        },
-      });
-      uploadRegistry.register(attachment.id, handle);
-      const stop = () => void handle.abort(true).catch(() => undefined);
-      holdOutgoingAbort(attachment.id, stop);
-      try {
-        const result = await handle.result;
-        uploadedPath = result.path;
-      } finally {
-        uploadRegistry.release(attachment.id, handle);
-        releaseOutgoingAbort(attachment.id, stop);
-      }
-    } else {
-      const { data, error } = await supabase.storage
-        .from(CHAT_MEDIA_BUCKET)
-        .upload(path, attachment.file, {
-          contentType,
-          upsert: false,
-          cacheControl: cacheControlFor(path),
-        });
-      if (error || !data) throw error ?? new Error("upload_failed");
-      uploadedPath = data.path;
-    }
-
-    // An original's preview goes beside it, at the address a reader derives from
-    // the original's own path. It is small, so a plain upload; and it is only a
-    // lighter picture for the conversation, so a failure costs the bubble a
-    // heavier download and never fails the send.
-    let previewPath: string | null = null;
-    if (
-      attachment.uncompressed &&
-      attachment.previewFile &&
-      !cancelledAttachmentIdsRef.current.has(attachment.id)
-    ) {
-      // `.preview.webp`, or `.preview.jpg` from an engine that cannot write WebP.
-      const candidate = originalPreviewPath(uploadedPath, attachment.previewFile.type);
-      const { error: previewError } = await supabase.storage
-        .from(CHAT_MEDIA_BUCKET)
-        .upload(candidate, attachment.previewFile, {
-          contentType: attachment.previewFile.type || "image/webp",
-          upsert: false,
-          cacheControl: cacheControlFor(candidate),
-        });
-      if (previewError) console.warn("[attachments] preview upload failed.");
-      else previewPath = candidate;
-    }
-
-    // D-208: the row records the bucket and the path beside this, and those two
-    // are what a reader resolves from. The URL is still written because 20 rows
-    // predate the columns and the projection reads it as a fallback; it is the
-    // public one, because a signature would be dead long before the message is.
-    const publicUrl = publicMediaObjectUrl({ bucket: CHAT_MEDIA_BUCKET, path: uploadedPath });
-    return {
-      bucket: CHAT_MEDIA_BUCKET,
-      path: uploadedPath,
-      publicUrl: publicUrl ?? "",
-      previewPath,
-    };
+    // The bytes go up in `lib/attachmentUpload.ts`, which the background sender
+    // of tracker item 52 runs too; what is this view's is the tray.
+    return uploadAttachmentBytes(supabase, userId, sourceChatId, attachment, {
+      onProgress: (progress) => {
+        if (
+          cancelledAttachmentIdsRef.current.has(attachment.id) ||
+          isOutgoingCancelled(attachment.id)
+        ) return;
+        // D-314: the placeholder in the conversation, whichever chat is on
+        // screen; the tray only while this view is still the chat's.
+        patchOutgoingPlaceholder(sourceChatId, outgoingTempId(attachment.clientMessageId), (message) => ({
+          ...message,
+          upload_progress: progress,
+        }));
+        if (!uploadScope.isActive(scopeToken)) return;
+        updateStagedAttachment(attachment.id, (current) => ({ ...current, progress }));
+      },
+      isCancelled: () => cancelledAttachmentIdsRef.current.has(attachment.id),
+      register: (handle) => {
+        uploadRegistry.register(attachment.id, handle);
+        return () => uploadRegistry.release(attachment.id, handle);
+      },
+    });
   }, [supabase, updateStagedAttachment, uploadRegistry, uploadScope, userId]);
 
   const sendStagedAttachments = useCallback(async (
@@ -1440,6 +1371,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [chatId, retrySend]);
+
+  // While this view is mounted its conversation's waiting attachments are its
+  // own to send, above; the background sender of item 52 leaves them alone.
+  useEffect(() => holdChatView(chatId), [chatId]);
 
   /** «Удалить» on a failed message, and «Отменить» on one still uploading. */
   const discardSend = useCallback((message: MessageWithSender) => {

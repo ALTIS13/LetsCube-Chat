@@ -86,7 +86,9 @@ test("nothing to version leaves the url alone", () => {
 });
 
 const CALL_SITES = [
-  "artifacts/kub/src/components/chat/ChatWindow.tsx",
+  // A chat's attachments, from the chat's view and from the background sender
+  // of tracker item 52 alike; `ChatWindow.tsx` uploaded them itself until then.
+  "artifacts/kub/src/lib/attachmentUpload.ts",
   "artifacts/kub/src/components/chat/ChatInfoPanel.tsx",
   // The avatar upload moved here with the rest of the settings markup (D-160);
   // `SettingsModal.tsx` is now the dialog wrapper and uploads nothing.

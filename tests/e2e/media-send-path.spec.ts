@@ -298,6 +298,47 @@ test.describe("the send path of photos and videos", () => {
   });
 
   /**
+   * Tracker item 52's last step. A waiting attachment used to go only from its
+   * own conversation's view, so one recorded offline and left behind sat with
+   * its clock until somebody went back. Telegram uploads in the background
+   * whatever is on screen: here the reader is on the chat list when the
+   * connection answers, and it goes from there.
+   */
+  test("an upload waiting for the network goes when it answers, with nobody in its chat", async ({ page }) => {
+    test.skip((page.viewportSize()?.width ?? 0) >= 768, "leaving a chat is its own screen on a phone");
+    const backend = await installBackend(page);
+    let unreachable = true;
+    backend.answer = () => (unreachable ? "unreachable" : null);
+    await openChat(page);
+
+    await pickPhotosOrVideos(page, [await testPhoto("facade.png", 30)]);
+    await page.getByTestId("attach-caption").fill(CAPTION);
+    await sendPicked(page, 1);
+    const placed = page.locator('[data-message-bubble="true"]').filter({ hasText: CAPTION });
+    await expect(placed.locator("[data-message-delivery-slot]").getByRole("img", { name: "Отправляется" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Назад", exact: true }).click();
+    await expect(page.getByTestId("chat-list-item").filter({ hasText: CHAT_NAME })).toBeVisible();
+    await expect(page.locator('[data-message-bubble="true"]'), "a conversation is still on screen").toHaveCount(0);
+    expect(backend.inserts.length).toBe(0);
+
+    unreachable = false;
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect
+      .poll(() => backend.inserts.length, { message: "it waited for its chat to be opened again" })
+      .toBe(1);
+    expect(backend.inserts[0]?.content).toBe(CAPTION);
+    expect(backend.inserts[0]?.chat_id, "into the chat it was sent from").toBe(CHAT_ID);
+    await page.waitForTimeout(800);
+    expect(backend.inserts.length, "the photo went twice").toBe(1);
+
+    // And its conversation shows it sent, not waiting and not twice.
+    await page.getByTestId("chat-list-item").filter({ hasText: CHAT_NAME }).click();
+    await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: CAPTION })).toHaveCount(1);
+    await expect(page.locator('[data-message-send-error="true"]')).toHaveCount(0);
+  });
+
+  /**
    * The other cut, between the two halves: the bytes are up and the row is
    * refused. D-287. What the send leaves behind is nothing at all — no failed
    * bubble in the conversation and no attachment above the composer — while the

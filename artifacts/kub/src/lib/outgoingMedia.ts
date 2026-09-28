@@ -143,3 +143,31 @@ export function outgoingEntriesForChat(chatId: string): OutgoingMediaEntry[] {
 export function isOutgoingUploading(attachmentId: string): boolean {
   return aborts.has(attachmentId);
 }
+
+/** Everything on its way, from every conversation, for the background sender (item 52). */
+export function allOutgoingEntries(): OutgoingMediaEntry[] {
+  return [...entries.values()];
+}
+
+const viewedChats = new Map<string, number>();
+
+/**
+ * A conversation's view sends its own waiting attachments while it is mounted,
+ * and the background sender leaves that conversation to it. Answers how to let
+ * go, for the view's unmount.
+ */
+export function holdChatView(chatId: string): () => void {
+  viewedChats.set(chatId, (viewedChats.get(chatId) ?? 0) + 1);
+  let held = true;
+  return () => {
+    if (!held) return;
+    held = false;
+    const left = (viewedChats.get(chatId) ?? 1) - 1;
+    if (left > 0) viewedChats.set(chatId, left);
+    else viewedChats.delete(chatId);
+  };
+}
+
+export function isChatViewed(chatId: string): boolean {
+  return viewedChats.has(chatId);
+}
