@@ -43,6 +43,18 @@ export interface FolderRailTab {
   shared?: boolean;
 }
 
+/**
+ * «Задачи» on the rail (tracker item 64): «отдельная иконка, например между
+ * папками и меню. И на этой иконке была цифра сколько задач у тебя сейчас в
+ * работе». Null for somebody without the right to tasks.
+ */
+export interface FolderRailTasks {
+  /** Tasks in work; null until it has been counted, or when it could not be. */
+  count: number | null;
+  active: boolean;
+  onOpen: () => void;
+}
+
 interface FolderRailProps {
   folders: FolderRailTab[];
   activeFolder: string | null;
@@ -51,6 +63,7 @@ interface FolderRailProps {
   onEdit?: (id: string) => void;
   onOpenSideMenu: () => void;
   sideMenuOpen: boolean;
+  tasks?: FolderRailTasks | null;
 }
 
 export function FolderRail({
@@ -61,6 +74,7 @@ export function FolderRail({
   onEdit,
   onOpenSideMenu,
   sideMenuOpen,
+  tasks = null,
 }: FolderRailProps) {
 
   return (
@@ -108,6 +122,50 @@ export function FolderRail({
           </button>
         </KubTooltip>
       </div>
+
+      {/* Between the menu and the folders, where the tester put it. It is a
+          place, not a folder, so a hairline sets it apart from them; and its
+          count is work to do, not something unread, so it is drawn quietly —
+          the folders' cyan count means «new», and this one does not. It
+          replaces the «Задачи» row item 41 put above the conversations: one
+          door to one page. */}
+      {tasks && (
+        <div className="flex shrink-0 flex-col border-b border-[color:var(--kub-rule)] pb-1">
+          <button
+            type="button"
+            onClick={tasks.onOpen}
+            aria-label={tasks.count ? `Задачи, в работе ${tasks.count}` : "Задачи"}
+            aria-current={tasks.active ? "page" : undefined}
+            data-shell-section="tasks"
+            data-testid="folder-rail-tasks"
+            className={cn(
+              "kub-button kub-interactive relative flex w-full flex-col items-center gap-1 px-1 py-2.5 transition-colors kub-raise-hover",
+              FOCUS_RING_INSET,
+              PRESS_SINK,
+              tasks.active
+                ? "text-[color:var(--kub-accent-text)]"
+                : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
+            )}
+          >
+            {tasks.active && (
+              <span aria-hidden="true" className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-[var(--kub-cyan)]" />
+            )}
+            <span className="relative flex h-6 items-center justify-center">
+              <KubIcon name="tasks" size={20} />
+              {tasks.count !== null && tasks.count > 0 && (
+                <span
+                  aria-hidden="true"
+                  data-testid="folder-rail-tasks-count"
+                  className="absolute -right-3 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-raised)] px-1 text-[11px] font-semibold tabular-nums text-[color:var(--kub-text)]"
+                >
+                  {tasks.count > 99 ? "99+" : tasks.count}
+                </span>
+              )}
+            </span>
+            <span className="w-full truncate px-0.5 text-center text-[11px] font-semibold leading-tight">Задачи</span>
+          </button>
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar pb-2">
         {folders.map((folder) => {

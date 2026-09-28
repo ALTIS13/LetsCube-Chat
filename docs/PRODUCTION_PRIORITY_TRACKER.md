@@ -2889,10 +2889,22 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     it go. Evidence: `task-route.test.mts`, `task-route-field.spec` (a mutant
     that sets only the scope goes red).
 
-64. `[ ]` Tasks as their own icon with a gentle count — «отдельная иконка,
+64. `[x]` Tasks as their own icon with a gentle count — «отдельная иконка,
     например между папками и меню. И на этой иконке была цифра сколько задач у
     тебя сейчас в работе». On a computer, in the folder rail beside the menu,
     alongside the section row item 41 added; decide which of the two stays.
+    **Done 2026-09-28:** the rail keeps it, the row goes — one page, one door.
+    «Задачи» stands between the menu and the folders, set apart from them by a
+    hairline because it is a place and not a folder, with the count of tasks
+    in work: this person's, `accepted` or `in_progress`, as the tasks page's
+    own «active» filter reads it. The count is drawn quietly — outlined, in
+    the text colour — because it is work to do, not something unread, and the
+    folders' cyan count means «new». One `HEAD` count, again when the window
+    returns, after a reconnection, and a moment after any task this person can
+    see changes (`public.tasks` is published with its old rows, read
+    2026-09-28). A phone keeps its menu row. Evidence: `shell-sections.spec`
+    ««Задачи» is an icon on the folder rail with how many are in work, and
+    nothing else is its door».
 
 65. `[x]` Text typed before an attachment becomes its caption — «если начать
     писать, а потом выбрать фото для загрузки. У телеги ты тогда автоматом

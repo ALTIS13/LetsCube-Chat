@@ -169,6 +169,56 @@ test.describe("sections open beside the lists (item 41)", () => {
     await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: LINE_BORIS })).toBeVisible();
   });
 
+  test("«Задачи» is an icon on the folder rail with how many are in work, and nothing else is its door", async ({ page }) => {
+    // Tracker item 64: «отдельная иконка, например между папками и меню. И на
+    // этой иконке была цифра сколько задач у тебя сейчас в работе».
+    test.skip(!isDesktop(page), "the rail is a computer's");
+    await boot(page);
+    // After the fixture's own route, so this one answers first; the page is
+    // loaded again so the rail counts under it.
+    const counted: string[] = [];
+    await page.route("**/rest/v1/tasks*", async (route) => {
+      const request = route.request();
+      if (!(request.headers().prefer ?? "").includes("count=")) return route.fallback();
+      counted.push(new URL(request.url()).search);
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-expose-headers": "Content-Range", "content-range": "*/3" },
+        body: "[]",
+      });
+    });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("chat-list-item")).toHaveCount(2);
+
+    const tasks = page.getByTestId("folder-rail-tasks");
+    await expect(tasks.getByTestId("folder-rail-tasks-count")).toHaveText("3");
+    await expect(tasks).toHaveAccessibleName("Задачи, в работе 3");
+    // Between the menu and the folders.
+    const order = await page.evaluate(() => {
+      const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+      return {
+        menu: box('[data-testid="side-menu-button"]').bottom,
+        tasksTop: box('[data-testid="folder-rail-tasks"]').top,
+        tasksBottom: box('[data-testid="folder-rail-tasks"]').bottom,
+        folder: box('[data-testid="folder-rail-item"]').top,
+      };
+    });
+    expect(order.menu).toBeLessThanOrEqual(order.tasksTop);
+    expect(order.tasksBottom).toBeLessThanOrEqual(order.folder);
+    // In work is this person's, taken and not yet handed back.
+    const query = new URLSearchParams(counted[0]);
+    expect(query.get("assignee_id")).toBe(`eq.${ME.id}`);
+    expect(query.get("status")).toBe("in.(accepted,in_progress)");
+    expect(query.get("deleted_at")).toBe("is.null");
+
+    // One page, one door: the row above the conversations is gone.
+    await expect(rows(page).locator('[data-shell-section="tasks"]')).toHaveCount(0);
+    await tasks.click();
+    await expect(page).toHaveURL(/\/tasks$/);
+    await expect(tasks).toHaveAttribute("aria-current", "page");
+  });
+
   test("«Задачи» has a row only with the right to it", async ({ page }) => {
     test.skip(!isDesktop(page), "the rows are a computer's");
     const fixture = await boot(page, { tasks: false });

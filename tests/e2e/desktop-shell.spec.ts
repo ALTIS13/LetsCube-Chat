@@ -635,11 +635,13 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     }
     // Moved, not lost: item 41 took «Мои боты» and «Задачи» to the rows above
     // the chat list — the owner's word was «перенести» — so a second door here
-    // would be the duplicate that move exists to remove.
+    // would be the duplicate that move exists to remove. Item 64 then moved
+    // «Задачи» on to the folder rail, as an icon with its count.
     for (const label of ["Мои боты", "Задачи"]) {
       await expect(layer.getByRole("button", { name: label, exact: true }), `${label} is still in the side list`).toHaveCount(0);
-      await expect(page.getByTestId("shell-sections").getByRole("button", { name: label, exact: true })).toBeVisible();
     }
+    await expect(page.getByTestId("shell-sections").getByRole("button", { name: "Мои боты", exact: true })).toBeVisible();
+    await expect(page.getByTestId("folder-rail-tasks")).toBeVisible();
     await expect(layer.getByTestId("side-menu-night-mode")).toBeVisible();
     // The version line is asserted in the Windows check below. A development
     // build's own version is «0.0.0», which `getVisibleReleaseVersion` refuses

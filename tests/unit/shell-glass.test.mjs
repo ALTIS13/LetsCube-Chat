@@ -266,8 +266,9 @@ const veiled = [
   // The computer's left region, 2026-09-12. The rail hovers its menu button,
   // its folder buttons and «+»; the side list hovers its rows. The resizer has
   // none: it is a separator, and its grip shows itself with an opacity, not
-  // with a step of material.
-  ["components/sidebar/FolderRail.tsx", 3],
+  // with a step of material. Since tracker item 64 the rail also hovers
+  // «Задачи», between the menu and the folders.
+  ["components/sidebar/FolderRail.tsx", 4],
   ["components/sidebar/SideMenuLayer.tsx", 1],
   ["components/sidebar/ChatListResizer.tsx", 0],
   ["components/sidebar/NotificationBell.tsx", 6],

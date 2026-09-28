@@ -2,7 +2,6 @@
 
 import { useLocation } from "wouter";
 import { KubIcon } from "@/components/kub";
-import { useTaskAccessGate } from "@/hooks/useTaskAccess";
 import { FOCUS_RING_INSET, PRESS_SINK } from "@/lib/controlSurface";
 import { SHELL_SECTION_ROWS, shellSection, shellSectionPath } from "@/lib/shellSection";
 import { cn } from "@/lib/utils";
@@ -18,12 +17,15 @@ import { cn } from "@/lib/utils";
  * The chosen row speaks the channel rail's language for a chosen channel: a
  * cyan wash that steps on hover and the accent text, so «where am I» reads the
  * same in both lists.
+ *
+ * «Задачи» is not among them since tracker item 64: it is an icon on the
+ * folder rail now, with how many are in work on it, where the tester asked for
+ * it — and one page has one door.
  */
 export function ShellSectionRows() {
   const [location, setLocation] = useLocation();
-  const { canAccessTasks } = useTaskAccessGate();
   const current = shellSection(location);
-  const rows = SHELL_SECTION_ROWS.filter((row) => row.section !== "tasks" || canAccessTasks);
+  const rows = SHELL_SECTION_ROWS.filter((row) => row.section !== "tasks");
 
   return (
     <nav aria-label="Разделы" className="hidden flex-col gap-0.5 px-2 pb-1 pt-1 md:flex" data-testid="shell-sections">

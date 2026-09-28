@@ -32,7 +32,9 @@ import { LIST_MAY_BE_STALE } from "@/lib/plainMessages";
 import { ChatKindFilterBar } from "./ChatKindFilterBar";
 import { ShellSectionRows } from "./ShellSectionRows";
 import { chatAddressPath } from "@/lib/chatRoute";
-import { shellSection } from "@/lib/shellSection";
+import { shellSection, shellSectionPath } from "@/lib/shellSection";
+import { useTaskAccessGate } from "@/hooks/useTaskAccess";
+import { useTasksInWork } from "@/hooks/useTasksInWork";
 import {
   chatKindStorageKey,
   chatsOfKind,
@@ -61,6 +63,8 @@ export function Sidebar() {
   // and the press would do nothing at all.
   const [location, setLocation] = useLocation();
   const section = shellSection(location);
+  // Tracker item 64: «Задачи» on the folder rail, with how many are in work.
+  const { canAccessTasks } = useTaskAccessGate();
   const selectChat = useCallback(
     (chatId: string | null) => {
       setSelectedChatId(chatId);
@@ -155,6 +159,8 @@ export function Sidebar() {
   // comes back here.
   const chatSearch = useAppStore((s) => s.chatSearch);
   const isPhone = useIsMobile();
+  // Counted only where the rail is drawn: a phone has no rail.
+  const tasksInWork = useTasksInWork(canAccessTasks && !isPhone);
   const chatSearchOpen =
     !isPhone && chatSearch !== null && chatSearch.chatId === selectedChatId;
 
@@ -251,6 +257,11 @@ export function Sidebar() {
           onEdit={editFolder}
           onOpenSideMenu={() => setSideMenuOpen(true)}
           sideMenuOpen={sideMenuOpen}
+          tasks={
+            canAccessTasks
+              ? { count: tasksInWork, active: section === "tasks", onOpen: () => setLocation(shellSectionPath("tasks")) }
+              : null
+          }
         />
 
         <div className="kub-chat-list-column @container relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
