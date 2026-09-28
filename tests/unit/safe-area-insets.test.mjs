@@ -181,33 +181,33 @@ test("every inset utility the markup writes is declared once, and reads the toke
   }
 });
 
-test("web pads its bottom tab bar; native Android floats above the gesture area", () => {
+test("the tab capsule is its row alone and floats clear of the system strip on every platform", () => {
   const nav = read("artifacts/kub/src/components/layout/BottomNav.tsx");
 
-  assert.ok(writesClass(nav, "pb-safe"), "the tab bar stopped asking for the bottom inset at all");
-
-  // Tailwind boxes are border-box, so a flat `height: 56px` beside `pb-safe`
-  // takes the inset out of the tabs instead of adding it underneath: on a 34px
-  // indicator that leaves six labels and their icons 22px of row.
-  //
-  // Changed on 2026-09-12, knowingly and upwards. The bar became a floating
-  // capsule and its height moved into `--kub-bottom-nav`, because the panes
-  // reserve the same number below themselves and two copies of one number
-  // drift apart the first time either is touched. Reading the spelling failed
-  // that indirection while the property was intact — and, worse, the same
-  // check would have passed a height that SUBTRACTED the inset, because all
-  // it asked was that the token appear somewhere in the text. So the value is
-  // resolved through index.css, which this file already reads, and both
-  // mistakes are caught.
-  const height = /height:\s*nativeAndroid\s*\?\s*"([^"]+)"\s*:\s*"([^"]+)"/.exec(nav);
-  assert.ok(height, "the tab bar no longer sets platform-specific heights — re-read this test before deleting it");
-  assert.equal(height[1], "calc(var(--kub-bottom-nav) - var(--kub-safe-bottom))");
-  assert.equal(height[2], "var(--kub-bottom-nav)");
+  // Tracker item 56, 2026-09-28. The web and iOS carried the home indicator's
+  // inset as `pb-safe` *inside* the capsule, with the height grown to match —
+  // on an iPhone a 90pt capsule with its tabs in the top 56 and an empty band
+  // beneath them, which the tester called «растянуто». Android already floated
+  // a row-high capsule above its gesture area; that is now the one geometry,
+  // as Telegram's own floating bar sits above the system bar.
+  assert.equal(writesClass(nav, "pb-safe"), false, "the capsule carries the inset inside itself again: it will stretch");
   assert.ok(
     nav.includes("bottom-[calc(var(--kub-bottom-nav-gap)+var(--kub-safe-bottom))]"),
-    "native Android no longer floats clear of the gesture area",
+    "the capsule no longer floats clear of the home indicator and the gesture area",
+  );
+  assert.equal(
+    (nav.match(/bottom-\[/g) ?? []).length,
+    1,
+    "the capsule is placed in more than one way; one geometry for every platform is the point",
   );
 
+  const height = /style=\{\{\s*height:\s*"([^"]+)"\s*\}\}/.exec(nav);
+  assert.ok(height, "the capsule no longer sets one height for every platform — re-read this test before deleting it");
+  assert.equal(height[1], "calc(var(--kub-bottom-nav) - var(--kub-safe-bottom))");
+
+  // And the room the panes reserve below themselves still reaches the inset:
+  // the capsule stands on it now rather than containing it, so a reservation
+  // that lost it would put the last row of a list under the capsule.
   const resolve = (expression, depth = 0) => {
     const text = String(expression).trim();
     if (!text.startsWith("var(") || !text.endsWith(")")) return text;
@@ -215,22 +215,18 @@ test("web pads its bottom tab bar; native Android floats above the gesture area"
     if (!name.startsWith("--")) return text;
     assert.ok(depth < 4, `"${text}" resolves through more tokens than this test will follow`);
     const at = cssSource.indexOf(name + ":");
-    assert.ok(at >= 0, `the tab bar's height is "${text}" and index.css declares no such token`);
+    assert.ok(at >= 0, `"${text}" is not declared in index.css`);
     const end = cssSource.indexOf(";", at);
     assert.ok(end > at, `the declaration of \`${name}\` in index.css never ends`);
     return resolve(cssSource.slice(at + name.length + 1, end), depth + 1);
   };
-
-  const resolved = resolve(height[2]);
+  const reserved = resolve("var(--kub-bottom-nav)");
   assert.ok(
-    resolved.includes("var(--kub-safe-bottom)"),
-    `the tab bar's height resolves to "${resolved}", which never reaches the home indicator's inset`,
+    reserved.includes("var(--kub-safe-bottom)"),
+    `the panes reserve "${reserved}" for the capsule, which never reaches the home indicator's inset`,
   );
   for (const subtraction of ["- var(--kub-safe-bottom)", "-var(--kub-safe-bottom)"]) {
-    assert.ok(
-      !resolved.includes(subtraction),
-      `the tab bar's height resolves to "${resolved}", which takes the inset away instead of adding it`,
-    );
+    assert.ok(!reserved.includes(subtraction), `the reservation "${reserved}" takes the inset away instead of adding it`);
   }
 });
 

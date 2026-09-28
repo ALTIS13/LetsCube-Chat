@@ -2621,12 +2621,30 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     retrying: the first form of the test used `toHaveCount(0)`, which waits for
     a notice to expire and let a mutant that brought it back pass.
 
-56. `[ ]` The installed iPhone app's bottom capsule and bottom edge — same
+56. `[x]` The installed iPhone app's bottom capsule and bottom edge — same
     report, screenshots of 2026-09-27 and a message of 2026-09-28. The stripe
     of D-111 is «считай ушла»; what remains: the tab capsule is «растянуто»,
     because on the web and on iOS the safe-area inset is padding inside the
     capsule (`pb-safe`) rather than room under it, as Android already has; and
     the bottom edge is «слишком сильно размылен».
+    **Done 2026-09-28.** The capsule has one geometry on every platform: the
+    row of tabs alone (56pt), floating `--kub-bottom-nav-gap` above the system
+    strip — the home indicator on an iPhone, the gesture area on Android, which
+    already had it. Telegram's own floating bar in the forwarded screenshot
+    sits above Android's system bar by about 13dp, measured off the pixels. The
+    reservation under the lists is unchanged and still clears it. The bottom
+    edge: the frost under the composer kept full density behind the capsules,
+    whose words it is for, and now lets go over the strip beneath them (the
+    dock's own padding, so the home indicator's inset or the keyboard's) to a
+    third at the screen's edge — it had been a band of frost as tall as the
+    inset, the stripe's place filled with blur.
+    **A measuring trap found on the way:** Playwright's Chromium renders with
+    SwiftShader, which dropped the capsule's backdrop blur for one box shape
+    and kept it for another, so a before/after pair photographed a regression
+    that did not exist. Headless Chromium on the hardware path
+    (`--use-angle=d3d11 --enable-gpu`) blurred all of them; Playwright's WebKit
+    on Windows blurs none. Judge any glass on the GPU path —
+    `output/render/render-bottom-edge.spec.ts` carries the flags.
 
 57. `[ ]` Finding a person to add from the contacts search — same report,
     2026-09-27. After the first contact the search box filters only contacts,

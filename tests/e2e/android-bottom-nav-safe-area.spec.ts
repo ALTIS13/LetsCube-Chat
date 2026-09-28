@@ -140,7 +140,7 @@ test.describe("Android floating navigation and system gesture area", () => {
     });
   }
 
-  test("web keeps its existing safe-area padding", async ({ page, request }) => {
+  test("web floats the same row-high capsule above the home indicator, in its own material", async ({ page, request }) => {
     await requireFixtureServer(request);
     await boot(page, false);
     const nav = page.getByRole("navigation", { name: "Навигация" });
@@ -148,7 +148,12 @@ test.describe("Android floating navigation and system gesture area", () => {
     await expect(nav).not.toHaveClass(/kub-glass-strong/);
     const box = await nav.boundingBox();
     expect(box).not.toBeNull();
-    expect(box!.height).toBeCloseTo(80, 0);
-    expect(page.viewportSize()!.height - box!.y - box!.height).toBeCloseTo(8, 0);
+    // Tracker item 56, 2026-09-28: the web carried the inset inside the
+    // capsule — 80 here, 90 on an iPhone, the tabs in the top 56 and an empty
+    // band under them, «растянуто». Now the row alone, standing on the inset
+    // plus the gap, as native Android always did. The inset is 24 here: boot
+    // sets `--kub-safe-bottom` itself.
+    expect(box!.height).toBeCloseTo(56, 0);
+    expect(page.viewportSize()!.height - box!.y - box!.height).toBeCloseTo(8 + 24, 0);
   });
 });

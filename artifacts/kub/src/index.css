@@ -1510,7 +1510,19 @@ html.light[data-ios-standalone] body::before {
     mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 1.5rem), transparent 100%);
   }
 
+  /* The strip under the composer's capsules — the home indicator's inset, or
+     the keyboard's, whichever the dock pads by — carries nothing to protect,
+     and the edge used to fill it at full density: on an iPhone a band of
+     frost as tall as the inset under the capsules, which the tester, once the
+     D-111 stripe was gone, reported as the bottom «слишком сильно размылен»
+     (tracker item 56). So the mask lets the edge go over that strip, to a
+     third at the screen's edge, and the capsules keep every bit of the density
+     behind them: the frost is for their words, and their words are above the
+     strip. iOS 26 lets content run under its floating bars to the bottom edge
+     the same way. The strip is the dock's own padding, so the stop reads the
+     same expression `ChatWindow` pads by. */
   .kub-chat-composer-dock::before {
+    --kub-composer-strip: max(var(--kub-keyboard-inset, 0px), var(--kub-safe-bottom));
     top: -1.5rem;
     bottom: 0;
     background-image: linear-gradient(
@@ -1519,8 +1531,8 @@ html.light[data-ios-standalone] body::before {
       color-mix(in srgb, var(--kub-chat-edge-bottom) 88%, transparent) calc(100% - 1.5rem),
       transparent 100%
     );
-    -webkit-mask-image: linear-gradient(0deg, #000 0, #000 calc(100% - 1.5rem), transparent 100%);
-    mask-image: linear-gradient(0deg, #000 0, #000 calc(100% - 1.5rem), transparent 100%);
+    -webkit-mask-image: linear-gradient(0deg, rgb(0 0 0 / 0.34) 0, #000 var(--kub-composer-strip), #000 calc(100% - 1.5rem), transparent 100%);
+    mask-image: linear-gradient(0deg, rgb(0 0 0 / 0.34) 0, #000 var(--kub-composer-strip), #000 calc(100% - 1.5rem), transparent 100%);
   }
 
   .context-menu {

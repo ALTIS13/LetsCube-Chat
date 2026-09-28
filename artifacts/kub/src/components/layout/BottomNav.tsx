@@ -49,19 +49,24 @@ export function BottomNav({ onSelect }: { onSelect?: (entry: BottomNavDestinatio
       //
       // Android uses the stronger existing material: row text can pass under
       // this floating surface, but must not compete with its tab labels.
+      //
+      // One geometry on every platform since 2026-09-28 (tracker item 56): the
+      // capsule is the row of tabs and nothing else, and it floats clear of the
+      // system's own strip at the bottom — the gesture area on Android, the home
+      // indicator on an iPhone. The web and iOS used to carry the indicator's
+      // inset as padding *inside* the capsule, so on an iPhone it was 90pt tall
+      // with its tabs in the top 56 and an empty band under them; the tester
+      // called it «растянуто». Telegram's own floating bar, in the forwarded
+      // screenshot of 2026-09-28, sits above Android's system bar with a small
+      // gap, which is what Android here already did.
       className={cn(
         "absolute inset-x-4 z-20 md:hidden flex items-center justify-around px-2 rounded-full border border-[color:var(--kub-border-color)]",
-        // On native Android the gesture area belongs below the floating
-        // capsule, not inside it. Web/iOS retain their existing inset padding.
-        nativeAndroid
-          ? "kub-glass-strong bottom-[calc(var(--kub-bottom-nav-gap)+var(--kub-safe-bottom))]"
-          : "kub-glass bottom-[var(--kub-bottom-nav-gap)] pb-safe",
+        "bottom-[calc(var(--kub-bottom-nav-gap)+var(--kub-safe-bottom))]",
+        nativeAndroid ? "kub-glass-strong" : "kub-glass",
       )}
-      style={{
-        height: nativeAndroid
-          ? "calc(var(--kub-bottom-nav) - var(--kub-safe-bottom))"
-          : "var(--kub-bottom-nav)",
-      }}
+      // The row's height: `--kub-bottom-nav` is the room the panes reserve,
+      // the inset included, so the capsule takes the inset back out of it.
+      style={{ height: "calc(var(--kub-bottom-nav) - var(--kub-safe-bottom))" }}
     >
       {tabs.map((entry) => {
         const { id, label, icon } = entry;
