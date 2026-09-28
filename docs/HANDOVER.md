@@ -251,7 +251,46 @@ whole deployment** — no bot has registered a command yet.
 
 ## 4. Where to start
 
-**Current checkpoint, 2026-09-28 (Claude):** `main` is `7cf0a349`, deployed and
+**Current checkpoint, 2026-09-29 (Claude):** `main` is `e1ed1968`. The owner
+approved every entry of `operations/2026-09-28-database-proposals.md`
+(«все пункты принимаю»), and all of them are applied and deployed except kind
+folders (item 69), which the proposal itself deferred until the capsule in
+«Все» proves not enough. Each change went through §10: a verified backup, a
+rolled-back rehearsal on production, one transaction with a self-check, a
+post-apply smoke, and byte-identical copies in `.migration-backup/`. Each is
+recorded in `operations/2026-09-28-owner-approved-database-changes.md`,
+§1–§8, in the order applied:
+
+- A task's period (item 68) and checklist (item 62).
+- Reminders on a task (item 66). pg_cron job `letscube-task-reminders`, owned
+  by `postgres`; its health query is in the record.
+- A badge's date (item 38). `profile_badges`, owned by `supabase_admin`.
+- D-103. A message deleted for everyone keeps nothing. The worker's new
+  `mediaPurgeWorker` removes the files through the Storage API; it cleared the
+  first 156 in its first four minutes.
+- Hides heard live (item 58). A private broadcast topic per account; the
+  publication the proposal asked for would have leaked other accounts'
+  unhides.
+- Unread per channel (item 54). `channel_reads`, beside the chat's own mark.
+- Co-executors on a task (item 67). `task_coassignees` beside the one
+  responsible assignee.
+
+Things to know, found on the way:
+- **The worker's first build failed mid-unpack (exit 255).** The image was cut
+  to 431 MB against the usual 2.07 GB, and Coolify rolled back. A retry through
+  the deploy token (§15) built it. So a `failed` worker row is worth reading
+  before retrying.
+- **`tests/server` needs `--test-concurrency=2` on this workstation.** At the
+  default the PGlite files die of V8's Zone OOM (CLAUDE.md §5).
+- **A shared-fixture change can land mid-run.** The fixture regression gave 90
+  failures while other runs and code edits happened beside it. Rerun alone, the
+  failed files gave 619 passed and 1 flake. Do not run two Playwright processes
+  into one `output/playwright-test`: the second deletes the first's folder
+  (ENOTEMPTY).
+- **`cron.job_run_details` is 204 MB and never purged.** A task was filed to add
+  a purge job through §10; it needs the owner's word like any DB change.
+
+**Checkpoint, 2026-09-28 (Claude):** `main` is `7cf0a349`, deployed and
 healthy as the sole web container. The day closed the testers' reports that the
 client could close alone: a file keeps the name it was picked under with its
 caption under it (item 33), the bots page splits by its own width (D-323), the
