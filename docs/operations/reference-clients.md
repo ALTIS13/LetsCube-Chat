@@ -3195,6 +3195,21 @@ all three surfaces; the label COMMUNITY sources give Discord's is «Mute», and
 ours says «для себя» because the same menu carries a moderator's «Заглушить в
 канале», which Discord separates with its «Server» prefix instead.
 
+### 21.4 What a badge says when it is pointed at (item 38)
+
+Same bundle, chunk `fb_534928_d3ed95b7d66c6d71.js`. SHIPPED. A profile badge is
+an anchor inside the client's tooltip (`delay`, `forceOpen`, `ariaHidden`), and
+the tooltip's content is `badge.description` — plain text — except for a tiered
+tenure badge, whose content is a component of its own: the tier's asset as an
+image, the Nitro wordmark at 56 px, the tier's name as `heading-xl/extrabold`,
+then the line. That card is what the owner's screenshot showed.
+
+Ours: a card for every badge that carries a line (`ProfileBadgeChip`), since our
+badges have no tiers to single out, with the mark large in the badge's colour,
+its name, and its line. Where it differs: it opens on a tap as well, because a
+tooltip that only a pointer can open does not exist on a phone, and there is no
+wordmark because there is no product tier to name.
+
 ## 22. Subject 14 — an attachment on its way, 2026-09-28
 
 D-314's second half. A tester, 2026-09-27: a file sent to upload showed

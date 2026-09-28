@@ -2,6 +2,7 @@
 
 import { KubBadge, KubIcon } from "@/components/kub";
 import { KUB_ICON_NAMES, type KubIconName } from "@/components/kub/icons";
+import { InfoHint } from "@/components/settings/InfoHint";
 import { badgeTone } from "@/lib/badgeVocabulary";
 import { chatRoleColourValue } from "@/lib/chatRolePalette";
 import { badgeColourKey, type ProfileBadge } from "@/lib/profileBadges";
@@ -64,7 +65,7 @@ export function ProfileBadgeChip({ badge }: { badge: ProfileBadge }) {
   // references this build wrote. See `badgeColourKey` for the three refusals.
   const colourKey = badgeColourKey(badge);
   const accent = colourKey ? chatRoleColourValue(colourKey) : null;
-  return (
+  const chip = (
     <KubBadge
       tone={badgeTone(badge.kind === "achievement" ? "medal" : "standing", badge.key)}
       accent={accent}
@@ -72,7 +73,6 @@ export function ProfileBadgeChip({ badge }: { badge: ProfileBadge }) {
       // One marker, not two: the dot and the icon say the same thing, and a chip
       // wearing both reads as a bullet point with a picture in it.
       dot={!icon}
-      title={badge.detail ?? undefined}
       data-badge-key={badge.key}
       data-badge-kind={badge.kind}
       data-badge-icon={icon ?? ""}
@@ -88,5 +88,60 @@ export function ProfileBadgeChip({ badge }: { badge: ProfileBadge }) {
       )}
       {badge.title}
     </KubBadge>
+  );
+
+  // Item 38: «the explanation is a browser tooltip». It was `title=` — the
+  // native bubble, which cannot be styled, is slow to appear and does not exist
+  // on a touch screen. Discord's profile badges, read in its web bundle (build
+  // 621195), each sit in the client's own tooltip whose text is the badge's
+  // `description`, and its tiered badges get a card — the mark large, its
+  // name, then the line. Ours is that card for every badge that has a line to
+  // say: the chip becomes a control a keyboard and a finger can reach, and a
+  // chip with nothing more to say than its own word stays a word.
+  if (!badge.detail) return chip;
+  return (
+    <InfoHint term={badge.title} text={<BadgeCard badge={badge} icon={icon} accent={accent} />} asChild>
+      <button
+        type="button"
+        className="inline-flex max-w-full min-w-0 rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+        // Not `data-badge-key`: the chip inside carries that, and one badge is
+        // one element to anybody counting them.
+        data-testid="profile-badge-trigger"
+        data-badge-trigger={badge.key}
+      >
+        {chip}
+      </button>
+    </InfoHint>
+  );
+}
+
+/** The badge's own card: its mark large, in its colour, its name, and what it says. */
+function BadgeCard({
+  badge,
+  icon,
+  accent,
+}: {
+  badge: ProfileBadge;
+  icon: KubIconName | null;
+  accent: string | null;
+}) {
+  return (
+    <span className="flex items-start gap-2.5 py-0.5" data-testid="profile-badge-card">
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--kub-inset)] text-[color:var(--kub-text)]"
+        style={accent ? { color: accent } : undefined}
+        aria-hidden="true"
+      >
+        {icon ? (
+          <KubIcon name={icon} size={20} weight={badge.weight} />
+        ) : (
+          <span className="h-2.5 w-2.5 rounded-full bg-current" />
+        )}
+      </span>
+      <span className="flex min-w-0 flex-col">
+        <span className="text-[13px] font-semibold text-[color:var(--kub-text)]">{badge.title}</span>
+        <span className="mt-0.5 text-xs text-[color:var(--kub-muted)]">{badge.detail}</span>
+      </span>
+    </span>
   );
 }

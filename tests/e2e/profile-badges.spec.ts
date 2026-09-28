@@ -140,6 +140,70 @@ test("the standing comes before the medal, and the strip says how many it did no
   await expect(page.getByTestId("profile-badges")).toContainText("+1");
 });
 
+test("a badge's line is its own card, reached by pointer, keyboard and a tap", async ({ page }, info) => {
+  // Item 38. The line was the native `title`, which cannot be styled, is slow
+  // and does not exist on a touch screen. Discord's badges each sit in the
+  // client's own tooltip; ours is a card with the mark, the name and the line.
+  await openCard(page, [
+    ...BADGE_ROWS,
+    {
+      user_id: ANNA.id,
+      kind: "achievement",
+      key: "tester",
+      title: "Тестировщик",
+      detail: null,
+      icon: "shield",
+      colour: null,
+      rank: 100000 - 10,
+    },
+  ]);
+  const strip = page.getByTestId("profile-badges");
+  const trigger = strip.locator('[data-badge-trigger="owner"]');
+  await expect(trigger).toHaveCount(1);
+  expect(await trigger.evaluate((node) => node.tagName.toLowerCase())).toBe("button");
+  // No native bubble anywhere in the strip any more.
+  await expect(strip.locator("[title]")).toHaveCount(0);
+
+  // Radix renders a tooltip's content twice — what is seen, and a visually
+  // hidden copy a screen reader reads — so the card is the first of the two.
+  const cards = page.getByTestId("profile-badge-card");
+  const card = cards.first();
+  if ((page.viewportSize()?.width ?? 0) >= 768) {
+    await trigger.hover();
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("Владелец");
+    await expect(card).toContainText("Полный доступ ко всему LETSCUBE");
+    // In steps, as a hand moves: one jump makes the exit point the corner
+    // itself, which Radix's grace area around the card then contains, and
+    // nothing ever leaves it.
+    await page.mouse.move(8, 8, { steps: 12 });
+    await expect(cards).toHaveCount(0);
+    await trigger.focus();
+    await expect(card).toBeVisible();
+    await page.keyboard.press("Escape");
+  } else {
+    await trigger.tap();
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("Полный доступ ко всему LETSCUBE");
+    // On top of what raised it, asked of the browser: «visible» is true of a
+    // card painted under the profile panel, and at 390 it was — the shared
+    // tooltip stood at 50 and the panel at 60, so a tap showed nothing at all.
+    const onTop = await card.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      return Boolean(hit && node.contains(hit));
+    });
+    expect(onTop, "the card is under the surface it was opened from").toBe(true);
+  }
+  // A chip with nothing more to say than its own word stays a word.
+  await expect(strip.locator('[data-badge-trigger="tester"]')).toHaveCount(0);
+  if ((page.viewportSize()?.width ?? 0) >= 768) {
+    await trigger.hover();
+    await expect(card).toBeVisible();
+  }
+  await page.screenshot({ path: shotPath(info, "badge-card") });
+});
+
 test("somebody who wears nothing is not called «Пользователь»", async ({ page }) => {
   // This test used to require the opposite, and it was pinning the defect.
   //

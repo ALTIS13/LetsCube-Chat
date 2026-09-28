@@ -1083,6 +1083,19 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 
     Sequence it after item 36, whose profile work draws these same chips.
 
+    **The card is built, 2026-09-28; the date and the icons are not.** Read in
+    Discord's web bundle, build 621195: each profile badge sits in the client's
+    own tooltip whose text is the badge's `description`, and a tiered badge gets
+    a card — its asset large, a wordmark, its name as a heading, then the line.
+    Ours is that card for every badge with a line to say (`ProfileBadgeChip`):
+    the chip becomes a control a keyboard and a finger reach, the native `title`
+    is gone, and a chip whose word is all it says stays a word. Building it found
+    D-321 — every tooltip opened inside a panel was painted under it — fixed
+    with it. **Still open:** «since when» needs the date the grant carries
+    (`profile_badges` returns none), which is a change to a production function
+    and goes through §10; and purpose-drawn marks are a design question for the
+    owner's eye rather than one to settle from a bundle.
+
 
 39. `[x]` The settings overlay's shape, applied to every other full surface.
     **Done 2026-09-21 as D-286.** The audit answered the question the item

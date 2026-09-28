@@ -24064,3 +24064,28 @@ once». Every cause was put back one at a time and each turned its test red —
 The phone half of the same spec's «selected chat highlight» test was red on the
 baseline too, and for a reason in the test: a phone shows one pane, so there is
 no selected row on screen to measure and no hover. It skips there now.
+
+## D-321 `[x]` A tooltip opened inside a panel, a sheet or a window is painted under it
+
+**Severity:** medium, and silent: nothing on screen says a tooltip was opened.
+Found 2026-09-28 while building item 38's badge card, by asking the browser
+what it would hit at the card's centre rather than whether the card was
+«visible» — Playwright's visible is true of an element painted underneath
+another.
+
+**Surface:** `artifacts/kub/src/components/ui/tooltip.tsx`, the one tooltip
+primitive `KubTooltip` and `InfoHint` are built on. It portals its content into
+`body` — rightly, for the clipping and the inherited capitals its own comment
+records — and gave it `z-50`. In `body` it competes with every layer there, and 50 is under all of
+them: the information panel stands at 60, the media viewer at 90, `KubModal` at
+95. Measured at 390 with a badge's card opened inside the profile panel: the
+topmost element at the card's centre was the panel's own scroller, and a tap
+showed nothing at all.
+
+**Fixed 2026-09-28:** `z-[96]` — above every surface that can raise a tooltip,
+below the ban screen's 100, which nothing may cover — and 8 px of collision
+padding, because the same card then sat flush against the left edge of the
+screen. Popovers are deliberately left where they are: a hint plate is anchored
+to an element, and when a panel covers that element the plate is right to be
+covered with it. Pinned by the badge card test, which asks `elementFromPoint`;
+putting the tooltip back at 50 turns it red at 390.
