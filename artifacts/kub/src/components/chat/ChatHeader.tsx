@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
 import { KubGlassLayer, KubModal, KubIcon, type KubIconName } from "@/components/kub";
@@ -45,7 +45,6 @@ interface ChatHeaderProps {
   onSearchOpen?: () => void;
   onInfoOpen?: () => void;
   onClearForMe?: () => Promise<{ ok: boolean; error: string | null }>;
-  mediaPlayback?: ReactNode;
   /**
    * «Назад» on a phone. Absent leaves the conversation for the chat list; a
    * server's conversation passes its channel list instead (tracker item 54),
@@ -54,7 +53,7 @@ interface ChatHeaderProps {
   onBack?: () => void;
 }
 
-export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForMe, mediaPlayback, onBack }: ChatHeaderProps) {
+export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForMe, onBack }: ChatHeaderProps) {
   const { chats, setChats, setSelectedChatId, setMessages, currentUser } = useAppStore();
   const supabase = createClient();
   const [showMenu, setShowMenu] = useState(false);
@@ -595,11 +594,6 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
             </div>
           </div>
         </div>
-        {mediaPlayback && (
-          <div data-testid="chat-header-media-playback" className="min-w-0">
-            {mediaPlayback}
-          </div>
-        )}
       </div>
       <KubModal
       open={deleteGroupOpen}

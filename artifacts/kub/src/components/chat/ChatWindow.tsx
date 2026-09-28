@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, type CSSProperties, type DragEvent } from "react";
 import { ChatHeader } from "./ChatHeader";
 import { BotViewerContext, BotViewerPanel, useBotViewerPanels } from "./BotViewerPanel";
-import { PinnedMessage } from "./PinnedMessage";
+import { ChatTopCard } from "./ChatTopCard";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { ChatSearchBar } from "./ChatSearchBar";
@@ -14,7 +14,7 @@ import { ChatSelectionBar } from "./ChatSelectionBar";
 import { ForwardModal } from "./ForwardModal";
 import { MessageDeleteDialogHost, copySelectedMessages, useChatMessageSelection } from "./MessageSelectionChrome";
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
-import { ChatMediaPlaybackBar, ChatMediaPlaybackProvider, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
+import { ChatMediaPlaybackProvider, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 import { TopicStrip } from "./TopicStrip";
 import { ChannelRail, ChannelRailSheet, ChannelRailTrigger } from "./ChannelRail";
 import { ChannelManageDialogHost, requestChannelManage } from "./ChannelManageModal";
@@ -2035,7 +2035,6 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
               onSearchOpen={() => openChatSearch(chatId)}
               onInfoOpen={() => setShowInfo(true)}
               onClearForMe={clearChatForMe}
-              mediaPlayback={<ChatMediaPlaybackBar compact />}
               // A server's conversation goes back to its channel list on a
               // phone, as a Telegram topic goes back to the forum's topics.
               onBack={phoneServer ? () => setRailOpen(true) : undefined}
@@ -2106,13 +2105,16 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             </div>
           )}
 
-          {pinnedReady && pinnedMessages.length > 0 && (
-            <PinnedMessage
-              messages={pinnedMessages}
-              onJump={handleJumpToPinned}
-              onUnpin={userId ? (msg) => void handleTogglePin(msg) : undefined}
-            />
-          )}
+          {/* The pinned message and the player, one card of a row each, as
+              Telegram draws them (tracker item 70). The player was in the
+              header until then, and left with it whenever the selection bar
+              stood in for the header. */}
+          <ChatTopCard
+            pinnedMessages={pinnedMessages}
+            pinnedReady={pinnedReady}
+            onJumpToPinned={handleJumpToPinned}
+            onUnpin={userId ? (msg) => void handleTogglePin(msg) : undefined}
+          />
         </div>
 
         <div
@@ -2386,6 +2388,7 @@ function createMediaPlaybackItem(
           ? "Аудио"
           : "Видео",
     subtitle: senderName,
+    sentAt: message.created_at,
     durationMs: getMessageMediaMetadataNumber(message, "duration_ms") ?? parseMessageDurationMs(message.content),
   };
 }

@@ -2404,6 +2404,7 @@ function createPlaybackItemFromMessage(
           ? "Аудио"
           : "Видео",
     subtitle: isMe ? "Вы" : messageActorDisplayName(resolveMessageActor(message)),
+    sentAt: message.created_at,
     durationMs,
   };
 }

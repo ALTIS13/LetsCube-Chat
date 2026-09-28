@@ -3043,7 +3043,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     with type rules — which needs a `folders` column and is a database change
     for the owner's word (§10), not built here.
 
-70. `[ ]` The top of a conversation is one compact line per thing, as in
+70. `[x]` The top of a conversation is one compact line per thing, as in
     Telegram — the owner, 2026-09-28, with two screenshots side by side:
     «посмотри как минималистично/удобно сделана верхняя панель в telegram
     (включая прослушивание голосовых) и как громоздко … это выглядит у нас».
@@ -3060,6 +3060,25 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     card with the pinned message**, each a row of it, rather than as two
     surfaces. To do: that row, that card, the same on a computer and a phone,
     and the header's own height measured against Telegram's while at it.
+    **Done 2026-09-28**, from Telegram's source rather than from memory
+    (`reference-clients.md` §24): one card under the header, the pinned message
+    a 48-high row and the player a 40-high one, a rule between — 89 in all,
+    where the player alone was over 110 on a phone. The player row is play or
+    pause in the accent, «Никита Фермер 06 сент. в 18:20», a «1X» chip that a
+    tap walks through 1, 1.5 and 2 and a long press or a right click opens
+    every speed from, a cross, and the progress as a 2-high line along the
+    foot, which seeks under a mouse as Telegram Desktop's does for music and
+    not under a finger. A computer keeps its volume behind an icon. The pinned
+    row is Telegram's: a line with a segment per pin and the shown one lit,
+    «Закреплённое сообщение» in the accent (with «#N» once it has left the
+    newest), a tap that goes to the pin and moves on to the one before it, and
+    one control — the list when there are several, a cross that asks before
+    unpinning when there is one. The player also no longer disappears while
+    messages are selected: it was inside the header, which the selection bar
+    replaces. The header was measured against Telegram's on the owner's two
+    screenshots and left alone — 113 to 118 at one scale. Evidence:
+    `chat-top-card.test.mts`, `chat-top-card.spec` at 1440 and 390, renders
+    of both themes.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

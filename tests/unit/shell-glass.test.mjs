@@ -133,7 +133,11 @@ function bodyAfterLayer(source) {
 const capsuleChrome = [
   ["components/chat/ChatHeader.tsx", "relative flex flex-shrink-0 flex-col"],
   ["components/chat/MessageInput.tsx", "relative flex-shrink-0"],
-  ["components/chat/PinnedMessage.tsx", "relative flex-shrink-0"],
+  // The pinned message and the player, one card of a row each since tracker
+  // item 70; the pinned message was its own capsule until then.
+  ["components/chat/ChatTopCard.tsx", "relative mx-2 mt-1 flex-shrink-0"],
+  // The same player row over the chat list, in a card of its own.
+  ["components/chat/ChatMediaPlayback.tsx", "relative mx-2 mb-1.5 flex-shrink-0"],
   ["components/chat/ChatSelectionBar.tsx", "relative flex flex-shrink-0 flex-col"],
   ["components/chat/ChatSearchBar.tsx", "relative mx-2 mt-1 flex flex-shrink-0 flex-col"],
   ["components/chat/TopicStrip.tsx", "relative mx-2 mt-1 flex-shrink-0"],
@@ -376,9 +380,17 @@ const veiled = [
   // context menu and its reaction pickers left the bubble for
   // `MessageActionLayer` and `MessageReactions`, which are counted below.
   ["components/chat/MessageBubble.tsx", 2],
-  ["components/chat/PinnedMessage.tsx", 7],
+  // Five since tracker item 70: the row, one literal for its one control —
+  // the list or the cross, never both, where there were three buttons — and
+  // the dropped list's row and its two presses.
+  ["components/chat/PinnedMessage.tsx", 5],
+  // None: the card draws the material and the rows draw their hovers.
+  ["components/chat/ChatTopCard.tsx", 0],
   ["components/chat/ChatSearchBar.tsx", 4],
-  ["components/chat/ChatMediaPlayback.tsx", 3],
+  // Two since tracker item 70: one literal for the row's controls — play,
+  // the speed chip, the volume and the cross — and the speed list's items.
+  // Previous and next went with the card.
+  ["components/chat/ChatMediaPlayback.tsx", 2],
   ["components/chat/VideoMessageRecorderModal.tsx", 2],
   ["components/chat/VoiceRecorder.tsx", 1],
   ["components/chat/TopicStrip.tsx", 1],

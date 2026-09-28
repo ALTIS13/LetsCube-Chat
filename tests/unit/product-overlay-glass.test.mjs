@@ -50,6 +50,10 @@ const surfaces = [
   ["components/chat/VideoMessageRecorderModal.tsx", "mx-3 mb-2 rounded-3xl", "kub-glass-strong"],
   // The pinned list, dropped over the conversation.
   ["components/chat/PinnedMessage.tsx", "top-[calc(100%+6px)]", "kub-glass-strong"],
+  // The player's list of speeds and its volume, both dropped from its row
+  // over the conversation (tracker item 70).
+  ["components/chat/ChatMediaPlayback.tsx", "right-0 top-[calc(100%+6px)] z-30 w-28", "kub-glass-strong"],
+  ["components/chat/ChatMediaPlayback.tsx", "flex h-10 items-center rounded-xl border", "kub-glass-strong"],
   // The support window: floating over the conversation, or covering the screen.
   ["components/support/SupportWindow.tsx", "fixed z-[70] flex flex-col", "kub-glass-strong"],
   // The update toast.
@@ -126,12 +130,16 @@ for (const file of scrims) {
  * make the host the blur root that its own dropdown samples — the dropdown
  * would frost the bar instead of the conversation behind it.
  */
-test("the pinned bar takes the material as a layer, not on itself", () => {
-  const source = read("components/chat/PinnedMessage.tsx");
-  // A capsule since 2026-09-11, so its layer carries the capsule's rounding
-  // and rim; the host it must not frost is the same.
-  assert.match(source, /<KubGlassLayer\b[^>]*\/>/, "the pinned bar lost its glass layer");
-  const bar = classString("components/chat/PinnedMessage.tsx", "relative flex-shrink-0");
-  assert.doesNotMatch(bar, /\bkub-glass(-strong)?\b/, "the bar wears the filter its dropdown samples");
-  assert.doesNotMatch(bar, /\bbg-\[var\(--kub-surface\)\]/, "the bar kept its opaque fill");
+test("the conversation's top card takes the material as a layer, not on itself", () => {
+  // Tracker item 70: the pinned message and the player are rows of one card,
+  // and the card is what floats. It hosts the pinned list and the player's
+  // speed list, both absolutely positioned, so the reason above still holds —
+  // it holds for the card now rather than for the pinned bar.
+  const source = read("components/chat/ChatTopCard.tsx");
+  assert.match(source, /<KubGlassLayer\b[^>]*\/>/, "the top card lost its glass layer");
+  const card = classString("components/chat/ChatTopCard.tsx", "relative mx-2 mt-1 flex-shrink-0");
+  assert.doesNotMatch(card, /\bkub-glass(-strong)?\b/, "the card wears the filter its dropdowns sample");
+  assert.doesNotMatch(card, /\bbg-\[var\(--kub-surface\)\]/, "the card kept an opaque fill");
+  // And the pinned row no longer carries a surface of its own.
+  assert.doesNotMatch(read("components/chat/PinnedMessage.tsx"), /<KubGlassLayer\b/, "the pinned row became a second capsule");
 });

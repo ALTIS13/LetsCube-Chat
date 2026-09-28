@@ -15,7 +15,7 @@ import {
   copySelectedMessages,
   useChatMessageSelection,
 } from "@/components/chat/MessageSelectionChrome";
-import { PinnedMessage } from "@/components/chat/PinnedMessage";
+import { ChatTopCard } from "@/components/chat/ChatTopCard";
 import { SideMenuLayer } from "@/components/sidebar/SideMenuLayer";
 import { ContactsPanel } from "@/components/contacts/ContactsPanel";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -48,7 +48,7 @@ import {
  * DEV-only capture surface for the public product previews.
  *
  * Every surface here is a shipping component: `SidebarHeader`, `FolderTabs`,
- * `ChatListItem`, `ChatHeader`, `PinnedMessage`, `MessageList` and
+ * `ChatListItem`, `ChatHeader`, `ChatTopCard`, `MessageList` and
  * `MessageInput`. An earlier revision redrew four of them as static markup,
  * and the published images ended up showing states the product cannot produce:
  * a send button on an empty composer, a mobile conversation with no way back, a
@@ -419,9 +419,12 @@ export default function PublicPreviewCapturePage() {
                 ) : (
                   <ChatHeader chatId={activeChat.id} chat={activeChat} />
                 )}
-                {pinnedMessages.length > 0 && (
-                  <PinnedMessage messages={pinnedMessages} onJump={jumpToPinned} onUnpin={togglePin} />
-                )}
+                <ChatTopCard
+                  pinnedMessages={pinnedMessages}
+                  pinnedReady
+                  onJumpToPinned={jumpToPinned}
+                  onUnpin={togglePin}
+                />
               </div>
               <div
                 ref={composerRef}

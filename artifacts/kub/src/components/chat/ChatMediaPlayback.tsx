@@ -11,7 +11,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { KubIcon } from "@/components/kub";
+import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
 import { reportError } from "@/lib/monitoring";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
@@ -19,6 +19,8 @@ import { cn } from "@/lib/utils";
 import { replacePlaybackItemUrl } from "@/lib/mediaQuality";
 import { coarsePointer } from "@/lib/pointer";
 import { safeOpenChat } from "@/lib/safeOpenChat";
+import { requestChatMessageJump } from "@/lib/chatJumpEvents";
+import { nextToggleSpeed, playerMoment, speedLabel } from "@/lib/chatTopCard";
 import {
   AUDIO_SETTINGS_KEY,
   PLAYBACK_RATES,
@@ -40,6 +42,8 @@ export interface ChatMediaPlaybackItem {
   url: string;
   title: string;
   subtitle?: string | null;
+  /** When the message was sent, for the player's row: «Никита Фермер 06 сент. в 18:20». */
+  sentAt?: string | null;
   durationMs?: number | null;
   isStaged?: boolean;
 }
@@ -622,129 +626,153 @@ export function useChatMediaPlayback() {
   return context;
 }
 
-export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } = {}) {
+type PlaybackRowRounding = "bottom" | "all";
+
+const ROW_ROUNDING: Record<PlaybackRowRounding, string> = {
+  bottom: "rounded-b-[1.375rem]",
+  all: "rounded-[1.375rem]",
+};
+
+const ROW_CONTROL =
+  "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]";
+
+/**
+ * The player, as one row (tracker item 70).
+ *
+ * The owner put ours beside Telegram's on 2026-09-28: ours a card a third of a
+ * phone's screen tall — a tile, a title and the sender, a time, a seek slider
+ * and a duration, then previous, play, next, a speed list and a cross — and
+ * Telegram's one line. Telegram's is `FragmentContextView` (DrKLO/Telegram,
+ * master, read 2026-09-28): 36 high; play or pause in the accent at the left;
+ * the sender in bold and the date after it; the speed as a «1X» chip that a tap
+ * moves through 1, 1.5 and 2 and a long press opens the list of; a cross; and
+ * how far it has got as a 2-high line along the foot. No slider, no previous
+ * and next — the message's own waveform seeks.
+ *
+ * Three things differ, each for a reason. It is 40 high, so the 2-high line
+ * runs under the 36-wide controls rather than across them. The line seeks
+ * under a mouse: Telegram Desktop seeks music from the same slider in its bar
+ * (`media_player_widget.cpp`, tdesktop dev, read 2026-09-28) and leaves voice
+ * and round video out only because its player cannot seek them yet — «Round
+ * video seek is not supported for now :(» — which ours can. Under a finger it
+ * does not, as Telegram Android's does not, so a tap near the card's edge
+ * cannot jump the playback. And a computer keeps its volume (D-118), behind
+ * an icon that shows the slider while it is pointed at, as Telegram Desktop's
+ * volume button does.
+ */
+export function PlaybackRow({ placement, rounding }: { placement: "chat" | "list"; rounding: PlaybackRowRounding }) {
   const playback = useChatMediaPlayback();
   const item = playback.currentItem;
   if (!item) return null;
 
   const duration = playback.duration || (item.durationMs ? item.durationMs / 1000 : 0);
+  const position = duration > 0 ? Math.min(playback.currentTime, duration) : 0;
+  const progress = duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0;
   const elsewhere = item.chatId !== playback.openChatId;
-  const elapsedLabel = formatMediaTime(playback.currentTime);
-  const durationLabel = duration > 0 ? formatMediaTime(duration) : "--:--";
+  const sender = item.isStaged ? item.title : item.subtitle?.trim() || item.title;
+  const moment = item.isStaged ? "предпросмотр" : playerMoment(item.sentAt);
+  const edge = ROW_ROUNDING[rounding];
+
+  // Telegram's bar takes you to the message it is playing: into its chat from
+  // anywhere else (D-313), and to it in its own chat.
+  const goToMessage = () => {
+    if (!elsewhere) {
+      requestChatMessageJump(item.chatId, item.id);
+      return;
+    }
+    void safeOpenChat(item.chatId, {
+      unavailableMessage: "Чат недоступен или был удалён.",
+      unavailableTitle: "Чат недоступен",
+    }).then((opened) => {
+      if (!opened) return;
+      // The pane has to mount before it can take the jump; global search waits
+      // the same two beats.
+      window.setTimeout(() => requestChatMessageJump(item.chatId, item.id), 250);
+      window.setTimeout(() => requestChatMessageJump(item.chatId, item.id), 700);
+    });
+  };
+
+  const words = (
+    <>
+      <span className="min-w-0 truncate font-semibold text-[color:var(--kub-text)]">{sender}</span>
+      {playback.error ? (
+        <span className="min-w-0 truncate text-[color:var(--kub-danger-text)]">{playback.error}</span>
+      ) : moment ? (
+        <span className="shrink-0 text-[color:var(--kub-muted)]">{moment}</span>
+      ) : null}
+    </>
+  );
+  const wordsClass = "relative flex min-w-0 flex-1 items-baseline gap-1.5 px-1 text-left text-[14px] leading-5";
 
   return (
     <div
       data-testid="chat-media-playback-bar"
-      data-placement={compact ? "header" : "standalone"}
+      data-placement={placement}
       data-current-kind={item.kind}
-      className={cn(
-        "overflow-hidden bg-[color-mix(in_srgb,var(--kub-surface)_92%,var(--kub-cyan)_8%)] shadow-lg transition-all kub-raise",
-        compact ? "mx-2 mb-2 rounded-xl sm:mx-3" : "mx-2 mt-2 rounded-2xl sm:mx-3"
-      )}
+      role="group"
+      aria-label="Воспроизведение"
+      className={cn("relative flex h-10 min-w-0 items-center gap-0.5 px-1", edge)}
     >
-      <div className={cn(
-        "flex min-w-0 flex-col gap-2 px-2.5 py-2 sm:flex-row sm:items-center sm:gap-3 sm:px-3",
-        compact && "py-1.5"
-      )}>
-        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-          <div className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden bg-black/80 text-white",
-            item.kind === "video_message" ? "rounded-full" : "rounded-xl"
-          )}>
-            <KubIcon name={item.kind === "voice" || item.kind === "audio" ? "voice" : "video"} size={18} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-2">
-              {elsewhere ? (
-                // Telegram's player bar takes you to the message's chat: the
-                // title is the way back (D-313).
-                <button
-                  type="button"
-                  data-testid="chat-media-playback-source"
-                  onClick={() => void safeOpenChat(item.chatId, {
-                    unavailableMessage: "Чат недоступен или был удалён.",
-                    unavailableTitle: "Чат недоступен",
-                  })}
-                  className="truncate text-left text-sm font-semibold text-[color:var(--kub-text)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
-                  title="Открыть чат с этим сообщением"
-                >
-                  {item.title}
-                </button>
-              ) : (
-                <div className="truncate text-sm font-semibold text-[color:var(--kub-text)]">{item.title}</div>
-              )}
-              {item.isStaged && (
-                <span className="shrink-0 rounded-full bg-[var(--kub-surface-3)] px-2 py-0.5 text-[12px] font-medium text-[color:var(--kub-muted)]">
-                  предпросмотр
-                </span>
-              )}
-            </div>
-            <div className="truncate text-[12px] text-[color:var(--kub-muted)]">
-              {playback.error ?? item.subtitle ?? "Медиа в текущем чате"}
-            </div>
-            <div className="mt-1.5 flex min-w-0 items-center gap-2">
-              <span className="w-11 shrink-0 text-[12px] tabular-nums text-[color:var(--kub-muted)]">{elapsedLabel}</span>
-              <input
-                data-testid="chat-media-playback-progress"
-                type="range"
-                min={0}
-                max={duration > 0 ? duration : 0}
-                step="0.01"
-                value={duration > 0 ? Math.min(playback.currentTime, duration) : 0}
-                disabled={duration <= 0}
-                onChange={(event) => playback.seek(Number(event.currentTarget.value))}
-                className="h-1.5 min-w-[80px] flex-1 cursor-pointer appearance-none rounded-full bg-[var(--kub-surface-3)] accent-[var(--kub-cyan)] disabled:cursor-not-allowed disabled:opacity-60"
-                aria-label="Позиция воспроизведения"
-              />
-              <span className="w-11 shrink-0 text-right text-[12px] tabular-nums text-[color:var(--kub-muted)]">{durationLabel}</span>
-            </div>
-          </div>
-        </div>
-        <div className="flex w-full shrink-0 items-center justify-between gap-1 sm:w-auto sm:justify-start">
-          <button
-            type="button"
-            onClick={playback.previous}
-            disabled={!playback.canPrevious}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
-            aria-label="Предыдущее медиа"
-          >
-            <KubIcon name="chevronLeft" size={18} />
-          </button>
-          <button
-            type="button"
-            onClick={() => (playback.isPlaying ? playback.pause() : item && playback.play(item))}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] transition hover:brightness-110"
-            aria-label={playback.isPlaying ? "Пауза" : "Воспроизвести"}
-          >
-            <KubIcon name={playback.isPlaying ? "pause" : "play"} size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={playback.next}
-            disabled={!playback.canNext}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
-            aria-label="Следующее медиа"
-          >
-            <KubIcon name="chevronRight" size={18} />
-          </button>
-          <select
-            data-testid="chat-media-playback-speed"
-            value={playback.playbackRate}
-            onChange={(event) => playback.setRate(Number(event.currentTarget.value))}
-            className="h-8 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-1.5 text-xs text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
-            aria-label="Скорость воспроизведения"
-          >
-            {PLAYBACK_RATES.map((rate) => (
-              <option key={rate} value={rate}>{rate}x</option>
-            ))}
-          </select>
-          <label
-            // A phone's own keys and mixer set how loud it plays, and Telegram draws
-            // no slider there; a desktop keeps one (D-118).
-            className="flex h-8 items-center gap-1 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-1.5 text-[color:var(--kub-muted)] pointer-coarse:hidden"
-            title="Громкость"
-          >
-            <KubIcon name="volume" size={14} />
+      {/* The foot of the row, clipped to the card's corners: the progress line,
+          and over it the band that seeks under a mouse. First in the markup so
+          the controls paint over the band where the two meet. */}
+      <div className={cn("pointer-events-none absolute inset-0 overflow-hidden", edge)}>
+        <input
+          data-testid="chat-media-playback-progress"
+          type="range"
+          min={0}
+          max={duration > 0 ? duration : 0}
+          step="0.01"
+          value={position}
+          disabled={duration <= 0}
+          onChange={(event) => playback.seek(Number(event.currentTarget.value))}
+          className="peer pointer-events-auto absolute inset-x-0 bottom-0 h-2 w-full cursor-pointer appearance-none bg-transparent opacity-0 disabled:cursor-default pointer-coarse:pointer-events-none"
+          aria-label="Позиция воспроизведения"
+        />
+        <span
+          aria-hidden="true"
+          data-testid="chat-media-playback-line"
+          className="absolute bottom-0 left-0 h-[2px] rounded-full bg-[var(--kub-cyan)] transition-[height] duration-150 peer-hover:h-1 peer-focus-visible:h-1 motion-reduce:transition-none"
+          style={{ width: `${progress * 100}%` }}
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={() => (playback.isPlaying ? playback.pause() : playback.play(item))}
+        className={cn(ROW_CONTROL, "text-[color:var(--kub-cyan)]")}
+        aria-label={playback.isPlaying ? "Пауза" : "Воспроизвести"}
+      >
+        <KubIcon name={playback.isPlaying ? "pause" : "play"} size={18} />
+      </button>
+
+      {item.isStaged ? (
+        <div className={wordsClass}>{words}</div>
+      ) : (
+        <button
+          type="button"
+          data-testid="chat-media-playback-source"
+          onClick={goToMessage}
+          title={elsewhere ? "Открыть чат с этим сообщением" : "Перейти к сообщению"}
+          className={cn(wordsClass, "rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]")}
+        >
+          {words}
+        </button>
+      )}
+
+      <SpeedChip rate={playback.playbackRate} onRate={playback.setRate} />
+
+      <label
+        // A phone's own keys and mixer set how loud it plays, and Telegram draws
+        // no slider there; a desktop keeps one (D-118), behind its icon as
+        // Telegram Desktop keeps it, and shown while the pointer or the focus is
+        // on it (item 70).
+        className={cn(ROW_CONTROL, "group/volume cursor-pointer text-[color:var(--kub-muted)] pointer-coarse:hidden")}
+        title="Громкость"
+      >
+        <KubIcon name="volume" size={16} />
+        <span className="pointer-events-none absolute right-0 top-full z-30 pt-1.5 opacity-0 transition-opacity duration-150 group-focus-within/volume:pointer-events-auto group-focus-within/volume:opacity-100 group-hover/volume:pointer-events-auto group-hover/volume:opacity-100">
+          <span className="kub-glass-strong flex h-10 items-center rounded-xl border border-[color:var(--kub-border-color)] px-3">
             <input
               data-testid="chat-media-playback-volume"
               type="range"
@@ -754,34 +782,162 @@ export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } 
               value={playback.volume}
               onInput={(event) => playback.setVolume(Number(event.currentTarget.value))}
               onChange={(event) => playback.setVolume(Number(event.currentTarget.value))}
-              className="h-1.5 w-14 cursor-pointer appearance-none rounded-full bg-[var(--kub-surface-3)] accent-[var(--kub-cyan)] sm:w-16"
+              className="h-1.5 w-24 cursor-pointer appearance-none rounded-full bg-[var(--kub-surface-3)] accent-[var(--kub-cyan)]"
               aria-label="Громкость воспроизведения"
             />
-          </label>
-          <button
-            type="button"
-            data-testid="chat-media-playback-close"
-            onClick={playback.close}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover"
-            aria-label="Закрыть панель воспроизведения"
-          >
-            <KubIcon name="close" size={16} />
-          </button>
-        </div>
-      </div>
+          </span>
+        </span>
+      </label>
+
+      <button
+        type="button"
+        data-testid="chat-media-playback-close"
+        onClick={playback.close}
+        className={cn(ROW_CONTROL, "text-[color:var(--kub-muted)]")}
+        aria-label="Закрыть панель воспроизведения"
+      >
+        <KubIcon name="close" size={16} />
+      </button>
     </div>
   );
 }
 
 /**
- * The bar over the chat list while a voice message plays with no chat open
+ * The «1X» chip. A tap moves to the next of Telegram's stops; a long press, or
+ * a right click on a computer, opens every speed there is. Accent when it is
+ * not 1, as Telegram colours its chip.
+ */
+function SpeedChip({ rate, onRate }: { rate: number; onRate: (rate: number) => void }) {
+  const [menu, setMenu] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const pressTimerRef = useRef<number | null>(null);
+  // Set when a held finger opened the list, so the click the release sends
+  // does not also move the speed.
+  const heldRef = useRef(false);
+
+  const clearPress = useCallback(() => {
+    if (pressTimerRef.current !== null) {
+      window.clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  }, []);
+  useEffect(() => clearPress, [clearPress]);
+
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenu(false);
+    };
+    const onPointer = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setMenu(false);
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onPointer, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onPointer, true);
+    };
+  }, [menu]);
+
+  const accented = Math.abs(rate - 1) > 0.01;
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        type="button"
+        data-testid="chat-media-playback-speed"
+        data-rate={rate}
+        aria-haspopup="menu"
+        aria-expanded={menu}
+        aria-label={`Скорость воспроизведения ${speedLabel(rate)}`}
+        title="Скорость: нажмите, чтобы переключить; удерживайте — все скорости"
+        onPointerDown={(event) => {
+          heldRef.current = false;
+          clearPress();
+          if (event.pointerType === "mouse") return;
+          pressTimerRef.current = window.setTimeout(() => {
+            pressTimerRef.current = null;
+            heldRef.current = true;
+            setMenu(true);
+          }, 450);
+        }}
+        onPointerUp={clearPress}
+        onPointerCancel={clearPress}
+        onPointerLeave={clearPress}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          clearPress();
+          setMenu(true);
+        }}
+        onClick={() => {
+          if (heldRef.current) {
+            heldRef.current = false;
+            return;
+          }
+          if (menu) {
+            setMenu(false);
+            return;
+          }
+          onRate(nextToggleSpeed(rate));
+        }}
+        className={cn(ROW_CONTROL, "select-none [-webkit-touch-callout:none]")}
+      >
+        <span
+          // Telegram's speed glyph is its number in an outlined box — a line
+          // that means something (rule 11) — drawn in the colour of the words.
+          className={cn(
+            "rounded-[5px] border-[1.5px] border-current px-[3px] text-[11px] font-bold leading-[13px] tabular-nums",
+            accented ? "text-[color:var(--kub-accent-text)]" : "text-[color:var(--kub-muted)]",
+          )}
+        >
+          {speedLabel(rate)}
+        </span>
+      </button>
+      {menu && (
+        <div
+          role="menu"
+          aria-label="Скорость воспроизведения"
+          data-testid="chat-media-playback-speed-menu"
+          className="kub-glass-strong absolute right-0 top-[calc(100%+6px)] z-30 w-28 rounded-xl border border-[color:var(--kub-border-color)] p-1"
+        >
+          {PLAYBACK_RATES.map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={value === rate}
+              onClick={() => {
+                onRate(value);
+                setMenu(false);
+              }}
+              className="flex h-9 w-full items-center justify-between rounded-lg px-2.5 text-sm tabular-nums text-[color:var(--kub-text)] transition-colors kub-raise-hover"
+            >
+              <span>{speedLabel(value)}</span>
+              {value === rate && <KubIcon name="check" size={14} tone="accent" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The player over the chat list while a voice message plays with no chat open
  * (D-313) — Telegram keeps its player there. Its own component so that only it
- * follows the playback's many updates; the list does not subscribe.
+ * follows the playback's many updates; the list does not subscribe. The same
+ * row as a conversation's top card, in a card of its own.
  */
 export function ListPlaybackBar() {
   const playback = useChatMediaPlayback();
-  if (playback.openChatId !== null) return null;
-  return <ChatMediaPlaybackBar compact />;
+  if (playback.openChatId !== null || !playback.currentItem) return null;
+  return (
+    <div data-testid="list-playback-card" className="relative mx-2 mb-1.5 flex-shrink-0 sm:mx-3">
+      <KubGlassLayer className="rounded-[1.375rem] border border-[color:var(--glass-line)]" />
+      <div className="relative">
+        <PlaybackRow placement="list" rounding="all" />
+      </div>
+    </div>
+  );
 }
 
 export function VideoCircleProgressRing({
@@ -855,9 +1011,3 @@ function finiteTime(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
-function formatMediaTime(seconds: number): string {
-  const safeSeconds = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
-  const minutes = Math.floor(safeSeconds / 60).toString().padStart(2, "0");
-  const secs = (safeSeconds % 60).toString().padStart(2, "0");
-  return `${minutes}:${secs}`;
-}

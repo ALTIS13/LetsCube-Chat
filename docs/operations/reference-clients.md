@@ -3339,3 +3339,103 @@ had, Desktop's cancel. Edit mode takes nothing.
 - **The caption became a field of lines**, as both Telegrams' are: a one-line
   input drops every line break it is handed, which was the loss the report is
   about in another form.
+
+## 24. Subject 16 — the top of a conversation: the pinned message and the player, 2026-09-28
+
+Tracker item 70. The owner, 2026-09-28, with his phone's screenshots of ours and
+of Telegram side by side: «посмотри как минималистично/удобно сделана верхняя
+панель в telegram (включая прослушивание голосовых) и как громоздко … это
+выглядит у нас». Telegram is the reference for a chat with media. Telegram for
+Android and Telegram Desktop were read from source on 2026-09-28; iOS and the
+web clients were not read — **UNESTABLISHED** there.
+
+### 24.1 What the clients do. SHIPPED
+
+**The player — Telegram for Android**, `DrKLO/Telegram`, `master`,
+`TMessagesProj/src/main/java/org/telegram/ui/Components/FragmentContextView.java`:
+
+- One row, **36dp** high (`getStyleHeight()`; the frame is
+  `LayoutHelper.createFrame(MATCH_PARENT, 36, …)`).
+- Play or pause at the left, 36 by 36, drawn in `key_inappPlayerPlayPause`,
+  the accent, with no fill of its own.
+- For a voice message or a round video the words are `"%s %s"` of
+  `getMusicAuthor()` and `getMusicTitle()` — the sender, in bold
+  (`TypefaceSpan(bold)` over the author's length), and the date, in the title's
+  grey. Ellipsised in the **middle**, so the name and the date both survive.
+- The date is `LocaleController.formatDateAudio(date, true)`: «at 18:20»
+  today, «yesterday at 18:20», `formatterDayMonth` («06 сент.» in Russian, as
+  the owner's screenshot reads) within 365 days, `formatterYear` (dd.MM.yy)
+  beyond; each followed by the time (`formatDateAtTime`).
+- The speed, 36 by 36, left of the cross: a tap walks `toggleSpeeds =
+  {1.0, 1.5, 2}`; a long press opens `speedItems` — 0.5, 1, 1.2, 1.5, 1.7, 2 —
+  with a slider. Its glyph is the accent when the speed is not 1, the close
+  button's grey when it is.
+- A cross, 36 by 36, at the right.
+- The progress: a **2dp line along the foot** of the row, from the left edge to
+  the fraction played, rounded 1dp, in `key_telegram_color`
+  (`dispatchDraw`). It does not seek; there is no slider, and no previous or
+  next.
+
+**The player — Telegram Desktop**, `telegramdesktop/tdesktop`, `dev`,
+`Telegram/SourceFiles/media/player/media_player_widget.cpp`: the same row with
+more controls on its right — a time label, volume, repeat, order, speed and
+close. The volume button mutes on a click and shows a slider on hover
+(`PrepareVolumeDropdown`). The **line along the foot is a slider**
+(`_playbackSlider`, `setChangeProgressCallback` → `handleSeekProgress`), which
+seeks music only: for anything else it returns early with the comment «Round
+video seek is not supported for now :(».
+
+**The pinned bar — Telegram for Android**, `ChatActivity.java` and
+`Components/PinnedLineView.java`:
+
+- **48dp** high. A line 3dp wide at 13dp from the left, inset 8dp top and
+  bottom, one segment per pin with 0.7dp either side, the one shown in the
+  accent and the others at alpha 76 of 255; never more than three in view,
+  scrolled to keep the lit one second from the top, with a 6dp fade at either
+  end once there are more than three. The newest pin is the lowest segment.
+- «Pinned Message» in the accent (`key_chat_topPanelTitle`), bold, over the
+  message's text. Once the bar has moved off the newest, a number counted from
+  the oldest follows it, capped at the total less one.
+- A tap scrolls to the pin shown and moves the bar to the one before it; after
+  the oldest, the newest (`forceNextPinnedMessageId`).
+- At the right, one control: `pinnedListButton` — the list of every pin — when
+  there is more than one; `closePinned`, a cross, when there is one. The cross
+  asks «Do you want to unpin this message?» with Unpin and Cancel for anyone who
+  may pin, and hides the bar locally for anyone who may not.
+
+**The two together.** In the owner's screenshot of Telegram for Android the
+pinned bar and the player are rows of **one card** under the header, the pinned
+message above, a hairline between.
+
+### 24.2 Ours, and where it differs on purpose
+
+`components/chat/ChatTopCard.tsx`, `PinnedMessage.tsx`, `ChatMediaPlayback.tsx`
+(`PlaybackRow`, `ListPlaybackBar`), `lib/chatTopCard.ts`. The card is the
+chrome stack's last capsule, where the pinned message stood; the player left
+the header for it. Pinned 48 high, the rule 1, the player 40.
+
+- **40, not 36.** The row's controls are Telegram's 36; the 4 around them keep
+  the 2-high line under them rather than across them.
+- **The line seeks under a mouse.** Telegram Desktop seeks music from the same
+  line and leaves voice out for want of an implementation, by its own comment;
+  ours can seek voice. Under a finger it does not, as on Android, so a tap on
+  the card's edge cannot jump the playback.
+- **From 0.5 a tap goes to 1.** Android's arithmetic (the first stop at or above
+  the speed less a tenth, then the next) sends 0.5 to 1.5, past 1. The long list
+  is ours, 0.5 to 2 (`PLAYBACK_RATES`), not Android's six.
+- **Volume on a computer, behind its icon.** D-118 keeps a desktop's slider;
+  Desktop shows it on hover, and so do we, and on focus. Its click-to-mute was
+  not taken.
+- **The cross unpins, after asking, for everybody.** Here every member may
+  unpin: `unpin_message` checks membership and nothing else (read on production,
+  2026-09-28). The local «Скрыть» it replaces came back on the next render.
+- **Not taken: the bar following the scroll.** Android shows the pin nearest
+  above what is on screen (`findClosest(pinnedMessageIds, maxVisibleId)`); that
+  needs the list's visible range fed back into the bar. The tap walk reaches
+  every pin without it.
+- **The player stays while messages are selected.** It was in the header, and
+  the selection bar stands in for the header.
+- **The header itself was measured and left alone.** On the owner's two
+  screenshots at one scale its capsules are 113 device pixels high to
+  Telegram's 118: the bulk was the player, a card 314 high where Telegram's row
+  is 98.

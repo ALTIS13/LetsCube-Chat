@@ -93,8 +93,10 @@ test.describe("KUB video recorders", () => {
     await expect(previewToggle).toHaveAttribute("aria-label", "Пауза предпросмотра");
     const playbackBar = page.getByTestId("chat-media-playback-bar");
     await expect(playbackBar).toBeVisible();
-    await expect(page.getByTestId("chat-header-media-playback")).toBeVisible();
-    await expect(playbackBar).toHaveAttribute("data-placement", "header");
+    // A row of the conversation's top card since tracker item 70, where it was
+    // a card of its own inside the header.
+    await expect(page.getByTestId("chat-top-card").getByTestId("chat-media-playback-bar")).toBeVisible();
+    await expect(playbackBar).toHaveAttribute("data-placement", "chat");
     await expect(playbackBar).toHaveAttribute("data-current-kind", "video_message");
     await expect(page.getByTestId("chat-media-playback-progress")).toBeVisible();
     await expect(page.getByTestId("chat-media-playback-speed")).toBeVisible();
@@ -103,8 +105,9 @@ test.describe("KUB video recorders", () => {
     const finger = await page.evaluate(() => window.matchMedia("(pointer: coarse)").matches);
     if (finger) await expect(page.getByTestId("chat-media-playback-volume")).toBeHidden();
     else await expect(page.getByTestId("chat-media-playback-volume")).toBeVisible();
-    await page.getByTestId("chat-media-playback-speed").selectOption("1.5");
-    await expect(page.getByTestId("chat-media-playback-speed")).toHaveValue("1.5");
+    // Telegram's chip: a tap moves 1 to 1.5 (item 70), where a list was opened.
+    await page.getByTestId("chat-media-playback-speed").click();
+    await expect(page.getByTestId("chat-media-playback-speed")).toHaveText("1.5X");
     if (!finger) {
       await page.getByTestId("chat-media-playback-volume").evaluate((node) => {
         const input = node as HTMLInputElement;

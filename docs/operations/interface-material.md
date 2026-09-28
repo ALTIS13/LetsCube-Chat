@@ -484,8 +484,9 @@ Android, the web app and the Windows app. What it is:
   conversation. The header is three capsules in its row: the way back, with the
   count of what is unread in the other chats, below `md` only, where no chat
   list is beside it; the avatar and name, centred on the pane; and a round «⋯».
-  The pinned message, the search panel, the topic strip and the selection bar
-  float as capsules under it. The composer is a round attach button, a field
+  The pinned message and the player — since tracker item 70 one card with a
+  row each and a `--kub-rule` between, as Telegram draws them — the search
+  panel, the topic strip and the selection bar float as capsules under it. The composer is a round attach button, a field
   capsule and a round microphone.
 - **A scroll edge** behind the chrome and under the composer: the conversation
   dimmed to 96% of the wallpaper's own colour at the screen's edge and 88% at

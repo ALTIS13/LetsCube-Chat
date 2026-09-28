@@ -109,7 +109,7 @@ import {
   type Icon as PhosphorIcon,
   type IconWeight,
 } from "@phosphor-icons/react";
-import { HeadphonesSlash } from "./composedIcons";
+import { HeadphonesSlash, PinnedList } from "./composedIcons";
 
 export type KubIconName =
   | "activity"
@@ -193,6 +193,7 @@ export type KubIconName =
   | "phoneOff"
   | "pin"
   | "pinOff"
+  | "pinnedList"
   | "play"
   | "poll"
   | "private"
@@ -355,6 +356,9 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   phoneOff: { Icon: PhoneDisconnect },
   pin: { Icon: PushPin, weight: "fill" },
   pinOff: { Icon: PushPinSlash },
+  // The pinned bar's list of every pin (tracker item 70): Telegram's pin
+  // beside a list, composed in `composedIcons.tsx` because Phosphor has none.
+  pinnedList: { Icon: PinnedList },
   play: { Icon: Play, weight: "fill" },
   // Telegram's glyph for a poll: answers as bars.
   poll: { Icon: ChartBarHorizontal },

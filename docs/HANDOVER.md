@@ -97,8 +97,13 @@ specs need a server with `VITE_PUBLIC_PREVIEW_FIXTURE=1` and are green on one.
 
 **Re-measured 2026-09-28**, the whole fixture suite at 1440 and 390 (2644
 tests: 2166 passed, 446 skipped, 32 red), each red one then run alone on a
-fresh server. None of the list above is red any more except where a server is
-missing, and four of them were the harness rather than the product:
+fresh server, and the nineteen preview-server specs on their own server.
+Still red, on the committed sources exactly as with the day's later changes:
+`message-meta-observer-cost` 236 and `message-meta-placement-settles` 457,
+whose fixtures no longer produce the two placements they compare, and
+`message-touch-gestures` 168/230, whose swipe never reaches the reply. Every
+other one on the list above is green, and four of them were the harness
+rather than the product:
 `ios-pwa-push-nudge` needs `VITE_VAPID_PUBLIC_KEY` on the dev server (any
 base64url P-256 point; the spec now says so instead of timing out) and is a
 phone's spec, now skipped at 1440; `media-original-claim` 336 pressed
