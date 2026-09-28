@@ -648,7 +648,9 @@ test.describe("the people already picked for a new group", () => {
       await page.getByRole("menu").getByText("Новая группа").click();
     }
 
-    const candidate = page.getByRole("button").filter({ hasText: ANNA.full_name }).first();
+    // Inside the dialog: from `md` the bar at the foot of the list (tracker
+    // item 40) carries the reader's own name on a button too.
+    const candidate = page.getByRole("dialog").getByRole("button").filter({ hasText: ANNA.full_name }).first();
     await expect(candidate).toBeVisible();
     await candidate.click();
 

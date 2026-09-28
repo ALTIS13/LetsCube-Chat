@@ -277,7 +277,10 @@ test("explicit Enable starts the push subscription inside the tap", async ({ pag
 test("iPhone browser tab does not show installed-app permission instructions", async ({ page }) => {
   await openPushFixture(page, "denied", { installed: false });
   await page.getByRole("button", { name: "Меню" }).first().click();
-  await page.getByRole("button", { name: "Настройки" }).first().click();
+  // The open menu's row, by its exact name — the side list from `md`, the
+  // header's dropdown below it: from `md` the bar at the foot of the list
+  // (tracker item 40) has «Настройки» and «Настройки ввода» too.
+  await page.locator('[data-kub-menu="true"]').getByRole("button", { name: "Настройки", exact: true }).click();
   const section = page.getByRole("dialog");
   await expect(section).toContainText("Заблокировано в настройках браузера");
   await expect(section).not.toContainText("Настройки» iPhone");
@@ -286,7 +289,10 @@ test("iPhone browser tab does not show installed-app permission instructions", a
 test("failed worker setup offers retry and then enables push in a fresh tap", async ({ page }) => {
   await openPushFixture(page, "default", { stalledWorker: true });
   await page.getByRole("button", { name: "Меню" }).first().click();
-  await page.getByRole("button", { name: "Настройки" }).first().click();
+  // The open menu's row, by its exact name — the side list from `md`, the
+  // header's dropdown below it: from `md` the bar at the foot of the list
+  // (tracker item 40) has «Настройки» and «Настройки ввода» too.
+  await page.locator('[data-kub-menu="true"]').getByRole("button", { name: "Настройки", exact: true }).click();
   const section = page.getByRole("dialog");
   const retry = section.getByRole("button", { name: "Повторить подготовку" });
   await expect(retry).toBeEnabled({ timeout: 12_000 });

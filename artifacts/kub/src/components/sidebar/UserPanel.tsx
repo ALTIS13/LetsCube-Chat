@@ -11,6 +11,7 @@ import {
   useAudioSettings,
 } from "@/hooks/useAudioSettings";
 import { useAudioDevices } from "@/hooks/useAudioDevices";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   setVoiceDeafened,
   setVoiceMuted,
@@ -97,8 +98,12 @@ export function UserPanel() {
   const outputRef = useRef<HTMLButtonElement | null>(null);
   const devices = useAudioDevices(menu?.kind === "input" || menu?.kind === "output");
   const outputSelectable = supportsAudioOutputSelection();
+  // Not drawn at all on a phone rather than drawn and hidden: its controls and
+  // its names would otherwise sit in the document under the bottom navigation,
+  // reachable by a screen reader and by anything that looks for a label.
+  const isPhone = useIsMobile();
 
-  if (!currentUser) return null;
+  if (!currentUser || isPhone) return null;
 
   const inCall = call.phase === "joining" || call.phase === "connected" || call.phase === "reconnecting";
   // A moderator's silence holds the microphone for this call: the control is
