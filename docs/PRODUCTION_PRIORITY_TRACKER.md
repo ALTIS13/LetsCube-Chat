@@ -2772,12 +2772,20 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     on Windows blurs none. Judge any glass on the GPU path —
     `output/render/render-bottom-edge.spec.ts` carries the flags.
 
-57. `[ ]` Finding a person to add from the contacts search — same report,
+57. `[x]` Finding a person to add from the contacts search — same report,
     2026-09-27. After the first contact the search box filters only contacts,
     and how to add the second was unclear. The add button (reachable since
     D-315/D-317) and «Добавить в контакты» on a profile exist; Telegram's
     contacts search also lists people outside the contacts under a heading of
     their own, which answers the question where it is asked.
+    **Done 2026-09-28:** the contacts search lists the contacts that match and,
+    under «Глобальный поиск» (Telegram's `GlobalSearch`, read on
+    translations.telegram.org), everybody else who does — the same people
+    search «Добавить контакт» runs, so it finds nobody that window would not.
+    A row opens the conversation; its «+» adds the person to the contacts
+    where they stand, and they move up into the contacts above. Evidence:
+    `contacts-member-flow.spec` «the contacts search also finds people outside
+    the contacts, and adds one where it stands».
 
     **The second report of 2026-09-28** (the same tester, 12:41–14:53 MSK, read
     from the database with its screenshots) repeats two things and adds the
@@ -2939,7 +2947,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     выбрать промежуток… есть задачи которые идут месяц». A start beside the
     due date, shown as a range; a database change — §10.
 
-69. `[~]` The kind capsule (item 47) stays out of the reader's own folders —
+69. `[x]` The kind capsule (item 47) stays out of the reader's own folders —
     «я создал себе уже отдельную папку, а тут мне еще фильтруют люди или
     группы… во всех согласен, но не в отдельной папке», and the chosen kind
     carried from folder to folder made him switch it back to write to somebody
@@ -2951,8 +2959,24 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     **The first half done 2026-09-28:** the capsule is «Все»'s alone and a kind
     chosen there is not applied inside a folder — `chat-kind-filter.spec` «a
     folder of the reader's own carries no capsule, and no kind chosen
-    elsewhere», which a mutant applying the capsule everywhere turns red. The
-    system folders are next.
+    elsewhere», which a mutant applying the capsule everywhere turns red.
+    **The system folders, decided against the same day, with the reasons.**
+    The complaint was the capsule inside his own folder and the kind carried
+    from one folder to the next; both are gone, and of «Все» he said «во всех
+    согласен». Telegram's version of a kind folder was read rather than
+    recalled (`DrKLO/Telegram`, `strings.xml`, 2026-09-28): «Recommended
+    Folders» (`FilterRecommended`) offered in the folder settings, each one a
+    folder with «Chat types» rules — Contacts, Non Contacts, Groups, Channels,
+    Bots (`FilterChatTypes`, `FilterIncludeInfo`) — added with one tap and
+    deleted like any other. Ours cannot say that: a `folders` row is a name
+    and a list of chats, with no type rules, so a «Группы» folder made today
+    would be a snapshot that every new group misses — worse than none. And a
+    kind folder beside the kind capsule would be two mechanisms for one
+    separation, the «both jobs» item 47 warned about. So: the capsule stays in
+    «Все», folders stay a personal grouping across kinds, and if kind folders
+    are wanted after all, Telegram's shape is the one — recommended folders
+    with type rules — which needs a `folders` column and is a database change
+    for the owner's word (§10), not built here.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

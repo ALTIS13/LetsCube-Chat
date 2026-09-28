@@ -25,10 +25,39 @@ export function ContactsPanel({ previewContacts }: { previewContacts?: UserConta
   const [deleting, setDeleting] = useState<UserContact | null>(null);
   const [alias, setAlias] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  /**
+   * People outside the contacts who match what is typed (tracker item 57).
+   *
+   * The report, 2026-09-27: after the first contact this search box filtered
+   * only contacts, and how to add a second was unclear. Telegram's contacts
+   * search answers where the question is asked: it lists the contacts that
+   * match, and under them everybody else who does, under «Глобальный поиск»
+   * (`GlobalSearch`, read on translations.telegram.org 2026-09-28). The same
+   * search the «Добавить контакт» window runs, so it finds nobody that window
+   * would not.
+   */
+  const [globalPeople, setGlobalPeople] = useState<Profile[]>([]);
+  const [globalSearching, setGlobalSearching] = useState(false);
 
   const contactRows = previewContacts ?? list.data ?? [];
   const contacts = useMemo(() => filterAndSortContacts(contactRows, query), [contactRows, query]);
   const existingIds = useMemo(() => new Set(contactRows.map((item) => item.contact_user_id)), [contactRows]);
+  const globalQuery = previewContacts ? "" : query.trim().replace(/^@/, "");
+  const outsideContacts = useMemo(
+    () => globalPeople.filter((person) => !existingIds.has(person.id)),
+    [globalPeople, existingIds],
+  );
+
+  useEffect(() => {
+    if (!globalQuery) { setGlobalPeople([]); setGlobalSearching(false); return; }
+    let active = true;
+    setGlobalSearching(true);
+    const timer = window.setTimeout(async () => {
+      const found = await searchUsers(globalQuery);
+      if (active) { setGlobalPeople(found); setGlobalSearching(false); }
+    }, 300);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [globalQuery, searchUsers]);
 
   useEffect(() => {
     if (!addOpen || !personQuery.trim()) { setPeople([]); setSearching(false); return; }
@@ -100,7 +129,7 @@ export function ContactsPanel({ previewContacts }: { previewContacts?: UserConta
       {chatError && <p role="alert" className="px-3 pb-2 text-xs text-[color:var(--kub-danger-text)]">{chatError}</p>}
       {!previewContacts && list.isLoading ? <div role="status" className="flex flex-1 items-center justify-center"><KubIcon name="spinner" size={22} className="text-[color:var(--kub-cyan)]" /></div> :
         !previewContacts && list.isError ? <div role="alert" className="px-4 py-5 text-sm">Не удалось загрузить контакты. <KubButton size="sm" variant="secondary" onClick={() => void list.refetch()}>Повторить</KubButton></div> :
-        contacts.length === 0 ? <KubEmptyState icon={<KubIcon name="contact" size={26} />} title={query ? "Ничего не найдено" : "Контактов пока нет"} description={query ? "Попробуйте другое имя или никнейм." : "Добавьте человека, чтобы находить его даже без открытого чата."} action={!query ? <KubButton size="sm" onClick={() => setAddOpen(true)}>Добавить контакт</KubButton> : undefined} /> :
+        contacts.length === 0 && (!globalQuery || (!globalSearching && outsideContacts.length === 0)) ? <KubEmptyState icon={<KubIcon name="contact" size={26} />} title={query ? "Ничего не найдено" : "Контактов пока нет"} description={query ? "Попробуйте другое имя или никнейм." : "Добавьте человека, чтобы находить его даже без открытого чата."} action={!query ? <KubButton size="sm" onClick={() => setAddOpen(true)}>Добавить контакт</KubButton> : undefined} /> :
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[calc(var(--kub-bottom-nav)+var(--kub-bottom-nav-gap)+var(--kub-safe-bottom)+1rem)] md:pb-3">
           {contacts.map((contact) => (
             <div key={contact.contact_user_id} className="flex min-h-[76px] items-center gap-2 border-b border-[color:var(--kub-rule)] px-3">
@@ -112,6 +141,25 @@ export function ContactsPanel({ previewContacts }: { previewContacts?: UserConta
               <button type="button" onClick={() => { setDeleting(contact); setActionError(null); }} aria-label={`Удалить контакт: ${contactDisplayName(contact)}`} title="Удалить контакт" className={cn("kub-icon-action flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-[color:var(--kub-muted)] kub-raise-hover", FOCUS_RING)}><KubIcon name="delete" size={16} /></button>
             </div>
           ))}
+          {globalQuery && (
+            <section aria-label="Глобальный поиск" data-testid="contacts-global">
+              <h3 className="px-4 pb-1 pt-3 text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-muted)]">Глобальный поиск</h3>
+              {globalSearching && outsideContacts.length === 0 && <p role="status" className="px-4 py-2 text-sm text-[color:var(--kub-muted)]">Ищем...</p>}
+              {!globalSearching && outsideContacts.length === 0 && <p className="px-4 py-2 text-sm text-[color:var(--kub-muted)]">Больше никого не нашлось.</p>}
+              {outsideContacts.map((person) => {
+                const name = person.full_name || person.username || "Пользователь";
+                return (
+                  <div key={person.id} data-testid="contacts-global-row" className="flex min-h-[64px] items-center gap-2 border-b border-[color:var(--kub-rule)] px-3">
+                    <button type="button" onClick={() => void openChat(person.id)} disabled={openingChat} className={cn("flex min-h-[64px] min-w-0 flex-1 items-center gap-3 rounded-md text-left kub-raise-hover", FOCUS_RING, DISABLED_SINK)}>
+                      <UserAvatar user={person} size="md" />
+                      <span className="min-w-0 flex-1"><span className="block truncate text-[15px] font-semibold">{name}</span>{person.username && <span className="block truncate text-[13px] text-[color:var(--kub-muted)]">@{person.username}</span>}</span>
+                    </button>
+                    <button type="button" onClick={() => void addPerson(person.id)} disabled={add.isPending} aria-label={`Добавить в контакты: ${name}`} title="Добавить в контакты" className={cn("kub-icon-action flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-[color:var(--kub-accent-text)] kub-raise-hover", FOCUS_RING, DISABLED_SINK)}><KubIcon name="userPlus" size={18} /></button>
+                  </div>
+                );
+              })}
+            </section>
+          )}
         </div>}
 
       {addOpen && <KubModal open onClose={() => { setAddOpen(false); setPersonQuery(""); setActionError(null); }} title="Добавить контакт" icon={<KubIcon name="userPlus" size={17} />} size="sm" contentClassName="space-y-3 px-4 py-3">
