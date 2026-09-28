@@ -304,6 +304,25 @@ test("a member reads the vocabulary and is offered nothing to press", async ({ p
   await expect(modal.getByTestId("chat-roles-denial")).toContainText("владелец");
 });
 
+test("the screen says where a role is seen, and that it grants nothing, before asking for one", async ({ page }) => {
+  // Tracker item 60: «не пойму это что и зачем». The answer is shown, not
+  // described: the name in a message in the role's colour, and the card with
+  // the role on it — with this group's own first role, «Основатель».
+  await openMembers(page, store(), OLGA, "member");
+  await expect(page.getByTestId("chat-info-roles")).toContainText("Роли участников");
+  await page.getByTestId("chat-info-roles").click();
+  const preview = page.getByTestId("chat-roles-modal").getByTestId("chat-roles-preview");
+  await expect(preview).toContainText("Где их видно");
+  await expect(preview).toContainText("Основатель");
+  await expect(preview).toContainText("Прав роли не дают");
+  const colours = await preview.evaluate((node) => {
+    const name = node.querySelector('[data-testid="chat-roles-preview-name"]') as HTMLElement;
+    const line = name.nextElementSibling as HTMLElement;
+    return { name: getComputedStyle(name).color, line: getComputedStyle(line).color };
+  });
+  expect(colours.name, "the sample name is not in the role's colour").not.toBe(colours.line);
+});
+
 test("the owner can name a new one, and the row that is sent is the row the table takes", async ({
   page,
 }) => {

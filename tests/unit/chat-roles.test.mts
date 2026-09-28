@@ -8,7 +8,7 @@
 // The reason this file exists rather than trusting the server to refuse: a
 // screen that offers a control the database will answer 403 to is worse than
 // one that hides it, because the person cannot tell which of the two happened.
-// The mirror is what lets the interface say «Роли группы настраивает владелец»
+// The mirror is what lets the interface say «Роли участников настраивает владелец»
 // instead of «Не удалось».
 
 import assert from "node:assert/strict";

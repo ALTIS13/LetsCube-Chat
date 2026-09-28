@@ -289,7 +289,7 @@ export function chatRoleDenialText(denial: ChatRoleDenial): string {
     case "not_group_chat":
       return "Роли есть только у групп и каналов.";
     case "owner_required":
-      return "Роли группы настраивает владелец.";
+      return "Роли участников настраивает владелец.";
     case "admin_required":
       return "Выдавать роли могут владелец и администраторы.";
     case "chat_full":

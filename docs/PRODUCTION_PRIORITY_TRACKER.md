@@ -2807,11 +2807,25 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     decides the old topic strip for a forum the rail is not offered in.
     `chat-settings.test.mts` and `plain-group-text-channel.spec` pin its absence.
 
-60. `[ ]` «Роли группы» is not understood — «не пойму это что и зачем». The
+60. `[x]` «Роли группы» is not understood — «не пойму это что и зачем». The
     dialog is a member's own title visible in the group only, which is
     Telegram's custom title, while «роль» reads as Discord's permission role.
     Name it for what it is and show where the title appears before asking for
     one; measure Telegram's own words for the admin title first.
+    **Done 2026-09-28**, and the premise above corrected on reading the code:
+    these are not Telegram's per-person title but Discord's roles without
+    permissions — a group's own vocabulary, several to a person, the highest
+    colouring the name in a message (`lib/chatRoles.ts`, D-215). Telegram's
+    words were measured on translations.telegram.org: `EditAdminRank` reads
+    «Тег участника», its explanation still «Должность» — one free-text line per
+    person, another mechanic, so its word would name something ours is not.
+    The word stays Discord's, «Роли», with whose they are: «Роли участников».
+    What the tester lacked was the answer to «что и зачем», so the screen now
+    opens on «Где их видно» — the name in a message in the role's colour and
+    the card with the role on it, drawn with the group's first role or a
+    sample — and says that a role grants nothing, the one thing a Discord user
+    would assume. Evidence: `chat-roles-reach.spec` «the screen says where a
+    role is seen, and that it grants nothing, before asking for one».
 
 61. `[x]` No «Управление каналами» row in the channel list — «мазолит глаза. Я
     туда могу раз в пол года зайти через редактирование группы и этого

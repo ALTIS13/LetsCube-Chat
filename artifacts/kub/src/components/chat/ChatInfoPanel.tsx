@@ -2495,7 +2495,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
                   className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
                 >
                   <KubIcon name="shield" size={17} tone="muted" className="shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">Роли группы</span>
+                  <span className="min-w-0 flex-1 truncate">Роли участников</span>
                   {chatRoles.ready && chatRoles.roles.length > 0 && (
                     <span className="shrink-0 text-xs tabular-nums text-[color:var(--kub-muted)]">
                       {chatRoles.roles.length}

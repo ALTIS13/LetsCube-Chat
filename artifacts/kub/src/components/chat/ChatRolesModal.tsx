@@ -7,6 +7,7 @@ import { KUB_ICON_NAMES, type KubIconName } from "@/components/kub/icons";
 import { newChatId } from "@/lib/chatCreation";
 import {
   CHAT_ROLE_COLOURS,
+  chatRoleColourOnChat,
   chatRoleColourValue,
   readChatRoleColour,
   type ChatRoleColour,
@@ -55,6 +56,59 @@ interface Draft {
 }
 
 const BLANK: Draft = { id: null, name: "", colour: "blue", icon: null, priority: 0 };
+
+/** Shown in the preview while the group has no role of its own yet. */
+const SAMPLE_ROLE: ChatRole = { id: "sample", name: "Наставник", colour: "blue", icon: null, priority: 0 };
+
+/**
+ * Where a role is seen, before anybody is asked to make one (tracker item 60).
+ *
+ * A tester, 2026-09-28, about the screen this opens: «не пойму это что и
+ * зачем». The mechanic is Discord's — a group's own vocabulary, several to a
+ * person, the highest colouring the name — and the word is Discord's too,
+ * «Роли». Telegram's nearest thing is another mechanic: one free-text line per
+ * person, «Тег участника» since its latest wording (key `EditAdminRank`, read
+ * on translations.telegram.org 2026-09-28; its explanation still says
+ * «Должность»), so borrowing its word would name something this is not.
+ *
+ * What was missing was not the word but the answer to «что и зачем», so the
+ * screen now shows the two places a role appears — the name in a message, in
+ * the role's colour, and the card, with the role on it — using the group's
+ * first role, or a sample while there is none. And it says the one thing a
+ * Discord user would assume and be wrong about: a role here grants nothing.
+ */
+function RolesPreview({ role }: { role: ChatRole }) {
+  const colour = readChatRoleColour(role.colour);
+  return (
+    <div className="rounded-xl bg-[color:var(--kub-surface-2)] p-3" data-testid="chat-roles-preview">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-[color:var(--kub-muted)]">Где их видно</div>
+      <div className="mt-2 flex items-start gap-2.5" aria-hidden="true">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[color:var(--kub-surface-3)] text-xs font-semibold text-[color:var(--kub-muted)]">
+          АС
+        </span>
+        <div className="min-w-0">
+          <div
+            className="text-sm font-semibold text-[color:var(--kub-text)]"
+            data-testid="chat-roles-preview-name"
+            style={colour ? { color: chatRoleColourOnChat(colour) } : undefined}
+          >
+            Анна Смирнова
+          </div>
+          <div className="text-sm text-[color:var(--kub-text)]">Смена закрыта, касса сдана</div>
+        </div>
+      </div>
+      <p className="mt-1.5 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+        В сообщениях имя участника окрашено в цвет его старшей роли.
+      </p>
+      <div className="mt-2.5 flex" aria-hidden="true">
+        <ChatRoleChip role={role} />
+      </div>
+      <p className="mt-1.5 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+        В карточке участника видны все его роли — там их и выдают. Прав роли не дают.
+      </p>
+    </div>
+  );
+}
 
 export function ChatRolesModal({
   open,
@@ -179,8 +233,8 @@ export function ChatRolesModal({
     <KubModal
       open={open}
       onClose={onClose}
-      title="Роли группы"
-      description="Своё название для участника — оно видно только в этой группе."
+      title="Роли участников"
+      description="Свои метки группы, например «Наставник» или «Дежурный». Видны только в ней."
       icon={<KubIcon name="shield" size={18} />}
       size="md"
       scrollBody
@@ -191,6 +245,7 @@ export function ChatRolesModal({
       }
     >
       <div className="space-y-3" data-testid="chat-roles-modal">
+        <RolesPreview role={roles.roles[0] ?? SAMPLE_ROLE} />
         {error && <KubNotice tone="danger">{error}</KubNotice>}
         {denial && denial !== "chat_full" && (
           <KubNotice tone="info" data-testid="chat-roles-denial">
