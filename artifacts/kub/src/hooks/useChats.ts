@@ -47,6 +47,7 @@ import {
   RESUME_REVALIDATE_MIN_INTERVAL_MS,
 } from "@/lib/resumeRevalidation";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
 
 const CHAT_REFETCH_DEBOUNCE_MS = 350;
 const CHAT_SUMMARY_DEBOUNCE_MS = 250;
@@ -671,10 +672,14 @@ export function useChats() {
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pageshow", onPageShow);
     window.addEventListener("online", onOnline);
+    // A network change that stranded a read or a socket is a reconnect too,
+    // though the browser may never say `online` (tracker item 53).
+    window.addEventListener(CONNECTION_REVIVED_EVENT, onOnline);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("online", onOnline);
+      window.removeEventListener(CONNECTION_REVIVED_EVENT, onOnline);
     };
   }, [fetchChats]);
 

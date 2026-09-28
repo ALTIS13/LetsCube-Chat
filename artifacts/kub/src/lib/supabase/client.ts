@@ -4,6 +4,7 @@ import {
 } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 import { resolveSupabaseConfig, type SupabasePublicEnv } from './config'
+import { createDeadlineFetch } from './deadlineFetch'
 
 // Read Supabase config from Vite env vars.
 // Accept both the new `VITE_SUPABASE_PUBLISHABLE_KEY` name and the legacy
@@ -39,6 +40,20 @@ export function getSupabasePublishableKey(): string {
 
 let instance: SupabaseClient<Database> | null = null
 
+// Every request the client makes gets a deadline, and a network change can cut
+// the reads it stranded (tracker item 53). The platform's `fetch` is looked up
+// at each call, as supabase-js does when it is given none: whatever replaces
+// `window.fetch` later — a test's interceptor, a monitoring shim — is still the
+// one that runs.
+const deadlineFetch = createDeadlineFetch(
+  ((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init)) as typeof fetch,
+)
+
+/** Cuts the reads a change of network stranded; see `useConnectionRevival`. */
+export function cutStrandedReads(): number {
+  return deadlineFetch.cutStrandedReads()
+}
+
 export function createClient(): SupabaseClient<Database> {
   if (!isSupabaseConfigured()) {
     throw new Error(MISSING_SUPABASE_CONFIG_ERROR)
@@ -63,6 +78,7 @@ export function createClient(): SupabaseClient<Database> {
             typeof window !== "undefined" ? window.localStorage : undefined,
           storageKey: "kub-auth",
         },
+        global: { fetch: deadlineFetch },
       }
     )
 

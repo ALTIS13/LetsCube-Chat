@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
+import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
 import type { Json, MessageWithSender, Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
@@ -762,10 +763,14 @@ export function useMessages(
       if (gate.visible()) scheduleReconcile();
     };
     window.addEventListener("online", handleOnline);
+    // The same for a network change that stranded a read or the socket
+    // (tracker item 53): the browser may never have said `online`.
+    window.addEventListener(CONNECTION_REVIVED_EVENT, handleOnline);
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       if (timer) clearTimeout(timer);
       window.removeEventListener("online", handleOnline);
+      window.removeEventListener(CONNECTION_REVIVED_EVENT, handleOnline);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [chatId, fetchMessages]);

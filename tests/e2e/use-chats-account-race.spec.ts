@@ -80,8 +80,11 @@ test("a pending summary from A cannot write its preview into B's shared chat", a
   })).toBeGreaterThan(0);
   await summaryRequested;
 
+  // Out of the shell, so the list unmounts while its summary is in flight.
+  // `/tasks` did that until item 41 made it one of the shell's own sections,
+  // opened beside the list; a public page is still outside it.
   await page.evaluate(() => {
-    history.pushState({}, "", "/tasks");
+    history.pushState({}, "", "/privacy");
     dispatchEvent(new PopStateEvent("popstate"));
   });
   await expect(page.getByTestId("chat-list-item")).toHaveCount(0);

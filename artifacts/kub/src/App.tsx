@@ -10,6 +10,7 @@ import { VoiceResumeNotice, VoiceResumeRuntimeController } from "@/components/ch
 import { useUser } from "@/hooks/useUser";
 import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { usePushForegroundSession } from "@/hooks/usePushForegroundSession";
+import { useConnectionRevival } from "@/hooks/useConnectionRevival";
 import { useBanState } from "@/hooks/useBanState";
 import { usePushNotificationNavigation } from "@/hooks/usePush";
 import { useNativeVoiceCalls } from "@/hooks/useNativeVoiceCalls";
@@ -387,6 +388,8 @@ function AppRoutes({
   useHeartbeat();
   usePushForegroundSession();
   usePushNotificationNavigation();
+  // A change of network must not need a restart (tracker item 53).
+  useConnectionRevival();
 
   useEffect(() => {
     if (userId) {

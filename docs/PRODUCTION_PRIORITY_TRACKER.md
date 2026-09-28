@@ -2575,7 +2575,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     takes its server time when it lands, so it may move below messages that
     arrived meanwhile — Telegram shows it where it was written until it is sent.
 
-53. `[ ]` The application recovers by itself when the network changes under it
+53. `[~]` The application recovers by itself when the network changes under it
     — same report. «Если меняется IP… приходится перезапускать мессенджер»:
     switching a VPN off to open another app leaves the messenger dead until it
     is restarted (the Android owner's account; not reproduced yet). Read in the
@@ -2590,6 +2590,30 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     has to give every request a deadline, treat a return to the app and a
     network change as a reason to verify the socket and resubscribe, and make
     the state visible — nothing shows the realtime connection today.
+    **Recovery shipped 2026-09-28; the visible state is still open.** Every
+    request but a file transfer has a 30 s deadline (`requestDeadline.ts`,
+    applied by the client's own `fetch` in `deadlineFetch.ts`), so nothing waits
+    on a dead route for as long as the operating system retransmits. A moment
+    of doubt — `online`, the Network Information API's `change` (which Android's
+    WebView raises on a VPN or Wi-Fi switch that never says `online`), the
+    return to the foreground — cuts the reads that have waited more than 3 s,
+    and asks the socket for a heartbeat; unanswered in 4 s, a second beat is
+    phoenix's own heartbeat timeout, which tears the socket down, errors the
+    channels so they rejoin, and reconnects — the socket's recovery, started on
+    a reason instead of after up to fifty seconds. When either found something
+    dead, the chat list and the open conversation refetch as on `online`. A cut
+    request fails as `TypeError: Failed to fetch`, what every layer already
+    reads as the network's — deliberately not an `AbortError`, which the auth
+    client would not retry and would answer by dropping the session.
+    Evidence: `tests/unit/connection-revival.test.mts` (13 cases);
+    `tests/e2e/network-change-recovery.spec.ts` strands the list's read the way
+    a dead socket does and passes only with the cut in place — a no-op cut
+    turned it red. An existing spec caught one defect on the way: the foreground
+    listener registered on a shell without the App plugin and left an
+    unhandled rejection; it now asks `Capacitor.isPluginAvailable` first.
+    **Still open:** Telegram's «Соединение…» in place of the list's title while
+    the socket is down, and a confirmation on a real Android phone switching a
+    VPN — the report's own case, which no emulator here reproduces.
 
 54. `[ ]` A server's channels show what is happening in them — same report,
     with two screenshots forwarded from a second tester comparing Telegram's
