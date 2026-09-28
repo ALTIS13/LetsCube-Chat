@@ -46,7 +46,8 @@ export function useTask(taskId: string | null) {
           `*,
            assignee:profiles!tasks_assignee_id_fkey(*),
            creator:profiles!tasks_created_by_fkey(*),
-           chat:chats(*)`,
+           chat:chats(*),
+           coassignees:task_coassignees(user_id, profile:profiles!task_coassignees_user_id_fkey(*))`,
         )
         .eq("id", taskId)
         .maybeSingle(),

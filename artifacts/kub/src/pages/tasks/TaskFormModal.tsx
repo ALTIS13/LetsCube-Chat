@@ -1,6 +1,9 @@
 "use client";
 
 import { taskPeriodError } from "@/lib/taskPeriod";
+import { coassigneeIds, coassigneesChanged, coassigneesRefusal } from "@/lib/taskCoassignees";
+import { TaskCoassigneesField } from "./TaskCoassigneesField";
+import { TASK_SEARCH_WELL } from "./taskFieldWell";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { KubButton, KubIcon, KubInput, KubModal } from "@/components/kub";
@@ -110,6 +113,12 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
   const [recurrenceMaxOccurrences, setRecurrenceMaxOccurrences] = useState(10);
 
   const [assignee, setAssignee] = useState<Profile | null>(task?.assignee ?? null);
+  // Tracker item 67: the people doing the work beside the assignee.
+  const initialCoassignees = useMemo(
+    () => (task?.coassignees ?? []).flatMap((row) => (row.profile ? [row.profile] : [])),
+    [task?.coassignees],
+  );
+  const [coassignees, setCoassignees] = useState<Profile[]>(initialCoassignees);
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<Profile[]>([]);
   const [searching, setSearching] = useState(false);
@@ -345,6 +354,12 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
           return;
         }
       }
+      const coassigneeError = await saveCoassignees(task.id, effectiveAssigneeId);
+      if (coassigneeError) {
+        setSubmitting(false);
+        setError(`Задача сохранена, но соисполнители не сохранены. ${coassigneeError}`);
+        return;
+      }
       setSubmitting(false);
       onDone(task.id);
       return;
@@ -392,9 +407,25 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
         return;
       }
     }
+    const coassigneeError = await saveCoassignees(newTaskId, effectiveAssigneeId);
+    if (coassigneeError) {
+      setCreatedTaskId(newTaskId);
+      setSubmitting(false);
+      setError(`Задача создана, но соисполнители не сохранены. ${coassigneeError}`);
+      return;
+    }
     setSubmitting(false);
     onDone(newTaskId);
   };
+
+  /** Sends the co-executors when the list changed; the refusal's sentence, or null. */
+  async function saveCoassignees(taskId: string, assigneeId: string | null): Promise<string | null> {
+    const next = assignmentScope === "user" ? coassigneeIds(coassignees.map((person) => person.id), assigneeId) : [];
+    const before = coassigneeIds(initialCoassignees.map((person) => person.id), assigneeId);
+    if (!coassigneesChanged(before, next)) return null;
+    const { error: refused } = await supabase.rpc("task_set_coassignees", { p_task_id: taskId, p_user_ids: next });
+    return refused ? coassigneesRefusal(refused) : null;
+  }
 
   return (
     <KubModal
@@ -914,7 +945,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-2 rounded-xl px-3 h-10 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] transition-all focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]">
+            <div className={TASK_SEARCH_WELL}>
               <KubIcon name="search" size={14} className="text-[color:var(--kub-muted)]" />
               <input
                 type="text"
@@ -957,6 +988,10 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
           </>
         )}
       </div>
+
+      {assignmentScope === "user" && assignee && (
+        <TaskCoassigneesField value={coassignees} onChange={setCoassignees} assigneeId={assignee.id} />
+      )}
 
       {error && (
         <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger-text)] border border-[color:var(--kub-danger)]/30">

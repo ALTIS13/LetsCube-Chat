@@ -316,7 +316,9 @@ test("the perimeter count only ever shrinks", () => {
   //
   // Still 200 after the task reminders (tracker item 66): their moment and
   // note share the checklist's field well, `pages/tasks/taskFieldWell.ts`, one
-  // class list rather than a copy, so they add nothing here.
+  // class list rather than a copy, so they add nothing here. The same holds
+  // for the co-executors' search (tracker item 67): it and the assignee's are
+  // `TASK_SEARCH_WELL` in that module.
   assert.ok(total <= 200, `perimeters on the sheet-edge colour grew to ${total}; the ceiling is 200`);
 });
 

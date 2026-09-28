@@ -173,6 +173,16 @@ export function TaskCard({ task, nowMs, onClick, selected = false, selectionCont
               <span className="truncate text-[color:var(--kub-text)]">
                 {task.assignee.full_name ?? "Исполнитель"}
               </span>
+              {/* Tracker item 67: how many do it beside them. */}
+              {(task.coassignees?.length ?? 0) > 0 && (
+                <span
+                  data-testid="task-coassignees-count"
+                  title="Соисполнители"
+                  className="shrink-0 rounded-full px-1.5 text-[11px] font-semibold tabular-nums text-[color:var(--kub-accent-text)] kub-raise"
+                >
+                  +{task.coassignees?.length}
+                </span>
+              )}
             </span>
           ) : (
             <span className="flex items-center gap-1 text-[color:var(--kub-warn)]">

@@ -2742,7 +2742,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     **Still open:** a confirmation on a real Android phone switching a VPN —
     the report's own case, which no emulator here reproduces.
 
-54. `[~]` A server's channels show what is happening in them — same report,
+54. `[x]` A server's channels show what is happening in them — same report,
     with two screenshots forwarded from a second tester comparing Telegram's
     topic list with our «Каналы» drawer. Никитос: «он совершенно прав… ты не
     видишь вот этих каналов в формате последнего сообщения… тебе надо будет
@@ -2827,6 +2827,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     (`MESSAGES_CHANNEL_PREVIEW`), because the sidebar's projection alone would
     have called a first visit to a server a whole-list refetch — D-173's shape.
     Evidence: `channel-preview-cache.test.mts` (7), `request-labels.test.mts`.
+    **The unread half, 2026-09-29**, on the owner's approval. Each channel now
+    carries Telegram's topic badge, «3» or «99+», with its name in full weight.
+    The count comes from a read mark per channel (`channel_reads`) that sits
+    beside the chat's own mark and does not replace it, so the chat list's
+    count, push, receipts and entry position are what they were. Opening a
+    channel clears its badge and moves its mark. Record in
+    `operations/2026-09-28-owner-approved-database-changes.md` §7; evidence
+    `channel-unread.test.mts` and `channel-previews.spec` «a server's channels
+    say how much is unread in them».
 
 55. `[x]` No «переслано» notice when the forward has already taken you there —
     same report. Forwarding from one chat to another opens the destination, and
@@ -2890,7 +2899,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     also asks «нафига голосовые каналы?)»; the owner keeps them (Discord's), so
     they stay, restyled under item 54.
 
-58. `[~]` Coming back to a conversation is instant — «я вот из чата с тобой
+58. `[x]` Coming back to a conversation is instant — «я вот из чата с тобой
     захожу в другой, потом возвращаюсь к тебе и секунду жду прогрузки, а
     зачем? Если кэш существует». The store keeps a conversation after it is
     left (D-089), so the second must be spent somewhere else: the entry position
@@ -2924,6 +2933,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     While measuring it, D-322: a message deleted for both while its private chat
     was closed came back on the return and stayed until a reload. Fixed the same
     day.
+    **The last round trip is gone, 2026-09-28**, on the owner's approval. It was
+    rebuilt as a private broadcast rather than the publication proposed above,
+    which would have let any account hear another's unhides. Each hide and
+    unhide goes to the account's own `hides:<id>` topic. Once that channel is
+    proved live by its own ping, a return draws the held rows without reading
+    their hidden ids. A hide made elsewhere takes the row out of the held copy
+    as it happens. Record in
+    `operations/2026-09-28-owner-approved-database-changes.md` §6; evidence
+    `conversation-return.spec` «with this account's hides heard live…».
 
 59. `[x]` «Режим топиков» in a group's settings says nothing any more — «как
     будто ни на что не влияет сейчас. Каналы и без него создаются». The server
@@ -3049,9 +3067,17 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     opens the task. Evidence: `task-reminders.test.mts`, `task-reminders.spec`
     at 1440 and 390.
 
-67. `[ ]` A task taken by several people together — «есть задачи которые два
+67. `[x]` A task taken by several people together — «есть задачи которые два
     человека ведут параллельно». Assignees become a set rather than one person;
     a database change — §10.
+    **Done 2026-09-29**, on the owner's approval. It was built as one
+    responsible person plus «Соисполнители», not a set of assignees, because
+    the assignee means one person in reminders, pool claims, recurrences and
+    the installed Android bundle. A co-executor sees the task, takes it on,
+    moves it along, comments, ticks the checklist and sets reminders. Like the
+    assignee, a co-executor does not confirm it. Record in
+    `operations/2026-09-28-owner-approved-database-changes.md` §8; evidence
+    `task-coassignees.test.mts`, `task-coassignees.spec`.
 
 68. `[x]` A task's period, not only its deadline — «не хватает возможности
     выбрать промежуток… есть задачи которые идут месяц». A start beside the

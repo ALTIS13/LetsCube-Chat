@@ -14,7 +14,12 @@ risk that decides whether it is worth it.
 
 Ordered by what it buys for the least risk.
 
-## 1. Hides heard live — a return to a conversation without waiting
+## 1. Hides heard live — a return to a conversation without waiting — applied 2026-09-28, rebuilt
+
+Approved with the rest and applied the same day, **not as written below**: the
+publication would have let any account hear another's unhides (see the rollout
+record's «Order»), so each account got a private broadcast topic instead —
+rollout record §6.
 
 **Unblocks:** tracker item 58's last round trip. Coming back to a conversation
 now waits for one read (the hidden ids); before 2026-09-28 it waited for two.
@@ -94,7 +99,11 @@ delivered_at is null` that inserts the notification and stamps the row.
 **Risk:** medium — the scheduler is new moving code on the server, and a stuck
 poll is a silent failure; it needs its own health line in the worker's status.
 
-## 5. Unread per channel (item 54, the unread half)
+## 5. Unread per channel (item 54, the unread half) — applied 2026-09-29
+
+Approved with the rest; designed and applied the next morning, keyed per
+channel rather than per topic row so the general conversation needs no row of
+its own — rollout record §7.
 
 **Unblocks:** a channel in a server's list saying how much is unread in it.
 Today the read marker is per chat (`chat_members.last_read_at`), so opening one
@@ -110,7 +119,11 @@ push, read receipts and the entry position (CLAUDE.md §11); the per-channel one
 must sit beside it without changing any of them. Worth a design pass of its own
 before SQL.
 
-## 6. Several people on one task (item 67)
+## 6. Several people on one task (item 67) — applied 2026-09-29
+
+Approved with the rest and applied the next morning. It was built as one person
+responsible with co-executors beside them, not as a set of assignees, for the
+reason given in the rollout record §8.
 
 **Change:** `public.task_assignees (task_id, user_id, primary key)` beside
 `tasks.assignee_id`, and every function that reads `assignee_id` —

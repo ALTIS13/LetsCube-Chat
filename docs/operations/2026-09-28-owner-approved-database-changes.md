@@ -292,3 +292,195 @@ testers asked for most.
 - **Worker switch:** `MEDIA_PURGE_WORKER_ENABLED=0` stops it;
   `MEDIA_PURGE_WORKER_TICK_MS` sets its pace (60 s). Its queue:
   `select status, count(*) from private.message_media_purge group by 1;`.
+
+## 6. Hides heard live — tracker item 58
+
+- **Migration** `supabase/migrations/20260928220000_hides_heard_live.sql`
+  (`0F8E1EC6626A7029E136BF483466A171827D138B16A29D90D015C8D9851EA5F1`),
+  rollback `…_hides_heard_live.rollback.sql`
+  (`E5BB43D85F0595A362DB664212328EA08F059D8169C249C2FD6D30798D9252F1`); both
+  copied byte-identical into `.migration-backup/`. Applied as `supabase_admin`,
+  because the policy is on `realtime.messages`, which `supabase_realtime_admin`
+  owns; what `postgres` should own is created under `SET LOCAL ROLE postgres`.
+- **Why not the proposal.** Publishing `message_hidden_for_users` would have
+  let any signed-in client subscribe to another account's unhides: Realtime
+  sends a DELETE to every subscriber whose filter matches without asking RLS
+  («Order», above). So each account has a private broadcast topic,
+  `hides:<its id>`.
+- **What it does:** `private.broadcast_hide`, AFTER INSERT OR DELETE on the
+  hides table, sends `{message_id, chat_id, hidden}` to the owner's topic
+  through `realtime.send`, which never raises — a broadcast that fails does not
+  undo a hide; a hide removed with its message sends nothing. The policy
+  «hides: each account hears its own» lets `authenticated` read, and so join,
+  only its own topic; there is no INSERT policy, so a client cannot send on it.
+  `public.hides_live_ping` sends a ping on the caller's own topic.
+- **Measured before writing it:** the database already replicates
+  `realtime.messages` to Realtime — `supabase_realtime_messages_publication`
+  over the daily partitions and an active `pgoutput` slot — and no broadcast
+  had ever been sent (0 rows). `realtime.send` is SECURITY INVOKER, so the two
+  functions that call it are SECURITY DEFINER as `postgres`, which may insert.
+- **Backup:** `/srv/letscube/backups/automated/20260928-234643`, `SHA256SUMS`
+  15 of 15, `pg_restore --list` 158 table-data entries including
+  `message_hidden_for_users` and `realtime.messages`.
+- **Rehearsal** (rolled back), in a group made for it with two real accounts:
+  the member's hide broadcast on `hides:<member>` with the message, the chat
+  and `hidden: true`; the ping arrived; Realtime's own join check — the account's
+  role and claims with `realtime.topic` set to the topic — let the member read
+  its topic and none of the admin's rows; the member's own INSERT on its topic
+  refused `42501`; the unhide broadcast `hidden: false`; `anon` refused the ping.
+  Production read afterwards: no policy, no trigger, no broadcast row. The
+  post-apply smoke passed the same way.
+- **Client:** `useChats` joins `hides:<id>` with `private: true` beside the
+  account's own membership channel. The channel is trusted only once the ping
+  sent after the join has come back through it (`lib/hiddenMessagesLive.ts`), so
+  a channel that reports SUBSCRIBED while database broadcasts do not reach it
+  never replaces a read. Any gap ends the trust: a status other than
+  SUBSCRIBED, a revival or going offline. A heard hide takes the row out of the
+  held copy of its chat, whether open or not; a heard unhide makes the chat read
+  again. A return to a conversation skips the hidden-ids read only when every
+  row it holds, and every row those reply to, was verified by a read begun while
+  the channel was live, or arrived live after that. If the channel never becomes
+  trusted, the product behaves exactly as before: it reads.
+- **Evidence:** `hidden-messages-live.test.mts`; `conversation-return.spec`
+  at 1440 and 390. With every hidden-ids read slowed to 1.5 s, the return draws
+  in under a second. A hide heard in the open chat removes the line, and one
+  heard while the chat was closed does not flash back. Two mutants go red: one
+  that never skips (drawn after 1.9 s), and one that leaves the held copy alone.
+  The second went green at first, because the open chat's own listener hid
+  the line as well; the closed-chat case is what the held copy's removal is
+  for, and it is now in the test. The fixture's count answer now honours the
+  reader's read mark. Without it, every re-read of the list counted a whole chat
+  as unread and a return took a path a real database never sends it down.
+
+## 7. Unread per channel — tracker item 54, the unread half
+
+- **Migration** `supabase/migrations/20260929090000_channel_reads.sql`
+  (`10AA5AF2C7E025EDB0FD790ACEBAC082FFAABBE0E6575B9632310B4DB6F83C69`),
+  rollback `…_channel_reads.rollback.sql`
+  (`B481F739D720E91236AD36F3467354C90B8579A1588A48919E5DCA4D3FB37D1E`); both
+  copied byte-identical into `.migration-backup/`.
+- **The design pass the proposal asked for.** The chat's own mark,
+  `chat_members.last_read_at`, drives the list's count, push, receipts and
+  where a chat opens (CLAUDE.md §11), so it is left exactly as it is, and a
+  second mark per channel sits beside it. That makes the chat's count and a
+  channel's count different questions, as in Discord, where a server shows
+  that something is unread and each channel shows its own. The channel key is
+  `general` for the general conversation — a topic flagged general, or no
+  topic, which is what a group without topics has — and the topic's id
+  otherwise, so the general channel needs no `topics` row of its own. Measured:
+  32 topics in 8 chats, 7 of them general rows; 38 of 3,905 messages carry a
+  topic.
+- **What it does:** `public.channel_reads (chat_id, channel, user_id,
+  last_read_at)`, read only by its owner, written only by
+  `mark_channel_read`: forward only, never past now, only by a member, only for
+  a channel the chat has. `channel_unread_counts(chat)` answers the caller's
+  count per channel: the general one and every topic not archived. It counts
+  messages after the mark that are somebody else's, not deleted, not hidden for
+  the caller, not from before they cleared the chat, and not a notice. That is
+  the list's own rule, the one the chat-level count query asks. The seed gives
+  every group member a mark per channel at their chat mark, or their joining,
+  so nothing turned unread on the day: 26 general marks and 47 topic marks. A
+  channel made later, or a member who joins later, counts from the later of
+  their joining and the channel's making.
+- **Backup:** `/srv/letscube/backups/automated/20260929-002747`, `SHA256SUMS`
+  15 of 15, `pg_restore --list` 158 table-data entries including
+  `chat_members`, `topics` and `messages`.
+- **Rehearsal** (rolled back), in a server made for it with two real accounts
+  who joined an hour before: general 2 and the channel 1. Hiding one message
+  took general to 1. Reading general took it to 0, left the channel at 1 and
+  left the chat's own mark where it was. A mark sent backwards was refused
+  silently. Reading the channel took it to 0. Refused: `invalid_channel`,
+  another chat's channel (`channel_not_found`), a chat the member is not in
+  (`chat_member_required`). No counts came back for a chat the member is not
+  in, and a direct INSERT was refused. The messages were written with a time
+  in the past: a signed-in write is stamped with `clock_timestamp()`, which in
+  one transaction is later than any mark `now()` can make, so the first try
+  failed on the rehearsal's own clock, not on the rule. The post-apply smoke
+  passed the same way.
+- **Client:** `useChannelUnread` reads the counts when the list is shown and
+  keeps them from the conversation's socket, once per message. The list's
+  socket and the conversation's both hand a message over, and the first e2e run
+  counted one message twice. The channel being read counts nothing. The list
+  draws Telegram's topic badge in the chat list's own counter style («3»,
+  «99+») and the name in full weight. `lib/channelReadMarks.ts` moves the
+  channel's mark as far as the conversation has been shown while the page is
+  visible, beside the chat's own mark. A database without the functions leaves
+  the list as it was. Evidence: `channel-unread.test.mts`, and
+  `channel-previews.spec` at 1440 and 390: three counts drawn, one more heard
+  live, opening a channel clears it and sends its mark, and a database without
+  the counts draws none.
+
+## 8. Co-executors on a task — tracker item 67
+
+- **Migration** `supabase/migrations/20260929100000_task_coassignees.sql`
+  (`724C5CF2FEC0A578F32A49A2786C78115DBA62F628831506D7D0129815005A45`),
+  rollback `…_task_coassignees.rollback.sql`
+  (`6A47F523AE5B36CE5F125FCED5E403BF19D2E8E09E1DC29A081D233218011B4B`); both
+  copied byte-identical into `.migration-backup/`. The six replaced functions
+  were generated from production's own text with each patch applied by exact
+  match, and read again just before the apply to confirm nothing had moved;
+  the rollback restores that text byte for byte.
+- **The shape, and why.** The proposal called this a project, because
+  `assignee_id` is read by 28 functions and 4 policies (measured). Turning
+  the assignee into a set would have changed every one of them, and also
+  several things that mean one person: the one a reminder «Исполнителю»
+  reaches, the one a pool claim fills, the one a recurrence copies, and the one
+  the installed Android bundle reads. So `assignee_id` keeps all of that, and
+  `task_coassignees` adds the others. The tester asked for two people doing
+  the work, and a co-executor may do what the work needs: see the task, move it
+  along its statuses, comment, tick the checklist and set reminders. Like the
+  assignee, a co-executor may not confirm or reject the task.
+- **What it does:**
+  - `_task_coassigned_to_me(task)` is SECURITY DEFINER and answers for the
+    caller only. The read policies of `tasks`, `task_events` and
+    `task_checklist_items` ask it beside the task's own visibility.
+    `task_coassignees`' own policy reads through `tasks`, so the two never
+    recurse.
+  - Six functions change only in the lines that name the assignee:
+    `_task_transition` (every assignee-only step — accept, start, send for
+    confirmation, return to work), `task_comment`, `task_confirm` and
+    `task_reject` (a co-executor is refused as the assignee is),
+    `_task_checklist_assert_can_change` (ticking) and `_task_reminder_may_hold`.
+  - `_task_transition` also compared the assignee with `<>`, which let anybody
+    through when the task had no assignee. It now uses IS DISTINCT FROM.
+  - `task_set_coassignees(task, people)` sets the whole list. Only those who may
+    edit the task may call it, on a task assigned to a person and still open.
+    It takes at most 10 people, never the assignee (silently dropped), nobody
+    banned, and on a location's task only that location's members. Each person
+    added is told as an assignee is told (`task_assigned`, `coassignee: true`).
+    The change goes into the task's history as an `update` with
+    `coassignees: {added, removed}`: the event kinds are a checked list, and
+    that list was left alone.
+  - A co-executor made the assignee leaves the co-executors.
+  - A task confirmed or rejected tells its co-executors as it tells its
+    assignee.
+- **Backup:** `/srv/letscube/backups/automated/20260929-005958`, `SHA256SUMS`
+  15 of 15, `pg_restore --list` 159 table-data entries including `tasks`,
+  `task_events`, `task_checklist_items` and `channel_reads`.
+- **Rehearsal** (rolled back), as a staff account and an ordinary one:
+  - The member could not see the admin's private task and was refused
+    `forbidden` setting co-executors.
+  - The admin added the member, naming themselves too; the name was dropped,
+    leaving exactly the member. Refused: eleven people (`too_many_coassignees`)
+    and an account that does not exist (`coassignee_unavailable`). The change
+    was in the history.
+  - As co-executor, the member saw the task, its history, checklist and list;
+    was told; accepted, started, commented, ticked a point, set a reminder and
+    sent the task for confirmation; and was refused a direct INSERT.
+  - The admin, made co-executor of the member's task, was refused confirming
+    it. Taken off the list, the admin confirmed it, and co-executors could not
+    be added to the confirmed task (`task_locked`).
+  - Made the assignee, the member left the co-executors.
+  - Production read afterwards: no table, `_task_transition` unchanged, no
+    rehearsal task. The post-apply smoke passed the same way; after it there
+    were 0 co-executors and 58 tasks.
+- **Client:** `lib/taskCoassignees.ts`; «Соисполнители» in the task form
+  (`TaskCoassigneesField`, found as the assignee is found), sent after the task
+  is saved and only when the list changed. The task's detail lists them under
+  «Исполнитель». A co-executor gets the assignee's buttons, ticking and
+  reminders. The card shows «+N». «Мои», «Новые», «В работе» and the «Я»
+  filter count a co-executed task as the reader's own; the page reads every
+  task its reader may see, which now includes these through the policy.
+  Evidence: `task-coassignees.test.mts` and `task-coassignees.spec` at 1440 and
+  390. The spec covers a co-executor taking the task on, the author adding one
+  in the form (saved after the task), and «Мои» holding the task with «+1».

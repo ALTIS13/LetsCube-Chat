@@ -19,6 +19,7 @@ import { useTaskSoftDelete } from "@/hooks/useTaskSoftDelete";
 import { KubButton, KubEmptyState, KubFilterButton, KubFilterSummary, KubHeader, KubIcon, KubInput, KubNotice, type ActiveFilter } from "@/components/kub";
 import { BulkSelectControl } from "@/components/ui/BulkSelectControl";
 import { TaskCard } from "./TaskCard";
+import { isCoassignee } from "@/lib/taskCoassignees";
 import { TaskListRow } from "./TaskListRow";
 import { TaskDetailModal } from "./TaskDetailModal";
 import { TaskDeleteModal } from "./TaskDeleteModal";
@@ -900,9 +901,12 @@ function applyClientFilters(
   showDeleted: boolean,
 ): TaskWithPeople[] {
   const query = normalizeSearch(search);
+  // Tracker item 67: the reader's own work is what they do as the assignee or
+  // beside them.
+  const mine = (task: TaskWithPeople) => task.assignee_id === userId || isCoassignee(task.coassignees, userId);
   return tasks.filter((task) => {
     if (!showDeleted && task.deleted_at) return false;
-    if (tabId === "mine" && task.assignee_id !== userId) return false;
+    if (tabId === "mine" && !mine(task)) return false;
     if (tabId === "available") {
       if (task.status !== "new" || task.assignment_scope === "user" || task.assignee_id !== null) return false;
     }
@@ -911,9 +915,9 @@ function applyClientFilters(
     if (tabId === "chat" && task.visibility !== "chat") return false;
     if (tabId === "unassigned" && task.assignee_id !== null) return false;
     if (tabId === "created" && task.created_by !== userId) return false;
-    if (tabId === "new" && (task.assignee_id !== userId || task.status !== "assigned")) return false;
-    if (tabId === "active" && (task.assignee_id !== userId || !["accepted", "in_progress"].includes(task.status))) return false;
-    if (assigneeFilter === "me" && task.assignee_id !== userId) return false;
+    if (tabId === "new" && (!mine(task) || task.status !== "assigned")) return false;
+    if (tabId === "active" && (!mine(task) || !["accepted", "in_progress"].includes(task.status))) return false;
+    if (assigneeFilter === "me" && !mine(task)) return false;
     if (assigneeFilter === "unassigned" && task.assignee_id !== null) return false;
     if (assigneeFilter !== "all" && assigneeFilter !== "me" && assigneeFilter !== "unassigned" && task.assignee_id !== assigneeFilter) {
       return false;

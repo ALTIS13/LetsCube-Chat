@@ -85,7 +85,8 @@ export function useTasks(filter: TasksFilter, options: { enabled?: boolean } = {
         `*,
          assignee:profiles!tasks_assignee_id_fkey(*),
          creator:profiles!tasks_created_by_fkey(*),
-         checklist:task_checklist_items(done)`,
+         checklist:task_checklist_items(done),
+         coassignees:task_coassignees(user_id, profile:profiles!task_coassignees_user_id_fkey(*))`,
       )
       // Sort by urgency first (enum order is low<normal<high<urgent in the
       // DB, so DESC gives urgent → low), then by recency so two tasks of

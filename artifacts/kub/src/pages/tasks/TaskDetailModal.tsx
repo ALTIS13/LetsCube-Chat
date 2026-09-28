@@ -37,6 +37,7 @@ import {
 import { TaskAssignModal } from "./TaskAssignModal";
 import { TaskChecklist } from "./TaskChecklist";
 import { TaskReminders } from "./TaskReminders";
+import { isCoassignee } from "@/lib/taskCoassignees";
 import { TaskConfirmModal } from "./TaskConfirmModal";
 import { TaskDeleteModal } from "./TaskDeleteModal";
 import { TaskFormModal } from "./TaskFormModal";
@@ -167,6 +168,9 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
   const linkedChat = task.chat ? getChatDisplayInfo(task.chat, currentUser?.id ?? null) : null;
   const isPoolAvailable = task.assignment_scope !== "user" && !task.assignee_id;
   const isAssignee = currentUser?.id === task.assignee_id;
+  // Tracker item 67: a co-executor does the work as the assignee does — moves
+  // the task along, ticks, sets reminders — and, like them, does not confirm it.
+  const isDoer = isAssignee || isCoassignee(task.coassignees, currentUser?.id);
   const isCreator  = currentUser?.id === task.created_by;
   const canDeleteTask =
     !taskIsDeleted &&
@@ -210,8 +214,8 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
     canEdit ||
     canCancel ||
     canConfirmReject ||
-    (isAssignee && ["assigned", "accepted", "in_progress", "rejected"].includes(task.status)) ||
-    (isManagerOrAdmin && task.status === "waiting_confirmation" && isAssignee) ||
+    (isDoer && ["assigned", "accepted", "in_progress", "rejected"].includes(task.status)) ||
+    (isManagerOrAdmin && task.status === "waiting_confirmation" && isDoer) ||
     canDeleteTask;
 
   // supabase.rpc(...) returns a thenable PostgrestBuilder, not a real Promise,
@@ -411,7 +415,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
           canEdit={canEdit}
           // The person doing the work ticks it off (tracker item 62), on a
           // task still open, as `task_checklist_set_done` allows.
-          canTick={canEdit || (!taskIsDeleted && isAssignee && !["confirmed", "cancelled"].includes(task.status))}
+          canTick={canEdit || (!taskIsDeleted && isDoer && !["confirmed", "cancelled"].includes(task.status))}
           onChanged={refetch}
         />
 
@@ -421,7 +425,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
           currentUserId={currentUser?.id ?? null}
           // Whoever may hold a reminder on the task, as `task_reminder_add`
           // asks: those who may edit it, and its assignee (tracker item 66).
-          canRemind={canEdit || (!taskIsDeleted && isAssignee && !["confirmed", "cancelled"].includes(task.status))}
+          canRemind={canEdit || (!taskIsDeleted && isDoer && !["confirmed", "cancelled"].includes(task.status))}
           assigneeName={task.assignee_id && !isAssignee ? task.assignee?.full_name ?? "исполнитель" : null}
           onChanged={refetch}
         />
@@ -578,6 +582,21 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
             ) : (
               <span className="text-xs text-[color:var(--kub-warn)]">Не назначен</span>
             )}
+            {(task.coassignees?.length ?? 0) > 0 && (
+              <div className="mt-2" data-testid="task-coassignees">
+                <div className="mb-1 text-[11px] uppercase tracking-wider text-[color:var(--kub-muted)]">Соисполнители</div>
+                <div className="flex flex-col gap-1">
+                  {(task.coassignees ?? []).map((row) => (
+                    <div key={row.user_id} className="flex min-w-0 items-center gap-2" data-testid="task-coassignee">
+                      {row.profile && <UserAvatar user={row.profile} size="sm" />}
+                      <span className="min-w-0 truncate text-sm text-[color:var(--kub-text)]">
+                        {row.profile?.full_name ?? "Без имени"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div className="rounded-xl px-3 py-2 kub-raise">
             <div className="text-[12px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
@@ -679,7 +698,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
               {task.assignee_id ? "Переназначить" : "Назначить исполнителя"}
             </KubButton>
           )}
-          {isAssignee && task.status === "assigned" && (
+          {isDoer && task.status === "assigned" && (
             <KubButton
               variant="primary"
               loading={actionLoading === "accept"}
@@ -689,7 +708,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
               Принять
             </KubButton>
           )}
-          {isAssignee && task.status === "accepted" && (
+          {isDoer && task.status === "accepted" && (
             <KubButton
               variant="primary"
               loading={actionLoading === "start"}
@@ -699,7 +718,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
               Взять в работу
             </KubButton>
           )}
-          {isAssignee && task.status === "in_progress" && (
+          {isDoer && task.status === "in_progress" && (
             <KubButton
               variant="primary"
               loading={actionLoading === "send"}
@@ -709,7 +728,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
               На подтверждение
             </KubButton>
           )}
-          {isAssignee && task.status === "rejected" && (
+          {isDoer && task.status === "rejected" && (
             <KubButton
               variant="primary"
               loading={actionLoading === "return"}
@@ -737,7 +756,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
               </KubButton>
             </>
           )}
-          {isManagerOrAdmin && task.status === "waiting_confirmation" && isAssignee && (
+          {isManagerOrAdmin && task.status === "waiting_confirmation" && isDoer && (
             <span className="text-[12px] self-center text-[color:var(--kub-muted)]">
               Подтвердить должен другой администратор или менеджер
             </span>
