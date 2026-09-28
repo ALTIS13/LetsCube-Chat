@@ -450,7 +450,10 @@ VITE_SUPABASE_ANON_KEY="$(cat "$CFG/.k")" pnpm.cmd --filter @workspace/kub run d
   ran the suite again. These tests read `artifacts/api-server/dist`, so build
   first: `pnpm.cmd --filter @workspace/api-server run build`, then
   `node --test $(find tests/server -name "*.test.mjs")`. That guard is green
-  again; the suite stands at **124/124** on 2026-09-19.
+  again; the suite stands at **124/124** on 2026-09-19. Pass
+  `--test-concurrency=2`: at the default parallelism on this workstation the
+  PGlite files die with «Fatal process out of memory: Zone», which reads as
+  four failed files and asserts nothing (measured 2026-09-28; 357/357 at 2).
 - **A fixture constant compared with `now()` is a time bomb, and when it goes
   off the test's title stops matching what it checks.**
   `voice-call-service-message-db.test.mjs` pinned `active_since` to a fixed

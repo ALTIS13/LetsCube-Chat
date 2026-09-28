@@ -87,6 +87,8 @@ VAPID_PRIVATE_KEY=<SERVER_SIDE_ONLY>
 VAPID_CONTACT=mailto:admin@example.com
 MEDIA_VARIANTS_WORKER_ENABLED=1
 MEDIA_VARIANTS_WORKER_TICK_MS=60000
+MEDIA_PURGE_WORKER_ENABLED=1
+MEDIA_PURGE_WORKER_TICK_MS=60000
 ```
 
 `kub-worker` has no public port. It runs server-side dispatchers such as browser

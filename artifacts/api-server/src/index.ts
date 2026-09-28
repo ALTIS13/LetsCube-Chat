@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startMediaPurgeWorker } from "./workers/mediaPurgeWorker";
 import { startMediaVariantsWorker } from "./workers/mediaVariantsWorker";
 import { startPushDispatcher } from "./workers/pushDispatcher";
 import { shouldStartLegacyPushDispatcher } from "./workers/pushDispatcherConfig";
@@ -35,5 +36,7 @@ app.listen(port, (err) => {
   }
   startRegistrationCleanupWorker();
   startMediaVariantsWorker();
+  // D-103: the files of messages deleted for everyone.
+  startMediaPurgeWorker();
   startVoiceReconciler();
 });

@@ -128,6 +128,7 @@ policies. This one is a project, not a migration.
 - **Kind folders (item 69, decided against for now):** Telegram's are folders
   with chat-type rules; ours would need `folders.include_types text[]`. Only if
   the capsule in «Все» turns out not to be enough.
-- **D-103:** «удалить у всех» leaves the content in the row, the media in
-  storage and the preview in `notifications`. Clearing them is a data-loss
-  decision about other people's messages, and the owner's.
+- **D-103 — applied 2026-09-28:** «удалить у всех» leaves the content in the
+  row, the media in storage and the preview in `notifications`. Clearing them
+  is a data-loss decision about other people's messages, and the owner's. He
+  took it with the rest; see the rollout record §5.

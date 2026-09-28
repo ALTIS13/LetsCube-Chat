@@ -213,3 +213,82 @@ testers asked for most.
   older than the column answers without it, which reads as no line. Evidence:
   `profile-badges.test.mts`, `profile-badges.spec` at 1440 and 390, with the
   mutant that drops the date from the card's condition going red.
+
+## 5. A message deleted for everyone keeps nothing — D-103
+
+- **Migration** `supabase/migrations/20260928210000_deleted_message_keeps_nothing.sql`
+  (`E1CDE49E3EE4DC9478A445269FF81CCCE5BFD3D2A875DF55842A251CB771A90D`),
+  rollback `…_deleted_message_keeps_nothing.rollback.sql`
+  (`467FF24A0699FCFF2A5A1E1E216BA223F118C7762A732B8F8CF2878F7B5830B2`); both
+  copied byte-identical into `.migration-backup/`, and the rehearsal beside
+  them in `.migration-backup/supabase/rehearsal/`.
+- **The decision.** The proposal named this the owner's to take, because it
+  loses other people's messages and cannot be undone; he approved it with the
+  rest. What was measured before writing it, read-only: 297 messages deleted
+  for everyone, 295 of them still holding their text and 34 their file;
+  151 notifications still carrying a deleted message's words; the `media`
+  bucket **public**, so a deleted file stayed downloadable by anyone holding
+  its URL; no function and no screen that undoes a deletion.
+- **What it does:**
+  - `private.deleted_message_keeps_nothing`, a BEFORE UPDATE trigger on
+    `messages` named `trg_zz_…` so it runs after every other BEFORE trigger,
+    clears content, media references, media metadata, a bot's keyboard and
+    placeholder, and unpins, for every path that sets `deleted_at`. It makes
+    the deletion final: nothing written into a deleted row afterwards stays,
+    and `deleted_at` cannot return to null. Because the statement that fires
+    it names only `deleted_at`, the column-scoped triggers on content and media
+    do not fire: no «edited» stamp, no bot `edited_message`, no variant job.
+  - What the row pointed at is queued in `private.message_media_purge` first:
+    the file and the preview named after it, in both spellings the media check
+    allows, so a preview written after the deletion is still found. Rows kept
+    only a public URL are parsed for their path.
+  - `public.message_media_purge_claim` / `_finish`, EXECUTE for `service_role`
+    only, feed the worker. The claim moves a deleted message's variant rows
+    into the queue, and keeps — never hands out — a file some live message
+    still shows: its own file, its preview, a preview named after its file, or
+    one of its variants. A forward shares its source's file and a reused 720p
+    rendition is the source itself, which is why this check exists.
+    `mediaPurgeWorker` removes what it is handed through the Storage API,
+    once a minute, one request per bucket, and logs counts only. A refusal is
+    backed off and given up after eight tries.
+  - `private.scrub_deleted_message_notifications`, from an AFTER trigger on
+    the transition: unsent pushes are deleted from both outboxes, sent ones keep
+    no copy of the words, and the notification's `preview` becomes null with
+    `deleted` true. The bell reads «Сообщение удалено».
+  - A message under an open report (`new`, `reviewing`) keeps what it said;
+    `trg_content_report_closed_finishes_deletion` finishes the deletion when
+    the report is `actioned` or `dismissed`.
+  - The 297 earlier deletions were cleared through the same trigger by setting
+    `deleted_at` to itself, and their notifications scrubbed.
+  - `notifications_message_id_idx` finds a message's notifications.
+- **Not touched, on purpose:** `forward_origin_name` (a guard keeps it
+  permanent, and it is a name the chat already saw) and reactions. A push
+  already on a device is out of the server's reach.
+- **Backup:** `/srv/letscube/backups/automated/20260928-232837`, `SHA256SUMS`
+  15 of 15, `pg_restore --list` 157 table-data entries; because this change
+  destroys data, the dump was also read back: `pg_restore --data-only --table
+  messages` yields 3,905 rows, the table's count at that moment. The cleared
+  words survive there until the 14-day prune.
+- **Rehearsal** (rolled back) on production, in a group made for it with two
+  real accounts: words, a photo with a preview, the same photo in a second
+  message, a message the admin reports, and one the older client deletes by a
+  direct UPDATE. Deleted for everyone: the words and the photo gone from their
+  rows, three paths queued for the photo, the admin's notification scrubbed
+  with no push left waiting; the direct UPDATE cleared the same way; the
+  reported message kept its words. The author's attempt to undelete and
+  rewrite came back deleted and empty. Dismissing the report finished that
+  deletion. As `service_role`, the claim handed out nothing of the shared
+  photo and marked its three paths kept; deleting the second message released
+  them, and finishing one as done and one with an error left them `done` and
+  backed off. `authenticated` was refused the claim. Production read
+  afterwards: no queue, no trigger, the same counts.
+- **Applied** as `postgres`: `UPDATE 297`, the self-check passed (no deleted
+  message outside an open report carries anything; no notification of one
+  carries words; triggers enabled; grants as above). Post-apply smoke the same
+  as the rehearsal, rolled back, passed. After: 297 deleted, 0 with content,
+  0 with media; 132 paths pending for the worker; 151 notifications marked
+  deleted.
+- **Rollback** removes the mechanism only; what was cleared stays cleared.
+- **Worker switch:** `MEDIA_PURGE_WORKER_ENABLED=0` stops it;
+  `MEDIA_PURGE_WORKER_TICK_MS` sets its pace (60 s). Its queue:
+  `select status, count(*) from private.message_media_purge group by 1;`.

@@ -6172,7 +6172,7 @@ message for both.
 unwired client; `tests/unit/deleted-messages.test.mts`; the rehearsal of
 `20260911143000`, under D-100.
 
-## D-103 `[ ]` A message deleted for everyone leaves its content, its media and its notification preview behind
+## D-103 `[x]` A message deleted for everyone leaves its content, its media and its notification preview behind
 
 **Severity:** low; recorded so that nobody assumes otherwise. Found with D-102.
 
@@ -6181,6 +6181,39 @@ through the API, as with the older group soft delete; its media stay in storage,
 since the deletion is reversible; a notification already written keeps its
 160-character preview in `public.notifications`, and a push already delivered stays
 on the device.
+
+**Fixed 2026-09-28**, on the owner's approval of the database proposals, where this
+was written down as his decision because it loses other people's messages.
+`20260928210000_deleted_message_keeps_nothing.sql`, applied through CLAUDE.md §10
+and recorded in `operations/2026-09-28-owner-approved-database-changes.md` §5.
+
+- The row loses what the message said: content, media references, media metadata,
+  a bot's keyboard and its placeholder; it is unpinned. A BEFORE UPDATE trigger
+  named to run after every other one does it for every path that sets
+  `deleted_at` — `delete_messages_for_everyone`, a bot's own deletion, and the
+  direct UPDATE `useMessages.deleteMessage` still makes — and it makes the
+  deletion final: nothing written afterwards stays, and `deleted_at` does not go
+  back to null. It was never reversible in the product; no function or screen
+  offered an undo.
+- The files go too. What the row pointed at is queued before it forgets it — the
+  file, and the preview named after it — and `mediaPurgeWorker` in the worker
+  removes them through the Storage API, which matters doubly because the `media`
+  bucket is public: a file anybody kept the URL of stayed downloadable. A file a
+  live message still shows is kept: a forward shares its source's file, and a
+  reused 720p rendition is the source file itself.
+- Notifications keep that a message came and lose its words; the bell reads
+  «Сообщение удалено». A push not yet sent is not sent. **Still open, and not
+  reachable from the server:** a push already on a device stays there.
+- A message under an open report keeps what it said until the report is closed,
+  so a deletion cannot remove what a moderator is about to read.
+- The 297 messages deleted before the change were cleared the same way, with
+  their 151 notifications; their content survives only in the automated backups,
+  pruned after 14 days.
+
+Evidence: the rollback-only rehearsal on production
+(`.migration-backup/supabase/rehearsal/20260928210000_deleted_message_keeps_nothing.test.sql`),
+`media-purge-worker.test.mjs`, `deleted-message-notification.test.mts` and
+`deleted-message-notification.spec` at 1440 and 390.
 
 ## D-104 `[x]` Every signed-in person can read every reaction, and add one to any message id
 
