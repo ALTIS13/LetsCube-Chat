@@ -20185,7 +20185,7 @@ first real proof will be a person being heard again on production.
 
 ---
 
-## D-266 `[ ]` Tapping a person in a call offers nothing on two of the three surfaces
+## D-266 `[x]` Tapping a person in a call offers nothing on two of the three surfaces
 
 **Reported by the owner, 2026-09-20:** «мало функционала при нажатии на
 пользователя», with Discord screenshots as the reference.
@@ -20291,7 +20291,30 @@ four entries in the order recorded above.
 
 ---
 
-## D-267 `[ ]` Deafen is global, in-call and in two places; a per-person mute has no entry
+### Fixed 2026-09-28
+
+The menu moved out of the rail into `components/chat/VoiceOccupantMenu.tsx` —
+state, header, volume band, actions, the menu and the sheet — and the three
+surfaces open that one: the rail's occupant rows as before, **the information
+panel's voice room** (`VoiceChannelRow`, whose rows are buttons now) and **the
+capsule's faces** (from `sm`, where the capsule draws them). One implementation,
+three doors, as D-283 settled for the contact card.
+
+It carries the four entries chosen above, in that order: **Громкость**,
+**Заглушить для себя** (D-267), **Профиль** — the full card over the shell, as
+the chat list's «Открыть профиль» opens it — and the moderation pair for the two
+roles that hold it. «Профиль» is for every known reader, so every row is a door
+now: `occupantMenuOffersSomething` takes it as a third reading, and the rail's
+«a plain member may act on nobody» test, which asserted a `div`, asserts a
+button with no room's items in its menu.
+
+Pinned by «a person in the room opens the same menu from the information panel
+and the capsule» (`voice-call.spec.ts`, 1440 and 390) and the rail's tests; making
+the panel's rows or the capsule's faces inert turns the first red. Photographed
+at 1440 and 390 in both themes.
+
+---
+## D-267 `[x]` Deafen is global, in-call and in two places; a per-person mute has no entry
 
 **Reported by the owner, 2026-09-20:** «нет возможности замьютить именно
 наушники».
@@ -20383,6 +20406,34 @@ of a control rather than of a word, the way the hold-to-talk button already
 switches between `w-8` and `px-2.5` — and that is a change to the bar, which is
 in flight for the voice-settings track. Filed, measured, and photographed:
 `output/shots/2026-09-20-chat-list-clamp/call-1440-02c-column-folded-66.png`.
+
+### Fixed 2026-09-28
+
+**The per-person local mute exists, on Discord's model rather than as a slider
+at zero.** Read in Discord's web bundle, build 621195: its media settings keep
+`localMutes` and `localVolumes` as two records, and a connection is told
+`setLocalVolume` and `setLocalMute` separately — so hearing somebody again brings
+back the loudness chosen for them, and moving the slider does not unmute them.
+Here the same two records live under two keys (`kub:voice-local-mute:v1` beside
+`kub:voice-volume:v1`); the room seeds both when it is built, and one rule,
+`appliedVoiceVolume`, decides what a person is played at from deafen, the local
+mute and the chosen volume together. The menu's entry is «Заглушить для себя» /
+«Включить для себя», offered where the volume is; the header says «Заглушён для
+вас» after a moderator's silence, which comes first as it does in Discord; and a
+row on all three surfaces draws its own mark — a speaker with a slash, beside the
+microphone with a slash and the circle with a slash, so colour is never alone.
+Nobody is told, as with a volume.
+
+**Deafen outside a call, and deafen at the folded list,** were item 40's: the
+account panel at the foot of the left region carries the microphone and the
+headphones at all times, spans the folder rail so it keeps both toggles at the
+narrowest list, and persists them between calls.
+
+Pinned by `voice-volume.test.mjs` (the records and the rule),
+`voice-room-seam.test.mjs` (held for somebody not yet in the room, never writing
+the volume) and the rail's «Заглушить для себя» test, which also proves the 25%
+chosen for the person survives the mute and its undoing. Removing the mark or
+muting through the volume turns it red.
 
 ---
 ## D-268 `[x]` The chat-list drag re-resolved every element's style on every frame

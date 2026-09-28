@@ -3,6 +3,8 @@
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { KubIcon } from "@/components/kub";
 import { VoiceSpeakingAvatar } from "./VoiceSpeakingAvatar";
+import { LocalMuteMark, useVoiceOccupantMenu, voiceOccupantOffer } from "./VoiceOccupantMenu";
+import { FOCUS_RING_INSET, PRESS_SINK } from "@/lib/controlSurface";
 import { cn } from "@/lib/utils";
 import {
   orderVoiceParticipants,
@@ -53,6 +55,10 @@ export interface VoiceChannelRowProps {
   /** Avatars by user id, from the member list this panel already loaded. */
   faces?: ReadonlyMap<string, string | null>;
   selfId: string | null;
+  /** This reader's role in the group, for the person menu's moderation half (D-266). */
+  role?: string | null;
+  /** Any member's role in the group, from the member list this panel already loaded. */
+  roleOf?: (userId: string) => string | null;
   /** True when the channel has no room left. The row still shows; the way in does not. */
   full: boolean;
   /** True when this client is in this channel. */
@@ -80,6 +86,8 @@ export function VoiceChannelRow({
   participants,
   faces,
   selfId,
+  role = null,
+  roleOf,
   full,
   inCall,
   elsewhere,
@@ -90,6 +98,9 @@ export function VoiceChannelRow({
   onLeave,
 }: VoiceChannelRowProps) {
   const ordered = orderVoiceParticipants(participants, selfId);
+  // D-266: the same person menu the rail opens. This room drew everybody in a
+  // group call and none of them could be pressed.
+  const occupantMenu = useVoiceOccupantMenu({ selfId, role, roleOf });
 
   return (
     <div
@@ -181,37 +192,79 @@ export function VoiceChannelRow({
 
       {ordered.length > 0 && (
         <div className="mt-2 space-y-1" data-testid="chat-info-voice-participants">
-          {ordered.map((participant) => (
-            <div
-              key={participant.userId}
-              className="flex items-center gap-3 rounded-xl px-2 py-1.5"
-              data-testid="chat-info-voice-participant"
-            >
-              <VoiceSpeakingAvatar userId={participant.userId} channelId={channel?.id ?? null}>
-                <UserAvatar
-                  size="sm"
-                  user={{
-                    id: participant.userId,
-                    full_name: participant.name,
-                    username: null,
-                    avatar_url: faces?.get(participant.userId) ?? null,
-                  }}
-                />
-              </VoiceSpeakingAvatar>
-              <span
-                className="min-w-0 flex-1 truncate text-sm text-[color:var(--kub-text)]"
-                data-testid="chat-info-voice-participant-name"
+          {ordered.map((participant) => {
+            const face = faces?.get(participant.userId) ?? null;
+            const person = { ...participant, face };
+            const offer = voiceOccupantOffer({ selfId, role, roleOf }, person);
+            const isSelf = participant.userId === selfId;
+            const body = (
+              <>
+                <VoiceSpeakingAvatar userId={participant.userId} channelId={channel?.id ?? null}>
+                  <UserAvatar
+                    size="sm"
+                    user={{
+                      id: participant.userId,
+                      full_name: participant.name,
+                      username: null,
+                      avatar_url: face,
+                    }}
+                  />
+                </VoiceSpeakingAvatar>
+                <span
+                  className="min-w-0 flex-1 truncate text-left text-sm text-[color:var(--kub-text)]"
+                  data-testid="chat-info-voice-participant-name"
+                >
+                  {isSelf ? `${participant.name} (вы)` : participant.name}
+                </span>
+                {!isSelf && <LocalMuteMark userId={participant.userId} size={15} />}
+                {participant.canSpeak === false ? (
+                  <KubIcon name="ban" size={15} tone="danger" label="Заглушён модератором" />
+                ) : (
+                  participant.muted && (
+                    <KubIcon name="microphoneSlash" size={15} tone="muted" label="Микрофон выключен" />
+                  )
+                )}
+              </>
+            );
+            const shared = {
+              "data-testid": "chat-info-voice-participant",
+              "data-user-id": participant.userId,
+              "data-moderatable": offer.moderatable ? "true" : "false",
+              "data-volume": offer.volume,
+            } as const;
+            if (!channel || !offer.offers) {
+              return (
+                <div key={participant.userId} className="flex items-center gap-3 rounded-xl px-2 py-1.5" {...shared}>
+                  {body}
+                </div>
+              );
+            }
+            const open = (event: { clientX: number; clientY: number; preventDefault: () => void }) => {
+              event.preventDefault();
+              occupantMenu.open(channel.id, person, { x: event.clientX, y: event.clientY });
+            };
+            return (
+              <button
+                key={participant.userId}
+                type="button"
+                onClick={open}
+                onContextMenu={open}
+                title={offer.moderatable ? "Профиль, громкость и управление участником" : offer.volume === "not_offered" ? "Профиль участника" : "Профиль и громкость участника"}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-xl px-2 py-1.5 transition-colors kub-raise-hover",
+                  FOCUS_RING_INSET,
+                  PRESS_SINK,
+                )}
+                {...shared}
               >
-                {participant.userId === selfId ? `${participant.name} (вы)` : participant.name}
-              </span>
-              {participant.muted && (
-                <KubIcon name="microphoneSlash" size={15} tone="muted" label="Микрофон выключен" />
-              )}
-            </div>
-          ))}
+                {body}
+              </button>
+            );
+          })}
         </div>
       )}
 
+      {occupantMenu.element}
     </div>
   );
 }

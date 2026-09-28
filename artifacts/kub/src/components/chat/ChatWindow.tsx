@@ -1958,6 +1958,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             participants={voiceParticipants}
             faces={voiceDirectory.faces}
             selfId={userId}
+            role={myRole}
+            roleOf={voiceRoleOf}
             view={voiceCapsule}
             onJoin={joinVoice}
             onLeave={leaveVoice}

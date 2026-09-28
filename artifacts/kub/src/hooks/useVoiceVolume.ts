@@ -4,9 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { currentVoiceRoom } from "@/hooks/useVoiceCall";
 import {
   chosenVoiceVolume,
+  localMutesAfter,
   normalizeVoiceVolume,
+  readStoredLocalMutes,
   readStoredVoiceVolumes,
   voiceVolumesAfter,
+  VOICE_LOCAL_MUTE_EVENT,
+  VOICE_LOCAL_MUTE_STORAGE_KEY,
   VOICE_VOLUME_EVENT,
   VOICE_VOLUME_STORAGE_KEY,
 } from "@/lib/voiceVolume";
@@ -135,4 +139,67 @@ export function useSetVoiceParticipantVolume(userId: string | null): (volume: nu
     },
     [userId],
   );
+}
+
+/** Everybody this listener has silenced for themselves. Empty where storage is unreadable. */
+export function getVoiceLocalMutes(): ReadonlySet<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    return readStoredLocalMutes(window.localStorage.getItem(VOICE_LOCAL_MUTE_STORAGE_KEY));
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Silence one person for this listener alone, or hear them again (D-267).
+ *
+ * Stored and pushed, in that order, as a volume is and for the same reasons.
+ * Nobody is told: like a volume, it is this listener's own ears and not a
+ * statement about the room. The method is called only where the room has it,
+ * because the stand-in rooms of the browser specs predate it.
+ */
+export function setVoiceParticipantLocalMute(userId: string, muted: boolean): void {
+  if (typeof window !== "undefined") {
+    try {
+      const list = localMutesAfter(window.localStorage.getItem(VOICE_LOCAL_MUTE_STORAGE_KEY), userId, muted);
+      if (list.length) window.localStorage.setItem(VOICE_LOCAL_MUTE_STORAGE_KEY, JSON.stringify(list));
+      else window.localStorage.removeItem(VOICE_LOCAL_MUTE_STORAGE_KEY);
+    } catch {
+      // The choice holds for this call and is lost with it.
+    }
+    window.dispatchEvent(
+      new CustomEvent<{ userId: string; muted: boolean }>(VOICE_LOCAL_MUTE_EVENT, { detail: { userId, muted } }),
+    );
+  }
+  currentVoiceRoom()
+    ?.setParticipantLocalMute?.(userId, muted)
+    .catch(() => {});
+}
+
+/** Whether this listener has silenced one person, kept in step with every other surface and tab. */
+export function useVoiceParticipantLocalMute(userId: string | null): boolean {
+  const [muted, setMuted] = useState<boolean>(() => Boolean(userId && getVoiceLocalMutes().has(userId)));
+
+  useEffect(() => {
+    setMuted(Boolean(userId && getVoiceLocalMutes().has(userId)));
+    if (!userId) return;
+    const onLocalChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId?: string; muted?: boolean }>).detail;
+      if (!detail || detail.userId !== userId) return;
+      setMuted(detail.muted === true);
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== VOICE_LOCAL_MUTE_STORAGE_KEY) return;
+      setMuted(getVoiceLocalMutes().has(userId));
+    };
+    window.addEventListener(VOICE_LOCAL_MUTE_EVENT, onLocalChange);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(VOICE_LOCAL_MUTE_EVENT, onLocalChange);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [userId]);
+
+  return muted;
 }

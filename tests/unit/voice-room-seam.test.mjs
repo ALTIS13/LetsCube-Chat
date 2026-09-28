@@ -115,11 +115,13 @@ test("the two controls meet in one function, so undeafening restores what was ch
   // volume existed. It looks harmless and it silently undoes every per-person
   // choice in the room on the second press of a control that is supposed to be
   // about nothing but this listener's own ears.
+  // Since D-267 a third reading meets them there — this listener's local mute —
+  // and the rule is `appliedVoiceVolume`, which `voice-volume.test.mjs` runs.
   assert.match(
     code,
-    /deafened \? 0 : chosen\.get\(userId\) \?\? DEFAULT_VOICE_VOLUME;/,
-    "the deafen state and the chosen volume are no longer decided together, so one " +
-      "of them is overwriting the other",
+    /appliedVoiceVolume\(\{\s*deafened,\s*locallyMuted: locallyMuted\.has\(userId\),\s*chosen: chosen\.get\(userId\) \?\? DEFAULT_VOICE_VOLUME,\s*\}\)/,
+    "the deafen state, the local mute and the chosen volume are no longer decided " +
+      "together, so one of them is overwriting another",
   );
   assert.ok(
     !code.includes("setVolume(deafened ? 0 : 1)"),
@@ -155,6 +157,27 @@ test("a volume chosen for somebody who is not here yet is kept", () => {
     body.includes("normalizeVoiceVolume(volume)"),
     "the value reaches the element unclamped, and above 1 `HTMLMediaElement.volume` " +
       "throws rather than getting louder",
+  );
+});
+
+test("a local mute is held for somebody not here yet, and never writes their volume", () => {
+  // D-267, on Discord's model: `localMutes` beside `localVolumes`. A version that
+  // muted by writing a zero into the chosen volumes would bring everybody back
+  // at 100% on the way out, which is the defect the separation exists to avoid.
+  const start = code.indexOf("async setParticipantLocalMute(");
+  assert.ok(start > 0, "the seam no longer carries the local mute");
+  const end = code.indexOf("async setMuted(", start);
+  assert.ok(end > start, "setMuted no longer follows setParticipantLocalMute — check this slice");
+  const body = code.slice(start, end);
+  const held = body.indexOf("locallyMuted.add(userId)");
+  const pushed = body.indexOf("remote.setVolume(volumeFor(userId))");
+  assert.ok(held >= 0, "the local mute is no longer held, so it is lost on the next event");
+  assert.ok(pushed > held, "the local mute is pushed before it is held, or not pushed at all");
+  assert.ok(!body.includes("chosen.set("), "a local mute writes the chosen volume");
+  assert.ok(!body.includes("chosen.delete("), "a local mute erases the chosen volume");
+  assert.ok(
+    code.includes("readStoredLocalMutes(readStoredLocalMuteRecord())"),
+    "the local mutes are no longer seeded where the room is built",
   );
 });
 

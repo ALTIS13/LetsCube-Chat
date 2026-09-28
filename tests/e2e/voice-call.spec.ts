@@ -838,6 +838,9 @@ async function open(page: Page, seed: Seed = {}) {
   const data = rows(seed);
   await openFixture(page, {
     me: ME,
+    // So a profile opened on one of them is theirs: without it the fixture's
+    // one-person read answers with the signed-in account (D-266's «Профиль»).
+    people: [ANNA, PETR],
     chats: data.chats,
     memberships: data.memberships,
     messages: data.messages,
@@ -1088,6 +1091,37 @@ test("a member of the group is offered the channel, its people and the way in", 
   await expect(page.getByTestId("voice-capsule-title")).toHaveText("Общий голос");
   await expect(detail(page)).toHaveText("2 из 10");
   await expect(action(page)).toHaveText("Присоединиться");
+});
+
+test("a person in the room opens the same menu from the information panel and the capsule", async ({
+  page,
+}, testInfo) => {
+  // D-266: a participant is drawn in three places and only the rail was a door.
+  // The information panel's voice room and the capsule's faces open the menu
+  // the rail opens — the person first, and their volume where it can reach.
+  await open(page, { channel: { participantCount: 2 }, present: [ANNA.id, PETR.id] });
+  const menuItem = (label: string) => page.getByRole("menuitem").filter({ hasText: label });
+
+  await openInfo(page);
+  const anna = page.locator('[data-testid="chat-info-voice-participant"]').filter({ hasText: "Анна Смирнова" });
+  expect(await anna.evaluate((node) => node.tagName.toLowerCase())).toBe("button");
+  await anna.click();
+  await expect(menuItem("Профиль")).toBeVisible();
+  await menuItem("Профиль").click();
+  // The whole card over the shell, as the chat list's «Открыть профиль» opens it.
+  await expect(page.getByTestId("user-profile-overlay")).toBeVisible();
+  await expect(page.getByTestId("user-profile-overlay")).toContainText("Анна Смирнова");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("user-profile-overlay")).toHaveCount(0);
+
+  // The capsule draws its faces from `sm` up; below it there is no face to press.
+  if ((page.viewportSize()?.width ?? 0) < 640) return;
+  if (await page.getByTestId("chat-info-panel").isVisible()) await page.keyboard.press("Escape");
+  const face = page.locator(`[data-testid="voice-capsule-face"][data-user-id="${PETR.id}"]`);
+  await expect(face).toBeVisible();
+  await face.click();
+  await expect(menuItem("Профиль")).toBeVisible();
+  testInfo.annotations.push({ type: "capsule", description: "face opened the person menu" });
 });
 
 test("an onlooker who is not in the group is offered nothing", async ({ page }) => {

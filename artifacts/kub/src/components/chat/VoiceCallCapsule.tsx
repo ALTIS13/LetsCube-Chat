@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { TinyUserAvatar } from "./MessageReactions";
 import { VoiceSpeakingAvatar } from "./VoiceSpeakingAvatar";
+import { useVoiceOccupantMenu, voiceOccupantOffer } from "./VoiceOccupantMenu";
 import { VoiceConnectionPanel } from "./VoiceConnectionPanel";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
 import {
@@ -62,6 +63,10 @@ export interface VoiceCallCapsuleProps {
   /** Avatars by user id, from the chat's own member list. Absent is a monogram. */
   faces?: ReadonlyMap<string, string | null>;
   selfId: string | null;
+  /** This reader's role in the group, for the person menu's moderation half (D-266). */
+  role?: string | null;
+  /** Any member's role in the group. */
+  roleOf?: (userId: string) => string | null;
   view: VoiceCapsuleView;
   onJoin: () => void;
   onLeave: () => void;
@@ -112,6 +117,8 @@ export function VoiceCallCapsule({
   participants,
   faces,
   selfId,
+  role = null,
+  roleOf,
   view,
   onJoin,
   onLeave,
@@ -127,6 +134,9 @@ export function VoiceCallCapsule({
   // whose channel list arrives after mount goes hidden to visible in place,
   // which is the ordinary case rather than an edge one.
   const [healthOpen, setHealthOpen] = useState(false);
+  // D-266: a face in the capsule opens the person, as the rail's rows do.
+  // Above the early return with the rest.
+  const occupantMenu = useVoiceOccupantMenu({ selfId, role, roleOf });
   // Above the early return with it, and scoped to this chat's channel so a
   // capsule drawing some other room cannot say this person was silenced in it.
   const speechRevoked = useVoiceSpeechRevoked(channel?.id ?? null);
@@ -367,23 +377,45 @@ export function VoiceCallCapsule({
              the same way, rings and spacing included, and `TinyUserAvatar`
              exists because of exactly this. */
           <div className="hidden shrink-0 items-center -space-x-1 sm:flex" data-testid="voice-capsule-faces">
-            {shown.map((participant) => (
-              <VoiceSpeakingAvatar
-                key={participant.userId}
-                userId={participant.userId}
-                channelId={channel.id}
-              >
-                <TinyUserAvatar
-                  ringed
-                  user={{
-                    id: participant.userId,
-                    full_name: participant.name,
-                    username: null,
-                    avatar_url: faces?.get(participant.userId) ?? null,
-                  }}
-                />
-              </VoiceSpeakingAvatar>
-            ))}
+            {shown.map((participant) => {
+              const face = faces?.get(participant.userId) ?? null;
+              const person = { ...participant, face };
+              const avatar = (
+                <VoiceSpeakingAvatar userId={participant.userId} channelId={channel.id}>
+                  <TinyUserAvatar
+                    ringed
+                    user={{
+                      id: participant.userId,
+                      full_name: participant.name,
+                      username: null,
+                      avatar_url: face,
+                    }}
+                  />
+                </VoiceSpeakingAvatar>
+              );
+              if (!voiceOccupantOffer({ selfId, role, roleOf }, person).offers) {
+                return <span key={participant.userId} className="inline-flex">{avatar}</span>;
+              }
+              const open = (event: { clientX: number; clientY: number; preventDefault: () => void }) => {
+                event.preventDefault();
+                occupantMenu.open(channel.id, person, { x: event.clientX, y: event.clientY });
+              };
+              return (
+                <button
+                  key={participant.userId}
+                  type="button"
+                  onClick={open}
+                  onContextMenu={open}
+                  aria-label={participant.userId === selfId ? `${participant.name} (вы)` : participant.name}
+                  title={participant.name}
+                  className="inline-flex rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+                  data-testid="voice-capsule-face"
+                  data-user-id={participant.userId}
+                >
+                  {avatar}
+                </button>
+              );
+            })}
             {rest > 0 && (
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-[color:var(--kub-surface)] bg-[var(--kub-inset)] text-[10px] font-semibold text-[color:var(--kub-muted)]">
                 +{rest}
@@ -604,6 +636,9 @@ export function VoiceCallCapsule({
           </div>
         </div>
       )}
+      {/* Portalled to the body, so the capsule's glass does not become its
+          containing block. */}
+      {occupantMenu.element}
     </div>
   );
 }

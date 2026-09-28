@@ -298,6 +298,64 @@ export function voiceVolumeNotice(offer: VoiceVolumeOffer, deafened: boolean): s
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Silenced for this listener alone (D-267)
+// ---------------------------------------------------------------------------
+
+/**
+ * Who this listener has silenced for themselves, apart from how loud they are.
+ *
+ * Read in Discord's web bundle, build 621195: its media settings hold
+ * `localMutes` and `localVolumes` as two records, and a connection is told
+ * `setLocalVolume(user, volume)` and `setLocalMute(user, muted)` separately.
+ * So unmuting brings back the loudness that was chosen rather than 100%, and
+ * moving the slider does not unmute — the two are one person's two settings,
+ * not one setting with a zero in it. The same two records here, in two keys.
+ */
+export const VOICE_LOCAL_MUTE_STORAGE_KEY = "kub:voice-local-mute:v1";
+/** What `hooks/useVoiceVolume.ts` dispatches so every open menu agrees. */
+export const VOICE_LOCAL_MUTE_EVENT = "kub:voice-local-mute-change";
+
+/** The people silenced, from the stored list. Anything that is not a list of ids reads as nobody. */
+export function readStoredLocalMutes(raw: string | null | undefined): Set<string> {
+  const muted = new Set<string>();
+  if (!raw) return muted;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return muted;
+    for (const id of parsed) if (typeof id === "string" && id.trim()) muted.add(id);
+  } catch {
+    // Half of something. Nobody is silenced rather than somebody by accident.
+  }
+  return muted;
+}
+
+/** The list to store after one person is silenced or heard again. */
+export function localMutesAfter(raw: string | null | undefined, userId: string, muted: boolean): string[] {
+  const next = readStoredLocalMutes(raw);
+  if (muted) next.add(userId);
+  else next.delete(userId);
+  return [...next];
+}
+
+/**
+ * What one person is played at right now: nothing while this listener is
+ * deafened or has silenced them, and otherwise the loudness chosen for them.
+ */
+export function appliedVoiceVolume(input: {
+  readonly deafened: boolean;
+  readonly locallyMuted: boolean;
+  readonly chosen: number;
+}): number {
+  if (input.deafened || input.locallyMuted) return 0;
+  return normalizeVoiceVolume(input.chosen);
+}
+
+/** The entry's words, which say what the press will do. */
+export function voiceLocalMuteLabel(muted: boolean): string {
+  return muted ? "Включить для себя" : "Заглушить для себя";
+}
+
 /**
  * Whether pressing this occupant's row opens anything at all.
  *
@@ -307,10 +365,15 @@ export function voiceVolumeNotice(offer: VoiceVolumeOffer, deafened: boolean): s
  * the row and once on the menu. `unreachable` counts as something: the surface
  * then carries the sentence that explains it, and a reader who can see why is
  * better off than one whose row simply does not respond.
+ *
+ * Since D-266 the menu also opens the person's profile, which is offered to any
+ * known reader — so for them every row is a door, and the other two readings
+ * decide only what is behind it.
  */
 export function occupantMenuOffersSomething(
   volume: VoiceVolumeOffer,
   moderationActionCount: number,
+  profileOffered = false,
 ): boolean {
-  return volume !== "not_offered" || moderationActionCount > 0;
+  return profileOffered || volume !== "not_offered" || moderationActionCount > 0;
 }

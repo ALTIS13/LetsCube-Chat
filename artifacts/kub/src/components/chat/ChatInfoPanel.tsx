@@ -2565,6 +2565,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
                 participants={voice.participants}
                 faces={voice.faces}
                 selfId={currentUserId}
+                role={myRole}
+                roleOf={(userId) => members.find((member) => member.id === userId)?.chat_role ?? null}
                 full={voiceOffer.full}
                 inCall={voice.inCall}
                 elsewhere={voice.elsewhere}

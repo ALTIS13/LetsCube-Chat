@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  appliedVoiceVolume,
   chosenVoiceVolume,
+  localMutesAfter,
   normalizeVoiceVolume,
+  readStoredLocalMutes,
+  voiceLocalMuteLabel,
   occupantMenuOffersSomething,
   readStoredVoiceVolumes,
   voiceVolumeLabel,
@@ -231,4 +235,36 @@ test("a volume alone is worth opening the menu for; nothing at all is not", () =
   assert.equal(occupantMenuOffersSomething("not_offered", 0), false);
   // A moderator outside the room still has their three items.
   assert.equal(occupantMenuOffersSomething("not_offered", 3), true);
+});
+
+// ── Silenced for this listener alone (D-267) ────────────────────────────────
+
+test("a local mute is its own record: a list of ids, and anything else is nobody", () => {
+  assert.deepEqual([...readStoredLocalMutes(JSON.stringify([ANNA, PETR]))], [ANNA, PETR]);
+  assert.equal(readStoredLocalMutes(null).size, 0);
+  assert.equal(readStoredLocalMutes("").size, 0);
+  assert.equal(readStoredLocalMutes("{").size, 0, "half of something silences nobody");
+  assert.equal(readStoredLocalMutes(JSON.stringify({ [ANNA]: true })).size, 0, "an object is not the list");
+  assert.deepEqual([...readStoredLocalMutes(JSON.stringify([ANNA, 7, "", " ", null]))], [ANNA]);
+});
+
+test("silencing and hearing again change one person and nobody else", () => {
+  const stored = JSON.stringify([PETR]);
+  assert.deepEqual(localMutesAfter(stored, ANNA, true).sort(), [ANNA, PETR].sort());
+  assert.deepEqual(localMutesAfter(stored, PETR, false), []);
+  assert.deepEqual(localMutesAfter(stored, ANNA, false), [PETR]);
+  assert.deepEqual(localMutesAfter(null, ANNA, true), [ANNA]);
+});
+
+test("a silenced person plays at nothing, and hearing them again brings back what was chosen, not 100%", () => {
+  // Discord keeps `localMutes` beside `localVolumes` for exactly this.
+  assert.equal(appliedVoiceVolume({ deafened: false, locallyMuted: true, chosen: 0.4 }), 0);
+  assert.equal(appliedVoiceVolume({ deafened: false, locallyMuted: false, chosen: 0.4 }), 0.4);
+  assert.equal(appliedVoiceVolume({ deafened: true, locallyMuted: false, chosen: 0.4 }), 0);
+  assert.equal(appliedVoiceVolume({ deafened: false, locallyMuted: false, chosen: 5 }), 1);
+});
+
+test("the entry says what the press will do", () => {
+  assert.equal(voiceLocalMuteLabel(false), "Заглушить для себя");
+  assert.equal(voiceLocalMuteLabel(true), "Включить для себя");
 });

@@ -3175,6 +3175,26 @@ Where ours differs, with the reason:
   dragged down to 66 points, which would leave room for the face alone;
   across the rail the narrowest panel keeps the face and both toggles.
 
+### 21.3 One other person, for this listener alone (D-267)
+
+Same bundle, same file (`web.d793fc00a2d44795.js`). SHIPPED. The media
+settings hold **`localMutes: {}` and `localVolumes: {}` as two records** per
+context, the RPC settings read reports them as `local_mutes` and
+`local_volumes`, and the audio-context sync writes each person as
+`{muted, volume, modifiedAt, soundboardMuted}` and then calls
+**`setLocalVolume(user, volume)` and `setLocalMute(user, muted)`** on every
+connection — two calls, not one volume with a zero in it. So a local mute and a
+local volume are one person's two settings: hearing them again restores the
+loudness that was chosen.
+
+Ours, built the same day: two keys beside each other, `kub:voice-volume:v1` and
+`kub:voice-local-mute:v1`; the room seeds both, and `appliedVoiceVolume` decides
+what a person is played at from deafen, the local mute and the chosen volume
+together. The entry is «Заглушить для себя» in the person menu that D-266 put on
+all three surfaces; the label COMMUNITY sources give Discord's is «Mute», and
+ours says «для себя» because the same menu carries a moderator's «Заглушить в
+канале», which Discord separates with its «Server» prefix instead.
+
 ## 22. Subject 14 — an attachment on its way, 2026-09-28
 
 D-314's second half. A tester, 2026-09-27: a file sent to upload showed

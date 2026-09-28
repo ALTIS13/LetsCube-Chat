@@ -6,9 +6,12 @@ import type { VoiceTransportFacts } from "@/lib/voiceConnectionReport";
 import type { VoiceTransportStage } from "@/lib/voiceJoinProgress";
 import { createVoiceAudioSink, VOICE_AUDIO_ELEMENT_MARK } from "@/lib/voiceAudioSink";
 import {
+  appliedVoiceVolume,
   DEFAULT_VOICE_VOLUME,
   normalizeVoiceVolume,
+  readStoredLocalMutes,
   readStoredVoiceVolumes,
+  VOICE_LOCAL_MUTE_STORAGE_KEY,
   VOICE_VOLUME_STORAGE_KEY,
   type VoiceAudioSource,
 } from "@/lib/voiceVolume";
@@ -122,6 +125,12 @@ export interface VoiceRoom {
    * interface knows before it draws the slider rather than after a press.
    */
   setParticipantVolume(userId: string, volume: number): Promise<void>;
+  /**
+   * Silence one person for this listener, or hear them again, without touching
+   * the loudness chosen for them (D-267). Remembered for somebody not in the
+   * room yet, as a volume is.
+   */
+  setParticipantLocalMute(userId: string, muted: boolean): Promise<void>;
   /** Leave. Must be safe to call twice and after a failed join. */
   leave(): Promise<void>;
   /**
@@ -320,6 +329,15 @@ function readStoredVolumeRecord(): string | null {
   }
 }
 
+function readStoredLocalMuteRecord(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(VOICE_LOCAL_MUTE_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 /** The runtime, fetched once per join. The browser caches the chunk after the first. */
 export async function loadVoiceRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
   if (import.meta.env.DEV && typeof window !== "undefined" && window.__letscubeVoiceRoom) {
@@ -399,6 +417,8 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
    * makes one guarded browser call.
    */
   const chosen = readStoredVoiceVolumes(readStoredVolumeRecord());
+  /** Who this listener has silenced for themselves, seeded the same way (D-267). */
+  const locallyMuted = readStoredLocalMutes(readStoredLocalMuteRecord());
 
   /**
    * What one participant's volume should be right now.
@@ -410,7 +430,11 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
    * of a control that is supposed to be about this listener's own ears.
    */
   const volumeFor = (userId: string): number =>
-    deafened ? 0 : chosen.get(userId) ?? DEFAULT_VOICE_VOLUME;
+    appliedVoiceVolume({
+      deafened,
+      locallyMuted: locallyMuted.has(userId),
+      chosen: chosen.get(userId) ?? DEFAULT_VOICE_VOLUME,
+    });
 
   const applyVolumes = () => {
     for (const remote of room.remoteParticipants.values()) {
@@ -768,6 +792,13 @@ async function createLiveKitRoom(events: VoiceRoomEvents): Promise<VoiceRoom> {
       // `volumeFor` rather than `next`, so choosing a loudness while deafened
       // does not make one person audible: what was chosen is remembered and
       // takes effect when the room is being listened to again.
+      if (remote) remote.setVolume(volumeFor(userId));
+    },
+    async setParticipantLocalMute(userId, muted) {
+      // Held first and applied second, as the volume above is.
+      if (muted) locallyMuted.add(userId);
+      else locallyMuted.delete(userId);
+      const remote = room.remoteParticipants.get(userId);
       if (remote) remote.setVolume(volumeFor(userId));
     },
     async setMuted(muted) {

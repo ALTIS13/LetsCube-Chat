@@ -158,11 +158,14 @@ interface Shape {
 
 /** The key `lib/voiceVolume.ts` stores the per-person volumes under. */
 const VOICE_VOLUME_KEY = "kub:voice-volume:v1";
+const VOICE_LOCAL_MUTE_KEY = "kub:voice-local-mute:v1";
 
 declare global {
   interface Window {
     /** Every per-person volume the rail asked the transport for, in order. */
     __railVolumeProbe?: { userId: string; volume: number }[];
+    /** Every «Заглушить для себя» the rail asked the transport for, in order (D-267). */
+    __railLocalMuteProbe?: { userId: string; muted: boolean }[];
   }
 }
 
@@ -282,6 +285,8 @@ async function installLobbyTransport(page: Page, silenced: string[], oldBuild: s
     ({ me, anna, petr, hushed, old }) => {
       const volumes: { userId: string; volume: number }[] = [];
       window.__railVolumeProbe = volumes;
+      const localMutes: { userId: string; muted: boolean }[] = [];
+      window.__railLocalMuteProbe = localMutes;
       const roster = () =>
         [
           { userId: me, name: "", muted: false },
@@ -323,6 +328,9 @@ async function installLobbyTransport(page: Page, silenced: string[], oldBuild: s
           // `createLiveKitRoom`, where `tests/unit/voice-room-seam.test.mjs`
           // reads it.
           volumes.push({ userId, volume });
+        },
+        async setParticipantLocalMute(userId: string, muted: boolean) {
+          localMutes.push({ userId, muted });
         },
         async setOutputDevice() {
           return true;
@@ -989,18 +997,24 @@ test.describe("moderating somebody in a voice room", () => {
     await expect(occupant(page, ANNA.id)).toHaveAttribute("data-moderatable", "true");
   });
 
-  test("a plain member may act on nobody", async ({ page }, testInfo) => {
+  test("a plain member may act on nobody, and still opens the person", async ({ page }, testInfo) => {
     const wide = paneIsWide(testInfo);
-    // And a row that offers nothing is not a button at all — no hover, no
-    // cursor, no focus stop. Asserted on the tag rather than on the attribute,
-    // because the attribute is what the component claims and the tag is what
-    // the browser gives a person.
+    // D-266. This row used to be no button at all, because a plain member had
+    // nothing to do with it. The menu now opens the person — «Профиль», which
+    // is for every reader — so every row is a door, and what a plain member's
+    // menu lacks is the room's own items. Asserted on the tag, because the tag
+    // is what the browser gives a person.
     await openGroup(page, { role: "member" });
     await showRail(page, wide);
     await expect(occupant(page, ANNA.id)).toHaveAttribute("data-moderatable", "false");
     expect(
       await occupant(page, ANNA.id).evaluate((node) => node.tagName.toLowerCase()),
-    ).toBe("div");
+    ).toBe("button");
+    await occupant(page, ANNA.id).click();
+    await expect(menuItem(page, "Профиль")).toBeVisible();
+    for (const label of ["Заглушить в канале", "Разрешить говорить", "Отключить от канала"]) {
+      await expect(menuItem(page, label)).toHaveCount(0);
+    }
   });
 
   test("a silence names the channel, the person and the direction, in the gateway's own field names", async ({
@@ -1182,8 +1196,8 @@ test.describe("moderating somebody in a voice room", () => {
     const wide = paneIsWide(testInfo);
     const opened = await openGroup(page, {
       // A plain member: this is the case that separates the volume from
-      // moderation. Outside the room their rows are inert, and the test above
-      // proves that by finding a `div`.
+      // moderation. Outside the room their rows open only the person, and the
+      // test above proves that by finding no room's items in the menu.
       role: "member",
       inLobby: {},
       // Pyotr was turned down in some earlier call. A listener's choice is
@@ -1205,9 +1219,14 @@ test.describe("moderating somebody in a voice room", () => {
 
     await closeRowMenu(page);
     await occupant(page, ANNA.id).click();
-    // A member's menu has the band and no items at all — the three moderation
-    // ones are not offered to them, and the band is not one of them.
-    await expect(page.getByRole("menuitem")).toHaveCount(0);
+    // A member's menu has the band and none of the room's items — the three
+    // moderation ones are not offered to them. What it does carry is this
+    // listener's own (D-267) and the person (D-266).
+    for (const label of ["Заглушить в канале", "Разрешить говорить", "Отключить от канала"]) {
+      await expect(menuItem(page, label)).toHaveCount(0);
+    }
+    await expect(menuItem(page, "Заглушить для себя")).toBeVisible();
+    await expect(menuItem(page, "Профиль")).toBeVisible();
     await expect(slider(page)).toHaveValue("1");
     await slider(page).fill("0.4");
     await expect(page.getByTestId("occupant-volume-value")).toHaveText("40%");
@@ -1233,6 +1252,48 @@ test.describe("moderating somebody in a voice room", () => {
     // a listener reaches for the slider to do.
     await slider(page).fill("0");
     await expect(page.getByTestId("occupant-volume-value")).toHaveText("Выключен");
+  });
+
+  test("«Заглушить для себя» silences one person for this listener, keeps their volume, and marks their row", async ({
+    page,
+  }, testInfo) => {
+    // D-267, on Discord's model: its media settings keep `localMutes` beside
+    // `localVolumes`, so hearing somebody again brings back the loudness that
+    // was chosen for them rather than 100%.
+    const wide = paneIsWide(testInfo);
+    const opened = await openGroup(page, { role: "member", inLobby: {}, volumes: { [PETR.id]: 0.25 } });
+    await showRail(page, wide);
+    await joinLobby(page, wide);
+
+    await occupant(page, PETR.id).click();
+    await menuItem(page, "Заглушить для себя").click();
+    await expect
+      .poll(() => page.evaluate(() => window.__railLocalMuteProbe?.at(-1)))
+      .toEqual({ userId: PETR.id, muted: true });
+    expect(
+      await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null"), VOICE_LOCAL_MUTE_KEY),
+    ).toEqual([PETR.id]);
+    // The row says so, with its own mark, and nobody else's does.
+    await expect(occupant(page, PETR.id).getByTestId("voice-local-mute-mark")).toBeVisible();
+    await expect(occupant(page, ANNA.id).getByTestId("voice-local-mute-mark")).toHaveCount(0);
+
+    // The volume is untouched: the two are one person's two settings.
+    await occupant(page, PETR.id).click();
+    await expect(page.getByTestId("occupant-volume-value")).toHaveText("25%");
+    await menuItem(page, "Включить для себя").click();
+    await expect
+      .poll(() => page.evaluate(() => window.__railLocalMuteProbe?.at(-1)))
+      .toEqual({ userId: PETR.id, muted: false });
+    expect(await page.evaluate((key) => localStorage.getItem(key), VOICE_LOCAL_MUTE_KEY)).toBeNull();
+    await expect(occupant(page, PETR.id).getByTestId("voice-local-mute-mark")).toHaveCount(0);
+    // And neither press went through the volume: no loudness was asked of the
+    // transport for him at all, so the 25% was never overwritten by a zero.
+    expect(
+      await page.evaluate((petr) => (window.__railVolumeProbe ?? []).filter((entry) => entry.userId === petr), PETR.id),
+    ).toEqual([]);
+
+    // This listener's own ears, like a volume: nobody was told.
+    expect(opened.moderationCalls).toEqual([]);
   });
 
   test("a participant this cannot work for is told, not handed a slider that moves nothing", async ({
