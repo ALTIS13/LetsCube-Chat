@@ -28,9 +28,20 @@ interface SidebarHeaderProps {
   searchTucked?: boolean;
   /** Bring it back, from the magnifier this header shows in its place. */
   onUntuckSearch?: () => void;
+  /** The field took or lost the focus: an empty focused field offers where to go (item 36, c). */
+  onSearchFocusChange?: (focused: boolean) => void;
+  /** The arrows and Enter, while that offer stands; true when it took the key. */
+  onQuickSwitchKey?: (key: "ArrowDown" | "ArrowUp" | "Enter") => boolean;
 }
 
-export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSearch }: SidebarHeaderProps) {
+export function SidebarHeader({
+  onNewChat,
+  onRefetch,
+  searchTucked,
+  onUntuckSearch,
+  onSearchFocusChange,
+  onQuickSwitchKey,
+}: SidebarHeaderProps) {
   const searchQuery = useAppStore((s) => s.searchQuery);
   const setSearchQuery = useAppStore((s) => s.setSearchQuery);
   const currentUser = useAppStore((s) => s.currentUser);
@@ -347,12 +358,29 @@ export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSear
             aria-label="Поиск людей, чатов, сообщений или +номера"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => setIsSearchFocused(true)}
-            onBlur={() => !searchQuery && setIsSearchFocused(false)}
+            onFocus={() => {
+              setIsSearchFocused(true);
+              onSearchFocusChange?.(true);
+            }}
+            onBlur={() => {
+              if (!searchQuery) setIsSearchFocused(false);
+              onSearchFocusChange?.(false);
+            }}
             onKeyDown={(event) => {
+              if (
+                !searchQuery &&
+                (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Enter") &&
+                onQuickSwitchKey?.(event.key)
+              ) {
+                event.preventDefault();
+                return;
+              }
               if (event.key === "Escape" && searchQuery) {
                 event.preventDefault();
                 setSearchQuery("");
+              } else if (event.key === "Escape") {
+                // Nothing typed: Escape leaves the field, and the offer with it.
+                event.currentTarget.blur();
               }
             }}
             className="h-full min-w-0 flex-1 truncate bg-transparent text-sm outline-none text-[color:var(--kub-text)]"

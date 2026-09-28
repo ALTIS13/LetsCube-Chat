@@ -32,6 +32,9 @@ import { LIST_MAY_BE_STALE } from "@/lib/plainMessages";
 import { ChatKindFilterBar } from "./ChatKindFilterBar";
 import { ShellSectionRows } from "./ShellSectionRows";
 import { ConnectionStatus } from "./ConnectionStatus";
+import { QuickSwitchList } from "./QuickSwitchList";
+import { quickSwitchOrder, quickSwitchSections } from "@/lib/quickSwitch";
+import { hasComposerDraft, readRecentChats, rememberRecentChat } from "@/lib/recentChats";
 import { chatAddressPath } from "@/lib/chatRoute";
 import { shellSection, shellSectionPath } from "@/lib/shellSection";
 import { useTaskAccessGate } from "@/hooks/useTaskAccess";
@@ -148,6 +151,47 @@ export function Sidebar() {
   // gone; `FolderTabs` below chooses, creates and edits.
 
   const hasSearchQuery = searchQuery.trim().length > 0;
+
+  // Item 36, c: an empty focused search offers where to go — where the reader
+  // was, drafts, unread — as Discord's quick switcher does
+  // (`lib/quickSwitch.ts`). The history is kept per account on this device.
+  useEffect(() => {
+    if (selectedChatId) rememberRecentChat(userId, selectedChatId);
+  }, [userId, selectedChatId]);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const mutedChatIdList = useAppStore((s) => s.mutedChatIds);
+  const mutedChatIdSet = useMemo(() => new Set(mutedChatIdList), [mutedChatIdList]);
+  const quickSections = useMemo(() => {
+    if (!searchFocused || hasSearchQuery || !userId) return [];
+    return quickSwitchSections({
+      recent: readRecentChats(userId),
+      currentChatId: section ? null : selectedChatId,
+      chats: chats.map((chat) => ({ id: chat.id, unread: chat.unread_count ?? 0, muted: mutedChatIdSet.has(chat.id) })),
+      draftChatIds: new Set(chats.filter((chat) => hasComposerDraft(chat.id)).map((chat) => chat.id)),
+    });
+  }, [searchFocused, hasSearchQuery, userId, chats, selectedChatId, section, mutedChatIdSet]);
+  const quickOrder = useMemo(() => quickSwitchOrder(quickSections), [quickSections]);
+  const chatsById = useMemo(() => new Map(chats.map((chat) => [chat.id, chat])), [chats]);
+  const [quickActive, setQuickActive] = useState(0);
+  useEffect(() => {
+    setQuickActive(0);
+  }, [searchFocused]);
+  const openQuick = (chatId: string) => {
+    selectChat(chatId);
+    setSearchFocused(false);
+    (document.activeElement as HTMLElement | null)?.blur?.();
+  };
+  const onQuickSwitchKey = (key: "ArrowDown" | "ArrowUp" | "Enter"): boolean => {
+    if (!quickOrder.length) return false;
+    if (key === "Enter") {
+      openQuick(quickOrder[Math.min(quickActive, quickOrder.length - 1)]);
+      return true;
+    }
+    setQuickActive((index) =>
+      key === "ArrowDown" ? (index + 1) % quickOrder.length : (index - 1 + quickOrder.length) % quickOrder.length,
+    );
+    return true;
+  };
   // In-chat search, as a state of this column from `md`.
   //
   // Three conditions, each load-bearing. Not on a phone: below `md` this column
@@ -276,6 +320,8 @@ export function Sidebar() {
               onRefetch={refetch}
               searchTucked={searchTucked}
               onUntuckSearch={() => setSearchTucked(false)}
+              onSearchFocusChange={setSearchFocused}
+              onQuickSwitchKey={onQuickSwitchKey}
             />
             {/* A voice message still playing after its chat was left (D-313):
                 Telegram keeps its player over the chat list. Only while no
@@ -317,6 +363,14 @@ export function Sidebar() {
 
           {hasSearchQuery ? (
             <SidebarSearchResults query={searchQuery} />
+          ) : quickSections.length > 0 ? (
+            <QuickSwitchList
+              sections={quickSections}
+              chatsById={chatsById}
+              activeChatId={quickOrder[Math.min(quickActive, quickOrder.length - 1)] ?? null}
+              mutedChatIds={mutedChatIdSet}
+              onOpen={openQuick}
+            />
           ) : chatSearchOpen && chatSearch ? (
             <ChatSearchPanel chatId={chatSearch.chatId} />
           ) : loading ? (

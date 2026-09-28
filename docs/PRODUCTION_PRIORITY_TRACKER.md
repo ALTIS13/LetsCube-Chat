@@ -1018,6 +1018,18 @@ Use this queue before starting the next production-hardening turn. Do not repeat
       reds), `tests/e2e/chat-search-filters.spec.ts` and
       `tests/e2e/chat-row-menu.spec.ts` at 1440 and 390; rendered at both
       widths in both themes before commit.
+    - **c, global, 2026-09-28: the empty field offers where to go.** It showed
+      nothing until a letter was typed. Discord's quick switcher, as read in
+      its bundle (reference-clients §15, module 174768), lists Previous
+      Channels — its history, the one on screen skipped — then Drafts,
+      Mentions and Unread, and cuts the first to seven alone and three with
+      company. Ours takes the three it has the facts for (`lib/quickSwitch.ts`):
+      «Недавние» from a per-account history of visits on this device, ids only
+      (`lib/recentChats.ts`); «Черновики» from the composer's own drafts;
+      «Непрочитанные», not muted. Mentions wait for a mention count the list
+      does not carry. Each conversation once, the arrows and Enter walk the rows
+      and skip the headings, Escape or a letter puts the list back. Evidence:
+      `quick-switch.test.mts`, `search-quick-switch.spec` at 1440 and 390.
 
     **c's other half — the global search's ideas from Discord's quick switcher —
     is not started.** §15.3 carries the reading. Item 38's badges draw these
