@@ -26,7 +26,6 @@ import type {
 } from "@/types/database";
 import {
   PRIORITIES,
-  TASK_ASSIGNMENT_SCOPE_META,
   TASK_PRIORITY_META,
   TASK_VISIBILITY_META,
 } from "./taskMeta";
@@ -40,9 +39,9 @@ import {
 } from "@/lib/recurringTasks";
 import {
   LOCATION_ROLE_LABEL,
-  TASK_TARGET_ROLE_LABEL,
   mapLocationRoutingError,
 } from "@/lib/locationRouting";
+import { routeChoices, routeOfTask } from "@/lib/taskRoute";
 import {
   TASK_RECURRENCE_UNAVAILABLE,
   TASK_RECURRENCE_UNAVAILABLE_DETAIL,
@@ -195,10 +194,21 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
     globalAdminTaskAccess.hasAnyPermission(ADMIN_TASK_CONTROL_PERMISSION_KEYS) ||
     locationAdminTaskAccess.hasAnyPermission(ADMIN_TASK_CONTROL_PERMISSION_KEYS);
 
-  const targetRoleOptions = useMemo(
-    () => (Object.keys(TASK_TARGET_ROLE_LABEL) as TaskTargetRole[]).filter((role) => canUseAdminTaskControls || role === "staff"),
-    [canUseAdminTaskControls],
-  );
+  // Item 63: one field for who the task goes to, setting both columns the old
+  // «Получатель» and «Тип назначения» set apart (`lib/taskRoute.ts`).
+  const route = routeOfTask(assignmentScope, targetRole);
+  const routeOptions = routeChoices(route, canUseAdminTaskControls);
+  const chooseRoute = (id: string) => {
+    if (id === route.id) return;
+    const next = routeOptions.find((option) => option.id === id);
+    if (!next) return;
+    setAssignmentScope(next.scope);
+    setTargetRole(next.targetRole);
+    if (next.scope !== "user") setAssignee(null);
+    // «Задача для администратора» is the administrator's route; another route
+    // is another addressee, and the box would pull the field straight back.
+    if (next.targetRole !== "admin") setCreatedForAdmin(false);
+  };
 
   const recurrenceSummary = useMemo(
     () => formatRecurrenceSummary(
@@ -645,7 +655,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
               Маршрутизация по локации
             </div>
             <p className="mt-1 text-[12px] leading-relaxed text-[color:var(--kub-muted)]">
-              Выберите локацию, роль получателя и администратора, через которого проходит задача.
+              Выберите локацию, кому идёт задача, и администратора, через которого она проходит.
             </p>
           </div>
           {routing.loading && <KubIcon name="spinner" size={14} tone="accent" className="shrink-0" />}
@@ -674,15 +684,15 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
               </label>
 
               <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
-                <span className="mb-1.5 block uppercase tracking-wide">Получатель</span>
+                <span className="mb-1.5 block uppercase tracking-wide">Кому</span>
                 <select
-                  value={targetRole}
-                  onChange={(event) => setTargetRole(event.target.value as TaskTargetRole | "")}
+                  value={route.id}
+                  onChange={(event) => chooseRoute(event.target.value)}
+                  data-testid="task-route"
                   className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
                 >
-                  <option value="">По текущему назначению</option>
-                  {targetRoleOptions.map((role) => (
-                    <option key={role} value={role}>{TASK_TARGET_ROLE_LABEL[role]}</option>
+                  {routeOptions.map((option) => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
                   ))}
                 </select>
               </label>
@@ -703,39 +713,22 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
               </label>
 
               <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
-                <span className="mb-1.5 block uppercase tracking-wide">Тип назначения</span>
+                <span className="mb-1.5 block uppercase tracking-wide">Администратор локации</span>
                 <select
-                  value={assignmentScope}
-                  onChange={(event) => {
-                    const next = event.target.value as TaskAssignmentScope;
-                    setAssignmentScope(next);
-                    if (next !== "user") setAssignee(null);
-                  }}
-                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+                  value={routeAdminId}
+                  onChange={(event) => setRouteAdminId(event.target.value)}
+                  disabled={!locationId || selectedLocationAdmins.length === 0}
+                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
                 >
-                  {(Object.keys(TASK_ASSIGNMENT_SCOPE_META) as TaskAssignmentScope[]).map((value) => (
-                    <option key={value} value={value}>{TASK_ASSIGNMENT_SCOPE_META[value].label}</option>
+                  <option value="">Не выбран</option>
+                  {selectedLocationAdmins.map((member) => (
+                    <option key={member.user_id} value={member.user_id}>
+                      {getPersonName(member.profile, "Пользователь")} · {LOCATION_ROLE_LABEL[member.role]}
+                    </option>
                   ))}
                 </select>
               </label>
             </div>
-
-            <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
-              <span className="mb-1.5 block uppercase tracking-wide">Администратор локации</span>
-              <select
-                value={routeAdminId}
-                onChange={(event) => setRouteAdminId(event.target.value)}
-                disabled={!locationId || selectedLocationAdmins.length === 0}
-                className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
-              >
-                <option value="">Не выбран</option>
-                {selectedLocationAdmins.map((member) => (
-                  <option key={member.user_id} value={member.user_id}>
-                    {getPersonName(member.profile, "Пользователь")} · {LOCATION_ROLE_LABEL[member.role]}
-                  </option>
-                ))}
-              </select>
-            </label>
 
             {canUseAdminTaskControls && (
               <label className="flex items-start gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-sm text-[color:var(--kub-text)]">
@@ -744,7 +737,12 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                   checked={createdForAdmin}
                   onChange={(event) => {
                     setCreatedForAdmin(event.target.checked);
-                    if (event.target.checked) setTargetRole("admin");
+                    if (event.target.checked) {
+                      // A task for the administrator goes to a person: a pool
+                      // cannot take it (`task_claim` refuses `task_admin_only`).
+                      setAssignmentScope("user");
+                      setTargetRole("admin");
+                    }
                   }}
                   className="mt-0.5 h-4 w-4 accent-[var(--kub-cyan)]"
                 />

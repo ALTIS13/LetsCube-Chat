@@ -2830,9 +2830,24 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     in the database (a column or a table) — §10, the owner's word before it is
     applied.
 
-63. `[ ]` One field for who a task goes to — «Получатель» («Менеджер локации»)
+63. `[x]` One field for who a task goes to — «Получатель» («Менеджер локации»)
     and «Тип назначения» («Пул менеджеров») read as the same question: «по
     идее это может быть в одном пункте едином». One choice that sets both.
+    **Done 2026-09-28:** «Кому» (`lib/taskRoute.ts`). The database keeps both
+    columns because they are read apart — `_task_visible_to_current_user_v3`
+    shows a location's task to its managers by the pool or by a manager's
+    role, `task_claim` lets a pool's own people take it, and the list's filters
+    sort by the role — so each route is one pair of them, and only pairs that
+    mean something are offered: a person; any worker; any manager; and, for
+    whoever may route to management, a manager, the administrator, the owner.
+    The managers' pool carries no role, since a manager's role would demand an
+    administrator to route through, a question a pool does not have. A saved
+    pair shows as the route it means to its readers, and goes back untouched
+    until the field is changed, so editing a title never moves a task; a pair
+    that means no route is shown as it is and kept. «Задача для
+    администратора» now sets the administrator's route, and another route lets
+    it go. Evidence: `task-route.test.mts`, `task-route-field.spec` (a mutant
+    that sets only the scope goes red).
 
 64. `[ ]` Tasks as their own icon with a gentle count — «отдельная иконка,
     например между папками и меню. И на этой иконке была цифра сколько задач у
