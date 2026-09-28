@@ -251,6 +251,20 @@ whole deployment** — no bot has registered a command yet.
 
 ## 4. Where to start
 
+**Current checkpoint, 2026-09-28 (Claude):** `main` is `7cf0a349`, deployed and
+healthy as the sole web container. The day closed the testers' reports that the
+client could close alone: a file keeps the name it was picked under with its
+caption under it (item 33), the bots page splits by its own width (D-323), the
+top of a conversation is Telegram's two rows — pinned message and player in one
+card (item 70, `reference-clients.md` §24), a swipe replies again from a photo,
+a link or an avatar (D-324), and a file or voice note that waited for the
+network goes from wherever the reader is, a gateway's 502/503/504 included
+(item 52). **Waiting on the owner:** every database change the reports asked for,
+written up with SQL, risk and rollback in
+`operations/2026-09-28-database-proposals.md` — nothing there is applied. The
+full fixture regression and its triage are recorded below under
+«Re-measured 2026-09-28».
+
 **Current bot checkpoint, 2026-09-26 (Codex):** `d846d4c7` is deployed and
 healthy on both web and Bot Gateway. A group administrator can give a bot full
 access to future group messages; a later restriction purges queued message
