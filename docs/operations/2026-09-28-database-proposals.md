@@ -1,5 +1,9 @@
 # Database changes waiting on the owner — 2026-09-28
 
+**Approved by the owner on 2026-09-28, all of it.** What has been applied, and
+how, is in [the rollout record](2026-09-28-owner-approved-database-changes.md);
+entry 1 is being rebuilt on a private channel, for the reason given there.
+
 Everything the tester's reports of 2026-09-27/28 asked for that the client
 could do alone is built and deployed. What is left needs the database, and
 CLAUDE.md §10 puts a production change behind the owner's word, a verified
@@ -45,7 +49,10 @@ client hears only its own hides. REPLICA IDENTITY is default, so a DELETE
 change after it: subscribe `user_id=eq.<me>` on the list's socket, keep the
 hidden ids current, and draw a held conversation at once.
 
-## 2. A task's start date (item 68)
+## 2. A task's start date (item 68) — applied 2026-09-28
+
+Approved with the rest and applied the same day; see
+[the rollout record](2026-09-28-owner-approved-database-changes.md).
 
 **Unblocks:** «не хватает возможности выбрать промежуток… есть задачи которые
 идут месяц» — a task that runs from a date to a date.

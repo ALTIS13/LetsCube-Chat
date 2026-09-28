@@ -1,5 +1,6 @@
 "use client";
 
+import { formatTaskPeriod } from "@/lib/taskPeriod";
 import type { ReactNode } from "react";
 import type { TaskWithPeople } from "@/types/database";
 import { KubBadge, KubIcon } from "@/components/kub";
@@ -9,7 +10,6 @@ import {
   TASK_PRIORITY_META,
   TASK_STATUS_META,
   TASK_VISIBILITY_META,
-  formatTaskDueDate,
   getTaskDeadlineState,
 } from "./taskMeta";
 import { cn } from "@/lib/utils";
@@ -111,9 +111,9 @@ export function TaskListRow({ task, nowMs, onClick, selected = false, selectionC
           >
             {deadline.timeLabel}
           </span>
-          {task.due_at && (
+          {(task.due_at || task.starts_at) && (
             <span className="shrink-0 text-[12px] text-[color:var(--kub-muted)]">
-              {formatTaskDueDate(task.due_at)}
+              {formatTaskPeriod(task.starts_at, task.due_at)}
             </span>
           )}
         </div>

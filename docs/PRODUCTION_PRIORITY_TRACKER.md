@@ -3031,9 +3031,19 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     человека ведут параллельно». Assignees become a set rather than one person;
     a database change — §10.
 
-68. `[ ]` A task's period, not only its deadline — «не хватает возможности
+68. `[x]` A task's period, not only its deadline — «не хватает возможности
     выбрать промежуток… есть задачи которые идут месяц». A start beside the
     due date, shown as a range; a database change — §10.
+    **Done 2026-09-28**, on the owner's approval of the database proposals the
+    same day: `tasks.starts_at` with the check that a start is not after the
+    deadline, and `task_create_v4` / `task_update_v4` beside an untouched v3 —
+    backup, rehearsal, apply and post-apply smoke in
+    `operations/2026-09-28-owner-approved-database-changes.md`. The form asks
+    «Начало» beside «Срок» and refuses a start after the deadline before
+    anything is sent; the card, the row and the detail show «01 окт., 09:00 —
+    30 окт., 18:00» where the deadline was, and a period not begun reads
+    «Начнётся через …» rather than as time running out. Evidence:
+    `task-period.test.mts`, `task-period.spec` at 1440 and 390.
 
 69. `[x]` The kind capsule (item 47) stays out of the reader's own folders —
     «я создал себе уже отдельную папку, а тут мне еще фильтруют люди или

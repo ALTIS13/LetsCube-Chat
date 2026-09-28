@@ -1,5 +1,6 @@
 "use client";
 
+import { formatTaskPeriod } from "@/lib/taskPeriod";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { KubBadge, KubButton, KubIcon, KubModal } from "@/components/kub";
@@ -30,7 +31,6 @@ import {
   TASK_PRIORITY_META,
   TASK_STATUS_META,
   TASK_VISIBILITY_META,
-  formatTaskDueDate,
   formatRelative,
   getTaskDeadlineState,
 } from "./taskMeta";
@@ -372,10 +372,10 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
               Экземпляр повтора
             </KubBadge>
           )}
-          {task.due_at && (
+          {(task.due_at || task.starts_at) && (
             <KubBadge tone={deadline.tone} pill>
               <KubIcon name="clock" size={11} className="mr-1" />
-              {formatTaskDueDate(task.due_at)}
+              {formatTaskPeriod(task.starts_at, task.due_at)}
             </KubBadge>
           )}
           {deadline.badgeLabel && (
@@ -418,9 +418,9 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
                 {deadline.detailLabel}
               </p>
             </div>
-            {task.due_at && (
+            {(task.due_at || task.starts_at) && (
               <div className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium text-[color:var(--kub-text)] kub-raise">
-                {formatTaskDueDate(task.due_at)}
+                {formatTaskPeriod(task.starts_at, task.due_at)}
               </div>
             )}
           </div>

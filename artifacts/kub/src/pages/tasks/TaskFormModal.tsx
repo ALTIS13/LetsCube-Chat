@@ -1,5 +1,6 @@
 "use client";
 
+import { taskPeriodError } from "@/lib/taskPeriod";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { KubButton, KubIcon, KubInput, KubModal } from "@/components/kub";
@@ -88,6 +89,8 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
   const [description, setDescription] = useState(task?.description ?? "");
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "normal");
   const [dueAt, setDueAt] = useState<string>(toLocalInput(task?.due_at));
+  // Tracker item 68: a task may run from a date to a date.
+  const [startsAt, setStartsAt] = useState<string>(toLocalInput(task?.starts_at));
   const [visibility, setVisibility] = useState<TaskVisibility>(task?.visibility ?? "staff");
   const [assignmentScope, setAssignmentScope] = useState<TaskAssignmentScope>(task?.assignment_scope ?? "user");
   const [locationId, setLocationId] = useState<string>((task?.location_id as string | null | undefined) ?? "");
@@ -248,6 +251,15 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       dueAt && !isNaN(new Date(dueAt).getTime())
         ? new Date(dueAt).toISOString()
         : null;
+    const starts_iso =
+      startsAt && !isNaN(new Date(startsAt).getTime())
+        ? new Date(startsAt).toISOString()
+        : null;
+    const periodError = taskPeriodError(starts_iso, due_iso);
+    if (periodError) {
+      setError(periodError);
+      return;
+    }
     const recurrenceValidation = validateRecurrenceDraft({
       enabled: recurringEnabled && !taskAlreadyRecurring && !isRecurrenceOccurrence,
       featureAvailable: recurring.available,
@@ -292,7 +304,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
 
     if (isEdit && task) {
       const { error: rpcError } = useRoutingRpc
-        ? await supabase.rpc("task_update_v3", {
+        ? await supabase.rpc("task_update_v4", {
             p_task_id: task.id,
             p_title: title.trim(),
             p_description: description.trim() || null,
@@ -306,6 +318,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
             p_target_role: targetRole || null,
             p_route_admin_id: routeAdminId || null,
             p_created_for_admin: createdForAdmin,
+            p_starts_at: starts_iso,
           })
         : await supabase.rpc("task_update", {
         p_task_id: task.id,
@@ -338,7 +351,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
     }
 
     const { data, error: rpcError } = useRoutingRpc
-      ? await supabase.rpc("task_create_v3", {
+      ? await supabase.rpc("task_create_v4", {
           p_title: title.trim(),
           p_description: description.trim() || null,
           p_assignee_id: effectiveAssigneeId,
@@ -351,6 +364,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
           p_target_role: targetRole || null,
           p_route_admin_id: routeAdminId || null,
           p_created_for_admin: createdForAdmin,
+          p_starts_at: starts_iso,
         })
       : await supabase.rpc("task_create", {
           p_title: title.trim(),
@@ -447,16 +461,37 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
         </div>
       </div>
 
-      <div>
-        <label className="text-[12px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
-          Срок (необязательно)
-        </label>
-        <input
-          type="datetime-local"
-          value={dueAt}
-          onChange={(e) => setDueAt(e.target.value)}
-          className="w-full rounded-xl px-3 py-2 text-sm bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
-        />
+      {/* A period, from a date to a date (tracker item 68): the start is as
+          optional as the deadline, and either stands alone. */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label htmlFor="task-starts-at" className="text-[12px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
+            Начало (необязательно)
+          </label>
+          <input
+            id="task-starts-at"
+            data-testid="task-starts-at"
+            type="datetime-local"
+            value={startsAt}
+            max={dueAt || undefined}
+            onChange={(e) => setStartsAt(e.target.value)}
+            className="w-full rounded-xl px-3 py-2 text-sm bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+          />
+        </div>
+        <div>
+          <label htmlFor="task-due-at" className="text-[12px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
+            Срок (необязательно)
+          </label>
+          <input
+            id="task-due-at"
+            data-testid="task-due-at"
+            type="datetime-local"
+            value={dueAt}
+            min={startsAt || undefined}
+            onChange={(e) => setDueAt(e.target.value)}
+            className="w-full rounded-xl px-3 py-2 text-sm bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+          />
+        </div>
       </div>
 
       <div className="rounded-xl p-3 kub-raise">

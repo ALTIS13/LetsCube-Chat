@@ -1,5 +1,6 @@
 "use client";
 
+import { formatTaskPeriod } from "@/lib/taskPeriod";
 import type { ReactNode } from "react";
 import type { TaskWithPeople } from "@/types/database";
 import { KubBadge, KubIcon, KubPanel } from "@/components/kub";
@@ -9,7 +10,6 @@ import {
   TASK_PRIORITY_META,
   TASK_STATUS_META,
   TASK_VISIBILITY_META,
-  formatTaskDueDate,
   formatRelative,
   getTaskDeadlineState,
 } from "./taskMeta";
@@ -139,9 +139,9 @@ export function TaskCard({ task, nowMs, onClick, selected = false, selectionCont
               <KubIcon name={deadline.isOverdue || deadline.isDueSoon ? "warning" : "clock"} size={12} />
               <span className="truncate">{deadline.timeLabel}</span>
             </span>
-            {task.due_at && (
+            {(task.due_at || task.starts_at) && (
               <span className="shrink-0 text-[color:var(--kub-muted)]">
-                {formatTaskDueDate(task.due_at)}
+                {formatTaskPeriod(task.starts_at, task.due_at)}
               </span>
             )}
           </div>

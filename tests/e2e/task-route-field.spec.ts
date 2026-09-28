@@ -71,7 +71,7 @@ async function openForm(page: Page, { management }: { management: boolean }) {
       if (name === "has_permission") return { body: rights.has(String(body.p_permission_key)) };
       if (name === "has_location_permission") return { body: rights.has(String(body.p_permission_key)) };
       if (name === "has_global_role") return { body: body.p_role_key === "manager" };
-      if (name === "task_create_v3") return { body: NEW_TASK };
+      if (name === "task_create_v4") return { body: NEW_TASK };
       return undefined;
     },
   });
@@ -104,8 +104,8 @@ test("choosing the managers' pool sends both columns the database reads", async 
   await expect(form.getByText("Для задач из пула конкретный исполнитель не назначается сразу.", { exact: false })).toBeVisible();
   await form.getByRole("button", { name: "Создать", exact: true }).click();
 
-  await expect.poll(() => fixture.rpcBodies("task_create_v3").length).toBe(1);
-  expect(fixture.rpcBodies("task_create_v3")[0]).toMatchObject({
+  await expect.poll(() => fixture.rpcBodies("task_create_v4").length).toBe(1);
+  expect(fixture.rpcBodies("task_create_v4")[0]).toMatchObject({
     p_assignment_scope: "manager_pool",
     p_target_role: null,
     p_assignee_id: null,
@@ -136,8 +136,8 @@ test("the workers' pool, and routes to management only for whoever may use them"
   await form.getByPlaceholder(/Название|Что нужно сделать/).first().fill("Разложить инвентарь");
   await form.locator("select").first().selectOption(LOCATION);
   await form.getByRole("button", { name: "Создать", exact: true }).click();
-  await expect.poll(() => fixture.rpcBodies("task_create_v3").length).toBe(1);
-  expect(fixture.rpcBodies("task_create_v3")[0]).toMatchObject({
+  await expect.poll(() => fixture.rpcBodies("task_create_v4").length).toBe(1);
+  expect(fixture.rpcBodies("task_create_v4")[0]).toMatchObject({
     p_assignment_scope: "staff_pool",
     p_target_role: "staff",
     p_created_for_admin: false,

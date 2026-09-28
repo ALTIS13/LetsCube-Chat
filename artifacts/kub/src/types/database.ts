@@ -1150,6 +1150,8 @@ export interface Database {
           assignee_id: string | null
           chat_id: string | null
           due_at: string | null
+          /** Tracker item 68: when the task's period begins; null is a plain deadline. */
+          starts_at: string | null
           created_at: string
           updated_at: string
           visibility: TaskVisibility
@@ -1582,6 +1584,25 @@ export interface Database {
         }
         Returns: string
       }
+      /** v3 and a start: `20260928170000_task_period.sql` (tracker item 68). */
+      task_create_v4: {
+        Args: {
+          p_title: string
+          p_description?: string | null
+          p_assignee_id?: string | null
+          p_priority?: TaskPriority
+          p_due_at?: string | null
+          p_chat_id?: string | null
+          p_visibility?: TaskVisibility
+          p_assignment_scope?: TaskAssignmentScope
+          p_location_id?: string | null
+          p_target_role?: TaskTargetRole | null
+          p_route_admin_id?: string | null
+          p_created_for_admin?: boolean
+          p_starts_at?: string | null
+        }
+        Returns: string
+      }
       task_assign: {
         Args: { p_task_id: string; p_assignee_id: string }
         Returns: void
@@ -1663,6 +1684,26 @@ export interface Database {
           p_target_role?: TaskTargetRole | null
           p_route_admin_id?: string | null
           p_created_for_admin?: boolean
+        }
+        Returns: void
+      }
+      /** v3 and a start: `20260928170000_task_period.sql` (tracker item 68). */
+      task_update_v4: {
+        Args: {
+          p_task_id: string
+          p_title: string
+          p_description: string | null
+          p_priority: TaskPriority
+          p_due_at: string | null
+          p_assignee_id: string | null
+          p_chat_id: string | null
+          p_visibility: TaskVisibility
+          p_assignment_scope: TaskAssignmentScope
+          p_location_id?: string | null
+          p_target_role?: TaskTargetRole | null
+          p_route_admin_id?: string | null
+          p_created_for_admin?: boolean
+          p_starts_at?: string | null
         }
         Returns: void
       }

@@ -1,3 +1,4 @@
+import { formatTaskMoment, formatTaskPeriod, taskNotStarted } from "@/lib/taskPeriod";
 import type {
   TaskAssignmentScope,
   TaskEventKind,
@@ -104,9 +105,33 @@ export interface TaskDeadlineState {
  * More time means a longer calm bar; close deadlines become shorter and warmer.
  */
 export function getTaskDeadlineState(
-  task: Pick<Task, "due_at" | "status">,
+  task: Pick<Task, "due_at" | "status"> & { starts_at?: string | null },
   nowMs: number = Date.now(),
 ): TaskDeadlineState {
+  // Tracker item 68: a period that has not begun is not yet running out.
+  if (
+    ACTIVE_DEADLINE_STATUSES.includes(task.status) &&
+    task.starts_at &&
+    taskNotStarted(task.starts_at, nowMs)
+  ) {
+    const until = formatDuration(Date.parse(task.starts_at) - nowMs);
+    const period = formatTaskPeriod(task.starts_at, task.due_at);
+    return {
+      hasDueDate: Boolean(task.due_at),
+      isActive: true,
+      isOverdue: false,
+      isDueSoon: false,
+      timeLabel: `Начнётся через ${until}`,
+      detailLabel: task.due_at
+        ? `Период задачи: ${period}.`
+        : `Задача начнётся ${formatTaskMoment(task.starts_at)}.`,
+      badgeLabel: null,
+      urgencyRatio: null,
+      fillPercent: null,
+      urgencyLevel: "none",
+      tone: "muted",
+    };
+  }
   if (!task.due_at) {
     return {
       hasDueDate: false,
@@ -197,15 +222,6 @@ export function getTaskDeadlineState(
     urgencyLevel,
     tone,
   };
-}
-
-export function formatTaskDueDate(iso: string): string {
-  return new Date(iso).toLocaleString("ru-RU", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 /** Human-friendly Russian relative date used inside cards/event log. */
