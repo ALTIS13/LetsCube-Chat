@@ -441,7 +441,9 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
       test.skip(isDesktop(page), "the folder strip belongs to the phone shell");
       await boot(page, { folderCount: 6, theme });
       expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(theme === "dark");
-      const row = page.locator("[data-kub-list-chrome] .kub-edge-scroll-fade");
+      // By its own name: the list chrome carries a second scrolling row since
+      // item 47's capsule, which wears the same fade.
+      const row = page.getByTestId("folder-tabs-row");
       await expect(row).toBeVisible();
       const arrow = page.getByRole("button", { name: "Прокрутить папки вправо" });
       await expect(arrow).toBeVisible();

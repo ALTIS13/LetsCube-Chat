@@ -65,6 +65,7 @@ export function FolderTabs({ folders, activeFolder, onFolderChange, onCreate, on
         onWheel={handleWheel}
         data-scroll-left={canScrollLeft}
         data-scroll-right={canScrollRight}
+        data-testid="folder-tabs-row"
         className="kub-edge-scroll-fade flex items-center overflow-x-auto no-scrollbar min-w-0 flex-1"
       >
         {folders.map((folder) => {

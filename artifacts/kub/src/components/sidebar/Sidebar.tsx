@@ -28,6 +28,16 @@ import { useChats } from "@/hooks/useChats";
 import { useFolders } from "@/hooks/useFolders";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import { LIST_MAY_BE_STALE } from "@/lib/plainMessages";
+import { ChatKindFilterBar } from "./ChatKindFilterBar";
+import {
+  chatKindStorageKey,
+  chatsOfKind,
+  effectiveChatKind,
+  offeredChatKinds,
+  readStoredChatKind,
+  unreadByChatKind,
+  type ChatKindFilter,
+} from "@/lib/chatKind";
 import type { Folder } from "@/types/database";
 
 export function Sidebar() {
@@ -54,6 +64,12 @@ export function Sidebar() {
     canManageFolder,
   } = useFolders();
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
+  // Item 47: which kind of conversation the list shows. Kept on this device
+  // for this account, because where a person left the list is where they
+  // expect to find it («where you were is product state»).
+  const [chosenKind, setChosenKind] = useState<ChatKindFilter>(() =>
+    readKeptChatKind(useAppStore.getState().currentUser?.id ?? null),
+  );
   const [showNewChat, setShowNewChat] = useState(false);
   const [editingFolder, setEditingFolder] = useState<Folder | "new" | null>(null);
   // Phone only in effect: the header keeps the field in its control row from
@@ -65,6 +81,19 @@ export function Sidebar() {
   const [sideMenuOpen, setSideMenuOpen] = useState(false);
   const [showNewGroup, setShowNewGroup] = useState(false);
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  // Another account on this device keeps its own choice.
+  useEffect(() => {
+    setChosenKind(readKeptChatKind(userId));
+  }, [userId]);
+  const chooseKind = (kind: ChatKindFilter) => {
+    setChosenKind(kind);
+    if (!userId) return;
+    try {
+      window.localStorage.setItem(chatKindStorageKey(userId), kind);
+    } catch {
+      // Unwritable storage costs the choice its persistence and nothing else.
+    }
+  };
 
   // Who has somebody talking in them, read once for the whole list (slice 3).
   // Shared with VoicePresenceRuntime during a call: leaving this sidebar does
@@ -134,6 +163,13 @@ export function Sidebar() {
     if (activeFolder === null) return true;
     return folderChats[activeFolder]?.has(chat.id) ?? false;
   }), [chats, activeFolder, folderChats]);
+
+  // Inside the folder, not beside it: a folder is a personal grouping across
+  // kinds, and the capsule separates the kinds within whatever is on screen.
+  const kindOffered = useMemo(() => offeredChatKinds(filtered), [filtered]);
+  const kind = effectiveChatKind(chosenKind, kindOffered);
+  const kindUnread = useMemo(() => unreadByChatKind(filtered), [filtered]);
+  const listed = useMemo(() => chatsOfKind(filtered, kind), [filtered, kind]);
 
   const tabs = useMemo<{ id: string | null; name: string; emoji: string | null; unread: number; shared: boolean }[]>(() => [
     {
@@ -231,6 +267,9 @@ export function Sidebar() {
                 />
               </div>
             )}
+            {!hasSearchQuery && !chatSearchOpen && kindOffered.length > 0 && (
+              <ChatKindFilterBar offered={kindOffered} active={kind} unread={kindUnread} onSelect={chooseKind} />
+            )}
           </div>
 
           {isPhone && !hasSearchQuery && !chatSearchOpen && <PwaPushNudge />}
@@ -273,7 +312,7 @@ export function Sidebar() {
                 </div>
               )}
               <ChatList
-                chats={filtered}
+                chats={listed}
                 selectedChatId={selectedChatId}
                 onChatSelect={setSelectedChatId}
                 onScrollStateChange={setSearchTucked}
@@ -354,4 +393,13 @@ export function Sidebar() {
       )}
     </div>
   );
+}
+
+function readKeptChatKind(userId: string | null): ChatKindFilter {
+  if (!userId || typeof window === "undefined") return "all";
+  try {
+    return readStoredChatKind(window.localStorage.getItem(chatKindStorageKey(userId)));
+  } catch {
+    return "all";
+  }
 }

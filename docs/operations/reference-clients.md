@@ -2520,6 +2520,21 @@ Discord's absence of them: a **personal grouping across types** — «работ
 does. Say it in the product, or folders will be asked to do both and do
 neither.
 
+**Built 2026-09-28 (item 47), from this reading.** The capsule sits at the
+top of the list, inside the folder: a folder stays a personal grouping across
+kinds, and the capsule separates the kinds within whatever the folder holds —
+«Люди», «Группы», «Каналы», «Боты», only the kinds present, and none at all when
+the list holds one kind. Telegram's five switches, without the six steps: that
+is the whole of the adoption, and the reason ours is not opt-in is the owner's
+finding above — opt-in is what left him with six tabs and still the noise.
+Two deliberate differences, each with its reason. **No «Все» pill:** the folder
+strip beside it already says «Все», and the first render read as two controls
+for one thing, so a kind is a toggle and pressing it again is everything. **A
+number on each kind** for what is unread there, so a kind that is not chosen
+still says something waits in it — Telegram's folder tabs carry the same count.
+The choice is kept per device and per account (where you were is state the
+product restores). Servers as structure wait for item 45.
+
 ### 17.3 The bot menu button, and what it costs the composer
 
 The owner asked for this specifically. Measured on Telegram's own demo bots

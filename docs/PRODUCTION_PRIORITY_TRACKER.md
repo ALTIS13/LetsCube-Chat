@@ -2156,7 +2156,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     strip comments now, and three mutations prove they still bite.
 
 
-47. `[ ]` Separating the kinds of conversation, so the list stops being
+47. `[~]` Separating the kinds of conversation, so the list stops being
     noise. Asked for by the owner on 2026-09-20, and he framed it as something
     **Telegram does badly** rather than as something to copy: «ботов много,
     людей тоже и групп очевидно не меньше, получается что всё в кучу
@@ -2247,6 +2247,16 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 
     Still unestablished and worth one more pass before building: how Discord's
     DM list marks a bot, if it does.
+
+    **The capsule is built, 2026-09-28** (`lib/chatKind.ts`,
+    `ChatKindFilterBar`), on the reading above and recorded in
+    reference-clients §17.2: «Люди», «Группы», «Каналы», «Боты» at the top of
+    the list, inside the folder, only the kinds present and none for a list of
+    one kind, each with what is unread in it, kept per device and account. A
+    kind is a toggle and there is no «Все» pill, because the folder's «Все» sits
+    beside it and the first render read as two controls for one thing. A bot
+    row already carried its mark (D-236). **Still open:** servers as a
+    structural rail, which is item 45's heavy object and waits for it.
 
 
 48. `[~]` A bot should offer an interface, not demand a command. The owner's
