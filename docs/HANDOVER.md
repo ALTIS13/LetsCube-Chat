@@ -100,10 +100,11 @@ tests: 2166 passed, 446 skipped, 32 red), each red one then run alone on a
 fresh server, and the nineteen preview-server specs on their own server.
 Still red, on the committed sources exactly as with the day's later changes:
 `message-meta-observer-cost` 236 and `message-meta-placement-settles` 457,
-whose fixtures no longer produce the two placements they compare, and
-`message-touch-gestures` 168/230, whose swipe never reaches the reply. Every
-other one on the list above is green, and four of them were the harness
-rather than the product:
+whose fixtures no longer produce the two placements they compare.
+`message-touch-gestures` 168/230 were a product regression, D-324: since
+`7d33fabb` a swipe begun on a photo, a link or an avatar never started, which
+undid D-287; fixed the same day. Every other one on the list above is green,
+and four of them were the harness rather than the product:
 `ios-pwa-push-nudge` needs `VITE_VAPID_PUBLIC_KEY` on the dev server (any
 base64url P-256 point; the spec now says so instead of timing out) and is a
 phone's spec, now skipped at 1440; `media-original-claim` 336 pressed

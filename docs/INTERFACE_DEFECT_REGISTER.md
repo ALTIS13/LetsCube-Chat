@@ -24150,3 +24150,25 @@ into a column inherits every viewport rule it was written with. Item 41 moved
 two pages, and «Задачи» carried one too — its card grid took four columns at
 `2xl:`, which beside the chat list is four cards of about 260px; it now takes
 two from a 40rem page and four from 80rem, by its own width.
+
+## D-324 `[x]` A swipe that begins on a photo, a link or an avatar does not reply
+
+**Severity:** high. It undid D-287's reason for being: the tester of 2026-09-20
+could not reply to a photo — «Нельзя зажать месседж и выбрать ответить» —
+because a tap on a photo opens the viewer, and the swipe was the answer to
+that. Found 2026-09-28 by `message-touch-gestures` 168 and 230, red at both
+widths since `7d33fabb` (2026-09-26) and listed among the preview-server reds.
+
+**Surface:** `artifacts/kub/src/components/chat/MessageList.tsx`, the row's
+`onPointerMove`. The bot inline field of `7d33fabb` added `gesture.content` to
+the checks that stop a swipe from starting, so that dragging across the words
+in that field would not reply. `content` is `isContentControl` — every button,
+link, input and player — and a photo's opener is a button, a sender's avatar is
+one, a link in the text is one: a swipe begun on any of them never moved.
+
+**Fixed 2026-09-28:** a swipe is refused only where a sideways drag is the
+control's own — a field, a select, a player, a slider, `isNativeControl` — and
+starts anywhere else. The bot's field is an `<input>`, so what `7d33fabb` meant
+to protect stays protected; a tap on a photo still opens the viewer, and the
+click a swipe leaves behind is still swallowed. Evidence: `message-touch-gestures`
+18 of 18 at 1440 and 390, `bot-chat-surfaces` 53 of 53.

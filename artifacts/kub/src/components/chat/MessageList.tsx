@@ -1807,6 +1807,14 @@ interface TouchGesture {
   swipe: SwipeAction | null;
   longPressed: boolean;
   content: boolean;
+  /**
+   * A field, a player or a slider, where a sideways drag is the control's own:
+   * selecting words in a bot's inline field, scrubbing a recording. A swipe
+   * does not begin there. A photo, a link or a button is not one — a tap there
+   * belongs to it, a sideways drag does not, and that difference is the whole
+   * reason the swipe exists (D-287, D-324).
+   */
+  native: boolean;
 }
 
 /**
@@ -1929,6 +1937,7 @@ const MessageRow = React.memo(function MessageRow({
       swipe: null,
       longPressed: false,
       content: isContentControl(event.target),
+      native: isNativeControl(event.target),
     };
     if (selectionMode || isNativeControl(event.target)) return;
     clearLongPress();
@@ -1954,7 +1963,7 @@ const MessageRow = React.memo(function MessageRow({
       gesture.moved = true;
       clearLongPress();
     }
-    if (selectionMode || gesture.longPressed || gesture.content || !gesture.maySwipe) return;
+    if (selectionMode || gesture.longPressed || gesture.native || !gesture.maySwipe) return;
     // Clearly horizontal, and in a direction this message offers. The row lets
     // the browser keep vertical panning (`touch-action: pan-y`), so a scroll
     // never reaches here as a swipe.
