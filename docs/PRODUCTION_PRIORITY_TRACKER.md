@@ -2608,11 +2608,18 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     work — backup, rehearsal, and the owner's word before it is applied. The
     preview half can be read with today's schema and ships first.
 
-55. `[ ]` No «переслано» notice when the forward has already taken you there —
+55. `[x]` No «переслано» notice when the forward has already taken you there —
     same report. Forwarding from one chat to another opens the destination, and
     a notice then says the message was forwarded to the chat now on screen:
     «я знаю, передо мной чат открыт». Telegram says nothing when it opens the
     destination; a notice is for a forward that leaves you where you were.
+    **Done 2026-09-28.** Every forward here is of that kind since D-071 — the
+    chat opens with the message above the composer and the send puts it into
+    the feed on screen — so a delivered forward now says nothing; a refused one
+    still says why, and a success takes a failure of the same forward off the
+    screen (`settleActionFeedback`). Pinned by sampling the notice area without
+    retrying: the first form of the test used `toHaveCount(0)`, which waits for
+    a notice to expire and let a mutant that brought it back pass.
 
 56. `[ ]` The installed iPhone app's bottom capsule and bottom edge — same
     report, screenshots of 2026-09-27 and a message of 2026-09-28. The stripe

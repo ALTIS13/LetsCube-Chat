@@ -9,9 +9,11 @@ import { expect, test, type Locator, type Page, type Route } from "@playwright/t
  * the answer before closing the dialog. A forward the server refused and one it
  * delivered looked exactly alike, so nobody could tell whether to try again.
  *
- * What is pinned: a delivered forward confirms itself and names the chat; a
- * refused one says so with the server's reason and leaves the next attempt one
- * send away; one that never reaches the server is not passed off as sent.
+ * What is pinned: a delivered forward is confirmed by the conversation it
+ * lands in (since item 55 there is no notice naming the chat already on
+ * screen); a refused one says so with the server's reason and leaves the next
+ * attempt one send away; one that never reaches the server is not passed off
+ * as sent.
  *
  * 2026-09-11, the owner's Telegram message actions (D-071): choosing the chat
  * no longer sends anything. The chat opens with the message waiting above its
@@ -72,16 +74,27 @@ test.describe("forwarding a message says what happened", () => {
     await installSession(page);
   });
 
-  test("a forward the server delivers confirms itself and names the chat", async ({ page }) => {
+  test("a forward the server delivers is confirmed by the chat on screen, not by a notice", async ({ page }) => {
     const forwards = await installBackend(page, "deliver");
     const { draft } = await forwardFromSourceChat(page, forwards);
 
-    const feedback = page.getByTestId("kub-feedback-viewport");
-    const confirmation = feedback.getByRole("status");
-    await expect(confirmation).toContainText("Сообщение переслано");
-    await expect(confirmation).toContainText(TARGET_NAME);
-    await expect(feedback.getByRole("alert")).toHaveCount(0);
+    // Tracker item 55, 2026-09-28: the forward opened this chat and the send
+    // puts the message into it, so a notice naming the chat the reader is
+    // looking at says nothing new — «я знаю, передо мной чат открыт».
+    // Telegram is silent here too. The message leaving the composer is what
+    // is asserted instead, and the server having been asked exactly once.
     await expect(draft, "a delivered forward is still waiting above the composer").toHaveCount(0);
+    const feedback = page.getByTestId("kub-feedback-viewport");
+    // Sampled, not awaited. `toHaveCount(0)` retries until it holds, and a
+    // notice that shows and then expires satisfies it — measured: a mutant
+    // that brought the notice back passed the retrying form. So the viewport
+    // is read without retrying, every 100 ms, for longer than the answer takes.
+    for (let sample = 0; sample < 20; sample += 1) {
+      expect(await feedback.getByRole("status").count(), "a notice named the chat already on screen").toBe(0);
+      expect(await feedback.getByRole("alert").count(), "a delivered forward reported a failure").toBe(0);
+      await page.waitForTimeout(100);
+    }
+    await expect.poll(() => forwards.length).toBe(1);
 
     expect(forwards).toHaveLength(1);
     expect(forwards[0]).toMatchObject({
@@ -124,10 +137,11 @@ test.describe("forwarding a message says what happened", () => {
     const forwards = await installBackend(page, "missing");
     const { draft } = await forwardFromSourceChat(page, forwards, PHOTO_CAPTION, null);
 
-    const feedback = page.getByTestId("kub-feedback-viewport");
-    await expect(feedback.getByRole("status")).toContainText("Сообщение переслано");
-    await expect(feedback.getByRole("alert")).toHaveCount(0);
+    // Delivered, so it leaves the composer and nothing is said (item 55).
     await expect(draft).toHaveCount(0);
+    await expect.poll(() => forwards.length).toBe(2);
+    const feedback = page.getByTestId("kub-feedback-viewport");
+    await expect(feedback.getByRole("alert")).toHaveCount(0);
 
     expect(forwards).toHaveLength(2);
     expect(forwards[0]).toMatchObject({ via: "rpc", p_source_message_id: PHOTO_ID, p_target_chat_id: TARGET_CHAT_ID });

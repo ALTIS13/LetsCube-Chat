@@ -86,21 +86,26 @@ export function forwardInsertPayload<Type, Metadata>(source: ForwardSource<Type,
   return source.media_metadata === undefined ? payload : { ...payload, media_metadata: source.media_metadata };
 }
 
-export function forwardFeedback(
-  result: ForwardMessageResult,
-  targetChatName: string | null | undefined,
-  /** How many were forwarded together, since several now go with one send. */
-  count = 1,
-): ActionFeedbackInput {
-  if (result.ok) {
-    const name = targetChatName?.trim();
-    return {
-      kind: "success",
-      title: count > 1 ? "Сообщения пересланы" : "Сообщение переслано",
-      detail: name ? `В чат «${name}»` : undefined,
-      key: FORWARD_FEEDBACK_KEY,
-    };
-  }
+/**
+ * What a forward's outcome puts on screen: its failure, or nothing.
+ *
+ * Nothing on success since 2026-09-28. The forward is Telegram's since D-071 —
+ * choosing a chat opens it with the message waiting above the composer, and
+ * the send puts the message into the conversation on screen — so the message
+ * arriving in the feed *is* the confirmation, and a notice naming the chat the
+ * reader is looking at told them what they could see. The tester's words: «я
+ * знаю, передо мной чат открыт». Telegram says nothing in that case either.
+ * The complaint this file began with — «переслал сообщение — ничего не
+ * произошло» — was the dialog era's, when the message went somewhere else and
+ * nothing on screen changed; that cannot happen in this flow.
+ *
+ * A failure is still said, with its reason, because a message put back above
+ * the composer is not self-explanatory. And a success takes a failure of the
+ * same forward off the screen (`settleActionFeedback`), so the two never stand
+ * side by side contradicting each other.
+ */
+export function forwardFeedback(result: ForwardMessageResult): ActionFeedbackInput | null {
+  if (result.ok) return null;
   return {
     kind: "error",
     title: "Не удалось переслать сообщение",

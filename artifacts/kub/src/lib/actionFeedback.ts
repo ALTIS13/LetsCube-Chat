@@ -41,6 +41,8 @@ const MAX_DETAIL = 160;
 export interface ActionFeedbackStore {
   show: (input: ActionFeedbackInput) => string;
   dismiss: (id: string) => void;
+  /** Takes away whatever is on screen under this key, if anything is. */
+  dismissKey: (key: string) => void;
   dismissForOtherAccount: (userId: string | null) => void;
   /** Drops whatever has outlived its duration, by the store's own clock. */
   prune: () => void;
@@ -103,6 +105,11 @@ export function createActionFeedbackStore(
       commit(items.filter((item) => item.id !== id));
     },
 
+    dismissKey(key) {
+      if (!items.some((item) => item.key === key)) return;
+      commit(items.filter((item) => item.key !== key));
+    },
+
     dismissForOtherAccount(userId) {
       const next = items.filter((item) => !item.ownerUserId || item.ownerUserId === userId);
       if (next.length !== items.length) commit(next);
@@ -142,6 +149,17 @@ export const actionFeedback = createActionFeedbackStore(() => Date.now(), {
 /** Shows one confirmation. Safe to call from anywhere, including a catch block. */
 export function showActionFeedback(input: ActionFeedbackInput): string {
   return actionFeedback.show(input);
+}
+
+/**
+ * Settles what an action with a keyed notice leaves on screen: the notice when
+ * there is something to say, and otherwise nothing — including taking away a
+ * failure the same action reported a moment ago, which a success must not be
+ * left standing beside.
+ */
+export function settleActionFeedback(key: string, input: ActionFeedbackInput | null): void {
+  if (input) actionFeedback.show({ ...input, key });
+  else actionFeedback.dismissKey(key);
 }
 
 /**

@@ -60,11 +60,11 @@ import { useAppStore } from "@/store/app.store";
 import { createClient, getSupabasePublicUrl } from "@/lib/supabase/client";
 import { KubButton, KubEmptyState, KubIcon } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
-import { showActionFeedback } from "@/lib/actionFeedback";
+import { settleActionFeedback, showActionFeedback } from "@/lib/actionFeedback";
 import { mapPgError } from "@/lib/errors";
 import { visibleConversation } from "@/lib/deletedMessages";
 import { readTimesLoader } from "@/hooks/useMessageReadTimes";
-import { forwardFeedback } from "@/lib/messageForward";
+import { FORWARD_FEEDBACK_KEY, forwardFeedback } from "@/lib/messageForward";
 import { KUB_CHAT_MESSAGE_JUMP_EVENT, requestChatMessageJump, type ChatMessageJumpDetail } from "@/lib/chatJumpEvents";
 import { getChatDisplayInfo, isSavedChat } from "@/lib/chatDisplay";
 import { reportError } from "@/lib/monitoring";
@@ -1378,21 +1378,19 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const sendForwardDraft = useCallback(async (comment: string, draft: MessageWithSender[]) => {
     setPendingForward(null);
     if (comment.trim()) await sendMessage(comment.trim());
-    // The messages go to the chat on screen, so its name is the one this
-    // window already reads — not the whole list, which D-088 took this window
-    // off so that every list change stopped rendering the open chat.
-    const targetName = chat?.name;
+    // The messages go to the chat on screen, and arriving in its feed is their
+    // confirmation — see `forwardFeedback`. Only a failure is said.
     for (let index = 0; index < draft.length; index += 1) {
       const result = await forwardMessage(draft[index], chatId)
         .catch((cause: unknown) => ({ ok: false as const, error: mapPgError(cause) }));
       if (!result.ok) {
         setPendingForward({ chatId, messages: draft.slice(index) });
-        showActionFeedback(forwardFeedback(result, targetName));
+        settleActionFeedback(FORWARD_FEEDBACK_KEY, forwardFeedback(result));
         return;
       }
     }
-    showActionFeedback(forwardFeedback({ ok: true, error: null }, targetName, draft.length));
-  }, [chat?.name, chatId, forwardMessage, sendMessage, setPendingForward]);
+    settleActionFeedback(FORWARD_FEEDBACK_KEY, null);
+  }, [chatId, forwardMessage, sendMessage, setPendingForward]);
 
   const stageIncomingFiles = useCallback(
     (files: File[], source: IncomingFilesSource, compress: boolean) => stageFiles(files, source, { compress }),
