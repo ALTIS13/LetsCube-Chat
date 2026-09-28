@@ -74,8 +74,9 @@ const panels = [
 
 test("bottom navigation uses panel glass on web and strong glass over Android chat rows", () => {
   const source = read("components/layout/BottomNav.tsx");
-  assert.match(source, /nativeAndroid\s*\?\s*"kub-glass-strong bottom-\[/);
-  assert.match(source, /:\s*"kub-glass bottom-\[/);
+  // The material is chosen by platform on its own line since item 56 gave the
+  // capsule one geometry everywhere: the position is shared, the glass is not.
+  assert.match(source, /nativeAndroid\s*\?\s*"kub-glass-strong"\s*:\s*"kub-glass"/);
   assert.doesNotMatch(source, /"kub-glass kub-glass-strong/);
 });
 
