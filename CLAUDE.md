@@ -411,7 +411,9 @@ VITE_SUPABASE_ANON_KEY="$(cat "$CFG/.k")" pnpm.cmd --filter @workspace/kub run d
   spec skips, which is how two of its tests went stale unseen until
   2026-09-11. `ios-standalone-safe-area.spec.ts` and
   `message-meta-spacer-line.spec.ts` need `VITE_PUBLIC_PREVIEW_FIXTURE=1` on a
-  fixture server. `pwa-service-worker.spec.ts` needs no server: it builds the
+  fixture server. `ios-pwa-push-nudge.spec.ts` needs `VITE_VAPID_PUBLIC_KEY` —
+  any base64url P-256 public key, a fixture value, since subscribing is
+  mocked — and refuses a server without one rather than timing out. `pwa-service-worker.spec.ts` needs no server: it builds the
   application itself.
 - Port hygiene: check the port is free first (an orphaned Vite answers 200 with
   stale configuration), then confirm `/src/lib/supabase/client.ts` contains the

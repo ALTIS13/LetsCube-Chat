@@ -26,6 +26,7 @@ const CHAT_NAME = "Объект на Минской";
 const REPORT = "Отчёт смены.txt";
 const REPORT_TEXT = "Бетон принят: 12 м³\nАрматура: акт подписан\nСледующая поставка — четверг";
 const ESTIMATE = "Смета.pdf";
+const ESTIMATE_CAPTION = "Смета на октябрь, проверь итог";
 const ARCHIVE = "Фото объекта.zip";
 const PDF_BYTES = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF";
 
@@ -43,10 +44,12 @@ async function boot(page: Page) {
     chats: [chat(CHAT, "group", CHAT_NAME, AT)],
     memberships: [membership(CHAT, ME, "owner", AT), membership(CHAT, ANNA, "member", AT)],
     messages: [
-      message("ce555555-5555-4555-8555-000000000001", CHAT, ANNA, ESTIMATE, "2026-09-28T08:50:00.000Z", {
+      // Sent with a caption: the text is the caption, and the name is the one
+      // the file was picked under.
+      message("ce555555-5555-4555-8555-000000000001", CHAT, ANNA, ESTIMATE_CAPTION, "2026-09-28T08:50:00.000Z", {
         type: "file",
         media_url: "/__fixture-media/estimate.pdf",
-        media_metadata: { size_bytes: 1_258_291, mime_type: "application/pdf" },
+        media_metadata: { size_bytes: 1_258_291, mime_type: "application/pdf", file_name: ESTIMATE },
       }),
       message("ce555555-5555-4555-8555-000000000002", CHAT, ANNA, ARCHIVE, "2026-09-28T08:55:00.000Z", {
         type: "file",
@@ -85,6 +88,9 @@ test("a file says its kind, its name and its size, and a text file opens in plac
   await expect(report.getByTestId("file-message-kind")).toHaveText("120 Б · TXT");
   await expect(report).toHaveAttribute("data-file-preview", "text");
   await expect(row(page, ESTIMATE).getByTestId("file-message-kind")).toHaveText("1,2 МБ · PDF");
+  // A caption does not take the file's name; it stands under the file.
+  await expect(row(page, ESTIMATE).getByTestId("file-message-name")).toHaveText(ESTIMATE);
+  await expect(page.getByTestId("file-message-caption")).toHaveText(ESTIMATE_CAPTION);
 
   await report.click();
   const viewer = page.getByTestId("document-viewer");

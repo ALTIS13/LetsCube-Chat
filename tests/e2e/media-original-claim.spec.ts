@@ -337,7 +337,11 @@ test("an original still says so, and a message that says nothing is left alone",
   await requireFixtureServer(page.request);
   await openConversation(page, "light", browserName);
 
-  await openViewer(page, ORIGINAL_CAPTION, "Открыть фото");
+  // A known large original with no preview waits for a tap, which opens the
+  // viewer: «Загрузить фото» since `1e7fe48e` (2026-09-25). The press is the
+  // same one; only the name the bubble gives it changed, and this check had
+  // been red on that name alone since then.
+  await openViewer(page, ORIGINAL_CAPTION, "Загрузить фото");
   const badge = page.getByTestId("media-viewer-originality");
   await expect(badge).toHaveAttribute("data-originality", "original");
   // One spelling at both widths: «Оригинал» already fits the narrowest header.

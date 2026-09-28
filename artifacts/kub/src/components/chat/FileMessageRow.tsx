@@ -80,6 +80,7 @@ export function FileMessageRow({
 
   return (
     <>
+      <div className="flex min-w-0 flex-col gap-1">
       <button
         type="button"
         onClick={press}
@@ -121,6 +122,13 @@ export function FileMessageRow({
           )}
         </span>
       </button>
+      {facts.caption && (
+        // Under the file, as Telegram draws a document's caption.
+        <p data-testid="file-message-caption" className="kub-message-text min-w-0 max-w-[18rem] whitespace-pre-wrap break-words text-[color:var(--kub-text)]">
+          {facts.caption}
+        </p>
+      )}
+      </div>
       {open && url && preview && (
         <DocumentViewer facts={facts} url={url} preview={preview} onClose={() => setOpen(false)} />
       )}

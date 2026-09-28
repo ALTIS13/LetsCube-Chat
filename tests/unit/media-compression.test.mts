@@ -246,10 +246,17 @@ test("the metadata says which way a photo or a video went", () => {
     { kind: "video_message", shape: "round", duration_ms: 4200, mime_type: "video/webm", size_bytes: 800, media_quality: "balanced" },
   );
   const document = buildAttachmentMediaMetadata(
-    { kind: "file", mimeType: "application/pdf", size: 900, uncompressed: true },
+    { kind: "file", mimeType: "application/pdf", size: 900, uncompressed: true, name: "  Смета.pdf " },
     { path: "u1/c1-a6.pdf" },
   );
   assert.equal(document && "uncompressed" in document, false);
+  // Item 33: a document keeps the name it was picked under, whatever its caption.
+  assert.equal(document?.file_name, "Смета.pdf");
+  const picture = buildAttachmentMediaMetadata(
+    { kind: "image", mimeType: "image/jpeg", size: 900, name: "IMG_0001.jpg" },
+    { path: "u1/c1-a7.jpg" },
+  );
+  assert.equal(picture && "file_name" in picture, false);
 
   assert.equal(isUncompressedMedia({ uncompressed: "true" }), false);
   assert.equal(isUncompressedMedia(null), false);

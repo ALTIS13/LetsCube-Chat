@@ -309,6 +309,8 @@ export interface MediaMetadataSource {
   kind: StagedAttachmentKind;
   mimeType: string;
   size: number;
+  /** The picked file's own name, kept for a document whatever its caption says. */
+  name?: string;
   originalSize?: number;
   originalMimeType?: string;
   optimized?: boolean;
@@ -368,6 +370,13 @@ export function buildAttachmentMediaMetadata(
     width: attachment.width ?? null,
     height: attachment.height ?? null,
   };
+  // A document's name is part of what it is (tracker item 33): the message's
+  // text is its caption when one was typed, and the name used to be lost to
+  // it — the row showed the caption as the file, and saved it under that.
+  if (attachment.kind === "file") {
+    const name = attachment.name?.trim().slice(0, 255);
+    if (name) metadata.file_name = name;
+  }
   if (!visual) return metadata;
 
   const { albumId, albumIndex, albumCount } = attachment;

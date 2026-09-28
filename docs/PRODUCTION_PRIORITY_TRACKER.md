@@ -640,6 +640,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     открылся» with «Скачать» rather than a blank page. The link that opened a
     browser tab is gone. Evidence: `document-preview.test.mts`,
     `file-message.spec` at 1440 and 390.
+    **And its name is its own, 2026-09-28.** The message's text was the file's
+    name unless a caption was typed, and then the caption took its place: the
+    row showed «Смета на октябрь, проверь итог» as the file and saved it under
+    that. A document now records the name it was picked under
+    (`media_metadata.file_name`); the row shows the name, the caption goes
+    under the row as Telegram draws a document's caption, and the chat list
+    reads «📎» and the message's text, as Telegram Web A's `messageSummary.ts`
+    does, where it read «Файл» whatever was written. Files sent
+    before the name was recorded keep reading their text as the name.
 
 34. `[~]` Standing: the interface's intuitiveness and its response to the
     person using it, and the interface bugs found along the way. Asked for by
@@ -3033,6 +3042,24 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     are wanted after all, Telegram's shape is the one — recommended folders
     with type rules — which needs a `folders` column and is a database change
     for the owner's word (§10), not built here.
+
+70. `[ ]` The top of a conversation is one compact line per thing, as in
+    Telegram — the owner, 2026-09-28, with two screenshots side by side:
+    «посмотри как минималистично/удобно сделана верхняя панель в telegram
+    (включая прослушивание голосовых) и как громоздко … это выглядит у нас».
+    Ours puts a voice message's player under the header as a card a third of a
+    phone's screen tall: a tile, the title and the sender on two lines, a time,
+    a seek slider and a duration on a third, then a row of previous, play,
+    next, a speed dropdown and a close. Telegram's, in his screenshot and in
+    its Android source (`FragmentContextView.java`, `DrKLO/Telegram` master,
+    read 2026-09-28), is **one 36dp row**: play or pause at the left, the
+    sender and the date on one line, a «1X» that **cycles 1 → 1.5 → 2 on a
+    tap** (a long press opens the full list, `toggleSpeeds` and `speedItems`),
+    a close, and the progress as a thin line along its foot — no slider, no
+    previous and next; seeking is the message's own. And it sits in **one
+    card with the pinned message**, each a row of it, rather than as two
+    surfaces. To do: that row, that card, the same on a computer and a phone,
+    and the header's own height measured against Telegram's while at it.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

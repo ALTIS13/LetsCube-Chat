@@ -24122,3 +24122,31 @@ private chat was closed does not come back», and `chat-list-event-cost.spec`
 «an edit heard while its chat was closed is on screen the moment the chat is
 back», in which the server's copy is left unedited so only the socket can put
 the new text on screen. Each fix taken out turns its test red.
+
+## D-323 `[x]` Beside the chat list, «Мои боты» squeezed a bot's settings to 35px
+
+**Severity:** high on the widths it hit, and introduced the same day. Found
+2026-09-28 by the full fixture run, not by the item's own regression:
+`bot-settings-container-queries.spec` went red at 1440's project the day
+tracker item 41 moved «Мои боты» into the shell's main area beside the lists.
+
+**Surface:** `artifacts/kub/src/pages/bots/BotsPage.tsx`. Its own
+list-and-settings split was a viewport rule, `md:grid-cols-[22rem_…]`, written
+when the page covered the whole window. In the main area the page is the window
+less the chat list (333px at these widths), so at a 768px window the 22rem list
+left the settings a 35px section, at 1052 a 319px one; the API tab's own tabs
+could not be pressed at 768.
+
+**Fixed 2026-09-28:** the split is the page's own width, not the window's — a
+container query, `@[48rem]/bots` — so the list and the settings stand side by
+side only while the page has room for both, and below that it is one or the
+other with «К списку», as on a phone. Measured after: 387px at 768, 652px at
+1033, the split from about 1120. The spec's two window pairs were re-derived
+from the new geometry rather than loosened: 700 and 768 still give two sections
+under one `sm:` answer, 700 and 1033 the same section under two `md:` answers.
+
+**The lesson** is D-222's again, and the reason it recurred: a page that moves
+into a column inherits every viewport rule it was written with. Item 41 moved
+two pages, and «Задачи» carried one too — its card grid took four columns at
+`2xl:`, which beside the chat list is four cards of about 260px; it now takes
+two from a 40rem page and four from 80rem, by its own width.

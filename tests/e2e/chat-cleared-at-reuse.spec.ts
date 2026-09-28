@@ -716,7 +716,12 @@ for (const theme of ["light", "dark"] as const) {
         .locator('[data-message-bubble="true"]')
         .filter({ hasText: messageRow.content as string }),
     ).toHaveCount(0);
-    await expect(page.getByText("Историю не удалось проверить")).toBeVisible();
+    // A 503 is one of the two statuses postgrest-js 2.105 retries on its own,
+    // three times with 1, 2 and 4 seconds between (`RETRYABLE_STATUS_CODES`),
+    // so the refusal reaches the page about seven seconds after the read. Ten
+    // seconds held that alone and failed under a loaded run; the wait is the
+    // library's, not the product's.
+    await expect(page.getByText("Историю не удалось проверить")).toBeVisible({ timeout: 20_000 });
     await page.screenshot({
       path: info.outputPath(`history-refused-${theme}.png`),
       fullPage: false,

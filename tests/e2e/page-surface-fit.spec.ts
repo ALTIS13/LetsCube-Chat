@@ -152,6 +152,10 @@ test.describe("the bot settings column stops at its measure", () => {
    */
   test("the column is 696 wide however wide the pane is", async ({ page }, info) => {
     test.skip(width(page) < 1096, WIDE_ONLY);
+    // Since item 41 the page stands beside the chat list, and at 1440 its
+    // settings pane is 656 — narrower than the measure, which then does not
+    // bind. A window that leaves the pane wider than 696 asks the question.
+    await page.setViewportSize({ width: 1920, height: 1000 });
     await openBotSettings(page, { webFont: true });
 
     const measured = await page.evaluate(() => {

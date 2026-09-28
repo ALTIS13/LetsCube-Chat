@@ -8,20 +8,26 @@ import { installMeasure, probe, TIER_2 } from "./helpers/d222Measure";
  *
  * **The instrument is a pair of viewports, and that is the whole point.** Tier 1
  * could take two container widths at one viewport because the chat-list column
- * is dragged by hand. Nothing here is dragged — the detail pane is the whole
- * window below `md` and the window minus a fixed 22rem list above it — so the
- * pair is built the other way round:
+ * is dragged by hand. Nothing here is dragged, so the pair is built the other
+ * way round, from windows whose sections are known.
+ *
+ * Since item 41 the page stands in the shell's main area beside the chat list
+ * (333px at these widths), and its own list-and-settings split is decided by
+ * its own width (48rem), not the window's: below that it is one pane, the
+ * settings the whole of it. So the section is the whole window below `md`,
+ * the window less the chat list and the pane's 48px of padding up to about
+ * 1100, and less the page's 22rem list as well above that.
  *
  * - **Pair A, one media state and two containers.** `sm:` is true at a 700pt
  *   window and true at a 768pt window, and the section behind it is 652px at
- *   one and 368px at the other, because 768 is the instant the 22rem list
- *   appears beside it. The two must lay out differently. Put `sm:` back and the
- *   768 half goes red while the 700 half keeps passing for the wrong reason.
- * - **Pair B, one container and two media states.** A 700pt window and a 1052pt
- *   window give the *same* 652px section — 1052 minus the 352px list is 700 —
- *   while `md:` is false at one and true at the other. The two must lay out
- *   identically, which is what forbids swapping `sm:` for a different viewport
- *   number instead of fixing the mechanism.
+ *   one and 387px at the other, because at 768 the chat list stands beside
+ *   the page. The two must lay out differently. Put `sm:` back and the 768 half
+ *   goes red while the 700 half keeps passing for the wrong reason.
+ * - **Pair B, one container and two media states.** A 700pt window and a 1033pt
+ *   window give the *same* 652px section — 1033 less the 333px chat list is
+ *   700 — while `md:` is false at one and true at the other. The two must lay
+ *   out identically, which is what forbids swapping `sm:` for a different
+ *   viewport number instead of fixing the mechanism.
  *
  * Nothing here asserts that `container-type` is declared: a declaration is not
  * a surface. What is asserted is the layout the reader gets.
@@ -33,13 +39,13 @@ import { installMeasure, probe, TIER_2 } from "./helpers/d222Measure";
  * font. The pixels are `d222-tier2-capture.spec.ts`.
  */
 
-const DESKTOP_ONLY = "the 22rem list sits beside the pane only from md upward";
+const DESKTOP_ONLY = "the chat list stands beside the page only from md upward";
 const PHONE_ONLY = "the phone form is what the narrow projects are for";
 
 /** Same `sm:` answer, different container. */
 const PAIR_A = { wide: 700, narrow: 768 } as const;
-/** Same container, different `md:` answer. 1052 − 352 = 700. */
-const PAIR_B = { small: 700, large: 1052 } as const;
+/** Same container, different `md:` answer. 1033 − 333 = 700. */
+const PAIR_B = { small: 700, large: 1033 } as const;
 
 /** The section, which is the box the thresholds are measured against. */
 async function sectionWidth(page: Page) {
@@ -86,10 +92,10 @@ test.describe("the command row", () => {
     ).toBe(3);
 
     await resize(page, PAIR_A.narrow);
-    expect(await sectionWidth(page), "at 768 the 22rem list takes 352 of the window").toBe(368);
+    expect(await sectionWidth(page), "at 768 the chat list beside the page takes 333 of the window").toBe(387);
     expect(
       (await commandGrid(page)).tracks?.length,
-      "a 368px section does not, and `sm:` cannot tell it from the 652px one",
+      "a 387px section does not, and `sm:` cannot tell it from the 652px one",
     ).toBe(1);
   });
 
@@ -127,7 +133,7 @@ test.describe("the command row", () => {
     await resize(page, PAIR_B.large);
     const large = { section: await sectionWidth(page), grid: await commandGrid(page) };
 
-    expect(large.section, "1052 minus the 352pt list is the 700pt window's own pane").toBe(
+    expect(large.section, "1033 minus the 333pt chat list is the 700pt window's own pane").toBe(
       small.section,
     );
     expect(large.grid.tracks, "the same section must produce the same tracks").toEqual(
@@ -154,7 +160,7 @@ test.describe("the two-button rows", () => {
     for (const row of await buttonRows(page)) {
       // Stacked: each button runs the width of the row rather than being
       // squeezed beside its neighbour until its label breaks in two.
-      expect(row.box.height, "a 368px section stacks them").toBeGreaterThan(60);
+      expect(row.box.height, "a 387px section stacks them").toBeGreaterThan(60);
       for (const child of row.children) {
         expect(child.width, "a stacked button runs the width of the row").toBeCloseTo(
           row.box.width,

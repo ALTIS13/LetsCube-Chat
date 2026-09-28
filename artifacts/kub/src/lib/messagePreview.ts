@@ -41,7 +41,13 @@ export function formatChatMessagePreview(
   if (message.type === "image") return "Фото";
   if (message.type === "video") return "Видео";
   if (message.type === "audio") return "Голосовое";
-  if (message.type === "file") return "Файл";
+  // Telegram's web client prints a document as a paperclip and its caption,
+  // or its name when there is none (`messageSummary.ts`, read 2026-09-28): the
+  // name says which file, where «Файл» said only that there was one.
+  if (message.type === "file") {
+    const text = message.content?.trim();
+    return text ? `📎 ${text}` : "Файл";
+  }
   if (message.media_url && !message.content?.trim()) return "Файл";
   return message.content ?? "";
 }

@@ -95,6 +95,20 @@ several of `ios-pwa-push-nudge`, `media-original-claim` 336,
 `windows-tauri-shell` 442, which wants a configured build. The preview-fixture
 specs need a server with `VITE_PUBLIC_PREVIEW_FIXTURE=1` and are green on one.
 
+**Re-measured 2026-09-28**, the whole fixture suite at 1440 and 390 (2644
+tests: 2166 passed, 446 skipped, 32 red), each red one then run alone on a
+fresh server. None of the list above is red any more except where a server is
+missing, and four of them were the harness rather than the product:
+`ios-pwa-push-nudge` needs `VITE_VAPID_PUBLIC_KEY` on the dev server (any
+base64url P-256 point; the spec now says so instead of timing out) and is a
+phone's spec, now skipped at 1440; `media-original-claim` 336 pressed
+«Открыть фото» on a large original that has said «Загрузить фото» since
+`1e7fe48e`; `chat-cleared-at-reuse` 681 gave ten seconds to a refusal that
+postgrest-js 2.105 retries three times on a 503 before handing it over; and
+`pre-react-recovery` 70 matched only a fresh server's `/src/main.tsx`, not the
+`?t=` a hot-updated one names. `letscube-brand-auth-layout` needs the captcha
+server (§5) and is green on one. The rest were load: green alone.
+
 MobileNext works from this machine through `mobilecli` (the login lives in the
 Windows keyring); the account allows one device at a time, and some iPhone 14
 Pro Max units have no control agent. `docs/operations/ios-pwa-viewport-validation.md`

@@ -26,6 +26,14 @@ const STATE_COPY = {
  * lists, as Discord's home rows open theirs, and not over the whole window. So
  * it fills the pane rather than the viewport, and its way back is the phone's
  * alone — from `md` the chat list is beside it and is the way back.
+ *
+ * **Its own split is decided by its own width**, not the window's (D-222). The
+ * list and the settings stand side by side only while the page is 48rem wide
+ * — the 22rem list and room for the settings — and are otherwise one or the
+ * other, with «К списку», as on a phone. Beside the chat list that is a window
+ * of about 1100px; below it the `md:` split this used to have squeezed the
+ * settings to 35px at 768, which `bot-settings-container-queries.spec`
+ * measured the day item 41 moved the page.
  */
 export function BotsPage({ inPane = false }: { inPane?: boolean } = {}) {
   const [, setLocation] = useLocation();
@@ -96,8 +104,9 @@ export function BotsPage({ inPane = false }: { inPane?: boolean } = {}) {
         }
       />
 
-      <div className="grid min-h-0 flex-1 md:grid-cols-[22rem_minmax(0,1fr)]">
-        <section data-testid="bots-list-pane" aria-label="Список ботов" className={cn("kub-glass min-h-0 min-w-0 border-r border-[color:var(--kub-border-color)]", selectedId ? "hidden md:flex" : "flex", "flex-col")}>
+      <div className="@container/bots min-h-0 flex-1">
+      <div className="grid h-full min-h-0 @[48rem]/bots:grid-cols-[22rem_minmax(0,1fr)]">
+        <section data-testid="bots-list-pane" aria-label="Список ботов" className={cn("kub-glass min-h-0 min-w-0 border-r border-[color:var(--kub-border-color)]", selectedId ? "hidden @[48rem]/bots:flex" : "flex", "flex-col")}>
           {!eligibility?.can_create && eligibility && <EligibilityNotice eligibility={eligibility} />}
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 pb-[calc(0.75rem+var(--kub-safe-bottom))]">
             {list.isLoading && <BotListSkeleton />}
@@ -110,10 +119,10 @@ export function BotsPage({ inPane = false }: { inPane?: boolean } = {}) {
           </div>
         </section>
 
-        <section data-testid="bots-detail-pane" aria-label="Настройки бота" className={cn("min-h-0 min-w-0", selectedId ? "flex" : "hidden md:flex", "flex-col")}>
+        <section data-testid="bots-detail-pane" aria-label="Настройки бота" className={cn("min-h-0 min-w-0", selectedId ? "flex" : "hidden @[48rem]/bots:flex", "flex-col")}>
           {selectedId ? (
             <>
-              <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[color:var(--kub-border-color)] px-3 md:hidden">
+              <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[color:var(--kub-border-color)] px-3 @[48rem]/bots:hidden">
                 <button type="button" onClick={() => select(null)} className="flex h-11 min-w-11 items-center gap-2 rounded-md px-2 text-sm text-[color:var(--kub-muted)] kub-raise-hover" aria-label="Назад к списку"><KubIcon name="back" size={18} />К списку</button>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-safe">
@@ -126,6 +135,7 @@ export function BotsPage({ inPane = false }: { inPane?: boolean } = {}) {
             <KubEmptyState icon={<KubIcon name="bot" size={28} />} title="Выберите бота" description="Настройки и диагностика откроются здесь." className="m-auto" />
           )}
         </section>
+      </div>
       </div>
 
       <BotCreateModal open={createOpen} onOpenChange={setCreateOpen} onCreated={created} onUncertain={refreshAfterUncertainCreate} />

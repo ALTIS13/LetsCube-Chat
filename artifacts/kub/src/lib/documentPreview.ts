@@ -23,6 +23,8 @@ export type DocumentPreview = "pdf" | "text" | "image" | "video" | "audio";
 
 export interface DocumentFacts {
   name: string;
+  /** What was written with the file, when that is not its name. */
+  caption: string | null;
   /** Upper case, at most five letters, or «ФАЙЛ» when there is none. */
   extension: string;
   family: DocumentFamily;
@@ -62,10 +64,15 @@ function extensionOf(name: string): string {
 }
 
 export function documentFacts(input: { content: string | null | undefined; mediaMetadata: unknown }): DocumentFacts {
-  const name = input.content?.trim() || "Файл";
   const meta = input.mediaMetadata && typeof input.mediaMetadata === "object" && !Array.isArray(input.mediaMetadata)
     ? (input.mediaMetadata as Record<string, unknown>)
     : {};
+  // The name the file was picked under, recorded since 2026-09-28; before that
+  // the message's text was the name unless a caption took its place.
+  const recordedName = typeof meta.file_name === "string" && meta.file_name.trim() ? meta.file_name.trim() : null;
+  const text = input.content?.trim() || null;
+  const name = recordedName ?? text ?? "Файл";
+  const caption = recordedName && text && text !== recordedName ? text : null;
   const sizeBytes = typeof meta.size_bytes === "number" && Number.isFinite(meta.size_bytes) && meta.size_bytes >= 0
     ? meta.size_bytes
     : null;
@@ -81,6 +88,7 @@ export function documentFacts(input: { content: string | null | undefined; media
   }
   return {
     name,
+    caption,
     extension: extension ? extension.slice(0, 5).toUpperCase() : "ФАЙЛ",
     family,
     sizeBytes,

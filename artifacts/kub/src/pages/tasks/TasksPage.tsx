@@ -761,7 +761,11 @@ export function TasksPage({ inPane = false }: { inPane?: boolean } = {}) {
               })}
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4 gap-3">
+            // The page's own width decides the columns, not the window's (D-323):
+            // beside the chat list a 1536px window leaves it about 1076, where
+            // `2xl:` used to lay four cards of 260px.
+            <div className="@container/tasks">
+            <div className="grid grid-cols-1 @[40rem]/tasks:grid-cols-2 @[80rem]/tasks:grid-cols-4 gap-3">
               {visibleTasks.map((t) => {
                 const canSelect = canBulkDeleteTasks && !t.deleted_at;
                 const selected = selectedTaskIds.has(t.id);
@@ -782,6 +786,7 @@ export function TasksPage({ inPane = false }: { inPane?: boolean } = {}) {
                   />
                 );
               })}
+            </div>
             </div>
           )
         )}

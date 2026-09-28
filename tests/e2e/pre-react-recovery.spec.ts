@@ -79,7 +79,10 @@ test("retry fetches the current document after a retired entry was named by stal
     staleDocuments += 1;
     const response = await route.fetch();
     const body = await response.text();
-    const currentEntry = body.match(/src="\/(?:src\/main\.tsx|assets\/index-[^"]+\.js)"/)?.[0];
+    // A dev server that has hot-updated the entry names it `main.tsx?t=<stamp>`,
+    // and this matched only the fresh spelling: after a day of edits the spec
+    // went red on the server's age, not on the product.
+    const currentEntry = body.match(/src="\/(?:src\/main\.tsx(?:\?t=\d+)?|assets\/index-[^"]+\.js)"/)?.[0];
     expect(currentEntry).toBeTruthy();
     return route.fulfill({
       response,

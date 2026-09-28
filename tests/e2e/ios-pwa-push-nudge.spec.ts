@@ -10,6 +10,31 @@ import {
 // Authenticated fixture: no automatic capture of even synthetic account state.
 test.use({ screenshot: "off", trace: "off", video: "off" });
 
+// An installed iPhone app is a phone's width. At 1440 the same user agent gets
+// the computer's shell, which has neither the bottom navigation nor the list
+// this nudge lives in, and five checks were red there on that alone.
+test.skip(({ viewport }) => (viewport?.width ?? 0) >= 768, "an installed iPhone app is a phone's width");
+
+/**
+ * Web Push needs a public key before anything offers it (`usePush.ts` returns
+ * early without `VITE_VAPID_PUBLIC_KEY`), and the fixture server has none, so
+ * every nudge check timed out waiting for a card that could not be drawn —
+ * red in every full run since at least 2026-09-21 and read as somebody else's.
+ * Any 65-byte uncompressed P-256 point in base64url will do: subscribing is
+ * mocked below, and nothing is ever sent to a push service.
+ */
+async function requirePushKey(page: Page) {
+  const push = await page.request
+    .get("/src/hooks/usePush.ts")
+    .then((response) => response.text())
+    .catch(() => "");
+  if (!/"VITE_VAPID_PUBLIC_KEY":\s*"[A-Za-z0-9_-]{80,}"/.test(push)) {
+    throw new Error(
+      "This spec needs a push key on the dev server: start it with VITE_VAPID_PUBLIC_KEY set to any base64url P-256 public key (a fixture value; nothing is sent).",
+    );
+  }
+}
+
 const me = person("11111111-1111-4111-8111-000000000001", "Тестовый пользователь");
 const chatId = "22222222-2222-4222-8222-000000000001";
 
@@ -19,6 +44,7 @@ async function openPushFixture(
   options: { installed?: boolean; stalledWorker?: boolean; existingSubscription?: boolean } = {},
 ) {
   await requireFixtureServer(page.request);
+  await requirePushKey(page);
   await page.addInitScript(
     ({ state, installed, stalledWorker, existingSubscription }) => {
       Object.defineProperty(navigator, "userAgent", {

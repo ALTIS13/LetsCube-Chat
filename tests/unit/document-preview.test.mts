@@ -8,6 +8,7 @@ import {
   previewEngineOf,
   TEXT_PREVIEW_LIMIT_BYTES,
 } from "../../artifacts/kub/src/lib/documentPreview.ts";
+import { formatChatMessagePreview } from "../../artifacts/kub/src/lib/messagePreview.ts";
 
 /**
  * Tracker item 33: «просмотр документов и т.п вещей сразу в чате, на примере
@@ -33,6 +34,21 @@ test("a file says its name, its extension and its size, from what the message re
   assert.equal(bare.sizeBytes, null);
   // The MIME type decides when the name cannot.
   assert.equal(documentFacts({ content: "report", mediaMetadata: { mime_type: "application/pdf" } }).family, "pdf");
+});
+
+test("a caption does not take the file's name: the name is the one it was picked under", () => {
+  const captioned = documentFacts({
+    content: "Смета на октябрь, проверь итог",
+    mediaMetadata: { file_name: "Смета.pdf", size_bytes: 80_000 },
+  });
+  assert.equal(captioned.name, "Смета.pdf");
+  assert.equal(captioned.extension, "PDF");
+  assert.equal(captioned.caption, "Смета на октябрь, проверь итог");
+  // No caption: the text is the name, and there is nothing to show under it.
+  const plain = documentFacts({ content: "Смета.pdf", mediaMetadata: { file_name: "Смета.pdf" } });
+  assert.equal(plain.caption, null);
+  // Sent before the name was recorded: the text is all there is.
+  assert.equal(documentFacts({ content: "Смета.pdf", mediaMetadata: {} }).name, "Смета.pdf");
 });
 
 test("sizes read the way a Russian file manager writes them", () => {
@@ -72,4 +88,11 @@ test("text opens in place up to a megabyte, and pictures, films and recordings i
   assert.equal(documentPreviewOf(documentFacts({ content: "logo.svg", mediaMetadata: null }), desktop), null);
   assert.equal(documentPreviewOf(documentFacts({ content: "IMG_0001.HEIC", mediaMetadata: null }), desktop), null);
   assert.equal(documentPreviewOf(documentFacts({ content: "архив.zip", mediaMetadata: null }), desktop), null);
+});
+
+test("the chat list prints a file as Telegram's web client does: a paperclip and its text", () => {
+  const file = (content: string | null) => ({ type: "file" as const, content, media_url: "u1/c1-a.pdf", deleted_at: null });
+  assert.equal(formatChatMessagePreview(file("Смета.pdf")), "📎 Смета.pdf");
+  assert.equal(formatChatMessagePreview(file("Смета на октябрь, проверь итог")), "📎 Смета на октябрь, проверь итог");
+  assert.equal(formatChatMessagePreview(file(null)), "Файл");
 });
