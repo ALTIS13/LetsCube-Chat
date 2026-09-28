@@ -83,12 +83,17 @@ test.describe("resumable media upload UI", () => {
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(1);
     await page.getByRole("button", { name: "Отправить" }).click();
 
-    const progress = page.getByTestId("staged-attachment-upload-progress");
-    await expect(progress).toBeVisible();
-    await expect.poll(async () => Number(await progress.getAttribute("aria-valuenow"))).toBeGreaterThan(0);
-
-    await page.getByRole("button", { name: "Отменить загрузку" }).click();
+    // D-314: from the press the file is in the conversation, with its upload's
+    // ring and its own cancel, and the tray above the composer is empty. This
+    // asserted the tray's progress and «Отменить загрузку», which no send has
+    // shown since; `media-send-path.spec.ts` pins the same ring on the fixture.
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
+    const progress = page.getByTestId("message-upload-progress");
+    await expect(progress).toBeVisible();
+    await expect.poll(async () => Number(await progress.getAttribute("aria-valuenow")), { timeout: 10_000 }).toBeGreaterThan(0);
+
+    await page.getByTestId("message-upload-cancel").click();
+    await expect(page.getByTestId("message-upload-progress")).toHaveCount(0);
     await expect.poll(() => deleteRequested).toBe(true);
   });
 });

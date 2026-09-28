@@ -23932,7 +23932,7 @@ after the reader has taken over, moves nobody. Probed after: the separator at
 render-stability, prepend-anchor, deleted-history, search-column and address
 specs pass beside it.
 
-## D-320 `[ ]` A reopened chat fetches its history three times
+## D-320 `[x]` A reopened chat fetches its history three times
 
 Same run, same spec, also red on 1c066e8b: «leaving a chat and opening it
 again renders its history once and fetches it once» and «switching to another
@@ -23957,3 +23957,49 @@ and measured: the counts moved (3 to 2 in one of the two tests) and did not
 reach the spec's 1, so the attempt was reverted rather than shipped half-proven
 into the text-channel scope rules. The spec's render count for a revalidation
 that changed nothing (3 against 0) was not looked into.
+
+**Fixed 2026-09-28, and the paragraphs above were wrong in two details that
+mattered.** The gate on a fresh «cleared for me» answer came from `a6d0284f`,
+not from `fdbb6d72`; `fdbb6d72`, seven hours later, added the check that made
+it redundant — the effect that draws a reopened chat's cached history only
+after that chat's cleared mark and hidden ids have been read again. That effect
+is the privacy guard, and it stays. And the spec's chat A is a group, so every
+cause below was in the one reopen. Each was found by tracing every
+`fetchMessages` of the reopen, and each has its own fix and its own red:
+
+1. **The redundant gate.** Removed from the open effect; the verification
+   effect still draws nothing until the chat has been checked
+   (`hooks/useMessages.ts`).
+2. **A chat's channel scope started from nothing on every visit.** The chat
+   window is not remounted between chats, so the history was read for the
+   unknown scope and again once the topics read answered. `useTopics` now
+   starts a chat it has seen from the last answer it had for it — per reader,
+   refreshed in the background, forgotten when a read is refused.
+3. **The general channel's ids were held by identity**, so a refresh that
+   returned the same channels as new objects re-keyed the history read. Held
+   by value (`ChatWindow.tsx`).
+4. **The chat's realtime channel left and rejoined on every scope change**,
+   because its effect depended on the history read; each join was one more
+   revalidation. The channel is the chat's — its filter is the chat and its
+   handlers read the scope from refs — so it now reads the latest history read
+   through a ref.
+5. **The conversation rendered on coming back** because the bot viewer
+   panels' read — on focus, on return, on reconnect and every fifteen seconds —
+   replaced its state with an equal one. It keeps what it holds when the answer
+   is the same. That was also a render of the whole conversation every fifteen
+   seconds in any open chat, with a bot in it or not.
+
+Measured at 1440, before → after: leave and reopen, `messages:list` 3 → 1,
+`message_hidden_for_users` 4 → 2, `messages:pinned` 2 → 1; switch to another
+chat and back, 3 → 1; coming back from away, conversation renders 3 → 0. A
+first open of a group reads its history three times instead of four. Two
+tests were added because causes 3 and 4 live only in a group with text
+channels, which chat A is not: «a group with text channels, reopened, reads
+its history once» and «moving to another text channel reads that channel
+once». Every cause was put back one at a time and each turned its test red —
+1 and 2 the reopen and switch tests (2 reads each), 3 the text-channel reopen
+(2), 4 the channel move (2), 5 the away test (3 renders).
+
+The phone half of the same spec's «selected chat highlight» test was red on the
+baseline too, and for a reason in the test: a phone shows one pane, so there is
+no selected row on screen to measure and no hover. It skips there now.

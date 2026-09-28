@@ -52,6 +52,10 @@ const CHAT = {
   F: "22222222-2222-4222-8222-2222222222a6",
 } as const;
 const LABEL_OF_CHAT = Object.fromEntries(Object.entries(CHAT).map(([label, id]) => [id, label]));
+const TOPIC = {
+  GENERAL: "33333333-3333-4333-8333-3333333333d1",
+  LAYOUTS: "33333333-3333-4333-8333-3333333333d2",
+} as const;
 
 const A_HISTORY = 40;
 const RENDERED = ["Sidebar", "ChatList", "ChatListItem", "ChatWindow", "MessageList", "MessageRow", "MessageBubble"];
@@ -82,7 +86,10 @@ test.describe("what one event costs the chat list and the conversation", () => {
     await requireFixtureServer(request);
   });
 
-  test("selected chat highlight remains translucent at rest and on hover", async ({ page }) => {
+  test("selected chat highlight remains translucent at rest and on hover", async ({ page }, testInfo) => {
+    // A phone shows one pane: the open conversation covers the list, so there
+    // is no selected row on screen to measure, and a finger has no hover.
+    test.skip(testInfo.project.name.includes("mobile"), "the selected row and its hover are the two-pane layout's");
     const { backend, realtime } = await boot(page);
     await openChat(page, backend, realtime, CHAT.A);
     const row = chatRow(page, CHAT.A);
@@ -344,6 +351,43 @@ test.describe("what one event costs the chat list and the conversation", () => {
     expect.soft(otherKeys(renders, "ChatListItem", [CHAT.A, CHAT.C]), `rows other than the two selected ones rendered: ${JSON.stringify(renders.byKey.ChatListItem)}`).toEqual([]);
   });
 
+  test("a group with text channels, reopened, reads its history once", async ({ page }) => {
+    test.setTimeout(90_000);
+    const { backend, realtime } = await boot(page);
+    await openChat(page, backend, realtime, CHAT.D);
+    await leaveChat(page);
+    await settle(page, backend, 1_200);
+
+    const mark = backend.mark();
+    await chatRow(page, CHAT.D).click();
+    await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: "Дизайн: последнее" })).toBeVisible();
+    await settle(page, backend, 2_800);
+    const cost = backend.since(mark);
+    report("reopen with text channels", cost, await readRenderCounts(page));
+    // D-320. A chat seen before starts from the channels it was last given, and
+    // the general channel's ids are held by value: a refresh that answers with
+    // the same channels as new objects used to re-key the history read.
+    expect.soft(cost[MESSAGES_HISTORY] ?? 0, `the history was fetched more than once: ${JSON.stringify(cost)}`).toBeLessThanOrEqual(1);
+  });
+
+  test("moving to another text channel reads that channel once", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name.includes("mobile"), "the channel rail beside the conversation is the desktop's");
+    test.setTimeout(90_000);
+    const { backend, realtime } = await boot(page);
+    await openChat(page, backend, realtime, CHAT.D);
+
+    const mark = backend.mark();
+    await page.locator(`[data-testid="channel-rail-text"][data-channel-id="${TOPIC.LAYOUTS}"]`).click();
+    await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: "Макеты: первая версия" })).toBeVisible();
+    await settle(page, backend, 2_800);
+    const cost = backend.since(mark);
+    report("move to a text channel", cost, await readRenderCounts(page));
+    // D-320. The chat's realtime channel is the chat's: its filter is the chat
+    // and its handlers read the scope from refs. Leaving and rejoining it on a
+    // scope change was one more revalidation of the history each time.
+    expect.soft(cost[MESSAGES_HISTORY] ?? 0, `the channel's history was fetched more than once: ${JSON.stringify(cost)}`).toBeLessThanOrEqual(1);
+  });
+
   test("coming back online after an outage still refetches the list and the open chat", async ({ page }) => {
     test.setTimeout(90_000);
     const { backend, realtime } = await boot(page);
@@ -594,6 +638,8 @@ class FixtureBackend {
   readonly chats: Row[] = [];
   readonly memberships: Row[] = [];
   readonly messages: Row[] = [];
+  /** Text channels. Only D has any, so every other chat reads exactly as before. */
+  readonly topics: Row[] = [];
   private sequence = 0;
 
   mark(): number {
@@ -694,6 +740,9 @@ class FixtureBackend {
         }
         return json(route, single ? body[0] ?? null : body);
       }
+      case "topics":
+        if (method !== "GET") return json(route, single ? null : []);
+        return json(route, pick(single, filterRows(this.topics, params)));
       default:
         return json(route, single ? null : []);
     }
@@ -847,7 +896,33 @@ function seed(backend: FixtureBackend): FixtureBackend {
     backend.chats.push(chat(id, "group", name, at(minute)));
     backend.memberships.push(member(id, ME, at(minute), "owner"), member(id, ANYA, at(minute)));
   }
+
+  // D is a group with text channels: its history is read per channel, which is
+  // the scope D-320's reopen and channel switch are about.
+  backend.topics.push(
+    topicRow(TOPIC.GENERAL, CHAT.D, "Общие", true, 0),
+    topicRow(TOPIC.LAYOUTS, CHAT.D, "Макеты", false, 1),
+  );
+  backend.messages.push({
+    ...messageRow("55555555-5555-4555-8555-500000000001", CHAT.D, ANYA, "Макеты: первая версия", at(15)),
+    topic_id: TOPIC.LAYOUTS,
+  });
   return backend;
+}
+
+function topicRow(id: string, chatId: string, name: string, isGeneral: boolean, position: number): Row {
+  return {
+    id,
+    chat_id: chatId,
+    name,
+    emoji: null,
+    is_general: isGeneral,
+    archived: false,
+    position,
+    created_by: ME,
+    created_at: "2026-09-01T09:00:00.000Z",
+    updated_at: "2026-09-01T09:00:00.000Z",
+  };
 }
 
 function profileRow(id: string, fullName: string, username: string | null): Row {

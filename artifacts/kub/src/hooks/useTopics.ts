@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
@@ -37,10 +37,39 @@ import { plainFailure } from "@/lib/plainMessages";
  * and `ChatWindow` folds it into the rail's own `failed`, which has said this
  * for the rooms since 2026-09-14.
  */
+
+/**
+ * The channels each reader was last given for each chat, this session (D-320).
+ *
+ * Every chat the chat window was given — reopened after none, or switched to
+ * from another — started with its scope unknown: the conversation was read
+ * once for the unknown scope and again when this hook's read answered, and
+ * the conversation's channel was joined twice with it. Starting from the last
+ * answer, a chat seen before knows its scope at once and draws the
+ * conversation from the store; the read still runs, in the background, and
+ * replaces it. Keyed by reader as well as by chat, so another account never
+ * starts from what this one was shown, and forgotten when a read is refused.
+ */
+const lastTopicReads = new Map<string, readonly Topic[]>();
+
+function topicReadKey(chatId: string): string {
+  return `${useAppStore.getState().currentUser?.id ?? ""}:${chatId}`;
+}
+
 export function useTopics(chatId: string | null, hasTopicNavigation: boolean) {
   const supabase = useMemo(() => createClient(), []);
   const rt = useMemo(() => getRealtimeClient(), []);
-  const [read, setRead] = useState<HeldList<Topic>>(() => heldListPending<Topic>());
+  const [ownRead, setRead] = useState<HeldList<Topic>>(() => heldListPending<Topic>());
+  // This hook's own answer once it has one for this chat; until then, the
+  // last one this session had for it. The window is not remounted between
+  // chats, so this is decided on every render rather than once at mount.
+  const lastRead = chatId && hasTopicNavigation ? lastTopicReads.get(topicReadKey(chatId)) : undefined;
+  const read = useMemo(
+    () => (ownRead.subject === chatId || !lastRead ? ownRead : heldListSucceeded(lastRead, chatId)),
+    [chatId, lastRead, ownRead],
+  );
+  const readRef = useRef(read);
+  readRef.current = read;
   const topics = useMemo(() => read.rows.filter((topic) => !topic.archived), [read.rows]);
   // Two slices, not the store. A selector-less read subscribes the chat window
   // that calls this hook to every change anywhere in the store, so every
@@ -68,6 +97,7 @@ export function useTopics(chatId: string | null, hasTopicNavigation: boolean) {
       // What the mapper made of it goes to the log, where somebody who can act
       // on a policy name reads it; the screen gets the product's sentence.
       if (import.meta.env.DEV) console.error("[useTopics] read refused", error);
+      lastTopicReads.delete(topicReadKey(chatId));
       setRead((previous) =>
         heldListRefused(previous, {
           subject: chatId,
@@ -76,11 +106,18 @@ export function useTopics(chatId: string | null, hasTopicNavigation: boolean) {
       );
       return;
     }
-    setRead(heldListSucceeded((data ?? []) as Topic[], chatId));
+    const rows = (data ?? []) as Topic[];
+    lastTopicReads.set(topicReadKey(chatId), rows);
+    setRead(heldListSucceeded(rows, chatId));
   }, [chatId, hasTopicNavigation, supabase]);
 
-  // Initial load + when chat changes.
-  useEffect(() => { void fetchTopics(); }, [fetchTopics]);
+  // Initial load + when chat changes. Where what is held already answers this
+  // chat — the last answer, above — the read is a refresh and blanks nothing.
+  useEffect(() => {
+    const held = readRef.current;
+    void fetchTopics({ background: held.loadedOnce && held.subject === chatId });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchTopics]);
 
   // Keep legacy/general messages visible by default. If the selected topic was
   // removed, fall back to the pseudo-topic "Общие" (`selectedTopicId = null`).

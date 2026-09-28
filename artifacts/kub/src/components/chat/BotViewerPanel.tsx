@@ -29,6 +29,10 @@ interface ViewerState {
   panels: BotViewerInterface[];
 }
 
+function samePanels(held: readonly BotViewerInterface[], read: readonly BotViewerInterface[]): boolean {
+  return held.length === read.length && held.every((panel, index) => JSON.stringify(panel) === JSON.stringify(read[index]));
+}
+
 export function useBotViewerPanels(chatId: string, accountId: string | null) {
   const scope = `${accountId ?? ""}:${chatId}`;
   const [state, setState] = useState<ViewerState>({ scope, panels: [] });
@@ -48,7 +52,13 @@ export function useBotViewerPanels(chatId: string, accountId: string | null) {
       ? await readBotViewerInterfaces(chatId, accountId, scopeAbort.current.signal)
       : null;
     if (currentScope.current !== scope || scopeAbort.current.signal.aborted || sequence !== requestNumber.current) return null;
-    setState({ scope, panels: rows ?? [] });
+    // An answer that says what is already held keeps it. This read runs on a
+    // timer, on focus, on return and on reconnect, and a new state object for
+    // the same panels rendered the whole conversation each time — four times
+    // for one return to the tab, and once every fifteen seconds in a chat with
+    // no bot in it at all (D-320).
+    const next = rows ?? [];
+    setState((current) => (current.scope === scope && samePanels(current.panels, next) ? current : { scope, panels: next }));
     return rows;
   }, [accountId, chatId, scope]);
 

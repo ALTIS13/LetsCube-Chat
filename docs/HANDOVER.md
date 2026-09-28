@@ -61,7 +61,29 @@ order was followed and closed:
 - D-314 closed — an attachment is in its conversation from the press, with
   its picture and a ring for its upload, wherever the reader goes afterwards;
   a failed one waits there with «Повторить». Read in Telegram Web A,
-  reference-clients §22.
+  reference-clients §22;
+- D-319 — a chat reopened with unread messages lands on the first of them
+  again, a CLAUDE.md §11 contract the full fixture regression found red
+  (`f2c61b42`);
+- item 36 b and the in-chat half of c (`5d8d20f1`): a row's menu reads,
+  calls and blocks in Discord's positions, and the in-chat search offers its
+  own grammar under the field; the global search's half of c is not started;
+- D-320 — a reopened or switched-back chat reads its history once instead of
+  three times, and coming back to the tab no longer renders the conversation:
+  the redundant gate, the topic scope a chat started from nothing, the general
+  topic ids held by identity, a channel rejoined on every scope change, and a
+  bot panel read that replaced equal state every fifteen seconds.
+
+A full fixture regression was run at `0eba67e9` against a throwaway worktree of
+the pre-session baseline `1c066e8b`. Everything red at `0eba67e9` was red on the
+baseline too, except D-319, which was then fixed; `chat-list-event-cost` 203,
+263 and 324 have since gone green with D-320. Still red on both, as measured
+then: `chat-list-event-cost` 85 at 390, `pill-one-line` 184/246/293/347,
+several of `ios-pwa-push-nudge`, `media-original-claim` 336,
+`chat-cleared-at-reuse` 681, `message-meta-observer-cost` 236,
+`message-meta-placement-settles` 457, `message-touch-gestures` 168/230, and
+`windows-tauri-shell` 442, which wants a configured build. The preview-fixture
+specs need a server with `VITE_PUBLIC_PREVIEW_FIXTURE=1` and are green on one.
 
 MobileNext works from this machine through `mobilecli` (the login lives in the
 Windows keyring); the account allows one device at a time, and some iPhone 14

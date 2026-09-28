@@ -430,6 +430,12 @@ export function useMessages(
       if (isCurrent()) setLoading(false);
     }
   }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat, userId]);
+  // The latest read, for the channel below. The channel is the chat's, not the
+  // scope's — its filter is the chat and its handlers read the scope from refs —
+  // so a scope that resolves or changes must not leave and rejoin it: every
+  // rejoin was one more revalidation of the same history (D-320).
+  const fetchMessagesRef = useRef(fetchMessages);
+  fetchMessagesRef.current = fetchMessages;
 
   useEffect(() => {
     if (!chatId || !userId) return;
@@ -475,6 +481,13 @@ export function useMessages(
   // fetch that lands before the join cannot see what arrives in between anyway.
   // A chat opened for the first time has nothing to show, so it fetches now and
   // is reconciled again once the channel is live (D-089).
+  //
+  // What a reopen shows is not trusted from the store: the effect above draws
+  // nothing until this chat's «cleared for me» mark and hidden ids have been
+  // read again, so a history cleared on another device is not shown from here.
+  // This branch was also gated on a fresh cleared-at answer, which predates
+  // that check and made every reopen after three seconds read the whole
+  // history once more than the join already does (D-320).
   useEffect(() => {
     if (!chatId) return;
     const scope = getPinnedKey(chatId, topicId);
@@ -486,7 +499,7 @@ export function useMessages(
     // effect runs before the chat window zeroes the count, so the count still
     // says whether there are any.
     const unreadWhileClosed = (useAppStore.getState().chats.find((item) => item.id === chatId)?.unread_count ?? 0) > 0;
-    if (fetchedMessageScopes.has(scope) && cached && !unreadWhileClosed && userId && clearedAtCache.hasFresh(chatId, userId)) {
+    if (fetchedMessageScopes.has(scope) && cached && !unreadWhileClosed) {
       setLoading(false);
       if (subscribedChatIdRef.current === chatId) {
         // Same chat, channel already live: a topic switch, or new general topic ids.
@@ -982,13 +995,13 @@ export function useMessages(
           // reconnect it brings back whatever the outage cost.
           subscribedChatIdRef.current = chatId;
           window.setTimeout(() => {
-            if (chatIdRef.current === chatId) void fetchMessages({ background: true });
+            if (chatIdRef.current === chatId) void fetchMessagesRef.current({ background: true });
           }, ACTIVE_CHAT_RECONCILE_DELAY_MS);
         }
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           if (subscribedChatIdRef.current === chatId) subscribedChatIdRef.current = null;
           window.setTimeout(() => {
-            if (chatIdRef.current === chatId) void fetchMessages({ background: true });
+            if (chatIdRef.current === chatId) void fetchMessagesRef.current({ background: true });
           }, ACTIVE_CHAT_RECONNECT_DELAY_MS);
         }
       });
@@ -999,7 +1012,7 @@ export function useMessages(
       rt.removeChannel(channel);
       unregisterChannel(channelName);
     };
-  }, [chatId, userId, rt, addMessage, fetchMessages, rememberHiddenMessageIds, setMessages, shouldMarkDeliveredForPrivateChat, supabase, updateChatLastMessage]);
+  }, [chatId, userId, rt, addMessage, rememberHiddenMessageIds, setMessages, shouldMarkDeliveredForPrivateChat, supabase, updateChatLastMessage]);
 
   useEffect(() => {
     if (!chatId || !userId) return;

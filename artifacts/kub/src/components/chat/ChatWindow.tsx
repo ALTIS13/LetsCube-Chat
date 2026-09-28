@@ -182,9 +182,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const isForum = !!chat?.is_forum;
   const topicsEnabled = isForum || chat?.type === "group";
   const { topics, hasTextChannelHistory, scopeKnown: topicScopeKnown, createTopic, view: topicsView, refetch: refetchTopics } = useTopics(chatId, topicsEnabled);
+  // Held by value. A refresh that answers with the same channels hands back new
+  // objects, and a new array here re-keyed the conversation's history read and
+  // fetched it again for a scope that had not changed (D-320).
+  const generalTopicKey = topics.filter((topic) => topic.is_general).map((topic) => topic.id).join(",");
   const generalTopicIds = useMemo(
-    () => topics.filter((topic) => topic.is_general).map((topic) => topic.id),
-    [topics],
+    () => (generalTopicKey ? generalTopicKey.split(",") : EMPTY_GENERAL_TOPIC_IDS),
+    [generalTopicKey],
   );
   // Until chat metadata and its topics read answer, unseen channels are possible.
   // Only a confirmed plain group that has never had text channels uses its legacy all-messages stream.
