@@ -7,9 +7,11 @@ import type { ProfileBadgeRow } from "@/lib/profileBadges";
  *
  * One RPC for a whole list of people, cached for the session. `profile_badges`
  * is a SECURITY DEFINER function that returns presentation fields only — it can
- * never hand back a permission, an `assigned_by` or an `assigned_at` — which is
- * why a badge became visible without widening the policies on `roles` and
- * `user_global_roles`, where a widened read would have carried all of that.
+ * never hand back a permission or an `assigned_by` — which is why a badge became
+ * visible without widening the policies on `roles` and `user_global_roles`,
+ * where a widened read would have carried all of that. Since tracker item 38 it
+ * returns one more field, `since`, the grant's date, which the owner asked a
+ * badge to carry («с такого числа»).
  *
  * **Cached at module level, not per component.** The same person appears in a
  * contact card, a member list and a hundred message bubbles; a cache inside the

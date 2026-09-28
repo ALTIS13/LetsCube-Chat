@@ -12,6 +12,7 @@ import { badgeTone } from "../../artifacts/kub/src/lib/badgeVocabulary.ts";
 import { CHAT_ROLE_COLOUR_KEYS } from "../../artifacts/kub/src/lib/chatRolePalette.ts";
 import {
   badgeColourKey,
+  badgeSinceLine,
   badgeStrip,
   badgeUserIds,
   badgeWeight,
@@ -72,6 +73,26 @@ test("the standing comes first, and the catalogue keeps its own order inside the
     projectProfileBadges(rows, ME).map((badge) => badge.title),
     ["Владелец", "Менеджер", "Тестировщик", "Рассказчик"],
   );
+});
+
+test("a badge says since when: a standing «с», a medal «получено», in the short numeric date", () => {
+  // Tracker item 38. Local time, as the viewer reads it: built from parts so the
+  // test holds in any zone the suite runs in.
+  const since = new Date(2026, 4, 10, 9, 0).toISOString();
+  const [standing] = projectProfileBadges([role({ since })], ME);
+  const [earned] = projectProfileBadges([medal({ since })], ME);
+  assert.equal(standing.since, since);
+  assert.equal(badgeSinceLine(standing), "с 10.05.26");
+  assert.equal(badgeSinceLine(earned), "получено 10.05.26");
+});
+
+test("no date, or one that does not parse, is no line rather than «с NaN»", () => {
+  const [absent] = projectProfileBadges([role()], ME);
+  const [broken] = projectProfileBadges([role({ since: "вчера" })], ME);
+  assert.equal(absent.since, null, "a database older than the column answers without it");
+  assert.equal(broken.since, null);
+  assert.equal(badgeSinceLine(absent), null);
+  assert.equal(badgeSinceLine({ kind: "global_role", since: "not a date" }), null);
 });
 
 test("the ladder is the icon's weight, at the seeded priorities", () => {

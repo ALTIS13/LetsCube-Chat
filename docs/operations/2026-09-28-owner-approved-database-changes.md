@@ -172,3 +172,44 @@ testers asked for most.
   `task-reminders.test.mts`, `task-reminders.spec` at 1440 and 390, each of
   three mutants (the bell's case, the author-only removal, the assignee as the
   first suggestion) turning its own check red.
+
+## 4. A badge says since when — tracker item 38
+
+- **Migration** `supabase/migrations/20260928200000_profile_badges_since.sql`
+  (`5DBC8C56123E7FF5909D650E52C59626FD7076F8F5E193E6D61A4365A106A7D4`),
+  rollback `…_profile_badges_since.rollback.sql`
+  (`FAB9E3B1FE258501EC7DD20ACFF82034925A3625519D988E7F86CC53C6B0CE32`); both
+  copied byte-identical into `.migration-backup/`.
+- **What it does:** `profile_badges` gains one column, `since` — the grant's own
+  date, `user_global_roles.assigned_at` for a standing and
+  `user_achievements.granted_at` for a medal, both `not null` already. The
+  proposal said `created_at`; neither table has one, and these are the columns
+  that hold the date. A result's columns cannot change under CREATE OR REPLACE,
+  so the function was dropped and created in one transaction, **as
+  `supabase_admin`**, its owner, which `postgres` cannot drop. Measured before
+  writing it: nothing depends on the function (`pg_depend`) and no other
+  function names it. Its comment and its grants are restored as they were —
+  EXECUTE for `authenticated` alone, the ACL read back
+  `{supabase_admin=X/supabase_admin,authenticated=X/supabase_admin}`. The new
+  body differs from production's `prosrc` by exactly the two `since` lines, and
+  the rollback's body is production's `prosrc` byte for byte.
+- **Self-check:** before the drop, the migration read the function as a signed-in
+  reader for every badge holder (up to 200) and kept the answer; after the
+  create, it compared every other column with `except all` both ways, required
+  `since` on every row, and required the owner, the ACL, `stable`, `security
+  definer` and the comment. Any difference raised.
+- **Backup:** `/srv/letscube/backups/automated/20260928-230920`, `SHA256SUMS`
+  15 of 15, `pg_restore --list` reads 157 table-data entries including
+  `user_global_roles`, `user_achievements` and the function itself.
+- **Rehearsal** (rolled back) and **post-apply smoke** (rolled back): through
+  the `authenticated` role, 39 badges came back, every one dated and none in
+  the future, and `anon` was refused `insufficient_privilege`. Production read
+  afterwards: the old result type until the apply, the new one after it.
+- **Client:** `badgeSinceLine` in `lib/profileBadges.ts` — a standing reads
+  «с 10.05.26», a medal, which is an event rather than a state, «получено
+  03.09.26»: the short numeric date the tracker records from Discord's card
+  («Подписчик с 12.05.26»). The badge card prints it under the badge's own
+  sentence, and a badge whose only line is its date is a card too. A database
+  older than the column answers without it, which reads as no line. Evidence:
+  `profile-badges.test.mts`, `profile-badges.spec` at 1440 and 390, with the
+  mutant that drops the date from the card's condition going red.

@@ -1405,6 +1405,8 @@ export interface Database {
           icon: string | null
           colour: string | null
           rank: number | null
+          /** The grant's own date (tracker item 38, `20260928200000_profile_badges_since.sql`). */
+          since?: string | null
         }[]
       }
       admin_user_emails: {

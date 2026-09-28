@@ -21,9 +21,10 @@ import {
  * «Пользователь» to everybody, whoever they were looking at.
  *
  * `profile_badges` is the read path — a SECURITY DEFINER function returning
- * presentation fields only, so no permission, no `assigned_by` and no
- * `assigned_at` can come with them. This spec stubs that function on the
- * fixture backend and asserts what reaches the screen.
+ * presentation fields only, so no permission and no `assigned_by` can come with
+ * them; since tracker item 38 the grant's date does, as `since`. This spec
+ * stubs that function on the fixture backend and asserts what reaches the
+ * screen.
  *
  * Everything here is fictional and mocked. No production screen is rendered.
  */
@@ -202,6 +203,57 @@ test("a badge's line is its own card, reached by pointer, keyboard and a tap", a
     await expect(card).toBeVisible();
   }
   await page.screenshot({ path: shotPath(info, "badge-card") });
+});
+
+test("a badge says since when, and a date alone makes the chip a card", async ({ page }) => {
+  // Tracker item 38. The owner, 2026-09-20: a badge carries history, «условно
+  // купил подписку с такого числа». The grant's date is `since`; a standing
+  // reads «с …», a medal, which is an event rather than a state, «получено …».
+  const sinceOwner = "2026-05-10T09:00:00.000Z";
+  const sinceTester = "2026-09-03T09:00:00.000Z";
+  await openCard(page, [
+    { ...BADGE_ROWS[0], since: sinceOwner },
+    {
+      user_id: ANNA.id,
+      kind: "achievement",
+      key: "tester",
+      title: "Тестировщик",
+      detail: null,
+      icon: "shield",
+      colour: null,
+      rank: 100000 - 10,
+      since: sinceTester,
+    },
+  ]);
+  // The dates as the page's own clock and zone print them.
+  const expected = await page.evaluate(
+    ([owner, tester]) =>
+      [owner, tester].map((iso) => {
+        const at = new Date(iso);
+        const pad = (n: number) => String(n).padStart(2, "0");
+        return `${pad(at.getDate())}.${pad(at.getMonth() + 1)}.${pad(at.getFullYear() % 100)}`;
+      }),
+    [sinceOwner, sinceTester],
+  );
+  const strip = page.getByTestId("profile-badges");
+  // A medal with no sentence of its own is a card now, because the date is a line.
+  const tester = strip.locator('[data-badge-trigger="tester"]');
+  await expect(tester, "a dated badge stayed a bare word").toHaveCount(1);
+  const card = page.getByTestId("profile-badge-card").first();
+  if ((page.viewportSize()?.width ?? 0) >= 768) await tester.hover();
+  else await tester.tap();
+  await expect(card).toBeVisible();
+  await expect(card.getByTestId("profile-badge-since")).toHaveText(`получено ${expected[1]}`);
+  await page.keyboard.press("Escape");
+  await page.mouse.move(8, 8, { steps: 8 });
+
+  const owner = strip.locator('[data-badge-trigger="owner"]');
+  if ((page.viewportSize()?.width ?? 0) >= 768) await owner.hover();
+  else await owner.tap();
+  const ownerCard = page.getByTestId("profile-badge-card").filter({ hasText: "Владелец" }).first();
+  await expect(ownerCard).toBeVisible();
+  await expect(ownerCard).toContainText("Полный доступ ко всему LETSCUBE");
+  await expect(ownerCard.getByTestId("profile-badge-since")).toHaveText(`с ${expected[0]}`);
 });
 
 test("somebody who wears nothing is not called «Пользователь»", async ({ page }) => {

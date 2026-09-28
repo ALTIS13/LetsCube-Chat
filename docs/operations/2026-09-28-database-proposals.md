@@ -121,8 +121,10 @@ policies. This one is a project, not a migration.
 
 ## 7. Smaller, recorded for completeness
 
-- **Badge dates (item 38):** `profile_badges` returns no grant date, so «с
-  такого числа» cannot be printed. Add the grant's `created_at` to its result.
+- **Badge dates (item 38) — applied 2026-09-28:** `profile_badges` returns no
+  grant date, so «с такого числа» cannot be printed. Add the grant's
+  `created_at` to its result. Applied as `since`, from `assigned_at` and
+  `granted_at`; see the rollout record.
 - **Kind folders (item 69, decided against for now):** Telegram's are folders
   with chat-type rules; ours would need `folders.include_types text[]`. Only if
   the capsule in «Все» turns out not to be enough.

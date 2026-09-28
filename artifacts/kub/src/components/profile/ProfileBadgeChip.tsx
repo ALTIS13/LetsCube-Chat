@@ -5,7 +5,7 @@ import { KUB_ICON_NAMES, type KubIconName } from "@/components/kub/icons";
 import { InfoHint } from "@/components/settings/InfoHint";
 import { badgeTone } from "@/lib/badgeVocabulary";
 import { chatRoleColourValue } from "@/lib/chatRolePalette";
-import { badgeColourKey, type ProfileBadge } from "@/lib/profileBadges";
+import { badgeColourKey, badgeSinceLine, type ProfileBadge } from "@/lib/profileBadges";
 
 /**
  * One badge, wherever it is worn (D-180).
@@ -97,10 +97,13 @@ export function ProfileBadgeChip({ badge }: { badge: ProfileBadge }) {
   // `description`, and its tiered badges get a card — the mark large, its
   // name, then the line. Ours is that card for every badge that has a line to
   // say: the chip becomes a control a keyboard and a finger can reach, and a
-  // chip with nothing more to say than its own word stays a word.
-  if (!badge.detail) return chip;
+  // chip with nothing more to say than its own word stays a word. Since
+  // tracker item 38 the grant's date is a line too, so a badge that has one is
+  // a card even without a sentence of its own.
+  const since = badgeSinceLine(badge);
+  if (!badge.detail && !since) return chip;
   return (
-    <InfoHint term={badge.title} text={<BadgeCard badge={badge} icon={icon} accent={accent} />} asChild>
+    <InfoHint term={badge.title} text={<BadgeCard badge={badge} icon={icon} accent={accent} since={since} />} asChild>
       <button
         type="button"
         className="inline-flex max-w-full min-w-0 rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
@@ -115,15 +118,17 @@ export function ProfileBadgeChip({ badge }: { badge: ProfileBadge }) {
   );
 }
 
-/** The badge's own card: its mark large, in its colour, its name, and what it says. */
+/** The badge's own card: its mark large, in its colour, its name, what it says, and since when. */
 function BadgeCard({
   badge,
   icon,
   accent,
+  since,
 }: {
   badge: ProfileBadge;
   icon: KubIconName | null;
   accent: string | null;
+  since: string | null;
 }) {
   return (
     <span className="flex items-start gap-2.5 py-0.5" data-testid="profile-badge-card">
@@ -140,7 +145,12 @@ function BadgeCard({
       </span>
       <span className="flex min-w-0 flex-col">
         <span className="text-[13px] font-semibold text-[color:var(--kub-text)]">{badge.title}</span>
-        <span className="mt-0.5 text-xs text-[color:var(--kub-muted)]">{badge.detail}</span>
+        {badge.detail && <span className="mt-0.5 text-xs text-[color:var(--kub-muted)]">{badge.detail}</span>}
+        {since && (
+          <span className="mt-0.5 text-xs tabular-nums text-[color:var(--kub-muted)]" data-testid="profile-badge-since">
+            {since}
+          </span>
+        )}
       </span>
     </span>
   );

@@ -44,6 +44,12 @@ export interface ProfileBadgeRow {
   icon: string | null;
   colour: string | null;
   rank: number | null;
+  /**
+   * When the grant was made: `user_global_roles.assigned_at` or
+   * `user_achievements.granted_at` (tracker item 38). Absent from a database
+   * older than `20260928200000_profile_badges_since.sql`, which reads as no date.
+   */
+  since?: string | null;
 }
 
 export type ProfileBadgeKind = "global_role" | "achievement";
@@ -60,6 +66,8 @@ export interface ProfileBadge {
   icon: string | null;
   colour: string | null;
   weight: ProfileBadgeWeight;
+  /** The grant's date as the database gave it, or null when there is none to trust. */
+  since: string | null;
 }
 
 /**
@@ -159,6 +167,7 @@ export function projectProfileBadges(
       detail: row.detail && row.detail.trim() !== "" ? row.detail.trim() : null,
       icon: known ? icon : null,
       colour: row.colour ?? null,
+      since: typeof row.since === "string" && Number.isFinite(Date.parse(row.since)) ? row.since : null,
       // A medal is not a rank: see `badgeWeight`.
       weight: kind === "achievement" ? ("regular" as const) : badgeWeight(row.rank),
       rank: typeof row.rank === "number" ? row.rank : 0,
@@ -174,6 +183,23 @@ export function projectProfileBadges(
   );
   const stripped = projected.map(({ rank: _rank, ...badge }) => badge);
   return typeof options.limit === "number" ? stripped.slice(0, Math.max(0, options.limit)) : stripped;
+}
+
+/**
+ * The line that says since when (tracker item 38). The owner, 2026-09-20: a
+ * badge carries history, «условно купил подписку с такого числа». Discord's
+ * card, as recorded in the tracker, reads «Подписчик с 12.05.26», and that is
+ * the shape taken: the short numeric date after «с». A standing began and
+ * still holds, so it reads «с 12.05.26»; a medal is an event, not a state, so
+ * it reads «получено 12.05.26». Read in the viewer's own time zone.
+ */
+export function badgeSinceLine(badge: Pick<ProfileBadge, "kind" | "since">): string | null {
+  if (!badge.since) return null;
+  const at = new Date(badge.since);
+  if (!Number.isFinite(at.getTime())) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const date = `${pad(at.getDate())}.${pad(at.getMonth() + 1)}.${pad(at.getFullYear() % 100)}`;
+  return badge.kind === "achievement" ? `получено ${date}` : `с ${date}`;
 }
 
 /** How many were left over once the strip took what it had room for. */

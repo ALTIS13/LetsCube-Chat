@@ -1133,6 +1133,12 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     and goes through §10; and purpose-drawn marks are a design question for the
     owner's eye rather than one to settle from a bundle.
 
+    **The date is done, 2026-09-28**, on the owner's approval:
+    `profile_badges` returns `since`, the grant's own date, and the card says
+    «с 10.05.26» for a standing and «получено 03.09.26» for a medal — record
+    in `operations/2026-09-28-owner-approved-database-changes.md` §4. What
+    remains of this item is the purpose-drawn marks.
+
 
 39. `[x]` The settings overlay's shape, applied to every other full surface.
     **Done 2026-09-21 as D-286.** The audit answered the question the item
