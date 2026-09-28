@@ -609,7 +609,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     [Task 4 evidence](operations/2026-09-21-android-call-native.md) and
     [Task 5 operations](operations/2026-09-21-android-call-operations.md).
 
-33. `[ ]` Documents and the rest of what a message can carry, opened **in the
+33. `[x]` Documents and the rest of what a message can carry, opened **in the
     chat** the way other media already is. Asked for by the owner on
     2026-09-20: «просмотр документов и т.п вещей сразу в чате, на примере
     других медиа». The reference for this one is **Telegram** — it is one of
@@ -624,6 +624,22 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     assessment against Telegram, then renders for approval, then code, the way
     items 25 and 28 were run — the owner has twice asked not to have work
     rebuilt after each iteration.
+    **Done 2026-09-28**, on the standing instruction of 2026-09-21 to decide from
+    the references, after reading Telegram's web client rather than recalling
+    it (`Ajaxy/telegram-tt` master, `Document.tsx` and `File.tsx`): a file is a
+    row — a tile with its extension, its name, its size and kind — whose button
+    says what a press does, an eye where it opens in place and a download arrow
+    where it cannot. Telegram's web client opens only a picture or a film sent
+    as a file and downloads everything else; its iPhone client shows a
+    document in place. Ours does what a browser draws without a plugin: a text
+    file up to a megabyte, a picture, a film, a recording, and a PDF where the
+    engine says it has a viewer (`navigator.pdfViewerEnabled`) and is not a
+    phone's — Android has none inside a page and iOS draws one page as a
+    picture, so a phone downloads, as Telegram's web client does for every
+    PDF. A PDF the engine turns out not to draw shows «Этот PDF здесь не
+    открылся» with «Скачать» rather than a blank page. The link that opened a
+    browser tab is gone. Evidence: `document-preview.test.mts`,
+    `file-message.spec` at 1440 and 390.
 
 34. `[~]` Standing: the interface's intuitiveness and its response to the
     person using it, and the interface bugs found along the way. Asked for by

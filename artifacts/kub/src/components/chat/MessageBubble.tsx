@@ -24,6 +24,7 @@ import { useAppStore } from "@/store/app.store";
 import { messageAuthorProfileTarget } from "@/lib/messageAuthorProfile";
 import { FormattedText, isLocationPreviewMessage, type BotCommandsInText } from "@/lib/formatText";
 import { KubIcon } from "@/components/kub";
+import { FileMessageRow } from "./FileMessageRow";
 import { useChatMediaPlayback, VideoCircleProgressRing, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 import { ROUND_VIDEO_OPEN_CLASS, ROUND_VIDEO_PLAYBACK_CLASS } from "@/lib/conversationStacking";
 import { mediaOriginality } from "@/lib/mediaOriginality";
@@ -1694,23 +1695,14 @@ export function MessageBubble({
                 </MediaWithCaption>
               )
             ) : message.type === "file" && (message.media_url || outgoingPlaceholder) ? (
-              message.media_url ? (
-                <a
-                  href={originalUrl ?? undefined}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity text-[color:var(--kub-accent-text)]"
-                >
-                  <KubIcon name="file" size={16} />
-                  <span className="truncate max-w-[200px]">{message.content ?? "File"}</span>
-                </a>
-              ) : (
-                // A file still on its way has nothing to open yet (D-314).
-                <div className="flex items-center gap-2 text-sm text-[color:var(--kub-text)]">
-                  <KubIcon name="file" size={16} tone="muted" />
-                  <span className="truncate max-w-[200px]">{message.content ?? "Файл"}</span>
-                </div>
-              )
+              // Telegram's file row (tracker item 33): the extension, the name,
+              // the size, and a press that opens it in place or downloads it.
+              // A file still on its way has nothing to open yet (D-314).
+              <FileMessageRow
+                content={message.content}
+                mediaMetadata={message.media_metadata}
+                url={message.media_url ? originalUrl ?? null : null}
+              />
             ) : canUseCompactReplyInline ? (
               <div
                 data-message-text-flow="true"
