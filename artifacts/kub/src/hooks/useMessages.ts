@@ -44,7 +44,7 @@ import {
 } from "@/lib/resumeRevalidation";
 import { canUseHumanMessageControls, isIncomingMessage } from "@/lib/messageActor";
 import { blockedSendRefusal } from "@/lib/personalModeration";
-import { mergeMessagesById } from "@/lib/messageMerge";
+import { heldRowsGoneFromPage, mergeMessagesById } from "@/lib/messageMerge";
 import { isMissingRpcError, rpcAvailability } from "@/lib/rpcAvailability";
 import { clearedAtCache } from "@/lib/clearedAtCache";
 import {
@@ -294,9 +294,12 @@ export function useMessages(
     const requestGeneration = ++historyRequestGenerationRef.current;
     const isCurrent = () => chatIdRef.current === chatId && historyRequestGenerationRef.current === requestGeneration;
     const background = options.background === true;
-    const hasCachedMessages = (useAppStore.getState().messages[chatId] ?? []).some((message) =>
+    const heldWhenAsked = useAppStore.getState().messages[chatId] ?? EMPTY_MESSAGES;
+    const hasCachedMessages = heldWhenAsked.some((message) =>
       messageBelongsToTopic(message, topicId, generalTopicIds)
     );
+    // D-322: what this read may judge — the rows held before it was asked.
+    const heldAtStart = new Set(heldWhenAsked.map((message) => message.id));
     bumpFetch("useMessages");
     if (!background) setHistoryError(null);
     if (!background) setLoading(options.cacheIsStale === true || !hasCachedMessages);
@@ -392,7 +395,11 @@ export function useMessages(
           fetched.filter((message) => !effectiveHiddenIds.has(message.id)),
           effectiveHiddenIds,
         );
+        // Deleted for both while the chat was closed, in a conversation whose
+        // page does not return deleted rows: the held copy must not bring it back.
+        const goneIds = heldRowsGoneFromPage(existing, fetched, heldAtStart);
         const visibleExisting = sanitizeHiddenReplies(existing.filter((message) => {
+          if (goneIds.has(message.id)) return false;
           if (effectiveHiddenIds.has(message.id)) return false;
           if (!messageBelongsToTopic(message, topicId, generalTopicIds)) return false;
           if (!localClearedAt) return true;
@@ -439,14 +446,20 @@ export function useMessages(
     if (!cached.length) return;
     let active = true;
     void (async () => {
-      const mark = await loadClearedAt(supabase, chatId, userId);
+      // Tracker item 58: the two checks a reopen waits on are independent —
+      // the hidden ids are asked of the rows already held — so they are asked
+      // together, one round trip instead of two in a row. The mark is usually
+      // answered without a request at all while the membership channel is
+      // live (`clearedAtCache.setLive`).
+      const [mark, hidden] = await Promise.all([
+        loadClearedAt(supabase, chatId, userId),
+        fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(cached)),
+      ]);
       if (!active) return;
       if (mark === undefined) {
         setHistoryError("Не удалось проверить историю чата.");
         return;
       }
-      const hidden = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(cached));
-      if (!active) return;
       if (!hidden) {
         setHistoryError("Не удалось проверить скрытые сообщения.");
         return;

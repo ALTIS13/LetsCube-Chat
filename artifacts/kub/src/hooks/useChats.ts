@@ -50,6 +50,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
 import { emitChannelActivity } from "@/lib/channelActivity";
 import { channelPreviewCache } from "@/lib/channelPreviewCache";
+import { patchHeldMessage } from "@/lib/messageMerge";
 
 const CHAT_REFETCH_DEBOUNCE_MS = 350;
 const CHAT_SUMMARY_DEBOUNCE_MS = 250;
@@ -484,6 +485,18 @@ export function useChats() {
       const row = payload.new as unknown as MessageRowLike | null;
       if (!row?.id || !row.chat_id) return;
       channelPreviewCache.hearUpdate(row as unknown as MessageWithSender);
+      // D-322. A conversation left a moment ago is kept to be drawn again at
+      // once (D-089), and only the open one listens to its own chat — so a
+      // message edited, or deleted for both, while its chat was closed stayed
+      // as it was in the held copy. This socket hears every chat: the held
+      // copy takes the change here, and the open chat's own handler keeps
+      // doing it for the open one.
+      const state = useAppStore.getState();
+      if (state.selectedChatId !== row.chat_id) {
+        const held = state.messages[row.chat_id];
+        const next = held ? patchHeldMessage(held, row as unknown as MessageWithSender) : null;
+        if (next) state.setMessages(row.chat_id, next);
+      }
       if (applyEvent({ kind: "message-update", row }) === "needs-summary") scheduleSummary(row.chat_id);
     };
 
@@ -619,9 +632,18 @@ export function useChats() {
       )
       .subscribe((status: string) => {
         if (import.meta.env.DEV) console.debug("[chat-members:user]", userId, status);
+        // While this channel is joined, a change to a «cleared for me» mark
+        // arrives above and evicts it, so a mark read meanwhile stays good
+        // (tracker item 58, `clearedAtCache.setLive`).
+        clearedAtCache.setLive(status === "SUBSCRIBED");
         revalidateWhenSubscribed(status);
       });
     registerChannel(membershipChannelName);
+    // A socket found dead, or a device gone offline, has heard nothing since:
+    // the marks go back to being read, until the channel joins again.
+    const notLive = () => clearedAtCache.setLive(false);
+    window.addEventListener(CONNECTION_REVIVED_EVENT, notLive);
+    window.addEventListener("offline", notLive);
 
     return () => {
       for (const { name, channel } of channels) {
@@ -632,6 +654,9 @@ export function useChats() {
       unregisterChannel(receiptsChannelName);
       rt.removeChannel(membershipChannel);
       unregisterChannel(membershipChannelName);
+      window.removeEventListener(CONNECTION_REVIVED_EVENT, notLive);
+      window.removeEventListener("offline", notLive);
+      clearedAtCache.setLive(false);
     };
   }, [userId, rt, supabase, applyEvent, scheduleRefetch, scheduleSummary]);
 

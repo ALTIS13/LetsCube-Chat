@@ -24089,3 +24089,36 @@ screen. Popovers are deliberately left where they are: a hint plate is anchored
 to an element, and when a panel covers that element the plate is right to be
 covered with it. Pinned by the badge card test, which asks `elementFromPoint`;
 putting the tooltip back at 50 turns it red at 390.
+
+## D-322 `[x]` A message deleted for both while its private chat was closed comes back on the return
+
+**Severity:** high — a message its sender deleted for both stays readable to
+the other person, which is the opposite of what «удалить у всех» promises.
+Found 2026-09-28 while measuring tracker item 58, by deleting a message in the
+fixture while its chat was closed and counting the bubbles after the return:
+one, five seconds after the conversation had revalidated.
+
+**Surface:** two holes in the same path. The store keeps a conversation after
+it is left, to draw it again at once (D-089), and only the open conversation
+listens to its own chat, so an edit or a deletion made while a chat was closed
+never reached its held copy. The reopen's revalidation should have corrected
+it, but a private chat's page does not return deleted rows (D-108), and the
+merge (D-090) keeps every held row the page does not mention — so the held
+copy of the deleted message was merged straight back, and stayed until a
+reload.
+
+**Fixed 2026-09-28**, both holes:
+
+- `useChats` already hears every chat's message updates for the list; it now
+  lays each one over the held copy of a closed conversation
+  (`patchHeldMessage`), the joined sender, reply and reactions kept.
+- `fetchMessages` judges the rows it held when the read began: one inside the
+  fetched page's window and missing from it is gone (`heldRowsGoneFromPage`).
+  Rows that arrived during the read, rows older than the page, and sends still
+  on their way are not judged.
+
+Evidence: `conversation-return.spec` «a message deleted for both while its
+private chat was closed does not come back», and `chat-list-event-cost.spec`
+«an edit heard while its chat was closed is on screen the moment the chat is
+back», in which the server's copy is left unedited so only the socket can put
+the new text on screen. Each fix taken out turns its test red.

@@ -100,3 +100,44 @@ test("with nothing held, the fetched page is returned as it is", () => {
   const fetched = [message("m1", T0)];
   assert.equal(mergeMessagesById(fetched, []), fetched);
 });
+
+// D-322: a message deleted for both while its private chat was closed came
+// back on the reopen and stayed until a reload — the list's socket heard the
+// change but never laid it over the held copy, and the reopen's page, which
+// does not return deleted rows in a private chat, left the held copy standing.
+test("the list's socket row is laid over a closed conversation's held copy, joins kept", async () => {
+  const { patchHeldMessage } = await import("../../artifacts/kub/src/lib/messageMerge.ts");
+  const held = [
+    { id: "m1", created_at: "2026-09-28T10:00:00.000Z", content: "Первое", sender: { id: "anna" } },
+    { id: "m2", created_at: "2026-09-28T10:01:00.000Z", content: "Второе", sender: { id: "anna" } },
+  ];
+  const deleted = patchHeldMessage(held, { id: "m2", deleted_at: "2026-09-28T11:00:00.000Z", content: "" });
+  assert.ok(deleted);
+  assert.equal(deleted[1].deleted_at, "2026-09-28T11:00:00.000Z");
+  assert.deepEqual(deleted[1].sender, { id: "anna" });
+  assert.equal(deleted[0], held[0]);
+  // Not held, or nothing new: no new array, so nothing renders.
+  assert.equal(patchHeldMessage(held, { id: "m9", content: "чужое" }), null);
+  assert.equal(patchHeldMessage(held, { id: "m1", content: "Первое" }), null);
+  // A send still on its way is not a server copy.
+  assert.equal(patchHeldMessage([{ id: "tmp:1", created_at: "2026-09-28T10:02:00.000Z", pending: true }], { id: "tmp:1", content: "x" }), null);
+});
+
+test("a held row inside the fetched page's window and missing from it is gone", async () => {
+  const { heldRowsGoneFromPage } = await import("../../artifacts/kub/src/lib/messageMerge.ts");
+  const at = (minute: number) => `2026-09-28T10:${String(minute).padStart(2, "0")}:00.000Z`;
+  const existing = [
+    { id: "old", created_at: at(1) },
+    { id: "kept", created_at: at(5) },
+    { id: "deleted", created_at: at(6) },
+    { id: "arrived-during-read", created_at: at(8) },
+    { id: "tmp:sending", created_at: at(9), pending: true },
+  ];
+  const fetched = [{ id: "kept", created_at: at(5) }, { id: "newest", created_at: at(7) }];
+  const heldAtStart = new Set(["old", "kept", "deleted", "tmp:sending"]);
+  // «old» is before the page and not judged by it; «arrived-during-read» came
+  // after the read began; a pending send is never judged.
+  assert.deepEqual([...heldRowsGoneFromPage(existing, fetched, heldAtStart)], ["deleted"]);
+  // An empty page means nothing after the clear mark is left on the server.
+  assert.deepEqual([...heldRowsGoneFromPage(existing, [], heldAtStart)].sort(), ["deleted", "kept", "old"]);
+});

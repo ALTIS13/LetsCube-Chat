@@ -2788,7 +2788,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     also asks «нафига голосовые каналы?)»; the owner keeps them (Discord's), so
     they stay, restyled under item 54.
 
-58. `[ ]` Coming back to a conversation is instant — «я вот из чата с тобой
+58. `[~]` Coming back to a conversation is instant — «я вот из чата с тобой
     захожу в другой, потом возвращаюсь к тебе и секунду жду прогрузки, а
     зачем? Если кэш существует». The store keeps a conversation after it is
     left (D-089), so the second must be spent somewhere else: the entry position
@@ -2796,6 +2796,32 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     the list's revalidation blocking the paint. Measure the return path first;
     Telegram and Discord both redraw a conversation left a moment ago at once
     and reconcile behind it.
+    **Measured and halved 2026-09-28.** With every read slowed to 1.5 s the held
+    rows were drawn 3.4 s after the tap: nothing in memory is shown until the
+    «cleared for me» mark and then the hidden ids have been read again — two
+    round trips in a row, the second the tester felt. Both checks stay: a
+    history cleared, or a message hidden, on another device must not flash
+    from the held copy, and `chat-cleared-at-reuse.spec` holds that. But they
+    are independent, so they are asked together now (1.9 s on the same
+    fixture), and the mark usually needs no request at all: while this user's
+    own membership channel is joined, a change to it arrives as an event that
+    evicts it, so a mark read under that channel stays good until then
+    (`clearedAtCache.setLive`; a revival, a gap or going offline ends it).
+    Evidence: `conversation-return.spec` «coming back asks its two checks
+    together, not one after the other» (sequential again: red).
+    **What is left is one round trip**, the hidden ids, and only the database
+    can remove it: `public.message_hidden_for_users` is not in the
+    `supabase_realtime` publication (read-only on production, 2026-09-28), so a
+    hide made on another device cannot be heard. Published — its SELECT policy
+    is already `user_id = auth.uid()`, so each client would hear only its own —
+    the held rows could be drawn at once with nothing able to flash, as
+    Telegram draws them. Proposal for the owner, §10 applies:
+    `alter publication supabase_realtime add table public.message_hidden_for_users;`
+    in one transaction with a self-check that raises unless the table is then
+    listed; rollback `… drop table …`. Not applied.
+    While measuring it, D-322: a message deleted for both while its private chat
+    was closed came back on the return and stayed until a reload. Fixed the same
+    day.
 
 59. `[x]` «Режим топиков» in a group's settings says nothing any more — «как
     будто ни на что не влияет сейчас. Каналы и без него создаются». The server

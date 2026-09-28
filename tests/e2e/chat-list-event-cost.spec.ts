@@ -382,6 +382,34 @@ test.describe("what one event costs the chat list and the conversation", () => {
     expect.soft(cost[MESSAGES_CHANNEL_PREVIEW] ?? 0, `a server seen before read its channels' last lines again: ${JSON.stringify(cost)}`).toBe(0);
   });
 
+  test("an edit heard while its chat was closed is on screen the moment the chat is back", async ({ page }) => {
+    // D-322. Only the open conversation listens to its own chat, and a closed
+    // one is kept to be drawn again at once — so what changed while it was
+    // closed stayed as it was in the held copy. The list's socket hears every
+    // chat; the held copy takes the change there. The server's copy is left
+    // as it was here, so nothing but that can put the new text on screen.
+    test.setTimeout(90_000);
+    const { backend, realtime } = await boot(page);
+    await openChat(page, backend, realtime, CHAT.A);
+    await leaveChat(page);
+    await settle(page, backend, 1_200);
+
+    const last = backend.messages.filter((row) => row.chat_id === CHAT.A).at(-1)!;
+    const delivered = realtime.emit({
+      type: "UPDATE",
+      table: "messages",
+      record: { ...last, content: "Строка 40 — исправлено", edited_at: new Date().toISOString() },
+    });
+    expect(delivered, "no channel took the update").toBeGreaterThan(0);
+
+    await chatRow(page, CHAT.A).click();
+    const edited = page.locator('[data-message-bubble="true"]').filter({ hasText: "Строка 40 — исправлено" });
+    await expect(edited).toBeVisible();
+    // And the reopen's own reconcile, which still has the old text, keeps it.
+    await settle(page, backend, 2_800);
+    await expect(edited).toBeVisible();
+  });
+
   test("moving to another text channel reads that channel once", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name.includes("mobile"), "the channel rail beside the conversation is the desktop's");
     test.setTimeout(90_000);

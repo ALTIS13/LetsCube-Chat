@@ -43,7 +43,7 @@ test("all message hydration paths share explicit bounded bot projections", () =>
 });
 
 test("message reconciliation, grouping, unread targeting, and human controls are actor-aware", () => {
-  assert.match(messages, /import \{ mergeMessagesById \} from "@\/lib\/messageMerge"/);
+  assert.match(messages, /import \{[^}]*mergeMessagesById[^}]*\} from "@\/lib\/messageMerge"/);
   assert.match(messageMerge, /sameActorClientMessage|actorClientMessageKey/);
   assert.match(store, /sameActorClientMessage/);
   assert.match(messageList, /messageActorGroupingKey/);

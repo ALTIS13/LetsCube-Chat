@@ -98,3 +98,60 @@ export function mergeMessagesById<T extends MergeableMessage>(fetched: T[], exis
     return a.id.localeCompare(b.id);
   });
 }
+
+/**
+ * A row from the chat list's socket laid over the held copy of a closed
+ * conversation (D-322), or null when that conversation does not hold it or
+ * nothing it holds changes.
+ *
+ * The socket's row is the table's columns and none of the joined ones — no
+ * sender, no replied-to row, no reactions — so those stay as held, and every
+ * column the row carries replaces the held one: an edit's text, a deletion's
+ * `deleted_at`. Whether a deleted message leaves a placeholder or no trace is
+ * the drawing's rule (`lib/deletedMessages.ts`), as it is for the open chat.
+ * A local send still on its way is not a server copy and is left alone.
+ */
+export function patchHeldMessage<T extends MergeableMessage>(held: readonly T[], row: Partial<T> & { id: string }): T[] | null {
+  const index = held.findIndex((message) => message.id === row.id);
+  if (index < 0) return null;
+  const current = held[index];
+  if (isLocalOnlyMessage(current)) return null;
+  let changed = false;
+  for (const key of Object.keys(row) as (keyof T)[]) {
+    if (row[key] !== undefined && row[key] !== current[key]) {
+      changed = true;
+      break;
+    }
+  }
+  if (!changed) return null;
+  const next = held.slice();
+  next[index] = { ...current, ...row };
+  return next;
+}
+
+/**
+ * The held rows a fetched page proves gone (D-322).
+ *
+ * A page is the newest rows of its scope, so every server row at or after the
+ * oldest one it returned is in it. A row the store held when the read began,
+ * inside that window and missing from the page, was deleted where the read
+ * does not return deleted rows — a private conversation, which draws none — or
+ * removed outright. The merge used to keep it from the held copy, so a message
+ * deleted for both while its chat was closed came back on the reopen and
+ * stayed until a reload. Rows that arrived while the read was in flight are
+ * not judged by it, and a send still on its way never is.
+ */
+export function heldRowsGoneFromPage<T extends MergeableMessage>(
+  existing: readonly T[],
+  fetchedAscending: readonly T[],
+  heldAtStart: ReadonlySet<string>,
+): Set<string> {
+  const gone = new Set<string>();
+  const fetchedIds = new Set(fetchedAscending.map((message) => message.id));
+  const windowStart = fetchedAscending.length ? timeOf(fetchedAscending[0].created_at) : Number.NEGATIVE_INFINITY;
+  for (const message of existing) {
+    if (!heldAtStart.has(message.id) || isLocalOnlyMessage(message) || fetchedIds.has(message.id)) continue;
+    if (timeOf(message.created_at) >= windowStart) gone.add(message.id);
+  }
+  return gone;
+}
