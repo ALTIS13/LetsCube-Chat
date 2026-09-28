@@ -23909,3 +23909,43 @@ again — «where you were is product state». The spec is green at 1440 and 390
 and so are `chat-address.spec.ts`, `use-chats-account-race.spec.ts`, the voice
 resume and routing specs (155 passed). Removing the guard turns the spec red
 again, which is the state it was found in.
+
+## D-319 `[x]` A chat reopened after messages arrived while it was closed opens at the bottom
+
+2026-09-28, found by the full fixture regression rather than a report, and
+red on 1c066e8b as well, so older than this session. CLAUDE.md §11: a chat
+with unread messages opens at the first of them.
+`chat-list-event-cost.spec.ts` «reopening a chat that received messages while
+it was closed lands on the first of them»: 24 unread, and the reopened chat
+stood at the very bottom — `scrollTop` 3622 of 4522 − 900 — with the separator
+1314 px above the viewport.
+
+The mechanism: a reopened chat renders first from the store, which does not
+hold what arrived while it was closed, so `MessageList` found no unread message
+and placed the entry at the bottom. The entry was keyed on the unread count and
+time alone, which do not change when those messages load, so it was never
+placed again. It is now placed again, on the first unread, when that message
+arrives while the bottom placement is still holding — nobody has touched the
+list — and the finding is latched, so older history arriving later, or anything
+after the reader has taken over, moves nobody. Probed after: the separator at
+120 px, the first unread in view. The test passes at 1440 and 390; the entry,
+render-stability, prepend-anchor, deleted-history, search-column and address
+specs pass beside it.
+
+## D-320 `[ ]` A reopened chat fetches its history three times
+
+Same run, same spec, also red on 1c066e8b: «leaving a chat and opening it
+again renders its history once and fetches it once» and «switching to another
+chat and back» measure `GET messages:list` 3, `message_hidden_for_users` 4,
+`messages:pinned` 2; «coming back from away» renders the conversation 3 times
+for a revalidation that changed nothing.
+
+Read, not yet measured step by step: `useMessages`' open effect and the cached
+check both depend on `fetchMessages`, whose identity follows `topicId` and
+`generalTopicIds`. On a reopen the chat's topic scope starts unknown
+(`messageTopicId` null) and resolves in two steps — the scope, then the general
+topic ids — and each step is a new `fetchMessages`, so each re-runs the open
+effect's «same chat, channel already live» branch. The likely repair is to
+carry the topic scope the previous open already resolved, so a reopen starts
+with it known; it touches the text-channel scope rules, so it is left for its
+own change with the spec as its measure.

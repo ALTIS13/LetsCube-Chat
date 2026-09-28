@@ -467,10 +467,6 @@ export function MessageList({
   const initialScrollPendingKeyRef = useRef<string | null>(null);
   const initialBottomLockUntilRef = useRef(0);
   const isInitialBottomLocked = useCallback(() => Date.now() < initialBottomLockUntilRef.current, []);
-  const initialScrollKey = React.useMemo(
-    () => `${layoutKey ?? "chat"}:${initialUnreadCount}:${initialUnreadSince ?? "none"}`,
-    [initialUnreadCount, initialUnreadSince, layoutKey],
-  );
   const firstUnreadMessageId = React.useMemo(() => {
     if (!initialUnreadCount || !userId) return null;
     const boundaryTime = initialUnreadSince ? new Date(initialUnreadSince).getTime() : null;
@@ -481,6 +477,37 @@ export function MessageList({
     });
     return first?.id ?? null;
   }, [initialUnreadCount, initialUnreadSince, sortedMessages, userId]);
+  const entryKey = `${layoutKey ?? "chat"}:${initialUnreadCount}:${initialUnreadSince ?? "none"}`;
+  /**
+   * Whether this entry has found its first unread message (§11: a chat with
+   * unread messages opens at the first of them).
+   *
+   * A reopened chat renders first from the store, and the store does not hold
+   * what arrived while the chat was closed — so the first placement can only
+   * be the bottom, with the unread messages still loading. Until this latch the
+   * entry was keyed on the unread count and time alone, which do not change
+   * when those messages arrive, so the entry was never placed again and the
+   * reader was left at the bottom, past every one of them. Measured on
+   * `chat-list-event-cost.spec.ts`: 24 unread, `scrollTop` at the very bottom,
+   * the separator 1314 px above the viewport, before and after this session.
+   *
+   * Now the entry is placed again, on the first unread, when that message
+   * arrives while the bottom placement is still holding — nobody has touched the
+   * list yet. It latches: once found it stays found, so older history arriving
+   * later, with an earlier unread message in it, cannot move a reader who is
+   * already reading, and nor can anything after they have taken over.
+   */
+  const unreadLatchRef = useRef<{ key: string; found: boolean }>({ key: "", found: false });
+  if (unreadLatchRef.current.key !== entryKey) {
+    unreadLatchRef.current = { key: entryKey, found: Boolean(firstUnreadMessageId) };
+  } else if (
+    !unreadLatchRef.current.found &&
+    firstUnreadMessageId &&
+    (initialScrollAppliedRef.current !== `${entryKey}:bottom` || isInitialBottomLocked())
+  ) {
+    unreadLatchRef.current = { key: entryKey, found: true };
+  }
+  const initialScrollKey = `${entryKey}:${unreadLatchRef.current.found ? "unread" : "bottom"}`;
   const albumGroups = React.useMemo(() => {
     const breaks = new Set<string>();
     if (firstUnreadMessageId) breaks.add(firstUnreadMessageId);
