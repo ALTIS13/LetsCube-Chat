@@ -184,8 +184,14 @@ export function Sidebar() {
 
   // Inside the folder, not beside it: a folder is a personal grouping across
   // kinds, and the capsule separates the kinds within whatever is on screen.
-  const kindOffered = useMemo(() => offeredChatKinds(filtered), [filtered]);
-  const kind = effectiveChatKind(chosenKind, kindOffered);
+  // Tracker item 69: a folder is already a filter, and a second one inside it
+  // was friction — «я создал себе уже отдельную папку, а тут мне еще фильтруют
+  // люди или группы… во всех согласен, но не в отдельной папке». So the
+  // capsule is «Все»'s alone, and a kind chosen there is not carried into a
+  // folder: a group put in «Работа» is found there whatever «Все» shows.
+  const inAllChats = activeFolder === null;
+  const kindOffered = useMemo(() => (inAllChats ? offeredChatKinds(filtered) : []), [filtered, inAllChats]);
+  const kind = inAllChats ? effectiveChatKind(chosenKind, kindOffered) : "all";
   const kindUnread = useMemo(() => unreadByChatKind(filtered), [filtered]);
   const listed = useMemo(() => chatsOfKind(filtered, kind), [filtered, kind]);
 

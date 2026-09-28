@@ -11,6 +11,7 @@ import {
   type Fixture,
   type Row,
 } from "./helpers/messageActionsFixture";
+import { closeChannelListIfShown } from "./helpers/channelList";
 
 /**
  * The management half of a group's channels: adding, renaming, moving and
@@ -266,6 +267,7 @@ async function openInfo(
     rpc: (name) => (name === "search_chat_messages" ? missingFunction(name) : undefined),
   });
   await openChat(page, "Команда проекта", LINES[0]);
+  await closeChannelListIfShown(page);
   await stampTheme(page, theme);
   await page.getByTestId("chat-header-info-button").click();
   await expect(page.getByTestId("chat-info-panel")).toBeVisible();
@@ -719,6 +721,7 @@ test("a group with nothing in it can still be given its first channel, from the 
     rpc: (name) => (name === "search_chat_messages" ? missingFunction(name) : undefined),
   });
   await openChat(page, "Команда проекта", LINES[0]);
+  await closeChannelListIfShown(page);
 
   // The rail is offered to somebody who can shape it even when there is
   // nothing to shape yet — otherwise the «+» that makes the first channel
@@ -759,6 +762,7 @@ for (const theme of ["dark", "light"] as const) {
       rpc: (name) => (name === "search_chat_messages" ? missingFunction(name) : undefined),
     });
     await openChat(page, "Команда проекта", LINES[0]);
+  await closeChannelListIfShown(page);
     await stampTheme(page, theme);
     await openRailManage(page);
     await expect(page.getByTestId("channel-manage-dialog")).toBeVisible();

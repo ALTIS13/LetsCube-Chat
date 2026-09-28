@@ -11,6 +11,7 @@ import {
   type Fixture,
   type Row,
 } from "./helpers/messageActionsFixture";
+import { closeChannelListIfShown } from "./helpers/channelList";
 
 test.use({ screenshot: "off", video: "off", trace: "off" });
 
@@ -88,6 +89,8 @@ const FULL_RAIL = [
 ];
 
 interface Shape {
+  /** Leave the phone's channel list open, for the tests about the list itself. */
+  keepList?: boolean;
   /** False for a plain group: no `topics` rows at all, so the rail invents the conversation. */
   forum?: boolean;
   role?: string;
@@ -460,6 +463,9 @@ async function openGroup(page: Page, shape: Shape = {}): Promise<Opened> {
   }
 
   await openChat(page, "Команда проекта", LINES[0]);
+  // On a phone the server opens on its channel list (item 54); every test but
+  // the list's own is about what is behind it.
+  if (!shape.keepList) await closeChannelListIfShown(page);
   return { tokenRequests, moderationCalls, fixture };
 }
 
@@ -756,43 +762,55 @@ test.describe("the channel rail", () => {
     await expect.poll(() => opened.tokenRequests).toEqual([ROOM_STANDUP, ROOM_LOBBY]);
   });
 
-  test("a phone gets a trigger and a sheet, never a column", async ({ page }, testInfo) => {
+  test("a phone opens a server on its channel list, never a column", async ({ page }, testInfo) => {
     test.skip(paneIsWide(testInfo), "the narrow shape is the point");
-    await openGroup(page);
+    await openGroup(page, { keepList: true });
 
     await expect(page.getByTestId("channel-rail")).toHaveCount(0);
     await expect(page.getByTestId("topic-strip")).toHaveCount(0);
 
-    const trigger = page.getByTestId("channel-rail-trigger");
-    await expect(trigger).toBeVisible();
-    // It names the channel being read, and says that somebody is in a room, so
-    // the answer the rail exists for survives the rail being closed.
-    await expect(trigger).toContainText("Общие");
-    await expect(trigger.getByTestId("channel-rail-trigger-live")).toContainText("1");
-
-    await trigger.click();
+    // Item 54: entering a server shows its channels, as Telegram's forum
+    // opens on its topics and Discord's server on its channels — the whole
+    // screen, with the server's name and a way back to the chats.
     const sheet = page.getByTestId("channel-rail-sheet");
     await expect(sheet).toBeVisible();
+    await expect(page.getByTestId("channel-rail-title")).toHaveText("Команда проекта");
+    const box = await sheet.locator('nav[data-shape="sheet"]').boundingBox();
+    expect(Math.round(box!.width)).toBe(page.viewportSize()!.width);
     expect(await drawnOrder(page)).toEqual(FULL_RAIL);
 
     // Choosing a channel is choosing it and getting out of the way.
     await page.locator(`[data-testid="channel-rail-text"][data-channel-id="${TOPIC_RELEASES}"]`).click();
     await expect(sheet).toHaveCount(0);
+    const trigger = page.getByTestId("channel-rail-trigger");
+    // It names the channel being read, and says that somebody is in a room, so
+    // the answer the list exists for survives the list being closed.
     await expect(trigger).toContainText("релизы");
+    await expect(trigger.getByTestId("channel-rail-trigger-live")).toContainText("1");
+
+    // The conversation's «Назад» comes back to the list, as a Telegram topic
+    // returns to the forum's topics — and the list's own leaves the server.
+    await page.getByTestId("chat-control-row").getByRole("button", { name: "Назад" }).click();
+    await expect(sheet).toBeVisible();
+    await page.getByTestId("channel-rail-leave").click();
+    await expect(sheet).toHaveCount(0);
+    await expect(page.getByTestId("chat-list-item").first()).toBeVisible();
   });
 
-  test("the sheet closes on the scrim and on Escape", async ({ page }, testInfo) => {
+  test("the list closes on Escape and on «Закрыть», back to the conversation", async ({ page }, testInfo) => {
     test.skip(paneIsWide(testInfo), "there is no sheet at a computer's width");
-    await openGroup(page);
+    await openGroup(page, { keepList: true });
 
-    await page.getByTestId("channel-rail-trigger").click();
-    await expect(page.getByTestId("channel-rail-sheet")).toBeVisible();
+    const sheet = page.getByTestId("channel-rail-sheet");
+    await expect(sheet).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(page.getByTestId("channel-rail-sheet")).toHaveCount(0);
+    await expect(sheet).toHaveCount(0);
+    await expect(page.getByTestId("channel-rail-trigger")).toBeVisible();
 
     await page.getByTestId("channel-rail-trigger").click();
-    await page.getByTestId("channel-rail-scrim").click({ position: { x: 340, y: 400 } });
-    await expect(page.getByTestId("channel-rail-sheet")).toHaveCount(0);
+    await expect(sheet).toBeVisible();
+    await page.getByTestId("channel-rail-close").click();
+    await expect(sheet).toHaveCount(0);
   });
 
   test("the management control is an administrator's alone", async ({ page }, testInfo) => {

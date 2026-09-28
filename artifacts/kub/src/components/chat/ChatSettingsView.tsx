@@ -31,8 +31,6 @@ interface ChatSettingsViewProps {
   invitePolicyError: string | null;
   invitePolicyNotice: string | null;
   onInvitePolicyChange: (next: InvitePolicy) => void;
-  topicsBusy: boolean;
-  onToggleTopics: () => void;
   onNavigate: (id: ChatSettingsRowId) => void;
   onDelete: () => void;
 }
@@ -85,8 +83,6 @@ export function ChatSettingsView({
   invitePolicyError,
   invitePolicyNotice,
   onInvitePolicyChange,
-  topicsBusy,
-  onToggleTopics,
   onNavigate,
   onDelete,
 }: ChatSettingsViewProps) {
@@ -157,24 +153,6 @@ export function ChatSettingsView({
               >
                 <KubIcon name="delete" size={17} tone="danger" className="shrink-0" />
                 <span className={LABEL}>{row.label}</span>
-              </button>
-            );
-          }
-
-          if (row.id === "topics") {
-            return (
-              <button
-                key={row.id}
-                type="button"
-                onClick={onToggleTopics}
-                disabled={!row.editable || topicsBusy}
-                data-testid="chat-settings-row-topics"
-                data-settings-value={row.value ?? ""}
-                className={cn(ROW, "kub-interactive text-[color:var(--kub-text)] kub-raise-hover", FOCUS_RING)}
-              >
-                <KubIcon name="hash" size={17} tone="muted" className="shrink-0" />
-                <span className={LABEL}>{row.label}</span>
-                <span className={VALUE}>{row.value}</span>
               </button>
             );
           }

@@ -31,7 +31,7 @@ const ids = (input: ChatSettingsInput) => chatSettingsRows(input).map((row) => r
 const row = (input: ChatSettingsInput, id: string) => chatSettingsRows(input).find((item) => item.id === id);
 
 test("a group owner sees every row, ending on the destructive one", () => {
-  assert.deepEqual(ids(group()), ["invites", "topics", "administrators", "members", "media", "delete"]);
+  assert.deepEqual(ids(group()), ["invites", "administrators", "members", "media", "delete"]);
 });
 
 test("an administrator who does not own the group is not offered its deletion", () => {
@@ -42,9 +42,8 @@ test("an administrator who does not own the group is not offered its deletion", 
 
 test("an ordinary member reads the same screen and changes none of it", () => {
   const member = group({ isOwner: false, isOwnerOrAdmin: false });
-  assert.deepEqual(ids(member), ["invites", "topics", "administrators", "members", "media"]);
+  assert.deepEqual(ids(member), ["invites", "administrators", "members", "media"]);
   assert.equal(row(member, "invites")?.editable, false);
-  assert.equal(row(member, "topics")?.editable, false);
   // The value is still shown. A setting somebody cannot change is still a fact
   // about the group they are in.
   assert.equal(row(member, "invites")?.value, "Только администраторы");
@@ -68,13 +67,11 @@ test("a channel's people are its subscribers, on the row that names them", () =>
   assert.equal(row(group({ members: 12 }), "members")?.value, "12 участников");
 });
 
-test("the topics row names the mode, not whether text channels exist", () => {
-  const enabled = row(group({ isForum: true }), "topics");
-  const disabled = row(group({ isForum: false }), "topics");
-  assert.equal(enabled?.label, "Режим топиков");
-  assert.equal(enabled?.value, "Включён");
-  assert.equal(disabled?.label, "Режим топиков");
-  assert.equal(disabled?.value, "Выключен");
+test("there is no forum-mode row, whichever way the flag stands", () => {
+  // Tracker item 59: the switch changed nothing the reader could see once text
+  // channels stopped depending on it — «как будто ни на что не влияет сейчас».
+  assert.ok(!ids(group({ isForum: true })).includes("topics"));
+  assert.ok(!ids(group({ isForum: false })).includes("topics"));
 });
 
 test("a media row appears only once something has been counted", () => {

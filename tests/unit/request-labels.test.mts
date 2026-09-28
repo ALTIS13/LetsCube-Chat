@@ -5,6 +5,7 @@ import {
   CHAT_BOTS_LIST,
   CHAT_BOTS_ONE,
   labelPostgrestRequest,
+  MESSAGES_CHANNEL_PREVIEW,
   MESSAGES_HISTORY,
   MESSAGES_PREVIEW,
 } from "../e2e/helpers/request-labels.ts";
@@ -54,6 +55,28 @@ test("the conversation's history and the chat list's preview are different label
     MESSAGES_PREVIEW,
   );
   assert.notEqual(MESSAGES_HISTORY, MESSAGES_PREVIEW);
+});
+
+test("a server channel's last line is neither the sidebar's preview nor the conversation's history", () => {
+  // Tracker item 54: `useChannelPreviews` reads each text channel's newest rows
+  // with the sidebar's projection, filtered to the channel. Called the
+  // sidebar's, a server opened for the first time read as the list refetching.
+  const channel = {
+    select: MESSAGE_LAST_MESSAGE_SELECT,
+    chat_id: "eq.22222222-2222-4222-8222-2222222222a4",
+    deleted_at: "is.null",
+    order: "created_at.desc",
+    limit: "5",
+  };
+  assert.equal(label("/rest/v1/messages", { ...channel, topic_id: "eq.33333333-3333-4333-8333-3333333333d2" }), MESSAGES_CHANNEL_PREVIEW);
+  // The general channel: messages with no topic, or with a general topic.
+  assert.equal(label("/rest/v1/messages", { ...channel, topic_id: "is.null" }), MESSAGES_CHANNEL_PREVIEW);
+  assert.equal(
+    label("/rest/v1/messages", { ...channel, or: "(topic_id.is.null,topic_id.in.(33333333-3333-4333-8333-3333333333d1))" }),
+    MESSAGES_CHANNEL_PREVIEW,
+  );
+  assert.notEqual(MESSAGES_CHANNEL_PREVIEW, MESSAGES_PREVIEW);
+  assert.notEqual(MESSAGES_CHANNEL_PREVIEW, MESSAGES_HISTORY);
 });
 
 test("the two projections the product ships are still distinguishable", () => {

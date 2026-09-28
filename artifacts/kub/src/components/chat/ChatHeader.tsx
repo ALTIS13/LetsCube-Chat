@@ -46,9 +46,15 @@ interface ChatHeaderProps {
   onInfoOpen?: () => void;
   onClearForMe?: () => Promise<{ ok: boolean; error: string | null }>;
   mediaPlayback?: ReactNode;
+  /**
+   * «Назад» on a phone. Absent leaves the conversation for the chat list; a
+   * server's conversation passes its channel list instead (tracker item 54),
+   * as a Telegram topic's «Назад» returns to the forum's topics.
+   */
+  onBack?: () => void;
 }
 
-export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForMe, mediaPlayback }: ChatHeaderProps) {
+export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForMe, mediaPlayback, onBack }: ChatHeaderProps) {
   const { chats, setChats, setSelectedChatId, setMessages, currentUser } = useAppStore();
   const supabase = createClient();
   const [showMenu, setShowMenu] = useState(false);
@@ -438,7 +444,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
           <div className="flex justify-start">
             <button
               type="button"
-              onClick={() => setSelectedChatId(null)}
+              onClick={() => (onBack ? onBack() : setSelectedChatId(null))}
               // D-047: the only way back to the chat list on a phone. Keep a
               // 48px minimum even when h-11 wins over the iOS component rule.
               className={cn(

@@ -34,6 +34,15 @@
 export const MESSAGES_HISTORY = "GET messages:list";
 /** One chat's preview line for the sidebar, on the per-chat compatibility path. */
 export const MESSAGES_PREVIEW = "GET messages:preview";
+/**
+ * One text channel's last line for a server's channel list (tracker item 54,
+ * `useChannelPreviews`). The preview's projection again, so the projection
+ * alone would call it the sidebar's, and a server opened for the first time
+ * would read as the whole list refetching; what tells it apart is the channel
+ * it is filtered to — `topic_id`, or the general channel's `or` over null and
+ * the general topics — which the sidebar's read never asks for.
+ */
+export const MESSAGES_CHANNEL_PREVIEW = "GET messages:channel-preview";
 
 /**
  * The same table, two owners — the shape D-173 was, found a second time.
@@ -72,9 +81,9 @@ export function labelPostgrestRequest({ method, url, headers }: PostgrestRequest
     if ((headers.prefer ?? "").includes("count=")) return "GET messages:count";
     if (url.searchParams.get("id")?.startsWith("eq.") || url.searchParams.get("client_message_id")) return "GET messages:one";
     if (url.searchParams.get("pinned")) return "GET messages:pinned";
-    return (url.searchParams.get("select") ?? "").includes(CONVERSATION_PROJECTION_MARKER)
-      ? MESSAGES_HISTORY
-      : MESSAGES_PREVIEW;
+    if ((url.searchParams.get("select") ?? "").includes(CONVERSATION_PROJECTION_MARKER)) return MESSAGES_HISTORY;
+    const channelFiltered = url.searchParams.has("topic_id") || (url.searchParams.get("or") ?? "").includes("topic_id");
+    return channelFiltered ? MESSAGES_CHANNEL_PREVIEW : MESSAGES_PREVIEW;
   }
   if (resource === "chat_bot_members" && method === "GET") {
     return (url.searchParams.get("chat_id") ?? "").startsWith("in.") ? CHAT_BOTS_LIST : CHAT_BOTS_ONE;

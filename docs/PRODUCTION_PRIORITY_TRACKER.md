@@ -2695,6 +2695,44 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     ours opens the general channel with the list behind a capsule; the voice
     rows restyled in the product's material with the people inside them; and
     the unread half, which needs the database and the owner's word.
+    **The phone's entry, the same day.** A server now opens on its channel list
+    on a phone, the whole screen with the server's name and «Назад к чатам»:
+    Telegram's forum opens on its topics and Discord's server on its channels,
+    and the tester asked for exactly that twice («просто возьми именно интерфейс
+    телеги»). Choosing a channel opens its conversation; the conversation's
+    «Назад» comes back to the list, as a topic's does in Telegram; Escape and
+    «Закрыть» return to the conversation behind. Only a group with something to
+    choose between opens this way — a heading, or a channel besides the general
+    one — not every group whose administrator is offered the rail for its «+»;
+    not for an address that names a message (a link or a notification is going
+    to that message); not when the channels arrive more than 2 s after the
+    entry, which would cover a conversation already being read; and not for
+    the server the reader is talking in — coming back to it is coming back to
+    the call («Вернуться к разговору» is the bar's own title), and Discord's
+    and Telegram's call bars both return to the call, never to a list over its
+    controls (`voice-shell-bar.spec` «the public call bar returns to the
+    conversation without restarting it» went red without that rule). Evidence:
+    `server-channel-rail.spec` «a phone opens a server on its channel list,
+    never a column» and «the list closes on Escape and on «Закрыть», back to the
+    conversation»; the specs whose tests are about the conversation behind the
+    list close it first through `helpers/channelList.ts`, and leave a server
+    through its list.
+    **What the previews cost, measured and fixed the same day.** The last lines
+    shipped in `84f8abcf` were read every time the list mounted, one page per
+    text channel with the conversation's projection, and on a phone even with
+    no list on screen. `chat-list-event-cost.spec` caught it: «a group with
+    text channels, reopened, reads its history once», and the two reopening
+    gates beside it, went red at both widths — every channel's read counted as
+    a history page. Now the lines are read only while a list is shown, with the
+    sidebar's preview projection, once per server, and kept
+    (`lib/channelPreviewCache.ts`): both sockets move them — the chat list's
+    hears every chat, so a closed server stays current — an edit rewrites a
+    line, and a deletion, a clearing or a reconnection after a gap drops the
+    entry to be read again. Telegram's topic list is kept and moved by updates
+    the same way. The gate's labels got a third bucket for these reads
+    (`MESSAGES_CHANNEL_PREVIEW`), because the sidebar's projection alone would
+    have called a first visit to a server a whole-list refetch — D-173's shape.
+    Evidence: `channel-preview-cache.test.mts` (7), `request-labels.test.mts`.
 
 55. `[x]` No «переслано» notice when the forward has already taken you there —
     same report. Forwarding from one chat to another opens the destination, and
@@ -2740,6 +2778,103 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     D-315/D-317) and «Добавить в контакты» on a profile exist; Telegram's
     contacts search also lists people outside the contacts under a heading of
     their own, which answers the question where it is asked.
+
+    **The second report of 2026-09-28** (the same tester, 12:41–14:53 MSK, read
+    from the database with its screenshots) repeats two things and adds the
+    rest below. Repeated: the channels — «просто возьми именно интерфейс телеги,
+    тк это самое удобное в плане каналов, что у нас было для работы… прям
+    идеально» (item 54: the phone opening a server on its channel list is the
+    step in progress) — and the network (items 52/53, shipped the same day). He
+    also asks «нафига голосовые каналы?)»; the owner keeps them (Discord's), so
+    they stay, restyled under item 54.
+
+58. `[ ]` Coming back to a conversation is instant — «я вот из чата с тобой
+    захожу в другой, потом возвращаюсь к тебе и секунду жду прогрузки, а
+    зачем? Если кэш существует». The store keeps a conversation after it is
+    left (D-089), so the second must be spent somewhere else: the entry position
+    waiting on a read, a loading state drawn while the held rows could be, or
+    the list's revalidation blocking the paint. Measure the return path first;
+    Telegram and Discord both redraw a conversation left a moment ago at once
+    and reconcile behind it.
+
+59. `[x]` «Режим топиков» in a group's settings says nothing any more — «как
+    будто ни на что не влияет сейчас. Каналы и без него создаются». The server
+    rail made channels independent of the forum flag, and the switch was left
+    behind. Remove it, or make it mean something the reader can see; a setting
+    that changes nothing is the interface lying.
+    **Done 2026-09-28:** the row is gone from the settings screen, with its
+    handler; the flag stays in the database (no migration), where it still
+    decides the old topic strip for a forum the rail is not offered in.
+    `chat-settings.test.mts` and `plain-group-text-channel.spec` pin its absence.
+
+60. `[ ]` «Роли группы» is not understood — «не пойму это что и зачем». The
+    dialog is a member's own title visible in the group only, which is
+    Telegram's custom title, while «роль» reads as Discord's permission role.
+    Name it for what it is and show where the title appears before asking for
+    one; measure Telegram's own words for the admin title first.
+
+61. `[x]` No «Управление каналами» row in the channel list — «мазолит глаза. Я
+    туда могу раз в пол года зайти через редактирование группы и этого
+    достаточно». Management stays in the group's settings («Каналы»), and the
+    list keeps at most Discord's small «+» beside a heading for whoever may
+    create.
+    **Done 2026-09-28**, reconciling two reports: the row had been added for the
+    owner's own «не вижу в уже созданной группе такой опции», so it is not
+    removed but reduced to Discord's vocabulary — the small «+» a heading
+    already carries, «Создать канал» in its title, no labelled row.
+
+62. `[ ]` A task can hold a checklist — «прописать пункты и отмечать какие
+    пункты уже сделал, чтобы в итоге закрыть большую задачу». Items without
+    their own deadlines or assignees: a list inside the task, ticked off.
+    Telegram's own checklist message is the model to read first. Needs a place
+    in the database (a column or a table) — §10, the owner's word before it is
+    applied.
+
+63. `[ ]` One field for who a task goes to — «Получатель» («Менеджер локации»)
+    and «Тип назначения» («Пул менеджеров») read as the same question: «по
+    идее это может быть в одном пункте едином». One choice that sets both.
+
+64. `[ ]` Tasks as their own icon with a gentle count — «отдельная иконка,
+    например между папками и меню. И на этой иконке была цифра сколько задач у
+    тебя сейчас в работе». On a computer, in the folder rail beside the menu,
+    alongside the section row item 41 added; decide which of the two stays.
+
+65. `[ ]` Text typed before an attachment becomes its caption — «если начать
+    писать, а потом выбрать фото для загрузки. У телеги ты тогда автоматом
+    падаешь в поле подписи под фото со своим набранным уже текстом. А здесь
+    либо отправлять по отдельности, либо слетит что-то одно из двух».
+    Telegram's mechanic, adopted as described: the composer's text moves into
+    the attach sheet's caption field and leaves the composer.
+
+66. `[ ]` Task reminders — «например стоит задача с выполнением на месяц…
+    комплектующие придут только через неделю и тогда надо напоминание, что пора
+    приступать делать. А потом будет вторая поставка… и опять надо
+    напоминание». Several reminders per task, at chosen moments, delivered as
+    the task notifications already are. Needs storage and a scheduler — §10
+    for the database half.
+
+67. `[ ]` A task taken by several people together — «есть задачи которые два
+    человека ведут параллельно». Assignees become a set rather than one person;
+    a database change — §10.
+
+68. `[ ]` A task's period, not only its deadline — «не хватает возможности
+    выбрать промежуток… есть задачи которые идут месяц». A start beside the
+    due date, shown as a range; a database change — §10.
+
+69. `[~]` The kind capsule (item 47) stays out of the reader's own folders —
+    «я создал себе уже отдельную папку, а тут мне еще фильтруют люди или
+    группы… во всех согласен, но не в отдельной папке», and the chosen kind
+    carried from folder to folder made him switch it back to write to somebody
+    («мне надо перетукнуть группы на люди, и выйти еще в другую папку»). A
+    folder is already a filter; a second one inside it is the friction. His own
+    proposal is Telegram's: a few system folders («Все», «Группы», «Личное»)
+    instead of a filter on top. At once: the capsule only in «Все», and a kind
+    never carried into a folder; then the system folders.
+    **The first half done 2026-09-28:** the capsule is «Все»'s alone and a kind
+    chosen there is not applied inside a folder — `chat-kind-filter.spec` «a
+    folder of the reader's own carries no capsule, and no kind chosen
+    elsewhere», which a mutant applying the capsule everywhere turns red. The
+    system folders are next.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

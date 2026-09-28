@@ -353,7 +353,6 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
   const [editing, setEditing] = useState(false);
   /** Which settings row has opened its choice in place. */
   const [settingsRow, setSettingsRow] = useState<ChatSettingsRowId | null>(null);
-  const [topicsBusy, setTopicsBusy] = useState(false);
   const [name, setName] = useState(chat.name ?? "");
   const [description, setDescription] = useState(chat.description ?? "");
   const [saving, setSaving] = useState(false);
@@ -1129,50 +1128,6 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
     // The settings screen is left by saving as well as by the arrow: a person
     // who pressed the check has finished with it.
     setView("root");
-  };
-
-  /**
-   * Turning topics on or off.
-   *
-   * Lifted out of the row it used to be written inside (D-164): the setting now
-   * lives on the settings screen, and a handler written in the middle of a
-   * button's markup can be called from nowhere else.
-   */
-  const handleToggleTopics = async () => {
-    if (topicsBusy) return;
-    const next = !chat.is_forum;
-    const confirmed = await requestAppConfirm({
-      title: next ? "Включить режим топиков?" : "Выключить режим топиков?",
-      description: next
-        ? "Все будущие сообщения можно будет отправлять в общий раздел или выбранный топик."
-        : "Топики и сообщения сохранятся. Текстовые каналы останутся доступными; если их нет, группа вернётся к обычному виду.",
-      confirmLabel: next ? "Включить" : "Выключить",
-      icon: "hash",
-    });
-    if (!confirmed) return;
-    setTopicsBusy(true);
-    try {
-      const { error: updErr } = await supabase
-        .from("chats").update({ is_forum: next }).eq("id", chat.id);
-      if (updErr) {
-        console.error("toggle is_forum failed:", updErr);
-        showAppAlert(prefixError("Не удалось переключить режим топиков", updErr), "Ошибка");
-        return;
-      }
-      setChats(chats.map((c) => c.id === chat.id ? { ...c, is_forum: next } : c));
-      if (next) {
-        const { data: existing } = await supabase
-          .from("topics").select("id").eq("chat_id", chat.id).eq("is_general", true).maybeSingle();
-        if (!existing) {
-          const { error: tErr } = await supabase.from("topics").insert({
-            chat_id: chat.id, name: "Общий", emoji: "💬", is_general: true, position: 0,
-          });
-          if (tErr) console.error("create general topic failed:", tErr);
-        }
-      }
-    } finally {
-      setTopicsBusy(false);
-    }
   };
 
   /**
@@ -3390,8 +3345,6 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
             invitePolicyError={invitePolicyError}
             invitePolicyNotice={invitePolicySupported ? null : INVITE_POLICY_MIGRATION_REQUIRED}
             onInvitePolicyChange={(next) => void handleInvitePolicyChange(next)}
-            topicsBusy={topicsBusy}
-            onToggleTopics={() => void handleToggleTopics()}
             onNavigate={(id) => {
               // Every one of these is somewhere that already exists on the card
               // root, so the row takes a person there rather than opening a

@@ -9,6 +9,7 @@ import {
   person,
   type Row,
 } from "./helpers/messageActionsFixture";
+import { closeChannelListIfShown, leaveConversationForChatList } from "./helpers/channelList";
 
 /**
  * The running call, on the screens that are not the messenger.
@@ -226,6 +227,9 @@ async function open(
   );
 
   await openChat(page, "Команда проекта", LINE);
+  // A group with a voice room opens on its channel list on a phone (tracker
+  // item 54); these tests are about the conversation and the bar around it.
+  await closeChannelListIfShown(page);
 }
 
 const bar = (page: Page) => page.locator('[data-testid="voice-call-bar"]:visible');
@@ -260,7 +264,7 @@ async function goToBots(page: Page) {
   }
   const menu = page.locator('[aria-label="Меню"]:visible');
   if ((await menu.count()) === 0) {
-    await page.getByTestId("chat-control-row").getByLabel("Назад").click();
+    await leaveConversationForChatList(page);
     await expect(menu).toHaveCount(1);
   }
   await menu.click();

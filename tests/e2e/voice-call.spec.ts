@@ -9,6 +9,7 @@ import {
   person,
   type Row,
 } from "./helpers/messageActionsFixture";
+import { closeChannelListIfShown, leaveConversationForChatList } from "./helpers/channelList";
 
 /**
  * Voice channels, slice 2, in a browser — the client half only.
@@ -1023,6 +1024,7 @@ async function open(page: Page, seed: Seed = {}) {
   });
 
   await openChat(page, "Команда проекта", LINE);
+  await closeChannelListIfShown(page);
   /**
    * Make the team's room vanish from every later read.
    *
@@ -1050,10 +1052,13 @@ async function open(page: Page, seed: Seed = {}) {
 async function switchChat(page: Page, chatName: string, text: string) {
   const row = page.getByTestId("chat-list-item").filter({ hasText: chatName });
   if (!(await row.isVisible().catch(() => false))) {
-    await page.getByTestId("chat-control-row").getByLabel("Назад").click();
+    await leaveConversationForChatList(page);
     await expect(row).toBeVisible();
   }
   await row.click();
+  // A server opens on its channel list on a phone (item 54); this is about
+  // the conversation.
+  await closeChannelListIfShown(page);
   await expect(
     page.locator('[data-message-bubble="true"]').filter({ hasText: text }),
   ).toBeVisible();
@@ -3685,7 +3690,7 @@ for (const theme of ["dark", "light"] as const) {
 async function showChatList(page: Page) {
   const row = page.getByTestId("chat-list-item").first();
   if (await row.isVisible().catch(() => false)) return;
-  await page.getByTestId("chat-control-row").getByLabel("Назад").click();
+  await leaveConversationForChatList(page);
   await expect(row).toBeVisible();
 }
 

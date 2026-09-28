@@ -468,8 +468,6 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   );
   const call = useVoiceCall();
   const serverChannels = useServerChannels(voiceEnabled ? chatId : null, voiceEnabled, topics);
-  // Each text channel's last line for the channel list (tracker item 54).
-  const channelPreviews = useChannelPreviews(voiceEnabled ? chatId : null, serverChannels.groups, generalTopicIds, userId);
   const voice = useVoiceChannel(serverChannels, call.channelId);
   // Whether this group gets the rail instead of the topic strip: anything at
   // all besides the one general channel. Read here rather than in the rail's
@@ -630,6 +628,54 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   useEffect(() => {
     if (railFitsColumn) setRailOpen(false);
   }, [railFitsColumn]);
+
+  // Tracker item 54: on a phone a server opens on its channel list, as
+  // Telegram's forum opens on its topics and Discord's server on its channels,
+  // and the tester's complaint was that entering showed none of it. Once per
+  // entry, and not for an address that names a message: somebody following a
+  // link or a notification is going to that message, not to the list.
+  //
+  // And only while the entry is still the moment: the channels are read after
+  // the conversation opens, and a list that arrived late would cover a
+  // conversation somebody had already started reading or writing in.
+  //
+  // A server, not any group: the rail is also offered to an administrator of a
+  // group with nothing in it, for its «+», and opening such a group on a list
+  // of one row would be the list for its own sake. So the entry is the list
+  // only where there is something to choose between — a heading, or a channel
+  // besides the general one — decided as `railIsOffered` decides it for
+  // somebody who cannot manage and whose read succeeded.
+  const serverHasChannels =
+    voiceEnabled && railIsOffered(serverChannels.channels, serverChannels.categories, false, false);
+  const phoneServer = railOffered && serverHasChannels && !railFitsColumn;
+  const enteredAtRef = useRef(Date.now());
+  useEffect(() => {
+    enteredAtRef.current = Date.now();
+  }, [chatId]);
+  const listShownForRef = useRef<string | null>(null);
+  // Nor for the server somebody is talking in: coming back to it is coming
+  // back to the call — the bar's own words are «Вернуться к разговору» — and
+  // Discord's and Telegram's call bars both return to the call, never to a
+  // list laid over its controls.
+  const talkingHere =
+    call.chatId === chatId && (call.phase === "joining" || call.phase === "connected" || call.phase === "reconnecting");
+  useEffect(() => {
+    if (!phoneServer || listShownForRef.current === chatId) return;
+    listShownForRef.current = chatId;
+    if (talkingHere) return;
+    if (Date.now() - enteredAtRef.current > LIST_ON_ENTRY_WINDOW_MS) return;
+    if (typeof window !== "undefined" && window.location.pathname.includes("/m/")) return;
+    setRailOpen(true);
+    // `talkingHere` is read at the entry, not followed: joining a room from the
+    // list must not reopen it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phoneServer, chatId]);
+
+  // Each text channel's last line (tracker item 54), read only while a list is
+  // on screen to show it: a phone on which the list was never opened reads
+  // nothing for it, and every later showing is answered from what was kept.
+  const railOnScreen = railOffered && (railFitsColumn || railOpen);
+  const channelPreviews = useChannelPreviews(railOnScreen ? chatId : null, serverChannels.groups, generalTopicIds, userId);
 
   const railTextChannelId = currentTextChannelId(serverChannels.channels, selectedTopicId);
   const railTextChannel = serverChannels.channels.find((channel) => channel.id === railTextChannelId) ?? null;
@@ -1990,6 +2036,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
               onInfoOpen={() => setShowInfo(true)}
               onClearForMe={clearChatForMe}
               mediaPlayback={<ChatMediaPlaybackBar compact />}
+              // A server's conversation goes back to its channel list on a
+              // phone, as a Telegram topic goes back to the forum's topics.
+              onBack={phoneServer ? () => setRailOpen(true) : undefined}
             />
           )}
 
@@ -2164,7 +2213,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           become its containing block (rule 3). Its siblings here — the contact
           card, the viewer, the dialogs — are placed for the same reason. */}
       {railOffered && !railFitsColumn && railOpen && (
-        <ChannelRailSheet {...railProps} onClose={() => setRailOpen(false)} />
+        <ChannelRailSheet
+          {...railProps}
+          title={chat?.name ?? null}
+          onClose={() => setRailOpen(false)}
+          onLeave={() => useAppStore.getState().setSelectedChatId(null)}
+        />
       )}
       {/* The dialog the rail's control asks for. Mounted here because the one
           in the settings screen only exists while that screen is open, and the
@@ -2273,6 +2327,13 @@ function patchOutgoingPlaceholder(
  * Not at once: the row's own address takes a moment to load, and freeing the
  * local one first would blank the picture for exactly that moment.
  */
+/**
+ * How long after entering a server its channel list may still open by itself
+ * on a phone (tracker item 54). The channels are read after the conversation
+ * opens; past this the reader is already in the conversation.
+ */
+const LIST_ON_ENTRY_WINDOW_MS = 2_000;
+
 const OUTGOING_PREVIEW_GRACE_MS = 60_000;
 function releaseOutgoingPreview(attachment: StagedAttachment): void {
   if (typeof window === "undefined") return;

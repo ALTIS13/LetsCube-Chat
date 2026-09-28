@@ -1,7 +1,15 @@
 import { expect, test, type APIRequestContext, type Page, type Route } from "@playwright/test";
 import { installRenderCounter, readRenderCounts, resetRenderCounts, type RenderCounts } from "./helpers/render-counter";
 import { RealtimeFixture } from "./helpers/realtime-fixture";
-import { CHAT_BOTS_LIST, CHAT_BOTS_ONE, labelPostgrestRequest, MESSAGES_HISTORY, MESSAGES_PREVIEW } from "./helpers/request-labels";
+import {
+  CHAT_BOTS_LIST,
+  CHAT_BOTS_ONE,
+  labelPostgrestRequest,
+  MESSAGES_CHANNEL_PREVIEW,
+  MESSAGES_HISTORY,
+  MESSAGES_PREVIEW,
+} from "./helpers/request-labels";
+import { closeChannelListIfShown } from "./helpers/channelList";
 
 /**
  * Complaints 12 and 13, measured per event: what one message, one receipt, one
@@ -368,6 +376,10 @@ test.describe("what one event costs the chat list and the conversation", () => {
     // the general channel's ids are held by value: a refresh that answers with
     // the same channels as new objects used to re-key the history read.
     expect.soft(cost[MESSAGES_HISTORY] ?? 0, `the history was fetched more than once: ${JSON.stringify(cost)}`).toBeLessThanOrEqual(1);
+    // Tracker item 54. The channels' last lines were read on the first visit
+    // and kept; the list shown again — a column here, the list a phone opens
+    // on — reads none of them again.
+    expect.soft(cost[MESSAGES_CHANNEL_PREVIEW] ?? 0, `a server seen before read its channels' last lines again: ${JSON.stringify(cost)}`).toBe(0);
   });
 
   test("moving to another text channel reads that channel once", async ({ page }, testInfo) => {
@@ -516,6 +528,9 @@ async function boot(page: Page) {
 async function openChat(page: Page, backend: FixtureBackend, realtime: RealtimeFixture, chatId: string) {
   await chatRow(page, chatId).click();
   await expect(page.locator('[data-message-bubble="true"]').first()).toBeVisible();
+  // A server opens on its channel list on a phone (tracker item 54), and
+  // Escape would close the list rather than the chat these tests leave.
+  await closeChannelListIfShown(page);
   await expect.poll(() => realtime.isJoined(`messages:chat:${chatId}`), { timeout: 15_000 }).toBe(true);
   // Past the join, its reconcile and the read mark, so only what the test does is counted.
   await settle(page, backend, 3_000);

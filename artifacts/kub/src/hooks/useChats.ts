@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
-import type { ChatWithLastMessage, Profile } from "@/types/database";
+import type { ChatWithLastMessage, MessageWithSender, Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
@@ -48,6 +48,8 @@ import {
 } from "@/lib/resumeRevalidation";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
+import { emitChannelActivity } from "@/lib/channelActivity";
+import { channelPreviewCache } from "@/lib/channelPreviewCache";
 
 const CHAT_REFETCH_DEBOUNCE_MS = 350;
 const CHAT_SUMMARY_DEBOUNCE_MS = 250;
@@ -443,6 +445,9 @@ export function useChats() {
       const row = payload.new as unknown as MessageRowLike | null;
       if (!row?.id || !row.chat_id) return;
       dispatchChatsRefresh({ reason: "message-realtime", chatId: row.chat_id, messageId: row.id });
+      // The channel list's last lines (tracker item 54) are kept while a server
+      // is closed, and this socket is the one that hears every chat.
+      emitChannelActivity(row as unknown as MessageWithSender);
       const chat = useAppStore.getState().chats.find((item) => item.id === row.chat_id);
       if (
         chat?.type === "private" &&
@@ -469,6 +474,7 @@ export function useChats() {
           .eq("id", row.id)
           .maybeSingle();
         if (!data) return;
+        emitChannelActivity(data as unknown as MessageWithSender);
         const joined = applyEvent({ kind: "message-insert", row: data as unknown as MessageRowLike });
         if (joined === "unknown-chat") scheduleRefetch();
       })();
@@ -477,6 +483,7 @@ export function useChats() {
     const handleMessageUpdate = (payload: RealtimeRowPayload) => {
       const row = payload.new as unknown as MessageRowLike | null;
       if (!row?.id || !row.chat_id) return;
+      channelPreviewCache.hearUpdate(row as unknown as MessageWithSender);
       if (applyEvent({ kind: "message-update", row }) === "needs-summary") scheduleSummary(row.chat_id);
     };
 
@@ -592,7 +599,10 @@ export function useChats() {
           if (!payload.new?.chat_id) return;
           if ("cleared_at" in payload.new) {
             const previous = useAppStore.getState().chats.find((chat) => chat.id === payload.new.chat_id);
-            if (previous?.cleared_at !== payload.new.cleared_at) clearedAtCache.evictChat(payload.new.chat_id);
+            if (previous?.cleared_at !== payload.new.cleared_at) {
+              clearedAtCache.evictChat(payload.new.chat_id);
+              channelPreviewCache.evict(payload.new.chat_id);
+            }
           }
           const outcome = applyEvent({ kind: "own-membership", row: payload.new });
           if (outcome === "unknown-chat" || outcome === "needs-refetch") scheduleRefetch();

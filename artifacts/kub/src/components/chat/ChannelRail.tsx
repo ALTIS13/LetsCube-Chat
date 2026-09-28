@@ -282,24 +282,31 @@ function ChannelRailList({
         );
       })}
 
-      {/* The one control an administrator gets here, for a group with no
-          headings at all: without it the manage button would exist only beside
-          a category, which is the state somebody needs it to leave. */}
+      {/* Tracker item 61. For an administrator of a group with no headings,
+          the way to make a channel: the owner asked for one here — «не вижу в
+          уже созданной группе такой опции», the settings were three screens
+          away — and the tester, also an administrator, found the text row
+          that answered him an eyesore: «надпись "управление каналами" лишняя,
+          она мазолит глаза». Both are met by Discord's own vocabulary: the
+          small «+» a heading already carries, with its words in its title,
+          not a labelled row in the list. */}
       {canManage && onManageChannels && !groups.some((group) => group.category) && (
-        <button
-          type="button"
-          onClick={onManageChannels}
-          data-testid="channel-rail-manage"
-          className={cn(
-            "mt-3 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors kub-raise-hover",
-            "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
-            FOCUS_RING_INSET,
-            PRESS_SINK,
-          )}
-        >
-          <KubIcon name="create" size={15} className="shrink-0" />
-          <span className="min-w-0 flex-1 truncate text-left">Управление каналами</span>
-        </button>
+        <div className="mt-2 flex justify-end px-1">
+          <button
+            type="button"
+            onClick={onManageChannels}
+            aria-label="Создать канал"
+            title="Создать канал"
+            data-testid="channel-rail-manage"
+            className={cn(
+              "flex h-7 w-7 items-center justify-center rounded-md text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]",
+              FOCUS_RING_INSET,
+              PRESS_SINK,
+            )}
+          >
+            <KubIcon name="create" size={14} />
+          </button>
+        </div>
       )}
 
       {occupantMenu.element}
@@ -713,7 +720,16 @@ export function ChannelRail(props: ChannelRailProps) {
 }
 
 /**
- * The same list over the conversation, for a pane with no room for a column.
+ * The same list for a pane with no room for a column: on a phone, the server's
+ * own screen (tracker item 54).
+ *
+ * It was a drawer over the conversation, opened from a capsule, and a server
+ * opened on its general channel. Both references open a server on its list
+ * instead — Telegram's forum on its topics, each with its last line, and
+ * Discord's server on its channels — and the tester's report was exactly that
+ * entering showed none of it. So it takes the whole screen, is what entering a
+ * server shows, and a conversation's «Назад» comes back to it; its own
+ * «Назад» leaves the server for the chat list, as a topic list's does.
  *
  * A covering surface, so it takes the strong material and keeps its perimeter
  * (rule 11): it stands on a backdrop nobody chose. Nothing inside it is
@@ -721,9 +737,21 @@ export function ChannelRail(props: ChannelRailProps) {
  *
  * No entrance animation, deliberately. Rule 14 is a WebKit defect about
  * surfaces that animate in from inside a container that hides itself, and a
- * drawer that simply appears cannot have it.
+ * screen that simply appears cannot have it.
  */
-export function ChannelRailSheet({ onClose, ...props }: ChannelRailProps & { onClose: () => void }) {
+export function ChannelRailSheet({
+  onClose,
+  onLeave,
+  title,
+  ...props
+}: ChannelRailProps & {
+  /** Back to the conversation behind: Escape, «Закрыть», or choosing a channel. */
+  onClose: () => void;
+  /** Out of the server, to the chat list — the list's own «Назад». */
+  onLeave?: () => void;
+  /** The server's name, for the screen's own header. */
+  title?: string | null;
+}) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -741,26 +769,38 @@ export function ChannelRailSheet({ onClose, ...props }: ChannelRailProps & { onC
     // paint was wrong — which is exactly the kind of thing a green test does
     // not see.
     <div className="fixed inset-0 z-[60] flex" data-testid="channel-rail-sheet">
-      <div
-        aria-hidden="true"
-        onClick={onClose}
-        className="absolute inset-0 bg-[color-mix(in_srgb,var(--kub-bg)_62%,transparent)]"
-        data-testid="channel-rail-scrim"
-      />
       <nav
         role="dialog"
         aria-label="Каналы"
         data-shape="sheet"
-        // `pl-[var(--kub-safe-left)]` rather than `px-safe`: this sheet is
-        // against the left edge only, and held sideways an iPhone's notch is
-        // on one of the long edges. The token, never `env()` — rule 13 keeps
-        // the four insets declared in one place so WebKit, which reports every
-        // inset as 0px, can still be given values to check against.
-        className="kub-glass-strong relative flex h-full w-[min(19rem,86vw)] flex-col border-r border-[color:var(--kub-border-color)] pb-safe pl-[var(--kub-safe-left)] pt-window-top"
+        // The whole screen, with both long edges' insets: held sideways an
+        // iPhone's notch is on one of them, and this now reaches both. The
+        // tokens, never `env()` — rule 13 keeps the four insets declared in
+        // one place so WebKit, which reports every inset as 0px, can still be
+        // given values to check against.
+        className="kub-glass-strong relative flex h-full w-full flex-col pb-safe px-safe pt-window-top"
       >
-        <div className="flex shrink-0 items-center gap-2 px-3 pb-1 pt-2">
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[color:var(--kub-text)]">
-            Каналы
+        <div className="flex shrink-0 items-center gap-2 px-2 pb-1 pt-2">
+          {onLeave && (
+            <button
+              type="button"
+              onClick={onLeave}
+              aria-label="Назад к чатам"
+              data-testid="channel-rail-leave"
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[color:var(--kub-text)] transition-colors kub-raise-hover",
+                FOCUS_RING,
+                PRESS_SINK,
+              )}
+            >
+              <KubIcon name="chevronLeft" size={22} />
+            </button>
+          )}
+          <span className="flex min-w-0 flex-1 flex-col px-1">
+            <span className="truncate text-[15px] font-semibold text-[color:var(--kub-text)]" data-testid="channel-rail-title">
+              {title?.trim() || "Каналы"}
+            </span>
+            {title?.trim() && <span className="truncate text-xs text-[color:var(--kub-muted)]">Каналы</span>}
           </span>
           <button
             type="button"

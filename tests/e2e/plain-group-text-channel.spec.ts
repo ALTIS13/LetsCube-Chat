@@ -10,6 +10,7 @@ import {
   requireFixtureServer,
   type Row,
 } from "./helpers/messageActionsFixture";
+import { closeChannelListIfShown } from "./helpers/channelList";
 
 const AT = "2026-09-27T09:00:00.000Z";
 const OWNER = person("11111111-1111-4111-8111-0000000000a1", "Владелец группы");
@@ -45,6 +46,9 @@ function channelRest(topics: Row[], member: boolean) {
 }
 
 async function openChannelList(page: Page) {
+  // On a phone the server may already be on its list (item 54): closed here so
+  // that it is opened below through its own door, as the test means.
+  await closeChannelListIfShown(page);
   await expect.poll(async () =>
     (await page.getByTestId("channel-rail-trigger").count()) + (await page.getByTestId("channel-rail").count()),
   ).toBeGreaterThan(0);
@@ -78,6 +82,7 @@ test("an ordinary member can open and read a text channel created in a non-forum
     rest: channelRest(topics, false),
   });
   await openChat(page, GROUP_NAME, GENERAL_TEXT);
+  await closeChannelListIfShown(page);
   await openChannelList(page);
   await page.getByTestId("channel-rail-manage").first().click();
   await page.getByTestId("channel-create-open").click();
@@ -190,6 +195,7 @@ test("a pending topics read never exposes another channel in the general convers
 
   try {
     await openChat(page, GROUP_NAME, GENERAL_TEXT);
+  await closeChannelListIfShown(page);
     await expect.poll(() => topicsRequested).toBe(true);
     const history = () => fixture.restCalls("messages", "GET").filter((call) =>
       new URLSearchParams(call.search).get("order")?.includes("id.desc"),
@@ -208,7 +214,7 @@ test("a pending topics read never exposes another channel in the general convers
   await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: CHANNEL_TEXT })).toBeVisible();
 });
 
-test("group settings call out forum mode separately from working text channels", async ({ page }, testInfo) => {
+test("group settings name the channels and no forum mode any more", async ({ page }) => {
   const topics: Row[] = [{
     id: TOPIC_ID,
     chat_id: CHAT_ID,
@@ -228,6 +234,7 @@ test("group settings call out forum mode separately from working text channels",
     rest: channelRest(topics, false),
   });
   await openChat(page, GROUP_NAME, GENERAL_TEXT);
+  await closeChannelListIfShown(page);
   await expect.poll(async () =>
     (await page.getByTestId("channel-rail-trigger").count()) + (await page.getByTestId("channel-rail").count()),
   ).toBeGreaterThan(0);
@@ -235,26 +242,12 @@ test("group settings call out forum mode separately from working text channels",
   await page.getByLabel("Редактировать").click();
   await expect(page.getByTestId("chat-info-settings-view")).toHaveAttribute("data-state", "current");
   await expect(page.getByTestId("chat-settings-row-channels")).toContainText("Каналы");
-  const mode = page.getByTestId("chat-settings-row-topics");
-  await expect(mode).toContainText("Режим топиков");
-  await expect(mode).toHaveAttribute("data-settings-value", "Выключен");
-
-  for (const theme of ["light", "dark"] as const) {
-    await page.evaluate((value) => {
-      const root = document.documentElement;
-      root.classList.toggle("dark", value === "dark");
-      root.classList.toggle("light", value === "light");
-      root.setAttribute("data-theme", value);
-      root.style.colorScheme = value;
-    }, theme);
-    await page.evaluate(() => document.fonts.ready);
-    await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running"));
-    const fits = await mode.evaluate((element) =>
-      Array.from(element.querySelectorAll("span")).every((span) => span.scrollWidth <= span.clientWidth),
-    );
-    expect(fits).toBe(true);
-    await mode.screenshot({ path: testInfo.outputPath(`forum-mode-${theme}.png`) });
-  }
+  // Tracker item 59: «Режим топиков» stood here, and the tester — «как будто
+  // ни на что не влияет сейчас. Каналы и без него создаются» — was right: the
+  // server rail made text channels independent of the flag. The channels are
+  // the row above; a switch that changes nothing the reader can see is gone.
+  await expect(page.getByTestId("chat-settings-row-topics")).toHaveCount(0);
+  await expect(page.getByTestId("chat-info-settings-view")).not.toContainText("Режим топиков");
 });
 
 test("a refused topics read is visible to a member of an ordinary group", async ({ page }) => {
@@ -269,6 +262,7 @@ test("a refused topics read is visible to a member of an ordinary group", async 
       : rest(call),
   });
   await openChat(page, GROUP_NAME, GENERAL_TEXT);
+  await closeChannelListIfShown(page);
   await openChannelList(page);
   await expect(page.getByTestId("channel-rail-unreadable")).toContainText("Не удалось загрузить каналы.");
   await expect(page.getByTestId("channel-rail-retry")).toBeVisible();
@@ -291,6 +285,7 @@ test("a plain group without active text channels keeps its legacy conversation",
     rest: channelRest([], true),
   });
   await openChat(page, GROUP_NAME, GENERAL_TEXT);
+  await closeChannelListIfShown(page);
   await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: CHANNEL_TEXT })).toBeVisible();
   await expect(page.getByTestId("channel-rail-trigger")).toHaveCount(0);
   await expect(page.getByTestId("channel-rail")).toHaveCount(0);

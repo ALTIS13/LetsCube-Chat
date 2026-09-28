@@ -73,7 +73,7 @@ async function open(page: Page) {
   const realtime = new RealtimeFixture();
   await realtime.install(page);
   await page.goto(`/chat/${TEAM}`, { waitUntil: "domcontentloaded" });
-  if ((page.viewportSize()?.width ?? 0) < 768) await page.getByTestId("channel-rail-trigger").click();
+  // A phone opens a server on its list by itself (item 54); a computer has the column.
   await expect(page.getByTestId("channel-rail-list")).toBeVisible();
   return realtime;
 }

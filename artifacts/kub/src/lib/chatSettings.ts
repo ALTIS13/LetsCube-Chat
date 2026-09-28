@@ -114,15 +114,11 @@ export function chatSettingsRows(input: ChatSettingsInput): ChatSettingsRow[] {
     editable: input.isOwnerOrAdmin,
   });
 
-  if (isGroup) {
-    rows.push({
-      id: "topics",
-      label: "Режим топиков",
-      value: input.isForum ? "Включён" : "Выключен",
-      kind: "toggle",
-      editable: input.isOwner,
-    });
-  }
+  // No «Режим топиков» row since tracker item 59: the server rail made text
+  // channels independent of the forum flag, and the switch was left saying
+  // something it no longer did — «как будто ни на что не влияет сейчас.
+  // Каналы и без него создаются». A setting that changes nothing the reader
+  // can see is the interface lying; the channels are «Каналы», above.
 
   rows.push({
     id: "administrators",

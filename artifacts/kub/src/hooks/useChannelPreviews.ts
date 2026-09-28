@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { onChannelActivity } from "@/lib/channelActivity";
-import { channelOfMessage, channelPreviewOf, laterPreview, type ChannelPreview } from "@/lib/channelPreview";
+import { channelPreviewOf, type ChannelPreview } from "@/lib/channelPreview";
+import { channelPreviewCache } from "@/lib/channelPreviewCache";
 import { clearedAtCache } from "@/lib/clearedAtCache";
-import { MESSAGE_SELECT_WITH_JOINS } from "@/lib/messageProjection";
+import { MESSAGE_LAST_MESSAGE_SELECT } from "@/lib/messageProjection";
+import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
 import type { ChannelGroup } from "@/lib/serverChannels";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
@@ -13,15 +15,34 @@ import type { MessageWithSender } from "@/types/database";
 /** How many of a channel's newest messages to read, so one hidden for this reader does not blank it. */
 const LOOKBACK = 5;
 
+// What either socket hears moves the kept lines, whether or not a list is on
+// screen: a server read once stays current while it is closed. A row from a
+// socket carries no joined sender, so the chat's own member list names them,
+// as the conversation fills it in for its own rows.
+onChannelActivity((message) => {
+  const known = message.sender
+    ? message
+    : {
+        ...message,
+        sender:
+          useAppStore.getState().chats.find((chat) => chat.id === message.chat_id)?.members?.find((member) => member.user_id === message.user_id)
+            ?.profile ?? null,
+      };
+  channelPreviewCache.hear(known as MessageWithSender);
+});
+
+// Back from a gap in the connection, anything may have been missed.
+if (typeof window !== "undefined") window.addEventListener(CONNECTION_REVIVED_EVENT, () => channelPreviewCache.clear());
+
 /**
  * Each text channel's last line — who, what, when — for the channel list
  * (tracker item 54; the row is `lib/channelPreview.ts`).
  *
- * One small read per text channel when the list is shown, then kept current
- * from the open conversation's own socket (`lib/channelActivity.ts`), which
- * already hears every channel of the chat. The history's own rules hold: a
- * chat cleared for this reader shows nothing from before the clearing, and a
- * message this reader hid for themselves is never the preview.
+ * Read once per server, one small read per text channel, and kept
+ * (`lib/channelPreviewCache.ts`): reopening a server reads nothing for its
+ * list. The history's own rules hold: a chat cleared for this reader shows
+ * nothing from before the clearing, and a message this reader hid for
+ * themselves is never the preview.
  */
 export function useChannelPreviews(
   chatId: string | null,
@@ -40,16 +61,21 @@ export function useChannelPreviews(
   const generalKey = generalTopicIds.join(",");
 
   useEffect(() => {
-    setPreviews(new Map());
-    if (!chatId || !selfId || !channelsKey) return undefined;
+    if (!chatId || !selfId || !channelsKey) {
+      setPreviews((current) => (current.size ? new Map() : current));
+      return undefined;
+    }
     let active = true;
     const supabase = createClient();
     const general = generalKey ? generalKey.split(",") : [];
+    const scope = { selfId, channelsKey, generalChannelId, general };
 
     const readChannel = async (channelId: string, isGeneral: boolean, clearedAt: string | null) => {
+      // The chat list's own preview projection: a line needs its sender and
+      // bot, not the reactions and replied-to rows a conversation page reads.
       let query = supabase
         .from("messages")
-        .select(MESSAGE_SELECT_WITH_JOINS)
+        .select(MESSAGE_LAST_MESSAGE_SELECT)
         .eq("chat_id", chatId)
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
@@ -77,7 +103,8 @@ export function useChannelPreviews(
       return null;
     };
 
-    void (async () => {
+    const load = async () => {
+      const token = channelPreviewCache.begin(chatId, scope);
       const clearedAt = await clearedAtCache
         .getOrLoad(chatId, selfId, async () => {
           const { data, error } = await supabase
@@ -95,35 +122,29 @@ export function useChannelPreviews(
           return readChannel(channelId, isGeneral === "1", clearedAt ?? null).catch(() => null);
         }),
       );
-      if (!active) return;
-      setPreviews((current) => {
-        const next = new Map(current);
-        for (const preview of found) if (preview) next.set(preview.channelId, laterPreview(next.get(preview.channelId), preview));
-        return next;
-      });
-    })();
+      const answered = channelPreviewCache.complete(
+        chatId,
+        token,
+        found.filter((preview): preview is ChannelPreview => preview !== null),
+      );
+      if (active && answered) setPreviews(answered);
+    };
 
-    const stop = onChannelActivity((message) => {
-      if (message.chat_id !== chatId || message.deleted_at) return;
-      const channelId = channelOfMessage(message, generalChannelId, general);
-      if (!channelId) return;
-      // A row from the socket carries no joined sender: the chat's own member
-      // list names them, as the conversation fills it in for its own rows.
-      const known = message.sender
-        ? message
-        : {
-            ...message,
-            sender:
-              useAppStore.getState().chats.find((chat) => chat.id === chatId)?.members?.find((member) => member.user_id === message.user_id)?.profile ??
-              null,
-          };
-      const preview = channelPreviewOf(known as MessageWithSender, channelId, selfId);
-      if (!preview) return;
-      setPreviews((current) => {
-        const next = new Map(current);
-        next.set(channelId, laterPreview(next.get(channelId), preview));
-        return next;
-      });
+    const show = () => {
+      const held = channelPreviewCache.read(chatId, scope);
+      if (held) {
+        setPreviews(held);
+        return;
+      }
+      setPreviews((current) => (current.size ? new Map() : current));
+      void load();
+    };
+    show();
+
+    const stop = channelPreviewCache.subscribe((changed) => {
+      if (!active || (changed !== chatId && changed !== "*")) return;
+      // Moved by a message: draw it. Dropped: read it again.
+      show();
     });
 
     return () => {

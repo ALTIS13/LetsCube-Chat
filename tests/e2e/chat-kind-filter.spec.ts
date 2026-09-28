@@ -42,7 +42,9 @@ test.beforeEach(async ({ request }) => {
   await requireFixtureServer(request);
 });
 
-async function boot(page: Page, options: { onlyPeople?: boolean } = {}) {
+const FOLDER = "c4444444-4444-4444-8444-000000000001";
+
+async function boot(page: Page, options: { onlyPeople?: boolean; folder?: boolean } = {}) {
   const chats = options.onlyPeople
     ? [chat(ANNA_CHAT, "private", null, AT)]
     : [chat(ANNA_CHAT, "private", null, AT), chat(TEAM, "group", "Команда проекта", AT), chat(BOT_CHAT, "private", null, AT)];
@@ -71,6 +73,17 @@ async function boot(page: Page, options: { onlyPeople?: boolean } = {}) {
     const rows = options.onlyPeople ? [] : [{ chat_id: BOT_CHAT, bot: BOT }];
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(rows) });
   });
+  if (options.folder) {
+    // The reader's own folder, holding a person's chat and a group.
+    await page.route("**/rest/v1/folders*", (route: Route) =>
+      route.fulfill({
+        json: [{ id: FOLDER, user_id: ME.id, created_by: ME.id, scope: "personal", name: "Работа", emoji: null, position: 1, created_at: AT }],
+      }),
+    );
+    await page.route("**/rest/v1/folder_chats*", (route: Route) =>
+      route.fulfill({ json: [{ folder_id: FOLDER, chat_id: ANNA_CHAT }, { folder_id: FOLDER, chat_id: TEAM }] }),
+    );
+  }
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("chat-list-item")).toHaveCount(options.onlyPeople ? 1 : 3);
 }
@@ -127,4 +140,22 @@ test("the choice is where the list was left, across a reload", async ({ page }) 
 test("a list of one kind draws no capsule, which would filter nothing", async ({ page }) => {
   await boot(page, { onlyPeople: true });
   await expect(capsule(page)).toHaveCount(0);
+});
+
+test("a folder of the reader's own carries no capsule, and no kind chosen elsewhere", async ({ page }) => {
+  // Tracker item 69: «я создал себе уже отдельную папку, а тут мне еще
+  // фильтруют люди или группы… во всех согласен, но не в отдельной папке».
+  // A folder is already a filter; the kind chosen in «Все» made him switch it
+  // back to reach a chat that was in his folder all along.
+  await boot(page, { folder: true });
+  await pill(page, "group").click();
+  await expect(rows(page)).toHaveCount(1);
+
+  const folder = (page.viewportSize()?.width ?? 0) >= 768
+    ? page.getByRole("button", { name: /Работа/ }).first()
+    : page.getByTestId("folder-tabs-row").getByText("Работа", { exact: true });
+  await folder.click();
+  await expect(capsule(page)).toHaveCount(0);
+  // Both of the folder's chats, although «Группы» is what «Все» was left on.
+  await expect(rows(page)).toHaveCount(2);
 });

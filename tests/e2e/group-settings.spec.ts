@@ -145,7 +145,6 @@ test("every row carries its current value on the right", async ({ page }) => {
     "data-settings-value",
     /администраторы|участники|Неизвестно/,
   );
-  await expect(page.getByTestId("chat-settings-row-topics")).toHaveAttribute("data-settings-value", "Выключен");
   await expect(page.getByTestId("chat-settings-row-administrators")).toHaveAttribute(
     "data-settings-value",
     "2 администратора",
@@ -153,17 +152,16 @@ test("every row carries its current value on the right", async ({ page }) => {
   await expect(page.getByTestId("chat-settings-row-members")).toHaveAttribute("data-settings-value", "3 участника");
 });
 
-test("disabling topics confirmation keeps text channels and messages distinct from plain group view", async ({ page }) => {
+test("a forum's settings carry no topics switch either", async ({ page }) => {
+  // Tracker item 59: «Режим топиков» changed nothing a reader could see — «как
+  // будто ни на что не влияет сейчас. Каналы и без него создаются» — so the row
+  // is gone, in a group that has the flag on as in one that has it off.
   await openInfo(page, "owner", "light", true);
   await openSettings(page);
 
-  const topics = page.getByTestId("chat-settings-row-topics");
-  await expect(topics).toHaveAttribute("data-settings-value", "Включён");
-  await topics.click();
-  const dialog = page.locator('[role="dialog"][aria-modal="true"]');
-  await expect(dialog).toContainText("Выключить режим топиков?");
-  await expect(dialog).toContainText("Топики и сообщения сохранятся.");
-  await expect(dialog).toContainText("Текстовые каналы останутся доступными; если их нет, группа вернётся к обычному виду.");
+  // The rows render together, so once one is on screen an absent one is absent.
+  await expect(page.getByTestId("chat-settings-row-invites")).toBeVisible();
+  await expect(page.getByTestId("chat-settings-row-topics")).toHaveCount(0);
 });
 
 test("the arrow goes back, and taking nothing away asks nothing", async ({ page }) => {
