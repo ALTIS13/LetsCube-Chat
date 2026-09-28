@@ -86,6 +86,22 @@ export class RealtimeFixture {
     return delivered;
   }
 
+  private refusing = false;
+
+  /**
+   * A server out of reach: every socket is closed, and so is every new one
+   * until `restore()`. `dropConnections` alone lets the client reconnect at
+   * once, which is a network blip rather than an outage.
+   */
+  async goDark(): Promise<void> {
+    this.refusing = true;
+    await this.dropConnections();
+  }
+
+  restore(): void {
+    this.refusing = false;
+  }
+
   async dropConnections(): Promise<void> {
     for (const socket of this.sockets) {
       if (!socket.open) continue;
@@ -96,6 +112,10 @@ export class RealtimeFixture {
   }
 
   private accept(ws: WebSocketRoute) {
+    if (this.refusing) {
+      void ws.close({ code: 4000, reason: "fixture outage" }).catch(() => undefined);
+      return;
+    }
     const socket: Socket = { ws, channels: new Map(), open: true };
     this.sockets.push(socket);
     ws.onMessage((raw) => {

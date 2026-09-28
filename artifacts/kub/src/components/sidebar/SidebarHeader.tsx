@@ -14,6 +14,7 @@ import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { KubBrandLogo, KubHint, KubIcon, KubTooltip, type KubIconName } from "@/components/kub";
 import { NewGroupModal } from "./NewGroupModal";
 import { NotificationBell } from "./NotificationBell";
+import { ConnectionStatus } from "./ConnectionStatus";
 import { cn } from "@/lib/utils";
 import { requestAppConfirm } from "@/lib/appDialogs";
 import { signOutConfirm } from "@/lib/signOutConfirm";
@@ -317,8 +318,12 @@ export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSear
         {/* Below `md` only, and it carries no meaning: it takes the slack the
             search field used to take on this line, so the bell, the pencil and
             the magnifier sit on the right edge instead of bunching against the
-            logo. From `md` it is gone and the field stretches the row again. */}
-        <div aria-hidden="true" className="min-w-0 flex-1 md:hidden" />
+            logo. From `md` it is gone and the field stretches the row again.
+            It is also where Telegram's title is, so it carries the
+            connection's words while there are any (tracker item 53). */}
+        <div className="flex min-w-0 flex-1 items-center justify-center md:hidden">
+          <ConnectionStatus variant="title" />
+        </div>
 
         {/* The wrapper is what collapses, never the field. A field whose own
             box goes to zero stops being visible to the four specs that

@@ -156,7 +156,7 @@ export function FolderRail({
                 <span
                   aria-hidden="true"
                   data-testid="folder-rail-tasks-count"
-                  className="absolute -right-3 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-raised)] px-1 text-[11px] font-semibold tabular-nums text-[color:var(--kub-text)]"
+                  className="absolute -right-3 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border border-[color:var(--glass-line)] bg-[var(--kub-raised)] px-1 text-[11px] font-semibold tabular-nums text-[color:var(--kub-text)]"
                 >
                   {tasks.count > 99 ? "99+" : tasks.count}
                 </span>

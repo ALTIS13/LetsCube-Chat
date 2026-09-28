@@ -2655,9 +2655,26 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     turned it red. An existing spec caught one defect on the way: the foreground
     listener registered on a shell without the App plugin and left an
     unhandled rejection; it now asks `Capacitor.isPluginAvailable` first.
-    **Still open:** Telegram's «Соединение…» in place of the list's title while
-    the socket is down, and a confirmation on a real Android phone switching a
-    VPN — the report's own case, which no emulator here reproduces.
+    **The visible state shipped the same day** (`lib/connectionState.ts`,
+    `ConnectionStatus`): Telegram's two phrases, read in its strings and on its
+    translation platform — «Ожидание сети...» (`WaitingForNetwork`) the moment
+    the device says it has no network, and «Соединение...» (`Connecting`) when a
+    socket that was open has been down for two seconds. In the title's place
+    on a phone, as Telegram's Android client draws it; on a computer in a small
+    plate at the bottom left of the list, as Telegram Desktop does. The plate
+    floats, so the list under it is not measured again. Two rules keep it
+    honest: the two-second grace, so a socket replaced on purpose by the
+    revival above is not announced as a failure, and nothing before the socket
+    has opened once in this run, so a slow start is not a lost network — the
+    price, stated in the module, is that a server unreachable from the very
+    first second is not announced until the device says it is offline.
+    Evidence: `connection-state.test.mts`; `network-change-recovery.spec` «a
+    connection that was up and is lost says «Соединение...» until it is back»
+    (the realtime fixture's new `goDark()` refuses every socket until
+    `restore()`) and «a device without network says «Ожидание сети...» at
+    once».
+    **Still open:** a confirmation on a real Android phone switching a VPN —
+    the report's own case, which no emulator here reproduces.
 
 54. `[~]` A server's channels show what is happening in them — same report,
     with two screenshots forwarded from a second tester comparing Telegram's
@@ -2717,6 +2734,17 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     conversation»; the specs whose tests are about the conversation behind the
     list close it first through `helpers/channelList.ts`, and leave a server
     through its list.
+    **The voice rows, weighed the same day and left as they are.** The owner's
+    «не такие удобные как в discord и выбиваются из стиля» was said of the
+    drawer's flat sheet, which the full-screen list above replaced; the rows
+    themselves already carry Discord's web mechanic as measured
+    (reference-clients §§4, 12): the speaker row with its seats, the people in
+    the room under its name with the speaking ring, their microphone and
+    silence marks, and the moderator's menu (D-221). What Discord's phone app
+    does on a tap — join at once, or open the room first — was not measured,
+    and a change to how a tap joins is not made from a recollection; if the
+    tester still finds joining awkward on a phone, that is the measurement to
+    take next.
     **What the previews cost, measured and fixed the same day.** The last lines
     shipped in `84f8abcf` were read every time the list mounted, one page per
     text channel with the conversation's projection, and on a phone even with

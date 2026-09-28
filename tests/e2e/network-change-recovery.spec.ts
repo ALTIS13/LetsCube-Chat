@@ -7,6 +7,7 @@ import {
   person,
   requireFixtureServer,
 } from "./helpers/messageActionsFixture";
+import { RealtimeFixture } from "./helpers/realtime-fixture";
 
 /**
  * Tracker item 53: «Если меняется IP… приходится перезапускать мессенджер».
@@ -92,5 +93,53 @@ test.describe("a change of network does not need a restart (item 53)", () => {
     await expect(page.getByTestId("chat-list-item")).toHaveCount(1);
     await expect(page.getByTestId("chat-list-stale")).toHaveCount(0);
     await expect(page.getByTestId("chat-list-unavailable")).toHaveCount(0);
+  });
+  // The words Telegram puts where the list's title is (`lib/connectionState.ts`):
+  // a list that looks current while nothing arrives has to say so.
+  test("a connection that was up and is lost says «Соединение...» until it is back", async ({ page }) => {
+    test.setTimeout(60_000);
+    const realtime = new RealtimeFixture();
+    await realtime.install(page);
+    await openFixture(page, {
+      me: ME,
+      people: [ANNA],
+      chats: [chat(TEAM, "group", "Команда проекта", AT)],
+      memberships: [membership(TEAM, ME, "owner", AT), membership(TEAM, ANNA, "member", AT)],
+      messages: [message("a7333333-3333-4333-8333-000000000002", TEAM, ANNA, "Макет главной готов", AT)],
+    });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect.poll(() => realtime.isJoined(":messages"), { timeout: 15_000 }).toBe(true);
+
+    const status = page.locator("[data-connection-state]").filter({ visible: true });
+    await page.waitForTimeout(1_500);
+    await expect(status).toHaveCount(0);
+
+    await realtime.goDark();
+    // After the grace: a socket replaced on purpose is not announced.
+    await expect(status).toHaveText("Соединение...", { timeout: 10_000 });
+    await expect(status).toHaveAttribute("data-connection-state", "connecting");
+
+    realtime.restore();
+    await expect(status).toHaveCount(0, { timeout: 30_000 });
+  });
+
+  test("a device without network says «Ожидание сети...» at once", async ({ page, context }) => {
+    await openFixture(page, {
+      me: ME,
+      people: [ANNA],
+      chats: [chat(TEAM, "group", "Команда проекта", AT)],
+      memberships: [membership(TEAM, ME, "owner", AT), membership(TEAM, ANNA, "member", AT)],
+      messages: [message("a7333333-3333-4333-8333-000000000003", TEAM, ANNA, "Макет главной готов", AT)],
+    });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("chat-list-item")).toHaveCount(1);
+    const status = page.locator("[data-connection-state]").filter({ visible: true });
+    await expect(status).toHaveCount(0);
+
+    await context.setOffline(true);
+    await expect(status).toHaveText("Ожидание сети...", { timeout: 3_000 });
+    await context.setOffline(false);
+    // This fixture has no socket at all, so back online is simply online.
+    await expect(status).toHaveCount(0, { timeout: 5_000 });
   });
 });

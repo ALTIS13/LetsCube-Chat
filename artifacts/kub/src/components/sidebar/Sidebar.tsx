@@ -31,6 +31,7 @@ import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import { LIST_MAY_BE_STALE } from "@/lib/plainMessages";
 import { ChatKindFilterBar } from "./ChatKindFilterBar";
 import { ShellSectionRows } from "./ShellSectionRows";
+import { ConnectionStatus } from "./ConnectionStatus";
 import { chatAddressPath } from "@/lib/chatRoute";
 import { shellSection, shellSectionPath } from "@/lib/shellSection";
 import { useTaskAccessGate } from "@/hooks/useTaskAccess";
@@ -337,7 +338,8 @@ export function Sidebar() {
               </div>
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col">
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              <ConnectionStatus variant="plate" />
               {/* The chats on screen are still true and are no longer current.
                   They stay, and the line above them says so — the same shape the
                   sanctions tab and the channel rail already use. */}
