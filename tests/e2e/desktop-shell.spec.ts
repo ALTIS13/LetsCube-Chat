@@ -628,12 +628,17 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
       "Мой профиль",
       "Избранное",
       "Новая группа",
-      "Мои боты",
-      "Задачи",
       "Управление",
       "Настройки",
     ]) {
       await expect(layer.getByRole("button", { name: label, exact: true }), `${label} is not in the side list`).toBeVisible();
+    }
+    // Moved, not lost: item 41 took «Мои боты» and «Задачи» to the rows above
+    // the chat list — the owner's word was «перенести» — so a second door here
+    // would be the duplicate that move exists to remove.
+    for (const label of ["Мои боты", "Задачи"]) {
+      await expect(layer.getByRole("button", { name: label, exact: true }), `${label} is still in the side list`).toHaveCount(0);
+      await expect(page.getByTestId("shell-sections").getByRole("button", { name: label, exact: true })).toBeVisible();
     }
     await expect(layer.getByTestId("side-menu-night-mode")).toBeVisible();
     // The version line is asserted in the Windows check below. A development
@@ -652,7 +657,9 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     await expect.poll(() => fixture.rpcBodies("has_permission").length).toBeGreaterThan(0);
     await page.waitForTimeout(800);
     await expect(layer.getByRole("button", { name: "Управление", exact: true })).toHaveCount(0);
-    await expect(layer.getByRole("button", { name: "Задачи", exact: true })).toHaveCount(0);
+    // «Задачи» asks the same rights from its own row now (item 41).
+    await expect(page.locator('[data-shell-section="tasks"]')).toHaveCount(0);
+    await expect(page.locator('[data-shell-section="bots"]')).toBeVisible();
   });
 
   test("every destination in the side list opens, and the way back returns to the list", async ({ page }) => {
@@ -663,20 +670,22 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
       await page.getByTestId("side-menu-layer").getByRole("button", { name: label, exact: true }).click();
     };
 
-    await open("Задачи");
+    // The sections open beside the lists since item 41, so the list is still
+    // there to come back through: a row leaves the section for its chat.
+    await page.locator('[data-shell-section="tasks"]').click();
     await expect(page).toHaveURL(/\/tasks$/);
-    await page.getByRole("button", { name: "Назад" }).first().click();
-    await expect(page).toHaveURL(/\/$/);
     await expect(page.getByTestId("chat-list-item")).toHaveCount(CHAT_COUNT);
+    await page.getByTestId("chat-list-item").first().click();
+    await expect(page).toHaveURL(/\/chat\//);
 
     await open("Управление");
     await expect(page).toHaveURL(/\/admin$/);
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("chat-list-item")).toHaveCount(CHAT_COUNT);
 
-    await open("Мои боты");
+    await page.locator('[data-shell-section="bots"]').click();
     await expect(page).toHaveURL(/\/bots$/);
-    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("bots-page")).toBeVisible();
     await expect(page.getByTestId("chat-list-item")).toHaveCount(CHAT_COUNT);
 
     // D-160 made this destination the list column's body; D-285 took it back

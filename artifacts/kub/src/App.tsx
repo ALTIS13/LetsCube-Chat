@@ -22,8 +22,6 @@ import { PwaRuntime } from "@/components/PwaRuntime";
 import { AppDialogs } from "@/components/AppDialogs";
 import { BannedScreen } from "@/components/BannedScreen";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
-import { TasksPage } from "@/pages/tasks/TasksPage";
-import { BotsPage } from "@/pages/bots/BotsPage";
 import { PUBLIC_PREVIEW_CAPTURE_PATH } from "@/lib/publicPreviewFixture";
 import { BotDocsPage } from "@/pages/public/BotDocsPage";
 import { DownloadPage } from "@/pages/public/DownloadPage";
@@ -44,7 +42,7 @@ import {
   isPasswordRecoveryUrl,
 } from "@/lib/authRecovery";
 import { isAuthRoute, isPublicRoute } from "@/lib/publicRoutes";
-import { isMessengerRoute } from "@/lib/chatRoute";
+import { isShellRoute } from "@/lib/shellSection";
 import { decideRootExperience } from "@/lib/publicHomeRouting";
 import { DesktopWindowChrome } from "@/components/layout/DesktopWindowChrome";
 import { AuthRuntimeProvider } from "@/lib/authRuntime";
@@ -472,7 +470,11 @@ function AppRoutes({
             chat opened. `lib/chatRoute.ts` decides what counts as the
             messenger; a near match is not one and falls through to `NotFound`
             below, exactly as an unknown path always has. */}
-      {isMessengerRoute(location) ? (
+      {/* The sections are the shell's own since item 41: `/bots` and `/tasks`
+          open beside the lists, as Discord's home rows open their pages, rather
+          than replacing the window. `shellSection` is exact, so `/bots/docs`
+          stays the public documentation below. */}
+      {isShellRoute(location) ? (
         <MainLayout />
       ) : (
         <Switch>
@@ -480,8 +482,6 @@ function AppRoutes({
           <Route path="/register" component={RegisterForm} />
           <Route path="/admin/:rest*" component={AdminLayout} />
           <Route path="/admin" component={AdminLayout} />
-          <Route path="/tasks" component={TasksPage} />
-          <Route path="/bots" component={BotsPage} />
           <Route component={NotFound} />
         </Switch>
       )}

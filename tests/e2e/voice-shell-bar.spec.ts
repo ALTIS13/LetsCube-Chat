@@ -237,29 +237,49 @@ async function join(page: Page) {
   await expect(action(page)).toHaveText("Выйти");
 }
 
+const isDesktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 768;
+
 /**
- * Walk to «Мои боты» through the application's own menu.
+ * Walk to «Мои боты» through the application's own door.
  *
  * Not `history.pushState`: the claim is that somebody in a call can reach
  * another page and still have the call, and a navigation the product does not
- * offer proves nothing about that. On a phone the chat list is a pane rather
- * than a column, so the conversation has to be closed first — which is itself
- * the journey being described.
+ * offer proves nothing about that.
+ *
+ * The door depends on the width since item 41. From `md` it is the section row
+ * above the chat list, Discord's home row, and the page opens in the main area
+ * beside the lists. On a phone the chat list is a pane rather than a column,
+ * so the conversation has to be closed first and the page is reached from the
+ * list header's menu — which is itself the journey being described.
  */
 async function goToBots(page: Page) {
-  // Two different controls carry this label and exactly one of them is ever on
-  // screen: the folder rail's `side-menu-button`, which opens `SideMenuLayer`
-  // from `md` up, and `SidebarHeader`'s dropdown, which is `md:hidden`. Asking
-  // for the visible one is what makes this helper work at both widths.
+  if (isDesktop(page)) {
+    await page.locator('[data-shell-section="bots"]').click();
+    await expect(page.getByTestId("bots-page")).toBeVisible();
+    return;
+  }
   const menu = page.locator('[aria-label="Меню"]:visible');
   if ((await menu.count()) === 0) {
     await page.getByTestId("chat-control-row").getByLabel("Назад").click();
     await expect(menu).toHaveCount(1);
   }
   await menu.click();
-  await page.getByText("Мои боты", { exact: true }).click();
+  // The section rows carry the same words, `md:hidden`-gated off a phone.
+    await page.getByText("Мои боты", { exact: true }).filter({ visible: true }).click();
   await expect(page.getByTestId("bots-page")).toBeVisible();
 }
+
+/** Where the messenger docks its own bar at this width: see `MainLayout`. */
+const messengerPlacement = (page: Page) => (isDesktop(page) ? "column" : "top");
+
+/**
+ * The microphone within reach in a section. On a computer the bar is docked in
+ * the list column and the microphone is the user panel's beneath it —
+ * Discord's arrangement, which the column bar was built around — while a
+ * phone's band carries its own.
+ */
+const sectionMute = (page: Page) =>
+  isDesktop(page) ? page.getByTestId("user-panel-mute") : bar(page).getByTestId("voice-call-bar-mute");
 
 test("a call stays on screen after walking out of the messenger", async ({ page, browserName }) => {
   needsWebRtc(browserName);
@@ -272,16 +292,23 @@ test("a call stays on screen after walking out of the messenger", async ({ page,
 
   await goToBots(page);
 
-  // The whole point. Before this change `MainLayout` was unmounted here and
-  // with it both of the bar's mounts, so a running microphone had nothing on
-  // screen about it.
+  // The whole point. Before the shell's bar existed `MainLayout` was unmounted
+  // here and with it both of the bar's mounts, so a running microphone had
+  // nothing on screen about it.
   await expect(bar(page)).toBeVisible();
   await expect(bar(page).getByTestId("voice-call-bar-room")).toHaveText("Общий голос");
   await expect(bar(page).getByTestId("voice-call-bar-state")).toHaveText("Вы в разговоре");
 
-  // And it is the shell's mount rather than a stray one from the messenger.
-  await expect(bar(page)).toHaveAttribute("data-placement", "top");
-  await expect(page.getByTestId("voice-call-shell")).toBeVisible();
+  // Since item 41 «Мои боты» is a section of the shell, so the bar is the
+  // messenger's own — docked at the list's foot on a computer, a band above
+  // the pane on a phone — and the shell's band stays empty rather than
+  // drawing a second one. And it is shown although the call's conversation is
+  // still the selected one behind the section: that conversation is not on
+  // screen, so its capsule speaks for nothing.
+  await expect(bar(page)).toHaveAttribute("data-placement", messengerPlacement(page));
+  await expect(
+    page.locator('[data-testid="voice-call-shell-band"] [data-testid="voice-call-bar"]'),
+  ).toHaveCount(0);
 
   // The state fits its own box here too. `toHaveText` reads `textContent`,
   // which is the same string whether or not the box can show it — the check
@@ -294,7 +321,7 @@ test("a call stays on screen after walking out of the messenger", async ({ page,
   expect(clipped!.scroll).toBeLessThanOrEqual(clipped!.client + 1);
 
   // The controls reach the same transport the capsule's do.
-  await bar(page).getByTestId("voice-call-bar-mute").click();
+  await sectionMute(page).click();
   await expect
     .poll(async () => page.evaluate(() => window.__shellProbe?.muted ?? []))
     .toEqual([true]);
@@ -317,7 +344,10 @@ test("the page gives up room for the bar and gets all of it back", async ({
   const measure = () =>
     page.evaluate(() => {
       const page_ = document.querySelector('[data-testid="bots-page"]')!.getBoundingClientRect();
-      const found = document.querySelector('[data-testid="voice-call-bar"]');
+      // The one on screen: a phone's band and the column's are both mounted.
+      const found = [...document.querySelectorAll<HTMLElement>('[data-testid="voice-call-bar"]')].find(
+        (node) => node.offsetParent !== null,
+      );
       const band = found ? found.getBoundingClientRect() : null;
       return {
         pageTop: Math.round(page_.top),
@@ -331,8 +361,10 @@ test("the page gives up room for the bar and gets all of it back", async ({
   const during = await measure();
   // A band with height, not a zero-height element that happens to exist.
   expect(during.barHeight).toBeGreaterThan(24);
-  // The page starts where the bar ends: it is pushed down, never covered.
-  expect(during.pageTop).toBe(during.barBottom);
+  // The page starts where the bar ends: it is pushed down, never covered. On a
+  // computer the bar is docked in the list column beside the page since item
+  // 41, so the page keeps the whole height and there is nothing to push.
+  expect(during.pageTop).toBe(isDesktop(page) ? 0 : during.barBottom);
   // And it ends at the bottom of the screen rather than past it — which is the
   // failure a band above an `h-app` page produces: the document becomes one bar
   // taller than the window and the page's last row goes off the end.
@@ -390,13 +422,18 @@ test("«Состояние связи» is readable without going back into the 
 
   // It opens away from the edge the bar is docked to. A band across the top
   // opens downward; the chat list's foot opens upward, and there is no room
-  // below it at all.
+  // below it at all. Both occur here since item 41: «Мои боты» is a section,
+  // so a computer shows the column's bar and a phone the band.
   const room = await page.evaluate(() => {
-    const bandNode = document.querySelector('[data-testid="voice-call-bar"]')!;
+    const bandNode = [...document.querySelectorAll<HTMLElement>('[data-testid="voice-call-bar"]')].find(
+      (node) => node.offsetParent !== null,
+    )!;
     const panelNode = document.querySelector('[data-testid="voice-call-bar-health-panel"]')!;
     const band = bandNode.getBoundingClientRect();
     const open = panelNode.getBoundingClientRect();
     return {
+      placement: bandNode.dataset.placement,
+      barTop: band.top,
       barBottom: band.bottom,
       barWidth: band.width,
       panelTop: open.top,
@@ -411,7 +448,8 @@ test("«Состояние связи» is readable without going back into the 
       viewport: window.innerHeight,
     };
   });
-  expect(room.panelTop).toBeGreaterThanOrEqual(room.barBottom - 1);
+  if (room.placement === "column") expect(room.panelBottom).toBeLessThanOrEqual(room.barTop + 1);
+  else expect(room.panelTop).toBeGreaterThanOrEqual(room.barBottom - 1);
   // On screen, whole. A panel whose foot is past the window is a panel whose
   // advice nobody reads.
   expect(room.panelBottom).toBeLessThanOrEqual(room.viewport + 1);
@@ -641,11 +679,13 @@ for (const theme of ["dark", "light"] as const) {
     await join(page);
     await goToBots(page);
     const chrome = page.getByTestId("desktop-window-chrome");
-    const control = bar(page).getByTestId("voice-call-bar-mute");
     const caption = await chrome.boundingBox();
-    const mic = await control.boundingBox();
+    // In the section the microphone is the messenger's own (item 41).
+    const mic = await sectionMute(page).boundingBox();
     expect(mic!.y).toBeGreaterThanOrEqual(caption!.y + caption!.height);
-    await control.click();
+    await sectionMute(page).click();
+    // On the public pages it is the shell's band that carries it.
+    const control = bar(page).getByTestId("voice-call-bar-mute");
     for (const path of ["/privacy", "/support", "/download", "/bots/docs"]) {
       await page.evaluate((url) => history.pushState(null, "", url), path);
       await expect(chrome).toHaveCount(1);
@@ -710,7 +750,7 @@ for (const theme of ["dark", "light"] as const) {
       await expect(bar(page)).toBeVisible();
 
       if (state === "muted") {
-        await bar(page).getByTestId("voice-call-bar-mute").click();
+        await sectionMute(page).click();
         await expect(bar(page).getByTestId("voice-call-bar-state")).toHaveText("Микрофон выключен");
       }
       if (state === "unhealthy") {

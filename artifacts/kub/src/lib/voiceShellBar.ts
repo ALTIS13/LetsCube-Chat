@@ -51,7 +51,14 @@
  * route table moves. There is one answer to «is this the messenger» and it
  * lives where the address rule lives.
  *
- * `chatRoute` imports nothing either, so `node --test` still loads this module
+ * And it moved again, which is the lesson paying for itself: item 41 made
+ * `/bots` and `/tasks` the shell's own sections, rendered by `MainLayout`
+ * beside the lists, so the bar docked to the list is on those screens too. The
+ * question is therefore «does the shell render here», and `lib/shellSection.ts`
+ * answers it — the same function `App.tsx` routes by, so the router and this
+ * rule cannot disagree about where the shell is.
+ *
+ * `chatRoute` and `shellSection` import nothing else, so `node --test` still loads this module
  * directly — the same reason `lib/voiceCallBar.ts` states at its own head. The
  * import is relative for that reason: `@/` is Vite's alias and Node does not
  * resolve it.
@@ -60,7 +67,7 @@
 // The extension is required: Node's ESM resolver does not guess one, and this
 // module is loaded straight from disk by `node --test`. `lib/voiceChannel.ts`
 // imports `./voiceElsewhere.ts` the same way and for the same reason.
-import { isMessengerRoute } from "./chatRoute.ts";
+import { isShellRoute } from "./shellSection.ts";
 
 /**
  * The path part of a location, as the exempt list spells paths.
@@ -88,11 +95,11 @@ export function voiceShellBarPath(location: string): string {
  * Whether the application shell must draw the call bar at this location.
  *
  * True everywhere the page does not draw one for itself — which is every
- * authenticated route but the messenger, and the messenger is the chat list
- * and every conversation address. Never a prefix test: `isMessengerRoute` is
- * strict, so `/chatz<uuid>` and `/chat/not-a-uuid` render `NotFound`, mount no
- * bar of their own, and get the shell's.
+ * authenticated route but the shell's: the chat list, every conversation
+ * address, and the sections. Never a prefix test: `isShellRoute` is strict, so
+ * `/chatz<uuid>`, `/chat/not-a-uuid` and `/tasks/deeper` render `NotFound`,
+ * mount no bar of their own, and get the shell's.
  */
 export function voiceShellBarNeeded(location: string): boolean {
-  return !isMessengerRoute(voiceShellBarPath(location));
+  return !isShellRoute(voiceShellBarPath(location));
 }

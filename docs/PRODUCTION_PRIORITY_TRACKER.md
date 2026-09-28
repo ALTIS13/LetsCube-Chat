@@ -1163,7 +1163,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     are the reason the bar is worth the work — a mute that needs a settings
     screen is a mute nobody reaches mid-call.
 
-41. `[ ]` A list of sections where Discord keeps Библиотека, Магазин and
+41. `[x]` A list of sections where Discord keeps Библиотека, Магазин and
     Задания. The owner, 2026-09-20: «ботов и т.п можно перенести в место
     подобное тому что на скриншоте 3». Today the bots page is its own route
     reached from elsewhere; his point is that the product has a natural home
@@ -1185,6 +1185,41 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     (the sections rendered in the main area beside the lists), then the rows,
     and the phone, which Discord's mobile app answers differently, measured
     separately.
+
+    **Done 2026-09-28.** The shell first: `lib/shellSection.ts` names the
+    sections (`/bots`, `/tasks`, exact paths — `/bots/docs` stays the public
+    documentation) and `isShellRoute` is the one answer to «does `MainLayout`
+    render here», which `App.tsx` routes by and `voiceShellBar.ts` exempts by, so
+    the router and the call-bar rule cannot disagree. `MainLayout` draws the
+    section in the main area; both pages take `inPane` (the pane's height, and
+    their «Назад» only below `md`, where the list is not beside them). Then the
+    rows: «Мои боты» and «Задачи» (the latter only with the right) above the
+    kind capsule, from `md`, and moved out of the side list — the owner's word
+    was «перенести». What the mechanic required and was measured:
+    - a row pressed during a section leaves it for that chat's address, the
+      chat already selected behind the section included (the store alone does
+      not count that as a change, so the press did nothing);
+    - while a section is open no chat row is marked and the section's row is
+      (`aria-current`), as Discord marks Friends rather than the last DM;
+    - Escape over a section closes nothing — the conversation it would close is
+      not on screen;
+    - the conversation stays selected behind a section, as walking into
+      «Задачи» and back always kept it;
+    - the call bars: in a section the messenger's own bar shows (the list's foot
+      on a computer, the band on a phone) and the shell draws no second one; the
+      «capsule already on screen» test is off in a section, since the selected
+      chat is not drawn; the phone band clears the Windows caption below `md` as
+      the shell's does.
+    One regression was found by photographing the phone and fixed in the same
+    change: the staff hint beside the header's shield stayed on screen, anchored
+    to a hidden header, over «Мои боты» — and would have over any open
+    conversation. It is now offered only while the list is the pane on screen.
+    The phone keeps its menu: Discord's phone app has no such rows.
+    Evidence: `tests/e2e/shell-sections.spec.ts` (a mutation of the hint
+    condition turns it red), `tests/unit/shell-section.test.mts`,
+    `voice-shell-bar` rewritten for sections inside the shell, `desktop-shell`
+    for the moved rows; typecheck, build, unit 4249/4249, 303 regression tests
+    across 16 specs at 1440 and 390 with no failure.
 
 42. `[x]` The update notice moves to the window's own controls — done 2026-09-28.
     **What each shell gets.** The Windows app: one control in the caption,
@@ -2520,6 +2555,78 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     `reference-clients.md` and mark every claim that says «Discord» or
     «Telegram» without saying *which client and build*, and every «cannot» whose
     reason is the browser. Re-verdict each against the shell it actually ships in.
+
+52. `[ ]` Messages written without a connection are kept and sent when it
+    returns — tester's report, 2026-09-28 (voice notes in the owner's chat,
+    read from the database and transcribed locally). Two people said the same
+    on their first day: offline a message cannot be written so that it goes
+    later, and a failed voice note has to be recorded again — «прям сильно
+    пользовательский опыт погубило». Measured in the code the same day: a text
+    sent offline turns red at once («Сетевой сбой…») with a manual «Повторить»;
+    nothing retries on reconnect; the composer's draft is deleted on press, so
+    a reload or an app restart loses the text; a voice note lives only in
+    memory (`lib/outgoingMedia.ts`) and is gone after a restart. The server side
+    is already idempotent (`client_message_id`, unique per chat and author), so
+    the missing half is the client's: Telegram's outbox — the bubble waits with
+    a clock rather than failing while offline, is kept on the device across a
+    restart (IndexedDB, the voice note's bytes included), and goes by itself,
+    in order, when the connection returns; «Повторить» stays for a refusal that
+    is not the network's. A design question, not the owner's: a queued message
+    takes its server time when it lands, so it may move below messages that
+    arrived meanwhile — Telegram shows it where it was written until it is sent.
+
+53. `[ ]` The application recovers by itself when the network changes under it
+    — same report. «Если меняется IP… приходится перезапускать мессенджер»:
+    switching a VPN off to open another app leaves the messenger dead until it
+    is restarted (the Android owner's account; not reproduced yet). Read in the
+    code the same day, no recovery of our own exists: realtime runs on library
+    defaults, no request has a timeout, and a VPN switch usually fires no
+    `offline`/`online` at all. The likely mechanisms, each to be forced rather
+    than waited for: a request left pending on the old network holds
+    `fetchInFlightRef` in `useChats`, and every later refetch queues behind it;
+    one hung token refresh stalls every request behind `getSession()`; a
+    half-open socket still reports connected, so a return to the app does not
+    reconnect it; a channel that ends in `CLOSED` is never re-created. The fix
+    has to give every request a deadline, treat a return to the app and a
+    network change as a reason to verify the socket and resubscribe, and make
+    the state visible — nothing shows the realtime connection today.
+
+54. `[ ]` A server's channels show what is happening in them — same report,
+    with two screenshots forwarded from a second tester comparing Telegram's
+    topic list with our «Каналы» drawer. Никитос: «он совершенно прав… ты не
+    видишь вот этих каналов в формате последнего сообщения… тебе надо будет
+    протыкивать каждый канал вручную». The owner, the same day: the voice
+    channels on a server are «не такие удобные как в discord и выбиваются из
+    стиля — это факт». So two halves, each from its reference: text channels
+    carry Telegram's topic row (sender, preview, time, unread), voice channels
+    carry Discord's (a speaker row with the people inside listed under it), all
+    in the product's material instead of the drawer's flat sheet. Measured: no
+    channel row shows anything about messages today, and nothing reads a
+    channel's last message. **The unread half needs the database:** the read
+    marker is per chat (`chat_members.last_read_at`), so opening one channel
+    marks the others read; a per-channel read state and a summary RPC are §10
+    work — backup, rehearsal, and the owner's word before it is applied. The
+    preview half can be read with today's schema and ships first.
+
+55. `[ ]` No «переслано» notice when the forward has already taken you there —
+    same report. Forwarding from one chat to another opens the destination, and
+    a notice then says the message was forwarded to the chat now on screen:
+    «я знаю, передо мной чат открыт». Telegram says nothing when it opens the
+    destination; a notice is for a forward that leaves you where you were.
+
+56. `[ ]` The installed iPhone app's bottom capsule and bottom edge — same
+    report, screenshots of 2026-09-27 and a message of 2026-09-28. The stripe
+    of D-111 is «считай ушла»; what remains: the tab capsule is «растянуто»,
+    because on the web and on iOS the safe-area inset is padding inside the
+    capsule (`pb-safe`) rather than room under it, as Android already has; and
+    the bottom edge is «слишком сильно размылен».
+
+57. `[ ]` Finding a person to add from the contacts search — same report,
+    2026-09-27. After the first contact the search box filters only contacts,
+    and how to add the second was unclear. The add button (reachable since
+    D-315/D-317) and «Добавить в контакты» on a profile exist; Telegram's
+    contacts search also lists people outside the contacts under a heading of
+    their own, which answers the question where it is asked.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

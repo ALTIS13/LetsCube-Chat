@@ -21,7 +21,13 @@ const STATE_COPY = {
   deleted: "Удалён",
 } as const;
 
-export function BotsPage() {
+/**
+ * `inPane` since item 41: the page opens in the shell's main area beside the
+ * lists, as Discord's home rows open theirs, and not over the whole window. So
+ * it fills the pane rather than the viewport, and its way back is the phone's
+ * alone — from `md` the chat list is beside it and is the way back.
+ */
+export function BotsPage({ inPane = false }: { inPane?: boolean } = {}) {
   const [, setLocation] = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
@@ -58,11 +64,11 @@ export function BotsPage() {
   // AND portaled to the body, and the confirm dialog inside BotSettingsPanel is
   // portaled too, so no backdrop-filter here can become their containing block.
   return (
-    <main data-testid="bots-page" className="bots-management-surface flex h-app min-w-0 flex-col overflow-hidden px-safe text-[color:var(--kub-text)]">
+    <main data-testid="bots-page" className={cn("bots-management-surface flex min-w-0 flex-col overflow-hidden px-safe text-[color:var(--kub-text)]", inPane ? "h-full w-full min-h-0" : "h-app")}>
       <KubHeader
         title={<h1 className="truncate text-sm font-semibold">Мои боты</h1>}
         subtitle={eligibility ? `${eligibility.active_bot_count} из ${eligibility.max_bots}` : "Управление Bot API"}
-        leading={<button type="button" onClick={() => setLocation("/")} className="flex h-11 w-11 items-center justify-center rounded-md text-[color:var(--kub-muted)] kub-raise-hover" aria-label="Назад к чатам"><KubIcon name="back" size={18} /></button>}
+        leading={<button type="button" onClick={() => setLocation("/")} className={cn("flex h-11 w-11 items-center justify-center rounded-md text-[color:var(--kub-muted)] kub-raise-hover", inPane && "md:hidden")} aria-label="Назад к чатам"><KubIcon name="back" size={18} /></button>}
         trailing={
           <div className="flex items-center gap-2">
             {/* The Bot API documentation has existed at /bots/docs all along and

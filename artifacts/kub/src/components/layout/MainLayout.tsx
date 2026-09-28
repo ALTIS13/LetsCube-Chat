@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { ChatListResizer } from "@/components/sidebar/ChatListResizer";
@@ -18,6 +19,10 @@ import { useDesktopUpdate } from "@/hooks/useDesktopUpdate";
 import { useChatAddress } from "@/hooks/useChatAddress";
 import { cn } from "@/lib/utils";
 import { AppMediaPlaybackProvider } from "@/components/chat/ChatMediaPlayback";
+import { BotsPage } from "@/pages/bots/BotsPage";
+import { TasksPage } from "@/pages/tasks/TasksPage";
+import { chatAddressPath } from "@/lib/chatRoute";
+import { shellSection } from "@/lib/shellSection";
 
 /**
  * Top-level shell. On <md, the layout is a one-pane drawer:
@@ -35,7 +40,22 @@ export function MainLayout() {
   const mobileSection = useAppStore((s) => s.mobileSection);
   const setSelectedChatId = useAppStore((s) => s.setSelectedChatId);
   const setShowSidebar = useAppStore((s) => s.setShowSidebar);
-  const isMobileChatOpen = !!selectedChatId;
+  // Item 41: «Мои боты» and «Задачи» open in the main area beside the lists,
+  // as Discord's home rows open theirs. On a phone, where there is one pane, a
+  // section takes it the way a conversation does.
+  const [location, setLocation] = useLocation();
+  const section = shellSection(location);
+  const isMobileChatOpen = !!selectedChatId || section !== null;
+  // A conversation chosen from anywhere — a row, a search result, a
+  // notification — leaves the section for the conversation's own address.
+  // Only on a change: walking into a section keeps the conversation open behind
+  // it, as walking into «Задачи» and back always has.
+  const previousSelectedRef = useRef(selectedChatId);
+  useEffect(() => {
+    const previous = previousSelectedRef.current;
+    previousSelectedRef.current = selectedChatId;
+    if (section && selectedChatId && selectedChatId !== previous) setLocation(chatAddressPath(selectedChatId));
+  }, [section, selectedChatId, setLocation]);
   const desktopUpdate = useDesktopUpdate();
   const updateBlocking = desktopUpdate?.presentation?.blocking === true;
 
@@ -75,7 +95,9 @@ export function MainLayout() {
         ),
       );
 
-      if (event.key === "Escape" && !isEditable && !hasBlockingOverlay && selectedChatId) {
+      // Not over a section: the conversation behind it is not on screen, and
+      // Escape closing something the reader cannot see is a key that lies.
+      if (event.key === "Escape" && !isEditable && !hasBlockingOverlay && selectedChatId && !section) {
         event.preventDefault();
         setSelectedChatId(null);
       }
@@ -95,7 +117,7 @@ export function MainLayout() {
     // whether something else wants this key.
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [selectedChatId, setSelectedChatId, updateBlocking]);
+  }, [section, selectedChatId, setSelectedChatId, updateBlocking]);
 
   return (
     // No background of its own. `body` paints --tg-bg with --kub-ambient over
@@ -164,14 +186,17 @@ export function MainLayout() {
               instead — see `Sidebar`. Exactly one of the two is ever visible, and
               `voice-call-bar-one-visible` in the e2e pins that. */}
           {isMobileChatOpen && (
-            <div className="md:hidden">
-              <VoiceCallBar placement="top" />
+            <div className="kub-messenger-call-band md:hidden">
+              {/* A section is not a conversation: with «Задачи» standing in the
+                  pane, the chat selected behind it draws no capsule, so the
+                  bar must not stand down on its account. */}
+              <VoiceCallBar placement="top" capsuleOnScreen={section === null} />
               {/* The other band, for a conversation running on another of this
                   person's devices — the state this whole feature exists for,
                   since the device being picked up is usually the phone. At most
                   one of the two is drawn; the rule is in
                   `lib/voiceElsewhere.ts`. */}
-              <VoiceElsewhereBar placement="top" />
+              <VoiceElsewhereBar placement="top" conversationOnScreen={section === null} />
             </div>
           )}
 
@@ -232,7 +257,15 @@ export function MainLayout() {
                 isMobileChatOpen ? "flex" : "hidden md:flex",
               )}
             >
-              {selectedChatId ? <ChatWindow chatId={selectedChatId} /> : <WelcomeScreen />}
+              {section === "bots" ? (
+                <BotsPage inPane />
+              ) : section === "tasks" ? (
+                <TasksPage inPane />
+              ) : selectedChatId ? (
+                <ChatWindow chatId={selectedChatId} />
+              ) : (
+                <WelcomeScreen />
+              )}
             </div>
           </div>
 

@@ -8,7 +8,6 @@ import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useSignOut } from "@/hooks/useUser";
 import { useTheme } from "@/hooks/useTheme";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
-import { useTaskAccessGate } from "@/hooks/useTaskAccess";
 import { requestAppConfirm } from "@/lib/appDialogs";
 import { FOCUS_RING } from "@/lib/controlSurface";
 import { signOutConfirm } from "@/lib/signOutConfirm";
@@ -65,7 +64,6 @@ export function SideMenuLayer({ onClose, onOpenSettings, onOpenContacts, onOpenN
   const signOut = useSignOut();
   const { resolvedTheme, setTheme } = useTheme();
   const isStaff = useIsManagerOrAdmin();
-  const { canAccessTasks } = useTaskAccessGate();
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -105,8 +103,10 @@ export function SideMenuLayer({ onClose, onOpenSettings, onOpenContacts, onOpenN
     { icon: "bookmark", label: "Избранное", action: () => { onClose(); onOpenSaved(); } },
     { icon: "contact", label: "Контакты", action: () => { onClose(); onOpenContacts(); } },
     { icon: "group", label: "Новая группа", action: () => { onClose(); onOpenNewGroup(); } },
-    { icon: "bot", label: "Мои боты", action: go("/bots") },
-    ...(canAccessTasks ? [{ icon: "tasks" as const, label: "Задачи", accent: true, action: go("/tasks") } satisfies Row] : []),
+    // «Мои боты» and «Задачи» were here until item 41 moved them — the owner's
+    // word was «перенести» — to the rows above the chat list, where Discord
+    // keeps its home sections and where they open beside the lists. The phone,
+    // which has no such rows, keeps them in its own menu.
     ...(isStaff ? [{ icon: "shield" as const, label: "Управление", accent: true, action: go("/admin") } satisfies Row] : []),
     { icon: "settings", label: "Настройки", action: () => { onClose(); onOpenSettings(); } },
     { icon: "help", label: "Помощь", action: () => { onClose(); openSupportWindow(); } },

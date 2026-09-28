@@ -49,13 +49,22 @@ test("a path that only looks like a conversation still needs the shell's bar", (
   }
 });
 
+test("the sections are the shell's own, so the bar docked to the list is already there", () => {
+  // Item 41: `/bots` and `/tasks` open in the main area beside the lists, and
+  // `MainLayout` — which docks the bar at the list's foot and draws it as a band
+  // on a phone — renders them. The shell's band here would be the duplicate
+  // this rule exists to refuse. A query is the normal case: `NotificationBell`
+  // navigates to `/tasks?task=…`.
+  for (const location of ["/tasks", "/bots", "/tasks?task=1", "/bots/"]) {
+    assert.equal(voiceShellBarNeeded(location), false, location);
+  }
+});
+
 test("every other authenticated route needs the shell's bar", () => {
-  // The exact route table of `App.tsx` on 2026-09-19, minus `/`. Listed rather
-  // than sampled: each of these is a place a person can be during a call, and
-  // «Задачи» is a tab of `BottomNav`, one tap away on a phone.
+  // The route table of `App.tsx` outside the shell, as of item 41. Listed
+  // rather than sampled: each of these is a place a person can be during a
+  // call.
   for (const location of [
-    "/tasks",
-    "/bots",
     "/admin",
     "/admin/users",
     "/admin/support/42",
@@ -80,7 +89,7 @@ test("the messenger is matched exactly, never as a prefix", () => {
   // the defect while reading as a fix. And the opposite mistake, which is the
   // one that actually happened: a hand-kept list of exempt paths, correct on
   // the day it was written and stale the next time the route table moved.
-  assert.equal(voiceShellBarNeeded("/tasks"), true);
+  assert.equal(voiceShellBarNeeded("/admin"), true);
   assert.equal(voiceShellBarNeeded("/chat"), true);
   assert.equal(voiceShellBarNeeded("/"), false);
   assert.equal(voiceShellBarNeeded(`/chat/${CHAT}`), false);
@@ -93,7 +102,7 @@ test("a query or a hash does not move a page off the exempt list", () => {
   // second band above the panes.
   assert.equal(voiceShellBarNeeded("/?task=1"), false);
   assert.equal(voiceShellBarNeeded("/#top"), false);
-  assert.equal(voiceShellBarNeeded("/tasks?task=1"), true);
+  assert.equal(voiceShellBarNeeded("/admin?tab=users"), true);
   assert.equal(voiceShellBarPath("/tasks?task=1"), "/tasks");
   assert.equal(voiceShellBarPath("/#top"), "/");
   // A hash before a question mark, so the order the two are stripped in is

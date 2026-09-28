@@ -129,8 +129,8 @@ test("the caption is zero everywhere and the strip's height on the Windows shell
   const rules = captionRules();
   assert.equal(
     rules.length,
-    3,
-    `${CAPTION} requires the root default, Windows override and call-content reset`,
+    4,
+    `${CAPTION} requires the root default, the Windows override, and the two resets beneath an inset call band`,
   );
 
   const [base, windows] = rules;
@@ -148,6 +148,13 @@ test("the caption is zero everywhere and the strip's height on the Windows shell
   assert.ok(toRem(windows.value) > 0, `the Windows override is "${windows.value}", which reserves nothing`);
   assert.deepEqual(rules[2].selectors, [".kub-voice-call-shell:has(> .kub-voice-call-shell-band > .kub-voice-call-bar) > .kub-voice-call-shell-content"]);
   assert.equal(rules[2].value, "0px");
+  // The messenger's own band above the panes (item 41 put «Мои боты» and
+  // «Задачи» under it too). Only below `md`: from `md` the band is still in
+  // the markup, hidden, and an unconditional reset would take the caption away
+  // from panes standing right under the window buttons — which is D-112.
+  assert.deepEqual(rules[3].selectors, [".kub-messenger-call-band:has(> *) + [data-kub-panes]"]);
+  assert.equal(rules[3].value, "0px");
+  assert.deepEqual(rules[3].at, ["@media (max-width: 767.98px)"], "the panes' reset is not confined to the phone width");
 });
 
 test("the reservation is exactly the strip the window chrome draws", () => {
@@ -321,5 +328,5 @@ test("the reservation guarantee fails when a surface goes back to the hardware's
 
 test("the caption guarantee fails when the Windows override is dropped", () => {
   const broken = mutate(cssSource, ':root[data-desktop-shell="windows"] {\n  --kub-window-caption: 2rem;\n}', "");
-  assert.equal(captionRules(broken).length, 2, "the override was removed but the rule count did not change");
+  assert.equal(captionRules(broken).length, 3, "the override was removed but the rule count did not change");
 });

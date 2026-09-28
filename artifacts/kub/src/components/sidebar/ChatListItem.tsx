@@ -236,6 +236,7 @@ export const ChatListItem = memo(function ChatListItem({
       data-chat-id={chat.id}
       data-unread-count={chat.unread_count ?? 0}
       data-has-messages={lastMsg ? "true" : "false"}
+      data-selected={isSelected ? "true" : undefined}
       className={cn(
         // The gap and the horizontal padding are `.kub-chat-list-row`, not
         // `gap-3 px-3`. A utility beats a class in `@layer components` (rule

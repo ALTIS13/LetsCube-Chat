@@ -614,7 +614,10 @@ for (const [file, needle] of transparentShells) {
  * --kub-surface in list mode, exactly as the message feed does.
  */
 test("pages/tasks/TasksPage.tsx lets the page ambient through in each of its three states", () => {
-  const roots = read("pages/tasks/TasksPage.tsx").match(/className="flex flex-col h-app[^"]*"/g) ?? [];
+  // Each root is `cn(…)` since item 41, which renders the page in the shell's
+  // main area as well as on its own: the height is `h-app` alone and `h-full`
+  // in the pane, and neither may bring a fill with it.
+  const roots = read("pages/tasks/TasksPage.tsx").match(/data-testid="tasks-page" className=\{cn\("flex flex-col[^}]*\}/g) ?? [];
   assert.equal(
     roots.length,
     3,

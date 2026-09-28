@@ -8,6 +8,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
 import { useTaskAccessGate } from "@/hooks/useTaskAccess";
 import { useHint } from "@/hooks/useHint";
+import { shellSection } from "@/lib/shellSection";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { KubBrandLogo, KubHint, KubIcon, KubTooltip, type KubIconName } from "@/components/kub";
@@ -46,7 +47,7 @@ export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSear
   const { resolvedTheme } = useTheme();
   const isStaff = useIsManagerOrAdmin();
   const { canAccessTasks } = useTaskAccessGate();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showNewGroup, setShowNewGroup] = useState(false);
@@ -64,7 +65,15 @@ export function SidebarHeader({ onNewChat, onRefetch, searchTucked, onUntuckSear
   // and timed out against it on 2026-09-12. `useIsMobile` is the product's
   // own signal and matches the same 768 the class does.
   const isPhone = useIsMobile();
-  const adminHint = useHint("admin-entry", { enabled: isStaff && isPhone });
+  // And only while this header is the pane on screen. A phone has one pane, so
+  // with a conversation open — or, since item 41, «Мои боты» or «Задачи» — the
+  // list and this header are `display: none` while still mounted, and the plate
+  // was left behind anchored to nothing, over the page that replaced them.
+  // Photographed at 390 on 2026-09-28 over «Мои боты». The same question
+  // `MainLayout` asks for `isMobileChatOpen`, asked here from the same facts.
+  const selectedChatId = useAppStore((s) => s.selectedChatId);
+  const listOnScreen = !selectedChatId && shellSection(location) === null;
+  const adminHint = useHint("admin-entry", { enabled: isStaff && isPhone && listOnScreen });
   const iconButtonClass =
     "kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]";
 

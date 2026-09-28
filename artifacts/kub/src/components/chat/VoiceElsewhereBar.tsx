@@ -45,7 +45,19 @@ import { cn } from "@/lib/utils";
  * either way, because what disappears when the move is pressed is driven by
  * *this* device's own call state.
  */
-export function VoiceElsewhereBar({ placement }: { placement: "column" | "top" }) {
+export function VoiceElsewhereBar({
+  placement,
+  /**
+   * Whether a conversation pane is on screen at all — `VoiceCallBar`'s
+   * `capsuleOnScreen`, for the same reason. Since item 41 a section can stand
+   * in the main area while a conversation stays selected behind it, and a
+   * selected chat that is not drawn speaks for nothing.
+   */
+  conversationOnScreen = true,
+}: {
+  placement: "column" | "top";
+  conversationOnScreen?: boolean;
+}) {
   const elsewhere = useVoiceElsewhere();
   const call = useVoiceCall();
   // A scalar selector, so a change anywhere else in the chat list does not
@@ -60,7 +72,7 @@ export function VoiceElsewhereBar({ placement }: { placement: "column" | "top" }
   // second answer to one question.
   const spokenForHere = useAppStore((state) => {
     const chatId = elsewhere?.chatId ?? null;
-    if (chatId === null || state.selectedChatId !== chatId) return false;
+    if (!conversationOnScreen || chatId === null || state.selectedChatId !== chatId) return false;
     return state.chats.find((chat) => chat.id === chatId)?.type === "group";
   });
 

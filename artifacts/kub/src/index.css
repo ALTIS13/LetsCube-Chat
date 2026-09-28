@@ -412,6 +412,24 @@ html[data-ios-standalone] [data-ios-app-shell] {
   .kub-voice-call-shell:has(> .kub-voice-call-shell-band > .kub-voice-call-bar) > .kub-voice-call-shell-content {
     --kub-window-caption: 0px;
   }
+
+  /* The same ownership for the messenger's own band above the panes, which a
+     narrow window shows — since item 41 on «Мои боты» and «Задачи» as well as
+     in a conversation. Below `md` only, where the band is on screen: from `md`
+     it is `display: none` but still in the markup, and `:has` would take the
+     caption away from panes that are standing right under the window buttons.
+     `:has(> *)` because the band holds at most one of its two bars and each
+     renders nothing at all when it has nothing to say, so «has a child» is
+     «a bar is drawn». */
+  @media (max-width: 767.98px) {
+    .kub-messenger-call-band:has(> *) {
+      padding-top: var(--kub-window-caption);
+    }
+
+    .kub-messenger-call-band:has(> *) + [data-kub-panes] {
+      --kub-window-caption: 0px;
+    }
+  }
 }
 
 .dark {

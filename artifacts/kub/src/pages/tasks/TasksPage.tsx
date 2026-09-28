@@ -69,7 +69,11 @@ const STAFF_TABS: Tab[] = [
  * Legacy profile roles remain only a fallback while the DB backfill is rolling
  * out; club staff access comes from location_members.role_id.
  */
-export function TasksPage() {
+/**
+ * `inPane` since item 41 — see `BotsPage`: the page fills the shell's main
+ * area beside the lists, and from `md` the list is the way back.
+ */
+export function TasksPage({ inPane = false }: { inPane?: boolean } = {}) {
   const [location, setLocation] = useLocation();
   const currentUser = useAppStore((s) => s.currentUser);
   const taskAccess = usePermissionAccess(TASK_ACCESS_PERMISSION_KEYS);
@@ -343,7 +347,7 @@ export function TasksPage() {
 
   if (taskChecking) {
     return (
-      <div className="flex flex-col h-app px-safe">
+      <div data-testid="tasks-page" className={cn("flex flex-col px-safe", inPane ? "h-full w-full min-h-0 min-w-0" : "h-app")}>
         <KubHeader
           title="Задачи"
           subtitle="Проверяем права доступа"
@@ -351,7 +355,7 @@ export function TasksPage() {
             <button
               type="button"
               onClick={() => setLocation("/")}
-              className="kub-icon-action kub-interactive rounded-lg kub-raise-hover text-[color:var(--kub-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
+              className={cn("kub-icon-action kub-interactive rounded-lg kub-raise-hover text-[color:var(--kub-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]", inPane && "md:hidden")}
               aria-label="Назад"
             >
               <KubIcon name="back" size={18} />
@@ -367,7 +371,7 @@ export function TasksPage() {
 
   if (!canViewTasks) {
     return (
-      <div className="flex flex-col h-app px-safe">
+      <div data-testid="tasks-page" className={cn("flex flex-col px-safe", inPane ? "h-full w-full min-h-0 min-w-0" : "h-app")}>
         <KubHeader
           title="Задачи"
           subtitle="Раздел доступен по ролям и правам"
@@ -375,7 +379,7 @@ export function TasksPage() {
             <button
               type="button"
               onClick={() => setLocation("/")}
-              className="kub-icon-action kub-interactive rounded-lg kub-raise-hover text-[color:var(--kub-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
+              className={cn("kub-icon-action kub-interactive rounded-lg kub-raise-hover text-[color:var(--kub-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]", inPane && "md:hidden")}
               aria-label="Назад"
             >
               <KubIcon name="back" size={18} />
@@ -411,7 +415,7 @@ export function TasksPage() {
   // modals are siblings of both bars at the page root, so no backdrop-filter
   // here can become the containing block of anything fixed.
   return (
-    <div className="flex flex-col h-app px-safe">
+    <div data-testid="tasks-page" className={cn("flex flex-col px-safe", inPane ? "h-full w-full min-h-0 min-w-0" : "h-app")}>
       <KubHeader
         title="Задачи"
         subtitle={canCreateTasks ? "Управление задачами локации" : "Ваши задачи"}
@@ -419,7 +423,7 @@ export function TasksPage() {
           <button
             type="button"
             onClick={() => setLocation("/")}
-            className="kub-icon-action kub-interactive rounded-lg kub-raise-hover text-[color:var(--kub-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
+            className={cn("kub-icon-action kub-interactive rounded-lg kub-raise-hover text-[color:var(--kub-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]", inPane && "md:hidden")}
             aria-label="Назад"
           >
             <KubIcon name="back" size={18} />

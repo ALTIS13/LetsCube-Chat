@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { KubButton, KubGlassLayer, KubIcon, KubNotice } from "@/components/kub";
 import { SidebarHeader } from "./SidebarHeader";
 import { PwaPushNudge } from "./PwaPushNudge";
@@ -29,6 +30,9 @@ import { useFolders } from "@/hooks/useFolders";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import { LIST_MAY_BE_STALE } from "@/lib/plainMessages";
 import { ChatKindFilterBar } from "./ChatKindFilterBar";
+import { ShellSectionRows } from "./ShellSectionRows";
+import { chatAddressPath } from "@/lib/chatRoute";
+import { shellSection } from "@/lib/shellSection";
 import {
   chatKindStorageKey,
   chatsOfKind,
@@ -50,6 +54,20 @@ export function Sidebar() {
 
   const selectedChatId = useAppStore((s) => s.selectedChatId);
   const setSelectedChatId = useAppStore((s) => s.setSelectedChatId);
+  // Item 41: a section — «Мои боты», «Задачи» — can stand in the main area
+  // while a conversation stays selected behind it. A row pressed then leaves
+  // the section for that conversation's address, the one already selected
+  // included: the store alone would not count choosing it again as a change,
+  // and the press would do nothing at all.
+  const [location, setLocation] = useLocation();
+  const section = shellSection(location);
+  const selectChat = useCallback(
+    (chatId: string | null) => {
+      setSelectedChatId(chatId);
+      if (section && chatId) setLocation(chatAddressPath(chatId));
+    },
+    [section, setLocation, setSelectedChatId],
+  );
   const searchQuery = useAppStore((s) => s.searchQuery);
   const mobileSection = useAppStore((s) => s.mobileSection);
   const setMobileSection = useAppStore((s) => s.setMobileSection);
@@ -267,6 +285,11 @@ export function Sidebar() {
                 />
               </div>
             )}
+            {/* Discord's home rows, above the conversations and above the
+                filter that sorts them (item 41). From `md`; the component
+                gates itself. Not while a search owns the column: the results
+                belong directly under the field that asked for them. */}
+            {!hasSearchQuery && !chatSearchOpen && <ShellSectionRows />}
             {!hasSearchQuery && !chatSearchOpen && kindOffered.length > 0 && (
               <ChatKindFilterBar offered={kindOffered} active={kind} unread={kindUnread} onSelect={chooseKind} />
             )}
@@ -313,8 +336,11 @@ export function Sidebar() {
               )}
               <ChatList
                 chats={listed}
-                selectedChatId={selectedChatId}
-                onChatSelect={setSelectedChatId}
+                // With a section open no conversation is on screen, so no row
+                // claims to be the one being read — Discord marks the Friends
+                // row, not the last direct message, while Friends is open.
+                selectedChatId={section ? null : selectedChatId}
+                onChatSelect={selectChat}
                 onScrollStateChange={setSearchTucked}
               />
             </div>
@@ -335,14 +361,14 @@ export function Sidebar() {
               progress because somebody opened settings. It draws nothing at all
               when there is no call, and nothing when the conversation that owns
               the call is the one on screen — the capsule is already there. */}
-          <VoiceCallBar placement="column" />
+          <VoiceCallBar placement="column" capsuleOnScreen={section === null} />
 
           {/* And the other band on this edge, for a call running on another of
               this person's devices. At most one of the two is ever drawn:
               `voiceElsewhereBarState` stands this one down whenever a call is
               running here, because the two say opposite things about the same
               person. */}
-          <VoiceElsewhereBar placement="column" />
+          <VoiceElsewhereBar placement="column" conversationOnScreen={section === null} />
         </div>
       </div>
 
