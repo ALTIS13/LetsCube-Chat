@@ -973,17 +973,22 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     `reference-clients.md`, which now carries what was taken and why ours
     differs where it does.
 
-    - **b: three of the five entries** §15.2 found we had the machinery for,
+    - **b: four of the five entries** §15.2 found we had the machinery for,
       each in Discord's position. «Пометить как прочитанное» right after
       «Открыть», only while the row shows something unread, written through
       the conversation's own `scheduleMarkChatRead` without opening it;
       «Позвонить» right after «Открыть профиль», offered by the header's own
       `voiceCallOffer` so the two cannot disagree; «Заблокировать» /
       «Разблокировать» ahead of the notification entries, asked first.
-      **Not built:** «Пригласить в группу», which needs each group's invite
-      policy and the person's state in it — a submenu with its own refusals,
-      and the next piece of this item; «Открыть в новой вкладке», which means
-      something only in a browser tab.
+      **«Пригласить в группу» followed the same day**, right before
+      «Заблокировать» where Discord's group 7 has «Invite to Server»: a step,
+      as the durations are, listing the groups and channels this reader may
+      invite into — the server's own gate as `chatInviteAdmission` copies it —
+      and the person is not in yet; a press sends `group_invite_create`, and a
+      refusal is said in that function's words. Each row says «Отправить
+      приглашение», because the step hides the entry that opened it where
+      Discord's flyout keeps it beside the list. **Not built:** «Открыть в
+      новой вкладке», which means something only in a browser tab.
     - **c, in-chat: the field offers its own grammar.** The empty field lists
       `from:`, `has:`, `before:`, `after:` with their syntax; a press inserts
       the prefix and does not search; a `from:` being typed completes the

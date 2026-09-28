@@ -1820,16 +1820,20 @@ Discord 345.9.
 - **«Открыть в новой вкладке».** Newly meaningful: a conversation has an
   address as of `054bf8ee`, so this is now a link rather than a wish.
 
-**Built 2026-09-28, three of the five** (tracker item 36 b), each where
+**Built 2026-09-28, four of the five** (tracker item 36 b), each where
 Discord's menu has it: «Пометить как прочитанное» right after «Открыть» and
 only while the row shows something unread, written without opening the
 conversation; «Позвонить» right after «Открыть профиль», offered by the
 header's own rule so the two cannot disagree; «Заблокировать» /
 «Разблокировать» ahead of the notification entries (Discord's group 7 before
-group 8), asked first with the header's own prompt. **Not built:** «Пригласить
-в группу» needs each group's invite policy and the person's state in it — a
-submenu with its own refusals, its own piece of work; «Открыть в новой
-вкладке» means something only in a browser tab. The header keeps its own
+group 8), asked first with the header's own prompt. «Пригласить в группу»
+followed the same day, right before «Заблокировать» as «Invite to Server» is in
+group 7: a step listing the groups this reader may invite into and the person
+is not in, one press each. Where ours differs: Discord's list is a flyout
+beside the entry that opened it; ours replaces the menu, as the durations do,
+so each row says «Отправить приглашение» to keep what the press does on
+screen. **Not built:** «Открыть в новой вкладке» means something only in a
+browser tab. The header keeps its own
 order, in which «Заблокировать» follows «Очистить историю у себя»; Discord has
 no such header menu to measure it against.
 

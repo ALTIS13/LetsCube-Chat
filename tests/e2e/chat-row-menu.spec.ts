@@ -16,6 +16,8 @@ import {
  *  - «Пометить как прочитанное», which Discord's web and desktop menu leads
  *    with, and only while there is something unread;
  *  - «Позвонить» beside the profile, offered by the header's own rule;
+ *  - «Пригласить в группу», Discord's «Invite to Server», as a step listing the
+ *    groups the person is not in yet;
  *  - «Заблокировать», asked first, before the notification entries.
  *
  * The conversations are fictional and served by the fixture.
@@ -30,6 +32,8 @@ const ME = person("91111111-1111-4111-8111-000000000001", "Максим Орло
 const ANNA = person("91111111-1111-4111-8111-000000000002", "Анна Смирнова", "anna");
 const PRIVATE = "92222222-2222-4222-8222-000000000001";
 const GROUP = "92222222-2222-4222-8222-000000000002";
+/** A group of mine Anna is not in: the one she can be invited to. */
+const ESTIMATES = "92222222-2222-4222-8222-000000000003";
 const ANNA_LINE = "Подпишешь акт сегодня?";
 
 test.beforeEach(async ({ request }) => {
@@ -41,13 +45,18 @@ async function boot(page: Page, options: { unread?: boolean } = {}) {
   return openFixture(page, {
     me: ME,
     people: [ANNA],
-    chats: [chat(PRIVATE, "private", null, AT), chat(GROUP, "group", "Бригада", EARLY)],
+    chats: [
+      chat(PRIVATE, "private", null, AT),
+      chat(GROUP, "group", "Бригада", EARLY),
+      chat(ESTIMATES, "group", "Сметный отдел", EARLY),
+    ],
     memberships: [
       // Read before Anna wrote, so her line is unread.
       membership(PRIVATE, ME, "owner", unread ? EARLY : LATER),
       membership(PRIVATE, ANNA, "member", AT),
       membership(GROUP, ME, "owner", AT),
       membership(GROUP, ANNA, "member", AT),
+      membership(ESTIMATES, ME, "owner", AT),
     ],
     // Nothing unread is a conversation with nothing in it: the fixture counts
     // a chat's unread without reading `last_read_at`, so a read mark alone
@@ -55,7 +64,25 @@ async function boot(page: Page, options: { unread?: boolean } = {}) {
     messages: [
       ...(unread ? [message("93333333-3333-4333-8333-000000000001", PRIVATE, ANNA, ANNA_LINE, AT)] : []),
       message("93333333-3333-4333-8333-000000000002", GROUP, ANNA, "Бетон завтра", EARLY),
+      message("93333333-3333-4333-8333-000000000003", ESTIMATES, ME, "Сметы за сентябрь", EARLY),
     ],
+    // What `group_invite_create` answers: the pending invitation it made.
+    rpc: (name, body) =>
+      name === "group_invite_create"
+        ? {
+            body: {
+              id: "94444444-4444-4444-8444-000000000001",
+              chat_id: body.p_chat_id,
+              inviter_id: ME.id,
+              invitee_id: body.p_invitee_id,
+              status: "pending",
+              created_at: AT,
+              updated_at: AT,
+              responded_at: null,
+              expires_at: null,
+            },
+          }
+        : undefined,
   });
 }
 
@@ -142,4 +169,31 @@ test("«Заблокировать» asks first, blocks, and then the row offers
   menu = await openRowMenu(page, "Анна Смирнова");
   await expect(menu.getByText("Разблокировать", { exact: true })).toBeVisible();
   await expect(menu.getByText("Позвонить", { exact: true })).toHaveCount(0);
+});
+
+test("«Пригласить в группу» steps into the groups the person is not in, and invites to the one pressed", async ({ page }) => {
+  const fixture = await boot(page);
+  let menu = await openRowMenu(page, "Анна Смирнова");
+  const labels = (await entries(menu)).map((label) => label.trim()).filter(Boolean);
+  // Discord's group 7: «Invite to Server» comes right before «Block».
+  expect(labels.indexOf("Пригласить в группу"), labels.join(" · ")).toBe(labels.indexOf("Заблокировать") - 1);
+
+  await menu.getByText("Пригласить в группу", { exact: true }).click();
+  menu = page.locator("[data-chat-context-menu]").first();
+  // A step, as the durations are: the menu stays open and says where back is.
+  await expect(menu.getByText("Назад", { exact: true })).toBeVisible();
+  await expect(menu.getByText("Сметный отдел", { exact: true })).toBeVisible();
+  // Anna is already in «Бригада», so it is not offered.
+  await expect(menu.getByText("Бригада", { exact: true })).toHaveCount(0);
+
+  await menu.getByText("Сметный отдел", { exact: true }).click();
+  await expect.poll(() => fixture.rpcBodies("group_invite_create").length).toBe(1);
+  expect(fixture.rpcBodies("group_invite_create")[0]).toMatchObject({ p_chat_id: ESTIMATES, p_invitee_id: ANNA.id });
+  await expect(page.getByText("Приглашение в «Сметный отдел» отправлено")).toBeVisible();
+});
+
+test("a group's row offers no invitation, and nor does a person already in all of mine", async ({ page }) => {
+  await boot(page);
+  const menu = await openRowMenu(page, "Бригада");
+  await expect(menu.getByText("Пригласить в группу", { exact: true })).toHaveCount(0);
 });

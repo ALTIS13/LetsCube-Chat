@@ -34,6 +34,9 @@ import { BLOCK_LABEL, UNBLOCK_LABEL, blockPrompt, unblockPrompt } from "@/lib/pe
 import { voiceCallOffer } from "@/lib/voiceRing";
 import { voiceCallSnapshot } from "@/hooks/useVoiceCall";
 import { startVoiceRing, voiceRingsSnapshot } from "@/hooks/useVoiceRing";
+import { usePermissionAccess } from "@/hooks/useRole";
+import { chatInviteAdmission, readInvitePolicy, type ChatMemberRole } from "@/lib/chatInviteAccess";
+import { createGroupInvite } from "@/lib/groupInvites";
 
 interface ChatListProps {
   chats: ChatWithLastMessage[];
@@ -65,6 +68,8 @@ interface ChatAction {
 }
 
 const DESKTOP_MENU_WIDTH = 272;
+/** What `group_invite_create` reads besides the chat itself; see `lib/chatInviteAccess.ts`. */
+const INVITE_PERMISSION_KEYS = ["chats.invite", "chats.invite_any", "system.manage"] as const;
 const DESKTOP_MENU_HEIGHT_ESTIMATE = 388;
 
 export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateChange }: ChatListProps) {
@@ -88,6 +93,10 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
   const [openMenu, setOpenMenu] = useState<ChatMenuState | null>(null);
   /** Whether the open menu has stepped into the durations. */
   const [muteChoiceOpen, setMuteChoiceOpen] = useState(false);
+  /** Whether the open menu has stepped into the groups a person can be invited to. */
+  const [inviteChoiceOpen, setInviteChoiceOpen] = useState(false);
+  // Read while a menu is open, and from the cache after the first time.
+  const invitePermissions = usePermissionAccess(INVITE_PERMISSION_KEYS, { enabled: openMenu !== null });
   const [busyActionId, setBusyActionId] = useState<string | null>(null);
   const [draggedPinnedChatId, setDraggedPinnedChatId] = useState<string | null>(null);
 
@@ -184,10 +193,12 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
   const closeMenu = useCallback(() => {
     setOpenMenu(null);
     setMuteChoiceOpen(false);
+    setInviteChoiceOpen(false);
   }, []);
 
   const openDesktopMenu = useCallback((chatId: string, position: { x: number; y: number }) => {
     setMuteChoiceOpen(false);
+    setInviteChoiceOpen(false);
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     // Read where the pointer opened it: on an iPad, or an iPhone held
@@ -211,6 +222,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
 
   const openMobileSheet = useCallback((chatId: string) => {
     setMuteChoiceOpen(false);
+    setInviteChoiceOpen(false);
     setOpenMenu({ chatId, mode: "sheet" });
   }, []);
 
@@ -367,6 +379,62 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
       },
     }));
     if (muteChoiceOpen) return muteActions;
+
+    // Item 36 b: Discord's «Invite to Server» (§15.2, group 7), in the form this
+    // product has — the groups and channels this reader may invite into and
+    // the person is not in yet, one press each. Who may invite is the server's
+    // own gate as `chatInviteAdmission` copies it, so a group it would refuse
+    // is not offered; whatever it refuses anyway is said in its own words.
+    // While the permissions are still being read, `chats.invite` is assumed,
+    // because every measured role holds it.
+    const invitee = chatRowProfileTarget(chat, currentUser?.id ?? null);
+    const inviteGroups = invitee.kind === "person"
+      ? chats.filter((group) => {
+          if (group.type !== "group" && group.type !== "channel") return false;
+          if (group.members?.some((member) => member.user_id === invitee.userId)) return false;
+          const role = (group.members?.find((member) => member.user_id === currentUser?.id)?.role ?? null) as ChatMemberRole | null;
+          return chatInviteAdmission({
+            chatType: group.type,
+            chatRole: role,
+            invitePolicy: readInvitePolicy(group.invite_policy),
+            hasInvite: invitePermissions.checking || invitePermissions.hasPermission("chats.invite"),
+            hasInviteAny: invitePermissions.hasPermission("chats.invite_any"),
+            hasSystemManage: invitePermissions.hasPermission("system.manage"),
+          }).canInvite;
+        })
+      : [];
+    if (inviteChoiceOpen && invitee.kind === "person") {
+      const person = invitee.userId;
+      return [
+        {
+          id: "invite-back",
+          icon: "chevronLeft",
+          label: "Назад",
+          keepOpen: true,
+          run: () => setInviteChoiceOpen(false),
+        },
+        ...inviteGroups.map((group): ChatAction => {
+          const name = group.name?.trim() || (group.type === "channel" ? "Канал" : "Группа");
+          return {
+            id: `invite-${group.id}`,
+            icon: group.type === "channel" ? "channel" : "group",
+            label: name,
+            // The step replaces the list, so the entry that opened it is gone;
+            // Discord's flyout keeps «Invite to Server» beside its servers. The
+            // row says what the press does instead.
+            detail: group.type === "channel" ? "Канал · отправить приглашение" : "Отправить приглашение",
+            run: async () => {
+              const result = await createGroupInvite(supabase, group.id, person);
+              showActionFeedback(
+                result.ok
+                  ? { kind: "success", title: `Приглашение в «${name}» отправлено`, key: `group-invite:${group.id}` }
+                  : { kind: "error", title: result.message, key: `group-invite:${group.id}` },
+              );
+            },
+          };
+        }),
+      ];
+    }
     const pinnedIndex = orderedPinnedChatIds.indexOf(chat.id);
 
     const selectChat = () => onChatSelect(chat.id);
@@ -521,6 +589,16 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
           run: () => movePinnedChat(chat.id, "down"),
         });
       }
+    }
+
+    if (inviteGroups.length > 0) {
+      actions.push({
+        id: "invite",
+        icon: "userPlus",
+        label: "Пригласить в группу",
+        keepOpen: true,
+        run: () => setInviteChoiceOpen(true),
+      });
     }
 
     // «Block», before the mute entries as in Discord's menu (§15.2). Asked
@@ -688,8 +766,11 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
     applyMute,
     blocks,
     chatMutes,
+    chats,
     clearChatLocally,
     currentUser?.id,
+    inviteChoiceOpen,
+    invitePermissions,
     markChatRead,
     movePinnedChat,
     muteChoiceOpen,
