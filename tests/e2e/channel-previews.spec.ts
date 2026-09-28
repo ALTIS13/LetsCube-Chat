@@ -7,6 +7,7 @@ import {
   openFixture,
   person,
   requireFixtureServer,
+  type Fixture,
   type Row,
 } from "./helpers/messageActionsFixture";
 import { RealtimeFixture } from "./helpers/realtime-fixture";
@@ -42,8 +43,11 @@ const ROWS: Row[] = [
   message("d8666666-6666-4666-8666-000000000003", TEAM, ME, "Всем доброе утро", "2026-09-28T09:00:00.000Z"),
 ];
 
-async function open(page: Page) {
-  await openFixture(page, {
+/** The fixture of the last `open`, for the tests that read what was sent. */
+let opened: Fixture | null = null;
+
+async function open(page: Page, unread?: Row[]) {
+  opened = await openFixture(page, {
     me: ME,
     people: [ANNA, PETR],
     chats: [{ ...chat(TEAM, "group", "CUBE. Минская", AT), is_forum: true }],
@@ -56,7 +60,14 @@ async function open(page: Page) {
       if (call.resource === "voice_channels" || call.resource === "voice_participants") return { status: 200, body: [] };
       return undefined;
     },
-    rpc: (name) => (name === "search_chat_messages" ? missingFunction(name) : undefined),
+    rpc: (name) => {
+      if (name === "search_chat_messages") return missingFunction(name);
+      // Each channel's unread count (item 54, the unread half); without one,
+      // the database of before, which has no such function.
+      if (name === "channel_unread_counts") return unread ? { body: unread } : missingFunction(name);
+      if (name === "mark_channel_read") return { body: null };
+      return undefined;
+    },
   });
   // A channel's newest lines, read as the list asks for them: its own topic,
   // or for the general channel no topic or the general one.
@@ -109,5 +120,52 @@ test.describe("a server's channels say what happened in them (item 54)", () => {
     await expect(row(page, T_CHECKS).getByTestId("channel-rail-preview")).toHaveText("Пётр: Касса сверена");
     // The channel on screen is still the one being read: nothing was opened.
     await expect(row(page, T_GENERAL)).toHaveAttribute("data-active", "true");
+  });
+});
+
+test.describe("a server's channels say how much is unread in them (item 54)", () => {
+  test.beforeEach(async ({ request }) => {
+    await requireFixtureServer(request);
+  });
+
+  test("a count per channel, Telegram's, and none on the one being read", async ({ page }) => {
+    const realtime = await open(page, [
+      { channel: "general", unread: 4 },
+      { channel: T_CHECKS, unread: 3 },
+      { channel: T_PHOTOS, unread: 120 },
+    ]);
+    await expect(row(page, T_CHECKS).getByTestId("channel-rail-unread")).toHaveText("3");
+    await expect(row(page, T_PHOTOS).getByTestId("channel-rail-unread")).toHaveText("99+");
+    // The general channel is the one on screen: it is being read.
+    await expect(row(page, T_GENERAL)).toHaveAttribute("data-active", "true");
+    await expect(row(page, T_GENERAL).getByTestId("channel-rail-unread")).toHaveCount(0);
+
+    // Somebody writes in «Чеки» while the reader is elsewhere: one more.
+    await expect.poll(() => realtime.isJoined(`messages:chat:${TEAM}`)).toBe(true);
+    realtime.emit({
+      type: "INSERT",
+      table: "messages",
+      record: {
+        ...message("d8666666-6666-4666-8666-000000000011", TEAM, ANNA, "Ещё чек", new Date().toISOString(), { topic_id: T_CHECKS }),
+        sender: undefined,
+      },
+    });
+    await expect(row(page, T_CHECKS).getByTestId("channel-rail-unread")).toHaveText("4");
+
+    // Opening it reads it: the count goes, and its mark is sent.
+    await row(page, T_CHECKS).click();
+    if ((page.viewportSize()?.width ?? 0) < 768) await page.getByTestId("channel-rail-trigger").click().catch(() => undefined);
+    await expect(row(page, T_CHECKS).getByTestId("channel-rail-unread")).toHaveCount(0);
+    await expect
+      .poll(() => opened!.rpcBodies("mark_channel_read").some((body) => body.p_channel === T_CHECKS && body.p_chat_id === TEAM))
+      .toBe(true);
+    // The other channel's count is its own.
+    await expect(row(page, T_PHOTOS).getByTestId("channel-rail-unread")).toHaveText("99+");
+  });
+
+  test("a database without the counts draws the list as it was", async ({ page }) => {
+    await open(page);
+    await expect(row(page, T_CHECKS).getByTestId("channel-rail-preview")).toHaveText("Анна: Смена закрыта, касса сдана");
+    await expect(page.getByTestId("channel-rail-unread")).toHaveCount(0);
   });
 });

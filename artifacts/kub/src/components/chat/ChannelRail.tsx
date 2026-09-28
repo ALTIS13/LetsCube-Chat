@@ -24,6 +24,7 @@ import { canManageChannels, voiceJoinVerdict, type ChannelGroup, type ServerChan
 import { VOICE_ELSEWHERE_MOVE, VOICE_ELSEWHERE_PROMISE } from "@/lib/voiceElsewhere";
 import type { VoiceParticipant } from "@/lib/voiceChannel";
 import type { ChannelPreview } from "@/lib/channelPreview";
+import { channelReadKey, unreadBadgeLabel } from "@/lib/channelUnread";
 import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -129,6 +130,12 @@ export interface ChannelRailProps {
    * `useChannelPreviews`). Absent or missing a channel draws the row as a name.
    */
   previews?: ReadonlyMap<string, ChannelPreview>;
+  /**
+   * Each text channel's unread count, by its read key (tracker item 54,
+   * `useChannelUnread`): `general` for the general channel, the topic id
+   * otherwise. Absent or zero draws no badge.
+   */
+  unread?: ReadonlyMap<string, number>;
 }
 
 /** The list itself, shared by the column and the sheet. */
@@ -149,6 +156,7 @@ function ChannelRailList({
   failed,
   onRetry,
   previews,
+  unread,
 }: ChannelRailProps) {
   const [collapsed, setCollapsed] = useState<readonly string[]>([]);
   const canManage = canManageChannels(role);
@@ -259,6 +267,7 @@ function ChannelRailList({
                   active={channel.id === currentTextChannelId}
                   onSelect={onSelectText}
                   preview={previews?.get(channel.id) ?? null}
+                  unread={unread?.get(channelReadKey(channel)) ?? 0}
                 />
               ) : (
                 <VoiceChannelRailRow
@@ -335,12 +344,17 @@ function TextChannelRow({
   active,
   onSelect,
   preview,
+  unread,
 }: {
   channel: ServerChannel;
   active: boolean;
   onSelect: (channel: ServerChannel) => void;
   preview: ChannelPreview | null;
+  unread: number;
 }) {
+  // Telegram's topic row: a name in full weight and a count at the end of the
+  // line while something in it is unread. The channel being read shows none.
+  const badge = active ? null : unreadBadgeLabel(unread);
   return (
     <button
       type="button"
@@ -369,16 +383,34 @@ function TextChannelRow({
       )}
       <span className="flex min-w-0 flex-1 flex-col text-left">
         <span className="flex min-w-0 items-baseline gap-2">
-          <span className="min-w-0 flex-1 truncate">{channel.name}</span>
+          <span className={cn("min-w-0 flex-1 truncate", badge && "font-semibold text-[color:var(--kub-text)]")}>{channel.name}</span>
           {preview && (
             <span className="shrink-0 text-[11px] tabular-nums text-[color:var(--kub-muted)]" data-testid="channel-rail-preview-time">
               {formatTime(preview.at)}
             </span>
           )}
         </span>
-        {preview && (
-          <span className="mt-0.5 min-w-0 truncate text-xs text-[color:var(--kub-muted)]" data-testid="channel-rail-preview">
-            <span className="font-medium text-[color:var(--kub-accent-text)]">{preview.sender}:</span> {preview.text}
+        {(preview || badge) && (
+          <span className="mt-0.5 flex min-w-0 items-center gap-2">
+            {preview ? (
+              <span className="min-w-0 flex-1 truncate text-xs text-[color:var(--kub-muted)]" data-testid="channel-rail-preview">
+                <span className="font-medium text-[color:var(--kub-accent-text)]">{preview.sender}:</span> {preview.text}
+              </span>
+            ) : (
+              <span className="flex-1" />
+            )}
+            {badge && (
+              <span
+                data-testid="channel-rail-unread"
+                aria-label={`Непрочитанных: ${badge}`}
+                // The chat list's own counter, so one idea keeps one look: the
+                // page colour on the accent, which measures 5.55:1 dark and
+                // 4.56:1 light (`ChatListItem`).
+                className="flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--kub-cyan)] px-1.5 text-[12px] font-bold tabular-nums text-[color:var(--kub-bg)]"
+              >
+                {badge}
+              </span>
+            )}
           </span>
         )}
       </span>

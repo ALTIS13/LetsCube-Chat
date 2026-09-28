@@ -136,6 +136,9 @@ import {
 } from "@/lib/outgoingMedia";
 import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
 import { useChannelPreviews } from "@/hooks/useChannelPreviews";
+import { useChannelUnread } from "@/hooks/useChannelUnread";
+import { channelReadKey } from "@/lib/channelUnread";
+import { scheduleMarkChannelRead } from "@/lib/channelReadMarks";
 import type { Json, MessageWithSender } from "@/types/database";
 import { uploadAttachmentBytes } from "@/lib/attachmentUpload";
 import { WAITING_UPLOAD_SWEEP_MS } from "@/lib/outbox/backgroundUploads";
@@ -671,6 +674,21 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
   const railTextChannelId = currentTextChannelId(serverChannels.channels, selectedTopicId);
   const railTextChannel = serverChannels.channels.find((channel) => channel.id === railTextChannelId) ?? null;
+  // Tracker item 54, the unread half: each channel's own count on the list,
+  // and the channel being read marked read as far as it has been shown, beside
+  // the chat's own mark rather than instead of it.
+  const railReadKey = railOffered && railTextChannel ? channelReadKey(railTextChannel) : null;
+  const channelUnread = useChannelUnread(railOnScreen ? chatId : null, railReadKey, generalTopicIds, userId);
+  const latestShownAt = messages.length ? messages[messages.length - 1].created_at : null;
+  useEffect(() => {
+    if (!chatId || !railReadKey || !latestShownAt) return undefined;
+    const mark = () => {
+      if (document.visibilityState === "visible") scheduleMarkChannelRead(createClient(), chatId, railReadKey, latestShownAt);
+    };
+    mark();
+    document.addEventListener("visibilitychange", mark);
+    return () => document.removeEventListener("visibilitychange", mark);
+  }, [chatId, railReadKey, latestShownAt]);
   // Who is in a room. The SDK while connected, the table otherwise — the same
   // split `voiceParticipants` makes for the capsule, applied per room, because
   // only one of these rooms can be the one this client is connected to.
@@ -715,6 +733,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const railProps = {
     groups: serverChannels.groups,
     previews: channelPreviews,
+    unread: channelUnread,
     currentTextChannelId: railTextChannelId,
     occupantsOf,
     faces: voiceDirectory.faces,
