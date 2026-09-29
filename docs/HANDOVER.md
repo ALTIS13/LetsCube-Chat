@@ -251,7 +251,40 @@ whole deployment** — no bot has registered a command yet.
 
 ## 4. Where to start
 
-**Current checkpoint, 2026-09-29, afternoon (Claude):** `main` is `7a2d6360`,
+**Current checkpoint, 2026-09-29, evening (Claude):** `main` is `a8f92c06`;
+the web application runs the last code commit, `624c4b3d`, and the commits after
+it are documents. Since the afternoon:
+
+- **D-260 is closed**: a peer's role reaches the store, the information panel
+  no longer reloads itself and the chat list on every read mark, it reads
+  itself again after a drop, and a card closes when its person leaves.
+- **Search:** conversations are found on Discord's ladder times a recency
+  booster, so words in another order find a chat (`lib/localChatSearch.ts`);
+  the global field offers `from:`, `in:` and `has:` values inside a token; D-328
+  — the syntax hint's plate lay over the new completions for about ten minutes
+  after deploy and was caught on the renders; it is withdrawn while a filter is
+  typed now. «Ещё фильтры» is refused, with the reason in §15.3.
+- **D-143:** on a phone an open support ticket is a page of its own.
+- **The register was reconciled with the product.** Seven entries fixed weeks
+  ago still read open — D-105, D-116, D-214, D-215, D-255, D-261, and D-236's
+  shape, now decided from both references (§26). Each now says when and where.
+  Before trusting an open entry, grep the log for its number and read the
+  database: a commit naming an entry is not proof it closed it, and an open
+  heading is not proof it did not.
+- **Three proposals wait on the owner**, none applied:
+  `operations/2026-09-29-micro-group-proposal.md` (item 45 — blocks are the
+  safety question), `operations/2026-09-29-chat-invite-link-proposal.md` (D-170 —
+  what a link shows before joining) and
+  `operations/2026-09-29-presence-afk-proposal.md` (item 37 — a status column,
+  and a Windows release for system idle). **D-327** needs his word for one
+  production write: whether a Realtime filter reaches a DELETE at all.
+- The cron history cleanup settled: about 130 rows an hour, a week kept.
+
+What is left without the owner is small: the interface audit's native passes
+need devices, D-222's tier 3 are candidates rather than defects, and D-084's fix
+is the feedback card's height.
+
+**Checkpoint, 2026-09-29, afternoon (Claude):** `main` is `7a2d6360`,
 deployed and healthy as the sole web container, the live bundle proved to carry
 it. Since the morning:
 
