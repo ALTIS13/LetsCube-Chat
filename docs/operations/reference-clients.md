@@ -3487,3 +3487,61 @@ the header for it. Pinned 48 high, the rule 1, the player 40.
   screenshots at one scale its capsules are 113 device pixels high to
   Telegram's 118: the bulk was the player, a card 314 high where Telegram's row
   is 98.
+
+## 25. Subject 17 — idle, AFK, and the move to the AFK channel, 2026-09-29
+
+Tracker item 37. The owner's words: a status that changes in real time; a
+desktop client that counts presence «только при движении мышью»; somebody
+asleep in a voice channel counted «Не активен» and moved to the server's AFK
+channel; and, first of all, **no false positives** — a person watching a stream
+is not moving the mouse and is not idle. Read today in the Discord web and
+desktop bundle chunks saved on 2026-09-20 (`output/_discord/js`,
+`web.d793fc00a2d44795.js`). Desktop and web are one bundle. **The Android app
+was not read**, and the rule from section 17 stands: a shape read from the web
+bundle is a desktop shape until a phone says otherwise.
+
+**`IdleStore`. SHIPPED.** Activity and its absence:
+
+- **What counts as activity.** In the desktop app, the operating system's own
+  idle time, polled every 10 seconds (`powerMonitor.getSystemIdleTimeMs`), so
+  any input anywhere on the machine counts. In the browser, `mouseup`, `wheel`
+  and `keypress` in the window, debounced by 500 ms. **In both, speaking**: a
+  `SPEAKING` event for the reader with any flag set resets the clock.
+- **What forces idle at once:** the system suspended, the screen locked, and
+  the Android app in the background. Suspend also disconnects the call.
+- **The threshold is 10 minutes**: `Date.now() - lastActivity > 6e5` (the
+  constant behind the export `sdF`). The `IDLE` event carries `idleSince`, the
+  moment of the last activity, not the moment the threshold passed.
+- A second flag, `AFK`, uses `min(a user setting, 10 minutes)`. What consumes
+  it was not traced: UNESTABLISHED.
+
+**The move to the AFK channel. SHIPPED**, in a store subscribed to `IDLE`:
+
+- **Only in the desktop app** (`isPlatformEmbedded`). The web client never moves
+  anybody. It cannot know the machine is idle, only that its own window is.
+- **Any active stream cancels the whole thing**, watched or broadcast — every
+  stream whose state is not `ENDED`. This is the owner's false positive,
+  answered: watching a stream is not idle, because a stream is running, not
+  because the mouse moved.
+- In a voice channel and idle: **after 5 hours the client leaves the call**
+  (`18e6` ms, `selectVoiceChannel(null)`).
+- If the server has an `afkChannelId` and an `afkTimeout`, the call is not
+  already in the AFK channel and it is not a stage: at `idleSince + afkTimeout`
+  the client moves itself into the AFK channel. The move is flagged
+  `bypassIdleUpdate`, so it does not count as activity.
+- `afkChannelId` and `afkTimeout` are saved with the server's settings
+  (`saveGuild`). **The timeouts the settings offer were not read.**
+
+**What this settles for us, and what it does not:**
+
+- Activity is input and speech, and a running stream exempts a person outright.
+  The owner's example of a false positive is answered by the reference itself.
+- **The move is made by the client, and only where the client can see the whole
+  machine.** Our Windows app is a Tauri shell over the web build. Until it
+  exposes the system's idle time, it knows only its own window, exactly like
+  Discord's web client, which moves nobody. The owner's «на Windows — только при
+  движении мышью» therefore needs a native command in the shell, and so a
+  Windows release.
+- The manual statuses and their durations come from the owner's screenshots:
+  В сети, Неактивен, Не беспокоить, Невидимый; 15 минут, 1 час, 8 часов,
+  24 часа, 3 дня, навсегда. That menu was not read in the bundle.

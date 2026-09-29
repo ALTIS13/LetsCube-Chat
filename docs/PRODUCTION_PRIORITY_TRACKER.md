@@ -1111,6 +1111,17 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     restoration principle needs, so sequence it with that work rather than
     beside it.
 
+    **2026-09-29: the mechanism is read, and the proposal written.** Discord's
+    `IdleStore` and its AFK mover were read in the shipped bundle
+    (`reference-clients.md` §25). Activity is input and speech. Idle comes after
+    10 minutes, and at once on a locked screen. A running stream exempts a
+    person outright, which answers the owner's false positive. The move to the
+    AFK channel is made by the desktop client alone; the browser client moves
+    nobody. The proposal (`operations/2026-09-29-presence-afk-proposal.md`) puts
+    four questions to the owner. Two parts need him: a status column is a
+    database change, and presence from any input on Windows needs a native
+    command, so a Windows release.
+
 
 38. `[ ]` Badges: real icons, and the history a badge carries. Asked for by the
     owner on 2026-09-20 and called by him «скорее визуальная придирка, которую
