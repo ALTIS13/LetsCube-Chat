@@ -19634,7 +19634,17 @@ role and `memberUpdateChangesList`, five mutants red.
 
 ---
 
-## D-261 `[ ]` Sound settings are a form, not an instrument
+## D-261 `[x]` Sound settings are a form, not an instrument
+
+**Closed 2026-09-20 in `ac85a74c`, and marked here only on 2026-09-29.** Most of
+it was already built. What was wrong underneath was not what this entry
+predicted: two scales on one screen, where one peak filled 5% of one bar and 63%
+of the other, and two samplers, the panel reading after the gain while the call's
+gate reads before it. Now there is one sampler at the call's own 20 Hz, on its
+raw track. «Подобрать порог» listens for two seconds and places the threshold
+10 dB above the room. The three switches say what the browser actually did,
+read from `getSettings()`. A test forbids any claim of Krisp or of an engine we
+do not own.
 
 **Asked for by the owner, 2026-09-19**, with a screenshot of Discord's voice
 settings: «требуется потом привести настройку звука в подобный удобный discord
