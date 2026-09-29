@@ -81,6 +81,11 @@ import {
 
 interface MessageListProps {
   messages: MessageWithSender[];
+  /**
+   * Told whenever «К последним сообщениям» comes on screen or goes, so that
+   * whatever else floats in that corner can make room (D-326).
+   */
+  onJumpControlChange?: (onScreen: boolean) => void;
   onReply: (msg: MessageWithSender) => void;
   onBotInputSubmit?: (msg: MessageWithSender, text: string) => boolean;
   onJumpToReply?: (messageId: string) => void;
@@ -327,6 +332,7 @@ const SCROLLING_KEYS = new Set([
 
 export function MessageList({
   messages,
+  onJumpControlChange,
   onReply,
   onBotInputSubmit,
   onJumpToReply,
@@ -421,6 +427,10 @@ export function MessageList({
   // where a click lands rather than to where they were, so a quiet restart
   // waits for them (`lib/reloadGuard.ts`).
   useReloadGuard(showScrollBtn, "reading-history");
+  useEffect(() => {
+    onJumpControlChange?.(showScrollBtn);
+  }, [onJumpControlChange, showScrollBtn]);
+  useEffect(() => () => onJumpControlChange?.(false), [onJumpControlChange]);
   // Selection lives in the store, because the bar that replaces the chat
   // header while it lasts is not part of this list. Scoped to one chat.
   const selectionScope = chatId ?? layoutKey ?? null;
@@ -1015,6 +1025,33 @@ export function MessageList({
     }
   }, [initialScrollKey, isInitialBottomLocked, onLoadOlder, releaseOlderScrollPreservation, sortedMessages]);
 
+  /**
+   * A smooth scroll to the bottom that the list started itself (D-325).
+   *
+   * The press hides «К последним сообщениям», and `handleScroll` used to read
+   * every frame of the scroll that followed as a reader away from the bottom and
+   * put the button back: measured at 390, gone at 6ms, back at 43ms, gone again
+   * at 593ms. While one is under way the button stays hidden. It ends when the
+   * list lands, when anything moves the list up — the reader has taken over —
+   * when the browser reports the scroll over, or after 1.2s whatever happens,
+   * and then the button answers the real position again.
+   */
+  const bottomJumpRef = useRef<{ top: number; timer: ReturnType<typeof setTimeout> } | null>(null);
+
+  const settleBottomJump = useCallback(() => {
+    const jump = bottomJumpRef.current;
+    if (!jump) return;
+    clearTimeout(jump.timer);
+    bottomJumpRef.current = null;
+    const el = containerRef.current;
+    if (!el || isInitialBottomLocked()) return;
+    setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight >= 120);
+  }, [isInitialBottomLocked]);
+
+  useEffect(() => () => {
+    if (bottomJumpRef.current) clearTimeout(bottomJumpRef.current.timer);
+  }, []);
+
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -1030,7 +1067,17 @@ export function MessageList({
     }
     const atBottom = distFromBottom < 120;
     isAtBottomRef.current = atBottom;
-    setShowScrollBtn(!atBottom);
+    const jump = bottomJumpRef.current;
+    if (jump && !atBottom && el.scrollTop >= jump.top - 1) {
+      // On its way down to where the reader asked to go (D-325).
+      jump.top = el.scrollTop;
+    } else {
+      if (jump) {
+        clearTimeout(jump.timer);
+        bottomJumpRef.current = null;
+      }
+      setShowScrollBtn(!atBottom);
+    }
     if (atBottom) setNewCount(0);
     const hasScrollableHistory = el.scrollHeight > el.clientHeight + 240;
     if (
@@ -1142,10 +1189,12 @@ export function MessageList({
   const applyBottomNow = useCallback((smooth = false) => {
     const el = containerRef.current;
     if (!el) return;
+    if (bottomJumpRef.current) clearTimeout(bottomJumpRef.current.timer);
+    bottomJumpRef.current = smooth ? { top: el.scrollTop, timer: setTimeout(settleBottomJump, 1200) } : null;
     el.scrollTo({ top: Math.max(0, el.scrollHeight - el.clientHeight), behavior: smooth ? "smooth" : "auto" });
     setNewCount(0);
     setShowScrollBtn(false);
-  }, []);
+  }, [settleBottomJump]);
 
   /**
    * The bottom, a frame from now — if `stillWanted` still says so then.
@@ -1476,6 +1525,7 @@ export function MessageList({
         data-has-more-older={hasMoreOlder ? "true" : "false"}
         data-loading-older={loadingOlder ? "true" : "false"}
         onScroll={handleScroll}
+        onScrollEnd={settleBottomJump}
         onPointerDown={releaseScrollControl}
         onTouchStart={releaseScrollControl}
         onWheel={releaseScrollControl}

@@ -441,6 +441,22 @@ export interface RecorderModeHintInput {
    * the plate comes back, with its budget intact, once the menu is shut.
    */
   commandMenuOpen: boolean;
+  /**
+   * «К последним сообщениям» is on screen (D-326).
+   *
+   * The reader is up in the history, and the list floats its jump control in
+   * the corner above the recorder button, which is the corner this plate hangs
+   * over. Measured at 390 on 2026-09-29: the plate 54–374 × 696–776, the
+   * control 334–374 × 722–762 — inside it entirely, so a tap meant for the jump
+   * dismissed the hint instead, and a reader in the history had no way back to
+   * the latest messages but scrolling.
+   *
+   * Withdrawn rather than stacked, for D-246's reasons: raising the control
+   * would still leave the hint offered, spending its budget behind it. And a
+   * sentence about recording is the least useful thing to read while reading
+   * history; it comes back, budget intact, at the bottom.
+   */
+  jumpControlVisible: boolean;
 }
 
 /**
@@ -458,13 +474,13 @@ export interface RecorderModeHintInput {
  * The rest is ordinary courtesy: not while something is recording, not under a
  * sheet that has opened over the composer, not on top of the composer's own
  * feedback plate **or its refusal banner**, not while the bot's command menu is
- * open into the same corner, and not once the person has reached `video`, which
- * is proof they found it.
+ * open into the same corner or the list's jump control is floating in it, and
+ * not once the person has reached `video`, which is proof they found it.
  */
 export function shouldOfferRecorderModeHint(input: RecorderModeHintInput): boolean {
   if (!input.coarsePointer || !input.phoneWidth) return false;
   if (!input.buttonOnScreen || input.overlayOpen) return false;
   if (input.recording || input.feedbackVisible || input.refusalVisible) return false;
-  if (input.commandMenuOpen) return false;
+  if (input.commandMenuOpen || input.jumpControlVisible) return false;
   return input.mode === "voice";
 }

@@ -24261,7 +24261,7 @@ to protect stays protected; a tap on a photo still opens the viewer, and the
 click a swipe leaves behind is still swallowed. Evidence: `message-touch-gestures`
 18 of 18 at 1440 and 390, `bot-chat-surfaces` 53 of 53.
 
-## D-325 `[ ]` «К последним сообщениям» hides at the press and comes back for the scroll it started
+## D-325 `[x]` «К последним сообщениям» hides at the press and comes back for the scroll it started
 
 **Severity:** low. Found 2026-09-29 while writing item 35's history case. The
 control that was just pressed disappears, reappears a frame later and rides
@@ -24278,3 +24278,66 @@ again at 593 ms, once the list is within 120px of the bottom.
 then reads every frame of that scroll as a reader away from the bottom and shows
 the button again. Two parts of one component disagree about what the press
 meant.
+
+**Fixed 2026-09-29.** A smooth scroll to the bottom that the list starts itself
+is remembered as a jump, and while one is under way the handler leaves the
+button hidden. It ends on the first of four things: the list lands; anything
+moves the list up, which is the reader taking over; the browser reports the
+scroll over (`scrollend`); or 1.2s pass whatever happens, so an engine without
+`scrollend` and a scroll that stopped short cannot leave the button away for
+good. Then the button answers the real position again.
+
+**Evidence.** `tests/e2e/jump-to-bottom.spec.ts`, every frame sampled from the
+press: the button never comes back during its own scroll, the scroll is proved
+to have travelled through the band where it used to reappear, and it lands; and
+a reader who wheels back up gets the button within 800ms — well inside the
+1.2s fallback, so that case cannot pass on the fallback alone. Three experiments
+against the served module, each at both widths and run twice: the suppression
+removed, **red**; `scrollend` removed, **green**, because the move-up check
+alone answers the takeover — which is why it exists, since `scrollend` is not in
+every engine this product runs in; `scrollend` and the move-up check both
+removed, **red**, only the fallback left.
+
+## D-326 `[x]` On a phone, the recording hint lies over «К последним сообщениям» and takes its tap
+
+**Severity:** medium. A reader up in the history of a conversation, on a
+touch phone, while the recorder-mode hint is still being offered, cannot jump
+back to the latest messages: the tap lands on the hint and dismisses it. Found
+2026-09-29 by D-325's regression spec, whose real tap timed out at 390 on
+«<button aria-label="Понятно"> … intercepts pointer events».
+
+**Measured** on the DEV capture route at 390 with touch, 48 messages, the
+reader wheeled up into the history: the hint's plate is 54–374 × 696–776 and
+the jump control 334–374 × 722–762, so the control is inside the plate
+entirely; `elementFromPoint` at the control's centre answers the plate's
+«Понятно». The photograph shows the control's edge under the plate's ✕.
+
+**Surface:** `artifacts/kub/src/lib/recordingGesture.ts`,
+`shouldOfferRecorderModeHint`. The plate hangs over the corner above the
+recorder button, and the jump control floats in that same corner of the list.
+D-246 met the same geometry with the bot's command menu and settled it by
+withdrawing the offer while the menu is open; nothing withdraws it for the
+jump control.
+
+**Fixed 2026-09-29**, the way D-246 was and for its reasons: withdrawn, not
+out-stacked. `RecorderModeHintInput` has `jumpControlVisible`, and the offer is
+withdrawn while the list's jump control is on screen. Raising the control above
+the plate would still have left the hint offered, spending its two-hour budget
+behind glass; withdrawn, it comes back with the budget intact once the reader is
+at the bottom — and a sentence about recording is the least useful thing to
+read while reading history. The fact belongs to the list, so it travels
+`MessageList` → `onJumpControlChange` → the conversation →
+`jumpControlOnScreen` → the composer, in `ChatWindow` and on the capture page
+alike.
+
+**Evidence.** `tests/unit/interface-hints.test.mts` 23/23: the new condition is
+in the load-bearing list, the composer's call is held to pass it by name and
+bound to the prop rather than a constant, and both places that render the pair
+are held to wire it. Four mutations, all red: the predicate ignoring it, the
+composer passing `false`, the conversation not listening, the capture page not
+telling the composer. `tests/e2e/jump-to-bottom.spec.ts` «nothing else in its
+corner takes its tap»: at both widths the control's centre hit-tests to the
+control and a real tap takes the reader down; on a touch phone the plate is
+gone while the control is up and back at the bottom. With the composer never
+told, it is red at 390 and green at 1440, where no hint is ever offered.
+Photographed at 1440 and 390 in both themes, scrolled into the history.

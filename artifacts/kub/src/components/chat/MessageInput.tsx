@@ -161,6 +161,11 @@ interface MessageInputProps {
     addressing: BotChatAddressing;
     onStart: () => void | Promise<void>;
   } | null;
+  /**
+   * The list's «К последним сообщениям» is on screen, in the corner above the
+   * recorder button that the mode hint hangs over (D-326).
+   */
+  jumpControlOnScreen?: boolean;
 }
 
 export function MessageInput({
@@ -188,6 +193,7 @@ export function MessageInput({
   refusal = null,
   onDismissRefusal,
   bot = null,
+  jumpControlOnScreen = false,
 }: MessageInputProps) {
   const [text, setText] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
@@ -1175,6 +1181,9 @@ export function MessageInput({
       // was painting across it. Suppressed rather than out-stacked — the note
       // on `commandMenuOpen` has the measurement both directions were judged on.
       commandMenuOpen: commandMenuVariant !== null,
+      // D-326: the list's jump control floats in the same corner, and the plate
+      // took the tap meant for it.
+      jumpControlVisible: jumpControlOnScreen,
     }),
   });
 

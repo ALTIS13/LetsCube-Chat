@@ -247,6 +247,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const forwardDraft = pendingForward?.chatId === chatId ? pendingForward.messages : null;
 
   const [replyTo, setReplyTo] = useState<MessageWithSender | null>(null);
+  /** The list's «К последним сообщениям» is on screen; the composer makes room (D-326). */
+  const [jumpControlOnScreen, setJumpControlOnScreen] = useState(false);
   const [replyFocusKey, setReplyFocusKey] = useState(0);
   // In-chat search is in the store since 2026-09-12, because from `md` it is a
   // state of the LIST COLUMN (`ChatSearchPanel`, mounted by `Sidebar`) while
@@ -1901,6 +1903,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           <MessageList
             chatId={chatId}
             messages={conversation}
+            onJumpControlChange={setJumpControlOnScreen}
             loadReadTimes={readTimesLoader()}
             onReply={handleReply}
             onBotInputSubmit={submitBotInput}
@@ -2101,6 +2104,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           <MessageInput
             chatId={chatId}
             replyTo={replyTo}
+            jumpControlOnScreen={jumpControlOnScreen}
             onCancelReply={() => setReplyTo(null)}
             onSend={handleSend}
             onEdit={editMessage}

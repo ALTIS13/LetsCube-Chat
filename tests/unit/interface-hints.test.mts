@@ -49,6 +49,8 @@ import {
 const SRC = fileURLToPath(new URL("../../artifacts/kub/src/", import.meta.url));
 const SEARCH_SURFACE = `${SRC}components/search/SidebarSearchResults.tsx`;
 const COMPOSER = `${SRC}components/chat/MessageInput.tsx`;
+const CONVERSATION = `${SRC}components/chat/ChatWindow.tsx`;
+const CAPTURE_PAGE = `${SRC}pages/public/PublicPreviewCapturePage.tsx`;
 const PLATE = `${SRC}components/kub/KubHint.tsx`;
 const SHEET = `${SRC}index.css`;
 
@@ -187,6 +189,7 @@ const offering: RecorderModeHintInput = {
   overlayOpen: false,
   refusalVisible: false,
   commandMenuOpen: false,
+  jumpControlVisible: false,
 };
 
 test("the composer hint is offered on a resting phone composer in voice mode", () => {
@@ -209,6 +212,10 @@ test("each condition on the composer hint is load-bearing", () => {
     // plate's 696–776, so 80 points of the plate sat inside the menu and left
     // the bottom two rows of a three-command bot as a ⚡ and a sliver of «/».
     ["the bot's command menu open into the same corner", { commandMenuOpen: true }],
+    // Measured at 390 on 2026-09-29 (D-326): the plate 54–374 × 696–776 and the
+    // jump control 334–374 × 722–762, inside it entirely, so a reader in the
+    // history tapped «Понятно» when they meant the latest messages.
+    ["«К последним сообщениям» floating in the same corner", { jumpControlVisible: true }],
     ["video already chosen, which is proof it was found", { mode: "video" }],
   ];
 
@@ -285,6 +292,7 @@ test("the composer hands the predicate every condition it judges", () => {
     "coarsePointer",
     "commandMenuOpen",
     "feedbackVisible",
+    "jumpControlVisible",
     "mode",
     "overlayOpen",
     "phoneWidth",
@@ -311,6 +319,23 @@ test("the composer hands the predicate every condition it judges", () => {
     /commandMenuOpen:\s*commandMenuVariant !== null/u,
     "the composer passes commandMenuOpen without reading whether the menu is open",
   );
+
+  // And for D-326: the jump control belongs to the list, so the fact has to
+  // travel from the list to the composer through the conversation that holds
+  // both. A link dropped anywhere on the way leaves the prop at its default,
+  // `false`, and puts the plate back over the control with nothing on screen
+  // to say why. Both places that render the pair are held, because the capture
+  // page is where the regression spec measures it.
+  assert.match(
+    blankComments(read(COMPOSER)),
+    /jumpControlVisible:\s*jumpControlOnScreen/u,
+    "the composer passes jumpControlVisible without reading whether the jump control is on screen",
+  );
+  for (const [where, file] of [["the conversation", CONVERSATION], ["the capture page", CAPTURE_PAGE]] as const) {
+    const source = blankComments(read(file));
+    assert.match(source, /onJumpControlChange=\{setJumpControlOnScreen\}/u, `${where} no longer hears the list's jump control`);
+    assert.match(source, /jumpControlOnScreen=\{jumpControlOnScreen\}/u, `${where} no longer tells the composer about it`);
+  }
 
   // And the same again for the two composers that render no recorder button at
   // all. Nothing is drawn in either, so no screenshot can catch this one: what

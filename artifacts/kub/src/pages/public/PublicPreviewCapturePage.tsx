@@ -124,6 +124,8 @@ export default function PublicPreviewCapturePage() {
   // capture; the QA specs that zoom or step through a photo inject them.
   const [openMediaId, setOpenMediaId] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<MessageWithSender | null>(null);
+  /** The list's «К последним сообщениям» is on screen; the composer makes room (D-326). */
+  const [jumpControlOnScreen, setJumpControlOnScreen] = useState(false);
   // The computer's side list, owned here for the reason `Sidebar` owns it: from
   // `md` the button that opens it is on the folder rail, not in the header.
   const [sideMenuOpen, setSideMenuOpen] = useState(false);
@@ -376,6 +378,7 @@ export default function PublicPreviewCapturePage() {
               <MessageList
                 chatId={activeChat.id}
                 messages={messages}
+                onJumpControlChange={setJumpControlOnScreen}
                 onReply={setReplyTo}
                 onReaction={react}
                 onEdit={(message) => setEditingMessage(message)}
@@ -437,6 +440,7 @@ export default function PublicPreviewCapturePage() {
                 <MessageInput
                   chatId={activeChat.id}
                   replyTo={replyTo}
+                  jumpControlOnScreen={jumpControlOnScreen}
                   onCancelReply={() => setReplyTo(null)}
                   onSend={() => undefined}
                   onEdit={editLocally}
