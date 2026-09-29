@@ -87,6 +87,7 @@ import {
   type RecordingPhase,
 } from "@/lib/recordingGesture";
 import type { VoiceRecordResult } from "@/hooks/useVoiceRecorder";
+import { useReloadGuard } from "@/hooks/useReloadGuard";
 
 const DRAFT_PREFIX = "kub:draft:";
 const draftKey = (chatId: string) => `${DRAFT_PREFIX}${chatId}`;
@@ -1137,6 +1138,15 @@ export function MessageInput({
    * pure expression and moving it changes nothing else.
    */
   const recording = holdRecorderState !== null;
+
+  // What a reload would take out of this composer (`lib/reloadGuard.ts`), so
+  // a quiet restart waits for it. The text is not among it: it is this chat's
+  // draft in `localStorage` and comes back with the composer.
+  useReloadGuard(recording || recordingPreview !== null || showVoice, "recording");
+  useReloadGuard(hasAttachments, "staged-attachments");
+  useReloadGuard(isEditing, "editing");
+  useReloadGuard(!isEditing && Boolean(replyTo), "reply");
+  useReloadGuard(hasForwardDraft, "forward");
 
   // The round button has a second mode and nothing on screen says so. Its
   // `aria-label` and `title` name the mode it is **in** — «Голосовое» — and

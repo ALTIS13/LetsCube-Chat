@@ -6,7 +6,7 @@ import {
   KUB_SW_UPDATE_READY_EVENT,
   restartOntoWaitingBuild,
 } from "@/hooks/usePwa";
-import { useAppStore } from "@/store/app.store";
+import { reloadWouldLose } from "@/lib/reloadGuard";
 import { markVoiceResumeInterrupted } from "@/lib/voiceResumeStorage";
 import { isDesktopApp } from "@/lib/platform/desktop";
 import { offerWebUpdate } from "@/lib/pwa/webUpdateOffer";
@@ -27,10 +27,11 @@ import {
  * defect the owner reported, running a two-commit-old bundle while the new one
  * was live. There are two answers and this component is both of them.
  *
- * **Quietly, where the reload costs nothing.** No call, no conversation open,
- * and the tab either hidden or untouched for long enough. Then it reloads
- * itself and says nothing, because there is nothing to say: the page comes back
- * where it already was.
+ * **Quietly, where the reload costs nothing.** No call, nothing in hand that a
+ * reload would lose (`lib/reloadGuard.ts` names each thing), and the tab either
+ * hidden or untouched for long enough. Then it reloads itself and says nothing,
+ * because there is nothing to say: the page comes back where it already was,
+ * the open conversation included, since it has an address.
  *
  * **An offer, everywhere else.** The pill, throttled to one an hour — our own
  * deploy cadence, not Discord's stable channel; the measurement is in the
@@ -138,19 +139,19 @@ function PendingUpdate({
         call.phase === "joining" ||
         call.phase === "reconnecting" ||
         voiceRingsSnapshot().length > 0;
-      const conversationOpen = useAppStore.getState().selectedChatId !== null;
+      const wouldLose = reloadWouldLose().length > 0;
       // A tab that is doing something is not a still tab: while anything vetoes
       // the restart, both clocks start again from now, so the window is
       // measured from the moment the last of them cleared rather than from
       // whenever the tab happened to go quiet. Without this, leaving a call in
       // a hidden tab would be followed by an immediate reload.
-      if (callBusy || conversationOpen) stillness.busy(now);
+      if (callBusy || wouldLose) stillness.busy(now);
       const rest = stillness.read(now);
       if (
         !shouldRestartQuietly({
           pending: true,
           callBusy,
-          conversationOpen,
+          wouldLose,
           hiddenSince: rest.hiddenSince,
           lastInteractionAt: rest.lastInteractionAt,
           lastQuietRestartAt: parseLastShownAt(readStored(sessionStore, APP_UPDATE_QUIET_RESTART_KEY)),

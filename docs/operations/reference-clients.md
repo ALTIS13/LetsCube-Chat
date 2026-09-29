@@ -1104,6 +1104,16 @@ a reload restores the conversation and rejoins the call, our click is as cheap
 as theirs and the automatic reload becomes an ordinary convenience rather than a
 compensation.
 
+*2026-09-29: half of it has.* A reload now comes back to the conversation that
+was open (`lib/chatRoute.ts`), so the quiet restart no longer waits for the chat
+list: it takes a tab in a conversation too, and waits instead for what a reload
+would still lose — a recording, picked or staged files, an edit, a reply, a
+forward, a reader scrolled up into the history, an open dialog, an attachment
+kept only in memory (`lib/reloadGuard.ts`). The call veto stays; the rejoin of
+`lib/voiceResume.ts` does not spend it, because a return is «join again» and the
+others hear it. Reloading without a click at all is still ours alone, and still
+the departure recorded above — a narrower one now.
+
 **2. Our «in a call» is wider than theirs.** Discord's confirmation guards
 `RTC_CONNECTED` only. Ours also covers `joining` and `reconnecting`, and any
 live ring. `joining` is the state where a reload costs the most — the join is in

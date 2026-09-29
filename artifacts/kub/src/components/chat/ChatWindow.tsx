@@ -142,6 +142,7 @@ import { scheduleMarkChannelRead } from "@/lib/channelReadMarks";
 import type { Json, MessageWithSender } from "@/types/database";
 import { uploadAttachmentBytes } from "@/lib/attachmentUpload";
 import { WAITING_UPLOAD_SWEEP_MS } from "@/lib/outbox/backgroundUploads";
+import { useReloadGuard } from "@/hooks/useReloadGuard";
 
 interface ChatWindowProps {
   chatId: string;
@@ -258,6 +259,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const closeChatSearch = useAppStore((s) => s.closeChatSearch);
   const isPhone = useIsMobile();
   const searchOpen = chatSearch?.chatId === chatId;
+  useReloadGuard(searchOpen, "chat-search");
   const [showInfo, setShowInfo] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [pinError, setPinError] = useState<string | null>(null);

@@ -149,11 +149,14 @@ test("a connected call is asked about once, and only once", () => {
 
 // --- Taking the build without asking -------------------------------------
 
-/** A tab hidden for an hour, on the chat list, with nothing else going on. */
+/**
+ * A tab hidden for an hour, with nothing in hand that a reload would lose. A
+ * conversation may be open in it: that stopped being a veto on 2026-09-29.
+ */
 const FREE = {
   pending: true,
   callBusy: false,
-  conversationOpen: false,
+  wouldLose: false,
   hiddenSince: NOW - HOUR,
   lastInteractionAt: NOW - HOUR,
   lastQuietRestartAt: null,
@@ -189,12 +192,14 @@ test("a call is never traded for an update, however long the tab has been idle",
   );
 });
 
-test("an open conversation is never reloaded out from under anybody", () => {
-  // A reload lands on the chat list: `selectedChatId` is neither in the URL nor
-  // persisted. So it is free exactly when the page is already on the list.
-  assert.equal(shouldRestartQuietly({ ...FREE, conversationOpen: true }), false);
+test("nothing a reload would lose is taken, however long the tab has been idle", () => {
+  // «A conversation is open» used to stand here, because a reload landed on the
+  // chat list. The conversation has an address now, so what is left is what a
+  // reload would still take away — a recording, picked files, an edit, a place
+  // in the history, an open dialog — which `lib/reloadGuard.ts` names.
+  assert.equal(shouldRestartQuietly({ ...FREE, wouldLose: true }), false);
   assert.equal(
-    shouldRestartQuietly({ ...FREE, conversationOpen: true, hiddenSince: NOW - 30 * DAY }),
+    shouldRestartQuietly({ ...FREE, wouldLose: true, hiddenSince: NOW - 30 * DAY, lastInteractionAt: NOW - 30 * DAY }),
     false,
   );
 });

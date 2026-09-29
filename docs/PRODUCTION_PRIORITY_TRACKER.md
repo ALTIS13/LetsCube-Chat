@@ -690,7 +690,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     the full accessible name. Both are locally verified with synthetic UI;
     the connected Realme still runs 0.1.3 build 4. Installed-client parity
     remains a separate native candidate/release task.
-35. `[~]` Standing: **«where you were» is state the product owns and
+35. `[x]` Standing: **«where you were» is state the product owns and
     restores.** Asked for by the owner on 2026-09-20, as the principle behind
     the update complaint rather than as a feature of it: «В этом и смысл что
     требуется перенять даже подобные механики либо придумать им более красивую
@@ -831,6 +831,22 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     person or the browser did (a manual reload, a crash), since only the first
     two are interruptions nobody chose. The mute state travels with the record
     either way, and the call bar is what states the microphone is live.
+
+    **Third step taken, 2026-09-29, and the item's list is done.** «No
+    conversation open» is gone from `shouldRestartQuietly`: a tab in a
+    conversation now takes a new build by itself, and comes back to the same
+    conversation. It was replaced rather than dropped, because on a computer a
+    conversation is open nearly all the time and the veto had been quietly
+    covering everything opened over one. `lib/reloadGuard.ts` names what a
+    reload would still lose — a recording, picked or staged files, an edit, a
+    reply, a forward, a reader scrolled up into the history, the conversation's
+    search, an open dialog, an attachment kept only in memory — and the tab
+    waits for exactly those. «Never while a call is connected» stays, for the
+    reason written at `callBusy`. Evidence and mutations are in D-282's
+    2026-09-29 section of `docs/INTERFACE_DEFECT_REGISTER.md`.
+
+    The rule itself stays standing: every new surface that holds something a
+    reload would lose holds it on `lib/reloadGuard.ts`, or says why not.
 
 
 36. `[~]` The person behind the conversation: reaching a profile, the depth of

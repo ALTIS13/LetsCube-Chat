@@ -72,6 +72,7 @@ import {
   type MessageMediaVariantUrls,
 } from "@/hooks/useMediaVariants";
 import { advanceMessageEntrance, EMPTY_ENTRANCE_STATE, messageEntranceKey } from "@/lib/messageEntrance";
+import { useReloadGuard } from "@/hooks/useReloadGuard";
 import {
   captureVisibleMessageAnchor,
   restoreVisibleMessageAnchor,
@@ -416,6 +417,10 @@ export function MessageList({
   const senderAvatarVariants = useAvatarVariantUrls(senderAvatarProfileIds);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [newCount, setNewCount] = useState(0);
+  // A reader scrolled away from the bottom would come back from a reload to
+  // where a click lands rather than to where they were, so a quiet restart
+  // waits for them (`lib/reloadGuard.ts`).
+  useReloadGuard(showScrollBtn, "reading-history");
   // Selection lives in the store, because the bar that replaces the chat
   // header while it lasts is not part of this list. Scoped to one chat.
   const selectionScope = chatId ?? layoutKey ?? null;

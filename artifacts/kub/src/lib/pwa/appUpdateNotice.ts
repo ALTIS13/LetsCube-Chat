@@ -54,25 +54,27 @@
  *
  * ## And most of the time nobody should be asked at all
  *
- * The reason nothing used to reload on its own was real: `selectedChatId` lives
- * only in `app.store.ts`, is not in the URL and is not persisted, so a reload
- * lands on the chat list. That is a cost, so it was never paid. But it is not a
- * cost in every state — and where it is nil, asking is worse than acting.
+ * The reason nothing used to reload on its own was real: `selectedChatId` lived
+ * only in `app.store.ts`, was not in the URL and was not persisted, so a reload
+ * landed on the chat list. That is a cost, so it was never paid. But it is not
+ * a cost in every state — and where it is nil, asking is worse than acting.
  *
  * `shouldRestartQuietly` is the rule for that, and it is deliberately narrow:
  * it fires only where a reload would land the page exactly where it already is,
  * with nothing running that a reload would end. What the conditions are and why
  * each of them is reachable is written beside it.
  *
- * **Its two vetoes are placeholders for something that does not exist yet.**
- * Queue item 35 of `docs/PRODUCTION_PRIORITY_TRACKER.md` is the standing rule
- * they stand in for: «where you were» — the conversation and the voice channel
- * — is state the product owns and restores, across a reload, across an update
- * it applied itself, and across a connection drop. Until a reload puts somebody
- * back in the conversation they had open, "no conversation open" is the only
- * honest way to say "this reload is free"; and until a reload rejoins the call,
- * "no call" is not a preference but the whole of the argument. Widen either of
- * them only after the matching restoration exists and has been proved.
+ * **Its vetoes follow the restorations, not the other way round.** Queue item
+ * 35 of `docs/PRODUCTION_PRIORITY_TRACKER.md` is the standing rule: «where you
+ * were» — the conversation and the voice channel — is state the product owns
+ * and restores, across a reload, across an update it applied itself, and across
+ * a connection drop; and where it cannot survive, the product does not take the
+ * action that would end it. There used to be two vetoes, "no conversation open"
+ * and "no call". The first was spent on 2026-09-29: the conversation has an
+ * address (`lib/chatRoute.ts`) and a reload comes back to it, so it gave way to
+ * the narrower thing it had been standing in front of — what a reload would
+ * still lose, which `lib/reloadGuard.ts` names one by one. The second is not
+ * spent, and the note on `callBusy` says why.
  *
  * ## The one thing worth asking about
  *
@@ -179,28 +181,26 @@ export type QuietRestartInput = {
   /**
    * A call is connected, connecting or putting itself back, or a ring is live.
    *
-   * The hard one. The owner sits in a voice channel for hours; a reload ends
-   * the call and there is no rejoin after one, so this can never be traded
-   * against convenience. It stays until that rejoin exists and is proved.
+   * The hard one. The owner sits in a voice channel for hours, and a reload
+   * ends the call. The rejoin of `lib/voiceResume.ts` exists now, and it does
+   * not spend this veto: a return is «join again», the room may have lapsed,
+   * the others hear a departure and a return, and five minutes of grace is not
+   * the same promise as not interrupting somebody mid-sentence. Relaxing it
+   * would need its own argument and its own measurement.
    */
   callBusy: boolean;
   /**
-   * A conversation is open.
+   * A reload would take something away: `reloadWouldLose()` of
+   * `lib/reloadGuard.ts` is not empty.
    *
-   * A reload lands on the chat list, because `selectedChatId` is neither in the
-   * URL nor persisted. So the reload is free exactly when the page is already
-   * on the chat list — it lands where it already is. This also covers the
-   * composer: `MessageInput` only exists inside an open conversation, and so do
-   * a recording in progress and a staged attachment being uploaded.
-   *
-   * A separate "unsent draft" condition was considered and left out because it
-   * could not be reached: the draft is written to `localStorage` per chat and
-   * read back when the composer mounts (`MessageInput.tsx`), so the text
-   * survives a reload; and typing is interaction, so the idle clock below
-   * already covers somebody who is mid-word. A condition that cannot decide
-   * anything is worse than a missing one — it reads like a guarantee.
+   * This replaced "a conversation is open". That veto existed because a reload
+   * landed on the chat list; the conversation now has an address and a reload
+   * comes back to it, so an open conversation costs nothing by itself. What it
+   * had covered along the way — a recording, picked and staged files, an edit,
+   * a place in the history, an open dialog — is listed there and held by
+   * whoever owns it.
    */
-  conversationOpen: boolean;
+  wouldLose: boolean;
   /** When the tab was last hidden, or `null` while it is visible. */
   hiddenSince: number | null;
   /** When somebody last touched this tab: a pointer, a key, a touch. */
@@ -222,7 +222,7 @@ export type QuietRestartInput = {
 export function shouldRestartQuietly({
   pending,
   callBusy,
-  conversationOpen,
+  wouldLose,
   hiddenSince,
   lastInteractionAt,
   lastQuietRestartAt,
@@ -230,7 +230,7 @@ export function shouldRestartQuietly({
 }: QuietRestartInput): boolean {
   if (!pending) return false;
   if (callBusy) return false;
-  if (conversationOpen) return false;
+  if (wouldLose) return false;
   if (lastQuietRestartAt !== null && now - lastQuietRestartAt < QUIET_RESTART_COOLDOWN_MS) return false;
   const hiddenLongEnough = hiddenSince !== null && now - hiddenSince >= QUIET_HIDDEN_MS;
   const idleLongEnough = now - lastInteractionAt >= QUIET_IDLE_MS;

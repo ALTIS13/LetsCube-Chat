@@ -22273,6 +22273,61 @@ rather than served. That is queue item 35 of
 owns and restores — and the vetoes here may only be widened after the matching
 restoration exists and has been proved.
 
+### 2026-09-29: one veto spent, and what it had been hiding
+
+Queue item 35 gave the conversation an address (`lib/chatRoute.ts`, held by
+`tests/e2e/chat-address.spec.ts`), so a reload comes back to the conversation
+that was open. «No conversation open» protected nothing by itself after that,
+and it is gone. «Not in a call» stays: the rejoin of `lib/voiceResume.ts` does
+not spend it, and the reason is written at `callBusy`.
+
+Taking it out showed what it had been standing in front of. On a computer a
+conversation is open nearly all the time, so the veto had also covered,
+unannounced, everything opened over one — and a reload loses all of it:
+
+- a voice or video note being recorded, or recorded and waiting to be heard;
+- files staged above the composer, or picked into the attach sheet;
+- a message being edited, a reply or a forward waiting to be written;
+- a reader scrolled up into the history, who would come back to where a click
+  lands — the bottom, or the first unread — and not to where they were;
+- the conversation's search;
+- every open `KubModal`: the settings, a task, a report, a new group, and the
+  «Отменить выбор?» question itself;
+- an attachment on its way above 25 MB, which item 52 keeps in memory only.
+
+So the veto was replaced rather than dropped. `lib/reloadGuard.ts` names each of
+those; the components that own them hold it through `hooks/useReloadGuard.ts`;
+dialogs and memory-only attachments are read from `lib/modalStack.ts` and
+`lib/outgoingMedia.ts`, which already knew; and `shouldRestartQuietly` takes
+`wouldLose` where it took `conversationOpen`. The composer's text is still not
+on the list, for the reason given above: it comes back with the composer. The
+sentence above that says «the composer only exists inside an open
+conversation, which is already a veto» describes the rule before this change.
+
+The scroll position is the one that needed an argument. `lib/chatRoute.ts` says
+nobody keeps a scroll offset and nobody should, and that stands for *opening* a
+conversation, where the person chose to move. A quiet restart is the product
+moving them, so a reader in the history is a veto.
+
+**Evidence.** `tests/unit/reload-guard.test.mts` 6/6 and
+`tests/unit/app-update-notice.test.mts` 18/18, and six mutations of the two
+modules all red: the veto dropped, dialogs not counted, memory-only attachments
+not counted, every attachment counted, a hold released by its name rather than
+its identity, the order left unsorted. `tests/e2e/app-update-notice.spec.ts`
+12/12, and 24/24 run twice over: an open conversation now takes the build by
+itself; a picked photograph and a reader in the history do not; the window
+restarts when the last veto clears — here the pick, leaving through the
+«Отменить выбор?» dialog. Four mutants against the served modules, each proved
+served before its run and restored after: the sheet's hold removed (2 red), the
+history's hold removed (1 red), the cooldown removed (1 red, which also proves
+nothing but the cooldown stops the second restart), and the old conversation
+veto put back (1 red).
+
+The history case first failed for a reason that was the test's: the jump to the
+bottom is a smooth scroll, the reader is not at the bottom until it ends, and a
+clock run in the middle of it correctly saw somebody in the history. Measuring
+that found D-325.
+
 ---
 
 ## D-284 `[x]` A one-to-one call can be told the room is at maximum participants
@@ -24205,3 +24260,21 @@ starts anywhere else. The bot's field is an `<input>`, so what `7d33fabb` meant
 to protect stays protected; a tap on a photo still opens the viewer, and the
 click a swipe leaves behind is still swallowed. Evidence: `message-touch-gestures`
 18 of 18 at 1440 and 390, `bot-chat-surfaces` 53 of 53.
+
+## D-325 `[ ]` «К последним сообщениям» hides at the press and comes back for the scroll it started
+
+**Severity:** low. Found 2026-09-29 while writing item 35's history case. The
+control that was just pressed disappears, reappears a frame later and rides
+along until the list is nearly at the bottom — a blink that reads as the press
+not having taken.
+
+**Measured** on the DEV capture route at 390, 48 messages, the list a third of
+the way up (`scrollTop` 1656 of 4123), sampled every frame: pressed at 0 ms;
+gone at 6 ms; **back at 43 ms**, when the smooth scroll starts to move; gone
+again at 593 ms, once the list is within 120px of the bottom.
+
+**Surface:** `artifacts/kub/src/components/chat/MessageList.tsx`.
+`applyBottomNow` hides the button and starts a smooth scroll; the scroll handler
+then reads every frame of that scroll as a reader away from the bottom and shows
+the button again. Two parts of one component disagree about what the press
+meant.

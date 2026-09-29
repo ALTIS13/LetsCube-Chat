@@ -15,17 +15,17 @@ import { expect, test, type Page } from "@playwright/test";
  * button is the same defect as one laid out over it. The notice this replaced
  * covered three header controls at 390.
  *
- * **An open conversation is never reloaded out from under anybody.**
- * `selectedChatId` is neither in the URL nor persisted, so a reload lands on
- * the chat list. That is why the tab below is hidden for well past the quiet
- * window and still does not reload: the open conversation is the veto, and it
- * is the only thing stopping it.
+ * **A tab nobody is using takes the build by itself.** No call, nothing in hand
+ * that a reload would lose, hidden for longer than the quiet window: the page
+ * reloads and says nothing, because there is nothing to say. This is the case
+ * the owner reported — he kept a tab open across a deploy and ran a
+ * two-commit-old bundle until he pressed F5. An open conversation no longer
+ * stops it: the conversation has an address, and a reload comes back to it.
  *
- * **A tab nobody is using takes the build by itself.** No call, no conversation
- * open, hidden for longer than the quiet window: the page reloads and says
- * nothing, because there is nothing to say. This is the case the owner
- * reported — he kept a tab open across a deploy and ran a two-commit-old bundle
- * until he pressed F5.
+ * **What a reload would lose is never reloaded away.** A photograph picked and
+ * not sent, a reader scrolled up into the history: `lib/reloadGuard.ts` names
+ * each such thing, and the tabs below are hidden for well past the quiet window
+ * with one of them in hand and still do not reload.
  *
  * **And it will not do it twice.** A restart that does not take — mid-rollover,
  * two replicas, a stale proxy — would otherwise loop in a background tab where
@@ -155,40 +155,6 @@ async function openFixtureChat(page: Page, clockMode: ClockMode = "fixed") {
     );
   }
   await expect(page.getByTestId("chat-control-row")).toBeVisible();
-}
-
-/**
- * Closes the conversation through the store the product itself reads.
- *
- * The capture surface has no chat list to press «back» into, so the selection
- * is cleared directly — and the module handed over is proved to be the one the
- * application is using before anything is done with it. A dev server that has
- * taken a hot update hands a bare `import()` a *second* copy of the store, with
- * none of the fixture's chats in it; that is silent, and it would turn this
- * test into one that proves nothing. See CLAUDE.md section 5.
- */
-async function closeConversation(page: Page) {
-  const state = await page.evaluate(async () => {
-    const module = (await import("/src/store/app.store.ts")) as {
-      useAppStore: {
-        getState: () => {
-          chats: unknown[];
-          selectedChatId: string | null;
-          setSelectedChatId: (id: string | null) => void;
-        };
-      };
-    };
-    const store = module.useAppStore.getState();
-    const before = { chats: store.chats.length, selected: store.selectedChatId };
-    store.setSelectedChatId(null);
-    return { before, after: module.useAppStore.getState().selectedChatId };
-  });
-  expect(
-    state.before.chats,
-    "the imported store holds none of the fixture's chats, so it is a second copy and this test would prove nothing",
-  ).toBeGreaterThan(0);
-  expect(state.before.selected, "the fixture was expected to open with a conversation").not.toBeNull();
-  expect(state.after).toBeNull();
 }
 
 async function stampTheme(page: Page, theme: "light" | "dark") {
@@ -322,36 +288,35 @@ test.describe("the update notice", () => {
   });
 });
 
+/** A one-pixel PNG: enough for the sheet to take it as a picked photograph. */
+const ONE_PIXEL_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+/** Picks one photograph into the attach sheet, the way the file picker does. */
+async function pickIntoSheet(page: Page) {
+  await page.getByRole("button", { name: "Прикрепить", exact: true }).click();
+  const sheet = page.getByTestId("attach-sheet");
+  await expect(sheet).toBeVisible();
+  await page
+    .locator('[data-attach-picker="library"]')
+    .setInputFiles({ name: "витрина.png", mimeType: "image/png", buffer: ONE_PIXEL_PNG });
+  await expect(sheet.getByText("Выбрано 1", { exact: true }).first()).toBeVisible();
+}
+
 test.describe("taking the build without asking", () => {
-  test("an open conversation is never reloaded out from under anybody", async ({ page }) => {
+  test("a tab nobody is using takes the build by itself, conversation and all", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openFixtureChat(page, "controlled");
     const before = await loadCount(page);
     await announceUpdate(page);
-    await expect(page.getByTestId("app-update-notice")).toBeVisible();
 
-    // Everything the quiet rule asks for except the one thing it will not
-    // trade: the tab is hidden, and stays hidden well past the quiet window.
-    // The conversation is the only veto left, so if it ever stops being one
-    // this test is what says so.
-    await setHidden(page, true);
-    await page.clock.runFor(PAST_QUIET_WINDOW_MS);
-    await page.waitForTimeout(500);
-
-    expect(await loadCount(page), "the page reloaded while a conversation was open").toBe(before);
-    await setHidden(page, false);
-    await expect(page.getByTestId("app-update-notice")).toBeVisible();
-  });
-
-  test("a tab nobody is using takes the build by itself", async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await openFixtureChat(page, "controlled");
-    const before = await loadCount(page);
-    await announceUpdate(page);
-    await closeConversation(page);
-
-    // The owner's own case: a session held open across a deploy. Before D-282
-    // this waited for an F5 that never came.
+    // The owner's own case: a session held open across a deploy, in a
+    // conversation. Before D-282 this waited for an F5 that never came, and
+    // until 2026-09-29 the open conversation alone still made it wait, because
+    // a reload landed on the chat list. It has an address now, and
+    // `chat-address.spec.ts` proves that a reload comes back to it.
     await setHidden(page, true);
     await page.clock.runFor(PAST_QUIET_WINDOW_MS);
 
@@ -360,22 +325,83 @@ test.describe("taking the build without asking", () => {
       .toBe(before + 1);
   });
 
-  test("the quiet window starts when the last veto clears, not before", async ({ page }) => {
+  test("a photograph picked and not sent is never reloaded away", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openFixtureChat(page, "controlled");
+    await pickIntoSheet(page);
     const before = await loadCount(page);
     await announceUpdate(page);
 
-    // Hidden for well past the window, but inside a conversation the whole
-    // time, so nothing may happen yet.
+    // Everything the quiet rule asks for except one thing: the photograph is in
+    // the sheet and nowhere else. If it ever stops being a veto, this test is
+    // what says so.
+    await setHidden(page, true);
+    await page.clock.runFor(PAST_QUIET_WINDOW_MS);
+    await page.waitForTimeout(500);
+    expect(await loadCount(page), "the page reloaded with a photograph picked and not sent").toBe(before);
+    await expect(page.getByTestId("attach-sheet")).toBeVisible();
+  });
+
+  test("a reader scrolled up into the history is not moved by a reload", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixtureChat(page, "controlled");
+    const before = await loadCount(page);
+    // Past the list's own four-second hold on the bottom after it opens, which
+    // would otherwise put the reader straight back.
+    await page.clock.runFor(5_000);
+
+    // A reload brings the conversation back where a click lands — here, the
+    // bottom — and not where the reader had scrolled to. That is a fair answer
+    // to opening a conversation, and no answer at all to the product moving
+    // somebody by itself.
+    await page.getByTestId("message-scroll-container").evaluate((element) => {
+      element.scrollTop = Math.round(element.scrollHeight / 3);
+    });
+    const jump = page.getByRole("button", { name: "К последним сообщениям" });
+    await expect(jump).toBeVisible();
+    await announceUpdate(page);
+    await setHidden(page, true);
+    await page.clock.runFor(PAST_QUIET_WINDOW_MS);
+    await page.waitForTimeout(500);
+    expect(await loadCount(page), "the page reloaded under a reader in the history").toBe(before);
+
+    // Back at the bottom there is nothing left to lose. The jump is a smooth
+    // scroll, and the reader is not at the bottom until it has ended: a clock
+    // run while it is still moving sees somebody in the history, correctly.
+    await jump.click();
+    await expect
+      .poll(() =>
+        page
+          .getByTestId("message-scroll-container")
+          .evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight),
+      )
+      .toBeLessThan(2);
+    await expect(jump).toBeHidden();
+    await page.clock.runFor(PAST_QUIET_WINDOW_MS);
+    await expect
+      .poll(() => loads(page), { timeout: 15_000, message: "the tab never took the new build" })
+      .toBe(before + 1);
+  });
+
+  test("the quiet window starts when the last veto clears, not before", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixtureChat(page, "controlled");
+    await pickIntoSheet(page);
+    const before = await loadCount(page);
+    await announceUpdate(page);
+
+    // Hidden for well past the window, with a photograph picked the whole time.
     await setHidden(page, true);
     await page.clock.runFor(PAST_QUIET_WINDOW_MS);
     expect(await loadCount(page)).toBe(before);
 
-    // The conversation closes. The tab has been hidden for a minute and a half
-    // by the page's own clock — but it was *busy* for all of it, so the window
-    // has to start again now. Half a minute later it is still too early.
-    await closeConversation(page);
+    // The pick is thrown away, through a second veto on the way out: «Отменить
+    // выбор?» is a dialog. The tab has been hidden for a minute and a half by
+    // the page's own clock — but it was *busy* for all of it, so the window has
+    // to start again now. Half a minute later it is still too early.
+    await page.getByTestId("attach-sheet-close").click();
+    await page.getByRole("button", { name: "Отменить выбор", exact: true }).click();
+    await expect(page.getByTestId("attach-sheet")).toHaveCount(0);
     await page.clock.runFor(30_000);
     expect(await loadCount(page), "the window was counted from before the veto cleared").toBe(before);
 
@@ -391,7 +417,6 @@ test.describe("taking the build without asking", () => {
     await openFixtureChat(page, "controlled");
     const before = await loadCount(page);
     await announceUpdate(page);
-    await closeConversation(page);
     await setHidden(page, true);
     await page.clock.runFor(PAST_QUIET_WINDOW_MS);
     await expect.poll(() => loads(page), { timeout: 15_000 }).toBe(before + 1);
@@ -401,7 +426,6 @@ test.describe("taking the build without asking", () => {
     // cooldown is a reload loop in a background tab, where nobody would see it.
     await expect(page.locator(`[${READY}="true"]`)).toBeAttached();
     await announceUpdate(page);
-    await closeConversation(page);
     await setHidden(page, true);
     await page.clock.runFor(PAST_QUIET_WINDOW_MS);
     await page.waitForTimeout(500);

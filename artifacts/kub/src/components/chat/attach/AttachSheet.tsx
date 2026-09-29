@@ -11,6 +11,7 @@ import {
 } from "react";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
+import { useReloadGuard } from "@/hooks/useReloadGuard";
 import {
   ATTACH_SHEET_DEFAULT_TAB,
   ATTACH_SHEET_MAX_SELECTION,
@@ -135,6 +136,9 @@ export default function AttachSheet({
   const [gallerySelected, setGallerySelected] = useState<string[]>([]);
   const [files, setFiles] = useState<AttachPick[]>([]);
   const [filesSelected, setFilesSelected] = useState<string[]>([]);
+  // Picked files are in this sheet and nowhere else, so a quiet restart waits
+  // for them (`lib/reloadGuard.ts`).
+  useReloadGuard(gallery.length + files.length > 0, "attach-sheet");
   const [caption, setCaption] = useState(initialCaption);
   const [menuOpen, setMenuOpen] = useState(false);
   // Remembered between sends, per device, since 2026-09-21. The tester called
