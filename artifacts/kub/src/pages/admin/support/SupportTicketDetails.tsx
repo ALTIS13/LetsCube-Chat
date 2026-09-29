@@ -112,7 +112,10 @@ export function SupportTicketDetails({
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="flex flex-shrink-0 items-start gap-3 border-b border-[color:var(--kub-border-color)] px-3 py-3 sm:px-4">
+      <header
+        data-testid="support-ticket-header"
+        className="flex flex-shrink-0 items-start gap-3 border-b border-[color:var(--kub-border-color)] px-3 py-3 sm:px-4"
+      >
         <button
           type="button"
           onClick={onBack}

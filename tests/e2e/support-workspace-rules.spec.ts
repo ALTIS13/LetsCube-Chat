@@ -324,6 +324,47 @@ test("a ticket that will not load leaves a way back, on a phone too", async ({ p
   await page.setViewportSize(info.project.use.viewport ?? { width: 1440, height: 900 });
 });
 
+test("on a phone an open ticket is a page of its own, under nothing but its header", async ({ page }, info) => {
+  // D-143's last half. Five bands stood above an open ticket at 390: the
+  // administration's title row, its tab strip, the «Поддержка» row, the notice
+  // band and the ticket's own header. A conversation on a phone is a page of its
+  // own under its own header, with the list gone; a ticket is the same kind of
+  // thing and now opens the same way.
+  const narrow = (info.project.use.viewport?.width ?? 1440) < 768;
+  await openWorkspace(page, { path: `/admin/support?ticket=${T_MINE}` });
+  const header = page.getByTestId("support-ticket-header");
+  await expect(header).toBeVisible();
+  const title = page.getByRole("heading", { name: "Поддержка", exact: true });
+
+  if (narrow) {
+    await expect(page.getByTestId("admin-chrome")).toBeHidden();
+    await expect(title).toBeHidden();
+    await expect(header.getByRole("button", { name: "Назад к очереди" })).toBeVisible();
+    // The ticket's header is the top of the screen now, so it starts under the
+    // status bar rather than behind it, and the card reaches the bottom.
+    const box = await page.getByTestId("support-operator-workspace").boundingBox();
+    expect(box?.y ?? 0).toBeLessThan(40);
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeGreaterThan(844 - 40);
+  } else {
+    await expect(page.getByTestId("admin-chrome")).toBeVisible();
+    await expect(title).toBeVisible();
+  }
+  for (const theme of ["dark", "light"] as const) {
+    await stampTheme(page, theme);
+    // The theme changes on a page that is already drawn, and the controls ease
+    // their colours in; a frame taken mid-way shows a light button in dark ink.
+    await page.screenshot({ path: shot(info, `ticket-page-${theme}`), animations: "disabled" });
+  }
+
+  // Back to the queue gives the administration its chrome again.
+  if (narrow) {
+    await header.getByRole("button", { name: "Назад к очереди" }).click();
+    await expect(page).not.toHaveURL(/ticket=/);
+    await expect(page.getByTestId("admin-chrome")).toBeVisible();
+    await expect(title).toBeVisible();
+  }
+});
+
 // ---------------------------------------------------------------------------
 // A-65 — the editor says what it wants
 // ---------------------------------------------------------------------------

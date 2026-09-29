@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Link, useLocation, Route, Switch, Redirect } from "wouter";
+import { Link, useLocation, useSearch, Route, Switch, Redirect } from "wouter";
 import { useCanReadModerationQueue, usePermissionAccess, useRoleAccess } from "@/hooks/useRole";
 import { useAppStore } from "@/store/app.store";
 import { KubIcon, KubLogo, type KubIconName } from "@/components/kub";
 import { cn } from "@/lib/utils";
+import { readSupportTicketFromSearch } from "@/lib/support/ticketAddress";
 import { DashboardTab } from "./DashboardTab";
 import { UsersTab } from "./UsersTab";
 import { BansMutesTab } from "./BansMutesTab";
@@ -56,6 +57,13 @@ const TABS: ReadonlyArray<TabDef> = [
 
 export function AdminLayout() {
   const [location] = useLocation();
+  const search = useSearch();
+  // D-143: on a phone an open support ticket is a page of its own, the way a
+  // conversation is. Five bands used to stand above it at 390 — this title
+  // row, the tab strip, the workspace's own title, a notice and the ticket's
+  // header. Below `md` the chrome steps aside while a ticket is open, and the
+  // ticket's header, which carries «Назад к очереди», is the top of the screen.
+  const ticketPage = location.startsWith("/admin/support") && readSupportTicketFromSearch(search) !== null;
   const tabStrip = useRef<HTMLDivElement | null>(null);
   const currentUser = useAppStore((s) => s.currentUser);
   const { isStaff, isAdmin, checking } = useRoleAccess();
@@ -136,7 +144,11 @@ export function AdminLayout() {
           The sheet is the top of the screen, so it pads the status bar's
           inset out of its own top, and the shell pads the notch off both
           sides when the phone is held sideways. */}
-      <div data-testid="admin-chrome" className="flex-shrink-0 kub-glass border-b border-[color:var(--kub-border-color)] pt-safe">
+      <div
+        data-testid="admin-chrome"
+        data-ticket-page={ticketPage ? "" : undefined}
+        className="flex-shrink-0 kub-glass border-b border-[color:var(--kub-border-color)] pt-safe data-[ticket-page]:hidden md:data-[ticket-page]:block"
+      >
         <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 h-14 border-b border-[color:var(--kub-border-color)]">
           <Link
             href="/"
@@ -207,7 +219,8 @@ export function AdminLayout() {
       <div data-testid="admin-content" className="min-h-0 flex-1 overflow-y-auto">
         <div
           className={cn(
-            "mx-auto p-3 pb-24 sm:p-4 sm:pb-8 md:p-6",
+            "mx-auto",
+            ticketPage ? "pt-safe md:p-6" : "p-3 pb-24 sm:p-4 sm:pb-8 md:p-6",
             location.startsWith("/admin/support") ? "max-w-[1600px]" : "max-w-5xl",
           )}
         >

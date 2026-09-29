@@ -8878,7 +8878,7 @@ The note's grammar was fixed from the frame rather than from a test: it first
 read «"Владелец" и "Тех. администратор" может выдать…», where the roles parse as
 the subject.
 
-## D-143 `[~]` On a phone the support workspace can leave the screen and the address disagreeing, and a failed ticket load has no way back
+## D-143 `[x]` On a phone the support workspace can leave the screen and the address disagreeing, and a failed ticket load has no way back
 
 **Severity:** medium, for support operators on phones. Found by the work-surfaces audit;
 the stacked headers are rendered (frame `admin-owner-phone-17-support-ticket-a.png`), the
@@ -8944,6 +8944,33 @@ because a rule read in one direction is half a rule.
 **Frames:** `output/support-workspace/unavailable-{dark,light}-chromium-{desktop-1440,mobile-390}.png`.
 Fictional data, mocked backend, injected session; no production screen was
 opened.
+
+**The stacked headers, closed 2026-09-29.** Below `md` an open ticket is a page
+of its own, the way a conversation is on a phone: the administration's title row
+and tab strip step aside (`AdminLayout`), the workspace's «Поддержка» row too
+(`SupportTab`), and the card runs edge to edge under the status bar with the
+ticket's header — which already carried «Назад к очереди» — at the top of the
+screen. The notice band stays: it reports what was just done. Nothing moved at
+`md` and above. No routing change was needed: the address already holds the
+ticket (`?ticket=`), so the layout reads it through the same reader as the tab
+(`lib/support/ticketAddress.ts`), and the two cannot disagree about whether a
+ticket is open.
+The chrome and the card each keep one class list and take the page's form from
+a `data-ticket-page` attribute variant. The first version split them into two
+`cn()` branches. That turned three guards red — the material guards read the
+element's own class list, and the edge ratchet counts a second perimeter —
+and the guards were right to refuse it.
+
+**Evidence.** `support-workspace-rules.spec` «on a phone an open ticket is a
+page of its own, under nothing but its header», 26 of 26 with the rest at 1440
+and 390. At 390 the chrome and the title are hidden, the card starts under the
+status bar and reaches the bottom, and back to the queue brings both back; at
+1440 both stay. Two mutants against the served modules — the chrome left over a
+ticket, the title left over it — are each red at 390 and green at 1440. Frames:
+`output/support-workspace/ticket-page-{dark,light}-chromium-{desktop-1440,mobile-390}.png`.
+The first light frames showed dark controls. They were taken mid-transition
+after the theme was stamped on a drawn page; with `animations: "disabled"` they
+are right.
 
 ## D-144 `[x]` Support ticket actions hide their rules and misstate the ticket
 

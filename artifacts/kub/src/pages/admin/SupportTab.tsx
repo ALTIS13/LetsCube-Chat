@@ -37,6 +37,8 @@ import { useAppStore } from "@/store/app.store";
 import { requestAppConfirm } from "@/lib/appDialogs";
 import { supportIntakeClosurePrompt } from "@/lib/adminPrompts";
 import { supportSettingsBlocker } from "@/lib/support/operatorRules";
+import { readSupportTicketFromSearch } from "@/lib/support/ticketAddress";
+import { cn } from "@/lib/utils";
 import { SupportQueue } from "./support/SupportQueue";
 import {
   SupportTicketDetails,
@@ -74,7 +76,7 @@ export function SupportTab() {
   // The address is the only copy now. `useSearch` subscribes to `location.search`
   // (wouter 3.9), which `useLocation` alone does not: it reports the path.
   const search = useSearch();
-  const selectedTicketId = useMemo(() => readTicketFromSearch(search), [search]);
+  const selectedTicketId = useMemo(() => readSupportTicketFromSearch(search), [search]);
   const [details, setDetails] = useState<SupportTicketDetailsModel | null>(null);
   const [operators, setOperators] = useState<SupportOperator[]>([]);
   const [customerCandidates, setCustomerCandidates] = useState<SupportCustomerCandidate[]>([]);
@@ -373,14 +375,27 @@ export function SupportTab() {
     // all, and `overflow-hidden` would then clip them too.
     <div
       data-testid="support-operator-workspace"
-      className="relative flex h-[calc(100dvh-7.75rem)] min-h-[34rem] min-w-0 flex-col overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] sm:h-[calc(100dvh-8.5rem)]"
+      // D-143: below `md` an open ticket is a page of its own, the way a
+      // conversation is on a phone: edge to edge under the status bar, with
+      // the administration's chrome and this workspace's own title stepped
+      // aside (`AdminLayout`), so the ticket's header is the top of the screen.
+      // One class list rather than two branches: the material and edge
+      // guards read this element's list, and an attribute variant outranks
+      // the `sm:` height it has to beat between 640 and `md`.
+      data-ticket-page={selectedTicketId ? "" : undefined}
+      className="relative flex h-[calc(100dvh-7.75rem)] min-h-[34rem] min-w-0 flex-col overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] sm:h-[calc(100dvh-8.5rem)] data-[ticket-page]:h-[calc(100dvh-var(--kub-safe-top))] data-[ticket-page]:min-h-0 data-[ticket-page]:rounded-none data-[ticket-page]:border-0 data-[ticket-page]:pb-safe md:data-[ticket-page]:h-[calc(100dvh-8.5rem)] md:data-[ticket-page]:min-h-[34rem] md:data-[ticket-page]:rounded-xl md:data-[ticket-page]:border md:data-[ticket-page]:pb-0"
     >
       <KubGlassLayer />
       <div className="relative flex min-h-0 flex-1 flex-col">
         {/* The panes below divide themselves with borders and carry no fill of
             their own, so the card reads as a single sheet with rules across it
             instead of as four stacked slabs. */}
-        <div className="flex flex-shrink-0 items-center gap-3 border-b border-[color:var(--kub-border-color)] px-3 py-2.5 sm:px-4">
+        <div
+          className={cn(
+            "flex-shrink-0 items-center gap-3 border-b border-[color:var(--kub-border-color)] px-3 py-2.5 sm:px-4",
+            selectedTicketId ? "hidden md:flex" : "flex",
+          )}
+        >
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-bold text-[color:var(--kub-text)]">
               Поддержка
@@ -815,13 +830,6 @@ function SupportSettingsDialog({
       </div>
     </div>
   );
-}
-
-function readTicketFromSearch(search: string): string | null {
-  const value = new URLSearchParams(search).get("ticket");
-  return value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
-    ? value
-    : null;
 }
 
 function readActionError(error: unknown): string {
