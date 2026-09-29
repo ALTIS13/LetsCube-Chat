@@ -6797,7 +6797,13 @@ item, and the attachment sheet does not rearrange the selection or preview the
 assembled mosaic before sending. Web deployment and an Android bundle release
 must be recorded separately before calling this shipped on either platform.
 
-## D-116 `[ ]` A received photo is a WebP that the tester cannot zoom, and it looks poor
+## D-116 `[x]` A received photo is a WebP that the tester cannot zoom, and it looks poor
+
+**Closed 2026-09-15 in `b25dba3a`, and marked here only on 2026-09-29.** The
+last question was whether `letscube-worker` ran the short-side rule. It did,
+and the backfill it waited on was one photograph, not forty. Regenerating it
+found D-207, which is closed. The zoom of D-087 is closed too. What follows is
+the entry as it was worked.
 
 **Severity:** to be assessed. The same report; not yet reproduced.
 
@@ -14395,7 +14401,7 @@ a pixel is D-214.
 
 ---
 
-## D-214 `[ ]` The colour an administrator picks for a role never reaches a pixel, and cannot
+## D-214 `[x]` The colour an administrator picks for a role never reaches a pixel, and cannot
 
 **Severity:** low as a defect, medium as dead configuration: the administration
 panel offers a colour picker whose value changes nothing.
@@ -14455,9 +14461,20 @@ assigned in a different pairing than the database describes.
 picker in the administration panel stops being free, and that is a product
 choice rather than a defect.
 
+**Done 2026-09-19 by the first way, and marked here only on 2026-09-29.** The
+colour is a key into a theme-aware palette rather than a free hex. It shipped
+in three steps, because a client and a database cannot flip in the same instant:
+`ae2de203`, the client reads a key as well as a hex; the migration
+`20260919170000_a_role_colour_a_reader_can_see.sql`, applied after a rehearsal
+on production; and `164887bb`, the picker becomes eight discs. The colour
+reaches the badge's mark (`ProfileBadgeChip`, `badgeColourKey`), never its
+words. The two residuals went in `cf809d47`. The tracker's deploy notes of that
+day carry the evidence. Read back on 2026-09-29: `roles` carries the
+`roles_colour_palette_key` constraint.
+
 ---
 
-## D-215 `[ ]` Per-group roles: the badge system has no way to express standing inside a group
+## D-215 `[x]` Per-group roles: the badge system has no way to express standing inside a group
 
 **Severity:** medium. It is the other half of what the owner asked for on
 2026-09-18, and it needs a migration rather than a client change.
@@ -14478,6 +14495,14 @@ choice rather than a defect.
   `chat_members.role` via `is_chat_admin` and `chat_role_of`.
 - So there is no table anywhere that assigns a named, coloured tag to a
   (chat, person) pair. Group standing is exactly three values and nothing else.
+
+**Built 2026-09-18, and marked here only on 2026-09-29.** The server half is
+`1674ddb7`, applied after a schema backup and a seventeen-case rehearsal: a group
+can name its own standings, and leaving takes them with you. The client half is
+`f05cb617`, a group's own word for a person, and `0a1f94fa`, an author's name
+carries the group's colour. `ChatRolesModal` and `hooks/useChatRoles.ts`, which
+hears both tables live, are the surface. Read back on 2026-09-29: both tables
+exist on production, and no group has made a role yet.
 
 **Do not reach for the dead rows.** Recorded twice already — D-168 above and
 `docs/proposals/2026-09-13-roles-and-badges.md` — and it is worth a third time
