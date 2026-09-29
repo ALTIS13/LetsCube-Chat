@@ -1067,8 +1067,12 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     word-start rung of ours, and a booster from the order of visits because we
     keep no counts. Evidence: `local-chat-search.test.mts` 11/11 with eight
     mutants red; `search-local-order.spec` at 1440 and 390, red against the
-    shipped scorer. Still open: completions for the global field, and the «Ещё
-    фильтры» surface.
+    shipped scorer. **Built the same day, the completions:** the global field
+    offers `from:` (everybody from the reader's conversations), `in:` (the
+    named ones, the one on screen first) and `has:` inside a token, as the
+    in-chat field does. Evidence: `search-filter-offer.test.mts` 14/14;
+    `search-global-completions.spec` at 1440 and 390, with three served
+    mutants red. Still open: the «Ещё фильтры» surface.
 
     Not established, and recorded as such: what Discord's DM **row** itself
     draws (this pass followed the menu, the profile and the searches; the

@@ -2112,8 +2112,20 @@ and why:
   in Discord, a visit can lift a match a rung or two: the place you go to every
   day outranks a slightly better spelling of one you never open.
 
-Completions for the global field (2) and the «Ещё фильтры» surface (3) are not
-built.
+**Built the same day: completions for the global field (2).** The sidebar's
+search of everything offers what the in-chat field offers inside a token, as one
+group of up to ten, Discord's in-token mode. `from:` lists everybody from the
+reader's conversations; `in:` lists the conversations that have a name, with the
+one on screen first, as Discord hoists the current channel; `has:` lists its
+fixed set. Two differences, with reasons:
+
+- **The empty field offers no filters here.** It already offers where to go
+  (the quick switch, above), and one field cannot open onto two lists.
+- **`in:` leaves private chats out.** The server matches `in:` against a
+  conversation's name or its id, and a private chat has no name. Offering one
+  would insert an id, and the chip would show that id.
+
+The «Ещё фильтры» surface (3) is not built.
 
 **Refused, with the reason:** `$` game profiles (no games), `*` servers (our
 folders are Telegram's model, per section 7), Listen Along and activity rows

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  chatNameMatchesSearch,
   completeSearchFilter,
   insertSearchPrefix,
   personMatchesSearch,
@@ -114,4 +115,44 @@ test("people are found by name or никнейм, in any case", () => {
   assert.equal(personMatchesSearch(anna, "смирн"), true);
   assert.equal(personMatchesSearch(anna, "борис"), false);
   assert.equal(personMatchesSearch({ name: "Борис", username: null }, "anna"), false);
+});
+
+// The global half (tracker item 36 c): the sidebar's search of everything offers
+// the same completions, plus `in:`, and leaves its empty field to the quick
+// switch.
+
+test("the global field leaves its empty state to the quick switch, and knows in:", () => {
+  assert.deepEqual(searchFilterOffer("", "global"), { kind: "none" });
+  assert.deepEqual(searchFilterOffer("   ", "global"), { kind: "none" });
+  assert.deepEqual(searchFilterOffer("in:", "global"), { kind: "in", partial: "", start: 0 });
+  assert.deepEqual(searchFilterOffer("смета in:ком", "global"), { kind: "in", partial: "ком", start: 6 });
+  assert.deepEqual(searchFilterOffer('in:"Команда пр', "global"), { kind: "in", partial: "Команда пр", start: 0 });
+  assert.deepEqual(searchFilterOffer("from:ан", "global"), { kind: "from", partial: "ан", start: 0 });
+  assert.deepEqual(searchFilterOffer("has:ph", "global"), { kind: "has", partial: "ph", start: 0 });
+});
+
+test("inside one conversation in: means nothing and is not offered", () => {
+  assert.deepEqual(searchFilterOffer("in:ком"), { kind: "none" });
+  assert.deepEqual(searchFilterOffer("in:ком", "chat"), { kind: "none" });
+});
+
+test("a word that only ends in «in:» is not the filter", () => {
+  assert.deepEqual(searchFilterOffer("join:x", "global"), { kind: "none" });
+  assert.deepEqual(searchFilterOffer("login:", "global"), { kind: "none" });
+});
+
+test("a completed in: is what the parser reads back, and offers nothing more", () => {
+  const next = completeSearchFilter("смета in:ком", 6, "in", "Команда проекта");
+  assert.equal(next, 'смета in:"Команда проекта" ');
+  const parsed = parseAdvancedSearchQuery(next, "all");
+  assert.equal(parsed.filters.in, "Команда проекта");
+  assert.equal(parsed.query, "смета");
+  assert.deepEqual(searchFilterOffer(next, "global"), { kind: "none" });
+});
+
+test("a conversation is found by any part of its name, in any case", () => {
+  assert.equal(chatNameMatchesSearch("Команда проекта", "ПРОЕК"), true);
+  assert.equal(chatNameMatchesSearch("Команда проекта", '"Команда пр'), true);
+  assert.equal(chatNameMatchesSearch("Команда проекта", ""), true);
+  assert.equal(chatNameMatchesSearch("Команда проекта", "склад"), false);
 });

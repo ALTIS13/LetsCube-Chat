@@ -15,6 +15,8 @@ import {
   type SearchTypeFilter,
 } from "@/components/search/SearchShared";
 import { getLocalChatSearchResults, useGlobalSearch } from "@/hooks/useGlobalSearch";
+import { SearchFilterOffer } from "@/components/search/SearchFilterOffer";
+import { focusSidebarSearch } from "@/lib/sidebarSearchFocus";
 import { readRecentChats } from "@/lib/recentChats";
 import { useHint } from "@/hooks/useHint";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -230,6 +232,12 @@ export function SidebarSearchResults({ query }: { query: string }) {
           space, so removing a chip from a query typed with a leading space
           deleted the wrong characters. */}
       <SearchFilterChips parsed={parsed} query={parsed.raw} onChangeQuery={setSearchQuery} compact />
+
+      {/* A `from:`, `in:` or `has:` still being typed offers its values, as the
+          in-chat field does (tracker item 36 c). `query`, not `parsed.raw`: the
+          offer reads the end of the text, and a trailing space is what says a
+          value is finished. */}
+      <SearchFilterOffer scope="global" query={query} onChangeQuery={setSearchQuery} onPicked={focusSidebarSearch} compact />
 
       <div
         // The floating capsule lies over this column on a phone. The room for

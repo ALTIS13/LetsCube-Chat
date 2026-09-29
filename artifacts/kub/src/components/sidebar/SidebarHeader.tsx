@@ -20,6 +20,7 @@ import { requestAppConfirm } from "@/lib/appDialogs";
 import { signOutConfirm } from "@/lib/signOutConfirm";
 import { openSavedMessagesChat } from "@/lib/savedMessages";
 import { openSupportWindow } from "@/lib/supportWindowEvents";
+import { SIDEBAR_SEARCH_FOCUS_EVENT } from "@/lib/sidebarSearchFocus";
 
 interface SidebarHeaderProps {
   onNewChat?: () => void;
@@ -95,6 +96,14 @@ export function SidebarHeader({
     searchInputRef.current?.focus();
     setMobileSection("chats");
   }, [mobileSection, setMobileSection]);
+
+  // A completion picked under the field hands the keyboard back here
+  // (`lib/sidebarSearchFocus.ts`), without touching the section the phone is on.
+  useEffect(() => {
+    const focus = () => searchInputRef.current?.focus();
+    window.addEventListener(SIDEBAR_SEARCH_FOCUS_EVENT, focus);
+    return () => window.removeEventListener(SIDEBAR_SEARCH_FOCUS_EVENT, focus);
+  }, []);
 
   // Ctrl/Cmd+K, which belongs to this field rather than to any panel.
   //
