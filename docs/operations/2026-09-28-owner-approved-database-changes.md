@@ -484,3 +484,30 @@ testers asked for most.
   Evidence: `task-coassignees.test.mts` and `task-coassignees.spec` at 1440 and
   390. The spec covers a co-executor taking the task on, the author adding one
   in the form (saved after the task), and «Мои» holding the task with «+1».
+
+## 9. The pg_cron run history is kept for a week
+
+- **Migration** `supabase/migrations/20260929110000_cron_history_cleanup.sql`
+  (`6F51235028E5BD29133EE70B8A81BDE6DBCFB273507EE54F98FEEA2D6EE88058`),
+  rollback `…_cron_history_cleanup.rollback.sql`
+  (`43DC2B1DE6ACB8CA4B72B268A8FD0AE6669BA8E29D50281207B6B91DA00DF8CB`); both
+  copied byte-identical into `.migration-backup/`. Found while adding the
+  reminder job (§3) and approved by the owner on 2026-09-29 («подтверждаю»).
+- **Measured first:** `cron.job_run_details` held 220,822 rows (210 MB), the
+  oldest from 2026-06-18, 176,566 of them from `kub-send-push-notifications`,
+  which runs every ten seconds. Nothing ever deleted a row. `postgres` holds
+  DELETE on the table, which `supabase_admin` owns.
+- **What it does:** `letscube-cron-history-cleanup`, hourly at :17, as
+  `postgres`, deletes at most 50,000 rows that ended more than seven days ago.
+  That window is longer than any health query here reads. The 158,267 rows
+  already past the week go in bounded steps over the first hours; after that a
+  run deletes a few hundred. The file keeps its size, and autovacuum lets later
+  rows reuse the space. VACUUM FULL would shrink it, but it needs an exclusive
+  lock that every job start would wait on, and 55 GB are free.
+- **Backup:** `/srv/letscube/backups/automated/20260929-125950`, `SHA256SUMS`
+  15 of 15, `pg_restore --list` 160 table-data entries including `cron.job` and
+  `cron.job_run_details`.
+- **Rehearsal** (rolled back): the job's own command, run once as `postgres`,
+  deleted exactly 50,000 rows past the week and none of the 62,559 from the
+  last week. Production read afterwards: no job, the rows intact.
+- **Applied** as `postgres`: job 12, active, `17 * * * *`.

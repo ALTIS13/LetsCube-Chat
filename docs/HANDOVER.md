@@ -287,8 +287,9 @@ Things to know, found on the way:
   failed files gave 619 passed and 1 flake. Do not run two Playwright processes
   into one `output/playwright-test`: the second deletes the first's folder
   (ENOTEMPTY).
-- **`cron.job_run_details` is 204 MB and never purged.** A task was filed to add
-  a purge job through §10; it needs the owner's word like any DB change.
+- **`cron.job_run_details` was 210 MB and never purged.** On the owner's word
+  of 2026-09-29, `letscube-cron-history-cleanup` now keeps a week (rollout
+  record §9).
 
 **Checkpoint, 2026-09-28 (Claude):** `main` is `7cf0a349`, deployed and
 healthy as the sole web container. The day closed the testers' reports that the
