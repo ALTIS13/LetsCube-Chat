@@ -74,6 +74,10 @@ test("from: offers everybody from the reader's conversations, and a press fills 
   const people = offer(page, "from");
   await expect(people).toBeVisible();
   await expect(people.locator("[data-search-person]")).toHaveCount(3);
+  // The syntax hint teaches what is being typed, and its plate hangs where these
+  // rows are: on the first renders it lay over the first of them.
+  await page.waitForTimeout(600);
+  await expect(page.getByTestId("kub-hint")).toHaveCount(0);
 
   await field(page).fill("from:бор");
   await expect(people.locator("[data-search-person]")).toHaveCount(1);

@@ -24434,3 +24434,30 @@ departure too, and reloading on it.
 filter that excludes it. That is a production write, a member leaving a chat,
 so it needs a QA-only group and its own go-ahead. The fixture's realtime mock
 applies `eq` filters to every event type and cannot answer this.
+
+## D-328 `[x]` The search's syntax hint lay over the completions it was teaching
+
+**Severity:** medium, and self-inflicted. `dd51e509` gave the sidebar's search
+completions for `from:`, `in:` and `has:`. They were live for about ten minutes
+before this was found, on the renders taken for the owner after the deploy
+rather than before it. The plate «Прямо в строке работают уточнения:
+from:@anna, has:image, after:2026-09-01.» hangs under the type pills, which is
+exactly where the new list begins. At 390 it covered «Анна Смирнова», the first
+person offered; at 1440 the heading and «Команда проекта». A tap there would
+have dismissed the hint rather than picked the person.
+
+**Cause:** `shouldOfferSearchSyntaxHint` withdrew the hint once the query
+produced a chip, as proof the grammar was known. A filter still being typed
+produces no chip, so the hint stayed. Now a filter token at the end withdraws it
+too (`lib/searchQuery.ts`). It is the grammar in use as surely as a chip is, and
+its own values are on screen in the plate's place.
+
+**Evidence:** `interface-hints.test.mts` holds `from:`, an open quote, `in:` and
+`has:фо`, and still offers the hint for `login:`, which only ends like a filter.
+`search-global-completions.spec` asserts no plate over the `from:` list at 1440
+and 390. With the old predicate served, both are red.
+
+**The lesson is the order, not the plate.** The renders were taken after the
+push, and they were the first look at the new list at all. For a visual change
+the look comes before the deploy — as the owner has asked more than once — and
+here the look found the defect.

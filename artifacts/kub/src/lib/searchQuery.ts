@@ -1,4 +1,5 @@
 import type { Json } from "@/types/database";
+import { searchFilterOffer } from "./searchFilterOffer.ts";
 
 export type SearchEntityFilter = "all" | "user" | "bot" | "chat" | "message" | "task" | "location" | "command" | "media";
 export type SearchHasFilter = "file" | "link" | "image" | "video" | "audio";
@@ -201,9 +202,16 @@ export const SEARCH_SYNTAX_HINT_TEXT = `Прямо в строке работа�
  * spends no budget and makes no permanent decision, so someone who uses
  * `from:` once and goes back to plain queries is neither charged for the hint
  * nor robbed of it.
+ *
+ * A filter still being typed at the end withdraws it too, since it is the
+ * grammar in use as surely as a chip is. And since 2026-09-29 its values are
+ * offered in the very place this plate hangs: measured on the renders, the
+ * plate lay over the first rows of the `from:` and `in:` completions, at 390
+ * and at 1440.
  */
 export function shouldOfferSearchSyntaxHint(parsed: ParsedSearchQuery): boolean {
-  return parsed.raw.trim().length > 0 && parsed.chips.length === 0;
+  if (parsed.raw.trim().length === 0 || parsed.chips.length > 0) return false;
+  return searchFilterOffer(parsed.raw, "global").kind === "none";
 }
 
 export function searchFiltersToRpc(filters: ParsedSearchFilters): Json {

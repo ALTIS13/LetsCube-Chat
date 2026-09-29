@@ -174,6 +174,15 @@ test("the search hint is offered while a query is typed and withdrawn once it is
   assert.equal(shouldOfferSearchSyntaxHint(parse("from:@anna смета")), false);
   assert.equal(shouldOfferSearchSyntaxHint(parse("has:image")), false);
   assert.equal(shouldOfferSearchSyntaxHint(parse("after:2026-09-01 смета")), false);
+
+  // So is a filter still being typed, whose values are offered where the plate
+  // would hang: it lay over the first completions on the renders of 2026-09-29.
+  assert.equal(shouldOfferSearchSyntaxHint(parse("from:")), false);
+  assert.equal(shouldOfferSearchSyntaxHint(parse('from:"Анна')), false);
+  assert.equal(shouldOfferSearchSyntaxHint(parse("смета in:")), false);
+  assert.equal(shouldOfferSearchSyntaxHint(parse("has:фо")), false);
+  // A word that only ends like a filter is still somebody searching for words.
+  assert.equal(shouldOfferSearchSyntaxHint(parse("login:")), true);
 });
 
 // ── the composer hint: every condition is load-bearing ──────────────────────
