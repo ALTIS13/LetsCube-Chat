@@ -15,6 +15,7 @@ import {
   type SearchTypeFilter,
 } from "@/components/search/SearchShared";
 import { getLocalChatSearchResults, useGlobalSearch } from "@/hooks/useGlobalSearch";
+import { readRecentChats } from "@/lib/recentChats";
 import { useHint } from "@/hooks/useHint";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useRoleAccess } from "@/hooks/useRole";
@@ -79,6 +80,9 @@ export function SidebarSearchResults({ query }: { query: string }) {
       currentUserId: currentUser?.id ?? null,
       chats,
       limit: 8,
+      // Where this reader has been lately weighs a match up, as Discord's
+      // switcher does with its usage score; ours is the order of the visits.
+      recentChatIds: readRecentChats(currentUser?.id ?? null),
     }),
     [chats, currentUser?.id, parsed.query],
   );

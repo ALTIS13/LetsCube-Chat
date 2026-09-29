@@ -2089,6 +2089,32 @@ reader will otherwise re-derive them:
    vocabulary small: five prefixes and one of them was still undocumented in
    its own hint when this was read.
 
+**Built 2026-09-29: the order (5), and the ladder under it.** The
+conversations the search finds on the device (`lib/localChatSearch.ts`) are
+ordered by `1000 × quality × booster`, read from module 802842. What differs,
+and why:
+
+- **The ladder is scored against the name and the handle**, not against one
+  string that joined the name with the last message. Joining them is how
+  «проекта команда» missed «Команда проекта» — every-word matching could never
+  fire.
+- **One rung of ours, word-start, 6**, between prefix and contains. «про» from a
+  word's start, as in «Команда проекта», names that word. The same letters
+  inside a word, as in «спросить», are usually an accident. Discord's ladder
+  ranks the two alike.
+- **A match only in the description or the last message scores 2**: above a
+  fuzzy guess at a name, below any real match on it. The switcher has no such
+  field, and a conversation is what it is called before it is what was said in
+  it.
+- **The booster is recency, not frecency.** We keep the order of the last
+  visits on the device (ids only), not their counts. So the last one weighs 2
+  and the rest less in turn, and nothing claims a frequency we do not have. As
+  in Discord, a visit can lift a match a rung or two: the place you go to every
+  day outranks a slightly better spelling of one you never open.
+
+Completions for the global field (2) and the «Ещё фильтры» surface (3) are not
+built.
+
 **Refused, with the reason:** `$` game profiles (no games), `*` servers (our
 folders are Telegram's model, per section 7), Listen Along and activity rows
 (item 37), and Discord's search **History** group **pending a decision** — it is

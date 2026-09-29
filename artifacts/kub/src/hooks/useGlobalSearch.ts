@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { withChatDisplayTitles } from "@/lib/searchResultChatDisplay";
 import { normalizePhoneSearchQuery } from "@/lib/phoneSearch";
+import { scoreLocalChat } from "@/lib/localChatSearch";
 import {
   hasLink,
   mediaLabelForMessage,
@@ -523,20 +524,27 @@ export function getLocalChatSearchResults({
   currentUserId,
   chats,
   limit,
+  recentChatIds = [],
 }: {
   query: string;
   currentUserId: string | null;
   chats: ChatWithLastMessage[];
   limit: number;
+  /** This device's last visits, most recent first (`lib/recentChats.ts`). */
+  recentChatIds?: readonly string[];
 }): GlobalSearchResult[] {
-  const needle = searchableNeedle(query);
-  const isHandleQuery = query.trim().startsWith("@");
   const results: GlobalSearchResult[] = [];
   for (const chat of chats) {
     const info = getChatDisplayInfo(chat, currentUserId);
-    const username = chat.other_user?.username ? `@${chat.other_user.username}` : "";
-    const haystack = [info.title, info.subtitle, chat.description, username, chat.last_message?.content].filter(Boolean).join(" ");
-    const rank = scoreText(haystack, needle, isHandleQuery ? username : "");
+    const handle = chat.other_user?.username ? `@${chat.other_user.username}` : null;
+    // The name is what a conversation is called, and is matched on the ladder;
+    // its subtitle, description and last message only when the name does not
+    // match at all (`lib/localChatSearch.ts`, item 36 c).
+    const rank = scoreLocalChat(
+      { id: chat.id, name: info.title, handle, elsewhere: [info.subtitle, chat.description, chat.last_message?.content] },
+      query,
+      recentChatIds,
+    );
     if (rank <= 0) continue;
     results.push({
       resultType: "chat",
