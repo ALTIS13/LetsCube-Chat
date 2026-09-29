@@ -5527,6 +5527,15 @@ seconds. Found 2026-09-11 while fixing D-081.
 the forward sheet's preview and its chat search — exactly where the next attempt
 starts.
 
+**The reference, read 2026-09-29.** Telegram Web A puts its toast in the same
+place: `.Notification-container` is centred at `margin: 4.25rem auto`, 22rem
+wide, above everything at `--z-notification`
+(`src/components/ui/Notification.scss`, `Ajaxy/telegram-tt` master). So the
+position is Telegram's, and a sheet open under it is covered there too. What
+differs is height. Telegram's toast is one line with an icon; ours is a titled
+card of about 131px. The fix this points to is the card's height, or keeping a
+refusal inside the sheet that caused it — not moving the viewport.
+
 ## D-085 `[x]` A draft that wraps paints the composer over the newest message for two frames
 
 **Severity:** medium. Every conversation at every width, on each line a draft
@@ -6796,6 +6805,14 @@ Telegram album: inserts are still individual, the server may notify once per
 item, and the attachment sheet does not rearrange the selection or preview the
 assembled mosaic before sending. Web deployment and an Android bundle release
 must be recorded separately before calling this shipped on either platform.
+
+**Read back 2026-09-29: one push per album is live.** `88c80056` grouped album
+pushes for Web and Android. `album_push_runtime` has been enabled on
+production since 2026-09-26 09:47 UTC, with a five-second window per group, and
+two albums have gone out as one push each. So «the server may notify once per
+item» above no longer holds for pushes. What keeps this entry `[~]`: the items
+are still inserted one by one rather than in one call, and the attach sheet does
+not show the assembled mosaic before sending.
 
 ## D-116 `[x]` A received photo is a WebP that the tester cannot zoom, and it looks poor
 
