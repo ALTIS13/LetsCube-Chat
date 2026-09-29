@@ -447,7 +447,14 @@ export function applyPeerLeft<T extends ChatLike>(
   };
 }
 
-/** Someone else in a chat read or received up to a point. Only that chat changes. */
+/**
+ * Someone else's row in a chat changed: they read or received up to a point, or
+ * their role changed. Only that chat changes.
+ *
+ * The role came in on the same UPDATE and was dropped until 2026-09-29 (D-260):
+ * a member made administrator stayed a member in everything that reads
+ * `chat.members` — their card, the call's faces — until an unrelated refetch.
+ */
 export function applyPeerReceipt<T extends ChatLike>(
   chats: readonly T[],
   row: MembershipRowLike,
@@ -468,6 +475,7 @@ export function applyPeerReceipt<T extends ChatLike>(
   if ("last_delivered_at" in row) {
     nextMember.last_delivered_at = instantOr(member.last_delivered_at, row.last_delivered_at);
   }
+  if (typeof row.role === "string" && row.role !== member.role) nextMember.role = row.role;
   if (sameData(nextMember, member)) return unchanged;
 
   const nextMembers = members.slice();

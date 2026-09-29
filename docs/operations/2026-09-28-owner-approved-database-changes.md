@@ -511,3 +511,8 @@ testers asked for most.
   deleted exactly 50,000 rows past the week and none of the 62,559 from the
   last week. Production read afterwards: no job, the rows intact.
 - **Applied** as `postgres`: job 12, active, `17 * * * *`.
+- **First run**, read back at 11:06 UTC: run 221003 at 10:17:00 UTC,
+  `succeeded`, `DELETE 50000`, one second long. The history then held 171,380
+  rows, 108,418 of them past the week, and its oldest run was from 2026-07-18
+  instead of 2026-06-18 — the bounded step doing exactly what it was rehearsed
+  to do, with three more runs to go before it settles into a few hundred an hour.

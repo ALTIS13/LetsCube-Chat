@@ -251,7 +251,46 @@ whole deployment** — no bot has registered a command yet.
 
 ## 4. Where to start
 
-**Current checkpoint, 2026-09-29 (Claude):** `main` is `e1ed1968`. The owner
+**Current checkpoint, 2026-09-29, afternoon (Claude):** `main` is `7a2d6360`,
+deployed and healthy as the sole web container, the live bundle proved to carry
+it. Since the morning:
+
+- **Item 35 is closed.** A tab in a conversation now takes a new build by
+  itself and comes back to the same conversation. «No conversation open» was
+  replaced rather than dropped: on a computer a conversation is open nearly all
+  the time, so it had been covering everything opened over one.
+  `lib/reloadGuard.ts` names what a reload would still lose — a recording,
+  picked or staged files, an edit, a reply, a forward, a reader up in the
+  history, the conversation's search, an open dialog, an attachment kept only
+  in memory — and the quiet restart waits for exactly those. The call veto
+  stays. Any new surface that holds something a reload would lose holds it on
+  that module (`hooks/useReloadGuard.ts`), or says why not.
+- **D-325 and D-326**, both found while proving item 35: the jump to the latest
+  messages no longer blinks back during its own scroll, and on a touch phone
+  the recorder hint no longer lies over it and takes its tap.
+- **D-258 is half closed** in the register: `sendPhoto` has taken new bytes
+  since 2026-09-26; any other kind of file still has no upload path.
+- **The cron history cleanup's first run** deleted its 50,000 at 10:17 UTC; the
+  record is §9 of the rollout.
+
+- **D-260 is closed.** The owner's case — the header missing a join — was
+  fixed on 2026-09-20 (`22fd0fdb`) and never marked; the rest of the sweep he
+  asked for closed today: a peer's role reaches the store, the information
+  panel no longer reloads itself and the chat list on every read mark, it reads
+  itself again after a drop, and a card closes when its person leaves.
+- **D-327 is open and is a question, not a task:** the store hears every
+  departure from every chat, because its DELETE binding is unfiltered. Whether a
+  filter would reach a DELETE at all is **not established** — Supabase's docs
+  say DELETE is not filterable, and this project's contrary note was reasoned,
+  never watched. Settling it needs one real departure in a QA-only group.
+
+Next: **item 45's database proposal**. `chats.type` is text with a CHECK of
+three values, and 29 functions and 2 policies read a type literal; each one's
+answer for the new kind is drafted, and the one that needs the owner is the
+personal block — `blocked_from_chat` only looks at private chats, so unchanged
+it would let a blocked person pull their blocker into a micro-group in one tap.
+
+**Checkpoint, 2026-09-29, morning (Claude):** `main` is `e1ed1968`. The owner
 approved every entry of `operations/2026-09-28-database-proposals.md`
 («все пункты принимаю»), and all of them are applied and deployed except kind
 folders (item 69), which the proposal itself deferred until the capsule in

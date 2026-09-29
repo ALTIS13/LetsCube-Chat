@@ -29,6 +29,7 @@ import {
 import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { subscribeByTable } from "@/lib/realtimeTableChannels";
+import { memberUpdateChangesList } from "@/lib/memberListEvents";
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
 import { ChatSettingsView } from "./ChatSettingsView";
 import {
@@ -825,6 +826,10 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
     };
   }, [isGroup, loadChatBots]);
 
+  // What the list holds now, for the UPDATE handler below, which outlives renders.
+  const membersRef = useRef(members);
+  membersRef.current = members;
+
   useEffect(() => {
     if (!isGroup) return;
     let timer: number | null = null;
@@ -848,14 +853,31 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
     // `chats` **is** published — on 2026-09-18 and again on 2026-09-20, one of
     // 33 tables — so that reason is withdrawn and the measured rule is what
     // stands. See lib/realtimeTableChannels.ts.
-    const channels = subscribeByTable<typeof scheduleRefresh, RealtimeChannel>(
+    //
+    // A member's UPDATE is almost always a read mark, so it reloads only when
+    // it changes what the list shows (`lib/memberListEvents.ts`, D-260). And a
+    // channel that comes back after a drop has missed whatever happened while
+    // it was away, so every SUBSCRIBED after the first reads the panel again.
+    type MemberRowEvent = (payload?: { new?: { user_id?: unknown; role?: unknown } }) => void;
+    const onMemberUpdate: MemberRowEvent = (payload) => {
+      if (memberUpdateChangesList(payload?.new, membersRef.current)) scheduleRefresh();
+    };
+    const joined = new Set<string>();
+    const channels = subscribeByTable<MemberRowEvent, RealtimeChannel>(
       supabase,
       `chat-info:${chat.id}`,
       [
         { event: "UPDATE", schema: "public", table: "chats", filter: `id=eq.${chat.id}`, handler: scheduleRefresh },
-        { event: "*", schema: "public", table: "chat_members", filter: `chat_id=eq.${chat.id}`, handler: scheduleRefresh },
+        { event: "INSERT", schema: "public", table: "chat_members", filter: `chat_id=eq.${chat.id}`, handler: scheduleRefresh },
+        { event: "DELETE", schema: "public", table: "chat_members", filter: `chat_id=eq.${chat.id}`, handler: scheduleRefresh },
+        { event: "UPDATE", schema: "public", table: "chat_members", filter: `chat_id=eq.${chat.id}`, handler: onMemberUpdate },
         { event: "*", schema: "public", table: "group_invites", filter: `chat_id=eq.${chat.id}`, handler: scheduleRefresh },
       ],
+      (channelName, status) => {
+        if (status !== "SUBSCRIBED") return;
+        if (joined.has(channelName)) scheduleRefresh();
+        joined.add(channelName);
+      },
     );
     return () => {
       if (timer) window.clearTimeout(timer);
@@ -1752,6 +1774,14 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
   );
 
   const memberCard = memberCardId ? members.find((m) => m.id === memberCardId) ?? null : null;
+  // A person who leaves while their card is open takes the card with them
+  // (D-260): the lookup answers null, and the view used to stay open and empty,
+  // offering to promote or remove somebody who was no longer there.
+  useEffect(() => {
+    if (view !== "member" || !memberCardId || memberCard) return;
+    setView("root");
+    setMemberCardId(null);
+  }, [memberCard, memberCardId, view]);
   /**
    * The card's one action: the private conversation with this person (D-168).
    *

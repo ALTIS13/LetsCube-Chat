@@ -294,6 +294,22 @@ test("a peer's receipt changes that chat only, once", () => {
   assert.equal(applyPeerReceipt(once, receipt, reading(null)), once);
 });
 
+test("a peer's role reaches the store on the same row as their marks", () => {
+  // D-260: a member made administrator stayed a member in everything that reads
+  // `chat.members` until an unrelated refetch, because only the marks were read.
+  const list = [chat("a", T0), chat("b", T0)];
+  const promoted = applyPeerReceipt(list, { chat_id: "b", user_id: PEER, role: "admin", last_read_at: T0, last_delivered_at: T0 }, reading(null));
+  assert.notEqual(promoted, list);
+  assert.equal(promoted[0], list[0]);
+  assert.equal(promoted[1].members?.find((m) => m.user_id === PEER)?.role, "admin");
+  // A read mark that carries the role it already had is only a read mark.
+  const read = applyPeerReceipt(list, { chat_id: "b", user_id: PEER, role: "member", last_read_at: T2 }, reading(null));
+  assert.equal(read[1].members?.find((m) => m.user_id === PEER)?.role, "member");
+  assert.equal(read[1].members?.find((m) => m.user_id === PEER)?.last_read_at, T2);
+  // And a row with no role in it leaves the role alone.
+  assert.equal(applyPeerReceipt(promoted, { chat_id: "b", user_id: PEER, last_read_at: T0 }, reading(null)), promoted);
+});
+
 test("your own row or a stranger's is not a peer's receipt", () => {
   const list = [chat("a", T0)];
   assert.equal(applyPeerReceipt(list, { chat_id: "a", user_id: ME, last_read_at: T2 }, reading(null)), list);

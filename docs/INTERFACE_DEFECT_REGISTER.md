@@ -19310,7 +19310,7 @@ already built on one of the two answers, and which one was never written down.
 
 ---
 
-## D-258 `[ ]` A bot cannot upload a photo, or attach one to a message
+## D-258 `[~]` A bot cannot upload a photo, or attach one to a message
 
 **Reported by the same tester, 2026-09-19:** «еще бы боту дать возможность
 загружать фото / прикреплять к сообщениям».
@@ -19343,6 +19343,17 @@ same bytes twice.
 
 Both of these came from the bot-platform tester while the voice incident was
 being worked, and are filed rather than started, at the owner's instruction.
+
+**Half closed, 2026-09-26, and recorded here on 2026-09-29.** `sendPhoto` now
+takes new bytes: one inline JPEG, PNG, WebP or GIF of at most 6 MiB
+(`MAX_INLINE_PHOTO_BYTES`), besides an existing object or a same-chat
+`file_id`, with the platform's idempotency key holding a retry to one message.
+A disposable QA bot sent a 39,848-byte test icon through the public API and the
+recipient saw it — `operations/2026-09-26-bot-privacy-photo-rollout.md`. So the
+tester's own words, a photo to a message, are answered. **Still open:** any
+other kind of file — a document, a video, a voice note — has no upload path, and
+PocketFlow's gap list (`artifacts/pocketflow/src/transport/letscube.ts`) still
+describes G-1 from before the photo half closed.
 
 ---
 
@@ -19453,7 +19464,7 @@ is proved by a photograph and by nothing else: a mutation removing only that
 colour leaves the suite green, measured.
 
 ---
-## D-260 `[ ]` A group's membership does not arrive by itself
+## D-260 `[x]` A group's membership does not arrive by itself
 
 **Reported by the owner, 2026-09-19:** «пригласил пользователя и у меня не
 обновило в realtime то что он уже в группе и соответственно то что человек
@@ -19484,6 +19495,56 @@ smallest part. The questions that decide the shape:
 - **Where a refetch is the wrong answer.** `useFolders` debounces a whole
   refetch on every membership row in the database. That is affordable for
   folders and would not be for a member list on a busy deployment; see D-262.
+
+**The owner's case was fixed on 2026-09-20** in `22fd0fdb` and never marked
+here: `useChats`' membership bindings all carried `user_id=eq.<me>`, so the
+store could only ever hear the reader's own row. A peer's join now appends to
+`chat.members` and asks for the refetch that brings the name; a peer's leave
+removes them in place. The measurement above was wrong in one respect, recorded
+in that commit: `chat_members` was subscribed to in four places, not one — the
+panel's binding goes through `subscribeByTable`, so no literal
+`postgres_changes` stands beside the table's name.
+
+**The sweep, enumerated 2026-09-29** — every surface that shows people or how
+many. Twenty-nine were read; seventeen read `chat.members` from the store and
+are live through `22fd0fdb` (the header, the read receipts' «N из M», the
+«Общие группы» on a card, the call's faces, `from:`, the search subtitle, the
+«Пригласить в …» menu, and the rest). The administration panel shows no chat
+membership at all — its users and roles are locations and global roles — and
+the notification bell already refreshes the invited person's own list. What
+was left, and closed the same day:
+
+- **A peer's role never reached the store.** The UPDATE that carries it was
+  read for its marks alone (`applyPeerReceipt`), so a member made
+  administrator stayed a member on their card and in the call until an
+  unrelated refetch. It is copied now.
+- **The information panel reloaded on every read mark.** Its binding was
+  `event: "*"`, and nearly every UPDATE on `chat_members` is somebody reading;
+  each one reloaded the panel's members, invitations and invite policy and,
+  through `dispatchChatsRefresh`, the whole chat list, for as long as the panel
+  stayed open. It now hears INSERT and DELETE as before, and an UPDATE only
+  when it changes the role the list already holds (`lib/memberListEvents.ts`).
+- **The panel had no way back after a drop.** Nothing re-read it when its
+  channel rejoined, so a join made while the socket was down stayed unseen
+  until the panel was reopened. Every SUBSCRIBED after the first reads it
+  again.
+- **A person who left while their card was open left the card behind**, empty,
+  still offering to promote or remove them. It closes now.
+
+Left as they are, with the reason: the invitation dialog reads its invitees'
+statuses once per opening, and the task form's chat picker its members once —
+both live for seconds. The unfiltered DELETE binding the store relies on is
+D-327.
+
+**Evidence.** `tests/e2e/group-membership-live.spec.ts`, five cases at 1440
+and 390, 10 of 10: a join reaches the open panel and the header; three read
+marks cost the panel and the chat list no request; a promotion reloads the
+panel and shows «Администратор»; a leave closes the open card and the header
+says one fewer; a join made while the socket was down appears when it comes
+back. Four mutants against the served modules, each proved served and
+restored, all red at both widths: every UPDATE reloading as before, no re-read
+after a drop, the card left open, no UPDATE ever mattering. Unit: the store's
+role and `memberUpdateChangesList`, five mutants red.
 
 ---
 
@@ -24341,3 +24402,35 @@ control and a real tap takes the reader down; on a touch phone the plate is
 gone while the control is up and back at the bottom. With the composer never
 told, it is red at 390 and green at 1440, where no hint is ever offered.
 Photographed at 1440 and 390 in both themes, scrolled into the history.
+
+## D-327 `[ ]` Every signed-in client hears every departure from every chat
+
+**Severity:** low, and a question about other people's information rather than a
+visible defect, so it is recorded and not acted on (CLAUDE.md §7).
+
+**Surface:** `hooks/useChats.ts`, the channel `chat-members:peers:<me>`. Its
+DELETE binding on `chat_members` has no filter, so that `22fd0fdb` could hear a
+peer leave (D-260). A DELETE is not checked against RLS, and with the table's
+`default` replica identity its old row carries the key: `(chat_id, user_id)`.
+So each client is handed the pair for every departure from every chat in the
+deployment. The client drops the ones for chats it does not hold
+(`chatListDelta.ts`, `applyPeerLeft`), but it has already received them. A
+chat's id is opaque to a non-member, while a person's id is not — profiles are
+readable — so what leaks is «this person left some chat, at this moment».
+Negligible at today's volume. Still not what the rows' own policy allows.
+
+**What is not established, and settles the fix.** Supabase's documentation says
+that DELETE events are not filterable. A note kept here since 2026-09-19 says a
+filter on a key column does reach a DELETE on a `default`-identity table. That
+note was reasoned from the replica identity and was never watched on a live
+delete. If the note is right, a binding filtered to the reader's own chats
+(`chat_id=in.(…)`, at most 100 values) closes this. If the documentation is
+right, the same filter is ignored, and so are the ones already standing on
+DELETE: `useChats`' own row (`user_id=eq.<me>`), the information panel
+(`chat_id=eq.<chat>`) and the folders. Each of them would then be hearing every
+departure too, and reloading on it.
+
+**How to settle it.** Watch one real departure from a client subscribed with a
+filter that excludes it. That is a production write, a member leaving a chat,
+so it needs a QA-only group and its own go-ahead. The fixture's realtime mock
+applies `eq` filters to every event type and cannot answer this.
