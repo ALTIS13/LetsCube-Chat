@@ -1057,8 +1057,18 @@ Use this queue before starting the next production-hardening turn. Do not repeat
       `quick-switch.test.mts`, `search-quick-switch.spec` at 1440 and 390.
 
     **c's other half — the global search's ideas from Discord's quick switcher —
-    is not started.** §15.3 carries the reading. Item 38's badges draw these
-    same chips and still wait on it.
+    is started.** §15.3 carries the reading. Item 38's badges draw these same
+    chips and still wait on it. **Built 2026-09-29, the order:** the
+    conversations found on the device follow the switcher's ladder times a
+    usage booster (`lib/localChatSearch.ts`). Words in another order find a
+    conversation now: «проекта команда» used to miss «Команда проекта». A name
+    outranks what was last said in it, and where the reader has just been comes
+    first. Two things differ from the reading, with the reasons in §15.3: a
+    word-start rung of ours, and a booster from the order of visits because we
+    keep no counts. Evidence: `local-chat-search.test.mts` 11/11 with eight
+    mutants red; `search-local-order.spec` at 1440 and 390, red against the
+    shipped scorer. Still open: completions for the global field, and the «Ещё
+    фильтры» surface.
 
     Not established, and recorded as such: what Discord's DM **row** itself
     draws (this pass followed the menu, the profile and the searches; the
@@ -1703,6 +1713,14 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     it justifies, and read with item 32 (calls in a private chat), which is the
     other half of the same question.
 
+    **2026-09-29: the database side is read and written up**, in
+    `operations/2026-09-29-micro-group-proposal.md`. It covers all 29
+    functions and 2 policies that name a chat type, what a new kind would get
+    from each if nothing changed, and the answer each needs. There are six
+    product questions, each with a recommendation. One of them is the owner's
+    alone: `blocked_from_chat` looks at private chats only, so unchanged it
+    would let a blocked person pull their blocker into a micro-group in one tap
+    and ring them there. Nothing is applied or written as a migration yet.
 
 46. `[~]` Tester's report, 2026-09-20, all of it from a phone. Eight items,
     kept in his words where paraphrase would soften them. **Triage opens with
