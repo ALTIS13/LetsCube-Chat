@@ -37,6 +37,20 @@ const COUNTS_KEY = "__letscubeObserverCosts";
  * and only a message that re-runs the effect reaches two. A fixture of nothing
  * but short messages would measure a limit of one and pass against three.
  */
+/**
+ * Graded tails: one sentence, one more two-letter word each time. A step
+ * (about 21px) is narrower than the time beside a message, so whatever the
+ * width and the font of a run, one of them ends with a last line too full for
+ * its time, and the anchored placement is present. A single sentence tuned to
+ * one width stopped doing that on the desktop project: measured 2026-09-29,
+ * every message kept its time inline at 1440, 1024 and 768 there, while the
+ * phone project still had five anchored at 768.
+ */
+const GRADED_TAILS = Array.from(
+  { length: 27 },
+  (_, step) => `Сообщение с растущим хвостом, чтобы последняя строка однажды заполнилась до самого края${" аа".repeat(step)}`,
+);
+
 const MESSAGES = [
   { sender: "Аня", text: "Коротко", time: "10:01", own: false },
   { sender: "Максим", text: "Ок", time: "10:02", own: true },
@@ -62,6 +76,7 @@ const MESSAGES = [
     own: true,
   },
   { sender: "Максим", text: "Договорились, встречаемся в три", time: "10:06", own: true },
+  ...GRADED_TAILS.map((text, step) => ({ sender: "Аня", text, time: `11:${String(step).padStart(2, "0")}`, own: false })),
 ];
 
 const FIXTURE = {

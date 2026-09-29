@@ -33,6 +33,20 @@ const READY = "data-public-preview-ready";
 const CHANGES_KEY = "__letscubePlacementChanges";
 const ERROR_SCREEN = "Произошла ошибка интерфейса";
 
+/**
+ * Graded tails: one sentence, one more two-letter word each time. A step
+ * (about 21px) is narrower than the time beside a message, so whatever the
+ * width and the font of a run, one of them ends with a last line too full for
+ * its time, and the anchored placement is present. A single sentence tuned to
+ * one width stopped doing that on the desktop project: measured 2026-09-29,
+ * every message kept its time inline at 1440, 1024 and 768 there, while the
+ * phone project still had five anchored at 768.
+ */
+const GRADED_TAILS = Array.from(
+  { length: 27 },
+  (_, step) => `Сообщение с растущим хвостом, чтобы последняя строка однажды заполнилась до самого края${" аа".repeat(step)}`,
+);
+
 const TEMPLATES = [
   "Коротко",
   "Средней длины сообщение, которое на телефоне переносится на две строки, а на широком экране остаётся в одной",
@@ -51,6 +65,7 @@ const TEMPLATES = [
   "Отлично, тогда так и сделаем, я предупрежу остальных",
   "Уже выхожу",
   "Сегодня не получится, давай перенесём на четверг или на пятницу после обеда, если тебе удобно",
+  ...GRADED_TAILS,
 ];
 
 const COUNT = 120;
