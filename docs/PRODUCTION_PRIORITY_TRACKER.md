@@ -1072,7 +1072,10 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     named ones, the one on screen first) and `has:` inside a token, as the
     in-chat field does. Evidence: `search-filter-offer.test.mts` 14/14;
     `search-global-completions.spec` at 1440 and 390, with three served
-    mutants red. Still open: the «Ещё фильтры» surface.
+    mutants red. **The «Ещё фильтры» surface is refused, with the reason**
+    in §15.3: Discord's modal holds seven fields, three of them filters our
+    grammar does not have, while every one of our six is already offered in
+    place by a press. A modal would be a second path to the same six.
 
     Not established, and recorded as such: what Discord's DM **row** itself
     draws (this pass followed the menu, the profile and the searches; the

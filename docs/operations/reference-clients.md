@@ -2125,7 +2125,13 @@ fixed set. Two differences, with reasons:
   conversation's name or its id, and a private chat has no name. Offering one
   would insert an id, and the chip would show that id.
 
-The «Ещё фильтры» surface (3) is not built.
+**The «Ещё фильтры» surface (3) is refused, with the reason.** Discord's
+Filters modal exists to hold seven fields, and three of them — `mentions:`,
+`pinned:` and author type — are not in our grammar. Ours has six filters, and
+every one is now offered in place, by a press: the empty in-chat field lists
+them, and inside a token the field offers the token's values. A modal would be a
+second path to the same six. Should the grammar grow past what a row of offers
+can hold, this is the answer to revisit.
 
 **Refused, with the reason:** `$` game profiles (no games), `*` servers (our
 folders are Telegram's model, per section 7), Listen Along and activity rows
@@ -3545,3 +3551,30 @@ bundle is a desktop shape until a phone says otherwise.
 - The manual statuses and their durations come from the owner's screenshots:
   В сети, Неактивен, Не беспокоить, Невидимый; 15 минут, 1 час, 8 часов,
   24 часа, 3 дня, навсегда. That menu was not read in the bundle.
+
+## 26. Subject 18 — how a bot is marked, 2026-09-29
+
+D-236's last question: should the mark on a bot be a badge beside the name, a
+line under it, or part of the avatar. Bots are an area where Telegram is the
+reference, contested — the owner finds Discord's handling good for its
+customisation — so both were read.
+
+- **Telegram Web A**, source read today (`Ajaxy/telegram-tt`, master).
+  SHIPPED. The chat header's status line for a bot is the word «бот»
+  (`lang('Bot')`), or its monthly users when known (`lang('BotUsers', …)`), in
+  place of «last seen» (`getUserStatus` in `src/global/helpers/users.ts`, used
+  by `PrivateChatInfo`). **The chat list row carries no bot mark at all**
+  (`src/components/left/main/Chat.tsx`). The only mark beside a name is the
+  verification icon of a verified bot (`FullNameTitle`, `botVerificationIconId`).
+- **Discord web and desktop**, the bundle chunks saved on 2026-09-20. SHIPPED.
+  The username component draws a bot tag beside the name by default
+  (`botType`, `botVerified`); a caller has to pass `hideBotTag` to leave it out.
+  So wherever a name is drawn, the tag comes with it.
+
+**Ours, decided:** the tag beside the name, which is Discord's shape. It is
+already built, one shared mark over one data path (D-236, 2026-09-19). The header
+keeps `@никнейм` under the name, what somebody needs in order to address the
+bot; the tag already says what it is. **Telegram's shape was not taken, for a
+reason in the owner's own report**: «выглядит будто я в диалоге просто с
+человеком» was said of the list, and the list is exactly where Telegram marks
+nothing.

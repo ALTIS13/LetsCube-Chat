@@ -516,3 +516,6 @@ testers asked for most.
   rows, 108,418 of them past the week, and its oldest run was from 2026-07-18
   instead of 2026-06-18 — the bounded step doing exactly what it was rehearsed
   to do, with three more runs to go before it settles into a few hundred an hour.
+- **Settled**, read back at 16:31 UTC: 50,000 at 10:17, 11:17 and 12:17, then
+  8,709 at 13:17, then 130, 134 and 134 an hour — every run `succeeded`. The
+  history holds 64,943 rows, a week of runs, the oldest from 2026-09-22 16:17.

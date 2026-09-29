@@ -17268,7 +17268,14 @@ Counted on production before fixing: zero such pairs exist.
 
 ---
 
-## D-236 `[~]` A conversation with a bot looks exactly like a conversation with a person
+## D-236 `[x]` A conversation with a bot looks exactly like a conversation with a person
+
+**Closed 2026-09-29: the shape is decided by reading both references**
+(`reference-clients.md` §26). Telegram marks a bot only in the header's status
+line and nothing in the list. Discord draws a tag beside the name wherever the
+name is drawn. The tag built on 2026-09-19 is Discord's shape, and it stays.
+The owner's complaint was about the list, which is where Telegram's shape
+leaves a bot unmarked.
 
 **Severity:** medium. It is on every bot chat, and the owner's words are the test:
 «выглядит будто я в диалоге просто с человеком».
