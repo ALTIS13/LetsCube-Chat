@@ -6285,7 +6285,7 @@ reacts in another's name, on a deleted message or on a notice; anon is refused; 
 one-call toggle still works — run in PGlite by
 `tests/server/message-actions-db.test.mjs` and on a copy of production's schema.
 
-## D-105 `[ ]` A global administrator deleting the other person's message in their own private chat is audited as staff
+## D-105 `[x]` A global administrator deleting the other person's message in their own private chat is audited as staff
 
 **Severity:** low, and the entry asked whether the row is wrong or merely terse.
 Measured on production 2026-09-15: **wrong, in every case it can fire.** Found
@@ -6355,6 +6355,14 @@ against the body that is live today, so an AFTER of 0 cannot be a trigger that
 never fires. Afterwards production measured 392 audit rows, 0
 `message_deleted_by_staff`, 0 `message_deletions`, and a trigger body with no
 `chat_kind` in it — unchanged.
+
+**Applied 2026-09-15, and marked here only on 2026-09-29.** The same day, after
+a verified schema backup (sha256 `23c08ecb…ebd288`) and a rehearsal rolled back
+on production, `20260915160000_a_private_delete_is_not_a_staff_action.sql` was
+applied. The files are in `.migration-backup/supabase/migrations/`, and the
+apply is recorded in the tracker's deploy notes for that day. What was stale was
+this heading. Read back on 2026-09-29: the live trigger skips a private chat and
+names the `chat_type`.
 
 ## D-106 `[x]` The chat list event-cost spec runs without the flag its count depends on
 
@@ -10555,6 +10563,12 @@ shareable link or join code for a chat. Reaching somebody you cannot spell at
 all — a stranger with no shared chat — needs that, or a phone lookup, and
 `search_profiles_by_phone` refuses every caller without `users.view`. Nothing in
 this batch offers or implies either.
+
+**2026-09-29: the link is proposed, not built.** See
+`operations/2026-09-29-chat-invite-link-proposal.md`. It sets out what exists,
+Discord's invite as read in its bundle, and five questions for the owner. The
+decisive one is what a person holding the link may see before joining.
+Recommendation: the group's name, picture and member count, and nothing else.
 
 ---
 
@@ -19170,7 +19184,7 @@ proved link by link up to `el.volume`; the last link is the browser's.
 
 ---
 
-## D-255 `[ ]` The connection panel measures only what we send
+## D-255 `[x]` The connection panel measures only what we send
 
 **Severity:** it is the instrument a person opens **when audio is missing**, and
 it is structurally incapable of seeing that.
@@ -19204,6 +19218,19 @@ matters, whether anything is being **heard**: `totalAudioEnergy` and
 arrive» and «a person hears», and 60 packets against zero energy was the
 measured signature of the silence. The verdict must then answer the case this
 entry exists for: outbound perfect, inbound silent.
+
+**Fixed 2026-09-19 in `8f3ddb05`, and marked here only on 2026-09-29.** The
+panel measures both directions and can say «Ничего не приходит». Which signal to
+trust was measured on a loopback peer connection rather than reasoned:
+`totalSamplesReceived` is the fault signal, because it advances only when
+something plays the track out. `totalAudioEnergy` is zero for silence, so it is
+carried as information and never alarms. Both inbound faults outrank every
+outbound answer, «good» included, so flawless outgoing numbers can no longer
+print «Связь стабильна» over silence. Jitter is withheld wherever nothing
+arrives, because `inbound-rtp.jitter` is a cumulative estimate that stays put.
+18 mutations red. The sampler reads the room's publications, not only its
+subscribed tracks, so a room talking to an unsubscribed client reads as
+starved, not idle.
 
 ---
 
