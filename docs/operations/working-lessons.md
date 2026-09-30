@@ -257,6 +257,14 @@ its dollar-quote. And when judging the effect, `docker logs supabase-db` is not
 a witness: it did not show even the debug run's own errors. Kong's access log
 and `cron.job_run_details` are.
 
+**An owner policy is as narrow as the grant under it.** `chats` carries a
+table-level UPDATE for `authenticated`, and «Chat admins update chat» admits an
+owner — so an owner could write every column, `type` included, and a private
+chat's opener could turn it into a group, out of reach of the block rules and
+the private-chat delete refusal (`operations/2026-09-30-database-changes.md` §4).
+When a policy names *who* may update, read the grants for *what*, and freeze the
+columns that are a row's identity with a trigger.
+
 **Every production database change** follows `CLAUDE.md` §10 — backup verified
 first (and proved to be a backup of the *before* state), one transaction, a
 self-check that raises rather than committing a half-applied state, rollback in

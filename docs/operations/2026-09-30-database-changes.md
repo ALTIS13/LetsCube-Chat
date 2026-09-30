@@ -161,3 +161,47 @@ and byte-identical copies in `.migration-backup/supabase/migrations/`.
   stray line, it refuses it. Dumps are stripped of psql's command tags, and each
   definition has to end with its own dollar-quote. The lesson is in
   `working-lessons.md` §5.
+
+## 4. A conversation keeps its kind — a hole found while reading the group chat's powers
+
+- **Found.** Reading which «admins manage» policies a group chat's crown falls
+  under, `chats` turned out to be updatable as a whole: `authenticated` holds
+  UPDATE on the table, `type` included, and «Chat admins update chat» admits an
+  owner. Whoever opens a private chat is its owner. **Measured**, in a
+  rolled-back transaction impersonating a private chat's opener: a control that
+  changed the description wrote one row, and `update public.chats set type =
+  'group'` wrote one row too.
+- **What it opened**, through the API only: a person who has been blocked, and
+  who opened the private chat, could make it a group and go on writing, because
+  `blocked_from_chat` looks at private chats only; the opener could then delete
+  the conversation for both sides, which `20260911120000` had closed for private
+  chats; and a group chat's crown could make it a server.
+- **Migration** `supabase/migrations/20260930170000_a_chat_keeps_its_kind.sql`
+  (SHA-256 `e1bf4a2e8e84f0509ea54c7f61479e0f323db86603b24d6f0db14c628aa80315`),
+  rollback `…_a_chat_keeps_its_kind.rollback.sql`
+  (`7119bc869cde29ec15341c0df2f1dc25498a07a899760b439e7e5b0f87b3bde3`), both
+  copied byte-identical into `.migration-backup/`. A `BEFORE UPDATE` trigger on
+  `chats` refuses any change of `type`, `created_by` or `created_at`, for every
+  role. Nothing legitimate changes them: no function does, and the client writes
+  only the name, the description, the picture, the invitation policy and
+  `updated_at`. A trigger rather than column grants, because a column REVOKE
+  cannot cut a table-level grant.
+- **Backup:** `/srv/letscube/backups/automated/20260930-050124`, `SHA256SUMS` 15
+  of 15 OK, 161 table-data entries.
+- **Rehearsal**, rolled back, as the owner of a throwaway private chat, server
+  and group chat: the controls still write (a description; a server's name and
+  invitation policy; its unchanged type; a group chat's rename through its
+  function); every change of kind is refused — a private chat to a server, a
+  group chat or a channel, a group chat to a server, a server to a private chat
+  — and so is rewriting the creator; the opener's delete of the private chat
+  still removes nothing; the database owner is held too. **The same smoke run
+  without the migration fails on «a private chat became group»**, so it tests
+  the defect it is named after.
+- **Applied** at 02:01:49Z as `postgres`; the post-apply smoke passed in a
+  rolled-back transaction; the trigger is enabled; the kinds on production are
+  as they were, 17 servers and 32 private chats.
+- **Still open**, for the group chat's second phase: its crown is
+  `is_chat_admin`, so the «admins manage» policies on `voice_channels`, `topics`
+  and `chat_channel_categories` let it make a server's furniture in a group chat
+  directly. That is the specification being bypassed rather than anybody's data,
+  and it closes with the calls.
