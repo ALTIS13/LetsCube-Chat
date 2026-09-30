@@ -30,3 +30,14 @@ test("a tablet in the wide layout sends on Enter, as Telegram Web A's layout rul
   assert.equal(enterSends({ userAgent: ANDROID.replace(" Mobile", ""), maxTouchPoints: 5, phoneLayout: false }), true);
   assert.equal(enterSends({ userAgent: IPAD_DESKTOP_SITE, maxTouchPoints: 5, phoneLayout: false }), true);
 });
+
+test("a phone held sideways keeps Enter as a line break; a tablet does not", () => {
+  // An iPhone 14 Pro Max in landscape: 932 wide, so the wide layout, but its
+  // short side is 430 and the keyboard is the same one.
+  assert.equal(enterSends({ userAgent: IPHONE, maxTouchPoints: 5, phoneLayout: false, shortSide: 430 }), false);
+  assert.equal(enterSends({ userAgent: ANDROID, maxTouchPoints: 5, phoneLayout: false, shortSide: 412 }), false);
+  // An iPad's short side is 744 or more; a tablet in the wide layout sends.
+  assert.equal(enterSends({ userAgent: IPAD_DESKTOP_SITE, maxTouchPoints: 5, phoneLayout: false, shortSide: 820 }), true);
+  // A small window on a computer is not a phone, whatever its size.
+  assert.equal(enterSends({ userAgent: WINDOWS, maxTouchPoints: 0, phoneLayout: false, shortSide: 500 }), true);
+});

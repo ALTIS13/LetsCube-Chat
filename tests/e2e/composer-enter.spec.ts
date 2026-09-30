@@ -73,3 +73,28 @@ test("on a phone Enter starts a new line and the arrow sends; on a computer Ente
   await expect(composer).toHaveValue("Лесная, 12\nвторой подъезд");
   expect(sends(fixture)).toBe(1);
 });
+
+test.describe("a phone held sideways", () => {
+  // An iPhone 14 Pro Max in landscape: 932 by 430, above `md`, so the wide
+  // layout — and the same keyboard. Telegram Web A sends here only because its
+  // landscape media query is malformed; the native apps do not (2026-09-30).
+  test.use({
+    viewport: { width: 932, height: 430 },
+    screen: { width: 932, height: 430 },
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+    hasTouch: true,
+    isMobile: true,
+  });
+
+  test("keeps Enter as a line break", async ({ page }) => {
+    const fixture = await boot(page);
+    const composer = page.getByPlaceholder("Сообщение…").first();
+    await composer.click();
+    await page.keyboard.type("Лесная, 12");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("второй подъезд");
+    await expect(composer, "Enter on a sideways phone sent the message").toHaveValue("Лесная, 12\nвторой подъезд");
+    await page.waitForTimeout(500);
+    expect(sends(fixture), "nothing goes until the arrow is pressed").toBe(0);
+  });
+});
