@@ -82,14 +82,14 @@ const FIXTURE = {
       },
     },
     { sender: "Максим", text: "Оба годятся", time: "09:05", own: true },
-    // A voice bubble, without touching the fixture module: `isVoiceMessage`
-    // routes on the text when the row is not typed `audio`, so this draws
-    // `AudioMessage` with no address — which is the exact state whose label
-    // D-208 changed («загрузка...» when the answer has not arrived,
-    // «Не удалось…» when there is no answer). The row carries no `media_url`,
-    // so the shipped mode must still say «загрузка...», and this screenshot is
-    // what proves it.
-    { sender: "Аня", text: "Голосовое сообщение 0:07", time: "09:06", own: false },
+    // A voice bubble with no address — the exact state whose label D-208
+    // changed («загрузка...» when the answer has not arrived, «Не удалось…»
+    // when there is no answer). The row carries no `media_url`, so the shipped
+    // mode must still say «загрузка...», and this screenshot is what proves it.
+    // Typed `audio` through the fixture's `voice`: until 2026-09-30 it was a
+    // text row the bubble routed on its words, which D-330 rightly stopped —
+    // and this case went red with nothing on its surface changed.
+    { sender: "Аня", text: "Голосовое сообщение 0:07", time: "09:06", own: false, voice: true },
   ],
 };
 

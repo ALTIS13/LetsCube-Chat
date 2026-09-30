@@ -38,7 +38,7 @@ test("an empty query is the whole screen, in the order the screen draws it", () 
   assert.deepEqual(idsOf(all), [
     "name", "username", "bio", "phone", "decoration",
     "push", "push-messages", "push-tasks", "push-invites",
-    "presence", "forward-origin", "blocked", "devices",
+    "status", "presence", "forward-origin", "blocked", "devices",
     "theme", "message-text-size", "audio", "updates",
   ]);
   // Whitespace is not a query. A field holding only spaces must not empty the
@@ -84,8 +84,11 @@ test("a heading finds the whole block under it", () => {
   assert.deepEqual([...result.sections], ["privacy"]);
   // Four rows since 2026-09-21: presence, whose name a forward of theirs
   // carries, the list of people this person has blocked, and where they are
-  // signed in. The heading still wins the whole section rather than one row.
+  // signed in; five since 2026-09-30, when the status a person sets joined
+  // them (tracker item 37). The heading still wins the whole section rather
+  // than one row.
   assert.deepEqual(idsOf(matchSettingsRows("конфиденциальность", EVERYONE)), [
+    "status",
     "presence",
     "forward-origin",
     "blocked",
@@ -191,10 +194,21 @@ test("the catalogue is not handed out for mutation", () => {
   // 16 since 2026-09-18, when «Активные сеансы» joined the privacy section
   // (slice F of the call proposal); 17 since 2026-09-20, when «Размер текста
   // сообщений» joined the application section (D-287); 18 since 2026-09-21,
-  // when «Имя при пересылке» joined the privacy section. The number is the
-  // point of this line — a row that vanishes is invisible — so it is moved
+  // when «Имя при пересылке» joined the privacy section; 19 since 2026-09-30,
+  // when «Мой статус» joined it (tracker item 37). The number is the point of
+  // this line — a row that vanishes is invisible — so it is moved
   // deliberately rather than widened into a range.
-  assert.equal(SETTINGS_ROWS.length, 18);
+  assert.equal(SETTINGS_ROWS.length, 19);
+});
+
+test("the status row is found by the status a person wants, not by its label", () => {
+  // Nobody types «Мой статус». They arrive with the state they want to be in,
+  // or with the word for it — and none of these is in the row's label.
+  for (const query of ["не беспокоить", "невидим", "неактивен", "занят", "отошёл", "dnd"]) {
+    assert.deepEqual(idsOf(matchSettingsRows(query, EVERYONE)), ["status"], query);
+  }
+  // «статус» is both rows' word, and both are what a person might mean by it.
+  assert.deepEqual(idsOf(matchSettingsRows("статус", EVERYONE)), ["status", "presence"]);
 });
 
 test("the forward-origin row is reachable by what a person would type", () => {

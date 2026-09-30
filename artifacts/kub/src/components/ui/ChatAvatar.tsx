@@ -6,6 +6,7 @@ import { KubIcon } from "@/components/kub";
 import { useAvatarVariant, useChatAvatarVariant, type AvatarVariantUrls } from "@/hooks/useMediaVariants";
 import { useAvatarMediaUrl } from "@/hooks/useMediaObjectUrl";
 import { isSavedChatLikeName } from "@/lib/chatDisplay";
+import { presenceDotBackground, presentKind, type PresenceKind } from "@/lib/presenceStatus";
 import { cn } from "@/lib/utils";
 import { messageActorAvatarUrl, messageActorDisplayName, type MessageActor } from "@/lib/messageActor";
 import { avatarInkFor } from "@/lib/avatarInk";
@@ -39,6 +40,8 @@ interface ChatAvatarProps {
   size?: "sm" | "md" | "lg" | "xl";
   className?: string;
   showOnline?: boolean;
+  /** Tracker item 37: the dot's colour — idle amber, «не беспокоить» red. */
+  presence?: PresenceKind;
   isSaved?: boolean;
   avatarVariant?: AvatarVariantUrls;
   /**
@@ -166,7 +169,7 @@ function AvatarImage({
   );
 }
 
-export function ChatAvatar({ chat, size = "md", className, showOnline, isSaved: savedOverride, avatarVariant, profileId }: ChatAvatarProps) {
+export function ChatAvatar({ chat, size = "md", className, showOnline, presence, isSaved: savedOverride, avatarVariant, profileId }: ChatAvatarProps) {
   const name = chat.name ?? "?";
   const bgColor = getAvatarColor(chat.id);
   const initials = getInitials(name);
@@ -218,10 +221,12 @@ export function ChatAvatar({ chat, size = "md", className, showOnline, isSaved: 
           // 14.645% is (1 - sqrt(2)/2)/2, so the centre lands on the circle at
           // every size.
           className="absolute h-2 w-2 rounded-full"
+          data-presence={presence ?? "online"}
           style={{
             right: "calc(14.645% - 4px)",
             bottom: "calc(14.645% - 4px)",
-            background: "var(--tg-online)",
+            // Tracker item 37: a shape per state — see presenceDotBackground.
+            background: presenceDotBackground(presence ?? "online", "var(--tg-sidebar)"),
             boxShadow: "0 0 0 2px var(--tg-sidebar)",
           }}
         />
@@ -279,6 +284,8 @@ export function UserAvatar({
 }: {
   user: Pick<Profile, "id" | "full_name" | "username" | "avatar_url"> & {
     profile_frame?: string | null;
+    /** Tracker item 37: what the person publishes beside presence. */
+    presence_status?: string | null;
   };
   size?: "sm" | "md" | "lg" | "xl";
   className?: string;
@@ -333,10 +340,11 @@ export function UserAvatar({
           // 14.645% is (1 - sqrt(2)/2)/2, so the centre lands on the circle at
           // every size.
           className="absolute h-2 w-2 rounded-full"
+          data-presence={presentKind(user.presence_status)}
           style={{
             right: "calc(14.645% - 4px)",
             bottom: "calc(14.645% - 4px)",
-            background: "var(--tg-online)",
+            background: presenceDotBackground(presentKind(user.presence_status), "var(--tg-header)"),
             boxShadow: "0 0 0 2px var(--tg-header)",
           }}
         />

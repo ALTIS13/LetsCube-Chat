@@ -38,6 +38,13 @@ export type PublicPreviewMessage = {
   editedAt?: string;
   pinned?: boolean;
   /**
+   * A voice note: typed `audio`, as every voice note in production is, and
+   * with no address — the state whose label D-208 settled («загрузка...»).
+   * A message is drawn as a player by what it is, never by what it says
+   * (D-330), so a caption cannot stand in for this.
+   */
+  voice?: boolean;
+  /**
    * How many days before the capture clock the message was sent, so a
    * conversation can cross a date separator. Today when absent.
    */
@@ -241,6 +248,8 @@ export function parsePublicPreviewFixture(raw: unknown): PublicPreviewFixture {
     const field = `messages[${index}]`;
     if (typeof message.own !== "boolean") fail(`${field}.own must be a boolean`);
     if (message.pinned !== undefined && typeof message.pinned !== "boolean") fail(`${field}.pinned must be a boolean`);
+    if (message.voice !== undefined && typeof message.voice !== "boolean") fail(`${field}.voice must be a boolean`);
+    if (message.voice === true && message.image !== undefined) fail(`${field} is a voice note or a picture, not both`);
     const image = message.image === undefined ? undefined : requireImage(message.image, `${field}.image`);
     const reactions = message.reactions === undefined ? undefined : requireReactions(message.reactions, `${field}.reactions`);
     const forwardedFrom =
@@ -261,6 +270,7 @@ export function parsePublicPreviewFixture(raw: unknown): PublicPreviewFixture {
       // one is tested against `undefined` rather than for truthiness.
       ...(replyTo === undefined ? {} : { replyTo }),
       ...(message.pinned ? { pinned: true } : {}),
+      ...(message.voice ? { voice: true } : {}),
       // Zero is today, which is what an absent value already means.
       ...(daysAgo ? { daysAgo } : {}),
     };
@@ -387,6 +397,7 @@ function previewProfile(id: string, name: string, username: string | null): Prof
     profile_frame: null,
     profile_background: null,
     online_at: EPOCH,
+    presence_status: null,
     role: "user",
     created_at: EPOCH,
     updated_at: EPOCH,
@@ -532,7 +543,7 @@ export function previewMessages(fixture: PublicPreviewFixture): MessageWithSende
       bot_input_field_placeholder: null,
       bot_reply_markup: null,
       content: message.text,
-      type: image ? "image" : "text",
+      type: image ? "image" : message.voice ? "audio" : "text",
       media_bucket: null,
       media_path: null,
       media_url: image ? image.url : null,

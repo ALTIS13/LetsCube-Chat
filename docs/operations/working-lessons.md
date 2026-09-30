@@ -100,6 +100,17 @@ defect injected into the fixed code (red)**, and a plain run (green). The third
 row is the one usually skipped and the one that proves the fix did not blunt
 the check.
 
+**A gate read from a shared store must know whose answer it holds.** The
+heartbeat decided whether to publish presence from the privacy store in the
+render where a new account first appeared — before the effect that tells the
+store about that account had run. The store still held the signed-out default,
+the runner beats at once, and people who had turned presence off were published
+once on every app open for four weeks (2026-09-03 → 2026-09-30). Nothing on
+screen ever showed it; a spec that counted the outgoing requests against a
+mocked backend did, in its first run. Stamp an answer with its account and gate
+on it, prove a privacy gate by counting requests, and let the database refuse as
+well where it can (tracker item 37).
+
 **A width nothing runs is a width nothing protects.** A viewer-header test was red
 only at 360px, for as long as nobody ran 360. The project's viewport matrix is a
 habit of four names, encoded nowhere: in the docs 390 is named 38 times and 360

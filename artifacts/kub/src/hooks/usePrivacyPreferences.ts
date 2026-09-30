@@ -8,6 +8,7 @@ import {
   type PrivacyGateway,
   type PrivacyPreferences,
 } from "@/lib/privacyPreferences";
+import { isManualStatus, type ManualStatus } from "@/lib/presenceStatus";
 
 export type { PrivacyPreferences };
 
@@ -16,7 +17,7 @@ const gateway: PrivacyGateway = {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("privacy_preferences")
-      .select("presence_visible,forward_origin_visible")
+      .select("presence_visible,forward_origin_visible,manual_status,manual_status_until")
       .eq("user_id", userId)
       .maybeSingle();
     // An absent row is not an error — it is the defaults.
@@ -25,6 +26,8 @@ const gateway: PrivacyGateway = {
       ? {
           presenceVisible: data.presence_visible !== false,
           forwardOriginVisible: data.forward_origin_visible !== false,
+          manualStatus: isManualStatus(data.manual_status) ? data.manual_status : "online",
+          manualStatusUntil: typeof data.manual_status_until === "string" ? data.manual_status_until : null,
         }
       : null;
   },
@@ -39,6 +42,8 @@ const gateway: PrivacyGateway = {
         user_id: userId,
         presence_visible: preferences.presenceVisible,
         forward_origin_visible: preferences.forwardOriginVisible,
+        manual_status: preferences.manualStatus,
+        manual_status_until: preferences.manualStatus === "online" ? null : preferences.manualStatusUntil,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id" },
@@ -48,12 +53,30 @@ const gateway: PrivacyGateway = {
 
   async clearPresence(userId) {
     const supabase = createClient();
-    const { error } = await supabase.from("profiles").update({ online_at: null }).eq("id", userId);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ online_at: null, presence_status: null })
+      .eq("id", userId);
+    if (error) throw new Error(error.message);
+  },
+
+  async setStatus(_userId, status, until) {
+    // The caller is the database's `auth.uid()`; the account is not an argument.
+    const supabase = createClient();
+    const { error } = await supabase.rpc("presence_set_status", { p_status: status, p_until: until });
     if (error) throw new Error(error.message);
   },
 };
 
 const store = createPrivacyPreferencesStore(gateway);
+
+/**
+ * Ask again, for a window coming back into view: a status chosen on another
+ * device reaches this one then (tracker item 37).
+ */
+export function refreshPrivacyPreferences(userId: string | null): Promise<void> {
+  return store.refresh(userId);
+}
 
 /**
  * A person's privacy preferences.
@@ -91,5 +114,10 @@ export function usePrivacyPreferences() {
     [userId],
   );
 
-  return { ...snapshot, setPresenceVisible, setForwardOriginVisible };
+  const setManualStatus = useCallback(
+    (status: ManualStatus, until: string | null) => store.setManualStatus(userId, status, until),
+    [userId],
+  );
+
+  return { ...snapshot, setPresenceVisible, setForwardOriginVisible, setManualStatus };
 }

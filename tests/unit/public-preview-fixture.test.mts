@@ -165,3 +165,25 @@ test("a message from an earlier day lands on that day, so a conversation can cro
     assert.throws(withDays(daysAgo), /daysAgo/, `${JSON.stringify(daysAgo)} was accepted`);
   }
 });
+
+/**
+ * D-330 draws a player by what a message is, never by what it says, so the
+ * fixture's voice note has to be one: typed `audio`, with no address. Until it
+ * could say so, `media-preview-visual.spec` built its voice bubble from a
+ * caption and went red the day D-330 shipped.
+ */
+test("a voice note is typed audio with no address, and cannot also be a picture", () => {
+  const voice = { sender: "Аня", text: "Голосовое сообщение 0:07", time: "00:00", own: false, voice: true };
+  const parsed = parsePublicPreviewFixture({ ...group, messages: [voice] });
+  assert.equal(parsed.messages[0].voice, true);
+  const [row] = previewMessages(parsed);
+  assert.equal(row.type, "audio");
+  assert.equal(row.media_url, null);
+  const plain = previewMessages(parsePublicPreviewFixture({ ...group, messages: [{ ...voice, voice: undefined }] }));
+  assert.equal(plain[0].type, "text", "a caption alone is text");
+  assert.throws(
+    () => parsePublicPreviewFixture({ ...group, messages: [{ ...voice, image: { url: PIXEL, width: 4, height: 3 } }] }),
+    /voice note or a picture/,
+  );
+  assert.throws(() => parsePublicPreviewFixture({ ...group, messages: [{ ...voice, voice: "yes" }] }), /voice must be a boolean/);
+});

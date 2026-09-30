@@ -377,7 +377,11 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
   };
 
   const subtitle = getSubtitle();
-  const isOnline = type === "private" && getUserPresenceState(chat?.other_user, presenceNow).isOnline;
+  const peerPresence = getUserPresenceState(chat?.other_user, presenceNow);
+  // Green says «в сети» and nothing else: «не беспокоить» and «неактивен» are
+  // present too, but their words are not a green light (tracker item 37).
+  const isOnline = type === "private" && peerPresence.isOnline;
+  const isPlainlyOnline = isOnline && peerPresence.kind === "online";
   const avatarProfileIds = useMemo(
     () => chat?.type === "private" && chat.other_user?.id && chat.other_user.avatar_url
       ? [chat.other_user.id]
@@ -516,6 +520,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
                 chat={{ id: chatId, name, avatar_url: chat?.avatar_url ?? null, type }}
                 size="sm"
                 showOnline={isOnline}
+                presence={peerPresence.kind}
                 isSaved={display.isSaved}
                 avatarVariant={avatarVariant}
                 profileId={chat?.other_user?.id ?? null}
@@ -531,7 +536,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
               {subtitle && (
                 <span className={cn(
                   "block truncate text-xs ios:text-sm leading-tight",
-                  isOnline ? "text-[color:var(--kub-online-text)]" : "text-[color:var(--kub-muted)]"
+                  isPlainlyOnline ? "text-[color:var(--kub-online-text)]" : "text-[color:var(--kub-muted)]"
                 )}>
                   {subtitle}
                 </span>

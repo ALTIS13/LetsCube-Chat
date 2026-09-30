@@ -507,10 +507,12 @@ test("the pulse guarantee fails when the animation comes back", () => {
   const file = FILES.find((f) => f.rel === "components/sidebar/ChatListItem.tsx");
   const text = read(file);
   assert.equal(/kub-pulse/.test(blankComments(text)), false);
+  // The dot's fill moved into a map by status on 2026-09-30 (tracker item 37);
+  // the shape it pulses on is still one string.
   const broken = mutate(
     text,
-    `"absolute bottom-0 right-0 h-2 w-2 rounded-full bg-[var(--kub-online)]"`,
-    `"absolute bottom-0 right-0 h-2 w-2 rounded-full bg-[var(--kub-online)] kub-pulse"`,
+    `"absolute bottom-0 right-0 h-2 w-2 rounded-full"`,
+    `"absolute bottom-0 right-0 h-2 w-2 rounded-full kub-pulse"`,
   );
   assert.equal(/kub-pulse/.test(blankComments(broken)), true);
 });

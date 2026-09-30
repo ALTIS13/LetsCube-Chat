@@ -3221,8 +3221,11 @@ than from memory:
 
 Where ours differs, with the reason:
 
-- **No status row, no durations.** Presence statuses are item 37 and do not
-  exist yet; a row that cannot work is absent (§8).
+- **No status row, no durations** — until 2026-09-30, when item 37 built them.
+  The row now sits where this section read it, after «Редактировать
+  профиль», and names the status; it opens the choice in place under itself
+  rather than as a submenu, as every other disclosure here does, and a finger
+  reaches it as well as a pointer.
 - **No volume sliders.** Our microphone gain does not reach a call
   (`AUDIO_GAIN_HINT`) and there is no call-wide output volume, so either slider
   would move nothing a call carries. «Входная чувствительность» and «Режим
@@ -3551,6 +3554,18 @@ bundle is a desktop shape until a phone says otherwise.
 - The manual statuses and their durations come from the owner's screenshots:
   В сети, Неактивен, Не беспокоить, Невидимый; 15 минут, 1 час, 8 часов,
   24 часа, 3 дня, навсегда. That menu was not read in the bundle.
+
+**The status dot. SHIPPED**, read 2026-09-30 in the same bundle: the function
+that draws a status picks a mask per state — `Masks.STATUS_IDLE`,
+`STATUS_DND`, `STATUS_ONLINE` (with its own mobile and VR variants), and
+`STATUS_OFFLINE` for offline, invisible and unknown alike. So each state has a
+shape of its own, and invisible is drawn as absence. **The shapes themselves
+were not read** (the masks are defined outside the chunk that was saved).
+Ours are a disc, a crescent, a disc with a bar and a ring
+(`presenceDotBackground`), so the four are told apart without their colours —
+the light theme's amber is darkened to 3:1 for a dot and reads brownish on its
+own. The mobile variant — a different online mark for somebody only on a phone
+— is noted and not adopted: presence here does not record the device.
 
 ## 26. Subject 18 — how a bot is marked, 2026-09-29
 

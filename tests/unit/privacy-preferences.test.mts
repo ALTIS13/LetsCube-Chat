@@ -13,6 +13,7 @@ interface Recorder extends PrivacyGateway {
   writes: Array<{ userId: string; presenceVisible: boolean }>;
   rows: Record<string, PrivacyPreferences | undefined>;
   cleared: string[];
+  statuses: Array<{ userId: string; status: string; until: string | null }>;
 }
 
 /** The whole row, as the table holds it; a bare boolean is presence shorthand. */
@@ -23,11 +24,12 @@ const row = (value: boolean | Partial<PrivacyPreferences>): PrivacyPreferences =
 
 function recordingGateway(
   seed: Record<string, boolean | Partial<PrivacyPreferences> | undefined> = {},
-  failures: { read?: Error; write?: Error; clear?: Error } = {},
+  failures: { read?: Error; write?: Error; clear?: Error; status?: Error } = {},
 ): Recorder {
   const reads: string[] = [];
   const writes: Array<{ userId: string; presenceVisible: boolean }> = [];
   const cleared: string[] = [];
+  const statuses: Array<{ userId: string; status: string; until: string | null }> = [];
   const rows: Record<string, PrivacyPreferences | undefined> = {};
   for (const [userId, value] of Object.entries(seed)) {
     if (value !== undefined) rows[userId] = row(value);
@@ -36,6 +38,7 @@ function recordingGateway(
     reads,
     writes,
     cleared,
+    statuses,
     rows,
     async read(userId) {
       reads.push(userId);
@@ -51,6 +54,12 @@ function recordingGateway(
       if (failures.clear) throw failures.clear;
       cleared.push(userId);
     },
+    // `presence_set_status`: two columns of the row, and nothing else.
+    async setStatus(userId, status, until) {
+      if (failures.status) throw failures.status;
+      statuses.push({ userId, status, until });
+      rows[userId] = { ...(rows[userId] ?? PRIVACY_DEFAULTS), manualStatus: status, manualStatusUntil: until };
+    },
   };
 }
 
@@ -58,9 +67,10 @@ test("an absent row means presence is published", async () => {
   const store = createPrivacyPreferencesStore(recordingGateway());
   await store.sync("user-1");
   assert.deepEqual(store.getSnapshot(), {
-    preferences: { presenceVisible: true, forwardOriginVisible: true },
+    preferences: { presenceVisible: true, forwardOriginVisible: true, manualStatus: "online", manualStatusUntil: null },
     loading: false,
     error: null,
+    userId: "user-1",
   });
 });
 
@@ -149,9 +159,10 @@ test("signing out clears the answer and stops claiming to be loading", async () 
   await store.sync("user-1");
   await store.sync(null);
   assert.deepEqual(store.getSnapshot(), {
-    preferences: { presenceVisible: true, forwardOriginVisible: true },
+    preferences: { presenceVisible: true, forwardOriginVisible: true, manualStatus: "online", manualStatusUntil: null },
     loading: false,
     error: null,
+    userId: null,
   });
 });
 
@@ -171,6 +182,7 @@ test("a reply for an account that has since been left is discarded", async () =>
     },
     async write() {},
     async clearPresence() {},
+    async setStatus() {},
   };
 
   const store = createPrivacyPreferencesStore(gateway);
@@ -219,6 +231,7 @@ test("a saved choice survives a store that could never read one", async () => {
     },
     async write() {},
     async clearPresence() {},
+    async setStatus() {},
   };
 
   const store = createPrivacyPreferencesStore(gateway);
@@ -246,6 +259,7 @@ test("a new account never shows the previous one's answer, not even while loadin
     },
     async write() {},
     async clearPresence() {},
+    async setStatus() {},
   };
 
   const store = createPrivacyPreferencesStore(gateway);
@@ -324,7 +338,7 @@ test("changing one switch does not reset the other", async () => {
   assert.equal(await store.setPreference("user-1", "forwardOriginVisible", false), true);
   assert.equal(await store.setPresenceVisible("user-1", false), true);
 
-  assert.deepEqual(gateway.rows["user-1"], { presenceVisible: false, forwardOriginVisible: false });
+  assert.deepEqual(gateway.rows["user-1"], { ...PRIVACY_DEFAULTS, presenceVisible: false, forwardOriginVisible: false });
   assert.equal(
     store.getSnapshot().preferences.forwardOriginVisible,
     false,
@@ -332,7 +346,56 @@ test("changing one switch does not reset the other", async () => {
   );
 
   assert.equal(await store.setPreference("user-1", "forwardOriginVisible", true), true);
-  assert.deepEqual(gateway.rows["user-1"], { presenceVisible: false, forwardOriginVisible: true });
+  assert.deepEqual(gateway.rows["user-1"], { ...PRIVACY_DEFAULTS, presenceVisible: false, forwardOriginVisible: true });
+});
+
+/**
+ * The same defect with four columns: a chosen status is somebody's choice too,
+ * and neither switch may reset it, nor it either switch.
+ */
+test("choosing a status resets neither switch, and a switch does not reset the status", async () => {
+  const gateway = recordingGateway({ "user-1": { forwardOriginVisible: false } });
+  const store = createPrivacyPreferencesStore(gateway);
+  await store.sync("user-1");
+
+  const until = "2026-09-30T13:00:00.000Z";
+  assert.equal(await store.setManualStatus("user-1", "dnd", until), true);
+  assert.deepEqual(gateway.rows["user-1"], { ...PRIVACY_DEFAULTS, forwardOriginVisible: false, manualStatus: "dnd", manualStatusUntil: until });
+
+  assert.equal(await store.setPreference("user-1", "forwardOriginVisible", true), true);
+  assert.deepEqual(gateway.rows["user-1"], { ...PRIVACY_DEFAULTS, manualStatus: "dnd", manualStatusUntil: until });
+});
+
+test("«В сети» carries no end, whatever the caller passed", async () => {
+  const gateway = recordingGateway({ "user-1": { manualStatus: "idle", manualStatusUntil: "2026-09-30T13:00:00.000Z" } });
+  const store = createPrivacyPreferencesStore(gateway);
+  await store.sync("user-1");
+  assert.equal(await store.setManualStatus("user-1", "online", "2026-10-01T00:00:00.000Z"), true);
+  assert.deepEqual(gateway.statuses, [{ userId: "user-1", status: "online", until: null }], "the database refuses «online» with an end");
+  assert.equal(store.getSnapshot().preferences.manualStatusUntil, null);
+});
+
+test("a status goes to the database's own call, which publishes it; nothing is erased from here", async () => {
+  // `presence_set_status` stores the choice and publishes it in one go —
+  // «Невидимый» included, which it hides — so the client neither writes the
+  // whole row for it nor clears presence itself.
+  const gateway = recordingGateway();
+  const store = createPrivacyPreferencesStore(gateway);
+  await store.sync("user-1");
+  await store.setManualStatus("user-1", "invisible", null);
+  assert.deepEqual(gateway.statuses, [{ userId: "user-1", status: "invisible", until: null }]);
+  assert.deepEqual(gateway.writes, []);
+  assert.deepEqual(gateway.cleared, []);
+});
+
+test("a failed status write puts the previous status back", async () => {
+  const gateway = recordingGateway({ "user-1": { manualStatus: "idle" } }, { status: new Error("network down") });
+  const store = createPrivacyPreferencesStore(gateway);
+  await store.sync("user-1");
+  assert.equal(await store.setManualStatus("user-1", "dnd", null), false);
+  assert.equal(store.getSnapshot().preferences.manualStatus, "idle");
+  assert.equal(store.getSnapshot().error, "network down");
+  assert.deepEqual(gateway.cleared, []);
 });
 
 test("a failed write rolls the forward switch back too", async () => {
@@ -362,4 +425,125 @@ test("nothing is written for the forward switch without an account", async () =>
   const store = createPrivacyPreferencesStore(gateway);
   assert.equal(await store.setPreference(null, "forwardOriginVisible", false), false);
   assert.deepEqual(gateway.writes, []);
+});
+
+test("an answer says whose it is, and a new account's is not anybody's until it arrives", async () => {
+  let release: (() => void) | null = null;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const gateway = recordingGateway();
+  const slow: PrivacyGateway = {
+    ...gateway,
+    async read(userId) {
+      if (userId === "user-2") await pending;
+      return gateway.read(userId);
+    },
+  };
+  const store = createPrivacyPreferencesStore(slow);
+  assert.equal(store.getSnapshot().userId, null, "before any account was asked about");
+  await store.sync("user-1");
+  assert.equal(store.getSnapshot().userId, "user-1");
+
+  const switching = store.sync("user-2");
+  assert.deepEqual(
+    { userId: store.getSnapshot().userId, loading: store.getSnapshot().loading },
+    { userId: "user-2", loading: true },
+    "the new account's, and still being asked",
+  );
+  release!();
+  await switching;
+  assert.deepEqual({ userId: store.getSnapshot().userId, loading: store.getSnapshot().loading }, { userId: "user-2", loading: false });
+
+  await store.sync(null);
+  assert.equal(store.getSnapshot().userId, null);
+});
+
+test("a refresh asks again for the same account, so a status chosen elsewhere arrives", async () => {
+  const gateway = recordingGateway();
+  const store = createPrivacyPreferencesStore(gateway);
+  await store.sync("user-1");
+  // Chosen on the phone.
+  gateway.rows["user-1"] = { ...PRIVACY_DEFAULTS, manualStatus: "dnd", manualStatusUntil: null };
+  await store.refresh("user-1");
+  assert.equal(store.getSnapshot().preferences.manualStatus, "dnd");
+  assert.equal(store.getSnapshot().loading, false, "a refresh never shows a loading state");
+  assert.deepEqual(gateway.reads, ["user-1", "user-1"]);
+});
+
+test("a refresh asks nothing for an account the store is not on, or before its first answer", async () => {
+  const gateway = recordingGateway();
+  const store = createPrivacyPreferencesStore(gateway);
+  await store.refresh("user-1");
+  await store.refresh(null);
+  assert.deepEqual(gateway.reads, [], "nothing held yet");
+  await store.sync("user-1");
+  await store.refresh("user-2");
+  assert.deepEqual(gateway.reads, ["user-1"]);
+});
+
+test("a failed refresh keeps the answer already held", async () => {
+  const failures: { read?: Error } = {};
+  const gateway = recordingGateway({ "user-1": { presenceVisible: false } }, failures);
+  const store = createPrivacyPreferencesStore(gateway);
+  await store.sync("user-1");
+  failures.read = new Error("network down");
+  await store.refresh("user-1");
+  assert.equal(store.getSnapshot().preferences.presenceVisible, false, "not the default handed back");
+  assert.equal(store.getSnapshot().error, null);
+});
+
+/**
+ * A read in flight when the person changes something would otherwise land
+ * afterwards and put the old value back — a switch that flips back by itself.
+ */
+test("a read that started before a write cannot undo it", async () => {
+  let release: (() => void) | null = null;
+  const gateway = recordingGateway({ "user-1": { forwardOriginVisible: true } });
+  let held = false;
+  const slow: PrivacyGateway = {
+    ...gateway,
+    async read(userId) {
+      const row = await gateway.read(userId);
+      if (held) {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+      return row;
+    },
+  };
+  const store = createPrivacyPreferencesStore(slow);
+  await store.sync("user-1");
+  held = true;
+  const refreshing = store.refresh("user-1");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(await store.setPreference("user-1", "forwardOriginVisible", false), true);
+  release!();
+  await refreshing;
+  assert.equal(store.getSnapshot().preferences.forwardOriginVisible, false, "the stale read put the old value back");
+});
+
+/**
+ * The heartbeat reads this store at the root of the application. A refresh that
+ * brought back the answer already held used to hand out a new object for it,
+ * and the open conversation rendered again for nothing on every return to the
+ * window (`chat-list-event-cost.spec.ts`, 2026-09-30).
+ */
+test("an answer that did not change is not handed out again", async () => {
+  const gateway = recordingGateway({ "user-1": { presenceVisible: false } });
+  const store = createPrivacyPreferencesStore(gateway);
+  await store.sync("user-1");
+  const held = store.getSnapshot();
+  let notified = 0;
+  store.subscribe(() => {
+    notified += 1;
+  });
+  await store.refresh("user-1");
+  assert.equal(notified, 0);
+  assert.equal(store.getSnapshot(), held, "the same object, so nothing re-renders");
+
+  gateway.rows["user-1"] = { ...PRIVACY_DEFAULTS, presenceVisible: false, manualStatus: "dnd" };
+  await store.refresh("user-1");
+  assert.equal(notified, 1, "a changed answer still arrives");
 });

@@ -35,10 +35,12 @@ import { WindowsStartupSection } from "@/components/settings/WindowsStartupSecti
 import { IosCallsSection } from "@/components/settings/IosCallsSection";
 import { SessionDevicesSection } from "@/components/settings/SessionDevicesSection";
 import { ProfileDecorationSection } from "@/components/settings/ProfileDecorationSection";
+import { StatusPicker, useChosenStatus } from "@/components/presence/StatusPicker";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
 import { getBuildMetadata } from "@/lib/monitoring";
 import { getVisibleReleaseVersion } from "@/lib/releaseVersionLabel";
+import { STATUS_OPTIONS } from "@/lib/presenceStatus";
 import {
   SETTINGS_SECTION_TITLES,
   audioSummary,
@@ -109,7 +111,7 @@ const THEME_OPTIONS: ReadonlyArray<{ value: Theme; label: string; icon: KubIconN
 ];
 
 /** The heavy sections, which stay unmounted until their row is opened. */
-type DisclosureId = "phone" | "decoration" | "audio" | "application" | "blocked" | "devices";
+type DisclosureId = "phone" | "decoration" | "audio" | "application" | "blocked" | "devices" | "status";
 
 export interface SettingsScreen {
   ready: boolean;
@@ -451,6 +453,9 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
     setCurrentUser({ ...currentUser, avatar_url: null });
   };
 
+  // Tracker item 37. A hook, so above the early return below.
+  const chosenStatus = useChosenStatus();
+
   if (!currentUser) {
     return {
       ready: false,
@@ -469,6 +474,10 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
   const pushAction = pushStatusAction(pushStatus, { nativeAndroid });
   const buildVersionLabel = getVisibleReleaseVersion(getBuildMetadata().version);
   const presenceExplanation = presenceHint(privacy.preferences.presenceVisible);
+  const chosenStatusSummary = [
+    STATUS_OPTIONS.find((option) => option.id === chosenStatus.status)?.label ?? "В сети",
+    chosenStatus.untilLabel,
+  ].filter(Boolean).join(" · ");
   const forwardOriginExplanation = forwardOriginHint(privacy.preferences.forwardOriginVisible);
 
   const identity = (
@@ -722,6 +731,18 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
 
       privacy: (
         <SettingsGroup id="privacy">
+          {shows("status") && (
+            <DisclosureRow
+              id="status"
+              icon="smile"
+              title="Мой статус"
+              value={chosenStatusSummary}
+              open={openSections.has("status")}
+              onToggle={toggleSection}
+            >
+              <StatusPicker />
+            </DisclosureRow>
+          )}
           {shows("presence") && (
             <SettingsRow
               icon={privacy.preferences.presenceVisible ? "eye" : "eyeOff"}

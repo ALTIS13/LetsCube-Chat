@@ -1081,7 +1081,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     draws (this pass followed the menu, the profile and the searches; the
     owner's screenshots are the evidence for d, not a bundle read).
 
-37. `[ ]` Presence, idleness and the AFK channel — and the false positives that
+37. `[~]` Presence, idleness and the AFK channel — and the false positives that
     make or break it. Asked for by the owner on 2026-09-20, in the same message
     as item 35 but a different system, and he flagged the hard part himself.
 
@@ -1124,6 +1124,41 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     four questions to the owner. Two parts need him: a status column is a
     database change, and presence from any input on Windows needs a native
     command, so a Windows release.
+
+    **2026-09-30: the first phase is built, and its database change applied**, on the
+    owner's «проверь как это устроено у Telegram/Discord … и внеси уже в наш
+    проект». The menu under the face on a desktop and «Мой статус» in the
+    settings: В сети / Неактивен / Не беспокоить / Невидимый, the last three
+    for 15 минут … навсегда. «Неактивен» also comes by itself after ten minutes
+    without input, speech or a playing video — the owner's false positive,
+    answered the way the reference answers it. «Не беспокоить» silences
+    notification and call sounds here. Others see a dot with a shape per state
+    (a crescent, a bar, a ring) and the words under the name.
+
+    **What others see is decided by the database, from every device** —
+    `presence_beat`, migration `20260930230000_presence_status.sql`
+    (`operations/2026-09-30-database-changes.md` §7): a device reports when its
+    person last did something, the latest report wins, and the status is
+    computed from the stored choice. So a quiet laptop does not make somebody
+    idle while they use their phone, and a choice made on one device holds on
+    all of them.
+
+    **A privacy defect found and fixed on the way:** presence turned off was
+    published once every time the application opened, since the presence
+    setting of 2026-09-03 — the heartbeat started from a privacy answer that
+    belonged to no account yet. Reproduced in
+    `tests/e2e/presence-status.spec.ts` before the fix; the client now beats
+    only on its own account's answer, and the database refuses the beat anyway.
+
+    **Left for the second phase:** the system idle time and the AFK move on
+    Windows (a native command, so a Windows release); leaving a call after five
+    hours idle; «не беспокоить» for push notifications, which are sent by the
+    server and still sound; and one race, reasoned rather than observed — a
+    beat from another device that reads the row in the milliseconds before a
+    new choice commits publishes the previous status until its next beat, a
+    minute at most. Serialising the beat on the privacy row (`for update`) is
+    the fix; the same device no longer races itself, since a choice no longer
+    wakes its own heartbeat (asserted in `presence-status.spec.ts`).
 
 
 38. `[ ]` Badges: real icons, and the history a badge carries. Asked for by the

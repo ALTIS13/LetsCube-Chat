@@ -1,5 +1,12 @@
 # Presence, idle and the AFK channel — tracker item 37 — 2026-09-29
 
+> **2026-09-30: the first phase is built.** Question 1 was settled as
+> recommended; question 2 differently from this text — the automatic idle is
+> not written by each device but decided by the database from every device's
+> report (`presence_beat`), so two devices cannot contradict each other. See
+> tracker item 37 and `2026-09-30-database-changes.md` §7. Questions 3 and 4
+> belong to the second phase, with the Windows release.
+
 What the owner asked for: statuses that change in real time; on Windows,
 presence that counts only real use of the machine; somebody asleep in a voice
 channel shown «Неактивен» and moved to the server's AFK channel; and no false

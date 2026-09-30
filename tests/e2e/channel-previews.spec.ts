@@ -83,6 +83,11 @@ async function open(page: Page, unread?: Row[]) {
   });
   const realtime = new RealtimeFixture();
   await realtime.install(page);
+  // The rows are dated 2026-09-28 and the time asserted below is today's
+  // «ЧЧ:ММ»: unpinned, this spec went red on the 29th with nothing in the
+  // product changed — «Вчера» where it expects a time. Pinned to the fixture's
+  // own morning, as `jump-to-bottom.spec.ts` pins its own; timers keep running.
+  await page.clock.setFixedTime(new Date("2026-09-28T10:00:00.000Z"));
   await page.goto(`/chat/${TEAM}`, { waitUntil: "domcontentloaded" });
   // A phone opens a server on its list by itself (item 54); a computer has the column.
   await expect(page.getByTestId("channel-rail-list")).toBeVisible();

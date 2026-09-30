@@ -301,6 +301,7 @@ export type SettingsRowId =
   | "push-messages"
   | "push-tasks"
   | "push-invites"
+  | "status"
   | "presence"
   | "forward-origin"
   | "blocked"
@@ -349,6 +350,9 @@ export const SETTINGS_ROWS: readonly SettingsRowMeta[] = [
   { id: "push-messages", section: "notifications", label: "Сообщения", keywords: ["пуш", "push", "чаты"] },
   { id: "push-tasks", section: "notifications", label: "Задачи", keywords: ["пуш", "push", "таски"] },
   { id: "push-invites", section: "notifications", label: "Приглашения", keywords: ["пуш", "push", "инвайты"] },
+  // 2026-09-30, tracker item 37: the status a person sets — «Не беспокоить» is
+  // what somebody types, and «занят» what they mean.
+  { id: "status", section: "privacy", label: "Мой статус", keywords: ["статус", "не беспокоить", "неактивен", "невидимый", "в сети", "занят", "dnd", "отошёл"] },
   { id: "presence", section: "privacy", label: "Статус «в сети»", keywords: ["онлайн", "presence", "последний вход", "видимость"] },
   // 2026-09-21. Somebody who wants this arrives with «пересылка», «переслал» or
   // «моё имя», not with the label — and one who arrives with «анонимно» is

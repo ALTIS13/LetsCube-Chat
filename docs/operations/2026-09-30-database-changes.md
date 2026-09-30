@@ -286,3 +286,66 @@ and byte-identical copies in `.migration-backup/supabase/migrations/`.
   back, and no rehearsal task is left.
 - **Client:** `lib/taskLocations.ts`, the extra locations under «Локация» in
   `TaskFormModal.tsx`, and the function's type in `types/database.ts`.
+
+## 7. A status beside presence — tracker item 37, first phase
+
+- **Migration** `supabase/migrations/20260930230000_presence_status.sql`
+  (SHA-256 `e540257185ad5f911a83d60db872df8234c92510801c3d761dadc27c7aa1c529`),
+  rollback `…_presence_status.rollback.sql`
+  (`1ac5342e02a34695db9b5376c83c15804f35e9f91f47a6243ee36da0b86091dd`), both
+  copied byte-identical into `.migration-backup/`. Roll the client back before
+  the rollback: it calls both functions.
+- **What it does.** `profiles.presence_status` (`idle`, `dnd` or nothing) is
+  what everybody may read beside `online_at`; `privacy_preferences` gains the
+  chosen status, when it runs out, and `last_active_at`, all three readable by
+  their owner alone. **Presence is now published by the database, not by each
+  device.** `presence_beat(p_active_at)` is the heartbeat: it keeps the latest
+  activity any device reported, never a clock ahead of the server's, and
+  publishes `online_at` with the status — the chosen one while it lasts, else
+  «неактивен» after ten minutes without activity — or clears both for somebody
+  who turned presence off or chose «Невидимый». `presence_set_status` stores a
+  choice and publishes it at once. Both SECURITY INVOKER, so row-level security
+  and the ban on a banned person's profile writes apply unchanged; EXECUTE for
+  `authenticated` only, granted back explicitly after the revoke from PUBLIC.
+- **Why the database decides.** With two devices, a status written by each
+  client lets an idle laptop override the phone in use and overwrite a choice
+  made on the phone; here the device in use wins and a choice holds everywhere.
+  Reasoned from the first draft, which wrote the status from the client — not
+  observed, since no status existed. And the beat now reads the privacy
+  preference itself: the client had published presence for people who turned
+  it off (below).
+- **Found on the way, and fixed in the client:** presence turned off was
+  published once every time the application opened. The heartbeat started from
+  the signed-out default of the privacy store, in the one render before the
+  account's own answer was asked for; the runner beats at once, the request
+  left, and the next render stopped it too late. Reproduced before the fix —
+  `tests/e2e/presence-status.spec.ts`, a `PATCH profiles {online_at}` for an
+  account whose row says `presence_visible = false`. The store's answer now
+  names its account, the beat starts only on this account's settled answer
+  (`presencePublished`), and the database refuses such a beat anyway. The
+  defect dates from the presence setting of 2026-09-03.
+- **Backup:** `/srv/letscube/backups/automated/20260930-071615`, `SHA256SUMS` 15
+  of 15 OK, 161 table-data entries, `privacy_preferences` among them.
+- **Rehearsal**, rolled back, as the two QA accounts: a fresh beat publishes
+  presence and no status; ten quiet minutes publish «неактивен»; a device in use
+  keeps a later report of an idle one from moving activity back; a clock a day
+  ahead is stored as now; «не беспокоить» is published at once and outlasts a
+  quiet mouse, and once run out gives the automatic status back; «Невидимый»
+  and presence turned off publish nothing and clear what was there; «В сети»
+  keeps no end; an unknown status and one already over are refused; the member
+  reads the admin's public status and not their privacy row, and the member's
+  beat touches only the member; `anon` runs neither function. **Five mutants —
+  the older report moving activity back, presence-off ignored, idle overriding
+  «не беспокоить», the clock not clamped, the end ignored — each failed the
+  smoke with its own message.**
+- **Applied** at 04:16:51Z as `postgres`; the post-apply smoke passed rolled
+  back. Live: no status and no activity stored yet — the client that calls the
+  functions is not deployed at that moment.
+- **Client:** `lib/presenceStatus.ts` (the rules, and the beat's gate),
+  `lib/privacyPreferences.ts` (an answer that names its account; a refresh when
+  the window comes back; a read begun before a write cannot undo it),
+  `hooks/useOwnPresence.ts` (activity: pointer, keys, touch, wheel, speech, a
+  playing video), `hooks/useHeartbeat.ts` (`presence_beat`, and a beat at once
+  on a change), `components/presence/StatusPicker.tsx`, the menu under the face
+  in `UserPanel.tsx`, «Мой статус» in the settings, and a dot with a shape per
+  state in the list, the avatars and the header.

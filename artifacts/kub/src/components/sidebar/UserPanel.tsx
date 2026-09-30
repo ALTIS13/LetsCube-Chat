@@ -34,6 +34,9 @@ import type { BoxEdges } from "@/lib/messageMenuPlacement";
 import { micControlWords } from "@/lib/micGate";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app.store";
+import { StatusDot, StatusPicker, useChosenStatus } from "@/components/presence/StatusPicker";
+import { presenceDotBackground, STATUS_OPTIONS } from "@/lib/presenceStatus";
+import { useOwnPresence } from "@/hooks/useOwnPresence";
 
 /**
  * The bar at the foot of the chat list, in Discord's shape (tracker item 40).
@@ -102,6 +105,9 @@ export function UserPanel() {
   // its names would otherwise sit in the document under the bottom navigation,
   // reachable by a screen reader and by anything that looks for a label.
   const isPhone = useIsMobile();
+  // Tracker item 37: the dot on this person's own face says how they appear —
+  // the automatic idle included — and «Невидимый» is a ring.
+  const own = useOwnPresence();
 
   if (!currentUser || isPhone) return null;
 
@@ -167,7 +173,21 @@ export function UserPanel() {
             menu?.kind === "identity" && "bg-[image:linear-gradient(var(--kub-raise-veil),var(--kub-raise-veil))]",
           )}
         >
-          <UserAvatar user={currentUser} size="sm" />
+          <span className="relative shrink-0" data-testid="user-panel-status" data-status={own}>
+            <UserAvatar user={currentUser} size="sm" />
+            {/* Where every other avatar in the product keeps its dot, at the
+                same size and ring. */}
+            <span
+              aria-hidden="true"
+              className="absolute h-2 w-2 rounded-full"
+              style={{
+                right: "calc(14.645% - 4px)",
+                bottom: "calc(14.645% - 4px)",
+                background: presenceDotBackground(own, "var(--tg-sidebar)"),
+                boxShadow: "0 0 0 2px var(--tg-sidebar)",
+              }}
+            />
+          </span>
           <span className="flex min-w-0 flex-1 flex-col leading-tight @max-[12rem]:hidden">
             <span className="truncate text-sm font-semibold text-[color:var(--kub-text)]" data-testid="user-panel-name">
               {name}
@@ -299,6 +319,7 @@ export function UserPanel() {
                 >
                   Редактировать профиль
                 </MenuRow>
+                <StatusMenuRow onChosen={() => closeMenu()} />
               </>
             ) : menu.kind === "input" ? (
               <>
@@ -493,6 +514,50 @@ function PanelMenuLayer({
     >
       {() => children}
     </AnchoredLayer>
+  );
+}
+
+/**
+ * The status row (tracker item 37), where Discord's account popout keeps it:
+ * after «Редактировать профиль», one row naming the status, which opens the
+ * choice (reference-clients §21). Discord's choice is a submenu; this opens
+ * it in place under the row, as every other disclosure here
+ * does, and a finger reaches it as well as a pointer. Closed each time the menu
+ * opens, so the menu is its usual height until somebody asks.
+ */
+function StatusMenuRow({ onChosen }: { onChosen: () => void }) {
+  const chosen = useChosenStatus();
+  const [open, setOpen] = useState(false);
+  const label = STATUS_OPTIONS.find((option) => option.id === chosen.status)?.label ?? "В сети";
+  return (
+    <>
+      <button
+        type="button"
+        role="menuitem"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        data-testid="user-panel-status-row"
+        data-chosen={chosen.status}
+        className={cn(
+          "flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-[color:var(--kub-text)] transition-colors kub-raise-hover",
+          FOCUS_RING_INSET,
+        )}
+      >
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+          <StatusDot status={chosen.status} />
+        </span>
+        <span className="min-w-0 flex-1 truncate">
+          {label}
+          {chosen.untilLabel && <span className="text-[color:var(--kub-muted)]"> · {chosen.untilLabel}</span>}
+        </span>
+        <KubIcon name={open ? "chevronDown" : "chevronRight"} size={14} tone="muted" />
+      </button>
+      {open && (
+        <div className="pb-1" data-testid="user-panel-status-menu">
+          <StatusPicker onChosen={onChosen} />
+        </div>
+      )}
+    </>
   );
 }
 

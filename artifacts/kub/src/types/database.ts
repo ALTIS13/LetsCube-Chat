@@ -54,6 +54,8 @@ export interface Database {
           profile_frame: string | null
           profile_background: string | null
           online_at: string | null
+          /** Tracker item 37: «idle» or «dnd» beside presence, or nothing. */
+          presence_status: "idle" | "dnd" | null
           role: AppRole
           created_at: string
           updated_at: string
@@ -68,6 +70,7 @@ export interface Database {
           profile_frame?: string | null
           profile_background?: string | null
           online_at?: string | null
+          presence_status?: "idle" | "dnd" | null
           role?: AppRole
           created_at?: string
           updated_at?: string
@@ -82,6 +85,7 @@ export interface Database {
           profile_frame?: string | null
           profile_background?: string | null
           online_at?: string | null
+          presence_status?: "idle" | "dnd" | null
           role?: AppRole
           created_at?: string
           updated_at?: string
@@ -1006,6 +1010,14 @@ export interface Database {
            * it is read at the moment of forwarding and never afterwards.
            */
           forward_origin_visible: boolean
+          /** Tracker item 37: the status this person chose, and when it runs out. */
+          manual_status: "online" | "idle" | "dnd" | "invisible"
+          manual_status_until: string | null
+          /**
+           * The latest activity any of this person's devices reported, which
+           * `presence_beat` publishes idle from. Readable by its owner alone.
+           */
+          last_active_at: string | null
           created_at: string
           updated_at: string
         }
@@ -1013,12 +1025,18 @@ export interface Database {
           user_id: string
           presence_visible?: boolean
           forward_origin_visible?: boolean
+          manual_status?: "online" | "idle" | "dnd" | "invisible"
+          manual_status_until?: string | null
+          last_active_at?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           presence_visible?: boolean
           forward_origin_visible?: boolean
+          manual_status?: "online" | "idle" | "dnd" | "invisible"
+          manual_status_until?: string | null
+          last_active_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1644,6 +1662,17 @@ export interface Database {
       // the caller's own RLS on `messages` decides what is counted and a
       // non-member gets an empty set — see
       // `.migration-backup/supabase/migrations/20260904110000_chat_media_counts.sql`.
+      // Tracker item 37 (20260930230000): one device's heartbeat, and a status
+      // chosen on one device. Both SECURITY INVOKER; both answer what was
+      // published — 'online', 'idle', 'dnd' or 'hidden'.
+      presence_beat: {
+        Args: { p_active_at?: string | null }
+        Returns: string
+      }
+      presence_set_status: {
+        Args: { p_status: string; p_until?: string | null }
+        Returns: string
+      }
       chat_media_counts: {
         Args: { p_chat_id: string }
         Returns: {

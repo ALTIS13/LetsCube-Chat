@@ -5,6 +5,13 @@ import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { bumpHeartbeat, setHeartbeatActive } from "@/lib/dev/instrumentation";
 import { usePrivacyPreferences } from "@/hooks/usePrivacyPreferences";
+import {
+  lastActivityIso,
+  onOwnStatusChange,
+  useOwnPresence,
+  useOwnPresenceRuntime,
+} from "@/hooks/useOwnPresence";
+import { presencePublished, statusUntilMs } from "@/lib/presenceStatus";
 
 const HEARTBEAT_MS = 60_000;
 const MAX_BACKOFF_MS = 5 * 60_000;
@@ -12,6 +19,12 @@ const WARN_THROTTLE_MS = 60_000;
 
 /**
  * Keeps `profiles.online_at` fresh for the current user.
+ *
+ * Since 2026-09-30 (tracker item 37) a beat is `presence_beat`, which reports
+ * when this person last did something here and lets the database publish
+ * `online_at` and the status from every device's report and the person's own
+ * choices. It refuses to publish somebody who has turned presence off or chosen
+ * «Невидимый», whatever a client sends.
  *
  * Task #48 hardening:
  *   – module-level singleton: один интервал на пользователя, даже если хук
@@ -66,10 +79,7 @@ function startRunner(userId: string): HeartbeatRunner {
     bumpHeartbeat();
     pingInFlight = (async () => {
       try {
-        const { error } = await supabase
-          .from("profiles")
-          .update({ online_at: new Date().toISOString() })
-          .eq("id", userId);
+        const { error } = await supabase.rpc("presence_beat", { p_active_at: lastActivityIso() });
         if (error) throw new Error(error.message);
         backoffMs = HEARTBEAT_MS;
       } catch (err) {
@@ -119,11 +129,19 @@ function startRunner(userId: string): HeartbeatRunner {
     void ping(true).then(() => schedule(backoffMs));
   };
 
+  // Back from idle, or a chosen status running out: others see it now, not at
+  // the next minute.
+  const handleOwnStatusChange = (): void => {
+    if (cancelled || document.visibilityState !== "visible") return;
+    void ping(true).then(() => schedule(backoffMs));
+  };
+
   if (document.visibilityState === "visible") {
     void ping().then(() => schedule(backoffMs));
   }
   document.addEventListener("visibilitychange", handleVisibility);
   window.addEventListener("online", handleOnline);
+  const stopWatchingOwnStatus = onOwnStatusChange(handleOwnStatusChange);
 
   return {
     userId,
@@ -136,17 +154,31 @@ function startRunner(userId: string): HeartbeatRunner {
       }
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("online", handleOnline);
+      stopWatchingOwnStatus();
     },
   };
 }
 
 export function useHeartbeat(): void {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
-  const { preferences, loading } = usePrivacyPreferences();
+  const privacy = usePrivacyPreferences();
   // Someone who has turned presence off is not published at all: the heartbeat
   // does not run, so nothing is stored for anyone to read. Hiding the value in
-  // one interface while still writing it would not be privacy.
-  const publishing = !loading && preferences.presenceVisible;
+  // one interface while still writing it would not be privacy. «Невидимый»
+  // stops it too (tracker item 37), and only an answer that is this account's
+  // may start it — see `presencePublished`.
+  useOwnPresenceRuntime(userId);
+  // Subscribed so that a chosen «Невидимый» running out starts the beat again.
+  useOwnPresence();
+  const publishing = presencePublished({
+    userId,
+    answerFor: privacy.userId,
+    loading: privacy.loading,
+    presenceVisible: privacy.preferences.presenceVisible,
+    manual: privacy.preferences.manualStatus,
+    until: statusUntilMs(privacy.preferences.manualStatusUntil),
+    now: Date.now(),
+  });
 
   useEffect(() => {
     if (!userId || !publishing) {

@@ -251,7 +251,42 @@ whole deployment** — no bot has registered a command yet.
 
 ## 4. Where to start
 
-**Current checkpoint, 2026-09-29, evening (Claude):** `main` is `a8f92c06`;
+**Current checkpoint, 2026-09-30 (Claude):** the owner answered the three
+proposals — «Разрешения выдаю на все нужные действия», and where a question
+remains, settle it from Telegram and Discord and build it. Everything below is
+on `main` and deployed; the database changes are recorded one by one in
+`operations/2026-09-30-database-changes.md`.
+
+- **Item 45, the group chat.** Made from a private chat; the heavy group is
+  called «сервер» everywhere a person reads it. A conversation keeps the kind it
+  was made as (a trigger, after a hole was found: an owner could turn a private
+  chat into a group). A group chat calls everybody, a call from a private chat
+  moves into the new group, and a blocked person's messages fold in a group
+  conversation, as in Discord.
+- **D-170:** a link into a group, as Telegram has it.
+- **Item 72:** one task sent to several locations, all or none.
+- **Item 73:** people are found as in Telegram — by the start of a word of the
+  name among people the reader has, by the start of the handle otherwise.
+- **Item 37, first phase:** В сети / Неактивен / Не беспокоить / Невидимый with
+  durations, under the face on a desktop and in the settings on a phone; idle
+  after ten quiet minutes; a dot with a shape per state. **Presence is now
+  published by the database** (`presence_beat`), from every device's activity
+  and the person's own choice, so two devices cannot contradict each other.
+  **A privacy defect was found and fixed on the way:** presence turned off was
+  published once on every app open, since 2026-09-03 (tracker item 37).
+- Three e2e specs had gone red with nothing in the product changed:
+  `channel-previews` (a fixed date read as today; pinned),
+  `plain-failure-messages` (it searched for the reader himself, which item 73
+  rightly stopped finding) and `media-preview-visual` (its voice bubble was a
+  caption, which D-330 rightly stopped drawing as a player; the preview fixture
+  now has a typed voice note).
+
+Open: item 37's second phase (Windows idle and the AFK move need a Windows
+release; push notifications under «не беспокоить»; the cross-device race noted
+in the tracker); item 74, search by phone, is the owner's decision — it is about
+what strangers can learn; D-327 needs one production departure in a QA group.
+
+**Checkpoint, 2026-09-29, evening (Claude):** `main` is `a8f92c06`;
 the web application runs the last code commit, `624c4b3d`, and the commits after
 it are documents. Since the afternoon:
 

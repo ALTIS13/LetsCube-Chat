@@ -13,6 +13,7 @@ import type { AvatarVariantUrls } from "@/hooks/useMediaVariants";
 import { formatChatMessagePreview } from "@/lib/messagePreview";
 import { getMessageDeliveryState } from "@/lib/messageDelivery";
 import { isUserOnline } from "@/lib/presence";
+import { presenceDotBackground, presentKind } from "@/lib/presenceStatus";
 import { useChatVoicePresence } from "@/hooks/useVoicePresence";
 import { voicePresenceTitle } from "@/lib/voicePresence";
 import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
@@ -125,6 +126,10 @@ export const ChatListItem = memo(function ChatListItem({
   const reorderHintId = isReorderable ? `pinned-reorder-${chat.id}` : undefined;
   const isOtherOnline = isOtherOnlineProp
     ?? (chat.type === "private" && isUserOnline(chat.other_user, presenceNow ?? Date.now()));
+  // Tracker item 37: what the other person publishes beside presence shapes
+  // the dot — idle a crescent, «не беспокоить» a bar — at one size.
+  const otherPresence = presentKind(chat.other_user?.presence_status);
+  const dotRing = isSelected ? "color-mix(in srgb, var(--kub-cyan) 18%, var(--kub-surface))" : "var(--kub-surface)";
 
   const clearLongPressTimer = () => {
     touchStartRef.current = null;
@@ -286,8 +291,9 @@ export const ChatListItem = memo(function ChatListItem({
             8px dot in the admin activity list. */}
         {isOtherOnline && (
           <span
-            className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-[var(--kub-online)]"
-            style={{ boxShadow: `0 0 0 2px ${isSelected ? "color-mix(in srgb, var(--kub-cyan) 18%, var(--kub-surface))" : "var(--kub-surface)"}` }}
+            data-presence={otherPresence}
+            className="absolute bottom-0 right-0 h-2 w-2 rounded-full"
+            style={{ background: presenceDotBackground(otherPresence, dotRing), boxShadow: `0 0 0 2px ${dotRing}` }}
           />
         )}
       </div>

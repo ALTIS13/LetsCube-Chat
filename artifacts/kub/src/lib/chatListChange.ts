@@ -34,7 +34,7 @@ export interface ChatMemberSnapshot {
   role?: string | null;
   last_read_at?: string | null;
   last_delivered_at?: string | null;
-  profile?: { online_at?: string | null } | null;
+  profile?: { online_at?: string | null; presence_status?: string | null } | null;
 }
 
 /** The parts of a chat this comparison reads. */
@@ -59,7 +59,7 @@ export interface ChatSnapshot {
     deleted_at?: string | null;
   } | null;
   members?: readonly ChatMemberSnapshot[] | null;
-  other_user?: { online_at?: string | null } | null;
+  other_user?: { online_at?: string | null; presence_status?: string | null } | null;
 }
 
 /**
@@ -75,6 +75,9 @@ export function chatMemberSignature(member: ChatMemberSnapshot): string {
     member.last_read_at ?? "",
     member.last_delivered_at ?? "",
     member.profile?.online_at ?? "",
+    // Tracker item 37: «неактивен» and «не беспокоить» recolour the dot, so a
+    // change of status is a change of the row.
+    member.profile?.presence_status ?? "",
   ].join(":");
 }
 
@@ -105,6 +108,7 @@ export function sameChat(a: ChatSnapshot, b: ChatSnapshot): boolean {
     // its own right: a private chat whose peer went online must not be judged
     // unchanged because the members array happened to agree.
     (a.other_user?.online_at ?? null) === (b.other_user?.online_at ?? null) &&
+    (a.other_user?.presence_status ?? null) === (b.other_user?.presence_status ?? null) &&
     chatMembersSignature(a) === chatMembersSignature(b)
   );
 }

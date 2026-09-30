@@ -69,9 +69,14 @@ test.describe("a failure says what failed, in Russian, beside the control", () =
     await page.getByRole("button", { name: "Новый чат" }).click();
     const modal = page.getByRole("dialog");
     await expect(modal).toBeVisible();
-    await modal.getByPlaceholder("Поиск по имени или @никнейму…").fill("Максим");
+    // Somebody the reader has — a member of one of their conversations — found
+    // by the start of her name (item 73). This searched for «Максим», the
+    // reader himself, and passed only because the fixture answered every
+    // profile filter with `me`; once the search stopped asking strangers by
+    // name and dropped the reader from the answer, nobody was left to click.
+    await modal.getByPlaceholder("Поиск по имени или @никнейму…").fill("Анна");
 
-    const candidate = modal.getByRole("button").filter({ hasText: "Максим Орлов" }).first();
+    const candidate = modal.getByRole("button").filter({ hasText: "Анна Смирнова" }).first();
     await expect(candidate).toBeVisible();
     await candidate.click();
 
