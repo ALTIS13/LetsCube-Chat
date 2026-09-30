@@ -397,8 +397,9 @@ const veiled = [
   // None: its one hover was the bulk selection bar's «Отмена», and that bar
   // is `ChatSelectionBar` now. Kept at zero so the leftover checks still run.
   ["components/chat/MessageList.tsx", 0],
-  // 1 before D-235 put a «Боты» section under the people.
-  ["components/chat/GroupInviteModal.tsx", 2],
+  // 1 before D-235 put a «Боты» section under the people; 4 since D-170
+  // added «Пригласить по ссылке» and the way back from the links.
+  ["components/chat/GroupInviteModal.tsx", 4],
   ["components/chat/ForwardModal.tsx", 1],
   // Eight since 2026-09-14: «Пожаловаться», the last item of both menu shapes.
   // It is one element drawn in each, not two, because the phone card and the

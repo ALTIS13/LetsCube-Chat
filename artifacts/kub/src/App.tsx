@@ -45,6 +45,8 @@ import {
 } from "@/lib/authRecovery";
 import { isAuthRoute, isPublicRoute } from "@/lib/publicRoutes";
 import { isShellRoute } from "@/lib/shellSection";
+import { pendingJoinPath, rememberPendingJoin } from "@/lib/pendingJoin";
+import { JoinPage } from "@/pages/JoinPage";
 import { decideRootExperience } from "@/lib/publicHomeRouting";
 import { DesktopWindowChrome } from "@/components/layout/DesktopWindowChrome";
 import { AuthRuntimeProvider } from "@/lib/authRuntime";
@@ -436,11 +438,14 @@ function AppRoutes({
   }
 
   if (!user && !authRoute) {
+    // A link into a group needs an account; it is kept so that signing in
+    // leads back to it rather than to the chat list (D-170).
+    rememberPendingJoin(location);
     return <Redirect to="/login" />;
   }
 
   if (user && authRoute) {
-    return <Redirect to="/" />;
+    return <Redirect to={pendingJoinPath() ?? "/"} />;
   }
 
   // If the signed-in user has an active ban, show the full-screen overlay
@@ -486,6 +491,7 @@ function AppRoutes({
         <Switch>
           <Route path="/login" component={LoginForm} />
           <Route path="/register" component={RegisterForm} />
+          <Route path="/join/:token" component={JoinPage} />
           <Route path="/admin/:rest*" component={AdminLayout} />
           <Route path="/admin" component={AdminLayout} />
           <Route component={NotFound} />

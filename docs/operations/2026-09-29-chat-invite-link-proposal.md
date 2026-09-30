@@ -1,5 +1,9 @@
 # A link into a group — D-170's last half — 2026-09-29
 
+> **Decided and applied 2026-09-30.** The owner answered question 3 (± Telegram);
+> the rest follow Telegram's link editor, read in its source. What was built, and
+> the rollout, are in `2026-09-30-database-changes.md` §1 and register D-170.
+
 D-170 in the register has one sentence left open: there is no shareable link or
 join code for a conversation anywhere in the product. Reaching somebody whose
 name you cannot spell, or a colleague who shares no chat with you yet, needs

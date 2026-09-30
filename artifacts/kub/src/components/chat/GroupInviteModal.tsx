@@ -41,6 +41,8 @@ import {
   type BotLike,
 } from "@/lib/chatBots";
 import { createGroupInvite, formatGroupInviteError, GROUP_INVITES_MIGRATION_REQUIRED, isGroupInviteUnavailableError } from "@/lib/groupInvites";
+import { ChatInviteLinksPanel, INVITE_FIELD_SHELL } from "./ChatInviteLinksPanel";
+import { FOCUS_RING } from "@/lib/controlSurface";
 import type { GroupInviteStatus } from "@/lib/groupInvites";
 import type { GroupInvite, Profile } from "@/types/database";
 
@@ -117,6 +119,9 @@ export function GroupInviteModal({
   const [addedBotIds, setAddedBotIds] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // D-170: the other way in. Telegram keeps «Пригласить по ссылке» at the top
+  // of the same screen that invites people by name, and opens the links there.
+  const [view, setView] = useState<"people" | "links">("people");
 
   const permissions = usePermissionAccess(INVITE_PERMISSION_KEYS);
 
@@ -458,7 +463,47 @@ export function GroupInviteModal({
         </KubButton>
       )}
     >
-      <div className="flex items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 h-10 transition-all focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]">
+      {view === "links" ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setView("people")}
+            data-testid="invite-links-back"
+            className={cn(
+              "kub-button kub-interactive -mx-1 flex items-center gap-1.5 rounded-lg px-1 py-1 text-xs font-semibold text-[color:var(--kub-accent-text)] kub-raise-hover",
+              FOCUS_RING,
+            )}
+          >
+            <KubIcon name="chevronLeft" size={14} />
+            Пригласить по имени
+          </button>
+          <ChatInviteLinksPanel
+            chatId={chatId}
+            currentUserId={currentUserId}
+            canRevokeAny={chatFacts?.myRole === "owner" || chatFacts?.myRole === "admin"}
+          />
+        </>
+      ) : (
+      <>
+      {admission?.canInvite && (chatFacts?.type === "group" || chatFacts?.type === "channel") && (
+        <button
+          type="button"
+          onClick={() => setView("links")}
+          data-testid="invite-by-link"
+          className={cn("kub-button kub-interactive flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left kub-raise-hover", FOCUS_RING)}
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--kub-cyan)_16%,transparent)] text-[color:var(--kub-accent-text)]">
+            <KubIcon name="link" size={16} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-[color:var(--kub-accent-text)]">Пригласить по ссылке</span>
+            <span className="block truncate text-xs text-[color:var(--kub-muted)]">Для тех, кого не найти по имени</span>
+          </span>
+          <KubIcon name="chevronRight" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
+        </button>
+      )}
+
+      <div className={INVITE_FIELD_SHELL}>
         <KubIcon name="search" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
         <input
           autoFocus
@@ -544,6 +589,8 @@ export function GroupInviteModal({
           </div>
         )}
       </div>
+      </>
+      )}
     </KubModal>
   );
 }

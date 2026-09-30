@@ -399,6 +399,44 @@ export interface Database {
           }
         ]
       }
+      chat_invite_links: {
+        Row: {
+          id: string
+          chat_id: string
+          token: string
+          title: string | null
+          created_by: string
+          created_at: string
+          expires_at: string | null
+          max_uses: number | null
+          uses: number
+          revoked_at: string | null
+        }
+        Insert: {
+          id?: string
+          chat_id: string
+          token: string
+          title?: string | null
+          created_by: string
+          created_at?: string
+          expires_at?: string | null
+          max_uses?: number | null
+          uses?: number
+          revoked_at?: string | null
+        }
+        Update: {
+          revoked_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_invite_links_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       user_contacts: {
         Row: {
           owner_user_id: string
@@ -1705,6 +1743,32 @@ export interface Database {
       task_reject: {
         Args: { p_task_id: string; p_reason: string }
         Returns: void
+      }
+      chat_invite_allowed: {
+        Args: { p_chat_id: string }
+        Returns: boolean
+      }
+      chat_invite_link_create: {
+        Args: { p_chat_id: string; p_expires_in_seconds?: number | null; p_max_uses?: number | null; p_title?: string | null }
+        Returns: Database["public"]["Tables"]["chat_invite_links"]["Row"]
+      }
+      chat_invite_link_revoke: {
+        Args: { p_link_id: string }
+        Returns: void
+      }
+      chat_invite_link_preview: {
+        Args: { p_token: string }
+        Returns: {
+          state: string
+          chat_id: string | null
+          name: string | null
+          avatar_url: string | null
+          member_count: number | null
+        }[]
+      }
+      chat_invite_link_join: {
+        Args: { p_token: string }
+        Returns: string
       }
       task_checklist_add: {
         Args: { p_task_id: string; p_text: string }

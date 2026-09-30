@@ -14,6 +14,7 @@ import {
 } from "@/lib/authCaptcha";
 import { requestAuthGateway } from "@/lib/authGateway";
 import { useTheme } from "@/hooks/useTheme";
+import { pendingJoinPath } from "@/lib/pendingJoin";
 
 interface BanInfo {
   reason: string;
@@ -85,7 +86,8 @@ export function LoginForm() {
           return;
         }
       }
-      setLocation("/");
+      // A link into a group opened before signing in is where this leads (D-170).
+      setLocation(pendingJoinPath() ?? "/");
     } catch (err: unknown) {
       setError(mapPgError(err));
     } finally {

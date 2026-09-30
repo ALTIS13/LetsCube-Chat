@@ -10574,7 +10574,7 @@ with a migration behind it, and it arrives here on top of the words rather than 
 
 ---
 
-## D-170 `[ ]` There is no way to invite anyone who is not already findable by name
+## D-170 `[x]` There is no way to invite anyone who is not already findable by name
 
 **Severity: medium.**
 
@@ -10619,6 +10619,24 @@ this batch offers or implies either.
 Discord's invite as read in its bundle, and five questions for the owner. The
 decisive one is what a person holding the link may see before joining.
 Recommendation: the group's name, picture and member count, and nothing else.
+
+**2026-09-30: built and applied.** The owner answered the exposure question:
+the holder of a link sees «примерно следующее, либо то что +- у Telegram», and
+the rest he delegated to the references. Telegram's link editor, read in its
+Android source (`LinkEditActivity`), gave the rest: a time limit of 1 hour,
+1 day, 1 week or none, a use limit of 1, 10, 100 or none, both defaulting to
+none, and an optional name. Migration `20260930120000_chat_invite_links.sql`
+adds the links table and five functions. Who may make a link is exactly who may
+invite by name. A dead link names nothing. A join is decided under the link's
+lock, and somebody already inside spends no use. It is recorded in
+`operations/2026-09-30-database-changes.md` with its backup, rehearsal and
+smoke. The client: «Пригласить по ссылке» at the top of the invitation dialog;
+a link is copied the moment it exists and withdrawn in one press; `/join/<token>`
+shows the picture, the name and the count with one button; a guest is taken
+through sign-in and back to the link (`lib/pendingJoin.ts`). Evidence:
+`chat-invite-links.test.mts`; `chat-invite-links.spec` 10 of 10 at 1440 and
+390, with the member case red when the dialog ignores the refusal; the routing
+matrix carries the guest; renders sent to the owner before the push.
 
 ---
 

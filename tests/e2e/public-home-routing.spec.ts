@@ -240,6 +240,25 @@ test.describe("public home routing integration", () => {
     }
   });
 
+  test("a guest's link into a group goes to login, and signing in leads back to it", async ({ page }) => {
+    // D-170: `/join/<token>` needs an account, so it is protected like every
+    // other address — and the link is kept for this tab, so that signing in
+    // lands on it rather than on the chat list.
+    const token = "AbCdEfGhIjKlMnOpQrStU_";
+    await installRuntime(page, "browser");
+    await installSupabaseFixture(page);
+
+    await page.goto(`/join/${token}`);
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByTestId("auth-form-shell")).toBeVisible();
+    expect(await page.evaluate(() => sessionStorage.getItem("kub:pending-join:v1"))).toBe(token);
+
+    await installSession(page);
+    await page.goto("/login");
+    await expect(page).toHaveURL(new RegExp(`/join/${token}$`));
+    await expect(page.getByTestId("join-page")).toBeVisible();
+  });
+
   test("a guest deep link to a conversation goes to login, like every protected route", async ({ page }) => {
     await installRuntime(page, "browser");
     await installSupabaseFixture(page);
