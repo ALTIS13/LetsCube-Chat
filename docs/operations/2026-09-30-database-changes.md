@@ -341,6 +341,11 @@ and byte-identical copies in `.migration-backup/supabase/migrations/`.
 - **Applied** at 04:16:51Z as `postgres`; the post-apply smoke passed rolled
   back. Live: no status and no activity stored yet — the client that calls the
   functions is not deployed at that moment.
+- **After the client's deploy** (`1e4ea736`, the only web container, healthy):
+  PostgREST knows both functions — an anonymous call is refused with 42501, not
+  answered 404 — and one beat through the production API as the QA client
+  answered `online`, wrote that account's `last_active_at` as reported, moved
+  its `online_at` and published no status.
 - **Client:** `lib/presenceStatus.ts` (the rules, and the beat's gate),
   `lib/privacyPreferences.ts` (an answer that names its account; a refresh when
   the window comes back; a read begun before a write cannot undo it),

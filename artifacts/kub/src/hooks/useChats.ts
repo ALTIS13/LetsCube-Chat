@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import type { ChatWithLastMessage, MessageWithSender, Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
@@ -52,6 +52,7 @@ import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
 import { emitChannelActivity } from "@/lib/channelActivity";
 import { channelPreviewCache } from "@/lib/channelPreviewCache";
 import { patchHeldMessage } from "@/lib/messageMerge";
+import { chatIdInFilters, heldChatIdsKey } from "@/lib/realtimeChatFilters";
 
 const CHAT_REFETCH_DEBOUNCE_MS = 350;
 const CHAT_SUMMARY_DEBOUNCE_MS = 250;
@@ -541,21 +542,19 @@ export function useChats() {
 
     // Everybody else's membership rows, in every chat this user may read.
     //
-    // Unfiltered on purpose: Realtime takes one `eq` filter and the question
-    // here is «any chat I am in», which no single column answers. RLS answers
-    // it instead — `chat_members select` is
-    // `user_id = auth.uid() OR is_chat_member(chat_id)` (read from
+    // Unfiltered on purpose: the question here is «any chat I am in», and for
+    // an INSERT and an UPDATE row-level security answers it — `chat_members
+    // select` is `user_id = auth.uid() OR is_chat_member(chat_id)` (read from
     // `pg_policies` on 2026-09-19), so the server sends this client rows from
-    // its own chats and no others. The three bindings share one channel
-    // because they share one table, which is what `realtimeTableChannels.ts`
-    // requires and all it requires.
+    // its own chats and no others. A DELETE is not checked against RLS, which
+    // is why a departure is heard on its own channel below (D-327).
     //
-    // D-260: the INSERT and the DELETE are new. Before them the only join or
-    // departure this hook could hear was this user's own — the bindings below
-    // carry `filter: user_id=eq.${userId}` — so `chat.members` grew and shrank
-    // for nobody else, and the header's «N участников», the channel header's
-    // «N подписчиков» and every other reader of that array stood still until
-    // something unrelated refetched the list.
+    // D-260: the INSERT is new, and so was a DELETE here. Before them the only
+    // join or departure this hook could hear was this user's own — the bindings
+    // below carry `filter: user_id=eq.${userId}` — so `chat.members` grew and
+    // shrank for nobody else, and the header's «N участников», the channel
+    // header's «N подписчиков» and every other reader of that array stood
+    // still until something unrelated refetched the list.
     const receiptsChannelName = `chat-members:peers:${userId}`;
     const receiptsChannel = rt
       .channel(receiptsChannelName)
@@ -575,18 +574,6 @@ export function useChats() {
           // `needs-refetch` every time it lands: the appended row has the count
           // right but no profile, and the refetch is what gives it a name.
           if (applyEvent({ kind: "peer-joined", row: payload.new }) !== "ignored") scheduleRefetch();
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "DELETE", schema: "public", table: "chat_members" },
-        // `Partial`, and not for tidiness: a DELETE payload carries only the
-        // columns of the replica identity, which for `chat_members` is its
-        // primary key. The guard below is what makes the row whole.
-        (payload: { old: Partial<MembershipRowLike> }) => {
-          const { chat_id: chatId, user_id: memberId } = payload.old ?? {};
-          if (!chatId || !memberId || memberId === userId) return;
-          applyEvent({ kind: "peer-left", row: { chat_id: chatId, user_id: memberId } });
         },
       )
       .subscribe((status: string) => {
@@ -696,6 +683,50 @@ export function useChats() {
       clearedAtCache.setLive(false);
     };
   }, [userId, rt, supabase, applyEvent, scheduleRefetch, scheduleSummary]);
+
+  // A peer's departure, heard only from the chats this reader holds (D-327).
+  //
+  // A DELETE is not checked against row-level security, so the unfiltered
+  // binding this replaces handed every client the `(chat_id, user_id)` of every
+  // departure from every chat in the deployment — «this person left some chat,
+  // now» — and the list dropped the ones it did not hold only after receiving
+  // them. A filter on the key does reach a DELETE: measured on production on
+  // 2026-09-30 with a real departure in a QA group (`lib/realtimeChatFilters.ts`).
+  //
+  // Keyed on the set of chats, so the channel is made again when one is joined
+  // or left and never for a message. A departure in the moment between a join
+  // and the new channel is caught by the next fetch, as any gap is: the peers
+  // channel above revalidates when it rejoins.
+  const departuresKey = useMemo(() => heldChatIdsKey(chats), [chats]);
+  const departuresGeneration = useRef(0);
+  useEffect(() => {
+    if (!userId) return;
+    const filters = chatIdInFilters(departuresKey);
+    if (!filters.length) return;
+    departuresGeneration.current += 1;
+    // A fresh topic each time: the channel it replaces may still be leaving.
+    const name = `chat-members:departures:${userId}:${departuresGeneration.current}`;
+    // `Partial`, and not for tidiness: a DELETE payload carries only the
+    // columns of the replica identity, which for `chat_members` is its primary
+    // key. The guard below is what makes the row whole.
+    const onDeparture = (payload: { old: Partial<MembershipRowLike> }) => {
+      const { chat_id: chatId, user_id: memberId } = payload.old ?? {};
+      if (!chatId || !memberId || memberId === userId) return;
+      applyEvent({ kind: "peer-left", row: { chat_id: chatId, user_id: memberId } });
+    };
+    let channel = rt.channel(name);
+    for (const filter of filters) {
+      channel = channel.on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_members", filter }, onDeparture);
+    }
+    channel.subscribe((status: string) => {
+      if (import.meta.env.DEV) console.debug("[chat-members:departures]", userId, status);
+    });
+    registerChannel(name);
+    return () => {
+      rt.removeChannel(channel);
+      unregisterChannel(name);
+    };
+  }, [userId, rt, applyEvent, departuresKey]);
 
   useEffect(() => {
     if (!userId) return;

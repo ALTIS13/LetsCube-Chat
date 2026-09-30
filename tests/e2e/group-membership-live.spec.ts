@@ -184,3 +184,42 @@ test("a panel whose channel dropped reads itself again when it comes back", asyn
     .toBeGreaterThan(joinsBefore);
   await expect(row(page, KLARA), "a join made while the channel was down stayed unseen").toBeVisible({ timeout: 10_000 });
 });
+
+/**
+ * D-327: a departure is heard from the chats this reader holds, and from no
+ * other. A DELETE is not checked against row-level security, so the binding
+ * this replaced — unfiltered — was handed every departure from every chat in
+ * the deployment. The fixture filters a DELETE by its old row as the real
+ * server does (measured on production on 2026-09-30, register D-327).
+ */
+test("a departure from somebody else's chat reaches no channel of this reader", async ({ page }) => {
+  const realtime = new RealtimeFixture();
+  const memberships: Row[] = [
+    membership(CHAT_TEAM, ZOYA, "owner", AT),
+    membership(CHAT_TEAM, OLGA, "member", AT),
+    membership(CHAT_TEAM, BORIS, "member", AT),
+  ];
+  await openFixture(page, {
+    me: ZOYA,
+    people: [OLGA, BORIS],
+    chats: [chat(CHAT_TEAM, "group", "Команда проекта", AT)],
+    memberships,
+    messages: [message("55555555-5555-4555-8555-000000000001", CHAT_TEAM, OLGA, LINE, AT)],
+    rpc: (name) => (name === "search_chat_messages" ? missingFunction(name) : undefined),
+  });
+  await realtime.install(page);
+  await openChat(page, "Команда проекта", LINE);
+  await headerSays(page, "3 участника");
+  await expect.poll(() => realtime.isJoined("chat-members:departures:")).toBe(true);
+
+  // Olga leaves a chat Zoya is not in.
+  const elsewhere = { chat_id: "45454545-4545-4545-8545-000000000099", user_id: OLGA.id };
+  expect(realtime.emit({ type: "DELETE", table: "chat_members", record: elsewhere, old_record: elsewhere })).toBe(0);
+
+  // Boris leaves Zoya's chat: heard, with the information panel closed, so it
+  // is the list's own channel that heard it.
+  memberships.splice(memberships.findIndex((entry) => entry.user_id === BORIS.id), 1);
+  const here = { chat_id: CHAT_TEAM, user_id: BORIS.id };
+  expect(realtime.emit({ type: "DELETE", table: "chat_members", record: here, old_record: here })).toBe(1);
+  await headerSays(page, "2 участника");
+});

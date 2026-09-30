@@ -106,12 +106,12 @@ test("a receipt keeps its object while it draws the same thing", () => {
  * needs two signed-in sessions and a write to production. These scans say the
  * bindings are still written; they cannot say a row ever arrives.
  */
-test("a peer's join and departure are subscribed to, unfiltered, on the chat_members channel", () => {
+test("a peer's join and read are subscribed to, unfiltered, on the chat_members channel", () => {
   const peers = chatsHook.match(/const receiptsChannelName[\s\S]*?registerChannel\(receiptsChannelName\);/);
   assert.ok(peers, "the peer chat_members channel could not be found in useChats");
   const block = peers[0];
 
-  for (const event of ["INSERT", "DELETE", "UPDATE"]) {
+  for (const event of ["INSERT", "UPDATE"]) {
     assert.match(
       block,
       new RegExp(`\{ event: "${event}", schema: "public", table: "chat_members" \}`),
@@ -121,10 +121,12 @@ test("a peer's join and departure are subscribed to, unfiltered, on the chat_mem
   assert.doesNotMatch(
     block,
     /table: "chat_members", filter:/,
-    "a filter on this channel narrows it to one column; «any chat I am in» is RLS's answer, not a filter's",
+    "a filter on this channel narrows it to one column; for an INSERT and an UPDATE «any chat I am in» is RLS's answer",
   );
+  // D-327: a DELETE is not checked against RLS, so here it would hear every
+  // departure in the deployment. It has its own, filtered channel.
+  assert.doesNotMatch(block, /event: "DELETE"/, "a departure is heard unfiltered again (D-327)");
   assert.match(block, /applyEvent\(\{ kind: "peer-joined", row: payload\.new \}\)/, "a peer's join no longer goes through the delta");
-  assert.match(block, /applyEvent\(\{ kind: "peer-left", row: \{ chat_id: chatId, user_id: memberId \} \}\)/, "a peer's departure no longer goes through the delta");
   assert.match(block, /!== "ignored"\) scheduleRefetch\(\)/, "a join no longer fetches the profile the Realtime row cannot carry");
 
   // The bindings that were already here, and which this channel must not lose:
@@ -132,7 +134,26 @@ test("a peer's join and departure are subscribed to, unfiltered, on the chat_mem
   assert.match(block, /applyEvent\(\{ kind: "peer-receipt", row: payload\.new \}\)/);
 });
 
-test("the three chat_members bindings share one channel, because they share one table", () => {
+/**
+ * D-327: a departure is heard from the chats this reader holds, by a filter on
+ * the key, which does reach a DELETE (measured on production on 2026-09-30).
+ * The behaviour is held by `group-membership-live.spec.ts`; this says the
+ * binding is still written the way the measurement covers.
+ */
+test("a peer's departure is subscribed to by the chats this reader holds", () => {
+  const departures = chatsHook.match(/const departuresKey = [\s\S]*?\}, \[userId, rt, applyEvent, departuresKey\]\);/);
+  assert.ok(departures, "the departures channel could not be found in useChats");
+  const block = departures[0];
+  assert.match(block, /heldChatIdsKey\(chats\)/, "the channel is no longer keyed on the chats held");
+  assert.match(block, /chatIdInFilters\(departuresKey\)/);
+  assert.match(block, /\{ event: "DELETE", schema: "public", table: "chat_members", filter \}/, "the departure binding lost its filter");
+  assert.match(block, /applyEvent\(\{ kind: "peer-left", row: \{ chat_id: chatId, user_id: memberId \} \}\)/, "a peer's departure no longer goes through the delta");
+});
+
+// Two since D-327, which took the departure to a channel of its own: a filter
+// there has to change with the chats held, and these two must not be rejoined
+// for it.
+test("the peer chat_members bindings share one channel, because they share one table", () => {
   const peers = chatsHook.match(/const receiptsChannelName[\s\S]*?registerChannel\(receiptsChannelName\);/)[0];
   assert.equal(
     (peers.match(/\.channel\(/g) ?? []).length,

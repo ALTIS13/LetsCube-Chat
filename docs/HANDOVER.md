@@ -281,10 +281,16 @@ on `main` and deployed; the database changes are recorded one by one in
   caption, which D-330 rightly stopped drawing as a player; the preview fixture
   now has a typed voice note).
 
+- **D-327 is closed:** one real departure in a QA-only group, watched, showed
+  that a filter on a key column does reach a DELETE here (eq and in, on
+  `chat_id` and on `user_id`); the documentation's «not filterable» does not
+  hold on this deployment. A peer's departure is now heard only from the chats
+  the reader holds.
+
 Open: item 37's second phase (Windows idle and the AFK move need a Windows
 release; push notifications under «не беспокоить»; the cross-device race noted
 in the tracker); item 74, search by phone, is the owner's decision — it is about
-what strangers can learn; D-327 needs one production departure in a QA group.
+what strangers can learn.
 
 **Checkpoint, 2026-09-29, evening (Claude):** `main` is `a8f92c06`;
 the web application runs the last code commit, `624c4b3d`, and the commits after

@@ -14,6 +14,13 @@ import type { Page, WebSocketRoute } from "@playwright/test";
  *
  * `dropConnections` closes the sockets from the server side, so the client
  * reconnects and rejoins exactly as it does after a real outage.
+ *
+ * Filters: `column=eq.value` and `column=in.(a,b)`, matched against the new row,
+ * and for a DELETE against the old one — the row that is gone, whose key is all
+ * a DELETE carries. That is what the real server does: measured on production
+ * on 2026-09-30 with one real departure (register D-327), `eq` and `in` on
+ * `chat_id` and on `user_id` each reached the DELETE or kept it away as the
+ * value said. Any other form still matches everything, as it always did here.
  */
 
 type Binding = { id: number; event: string; schema: string; table: string; filter?: string };
@@ -57,7 +64,7 @@ export class RealtimeFixture {
           .filter((binding) =>
             binding.table === change.table &&
             (binding.event === "*" || binding.event === change.type) &&
-            matchesFilter(binding.filter, change.record),
+            matchesFilter(binding.filter, change.type === "DELETE" ? change.old_record ?? change.record : change.record),
           )
           .map((binding) => binding.id);
         if (!ids.length) continue;
@@ -189,7 +196,9 @@ function reply(ws: WebSocketRoute, joinRef: string | null, ref: string | null, t
 
 function matchesFilter(filter: string | undefined, record: Record<string, unknown>): boolean {
   if (!filter) return true;
-  const match = filter.match(/^([a-z_]+)=eq\.(.+)$/);
-  if (!match) return true;
-  return String(record[match[1]]) === match[2];
+  const eq = filter.match(/^([a-z_]+)=eq\.(.+)$/);
+  if (eq) return String(record[eq[1]]) === eq[2];
+  const inList = filter.match(/^([a-z_]+)=in\.\((.*)\)$/);
+  if (inList) return inList[2].split(",").includes(String(record[inList[1]]));
+  return true;
 }

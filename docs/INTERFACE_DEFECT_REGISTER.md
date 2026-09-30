@@ -24534,7 +24534,7 @@ gone while the control is up and back at the bottom. With the composer never
 told, it is red at 390 and green at 1440, where no hint is ever offered.
 Photographed at 1440 and 390 in both themes, scrolled into the history.
 
-## D-327 `[ ]` Every signed-in client hears every departure from every chat
+## D-327 `[x]` Every signed-in client hears every departure from every chat
 
 **Severity:** low, and a question about other people's information rather than a
 visible defect, so it is recorded and not acted on (CLAUDE.md §7).
@@ -24565,6 +24565,40 @@ departure too, and reloading on it.
 filter that excludes it. That is a production write, a member leaving a chat,
 so it needs a QA-only group and its own go-ahead. The fixture's realtime mock
 applies `eq` filters to every event type and cannot answer this.
+
+**Settled on 2026-09-30, and fixed.** The owner's «Разрешения выдаю на все
+нужные действия» was the go-ahead. Three QA accounts: the admin made a group
+chat from their private chat with the client and added the staff account; the
+client subscribed with five DELETE bindings on `chat_members`; the staff
+account left; everybody left and the chat went with them (two `chat_added`
+notifications it had made were removed after). A second run added the two
+`in` bindings and gave the same answer for the five:
+
+| binding | events |
+| --- | --- |
+| no filter | 1 |
+| `chat_id=eq.` this chat | 1 |
+| `chat_id=eq.` another chat | 0 |
+| `user_id=eq.` the one who left | 1 |
+| `user_id=eq.` the reader | 0 |
+| `chat_id=in.(` another chat, this chat `)` | 1 |
+| `chat_id=in.(` two other chats `)` | 0 |
+
+The old row carried `chat_id, user_id` and nothing else. So a filter on the
+key **does** reach a DELETE on this deployment's Realtime, the note of
+2026-09-19 was right, and the documentation's sentence does not hold here. The
+filters already standing on DELETE — `useChats`' own row, the information
+panel, the folders — were never over-hearing.
+
+**Fix:** the departure moved off the unfiltered peers channel onto its own,
+`chat-members:departures:<me>:<n>`, with `chat_id=in.(…)` over the chats the
+reader holds, a hundred to a filter (`lib/realtimeChatFilters.ts`), made again
+only when a chat is joined or left. The join and the read stay on the peers
+channel, where row-level security already narrows them. The realtime fixture
+now filters `in` as well as `eq`, and a DELETE by its old row, as the server
+was measured to; `group-membership-live.spec.ts` holds a departure from another
+chat reaching no channel of the reader's and one from their own reaching the
+list — red with the unfiltered binding put back.
 
 ## D-328 `[x]` The search's syntax hint lay over the completions it was teaching
 

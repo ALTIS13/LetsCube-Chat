@@ -3631,6 +3631,32 @@ hash run by hand, and it is worth writing down as one.
 
 ## Last Confirmed Deploy Baseline
 
+### 2026-09-30 — `letscube-web` through `1e4ea736`, and six database changes
+
+Each push read `origin/main..HEAD` first, and each deploy was confirmed the same
+two ways: the web container `l64kyyu1sysev2izzjjbizhe` running the commit's
+full SHA, alone and healthy, and a marker of the change in the live bundle —
+for `1e4ea736` `user-panel-status-row`, shown absent before the push beside a
+control (`user-panel-identity`) present both times.
+
+| commit | items |
+| --- | --- |
+| `331ebe71`, `c81f6c80`, `e510fe81`, `59873f99`, `861030d2` | D-329, D-330, 71, 47/69, 73 — voice seek, Enter held sideways, system folders, people search |
+| `80ceec3b` | D-170 — a link into a group |
+| `2b96d57e`, `6abd5f1c` | 45 — the group chat; a conversation keeps its kind |
+| `30f3d1b8`, `05cb6cd5` | 45 — the group chat's call; blocked messages fold |
+| `dce1c32b` | 72 — one task, several locations |
+| `1e4ea736` | 37 — the status beside presence; the presence-off leak |
+
+The database changes, each with a verified backup, a rolled-back rehearsal and a
+post-apply smoke, are `operations/2026-09-30-database-changes.md` §§1–2 and 4–7 (§3 is an incident). After
+`1e4ea736` PostgREST was shown to know both presence functions and one beat as
+the QA client answered through the production API. Gates at `1e4ea736`:
+typecheck clean in all packages, unit 4478/4478, build `sw.js` 9838aade21391a09,
+e2e — the wide fixture set with every failure fixed or green alone, and the
+final targeted set 158/158 at 1440 and 390. Rollback: redeploy `dce1c32b`
+through Coolify, and the presence rollback file after it — the client first.
+
 ### 2026-09-28 — `letscube-web` through `2c0c36ef`, nine deploys in one day
 
 Every push to `main` today was followed by the same two checks, read rather
