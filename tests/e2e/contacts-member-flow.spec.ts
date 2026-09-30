@@ -100,8 +100,10 @@ test("an ordinary member manages a contact independently of the chat", async ({ 
 // Tracker item 57, the same tester, 2026-09-27: after the first contact the
 // search box filtered only contacts, and how to add the second was unclear.
 // Telegram's contacts search lists everybody else who matches under «Глобальный
-// поиск», where the question is asked.
-test("the contacts search also finds people outside the contacts, and adds one where it stands", async ({ page, request }) => {
+// поиск», where the question is asked — and matches them by the handle, never
+// by the displayed name (`lib/peopleSearchScope.ts`, 2026-09-30: «Мы можем не
+// показывать всех пользователей, а только тех кого ищем»).
+test("the contacts search also finds people outside the contacts by their handle, and adds one where it stands", async ({ page, request }) => {
   await requireFixtureServer(request);
   await page.setViewportSize({ width: 390, height: 844 });
   const STRANGER = person("11111111-1111-4111-8111-0000000000a3", "Дружелюбный сосед", "friendly");
@@ -125,24 +127,35 @@ test("the contacts search also finds people outside the contacts, and adds one w
       return undefined;
     },
   });
+  const handleQueries: string[] = [];
   await page.route(
-    (url) => url.href.startsWith(FIXTURE_HOST) && url.pathname === "/rest/v1/profiles" && url.searchParams.has("or"),
-    (route) => route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      // The contact matches too: the global section must not list them twice.
-      body: JSON.stringify(new URL(route.request().url()).searchParams.get("or")?.includes("Дру") ? [PEER, STRANGER] : []),
-    }),
+    (url) => url.href.startsWith(FIXTURE_HOST) && url.pathname === "/rest/v1/profiles" && (url.searchParams.get("username") ?? "").startsWith("ilike."),
+    (route) => {
+      const pattern = new URL(route.request().url()).searchParams.get("username") ?? "";
+      handleQueries.push(pattern);
+      // The handle's start, as the server would answer `ilike 'fri%'`.
+      const prefix = pattern.replace(/^ilike\./, "").replace(/%$/, "").toLowerCase();
+      const found = [PEER, STRANGER].filter((profile) => (profile.username ?? "").toLowerCase().startsWith(prefix));
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(found) });
+    },
   );
 
   await page.goto("/");
   await page.getByRole("navigation", { name: "Навигация" }).getByRole("button", { name: "Контакты" }).click();
   const panel = page.getByTestId("contacts-panel");
   await expect(panel.getByText("Другой участник")).toBeVisible();
-  await panel.getByRole("textbox", { name: "Поиск контактов" }).fill("Дру");
-
+  const search = panel.getByRole("textbox", { name: "Поиск контактов" });
   const global = panel.getByTestId("contacts-global");
+
+  // The start of a stranger's displayed name finds nobody outside the contacts.
+  await search.fill("Дру");
   await expect(global.getByRole("heading", { name: "Глобальный поиск" })).toBeVisible();
+  await expect(global.getByText("Больше никого не нашлось.")).toBeVisible();
+  await expect(global.getByTestId("contacts-global-row")).toHaveCount(0);
+  expect(handleQueries, "strangers are asked for by the start of a handle and nothing else").toEqual(["ilike.дру%"]);
+
+  // His handle does.
+  await search.fill("@fri");
   await expect(global.getByTestId("contacts-global-row")).toHaveCount(1);
   await expect(global).toContainText("Дружелюбный сосед");
   await expect(global).not.toContainText("Другой участник");

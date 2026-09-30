@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import { mapPgError } from "@/lib/errors";
 import { CHAT_OPEN_FAILED, CHAT_OPEN_SIGNED_OUT, plainFailure } from "@/lib/plainMessages";
 import { sanitizePostgrestSearch } from "@/lib/searchQuery";
+import { STRANGER_HANDLE_MIN, peopleSearchNeedle, personMatchesSearch } from "@/lib/peopleSearchScope";
+import type { UserContact } from "@/lib/userContacts";
 import type { Profile } from "@/types/database";
 
 export function useCreateChat() {
@@ -14,6 +17,7 @@ export function useCreateChat() {
   const [error, setError] = useState<string | null>(null);
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const setSelectedChatId = useAppStore((s) => s.setSelectedChatId);
+  const queryClient = useQueryClient();
   const supabase = createClient();
 
   const openPrivateChat = useCallback(
@@ -67,17 +71,43 @@ export function useCreateChat() {
     [userId, supabase, setSelectedChatId]
   );
 
+  // Who a new chat or the contacts' search may offer (`lib/peopleSearchScope`):
+  // somebody the reader already has, by name, from what this device holds;
+  // anybody else only by the start of their handle. A name that merely
+  // contained the letters typed used to be enough, from the first letter.
   const searchUsers = useCallback(
     async (query: string): Promise<Profile[]> => {
-      const safe = sanitizePostgrestSearch(query);
-      if (!safe || !userId) return [];
+      const needle = peopleSearchNeedle(query);
+      if (!needle || !userId) return [];
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .neq("id", userId)
-        .or(`full_name.ilike.%${safe}%,username.ilike.%${safe}%`)
-        .limit(20);
+      const found = new Map<string, Profile>();
+      for (const chat of useAppStore.getState().chats) {
+        for (const member of chat.members ?? []) {
+          const profile = member.profile;
+          if (!profile || profile.id === userId || found.has(profile.id)) continue;
+          if (personMatchesSearch(profile, needle, true)) found.set(profile.id, profile);
+        }
+      }
+      // A contact is matched by the name the reader saved them under, too.
+      const contacts = queryClient.getQueryData<UserContact[]>(["user-contacts", userId]) ?? [];
+      const contactIds = contacts
+        .filter((contact) => contact.profile && !found.has(contact.contact_user_id) && (
+          personMatchesSearch({ id: contact.contact_user_id, full_name: contact.alias, username: null }, needle, true)
+          || personMatchesSearch({ ...contact.profile, id: contact.contact_user_id }, needle, true)
+        ))
+        .map((contact) => contact.contact_user_id)
+        .slice(0, 20);
+      const handle = sanitizePostgrestSearch(needle).replace(/[_\\]/g, (char) => `\\${char}`);
+
+      const [contactRows, strangerRows] = await Promise.all([
+        contactIds.length > 0
+          ? supabase.from("profiles").select("*").in("id", contactIds)
+          : Promise.resolve({ data: [] as Profile[], error: null }),
+        handle.length >= STRANGER_HANDLE_MIN
+          ? supabase.from("profiles").select("*").neq("id", userId).ilike("username", `${handle}%`).limit(20)
+          : Promise.resolve({ data: [] as Profile[], error: null }),
+      ]);
+      const error = contactRows.error ?? strangerRows.error;
 
       if (error) {
         console.error("searchUsers error:", error);
@@ -85,9 +115,12 @@ export function useCreateChat() {
       } else {
         setError(null);
       }
-      return (data as Profile[]) ?? [];
+      for (const profile of [...((contactRows.data ?? []) as Profile[]), ...((strangerRows.data ?? []) as Profile[])]) {
+        if (!found.has(profile.id) && profile.id !== userId) found.set(profile.id, profile);
+      }
+      return [...found.values()].slice(0, 20);
     },
-    [userId, supabase]
+    [userId, supabase, queryClient]
   );
 
   return { openPrivateChat, searchUsers, loading, error };

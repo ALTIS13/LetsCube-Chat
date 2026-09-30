@@ -6,6 +6,8 @@ import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { withChatDisplayTitles } from "@/lib/searchResultChatDisplay";
 import { normalizePhoneSearchQuery } from "@/lib/phoneSearch";
 import { scoreLocalChat } from "@/lib/localChatSearch";
+import { knownPeopleIds, peopleSearchNeedle, personMatchesSearch, personOfSearchRow } from "@/lib/peopleSearchScope";
+import { useUserContacts } from "@/hooks/useUserContacts";
 import {
   hasLink,
   mediaLabelForMessage,
@@ -38,6 +40,8 @@ export interface GlobalSearchResult {
   rank?: number | null;
   source: GlobalSearchSource;
   profile?: Pick<Profile, "id" | "full_name" | "username" | "avatar_url" | "role" | "bio" | "online_at"> | null;
+  /** Found by a verified phone number typed in full, which is always in scope. */
+  matchedBy?: "phone";
 }
 
 type RpcGlobalSearchRow = {
@@ -122,6 +126,7 @@ export function useGlobalSearch({
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const chats = useAppStore((s) => s.chats);
   const messagesByChat = useAppStore((s) => s.messages);
+  const contacts = useUserContacts({ enabled });
   const [debouncedQuery, setDebouncedQuery] = useState(query);
   const [results, setResults] = useState<GlobalSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -320,9 +325,28 @@ export function useGlobalSearch({
     })();
   }, [debouncedQuery, enabled, filters, limit, runFallback, supabase, type]);
 
+  // People are shown by `lib/peopleSearchScope.ts`: somebody the reader
+  // already has by name, anybody else only by the start of their handle or a
+  // verified phone. Applied here rather than in the requests above, so a
+  // conversation updating while the results are open re-scopes them without
+  // asking the server again.
+  const contactIds = contacts.list.data;
+  const knownIds = useMemo(
+    () => knownPeopleIds(chats, (contactIds ?? []).map((contact) => contact.contact_user_id), currentUserId),
+    [chats, contactIds, currentUserId],
+  );
+  const scopedResults = useMemo(() => {
+    const needle = peopleSearchNeedle(debouncedQuery);
+    return results.filter((result) =>
+      result.resultType !== "user"
+      || result.matchedBy === "phone"
+      || personMatchesSearch(personOfSearchRow(result), needle, knownIds.has(result.id)),
+    );
+  }, [results, debouncedQuery, knownIds]);
+
   const displayResults = useMemo(
-    () => withChatDisplayTitles(results, chats, currentUserId),
-    [results, chats, currentUserId],
+    () => withChatDisplayTitles(scopedResults, chats, currentUserId),
+    [scopedResults, chats, currentUserId],
   );
 
   return {
@@ -395,6 +419,7 @@ async function fetchPhoneSearchResults({
     createdAt: row.created_at,
     rank: 250,
     source: "rpc",
+    matchedBy: "phone" as const,
   }));
 }
 
