@@ -1771,12 +1771,25 @@ Use this queue before starting the next production-hardening turn. Do not repeat
       spec the rename reached at 1440 and 390; renders at both widths and both
       themes sent to the owner before the push.
 
-    **The second phase, not started: the call.** A room for ten; the two already
-    talking carried into it and the people added rung, and only they — Discord's
-    `dm_invite` ring; a call record when the room empties; a block silencing a
-    ring. `voice_private_room` refuses the kind until then, so no call can start
-    in a group chat. Also open: how a blocked person's messages look inside one,
-    which Discord's bundle names (`MESSAGE_GROUP_BLOCKED`) but was not traced.
+    **2026-09-30, later: the second phase is live — the call.** Discord's
+    mechanics, read in its bundle (`reference-clients.md` §27): a call rings
+    people one by one, it is one message that is given its participants and its
+    end, and a reader missed it when they are not among the participants.
+    «Позвонить» in the header rings everybody else; each of them gets the band
+    «Входящий групповой звонок» with «Отклонить» and «Ответить»; the message
+    reads «Идёт звонок» with «Присоединиться» while it runs, then «Звонок» and
+    its length to whoever took part and a red «Пропущенный звонок» to whoever
+    did not. **The owner's birth-from-a-call** is built as he described it: the
+    two already talking are moved into the group's call without pressing
+    anything, and only the person added is rung; somebody added during a call
+    is rung too. Ten seats. Database: `operations/2026-09-30-database-changes.md`
+    §5; evidence: unit 4438/4438, `group-call.spec` 18/18 at 1440 and 390 with
+    three client mutants red, the voice regression 424/424.
+
+    **Still open:** a ring for a closed application — the Android call
+    delivery is private-chat only and not switched on — and how a blocked
+    person's messages look inside a group chat, which Discord's bundle names
+    (`MESSAGE_GROUP_BLOCKED`) but was not traced.
 
 46. `[~]` Tester's report, 2026-09-20, all of it from a phone. Eight items,
     kept in his words where paraphrase would soften them. **Triage opens with

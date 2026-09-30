@@ -39,6 +39,8 @@ import { voiceCallOffer } from "@/lib/voiceRing";
 import { useAvatarVariantUrls } from "@/hooks/useMediaVariants";
 import type { ChatWithLastMessage } from "@/types/database";
 import { isMicroGroup, microGroupRoom } from "@/lib/microGroup";
+import { groupCallOffer } from "@/lib/groupCall";
+import { startGroupCall, useGroupCallForChat } from "@/hooks/useGroupCalls";
 import { MicroGroupPeopleModal } from "./MicroGroupPeopleModal";
 
 interface ChatHeaderProps {
@@ -144,6 +146,24 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
     chat && chat.type === "private" && !display.isSaved && !display.isBot && otherUser?.id && !isBlocked,
   );
   const canAddToMicroGroup = microGroup && microGroupRoom(chat?.members?.length ?? 0) > 0;
+
+  /**
+   * A group chat's call (tracker item 45, second phase): «Позвонить» rings
+   * everybody else and takes this reader into the room; «Присоединиться» when
+   * a call is already running there — Discord offers a join to whoever is not
+   * in a running call. Nothing while this reader is in it: the call bar is.
+   */
+  const groupCall = useGroupCallForChat(microGroup ? chatId : null);
+  const groupOffer = groupCallOffer({ chatType: chat?.type, call: groupCall, callChannelId: call.channelId });
+  const handleGroupCall = async () => {
+    if (!groupOffer.offered || callStarting) return;
+    setCallStarting(true);
+    const outcome = await startGroupCall(chatId);
+    setCallStarting(false);
+    if (!outcome.ok) {
+      showActionFeedback({ kind: "error", title: outcome.refusal, key: "voice-ring" });
+    }
+  };
 
   const handleCall = async () => {
     if (!callOffer.offered || callStarting) return;
@@ -558,6 +578,30 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
               >
                 <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />
                 <KubIcon name="phone" size={20} className="relative" tone="accent" />
+              </button>
+            )}
+            {groupOffer.offered && (
+              <button
+                type="button"
+                onClick={() => void handleGroupCall()}
+                disabled={callStarting}
+                className={cn(
+                  "kub-icon-action kub-interactive kub-ios-chat-icon group/capsule relative h-11 w-11 rounded-full text-[color:var(--kub-text)]",
+                  callStarting && "cursor-not-allowed",
+                  FOCUS_RING,
+                )}
+                aria-label={groupOffer.title}
+                title={groupOffer.title}
+                data-testid="chat-header-group-call"
+                data-mode={groupOffer.mode}
+              >
+                <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />
+                <KubIcon name="phone" size={20} className="relative" tone="accent" />
+                {groupOffer.mode === "join" && (
+                  // A running call, marked on the control itself: the dot a
+                  // chat row already carries for a room with people in it.
+                  <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border-2 border-[color:var(--kub-surface)] bg-[var(--kub-online)]" />
+                )}
               </button>
             )}
             <div className="relative">

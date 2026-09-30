@@ -12,6 +12,8 @@ import {
 } from "@/lib/voicePresence";
 import { readVoiceRingRows } from "@/lib/voiceRing";
 import { publishVoiceRings, setVoiceRingViewer } from "@/hooks/useVoiceRing";
+import { readGroupCallRows } from "@/lib/groupCall";
+import { publishGroupCalls, setGroupCallViewer } from "@/hooks/useGroupCalls";
 
 /**
  * Which of the reader's conversations have somebody talking in them (slice 3).
@@ -102,6 +104,8 @@ function clearReaderState() {
   // Remove expiry authority before clearing rings: an identity boundary must
   // never send a missed/cancelled RPC on the previous person's behalf.
   setVoiceRingViewer(null);
+  setGroupCallViewer(null);
+  publishGroupCalls([]);
   publish(new Map());
   // This is not a query snapshot. Invalidate even a seed created this same ms.
   publishVoiceRings([], Number.POSITIVE_INFINITY);
@@ -153,9 +157,13 @@ function openReader(userId: string): PresenceReader {
         const { data, error } = await supabase
           .from("voice_channels" as never)
           .select(
-            "id,chat_id,name,participant_count,archived,ring_started_at,ring_caller,ring_answered_at",
+            "id,chat_id,name,participant_count,archived,ring_started_at,ring_caller,ring_answered_at," +
+              "call_started_at,call_started_by,call_message_id,call_ringing,call_moved_to,call_moved_at",
           )
-          .or("participant_count.gt.0,ring_started_at.not.is.null")
+          // A group chat's call rings before anybody is in its room, and a
+          // private room that moved into one has to be seen to be followed
+          // (tracker item 45, second phase).
+          .or("participant_count.gt.0,ring_started_at.not.is.null,call_started_at.not.is.null,call_moved_to.not.is.null")
           .eq("archived", false)
           .abortSignal(controller.signal);
         // Even a response already received when abort runs belongs to the old
@@ -169,6 +177,10 @@ function openReader(userId: string): PresenceReader {
         // just ended.
         if (!error) {
           publish(chatVoicePresence(readVoicePresenceRows(data, Date.now())));
+          // Group calls first: a move clears the private ring in the same read,
+          // and the move has to be followed before that absence is read as a
+          // hang-up (`useGroupCalls`).
+          publishGroupCalls(readGroupCallRows(data));
           publishVoiceRings(readVoiceRingRows(data), readStartedAt);
         }
         if (!again) break;
@@ -181,6 +193,7 @@ function openReader(userId: string): PresenceReader {
   };
 
   setVoiceRingViewer(userId);
+  setGroupCallViewer(userId);
   const opened = subscribeByTable<(payload: unknown) => void, RealtimeChannel>(
     supabase.realtime,
     "voice-presence",

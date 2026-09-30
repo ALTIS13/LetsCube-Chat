@@ -8,6 +8,8 @@ import { showActionFeedback } from "@/lib/actionFeedback";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { FOCUS_RING, PRESS_FILLED } from "@/lib/controlSurface";
 import { voiceRingState, voiceRingView } from "@/lib/voiceRing";
+import { groupRingView } from "@/lib/groupCall";
+import { answerGroupRing, declineGroupRing, useGroupRingPick } from "@/hooks/useGroupCalls";
 import {
   answerVoiceRing,
   cancelVoiceRing,
@@ -101,6 +103,14 @@ export function VoiceCallRing() {
   const selfId = useAppStore((state) => state.currentUser?.id ?? null);
   const offered = useVoiceRingPick(selfId);
   /**
+   * A group chat's call ringing this reader (tracker item 45, second phase).
+   * Drawn on the same band, with the same two buttons and the same sound; a
+   * private ring, when there is one, comes first, because it is somebody
+   * waiting on this one person.
+   */
+  const groupOffered = useGroupRingPick();
+  const groupFirst = !offered && groupOffered !== null;
+  /**
    * Slice F: a device its owner has turned off shows **nothing** for an
    * incoming call, which is Telegram's behaviour and the owner's answer to open
    * question 7 of the proposal.
@@ -119,11 +129,16 @@ export function VoiceCallRing() {
    * carries its own deadline and answers `true` if the server does not.
    */
   const gate = useIncomingRingGate({
-    ringKey: offered ? `${offered.ring.channelId}@${offered.ring.startedAt}` : null,
-    direction: offered?.direction ?? null,
+    ringKey: offered
+      ? `${offered.ring.channelId}@${offered.ring.startedAt}`
+      : groupFirst
+        ? `${groupOffered.call.channelId}@${groupOffered.rungAt}`
+        : null,
+    direction: offered?.direction ?? (groupFirst ? "incoming" : null),
   });
   const pick = gate === "show" ? offered : null;
-  const chatId = pick?.ring.chatId ?? null;
+  const groupPick = gate === "show" && groupFirst ? groupOffered : null;
+  const chatId = pick?.ring.chatId ?? groupPick?.call.chatId ?? null;
   // Scalar selectors, so a change anywhere else in the chat list does not
   // re-render this card, and read from the list the reader already has rather
   // than fetched: a ring is not worth a request, and `VoiceCallBar` names the
@@ -132,27 +147,29 @@ export function VoiceCallRing() {
     const chat = chatId ? state.chats.find((entry) => entry.id === chatId) : undefined;
     return chat ? getChatDisplayInfo(chat, state.currentUser?.id ?? null).title : null;
   });
-  const face = useAppStore(
-    (state) =>
-      (chatId ? state.chats.find((entry) => entry.id === chatId)?.other_user?.avatar_url : null) ?? null,
-  );
+  const face = useAppStore((state) => {
+    const chat = chatId ? state.chats.find((entry) => entry.id === chatId) : undefined;
+    // A group chat's own picture; a private chat's is the other person's.
+    return (chat?.type === "dm_group" ? chat.avatar_url : chat?.other_user?.avatar_url) ?? null;
+  });
   const otherId = useAppStore(
     (state) => (chatId ? state.chats.find((entry) => entry.id === chatId)?.other_user?.id : null) ?? null,
   );
   const [busy, setBusy] = useState(false);
   const { settings } = useAudioSettings();
 
-  const channelId = pick?.ring.channelId ?? null;
-  const startedAt = pick?.ring.startedAt ?? null;
+  const channelId = pick?.ring.channelId ?? groupPick?.call.channelId ?? null;
+  const startedAt = pick?.ring.startedAt ?? groupPick?.rungAt ?? null;
   // A press belongs to one ring. Without this, a cancel that was still in
   // flight when the next call arrived would leave its buttons refusing.
   useEffect(() => {
     setBusy(false);
   }, [channelId, startedAt]);
 
-  const view = voiceRingView({ pick, who, busy });
+  const view = groupPick ? groupRingView({ pick: groupPick, who, busy }) : voiceRingView({ pick, who, busy });
   useNativeForegroundRing(
-    nativeForegroundRingKey(channelId, startedAt, view.visible && view.direction === "incoming"),
+    // The native call screen is a private chat's; a group ring is the band's alone.
+    nativeForegroundRingKey(pick ? channelId : null, pick ? startedAt : null, Boolean(pick) && view.visible && view.direction === "incoming"),
     selfId,
   );
 
@@ -178,8 +195,10 @@ export function VoiceCallRing() {
           answeredAt: pick.ring.answeredAt,
           now: Date.now(),
         })
-      : "idle",
-    direction: pick?.direction ?? null,
+      : groupPick
+        ? "ringing"
+        : "idle",
+    direction: pick?.direction ?? (groupPick ? "incoming" : null),
     enabled: settings.callSoundEnabled,
   });
   // This component is mounted for the whole signed-in session, whether or not
@@ -202,7 +221,7 @@ export function VoiceCallRing() {
     }
   };
 
-  if (!view.visible || !pick) return null;
+  if (!view.visible || (!pick && !groupPick)) return null;
 
   const incoming = view.direction === "incoming";
   /**
@@ -242,6 +261,7 @@ export function VoiceCallRing() {
       aria-live={incoming ? "assertive" : "polite"}
       aria-label={incoming ? "Входящий звонок" : "Исходящий звонок"}
       data-testid="voice-ring"
+      data-kind={groupPick ? "group" : "private"}
       data-direction={view.direction}
       data-busy={view.busy ? "true" : "false"}
     >
@@ -273,7 +293,7 @@ export function VoiceCallRing() {
             <span aria-hidden="true" data-testid="voice-ring-pulse" className="kub-call-pulse" />
           )}
           <ChatAvatar
-            chat={{ id: chatId ?? "", name: view.who, avatar_url: face, type: "private" }}
+            chat={{ id: chatId ?? "", name: view.who, avatar_url: face, type: groupPick ? "dm_group" : "private" }}
             size="lg"
             profileId={otherId}
           />
@@ -328,7 +348,7 @@ export function VoiceCallRing() {
               busy={view.busy}
               grow={splitRow}
               testId="voice-ring-decline"
-              onPress={() => void run(() => declineVoiceRing(pick.ring))}
+              onPress={() => void run(() => (groupPick ? declineGroupRing(groupPick) : declineVoiceRing(pick!.ring)))}
             />
           )}
           {view.answer && (
@@ -339,7 +359,7 @@ export function VoiceCallRing() {
               busy={view.busy}
               grow={splitRow}
               testId="voice-ring-answer"
-              onPress={() => void run(() => answerVoiceRing(pick.ring, view.who))}
+              onPress={() => void run(() => (groupPick ? answerGroupRing(groupPick) : answerVoiceRing(pick!.ring, view.who)))}
             />
           )}
           {view.cancel && (
@@ -353,7 +373,7 @@ export function VoiceCallRing() {
               busy={view.busy}
               grow={false}
               testId="voice-ring-cancel"
-              onPress={() => void run(() => cancelVoiceRing(pick.ring))}
+              onPress={() => void run(() => cancelVoiceRing(pick!.ring))}
             />
           )}
         </span>

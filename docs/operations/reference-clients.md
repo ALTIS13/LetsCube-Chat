@@ -3621,6 +3621,21 @@ app was read.**
   for an hour after any dismissal.
 - `MESSAGE_GROUP_BLOCKED` exists in both chunks. How a blocked person's messages
   are drawn inside a group DM was not traced: UNESTABLISHED.
+- **A call is one message.** The call store's `CALL_CREATE` carries the call's
+  `messageId`, and its ringing set is `Object.keys(ongoingRings)` — an object
+  keyed by the people being rung. The message is given `call.participants` and
+  `call.ended_timestamp`; its duration is the end minus the message's own time.
+  A ring is sent as `POST /channels/{id}/call/ring` with `recipients` (none
+  meaning everybody), and queued until the call exists.
+- **Missed is the reader's.** The call message's renderer computes
+  `missed = !isCallActive && !call.participants.includes(me)` and offers a join
+  while the call is active and the reader's voice state is elsewhere. The chat
+  list's line picks one of three strings — a running call, a participant's,
+  anybody else's — with a `call-active` or `call-ended` icon; the words are
+  hashed keys in the bundle, so «call ended» and «missed call» are INFERRED.
+- **Declining is one's own.** The incoming-call notification's decline posts
+  `stopRinging(channel)`; the voice user list offers stopping the ring of one
+  named person.
 
 **Telegram. DOCUMENTED** (the API's own method pages, not a client's source).
 `messages.addChatUser` lists `USER_IS_BLOCKED` («You were blocked by this user»)
@@ -3645,8 +3660,16 @@ direction refuses adding somebody to a group. `channels.inviteToChannel` lists
   itself holds its modal back for three days after each dismissal, which says
   the interruption costs something; a note in the place where you leave is
   there when you look and never stops the conversation.
-- **The ring, when calls arrive** (phase two): the people added, never the ones
-  already in the call — Discord's `dm_invite`.
+- **The call** (phase two, built the same night): one message per call, opened
+  at the start and closed at the end, read per reader by Discord's rule. Ours
+  in two places: the one who rang and was alone there reads «Отменённый
+  звонок», which is what a private chat's record says of a call nobody
+  answered; and a ring lasts 45 seconds, a private ring's length — Discord's
+  server-side timeout was not read. Adding people during a call rings them and
+  nobody else — Discord's `dm_invite`.
+- **Born from a call**, the owner's own design rather than a reference's: the
+  two already talking move into the group's call without a press, and only
+  the people added are rung.
 - **Not built yet:** how a blocked person's messages look inside a group chat.
   Discord's handling was not traced, and the proposal's rule stands meanwhile —
   nothing is hidden from the rest of the conversation.

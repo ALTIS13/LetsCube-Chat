@@ -1,6 +1,7 @@
 // Relative, with the extension, so `node --test` reaches this module too
 // (the channel list's previews, tracker item 54, are unit-tested through it).
 import { callRecordPreview } from "./callRecord.ts";
+import { groupCallRecordPreview } from "./groupCall.ts";
 import type { Message } from "../types/database.ts";
 
 type PreviewMessage = Pick<Message, "type" | "content" | "media_url" | "deleted_at"> & {
@@ -35,6 +36,10 @@ export function formatChatMessagePreview(
     // -- falls straight through to the `content` it has always printed.
     const call = callRecordPreview(message.system_payload ?? null, viewerId ?? null);
     if (call) return call;
+    // A group chat's call (tracker item 45): one message for the whole call, and
+    // a list line for each reader. An end not written yet is a call running.
+    const group = groupCallRecordPreview(message.system_payload ?? null, viewerId ?? null, { running: true, inThisCall: false });
+    if (group) return group;
   }
   if (isGifMessage(message)) return "GIF";
   if (isRoundVideoMessage(message)) return "Видео-сообщение";

@@ -43,7 +43,9 @@ import {
   type CallBackPerson,
 } from "@/lib/callRecord";
 import { startVoiceRing } from "@/hooks/useVoiceRing";
-import { voiceCallSnapshot } from "@/hooks/useVoiceCall";
+import { useVoiceCall, voiceCallSnapshot } from "@/hooks/useVoiceCall";
+import { groupCallRecordView, readGroupCallRecord } from "@/lib/groupCall";
+import { startGroupCall, useGroupCallForChat } from "@/hooks/useGroupCalls";
 import { messageActionKind, type MessageActionId } from "@/lib/messageActions";
 import { canReportMessage } from "@/lib/personalModeration";
 import { requestContentReport } from "./ReportDialog";
@@ -225,6 +227,11 @@ function SystemMessageNotice({
   // bundle cannot read and for a reader it cannot name. Every one of those
   // falls through to `content`, which the database wrote as a complete neutral
   // sentence for exactly this purpose.
+  // A group chat's call (tracker item 45, second phase) has its own chip: one
+  // message for the whole call, read differently by each reader.
+  if (readGroupCallRecord(message.system_payload)) {
+    return <GroupCallRecordNotice message={message} viewerId={viewerId} />;
+  }
   const call = callRecordView(message.system_payload, viewerId);
   if (call) return <CallRecordNotice message={message} view={call} onCallBack={onCallBack} />;
   const text = message.content?.trim() || "Системное уведомление";
@@ -313,6 +320,83 @@ function CallRecordNotice({
         <span className={chip} aria-label={view.spoken}>
           {body}
         </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A group chat's call, in the conversation it happened in — the same chip a
+ * private call wears, read for this reader: «Идёт звонок» with a join while it
+ * runs and they are not in it, then «Звонок» and its length for whoever took
+ * part and «Пропущенный звонок» in red for whoever did not. Discord's rule,
+ * from its bundle: missed is not being among the call's participants.
+ */
+function GroupCallRecordNotice({ message, viewerId }: { message: MessageWithSender; viewerId: string | null }) {
+  const room = useGroupCallForChat(message.chat_id);
+  const voice = useVoiceCall();
+  const running = room !== null && room.messageId === message.id;
+  const inThisCall = running && voice.channelId === room.channelId;
+  const view = groupCallRecordView(message.system_payload, viewerId, { running, inThisCall });
+  const [joining, setJoining] = React.useState(false);
+  if (!view) {
+    const text = message.content?.trim() || "Звонок";
+    return (
+      <div className="my-2 flex w-full justify-center px-8" data-system-message={message.id}>
+        <span className="max-w-[min(82vw,32rem)] rounded-full bg-[var(--kub-chat-chip)] px-3 py-1 text-center text-[12px] leading-snug text-[color:var(--kub-chat-chip-text)]">
+          {text}
+        </span>
+      </div>
+    );
+  }
+  const join = async () => {
+    if (joining) return;
+    setJoining(true);
+    const outcome = await startGroupCall(message.chat_id);
+    setJoining(false);
+    if (!outcome.ok) showActionFeedback({ kind: "error", title: outcome.refusal, key: "voice-ring" });
+  };
+  const body = (
+    <>
+      <KubIcon name={view.icon} size={14} tone={view.missed ? "danger" : view.state === "running" ? "accent" : "muted"} />
+      <span data-call-record-headline="true">{view.headline}</span>
+      {view.duration && (
+        <span className="opacity-70" data-call-record-duration="true">
+          {view.duration}
+        </span>
+      )}
+    </>
+  );
+  const chip = cn(
+    "inline-flex max-w-[min(82vw,32rem)] items-center gap-1.5 rounded-full bg-[var(--kub-chat-chip)] px-3 py-1 text-center text-[12px] leading-snug",
+    view.missed ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-chat-chip-text)]",
+  );
+  return (
+    <div
+      className="my-2 flex w-full flex-wrap items-center justify-center gap-2 px-8"
+      data-system-message={message.id}
+      data-call-record="true"
+      data-call-mode="group"
+      data-call-state={view.state}
+      data-call-missed={view.missed ? "true" : "false"}
+    >
+      <span className={chip} aria-label={view.spoken}>
+        {body}
+      </span>
+      {view.joinable && (
+        <button
+          type="button"
+          onClick={() => void join()}
+          disabled={joining}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full bg-[var(--kub-action-primary-background)] px-3 py-1 text-[12px] font-semibold leading-snug text-[color:var(--kub-action-primary-foreground)] transition-colors hover:bg-[var(--kub-action-primary-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
+            joining && "cursor-not-allowed opacity-70",
+          )}
+          data-testid="group-call-record-join"
+        >
+          <KubIcon name="phone" size={13} />
+          Присоединиться
+        </button>
       )}
     </div>
   );

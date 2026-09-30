@@ -83,12 +83,14 @@ and byte-identical copies in `.migration-backup/supabase/migrations/`.
   (Discord's group-DM limit in its shipped bundle); a new group chat is made
   from a private one, which stays as it was (Discord's `_promoteDMToGroupDM`).
   Any member adds and only the crown removes is ours, the proposal's
-  recommendation. Two sentences of the migration's header say more than was
-  read: that Discord adds only friends to a group DM, an inference from the
-  bundle's names (`inviteLinkOnlyUserIds`, `friend_recipient_count`) whose
-  predicate was not traced, and that in Discord any member adds and the owner
-  removes, which was not read at all. The header is left as applied, so that the
-  file stays byte-identical to what ran; `reference-clients.md` §27 is the record.
+  recommendation. Several comments in that migration say more than was read:
+  that Discord adds only friends to a group DM (an inference from the bundle's
+  names, `inviteLinkOnlyUserIds` and `friend_recipient_count`, whose predicate
+  was not traced), that in Discord any member adds, any member renames and the
+  owner removes, and that Discord draws a group DM's default name from its
+  members — none of which was read. The file is left as applied, so that it
+  stays byte-identical to what ran; `reference-clients.md` §27 is the record,
+  and the client's comments were corrected to it.
 - **Backup:** `/srv/letscube/backups/automated/20260930-035715`, `SHA256SUMS`
   15 of 15 OK, `pg_restore --list` reads 161 table-data entries, one more than
   §1's because `chat_invite_links` now exists.
@@ -205,3 +207,53 @@ and byte-identical copies in `.migration-backup/supabase/migrations/`.
   and `chat_channel_categories` let it make a server's furniture in a group chat
   directly. That is the specification being bypassed rather than anybody's data,
   and it closes with the calls.
+
+## 5. The group chat's call — tracker item 45, second phase
+
+- **Migration** `supabase/migrations/20260930190000_group_chat_calls.sql`
+  (SHA-256 `44689d120ca5b9a2300b857be8db4baab924485918bef3af427b2d39abff7e22`),
+  rollback `…_group_chat_calls.rollback.sql`
+  (`90c04024b3b0f2d8f957e1ef1c2db17d0210d38242121f8f8c2b5b8f5cde26d7`), both
+  copied byte-identical into `.migration-backup/`. Applied as `supabase_admin`,
+  because its triggers go on `voice_channels` and `voice_participants`.
+- **What it does.** A group chat has one room of ten seats (`voice_group_room`),
+  and its call lives on that row: `call_started_at`, `call_started_by`,
+  `call_message_id`, and `call_ringing`, `{person: when their ring began}` —
+  Discord's `ongoingRings`. `voice_group_call_start` writes the call's one
+  message and rings everybody else except across a block; taking a seat stops
+  that person's ring and adds them to the message's participants
+  (`trg_voice_group_call_joined`); the last one out writes the end and the length
+  (`trg_voice_group_call_count_changed`); `voice_group_call_decline` stops one's
+  own ring. `micro_group_create`, when the two were talking in the private chat,
+  writes that call down there, starts the group's call ringing only the people
+  added, and points the private room at the group's (`call_moved_to`);
+  `micro_group_add` rings the people added during a call. Restrictive policies
+  keep a group chat's crown from making rooms, topics or channel categories
+  directly — §4's open point. `voice_group_calls_sweep` runs every minute
+  (`letscube-voice-group-call-sweep`): rings older than 45 seconds, a call nobody
+  ever sat in, and moves older than two minutes.
+- **Backup:** `/srv/letscube/backups/automated/20260930-054131`, `SHA256SUMS` 15
+  of 15 OK, 161 table-data entries.
+- **Rehearsal**, as `supabase_admin`, rolled back, with the two QA accounts and
+  four throwaway people: a start rings the others and not the caller nor somebody
+  who blocked the caller, and a second start finds the running call; a decline
+  stops one ring and a second finds none; two seats make two participants, a
+  repeated seat counts once, one leaving keeps the call and the last leaving ends
+  it with «Звонок» and a length; a seat taken with no call opens a quiet one that
+  ends «Звонок без ответа»; the crown's direct room, widening, deletion, topic
+  and category are refused while the same owner still furnishes a server; a
+  private chat cannot start a group call; somebody added during a call is rung;
+  the sweep ends a call nobody sat in; and a group chat born from a call writes
+  the private call down as answered, rings the person added and not the two
+  talking, points the private room at the group's, and forgets that pointer when
+  a new call starts there. **Four mutants of the migration each failed the smoke
+  on the check named after them**: an add that rings nobody, a ring set that
+  ignores blocks, an open insert policy for the crown's rooms, and a move that is
+  never forgotten.
+- **Applied** at 02:41:56Z; the post-apply smoke passed in a rolled-back
+  transaction. Afterwards: the six columns, the two triggers enabled, the sweep's
+  job active, no call and no move on any room, and no group chat yet.
+- **Client:** `lib/groupCall.ts`, `hooks/useGroupCalls.ts`, the band in
+  `VoiceCallRing.tsx`, the control in `ChatHeader.tsx`, the record in
+  `MessageList.tsx`, the list line in `messagePreview.ts`, and the reader in
+  `useVoicePresence.ts`, which hands group rows over before the private rings.
