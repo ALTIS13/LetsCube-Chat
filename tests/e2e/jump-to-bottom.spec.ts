@@ -56,6 +56,11 @@ async function openInTheHistory(page: Page) {
     },
     [WINDOW_KEY, FIXTURE] as const,
   );
+  // The capture refuses a fixture whose times are later than its clock, and
+  // these messages say «09:0x»: unpinned, this spec was red every morning
+  // before nine and green after, whatever the product did. Pinned as
+  // `chat-entry-scroll.spec.ts` pins it; timers keep running.
+  await page.clock.setFixedTime(new Date("2026-09-03T18:00:00"));
   const response = await page.goto(CAPTURE_PATH, { waitUntil: "domcontentloaded" }).catch(() => null);
   const ready = response
     ? await page

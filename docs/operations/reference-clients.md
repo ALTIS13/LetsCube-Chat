@@ -3619,8 +3619,14 @@ app was read.**
   reader's voice channel opens a modal of its own
   (`blocked_user_joined_voice_channel_modal`), quiet for two days per person and
   for an hour after any dismissal.
-- `MESSAGE_GROUP_BLOCKED` exists in both chunks. How a blocked person's messages
-  are drawn inside a group DM was not traced: UNESTABLISHED.
+- **A blocked person's messages** (read in `fb_44317_969918a4b4f5201c.js`, the
+  same night): a message whose author is blocked, and whose type is not in
+  `NON_COLLAPSIBLE`, joins a `MESSAGE_GROUP_BLOCKED` group with its
+  neighbours; the group draws one item — an icon, the reason formatted with
+  the count, then « — » and a toggle between show and hide — and opens by
+  itself when it holds the jump target (`hasJumpTarget`). Blocked groups can
+  be opened (`canUncollapse`), a suspended user's cannot. The words are hashed
+  keys; «N blocked messages» is INFERRED from the count argument.
 - **A call is one message.** The call store's `CALL_CREATE` carries the call's
   `messageId`, and its ringing set is `Object.keys(ongoingRings)` — an object
   keyed by the people being rung. The message is given `call.participants` and
@@ -3670,6 +3676,12 @@ direction refuses adding somebody to a group. `channels.inviteToChannel` lists
 - **Born from a call**, the owner's own design rather than a reference's: the
   two already talking move into the group's call without a press, and only
   the people added are rung.
-- **Not built yet:** how a blocked person's messages look inside a group chat.
-  Discord's handling was not traced, and the proposal's rule stands meanwhile —
-  nothing is hidden from the rest of the conversation.
+- **A blocked person's messages fold**, in a server, a group chat and a
+  channel, as Discord folds them: «2 заблокированных сообщения», «Показать»
+  beside it, and a run holding a jump's target opens by itself. Ours in two
+  places: a run does not cross a day, so the date stays where the reader looks
+  for it; and the entry's first unread skips a blocked author, so the entry
+  lands on something the reader chose to see. A private chat folds nothing —
+  a blocked person cannot write there, and what they wrote before is the
+  conversation itself. Folding is the reader's alone: nothing is hidden from
+  anybody else.

@@ -75,6 +75,16 @@ import {
 } from "@/hooks/useMediaVariants";
 import { advanceMessageEntrance, EMPTY_ENTRANCE_STATE, messageEntranceKey } from "@/lib/messageEntrance";
 import { useReloadGuard } from "@/hooks/useReloadGuard";
+import { usePersonalBlocks } from "@/hooks/usePersonalModeration";
+import {
+  blockedRunHoldsTarget,
+  blockedRunLabel,
+  chatFoldsBlockedMessages,
+  foldBlockedRuns,
+  isBlockedAuthorMessage,
+  type FoldItem,
+} from "@/lib/blockedRuns";
+import type { MediaAlbumGroup } from "@/lib/mediaAlbum";
 import {
   captureVisibleMessageAnchor,
   restoreVisibleMessageAnchor,
@@ -402,6 +412,89 @@ function GroupCallRecordNotice({ message, viewerId }: { message: MessageWithSend
   );
 }
 
+const EMPTY_BLOCKED: ReadonlySet<string> = new Set();
+
+/**
+ * A run of messages from somebody the reader blocked, folded to one line —
+ * Discord's collapsed blocked group (`MESSAGE_GROUP_BLOCKED`, read in its
+ * bundle): how many, and «Показать» to open them. A run holding the target of
+ * a jump opens by itself and hands the scroll on to the message itself, so a
+ * search or a notification still lands on exactly what it named.
+ *
+ * Folded, the line stands in for its messages in `messageRefs`, so a jump
+ * finds something to go to rather than reporting the message unloaded.
+ */
+function BlockedRun({
+  item,
+  dateLabel,
+  targetId,
+  messageRefs,
+  onOpenForJump,
+  children,
+}: {
+  item: Extract<FoldItem<MediaAlbumGroup>, { kind: "blocked" }>;
+  dateLabel: string | null;
+  targetId: string | null;
+  messageRefs?: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
+  /**
+   * Called as the run opens for a jump, before its messages grow the list. The
+   * list keeps a reader who was at the bottom there when its content grows,
+   * and a jump is a reader leaving the bottom — without this the growth
+   * pulled the list back down past the message the jump had just named.
+   */
+  onOpenForJump: () => void;
+  children: () => React.ReactNode;
+}) {
+  const holds = blockedRunHoldsTarget(item.messageIds, targetId);
+  const [open, setOpen] = React.useState(holds);
+  const expanded = open || holds;
+  const rowRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    if (holds) setOpen(true);
+  }, [holds]);
+  React.useLayoutEffect(() => {
+    if (expanded || !messageRefs || !rowRef.current) return;
+    for (const id of item.messageIds) messageRefs.current[id] = rowRef.current;
+  }, [expanded, item.messageIds, messageRefs]);
+  React.useLayoutEffect(() => {
+    if (!holds || !targetId || !messageRefs) return;
+    onOpenForJump();
+    const target = messageRefs.current[targetId];
+    if (target && target !== rowRef.current) target.scrollIntoView({ behavior: "auto", block: "center" });
+  }, [holds, targetId, messageRefs, onOpenForJump]);
+  const label = blockedRunLabel(item.messageIds.length);
+  return (
+    <div data-blocked-run={item.key} data-expanded={expanded ? "true" : "false"}>
+      {!expanded && dateLabel && (
+        <div className="my-3 flex justify-center">
+          <span className="rounded-full bg-[var(--kub-chat-chip)] px-3 py-1 text-xs font-semibold text-[color:var(--kub-chat-chip-text)]">
+            {dateLabel}
+          </span>
+        </div>
+      )}
+      {/* The line and its control side by side, the way a running call's chip
+          sits beside «Присоединиться»: one piece of text and one thing to
+          press. Inside one chip at 390 the label wrapped into a box of its own. */}
+      <div ref={rowRef} className="my-2 flex w-full flex-wrap items-center justify-center gap-2 px-4 sm:px-8" data-testid="blocked-run">
+        <span className="inline-flex max-w-[min(82vw,32rem)] items-center gap-1.5 rounded-full bg-[var(--kub-chat-chip)] px-3 py-1 text-[12px] leading-snug text-[color:var(--kub-chat-chip-text)]">
+          <KubIcon name="ban" size={13} tone="muted" />
+          <span data-testid="blocked-run-label">{label}</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !(value || holds))}
+          aria-expanded={expanded}
+          className="inline-flex items-center whitespace-nowrap rounded-full bg-[var(--kub-chat-chip)] px-3 py-1 text-[12px] font-semibold leading-snug text-[color:var(--kub-accent-text)] transition-colors hover:bg-[color-mix(in_srgb,var(--kub-chat-chip)_70%,var(--kub-cyan)_16%)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+          data-testid="blocked-run-toggle"
+        >
+          {expanded ? "Скрыть" : "Показать"}
+        </button>
+      </div>
+      {expanded && children()}
+    </div>
+  );
+}
+
 /** Keys that move a scroller, and therefore mean "I am reading, leave me here". */
 const SCROLLING_KEYS = new Set([
   "PageUp",
@@ -566,16 +659,27 @@ export function MessageList({
   const initialScrollPendingKeyRef = useRef<string | null>(null);
   const initialBottomLockUntilRef = useRef(0);
   const isInitialBottomLocked = useCallback(() => Date.now() < initialBottomLockUntilRef.current, []);
+  /**
+   * Whom this reader blocked, in a conversation of several people, where
+   * their messages fold away (`lib/blockedRuns.ts`). An empty set anywhere
+   * else, so a private chat renders exactly as it did.
+   */
+  const personalBlocks = usePersonalBlocks();
+  const foldsBlocked = chatFoldsBlockedMessages(chatType, Boolean(isSavedChat));
+  const blockedAuthors = foldsBlocked ? personalBlocks.ids : EMPTY_BLOCKED;
   const firstUnreadMessageId = React.useMemo(() => {
     if (!initialUnreadCount || !userId) return null;
     const boundaryTime = initialUnreadSince ? new Date(initialUnreadSince).getTime() : null;
     const first = sortedMessages.find((message) => {
       if (message.deleted_at || !isIncomingMessage(message, userId)) return false;
+      // The entry lands on something the reader chose to see: a blocked
+      // person's message is folded, and there is nothing there to read.
+      if (isBlockedAuthorMessage(message, blockedAuthors)) return false;
       if (!boundaryTime || Number.isNaN(boundaryTime)) return true;
       return new Date(message.created_at).getTime() > boundaryTime;
     });
     return first?.id ?? null;
-  }, [initialUnreadCount, initialUnreadSince, sortedMessages, userId]);
+  }, [blockedAuthors, initialUnreadCount, initialUnreadSince, sortedMessages, userId]);
   const entryKey = `${layoutKey ?? "chat"}:${initialUnreadCount}:${initialUnreadSince ?? "none"}`;
   /**
    * Whether this entry has found its first unread message (§11: a chat with
@@ -615,6 +719,22 @@ export function MessageList({
     });
     return groupVisibleMediaAlbums(sortedMessages, breaks);
   }, [firstUnreadMessageId, sortedMessages]);
+  const startsDay = React.useCallback(
+    (group: MediaAlbumGroup) =>
+      group.startIndex === 0 ||
+      shouldShowDateSeparator(sortedMessages[group.startIndex - 1], sortedMessages[group.startIndex]),
+    [sortedMessages],
+  );
+  const foldItems = React.useMemo(
+    () =>
+      foldBlockedRuns<MediaAlbumGroup>({
+        groups: albumGroups,
+        messagesOf: (group) => group.messages,
+        blocked: blockedAuthors,
+        startsDay,
+      }),
+    [albumGroups, blockedAuthors, startsDay],
+  );
 
   const readReceiptsMessage = React.useMemo(
     () => readReceiptsMessageId ? sortedMessages.find((message) => message.id === readReceiptsMessageId) ?? null : null,
@@ -1568,6 +1688,80 @@ export function MessageList({
     );
   };
 
+  // A jump is the reader taking over, as input is: both holds end, the one
+  // that keeps a reader at the bottom and the entry's own for its first
+  // seconds. Measured without the second: the target in view at once, and
+  // 50 ms later the list back at the bottom, 1016 px past it.
+  const leaveBottomForJump = useCallback(() => {
+    releaseInitialScrollControl();
+    isAtBottomRef.current = false;
+  }, [releaseInitialScrollControl]);
+
+  const renderGroup = (group: MediaAlbumGroup): React.ReactNode => {
+    const first = sortedMessages[group.startIndex];
+    if (group.kind === "single") return renderMessageRow(first, group.startIndex);
+    const prev = group.startIndex > 0 ? sortedMessages[group.startIndex - 1] : null;
+    const showDate = shouldShowDateSeparator(prev, first);
+    const actor = resolveMessageActor(first);
+    const isMe = actor.kind === "user" && actor.id === userId;
+    const compact = group.messages.length >= 5;
+    return (
+      <div key={messageEntranceKey(first)} data-message-album={group.albumId} role="group" aria-label={`Медиаальбом, вложений: ${group.messages.length}`} className="my-1 min-w-0">
+        {showDate && (
+          <div className="my-3 flex justify-center" data-message-date-separator={getMessageDayKey(first.created_at)}>
+            <span className="rounded-full bg-[var(--kub-chat-chip)] px-3 py-1 text-xs font-semibold text-[color:var(--kub-chat-chip-text)]">
+              {getMessageDayLabel(first.created_at)}
+            </span>
+          </div>
+        )}
+        {first.id === firstUnreadMessageId && (
+          <div className="unread-separator my-3 flex items-center justify-center" data-testid="first-unread-separator">
+            <span className="rounded-full border border-[color-mix(in_srgb,var(--kub-pink)_35%,var(--kub-border-color))] bg-[var(--kub-chat-chip)] px-3 py-1 text-[12px] font-semibold uppercase text-[color:var(--kub-pink-text)]">
+              Новые сообщения
+            </span>
+          </div>
+        )}
+        <div className={cn("flex min-w-0", isMe ? "justify-end" : "justify-start")}>
+          <div className={cn("min-w-0 w-[min(86vw,32rem)] max-w-full", !isMe && "ml-10")}>
+            {!isMe && (
+              <button
+                type="button"
+                aria-label={`Профиль: ${messageActorDisplayName(actor)}`}
+                className="mb-1 block max-w-full truncate px-1 text-left text-xs font-semibold text-[color:var(--kub-accent-text)] hover:underline focus-visible:outline-2 focus-visible:outline-[color:var(--kub-cyan)]"
+                onClick={(event) => {
+                  const target = messageAuthorProfileTarget(actor);
+                  if (target.kind === "none") return;
+                  const box = event.currentTarget.getBoundingClientRect();
+                  const albumBox = event.currentTarget.closest("[data-message-album]")?.getBoundingClientRect() ?? box;
+                  const anchor = { top: box.top, bottom: box.bottom, left: box.left, right: box.right };
+                  const row = { top: albumBox.top, bottom: albumBox.bottom, left: albumBox.left, right: albumBox.right };
+                  const store = useAppStore.getState();
+                  if (target.kind === "person") store.openUserProfile(target.userId, "glance", first.chat_id, anchor, row);
+                  else store.openBotProfile(target.botId, target.bot, "glance", first.chat_id, anchor, row);
+                }}
+              >
+                {messageActorDisplayName(actor)}
+              </button>
+            )}
+            <div
+              className={cn("grid gap-1", compact ? "grid-cols-3" : "grid-cols-2")}
+              style={{ gridAutoRows: compact ? "clamp(96px, 24vw, 156px)" : "clamp(132px, 36vw, 196px)" }}
+            >
+              {group.messages.map((message, offset) => (
+                <div
+                  key={messageEntranceKey(message)}
+                  className={cn("min-w-0", group.messages.length === 3 && offset === 0 && "row-span-2")}
+                >
+                  {renderMessageRow(message, sortedIndexById.get(message.id) ?? group.startIndex + offset, compact)}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <MessageActionsContext.Provider value={actionsContext}>
     <div
@@ -1649,70 +1843,26 @@ export function MessageList({
             </div>
           )}
 
-          {albumGroups.map((group) => {
-            const first = sortedMessages[group.startIndex];
-            if (group.kind === "single") return renderMessageRow(first, group.startIndex);
-            const prev = group.startIndex > 0 ? sortedMessages[group.startIndex - 1] : null;
-            const showDate = shouldShowDateSeparator(prev, first);
-            const actor = resolveMessageActor(first);
-            const isMe = actor.kind === "user" && actor.id === userId;
-            const compact = group.messages.length >= 5;
-            return (
-              <div key={messageEntranceKey(first)} data-message-album={group.albumId} role="group" aria-label={`Медиаальбом, вложений: ${group.messages.length}`} className="my-1 min-w-0">
-                {showDate && (
-                  <div className="my-3 flex justify-center" data-message-date-separator={getMessageDayKey(first.created_at)}>
-                    <span className="rounded-full bg-[var(--kub-chat-chip)] px-3 py-1 text-xs font-semibold text-[color:var(--kub-chat-chip-text)]">
-                      {getMessageDayLabel(first.created_at)}
-                    </span>
-                  </div>
-                )}
-                {first.id === firstUnreadMessageId && (
-                  <div className="unread-separator my-3 flex items-center justify-center" data-testid="first-unread-separator">
-                    <span className="rounded-full border border-[color-mix(in_srgb,var(--kub-pink)_35%,var(--kub-border-color))] bg-[var(--kub-chat-chip)] px-3 py-1 text-[12px] font-semibold uppercase text-[color:var(--kub-pink-text)]">
-                      Новые сообщения
-                    </span>
-                  </div>
-                )}
-                <div className={cn("flex min-w-0", isMe ? "justify-end" : "justify-start")}>
-                  <div className={cn("min-w-0 w-[min(86vw,32rem)] max-w-full", !isMe && "ml-10")}>
-                    {!isMe && (
-                      <button
-                        type="button"
-                        aria-label={`Профиль: ${messageActorDisplayName(actor)}`}
-                        className="mb-1 block max-w-full truncate px-1 text-left text-xs font-semibold text-[color:var(--kub-accent-text)] hover:underline focus-visible:outline-2 focus-visible:outline-[color:var(--kub-cyan)]"
-                        onClick={(event) => {
-                          const target = messageAuthorProfileTarget(actor);
-                          if (target.kind === "none") return;
-                          const box = event.currentTarget.getBoundingClientRect();
-                          const albumBox = event.currentTarget.closest("[data-message-album]")?.getBoundingClientRect() ?? box;
-                          const anchor = { top: box.top, bottom: box.bottom, left: box.left, right: box.right };
-                          const row = { top: albumBox.top, bottom: albumBox.bottom, left: albumBox.left, right: albumBox.right };
-                          const store = useAppStore.getState();
-                          if (target.kind === "person") store.openUserProfile(target.userId, "glance", first.chat_id, anchor, row);
-                          else store.openBotProfile(target.botId, target.bot, "glance", first.chat_id, anchor, row);
-                        }}
-                      >
-                        {messageActorDisplayName(actor)}
-                      </button>
-                    )}
-                    <div
-                      className={cn("grid gap-1", compact ? "grid-cols-3" : "grid-cols-2")}
-                      style={{ gridAutoRows: compact ? "clamp(96px, 24vw, 156px)" : "clamp(132px, 36vw, 196px)" }}
-                    >
-                      {group.messages.map((message, offset) => (
-                        <div
-                          key={messageEntranceKey(message)}
-                          className={cn("min-w-0", group.messages.length === 3 && offset === 0 && "row-span-2")}
-                        >
-                          {renderMessageRow(message, sortedIndexById.get(message.id) ?? group.startIndex + offset, compact)}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {foldItems.map((item) =>
+            item.kind === "open" ? (
+              renderGroup(item.group)
+            ) : (
+              <BlockedRun
+                key={`blocked-${item.key}`}
+                item={item}
+                dateLabel={
+                  item.groups[0] && startsDay(item.groups[0])
+                    ? getMessageDayLabel(sortedMessages[item.groups[0].startIndex].created_at)
+                    : null
+                }
+                targetId={highlightedId ?? null}
+                messageRefs={messageRefs}
+                onOpenForJump={leaveBottomForJump}
+              >
+                {() => item.groups.map((group) => renderGroup(group))}
+              </BlockedRun>
+            ),
+          )}
 
           {/* Typing indicator */}
           {isTyping && (

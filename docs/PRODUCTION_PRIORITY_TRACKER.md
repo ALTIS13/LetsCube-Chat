@@ -1786,10 +1786,23 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     §5; evidence: unit 4438/4438, `group-call.spec` 18/18 at 1440 and 390 with
     three client mutants red, the voice regression 424/424.
 
+    **And a blocked person's messages, the same night**, the last part of the
+    owner's «общая система блока». Discord's collapsed blocked group, read in
+    its bundle rather than recalled: in a server, a group chat or a channel,
+    consecutive messages from somebody the reader blocked fold to one line,
+    «2 заблокированных сообщения», with «Показать» and «Скрыть» beside it;
+    a run holding the target of a search or a notification opens by itself
+    and the jump lands on the message; system lines never fold. Ours in two
+    places: a run does not cross a day, and the entry's first unread is the
+    first message from somebody not blocked. A private chat folds nothing.
+    `lib/blockedRuns.ts`; `blocked-fold.spec` 8/8 with two mutants red, and
+    the list's regression green on both fixture servers. It found one thing
+    on the way: `jump-to-bottom.spec` was red every morning before nine and
+    green after, because its fixture says «09:0x» and the capture refuses a
+    time later than its clock; its clock is pinned now, as its neighbour's is.
+
     **Still open:** a ring for a closed application — the Android call
-    delivery is private-chat only and not switched on — and how a blocked
-    person's messages look inside a group chat, which Discord's bundle names
-    (`MESSAGE_GROUP_BLOCKED`) but was not traced.
+    delivery is private-chat only and not switched on.
 
 46. `[~]` Tester's report, 2026-09-20, all of it from a phone. Eight items,
     kept in his words where paraphrase would soften them. **Triage opens with
