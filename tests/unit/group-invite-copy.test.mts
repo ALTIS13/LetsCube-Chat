@@ -28,8 +28,8 @@ const inGroup = (status: Parameters<typeof inviteState>[0]["status"], isMember =
 
 test("every state the block really has is still named", () => {
   assert.equal(inGroup("pending").label, "Ждёт ответа");
-  assert.equal(inGroup("accepted", true).label, "В группе");
-  assert.equal(inGroup("accepted", false).label, "Уже не в группе");
+  assert.equal(inGroup("accepted", true).label, "На сервере");
+  assert.equal(inGroup("accepted", false).label, "Уже не на сервере");
   assert.equal(inGroup("declined").label, "Отклонено");
   assert.equal(inGroup("cancelled").label, "Отменено");
   assert.equal(inGroup("expired").label, "Истекло");
@@ -97,7 +97,7 @@ test("nobody waiting means no line at all, not a line saying so", () => {
 test("an empty list says why it is empty, and there are two reasons", () => {
   assert.equal(
     invitesEmptyText({ total: 0, visible: 0, failed: false, type: "group" }),
-    "В группу ещё никого не приглашали.",
+    "На сервер ещё никого не приглашали.",
   );
   assert.equal(
     invitesEmptyText({ total: 0, visible: 0, failed: false, type: "channel" }),
@@ -108,7 +108,7 @@ test("an empty list says why it is empty, and there are two reasons", () => {
   // watched all five arrive.
   assert.equal(
     invitesEmptyText({ total: 5, visible: 0, failed: false, type: "group" }),
-    "Все приглашённые уже в группе.",
+    "Все приглашённые уже на сервере.",
   );
   assert.equal(
     invitesEmptyText({ total: 5, visible: 0, failed: false, type: "channel" }),
@@ -143,9 +143,9 @@ test("the state a missing migration leaves behind tells the reader nothing about
 // `group_invite_create`'s refusal rather than the database.
 
 test("each refusal is named after the branch that would raise it", () => {
-  assert.equal(inviteDenialText("not_group_chat", "group"), "Приглашения есть только у групп и каналов.");
-  assert.equal(inviteDenialText("member_required", "group"), "Приглашать может только тот, кто сам в группе.");
-  assert.equal(inviteDenialText("admin_required", "group"), "В группе приглашают только владелец и администраторы.");
+  assert.equal(inviteDenialText("not_group_chat", "group"), "Приглашения есть только у серверов и каналов.");
+  assert.equal(inviteDenialText("member_required", "group"), "Приглашать может только тот, кто сам на сервере.");
+  assert.equal(inviteDenialText("admin_required", "group"), "На сервере приглашают только владелец и администраторы.");
 });
 
 test("a channel's refusals speak of a channel", () => {
@@ -162,7 +162,10 @@ test("no refusal mentions the database, a policy name or a migration", () => {
 test("an unread policy says it was not read, and claims nothing about what it is", () => {
   const note = invitePolicyUnreadNote("group");
   assert.match(note, /Не удалось прочитать/);
-  assert.match(note, /ответит сервер/);
+  // It used to say «ответит сервер», meaning the backend; «сервер» is the heavy
+  // group's own name since 2026-09-30, so it says what happens instead.
+  assert.match(note, /права проверятся при отправке/);
+  assert.doesNotMatch(note, /ответит сервер/);
   // The defect this replaces is the card asserting the default it never read.
   assert.doesNotMatch(note, /только администраторы|только владелец/i);
   assert.match(invitePolicyUnreadNote("channel"), /канал/);

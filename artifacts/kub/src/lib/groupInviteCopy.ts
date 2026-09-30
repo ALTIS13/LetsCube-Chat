@@ -68,8 +68,8 @@ export function inviteState({ status, isMember, type }: InviteStateInput): Invit
   }
   if (status === "accepted") {
     return isMember
-      ? { label: `В ${words.locative}`, tone: "joined", canCancel: false, canInviteAgain: false }
-      : { label: `Уже не в ${words.locative}`, tone: "gone", canCancel: false, canInviteAgain: true };
+      ? { label: capitalise(words.at), tone: "joined", canCancel: false, canInviteAgain: false }
+      : { label: `Уже не ${words.at}`, tone: "gone", canCancel: false, canInviteAgain: true };
   }
   if (status === "declined") {
     return { label: "Отклонено", tone: "refused", canCancel: false, canInviteAgain: true };
@@ -122,8 +122,8 @@ export function invitesEmptyText({ total, visible, failed, type }: InviteEmptyIn
   if (failed) return "";
   const words = chatVocabulary(type);
   if (visible > 0) return "";
-  if (total > 0) return `Все приглашённые уже в ${words.locative}.`;
-  return `В ${words.object} ещё никого не приглашали.`;
+  if (total > 0) return `Все приглашённые уже ${words.at}.`;
+  return `${capitalise(words.into)} ещё никого не приглашали.`;
 }
 
 /**
@@ -138,9 +138,9 @@ export function invitesEmptyText({ total, visible, failed, type }: InviteEmptyIn
  */
 export function inviteDenialText(denial: ChatInviteDenial, type: string | null | undefined): string {
   const words = chatVocabulary(type);
-  if (denial === "not_group_chat") return "Приглашения есть только у групп и каналов.";
-  if (denial === "member_required") return `Приглашать может только тот, кто сам в ${words.locative}.`;
-  return `В ${words.locative} приглашают только владелец и администраторы.`;
+  if (denial === "not_group_chat") return "Приглашения есть только у серверов и каналов.";
+  if (denial === "member_required") return `Приглашать может только тот, кто сам ${words.at}.`;
+  return `${capitalise(words.at)} приглашают только владелец и администраторы.`;
 }
 
 /**
@@ -154,7 +154,9 @@ export function inviteDenialText(denial: ChatInviteDenial, type: string | null |
  */
 export function invitePolicyUnreadNote(type: string | null | undefined): string {
   const words = chatVocabulary(type);
-  return `Не удалось прочитать, кому разрешено приглашать в ${words.object}. Приглашение можно отправить — ответит сервер.`;
+  // «ответит сервер» said the backend would decide — and «сервер» is the
+  // heavy group's own name now, so the sentence says what happens instead.
+  return `Не удалось прочитать, кому разрешено приглашать ${words.into}. Приглашение можно отправить — права проверятся при отправке.`;
 }
 
 /** What the button beside one person says. */
@@ -190,4 +192,8 @@ export function inviteSearchEmptyText(term: string): string {
   const trimmed = term.trim();
   if (!trimmed) return "Пока некого приглашать.";
   return `По запросу «${trimmed}» никого не нашли.`;
+}
+
+function capitalise(text: string): string {
+  return text.charAt(0).toLocaleUpperCase("ru-RU") + text.slice(1);
 }

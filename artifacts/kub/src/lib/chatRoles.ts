@@ -287,13 +287,13 @@ export function chatRoleAssignDenial(input: ChatRoleGateInput): ChatRoleDenial |
 export function chatRoleDenialText(denial: ChatRoleDenial): string {
   switch (denial) {
     case "not_group_chat":
-      return "Роли есть только у групп и каналов.";
+      return "Роли есть только у серверов и каналов.";
     case "owner_required":
       return "Роли участников настраивает владелец.";
     case "admin_required":
       return "Выдавать роли могут владелец и администраторы.";
     case "chat_full":
-      return `В группе уже ${CHAT_ROLE_LIMITS.perChat} ролей — больше добавить нельзя.`;
+      return `На сервере уже ${CHAT_ROLE_LIMITS.perChat} ролей — больше добавить нельзя.`;
     case "member_full":
       return `У участника уже ${CHAT_ROLE_LIMITS.perMember} ролей — снимите одну, чтобы выдать другую.`;
   }

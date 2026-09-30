@@ -171,14 +171,14 @@ test("«Заблокировать» asks first, blocks, and then the row offers
   await expect(menu.getByText("Позвонить", { exact: true })).toHaveCount(0);
 });
 
-test("«Пригласить в группу» steps into the groups the person is not in, and invites to the one pressed", async ({ page }) => {
+test("«Пригласить на сервер» steps into the groups the person is not in, and invites to the one pressed", async ({ page }) => {
   const fixture = await boot(page);
   let menu = await openRowMenu(page, "Анна Смирнова");
   const labels = (await entries(menu)).map((label) => label.trim()).filter(Boolean);
   // Discord's group 7: «Invite to Server» comes right before «Block».
-  expect(labels.indexOf("Пригласить в группу"), labels.join(" · ")).toBe(labels.indexOf("Заблокировать") - 1);
+  expect(labels.indexOf("Пригласить на сервер"), labels.join(" · ")).toBe(labels.indexOf("Заблокировать") - 1);
 
-  await menu.getByText("Пригласить в группу", { exact: true }).click();
+  await menu.getByText("Пригласить на сервер", { exact: true }).click();
   menu = page.locator("[data-chat-context-menu]").first();
   // A step, as the durations are: the menu stays open and says where back is.
   await expect(menu.getByText("Назад", { exact: true })).toBeVisible();
@@ -195,5 +195,5 @@ test("«Пригласить в группу» steps into the groups the person 
 test("a group's row offers no invitation, and nor does a person already in all of mine", async ({ page }) => {
   await boot(page);
   const menu = await openRowMenu(page, "Бригада");
-  await expect(menu.getByText("Пригласить в группу", { exact: true })).toHaveCount(0);
+  await expect(menu.getByText("Пригласить на сервер", { exact: true })).toHaveCount(0);
 });

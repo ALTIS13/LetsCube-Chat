@@ -97,7 +97,7 @@ test("Escape is refused while something the reader opened is on top", async ({ p
   // underneath must survive it, or one press would close two things.
   await page.getByTestId("chat-header-info-button").click();
   await expect(page.getByTestId("chat-info-panel")).toBeVisible();
-  const leave = page.getByRole("button", { name: /Покинуть группу|Удалить группу/ }).first();
+  const leave = page.getByRole("button", { name: /Покинуть сервер|Удалить сервер/ }).first();
   await leave.click();
   const dialog = page.locator('[role="dialog"][aria-modal="true"]');
   await expect(dialog).toBeVisible();

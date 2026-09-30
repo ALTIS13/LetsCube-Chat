@@ -811,7 +811,7 @@ export function voiceChannelEndConfirmation(): VoiceChannelEndConfirmation {
     title: "Завершить голосовой чат?",
     description: "Все, кто сейчас в нём, будут отключены.",
     aftermath:
-      "Голосовой чат исчезнет у всех участников группы. Начать новый можно в любой момент.",
+      "Голосовой чат исчезнет у всех участников сервера. Начать новый можно в любой момент.",
     confirmLabel: "Завершить",
     busyLabel: "Завершаем…",
   };

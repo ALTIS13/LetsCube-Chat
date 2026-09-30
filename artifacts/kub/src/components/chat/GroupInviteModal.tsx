@@ -41,7 +41,8 @@ import {
   type BotLike,
 } from "@/lib/chatBots";
 import { createGroupInvite, formatGroupInviteError, GROUP_INVITES_MIGRATION_REQUIRED, isGroupInviteUnavailableError } from "@/lib/groupInvites";
-import { ChatInviteLinksPanel, INVITE_FIELD_SHELL } from "./ChatInviteLinksPanel";
+import { ChatInviteLinksPanel } from "./ChatInviteLinksPanel";
+import { FIELD_SHELL } from "@/lib/fieldShell";
 import { FOCUS_RING } from "@/lib/controlSurface";
 import type { GroupInviteStatus } from "@/lib/groupInvites";
 import type { GroupInvite, Profile } from "@/types/database";
@@ -503,7 +504,7 @@ export function GroupInviteModal({
         </button>
       )}
 
-      <div className={INVITE_FIELD_SHELL}>
+      <div className={FIELD_SHELL}>
         <KubIcon name="search" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
         <input
           autoFocus

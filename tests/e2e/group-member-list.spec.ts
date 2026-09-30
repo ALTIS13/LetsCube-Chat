@@ -270,10 +270,10 @@ test("a member with no nickname is still told apart from an empty row", async ({
 test("the chat's own role still comes first where there is one", async ({ page }) => {
   await openMembers(page);
   await expect(row(page, ZOYA).getByTestId("chat-info-member-secondary")).toContainText(
-    "Владелец группы",
+    "Владелец сервера",
   );
   await expect(row(page, YAKOV).getByTestId("chat-info-member-secondary")).toContainText(
-    "Администратор группы",
+    "Администратор сервера",
   );
 });
 
@@ -323,7 +323,7 @@ test("a member row is pressable, and opens the person", async ({ page }) => {
   const card = page.getByTestId("chat-info-member-card");
   await expect(card).toHaveAttribute("data-state", "current");
   await expect(card.getByTestId("member-card-username")).toHaveText("@olga");
-  await expect(card.getByTestId("member-card-joined")).toContainText("В группе с");
+  await expect(card.getByTestId("member-card-joined")).toContainText("На сервере с");
   await expect(card.getByTestId("member-card-open-chat")).toBeVisible();
 });
 

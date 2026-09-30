@@ -82,7 +82,7 @@ async function openNewGroup(page: Page): Promise<Seen> {
   } else {
     await page.getByTestId("side-menu-button").click();
   }
-  await page.getByRole("button", { name: "Новая группа" }).first().click();
+  await page.getByRole("button", { name: "Новый сервер" }).first().click();
   return seen;
 }
 
@@ -105,22 +105,22 @@ test("the invitee step is not a blank box", async ({ page }) => {
 
 test("a person with nobody to invite can still reach the name field", async ({ page }) => {
   await openNewGroup(page);
-  const next = page.getByRole("button", { name: /Пропустить и назвать группу/ });
+  const next = page.getByRole("button", { name: /Пропустить и назвать сервер/ });
   await expect(next).toBeVisible();
   await expect(next).toBeEnabled();
   await next.click();
   // The step really changed: the modal's own title is the naming one, and the
   // create button is the one now on offer.
-  await expect(page.getByText("Название группы", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Создать группу" })).toBeVisible();
+  await expect(page.getByText("Название сервера", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Создать сервер" })).toBeVisible();
 });
 
 test("and the group is actually created, with nobody invited", async ({ page }) => {
   const seen = await openNewGroup(page);
-  await page.getByRole("button", { name: /Пропустить и назвать группу/ }).click();
+  await page.getByRole("button", { name: /Пропустить и назвать сервер/ }).click();
 
   await page.getByRole("textbox").last().fill("Команда без приглашений");
-  const create = page.getByRole("button", { name: "Создать группу" });
+  const create = page.getByRole("button", { name: "Создать сервер" });
   await expect(create).toBeEnabled();
   await create.click();
 
@@ -129,7 +129,7 @@ test("and the group is actually created, with nobody invited", async ({ page }) 
   await expect.poll(() => seen.chatInserts, { timeout: 5_000 }).toBe(1);
 
   // And nothing claims invitations that were never sent.
-  await expect(page.getByText(/Пригласить участников можно в информации о группе/)).toBeVisible();
+  await expect(page.getByText(/Пригласить участников можно в информации о сервере/)).toBeVisible();
   await expect(page.getByText("Приглашения отправлены.")).toHaveCount(0);
 });
 

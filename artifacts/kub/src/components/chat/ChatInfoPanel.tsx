@@ -169,6 +169,8 @@ import {
   unblockPrompt,
 } from "@/lib/personalModeration";
 import { usePersonalBlocks } from "@/hooks/usePersonalModeration";
+import { isMicroGroup } from "@/lib/microGroup";
+import { MicroGroupSection } from "./MicroGroupSection";
 import { requestContentReport } from "./ReportDialog";
 import { useChatMute } from "@/hooks/useChatMute";
 import {
@@ -332,6 +334,9 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
   const display = getChatDisplayInfo(chat, currentUser?.id ?? null);
   const isSaved = display.isSaved;
   const isGroup = !isSaved && (chat.type === "group" || chat.type === "channel");
+  // Tracker item 45: a micro-group is neither a server nor a private chat. It
+  // takes this card's frame and its universal rows, and brings its own part.
+  const isMicro = isMicroGroup(chat);
   // D-169: this card called both of them a group. `isGroup` stays — a channel
   // really is a group as far as every rule in this component goes, because the
   // database gives it the same members, the same roles and the same permission
@@ -433,7 +438,9 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
   // «Без имени пользователя» that used to sit under its name (D-236).
   const rootTitle = isSaved
     ? "Избранное"
-    : isGroup
+    : isMicro
+      ? "Групповой чат"
+      : isGroup
       ? words.infoTitle
       : chatBotPartner(chat)
         ? "Профиль бота"
@@ -2194,7 +2201,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
     if (full) {
       const confirmed = await requestAppConfirm({
         title: `Дать боту «${botDisplayName(bot)}» полный доступ?`,
-        description: "Бот будет получать все новые сообщения и вложения в этой группе. Сообщения до изменения доступа ему не откроются. Доступ можно снова ограничить.",
+        description: "Бот будет получать все новые сообщения и вложения на этом сервере. Сообщения до изменения доступа ему не откроются. Доступ можно снова ограничить.",
         confirmLabel: "Дать доступ",
         icon: "bot",
       });
@@ -2354,7 +2361,9 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
             size="xl"
             isSaved={display.isSaved}
           />
-          {canEditChatProfile && (
+          {/* A micro-group's picture is its crown's to change: the storage rule
+              for a chat's picture admits its owner and administrators. */}
+          {(canEditChatProfile || (isMicro && isOwner)) && (
             <label className="absolute bottom-0 right-0 w-9 h-9 rounded-full flex items-center justify-center cursor-pointer bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan">
               <KubIcon name="camera" size={14} label="Сменить аватар" />
               <input
@@ -2383,7 +2392,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
               <div className="col-start-2 row-start-2 text-left text-xs text-[color:var(--kub-muted)]">
                 Личное пространство для сохранённых сообщений
               </div>
-            ) : isGroup ? (
+            ) : isGroup || isMicro ? (
               <div className="col-start-2 row-start-2 text-left text-xs text-[color:var(--kub-muted)]">
                 {countedMemberLabel(members.length || chat.members?.length || 0, chat.type)}
               </div>
@@ -2444,6 +2453,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
 
         {(tab === "info" || !isGroup) && (
           <div>
+            {isMicro && <MicroGroupSection chat={chat} onLeft={onClose} />}
             {!isGroup && otherUser && (
               <div className="px-4 py-3 border-b border-[color:var(--kub-rule)]">
                 <ProfileRoleSummary user={otherUser} compact />
@@ -2676,6 +2686,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
                   </span>
                 </button>
               )}
+              {isMicro && <MicroGroupSection chat={chat} onLeft={onClose} part="exit" exitRowClassName={dangerActionRowClass} />}
               {/* «Заблокировать» carries the danger colour and
                   «Разблокировать» does not, because one takes something away
                   and the other gives it back. */}

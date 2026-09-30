@@ -632,7 +632,7 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     for (const label of [
       "Мой профиль",
       "Избранное",
-      "Новая группа",
+      "Новый сервер",
       "Управление",
       "Настройки",
     ]) {

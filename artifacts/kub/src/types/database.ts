@@ -555,7 +555,7 @@ export interface Database {
       chats: {
         Row: {
           id: string
-          type: 'private' | 'group' | 'channel'
+          type: 'private' | 'group' | 'channel' | 'dm_group'
           name: string | null
           description: string | null
           avatar_url: string | null
@@ -567,7 +567,7 @@ export interface Database {
         }
         Insert: {
           id?: string
-          type: 'private' | 'group' | 'channel'
+          type: 'private' | 'group' | 'channel' | 'dm_group'
           name?: string | null
           description?: string | null
           avatar_url?: string | null
@@ -579,7 +579,7 @@ export interface Database {
         }
         Update: {
           id?: string
-          type?: 'private' | 'group' | 'channel'
+          type?: 'private' | 'group' | 'channel' | 'dm_group'
           name?: string | null
           description?: string | null
           avatar_url?: string | null
@@ -1742,6 +1742,22 @@ export interface Database {
       }
       task_reject: {
         Args: { p_task_id: string; p_reason: string }
+        Returns: void
+      }
+      micro_group_create: {
+        Args: { p_private_chat_id: string; p_user_ids: string[] }
+        Returns: string
+      }
+      micro_group_add: {
+        Args: { p_chat_id: string; p_user_ids: string[] }
+        Returns: number
+      }
+      micro_group_rename: {
+        Args: { p_chat_id: string; p_name: string | null }
+        Returns: void
+      }
+      micro_group_leave: {
+        Args: { p_chat_id: string }
         Returns: void
       }
       chat_invite_allowed: {

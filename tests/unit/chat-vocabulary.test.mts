@@ -29,9 +29,9 @@ test("every title the card wears names the thing it is over", () => {
   const group = chatVocabulary("group");
   const channel = chatVocabulary("channel");
 
-  assert.equal(group.infoTitle, "Информация о группе");
+  assert.equal(group.infoTitle, "Информация о сервере");
   assert.equal(channel.infoTitle, "Информация о канале");
-  assert.equal(group.settingsTitle, "Настройки группы");
+  assert.equal(group.settingsTitle, "Настройки сервера");
   assert.equal(channel.settingsTitle, "Настройки канала");
   assert.equal(group.membersTitle, "Участники");
   assert.equal(channel.membersTitle, "Подписчики");
@@ -41,17 +41,17 @@ test("leaving and deleting say which of the two you are leaving or deleting", ()
   const group = chatVocabulary("group");
   const channel = chatVocabulary("channel");
 
-  assert.equal(group.leaveLabel, "Покинуть группу");
+  assert.equal(group.leaveLabel, "Покинуть сервер");
   assert.equal(channel.leaveLabel, "Покинуть канал");
-  assert.equal(group.leaveTitle, "Покинуть группу?");
+  assert.equal(group.leaveTitle, "Покинуть сервер?");
   assert.equal(channel.leaveTitle, "Покинуть канал?");
-  // «Удалить групповой чат» on the card root against «Удалить группу» on the
+  // «Удалить групповой чат» on the card root against «Удалить сервер» on the
   // settings screen was one button named twice.
-  assert.equal(group.deleteLabel, "Удалить группу");
+  assert.equal(group.deleteLabel, "Удалить сервер");
   assert.equal(channel.deleteLabel, "Удалить канал");
-  assert.equal(group.deleteTitle, "Удалить группу?");
+  assert.equal(group.deleteTitle, "Удалить сервер?");
   assert.equal(channel.deleteTitle, "Удалить канал?");
-  assert.equal(group.deleteError, "Не удалось удалить группу");
+  assert.equal(group.deleteError, "Не удалось удалить сервер");
   assert.equal(channel.deleteError, "Не удалось удалить канал");
 });
 
@@ -61,7 +61,7 @@ test("the sentences about the other people use the other people's noun", () => {
 
   assert.equal(
     group.leaveDescription,
-    "Группа исчезнет из вашего списка. История у других участников останется.",
+    "Сервер исчезнет из вашего списка. История у других участников останется.",
   );
   assert.equal(
     channel.leaveDescription,
@@ -81,7 +81,7 @@ test("the sentences about the other people use the other people's noun", () => {
   // other people.
   assert.equal(
     group.deleteAftermath,
-    "Если вы просто хотите уйти, передайте права владельца другому участнику — тогда группа останется.",
+    "Если вы просто хотите уйти, передайте права владельца другому участнику — тогда сервер останется.",
   );
   assert.equal(
     channel.deleteAftermath,
@@ -105,7 +105,7 @@ test("handing the chat over is offered in the words of that chat", () => {
     group.transferDescription("Фиктивный Участник"),
     "Фиктивный Участник станет владельцем, а вы — администратором. Вернуть права сможет только новый владелец.",
   );
-  assert.equal(group.transferAftermath, "После этого вы сможете покинуть группу.");
+  assert.equal(group.transferAftermath, "После этого вы сможете покинуть сервер.");
   assert.equal(channel.transferAftermath, "После этого вы сможете покинуть канал.");
 
   // Nobody's pronoun is guessed: the product does not know it, and «новый
@@ -118,7 +118,7 @@ test("handing the chat over is offered in the words of that chat", () => {
 });
 
 test("the description box asks about the thing it is describing", () => {
-  assert.equal(chatVocabulary("group").descriptionPlaceholder, "О чём эта группа");
+  assert.equal(chatVocabulary("group").descriptionPlaceholder, "О чём этот сервер");
   assert.equal(chatVocabulary("channel").descriptionPlaceholder, "О чём этот канал");
 });
 
@@ -129,11 +129,13 @@ test("the cases are the ones the sentences are built from", () => {
   assert.equal(channel.possessive, "канала");
   assert.equal(channel.locative, "канале");
 
+  // The heavy group is «сервер» in the interface since 2026-09-30 (tracker
+  // item 45): «групповой чат» is the micro-group's name.
   const group = chatVocabulary("group");
-  assert.equal(group.subject, "Группа");
-  assert.equal(group.object, "группу");
-  assert.equal(group.possessive, "группы");
-  assert.equal(group.locative, "группе");
+  assert.equal(group.subject, "Сервер");
+  assert.equal(group.object, "сервер");
+  assert.equal(group.possessive, "сервера");
+  assert.equal(group.locative, "сервере");
 });
 
 test("the people are counted in Russian, in each of the two nouns", () => {

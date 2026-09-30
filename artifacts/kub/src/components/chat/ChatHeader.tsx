@@ -38,6 +38,8 @@ import { startVoiceRing, useVoiceRings } from "@/hooks/useVoiceRing";
 import { voiceCallOffer } from "@/lib/voiceRing";
 import { useAvatarVariantUrls } from "@/hooks/useMediaVariants";
 import type { ChatWithLastMessage } from "@/types/database";
+import { isMicroGroup, microGroupRoom } from "@/lib/microGroup";
+import { MicroGroupPeopleModal } from "./MicroGroupPeopleModal";
 
 interface ChatHeaderProps {
   chatId: string;
@@ -128,6 +130,21 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
   });
   const [callStarting, setCallStarting] = useState(false);
 
+  /**
+   * Tracker item 45, the gesture: from a private chat with a person, «Добавить
+   * в беседу» makes a micro-group of the two and whoever is picked; in a micro-
+   * group the same place adds people. Discord's add-people control does the
+   * same from a DM (`_promoteDMToGroupDM`, its web bundle, read 2026-09-30;
+   * `reference-clients.md` §27). Not offered to somebody the reader has
+   * blocked: the database refuses a group across a block in either direction.
+   */
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  const microGroup = isMicroGroup(chat);
+  const canStartMicroGroup = Boolean(
+    chat && chat.type === "private" && !display.isSaved && !display.isBot && otherUser?.id && !isBlocked,
+  );
+  const canAddToMicroGroup = microGroup && microGroupRoom(chat?.members?.length ?? 0) > 0;
+
   const handleCall = async () => {
     if (!callOffer.offered || callStarting) return;
     setCallStarting(true);
@@ -168,7 +185,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
 
     if (error) {
       console.error("delete group chat failed:", error);
-      setDeleteError(prefixError("Не удалось удалить групповой чат", error));
+      setDeleteError(prefixError("Не удалось удалить сервер", error));
       return;
     }
 
@@ -329,7 +346,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
     if (!chat) return "";
     if (display.isSaved) return display.subtitle;
     if (type === "channel") return `${(chat.members?.length ?? 0) || "?"} подписчиков`;
-    if (type === "group") return memberCountLabel(chat.members?.length ?? 0);
+    if (type === "group" || type === "dm_group") return memberCountLabel(chat.members?.length ?? 0);
     // A bot has no presence to report, and this line used to report one: with
     // no `other_user` — a bot is not a `chat_members` row — the call below
     // answers the never-seen state, so the header said «был(а) давно» about
@@ -399,7 +416,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
     ...(canDeleteGroup
       ? [{
           icon: "userRemove" as KubIconName,
-          label: "Удалить групповой чат",
+          label: "Удалить сервер",
           danger: true,
           disabled: deletingChat,
           action: () => {
@@ -509,6 +526,22 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
                 itself. It is drawn only where it can be pressed — a private
                 chat with a person who is not blocked — which is
                 `voiceCallOffer`'s decision and not this file's. */}
+            {(canStartMicroGroup || canAddToMicroGroup) && (
+              <button
+                type="button"
+                onClick={() => setPeopleOpen(true)}
+                className={cn(
+                  "kub-icon-action kub-interactive kub-ios-chat-icon group/capsule relative h-11 w-11 rounded-full text-[color:var(--kub-text)]",
+                  FOCUS_RING,
+                )}
+                aria-label={microGroup ? "Добавить участников" : "Добавить в беседу"}
+                title={microGroup ? "Добавить участников" : "Добавить в беседу"}
+                data-testid="chat-header-add-people"
+              >
+                <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />
+                <KubIcon name="userPlus" size={20} className="relative" />
+              </button>
+            )}
             {callOffer.offered && (
               <button
                 type="button"
@@ -575,7 +608,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
                         />
                         <span className="flex min-w-0 flex-1 flex-col text-left">
                           <span className="min-w-0 truncate">
-                            {disabled && label === "Удалить групповой чат" ? "Удаление..." : label}
+                            {disabled && label === "Удалить сервер" ? "Удаление..." : label}
                           </span>
                           {/* When a timed mute ends, on the row that would otherwise
                               say only «Включить уведомления» — the state of the
@@ -600,7 +633,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
       onClose={() => {
         if (!deletingChat) setDeleteGroupOpen(false);
       }}
-      title="Удалить групповой чат?"
+      title="Удалить сервер?"
       description="Это действие нельзя отменить. Чат и история исчезнут у всех участников."
       icon={<KubIcon name="userRemove" size={18} tone="danger" />}
       tone="danger"
@@ -633,10 +666,18 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
         </div>
       ) : (
         <p className="text-sm text-[color:var(--kub-muted)]">
-          После удаления группа исчезнет у всех участников.
+          После удаления сервер исчезнет у всех участников.
         </p>
       )}
     </KubModal>
+      {peopleOpen && chat && (
+        <MicroGroupPeopleModal
+          target={microGroup
+            ? { kind: "add", chatId: chat.id, memberIds: (chat.members ?? []).map((member) => member.user_id) }
+            : { kind: "create", privateChatId: chat.id, partnerId: otherUser?.id ?? "" }}
+          onClose={() => setPeopleOpen(false)}
+        />
+      )}
     </>
   );
 }

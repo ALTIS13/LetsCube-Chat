@@ -263,7 +263,7 @@ test("a row carries this group's standing, and no LETSCUBE standing at all", asy
   // The row that used to read «Владелец  [♛ Владелец]»: this chat's owner, who
   // is also LETSCUBE's. One word, one meaning, and the meaning is named.
   const mine = row(page, ME);
-  await expect(mine).toContainText("Владелец группы");
+  await expect(mine).toContainText("Владелец сервера");
   await expect(mine).not.toContainText("Полный доступ ко всему LETSCUBE");
   await expect(
     chips(page, ME),
@@ -290,14 +290,16 @@ test("a row carries this group's standing, and no LETSCUBE standing at all", asy
       return marks.map((svg) => svg.closest("[aria-label]")?.getAttribute("aria-label") ?? "");
     });
   }, [ME.id, ANNA.id, OLGA.id]);
-  expect(glyphs[0], "the owner's row lost its crown").toContain("Владелец группы");
-  expect(glyphs[1], "the administrator's row lost its shield").toContain("Администратор группы");
+  expect(glyphs[0], "the owner's row lost its crown").toContain("Владелец сервера");
+  expect(glyphs[1], "the administrator's row lost its shield").toContain("Администратор сервера");
   expect(
-    glyphs[2].filter((label) => label.includes("группы")),
+    // «сервера» since the heavy group became «сервер» (2026-09-30): a filter
+    // left on «группы» would match nothing and pass whatever the row drew.
+    glyphs[2].filter((label) => label.includes("сервера")),
     "an ordinary member was given a standing glyph",
   ).toEqual([]);
 
-  await expect(row(page, ANNA)).toContainText("Администратор группы");
+  await expect(row(page, ANNA)).toContainText("Администратор сервера");
 
   // The fixture signs in with the dark theme stored, so the light one has to be
   // stamped or both screenshots come out the same file — which is how the first
@@ -467,7 +469,7 @@ test("the badge's colour never reaches the words", async ({ page }) => {
 test("both surfaces hold in the dark theme", async ({ page }, info) => {
   await openMembers(page);
   await stampTheme(page, "dark");
-  await expect(row(page, ANNA)).toContainText("Администратор группы");
+  await expect(row(page, ANNA)).toContainText("Администратор сервера");
   await page.getByTestId("chat-info-panel").screenshot({ path: shotPath(info, "dark") });
   await openCard(page, ANNA);
   await expect(cardChips(page).first()).toBeVisible();
@@ -493,5 +495,5 @@ test("an answer that never came leaves the list as it was", async ({ page }) => 
 
   await expect(page.getByTestId("chat-info-member")).toHaveCount(4);
   await expect(page.getByTestId("chat-info-member-badges")).toHaveCount(0);
-  await expect(row(page, ME)).toContainText("Владелец группы");
+  await expect(row(page, ME)).toContainText("Владелец сервера");
 });

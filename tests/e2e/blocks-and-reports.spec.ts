@@ -134,7 +134,10 @@ test.describe("blocking somebody", () => {
     expect(body).toMatch(/не сможет писать/iu);
     expect(body).toMatch(/не узнает/iu);
     expect(body).toMatch(/останутся/iu);
-    expect(body).toMatch(/групп/iu);
+    // Since 2026-09-30 a block also keeps them from adding you to a group
+    // chat; it still does not reach a server.
+    expect(body).toMatch(/добавлять вас в групповые чаты/iu);
+    expect(body).toMatch(/на серверах/iu);
 
     await question.getByRole("button", { name: "Отмена" }).click();
     await expect(question).toBeHidden();

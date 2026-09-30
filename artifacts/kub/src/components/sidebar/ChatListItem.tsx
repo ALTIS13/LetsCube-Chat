@@ -271,7 +271,9 @@ export const ChatListItem = memo(function ChatListItem({
           interpolate towards Telegram's 66px and everything beside this fades. */}
       <div className="flex-shrink-0 relative" data-chat-avatar="">
         <ChatAvatar
-          chat={chat}
+          // A micro-group nobody named has no stored name to take initials
+          // from; it is called what this reader sees it called (item 45).
+          chat={chat.type === "dm_group" && !chat.name?.trim() ? { ...chat, name: display.title } : chat}
           size="md"
           isSaved={display.isSaved}
           avatarVariant={avatarVariant}
@@ -299,6 +301,9 @@ export const ChatListItem = memo(function ChatListItem({
               <KubIcon name="channel" size={13} className="flex-shrink-0 text-[color:var(--kub-muted)]" />
             ) : chat.type === "group" ? (
               <KubIcon name="group" size={13} className="flex-shrink-0 text-[color:var(--kub-muted)]" />
+            ) : chat.type === "dm_group" ? (
+              // Tracker item 45: a micro-group, told from a server at a glance.
+              <KubIcon name="users" size={13} className="flex-shrink-0 text-[color:var(--kub-muted)]" />
             ) : display.isBot ? (
               // The type glyph was «user» here, which is not a missing mark but
               // a wrong one: this row is not a person. The word beside the name

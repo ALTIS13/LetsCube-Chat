@@ -1,5 +1,17 @@
 # The micro-group — what it asks of the database, and what only the owner can answer — 2026-09-29
 
+> **Decided and applied 2026-09-30, first phase.** The owner: «Микро-группы
+> должны входить в общую систему блока пользователя (проверь реализацию
+> Discord/Telegram)», and the other questions went to the references
+> (`reference-clients.md` §27). Question 1: a block in either direction refuses
+> an add, the private chat's other person included. 2: ten, Discord's number.
+> 3: any member adds, the crown removes. 4: own messages only, as proposed. 5: the
+> ring comes with the calls, in the second phase. 6: no stored name, drawn for
+> each reader, and a push titled for each recipient. The value is `dm_group`, not
+> `group_chat` as written below: one suffix away from `group` is the hazard item
+> 45 warns of. The rollout is `2026-09-30-database-changes.md` §2, and §3 is the
+> incident during its rehearsal.
+
 Tracker item 45. The owner has decided that the micro-group is a separate kind of
 conversation, a separate `chats.type`, and specified how it is born and what it
 looks like. This document is the step before any SQL: everything the database

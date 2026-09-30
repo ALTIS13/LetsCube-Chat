@@ -31,7 +31,7 @@ export function getGroupReadReceiptInfo(
 ): GroupReadReceiptInfo | null {
   if (!message) return null;
   if (!context.currentUserId || context.isSavedChat) return null;
-  if (context.chatType !== "group" && context.chatType !== "channel") return null;
+  if (context.chatType !== "group" && context.chatType !== "channel" && context.chatType !== "dm_group") return null;
   if (message.user_id !== context.currentUserId) return null;
   if (message.deleted_at || message.pending || message.checking || message.failed) return null;
 

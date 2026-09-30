@@ -142,11 +142,11 @@ export function channelNamePlaceholder(kind: ChannelKind): string {
 export const CATEGORY_NAME_PLACEHOLDER = "Работа, Голос, Архив…";
 
 /** What the list says when the group has no channels and no headings at all. */
-export const CHANNELS_EMPTY = "В этой группе пока нет каналов.";
+export const CHANNELS_EMPTY = "На этом сервере пока нет каналов.";
 
 /** And the one line under the title, which is the whole screen in a sentence. */
 export const CHANNELS_HINT =
-  "Каналы видят все участники группы. Разделы нужны только для того, чтобы их было удобно читать.";
+  "Каналы видят все участники сервера. Разделы нужны только для того, чтобы их было удобно читать.";
 
 // ---------------------------------------------------------------------------
 // A voice room's two settings
@@ -384,7 +384,7 @@ export function canRemoveChannel(channel: {
 }
 
 /** Said on the general channel's own row, so its missing control is explained. */
-export const GENERAL_CHANNEL_NOTE = "Основной канал группы";
+export const GENERAL_CHANNEL_NOTE = "Основной канал сервера";
 
 // ---------------------------------------------------------------------------
 // What a refusal is allowed to say
@@ -440,7 +440,7 @@ export function classifyChannelWriteError(error: unknown): ChannelWriteOutcome {
 }
 
 /** The refusal a policy gives, said as the rule it is rather than as a code. */
-export const CHANNELS_REFUSED = "Менять каналы может только владелец или администратор группы.";
+export const CHANNELS_REFUSED = "Менять каналы может только владелец или администратор сервера.";
 
 /** A deployment that has this screen and not the rest of what it needs. */
 export const CHANNELS_UNAVAILABLE = "Управление каналами здесь пока недоступно.";

@@ -1567,7 +1567,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     extend.
 
 
-45. `[ ]` The micro-group: a conversation for a few people that is not a
+45. `[~]` The micro-group: a conversation for a few people that is not a
     server. Named by the owner on 2026-09-20 while we were deciding whether a
     private chat's two-person voice cap should be lifted, and **specified by
     him the same evening**, which closed two of the three questions this entry
@@ -1739,6 +1739,44 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     alone: `blocked_from_chat` looks at private chats only, so unchanged it
     would let a blocked person pull their blocker into a micro-group in one tap
     and ring them there. Nothing is applied or written as a migration yet.
+
+    **2026-09-30: the first phase is live**, after the owner's «Микро-группы
+    должны входить в общую систему блока пользователя (проверь реализацию
+    Discord/Telegram)». The database is `dm_group` with four functions
+    (`operations/2026-09-30-database-changes.md` §2); the references are in
+    `reference-clients.md` §27.
+
+    - **The gesture.** A private chat's header carries «Добавить в беседу»
+      beside the call button. It opens the people you already talk to, with a
+      search, and «Создать групповой чат (N)» makes a new conversation of the two
+      and the people picked; the private chat stays as it was, as Discord leaves
+      a DM when it makes a group DM of it.
+    - **The card** is the owner's list and nothing else: the name — drawn from
+      the others' first names until somebody gives one, and any member renames —
+      «Участники — N» with the crown, «Добавить», removal by the crown only, and
+      at the foot «Покинуть групповой чат» and, for the crown, «Удалить групповой
+      чат». The picture is the crown's to change in this phase: widening the
+      storage rule for a chat's picture is a change of its own. Ten people at
+      most, Discord's number.
+    - **Blocks.** Nobody is added across a block in either direction, the
+      private chat's other person included — Telegram's rule. Somebody the reader
+      has blocked being inside is said at the top of the card, with «Покинуть».
+    - **The words.** The heavy group is «сервер» everywhere in the interface:
+      «Новый сервер», «Информация о сервере», «Удалить сервер», its roles, bots,
+      invitations and links, with the prepositions Russian wants («на сервере»,
+      but «в канале»). A group chat sits in the «Группы» folder: Telegram's
+      folder rules have one chat type, Groups, for every group
+      (`lib/systemFolders.ts`), and this is a group.
+    - Gates: unit 4417/4417, server 357/357, the group-chat spec 10/10 and every
+      spec the rename reached at 1440 and 390; renders at both widths and both
+      themes sent to the owner before the push.
+
+    **The second phase, not started: the call.** A room for ten; the two already
+    talking carried into it and the people added rung, and only they — Discord's
+    `dm_invite` ring; a call record when the room empties; a block silencing a
+    ring. `voice_private_room` refuses the kind until then, so no call can start
+    in a group chat. Also open: how a blocked person's messages look inside one,
+    which Discord's bundle names (`MESSAGE_GROUP_BLOCKED`) but was not traced.
 
 46. `[~]` Tester's report, 2026-09-20, all of it from a phone. Eight items,
     kept in his words where paraphrase would soften them. **Triage opens with

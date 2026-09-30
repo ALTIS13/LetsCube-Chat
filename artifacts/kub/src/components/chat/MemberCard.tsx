@@ -191,7 +191,7 @@ export function MemberCard({
               />
             ))}
             {groupRoles.length === 0 && (
-              <span className="text-xs text-[color:var(--kub-muted)]">Ролей в группе нет</span>
+              <span className="text-xs text-[color:var(--kub-muted)]">Ролей на сервере нет</span>
             )}
           </div>
           {/* What is left to give. Only the roles this person does not wear, so
@@ -261,7 +261,7 @@ export function MemberCard({
       {mutualChats && mutualChats.total > 0 && (
         <div className="mt-5 w-full max-w-xs text-left" data-testid="member-card-mutual-chats">
           <div className="px-1 pb-1.5 text-[12px] font-bold uppercase tracking-[0.16em] text-[color:var(--kub-muted)]">
-            Общие группы
+            Общие чаты
           </div>
           <div className="flex flex-col gap-1">
             {mutualChats.shown.map((row) => (
@@ -278,7 +278,7 @@ export function MemberCard({
               >
                 <ChatAvatar chat={row as never} size="sm" />
                 <span className="min-w-0 flex-1 truncate text-sm text-[color:var(--kub-text)]">
-                  {row.name?.trim() || (row.type === "channel" ? "Канал" : "Группа")}
+                  {row.name?.trim() || (row.type === "channel" ? "Канал" : row.type === "dm_group" ? "Групповой чат" : "Сервер")}
                 </span>
               </button>
             ))}

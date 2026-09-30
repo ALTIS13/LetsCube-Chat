@@ -3578,3 +3578,75 @@ bot; the tag already says what it is. **Telegram's shape was not taken, for a
 reason in the owner's own report**: «выглядит будто я в диалоге просто с
 человеком» was said of the list, and the list is exactly where Telegram marks
 nothing.
+
+## 27. Subject 19 — a group of a few people, and a block across it, 2026-09-30
+
+Tracker item 45. The owner: «Микро-группы должны входить в общую систему блока
+пользователя (проверь реализацию Discord/Telegram)», with every other open
+question of the micro-group proposal left to the references. Discord was read in
+the web and desktop bundle chunks saved on 2026-09-20 (`output/_discord/js`,
+`web.d793fc00a2d44795.js` and the lazy chunk `fb_955053_fe444e6adbac54ce.js`);
+Telegram in its API method documentation on core.telegram.org. **Neither mobile
+app was read.**
+
+**Discord. SHIPPED unless marked.**
+
+- **Adding people to a conversation** goes through one function,
+  `pushToExistingDM`. In a group DM it adds the chosen people to that group
+  (`_addRecipientsToExistingGroupDM`). In a one-to-one DM it makes a **new**
+  group DM of the DM's other person and the chosen people
+  (`_promoteDMToGroupDM`, location «New Group DM»); the DM itself is left as it
+  was.
+- **Who can be added directly.** The chosen people are split first (`tn`) into
+  those added to the group (`channelRecipientIds`) and those who are only sent
+  an invite link (`inviteLinkOnlyUserIds`); the analytics count friends and
+  non-friends separately. What decides the split was not traced: UNESTABLISHED.
+  The names suggest friendship, and a block ends a friendship, but that is an
+  inference.
+- **The ring.** When people are added to a group DM whose call the adder is in,
+  the people added are rung — `ring(channel, added, "dm_invite")` — and nobody
+  else.
+- **Size.** `isPartyFull` is `recipients.length + 1 >= limit`. The limit is
+  `wLU`, which is `10`; staff get `$aF`, `25`, and so does a Nitro tier-2 user
+  under the `getGroupDMRecipientLimit` experiment.
+- **Somebody blocked inside a group DM.** Opening a group DM that holds somebody
+  the reader blocked or ignored opens a warning modal, unless the reader
+  dismissed it for that conversation (`blockedUserWarningDismissed` on the
+  channel; the API has `/channels/{id}/blocked-user-warning-dismissal`) or
+  within the last three days (`3 * DAY`, per conversation). The modal's own text was not
+  read; its analytics actions include `CLICK_TO_STAY` and `CLICK_TO_LEAVE`, so it
+  offers staying or leaving: INFERRED. Somebody blocked or ignored joining the
+  reader's voice channel opens a modal of its own
+  (`blocked_user_joined_voice_channel_modal`), quiet for two days per person and
+  for an hour after any dismissal.
+- `MESSAGE_GROUP_BLOCKED` exists in both chunks. How a blocked person's messages
+  are drawn inside a group DM was not traced: UNESTABLISHED.
+
+**Telegram. DOCUMENTED** (the API's own method pages, not a client's source).
+`messages.addChatUser` lists `USER_IS_BLOCKED` («You were blocked by this user»)
+and `YOU_BLOCKED_USER` («You blocked this user»), so a block in **either**
+direction refuses adding somebody to a group. `channels.inviteToChannel` lists
+`USER_BLOCKED`.
+
+**Ours, decided:**
+
+- **A block in either direction refuses an add**, the private chat's other
+  person included — Telegram's rule, which is stated where Discord's gate is only
+  inferred. The one adding is told plainly when the block is theirs («Вы
+  заблокировали одного из выбранных. Разблокируйте его, чтобы добавить.») and
+  told nothing more than «Одного из выбранных нельзя добавить.» when it is the
+  other person's: Telegram's API distinguishes the two, but that somebody has
+  blocked you is not yours to learn.
+- **Ten at most**, Discord's number.
+- **A new conversation, made from the private one, which stays** — Discord's
+  `_promoteDMToGroupDM`. Any member adds; the crown removes.
+- **Somebody the reader blocked being inside** is said in a note at the top of
+  the card, with «Покинуть» beside it, rather than a modal on opening. Discord
+  itself holds its modal back for three days after each dismissal, which says
+  the interruption costs something; a note in the place where you leave is
+  there when you look and never stops the conversation.
+- **The ring, when calls arrive** (phase two): the people added, never the ones
+  already in the call — Discord's `dm_invite`.
+- **Not built yet:** how a blocked person's messages look inside a group chat.
+  Discord's handling was not traced, and the proposal's rule stands meanwhile —
+  nothing is hidden from the rest of the conversation.

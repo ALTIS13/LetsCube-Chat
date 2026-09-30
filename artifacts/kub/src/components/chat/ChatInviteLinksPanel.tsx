@@ -21,16 +21,7 @@ import {
   type InviteLinkUsesId,
 } from "@/lib/chatInviteLinks";
 import { cn } from "@/lib/utils";
-
-/**
- * The invitation dialog's one field shell: its search and a link's name.
- *
- * One class list, not a copy, so `tests/unit/edge-vocabulary.test.mjs` counts
- * the perimeter once — the arrangement `pages/tasks/taskFieldWell.ts` has for
- * the task form's fields.
- */
-export const INVITE_FIELD_SHELL =
-  "flex items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 h-10 transition-all focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]";
+import { FIELD_SHELL } from "@/lib/fieldShell";
 
 const LINK_COLUMNS = "id,token,title,created_by,created_at,expires_at,max_uses,uses,revoked_at";
 
@@ -107,7 +98,7 @@ export function ChatInviteLinksPanel({ chatId, currentUserId, canRevokeAny }: {
   const revoke = async (row: InviteLinkRow) => {
     const confirmed = await requestAppConfirm({
       title: "Отозвать ссылку?",
-      description: "По ней больше никто не войдёт. Те, кто уже вошёл, останутся в группе.",
+      description: "По ней больше никто не войдёт. Те, кто уже вошёл, останутся на сервере.",
       confirmLabel: "Отозвать",
       tone: "danger",
       icon: "link",
@@ -141,7 +132,7 @@ export function ChatInviteLinksPanel({ chatId, currentUserId, canRevokeAny }: {
           onChange={setUses}
           testId="invite-link-uses"
         />
-        <div className={INVITE_FIELD_SHELL}>
+        <div className={FIELD_SHELL}>
           <KubIcon name="edit" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
           <input
             value={title}

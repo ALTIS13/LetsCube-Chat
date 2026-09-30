@@ -240,7 +240,7 @@ export function voiceGatewayRefusalText(code: VoiceGatewayRefusalCode): string {
       // would be false about the thing they were trying to do.
       return "Себя заглушить нельзя — выйдите из канала, если нужно.";
     case "target_is_owner":
-      return "Владельца группы нельзя заглушить или отключить.";
+      return "Владельца сервера нельзя заглушить или отключить.";
     case "target_not_in_room":
       return "Этот участник уже не в голосовом канале.";
     case "network":

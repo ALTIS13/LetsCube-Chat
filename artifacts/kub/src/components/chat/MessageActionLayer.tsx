@@ -679,7 +679,7 @@ export function MessageActionLayer({
       </>
     );
   } else {
-    const groupRead = own && readInfo && (chatType === "group" || chatType === "channel");
+    const groupRead = own && readInfo && (chatType === "group" || chatType === "channel" || chatType === "dm_group");
     const privateReadLine = own && chatType === "private" && privateRead.read;
     cardContent = (
       <>

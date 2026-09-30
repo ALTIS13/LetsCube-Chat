@@ -25,7 +25,8 @@ export type ChatKindSubject = ChatBotHost & { readonly type: string };
  * makes. «Избранное» is a person's own conversation and counts as one.
  */
 export function chatKind(chat: ChatKindSubject): ChatKind {
-  if (chat.type === "group") return "group";
+  // A micro-group is a group to the folders: «Группы» holds both.
+  if (chat.type === "group" || chat.type === "dm_group") return "group";
   if (chat.type === "channel") return "channel";
   if (chatBotPartner(chat)) return "bot";
   return "person";

@@ -81,7 +81,7 @@ export function profileMutualChats(
 ): MutualChats {
   if (!userId || userId === currentUserId) return { shown: [], hidden: 0, total: 0 };
   const shared = chats.filter((chat) => {
-    if (chat.type !== "group" && chat.type !== "channel") return false;
+    if (chat.type !== "group" && chat.type !== "channel" && chat.type !== "dm_group") return false;
     return (chat.members ?? []).some((member) => member.user_id === userId);
   });
   const shown = shared.slice(0, Math.max(0, limit));

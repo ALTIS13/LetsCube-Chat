@@ -314,7 +314,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
             </div>
           </Section>
 
-          <Section title="Приватность в группах" description="Для каждой группы доступ к новым сообщениям переключает её администратор в списке участников. Здесь показан текущий режим.">
+          <Section title="Приватность на серверах" description="Для каждого сервера доступ к новым сообщениям переключает его администратор в списке участников. Здесь показан текущий режим.">
             <div className="space-y-2">
               {detail.privacy.map((item) => (
                 <div key={item.chat_id} data-bot-privacy={item.privacy_mode} className="flex flex-col gap-2 border-b border-[color:var(--kub-rule)] py-3 sm:flex-row sm:items-center">
@@ -324,7 +324,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
                   </div>
                 </div>
               ))}
-              {detail.privacy.length === 0 && <KubEmptyState title="Бот не добавлен в группы" description="Настройки появятся после добавления в чат." className="py-5" />}
+              {detail.privacy.length === 0 && <KubEmptyState title="Бот не добавлен на серверы" description="Настройки появятся после добавления в чат." className="py-5" />}
             </div>
           </Section>
 

@@ -1,6 +1,7 @@
 import type { ChatMember, ChatWithLastMessage, Profile } from "@/types/database";
 import { botDisplayName, chatBotPartner } from "./chatBots.ts";
 import { selectRussianPluralForm } from "./messageMediaSections.ts";
+import { isMicroGroup, microGroupDrawnName, type MicroGroupMember } from "./microGroup.ts";
 
 type DisplayChat = Pick<
   ChatWithLastMessage,
@@ -96,6 +97,19 @@ export function getChatDisplayInfo(
     };
   }
 
+  // Tracker item 45: «групповой чат». Its name is whatever somebody called it,
+  // or the others' first names as this reader sees them.
+  if (isMicroGroup(chat)) {
+    const members = (chat.members ?? []) as unknown as MicroGroupMember[];
+    return {
+      title: chat.name?.trim() || microGroupDrawnName(members, currentUserId ?? null),
+      subtitle: members.length > 0 ? memberCountLabel(members.length) : "Групповой чат",
+      typeLabel: "Групповой чат",
+      isSaved: false,
+      isBot: false,
+    };
+  }
+
   if (chat.type === "channel") {
     return {
       title: chat.name?.trim() || "Канал без названия",
@@ -108,9 +122,9 @@ export function getChatDisplayInfo(
 
   const memberCount = chat.members?.length ?? 0;
   return {
-    title: chat.name?.trim() || "Группа без названия",
-    subtitle: chat.description?.trim() || (memberCount > 0 ? memberCountLabel(memberCount) : "Группа"),
-    typeLabel: "Группа",
+    title: chat.name?.trim() || "Сервер без названия",
+    subtitle: chat.description?.trim() || (memberCount > 0 ? memberCountLabel(memberCount) : "Сервер"),
+    typeLabel: "Сервер",
     isSaved: false,
     isBot: false,
   };

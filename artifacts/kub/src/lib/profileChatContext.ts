@@ -66,7 +66,9 @@ export function profileChatContext(
   if (!chat || !userId) return NO_PROFILE_CHAT_CONTEXT;
   // A private conversation's «owner» is whoever opened it. Reporting it would
   // be reporting an artefact of the schema as a fact about a person.
-  if (chat.type !== "group" && chat.type !== "channel") return NO_PROFILE_CHAT_CONTEXT;
+  // A micro-group's owner wears its crown on purpose (tracker item 45), so
+  // that standing is a fact about the person, as a group's is.
+  if (chat.type !== "group" && chat.type !== "channel" && chat.type !== "dm_group") return NO_PROFILE_CHAT_CONTEXT;
   const member = (chat.members ?? []).find((row) => row.user_id === userId);
   // Present in the place but not in the copy of it we hold. The chat is still
   // a group, so the vocabulary is known; the standing is not, and an absent

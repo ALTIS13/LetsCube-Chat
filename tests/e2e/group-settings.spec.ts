@@ -129,7 +129,7 @@ test("the pencil opens a settings screen rather than swapping two fields", async
 
   // The card's own header says where you are and offers the way back — the
   // thing edit mode never had.
-  await expect(page.getByTestId("chat-info-header")).toContainText("Настройки группы");
+  await expect(page.getByTestId("chat-info-header")).toContainText("Настройки сервера");
   await expect(page.getByTestId("chat-info-back")).toBeVisible();
 
   await settled(page);

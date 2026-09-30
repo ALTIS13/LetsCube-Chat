@@ -240,7 +240,16 @@ export function UserProfileOverlay() {
           // ordinary member, which the card already draws nothing for, so
           // the line appears for an owner and an administrator and for
           // nobody else.
-          roleLabel={context.standing ? chatRoleLabel(context.standing, context.channel ? "канала" : "группы") : ""}
+          // Three places now (tracker item 45): a channel, a micro-group — its
+          // crown is «Владелец группового чата» — and a server.
+          roleLabel={context.standing
+            ? chatRoleLabel(
+              context.standing,
+              context.channel
+                ? "канала"
+                : chats.find((row) => row.id === contextChatId)?.type === "dm_group" ? "группового чата" : "сервера",
+            )
+            : ""}
           presenceLabel={presence?.label ?? ""}
           joinedLabel={context.joinedAt ? formatJoinedAt(context.joinedAt) : ""}
           showOnlineDot={presence?.isOnline ?? false}

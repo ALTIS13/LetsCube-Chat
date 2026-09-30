@@ -1114,7 +1114,7 @@ function groupInviteTitle(status: GroupInviteStatus): string {
     case "expired":
       return "Приглашение истекло";
     default:
-      return "Приглашение в группу";
+      return "Приглашение на сервер";
   }
 }
 

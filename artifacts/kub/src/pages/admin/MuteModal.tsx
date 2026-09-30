@@ -149,7 +149,7 @@ export function MuteModal({ target, onClose, onSuccess }: Props) {
             onChange={(e) => setChatId(e.target.value)}
             className="mt-2 w-full rounded-xl px-3 py-2 text-sm bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
           >
-            {chats.length === 0 && <option value="">Нет доступных групп</option>}
+            {chats.length === 0 && <option value="">Нет доступных серверов</option>}
             {chats.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name ?? c.id.slice(0, 8)}

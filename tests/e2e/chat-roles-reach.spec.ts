@@ -217,7 +217,7 @@ test("the group's own word stands where the tier used to", async ({ page }) => {
   await expect(
     secondLine(ME),
     "the tier and the group's word are both on the line",
-  ).not.toContainText("Владелец группы");
+  ).not.toContainText("Владелец сервера");
 
   // Анна wears two; the row takes the higher one and only that one.
   await expect(secondLine(ANNA)).toContainText("Наставник");
@@ -245,8 +245,8 @@ test("the glyph still says which tier this is, even when the word is the group's
   expect(
     labels[0],
     "a screen reader lost the fact that this person owns the group",
-  ).toContain("Владелец группы");
-  expect(labels[1]).toContain("Администратор группы");
+  ).toContain("Владелец сервера");
+  expect(labels[1]).toContain("Администратор сервера");
 });
 
 test("the card stacks the group's words above LETSCUBE's", async ({ page }, info) => {

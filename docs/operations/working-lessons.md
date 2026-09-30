@@ -242,6 +242,21 @@ the calling function was itself definer and the trigger inherited its context.
 Removing `security definer` left the whole rehearsal green. Mutate the migration
 and require each self-check to go red.
 
+**A dump carries psql's own `ROLLBACK`.** Live definitions dumped with
+`begin read only; select pg_get_functiondef(…); rollback;` end with psql's command
+tag `ROLLBACK`, and on 2026-09-30 it stayed at the end of one definition's file.
+Assembled into a migration it became a real statement between two `CREATE
+FUNCTION`s: the rehearsal's transaction ended there, the next function committed
+on its own, and for 2 minutes 16 seconds production's message trigger called a
+helper that did not exist (`operations/2026-09-30-database-changes.md` §3).
+`ON_ERROR_STOP` cannot catch it, because the statement succeeds. Put every
+assembled migration and rehearsal file through a check that there is exactly
+one top-level `begin`, first, and one `commit`, last, outside dollar-quotes and
+comments; strip command tags from dumps and require each definition to end with
+its dollar-quote. And when judging the effect, `docker logs supabase-db` is not
+a witness: it did not show even the debug run's own errors. Kong's access log
+and `cron.job_run_details` are.
+
 **Every production database change** follows `CLAUDE.md` §10 — backup verified
 first (and proved to be a backup of the *before* state), one transaction, a
 self-check that raises rather than committing a half-applied state, rollback in

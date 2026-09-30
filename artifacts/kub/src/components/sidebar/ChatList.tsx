@@ -7,6 +7,7 @@ import { KubEmptyState, KubIcon, type KubIconName } from "@/components/kub";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import { createClient } from "@/lib/supabase/client";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
+import { isMicroGroup, microGroupErrorText } from "@/lib/microGroup";
 import { getChatDisplayInfo, isSavedChat } from "@/lib/chatDisplay";
 import { chatRowProfileTarget } from "@/lib/chatRowProfile";
 import { comparePinnedOrder, sortChatsForSidebar } from "@/lib/chatSort";
@@ -350,6 +351,10 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
     const isSaved = display.isSaved;
     const isPrivate = chat.type === "private" && !isSaved;
     const isGroupLike = !isSaved && (chat.type === "group" || chat.type === "channel");
+    // Tracker item 45: a micro-group has its own three rows here — its card,
+    // leaving through its function so the crown passes on, and the crown's
+    // delete.
+    const isMicro = isMicroGroup(chat);
     const myRole =
       (chat.members?.find((member) => member.user_id === currentUser?.id)?.role as
         | "owner"
@@ -357,7 +362,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
         | "member"
         | undefined) ?? null;
     const isPinned = Boolean(chat.is_pinned);
-    const groupLabel = chat.type === "channel" ? "канал" : "группу";
+    const groupLabel = chat.type === "channel" ? "канал" : "сервер";
 
     // D-167. One row at rest, five once it has been opened — the same entries
     // the chat header and the contact card draw, from the one decision in
@@ -414,7 +419,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
           run: () => setInviteChoiceOpen(false),
         },
         ...inviteGroups.map((group): ChatAction => {
-          const name = group.name?.trim() || (group.type === "channel" ? "Канал" : "Группа");
+          const name = group.name?.trim() || (group.type === "channel" ? "Канал" : "Сервер");
           return {
             id: `invite-${group.id}`,
             icon: group.type === "channel" ? "channel" : "group",
@@ -525,11 +530,11 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
       });
     }
 
-    if (isGroupLike) {
+    if (isGroupLike || isMicro) {
       actions.push({
         id: "group-info",
         icon: "info",
-        label: chat.type === "channel" ? "Информация о канале" : "Информация о группе",
+        label: isMicro ? "Информация о групповом чате" : chat.type === "channel" ? "Информация о канале" : "Информация о сервере",
         run: () => selectAndOpenPanel("info"),
       });
     }
@@ -595,7 +600,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
       actions.push({
         id: "invite",
         icon: "userPlus",
-        label: "Пригласить в группу",
+        label: "Пригласить на сервер",
         keepOpen: true,
         run: () => setInviteChoiceOpen(true),
       });
@@ -694,6 +699,35 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
       });
     }
 
+    if (isMicro) {
+      actions.push({
+        id: "leave-micro-group",
+        icon: "logout",
+        label: "Покинуть групповой чат",
+        danger: true,
+        disabled: !currentUser?.id,
+        run: async () => {
+          const confirmed = await requestAppConfirm({
+            title: "Покинуть групповой чат?",
+            description: myRole === "owner"
+              ? "Вы больше не будете его видеть. Корона перейдёт тому, кто здесь дольше всех."
+              : "Вы больше не будете его видеть. Вернуть вас сможет любой участник.",
+            confirmLabel: "Покинуть",
+            tone: "danger",
+            icon: "logout",
+          });
+          if (!confirmed) return;
+          const { error } = await supabase.rpc("micro_group_leave", { p_chat_id: chat.id });
+          if (error) {
+            showAppAlert(microGroupErrorText(error, "Не удалось покинуть чат. Попробуйте ещё раз."), "Ошибка");
+            return;
+          }
+          removeChatLocally(chat.id);
+          dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
+        },
+      });
+    }
+
     if (isGroupLike && myRole !== "owner") {
       actions.push({
         id: "leave-group",
@@ -704,8 +738,8 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
         run: async () => {
           if (!currentUser?.id) return;
           const confirmed = await requestAppConfirm({
-            title: chat.type === "channel" ? "Покинуть канал?" : "Покинуть группу?",
-            description: `${chat.type === "channel" ? "Канал" : "Группа"} исчезнет из вашего списка. История у других участников останется.`,
+            title: chat.type === "channel" ? "Покинуть канал?" : "Покинуть сервер?",
+            description: `${chat.type === "channel" ? "Канал" : "Сервер"} исчезнет из вашего списка. История у других участников останется.`,
             confirmLabel: "Покинуть",
             tone: "danger",
             icon: "logout",
@@ -726,15 +760,15 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
       });
     }
 
-    if (isGroupLike && myRole === "owner") {
+    if ((isGroupLike || isMicro) && myRole === "owner") {
       actions.push({
         id: "delete-group",
         icon: "userRemove",
-        label: chat.type === "channel" ? "Удалить канал" : "Удалить групповой чат",
+        label: chat.type === "channel" ? "Удалить канал" : isMicro ? "Удалить групповой чат" : "Удалить сервер",
         danger: true,
         run: async () => {
           const confirmed = await requestAppConfirm({
-            title: chat.type === "channel" ? "Удалить канал?" : "Удалить групповой чат?",
+            title: chat.type === "channel" ? "Удалить канал?" : isMicro ? "Удалить групповой чат?" : "Удалить сервер?",
             description: "Это действие нельзя отменить.",
             confirmLabel: "Удалить",
             tone: "danger",
@@ -748,7 +782,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
             .select("id")
             .maybeSingle();
           if (error) {
-            showAppAlert(prefixError("Не удалось удалить групповой чат", error), "Ошибка");
+            showAppAlert(prefixError(isMicro ? "Не удалось удалить групповой чат" : "Не удалось удалить сервер", error), "Ошибка");
             return;
           }
           if (!data) {
@@ -974,7 +1008,7 @@ function ChatActionHeader({ chat }: { chat: ChatWithLastMessage }) {
     <div className="flex min-w-0 items-center gap-3 border-b border-[color:var(--kub-rule)] px-3 py-3">
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--kub-surface-3)]">
         <KubIcon
-          name={display.isSaved ? "bookmark" : chat.type === "private" ? "user" : "group"}
+          name={display.isSaved ? "bookmark" : chat.type === "private" ? "user" : chat.type === "dm_group" ? "users" : "group"}
           size={17}
           tone={display.isSaved ? "accent" : "muted"}
         />

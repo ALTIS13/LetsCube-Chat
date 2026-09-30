@@ -37,7 +37,8 @@ test("a group without a description counts its members in that form, and one wit
     other_user: null,
   });
   assert.equal(getChatDisplayInfo(group(3) as never, "user-0").subtitle, "3 участника");
-  assert.equal(getChatDisplayInfo(group(0) as never, "user-0").subtitle, "Группа");
+  // «Сервер»: the heavy group's name in the interface since 2026-09-30.
+  assert.equal(getChatDisplayInfo(group(0) as never, "user-0").subtitle, "Сервер");
   assert.equal(getChatDisplayInfo(group(3, "Проект на осень") as never, "user-0").subtitle, "Проект на осень");
 });
 

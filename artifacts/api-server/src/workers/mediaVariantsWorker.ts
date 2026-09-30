@@ -461,14 +461,17 @@ async function loadProfileCandidates(supabase: SupabaseClient): Promise<AvatarCa
 }
 
 /**
- * Groups and channels whose own picture has no small version yet.
+ * Servers, channels and group chats whose own picture has no small version
+ * yet. A group chat (`dm_group`, 2026-09-30) is here because its crown can give
+ * it a picture; the enqueue trigger admits it in
+ * `20260930150100_micro_group_avatar_variants.sql`, and this is the backfill.
  *
  * A private chat is skipped on purpose: the client shows the other person's
  * profile picture there, which already has variants of its own, so a variant of
  * the chat row's picture would be produced and never asked for.
  */
 async function loadChatCandidates(supabase: SupabaseClient): Promise<AvatarCandidate[]> {
-  return loadAvatarCandidates(supabase, "chat", "chats", ["group", "channel"]);
+  return loadAvatarCandidates(supabase, "chat", "chats", ["group", "channel", "dm_group"]);
 }
 
 async function loadAvatarCandidates(

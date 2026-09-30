@@ -379,7 +379,7 @@ test("an invitation can be sent, and the row stops offering it", async ({ page }
  */
 test("a policy that has changed under the reader refuses, and names the reason", async ({ page }) => {
   await openInvite(page, { myRole: "member", panelPolicy: "members_can_invite", modalPolicy: "owner_admin_only", permissions: ["chats.invite"] });
-  await expect(page.getByTestId("invite-denied")).toHaveText("В группе приглашают только владелец и администраторы.");
+  await expect(page.getByTestId("invite-denied")).toHaveText("На сервере приглашают только владелец и администраторы.");
   // And no row pretends otherwise. Not a disabled «Пригласить» either: a row of
   // inert offers under a sentence saying you may not invite is the screen
   // disagreeing with itself. The people stay, the controls go.

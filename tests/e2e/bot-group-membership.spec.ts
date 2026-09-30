@@ -333,7 +333,7 @@ test("adding one calls the door with this group and this bot, and says what it d
     .poll(() => fixture.rpcBodies("chat_bot_add"))
     .toEqual([{ p_chat_id: GROUP, p_bot_id: HELPER.id }]);
   await expect(page.getByTestId("invite-candidates").locator("..")).toContainText(
-    "Помощник добавлен в группу",
+    "Помощник добавлен на сервер",
   );
   await expect(page.locator(`[data-invite-bot="${HELPER.id}"]`)).toHaveAttribute(
     "data-invite-bot-state",
@@ -346,7 +346,7 @@ test("the group's own list shows the bot once it is in, marked as one", async ({
   await openPanel(page, { joined: [{ chat_id: GROUP, privacy_mode: "restricted", bot: HELPER }] });
 
   await expect(memberBots(page)).toBeVisible();
-  await expect(memberBots(page)).toContainText("Боты в группе");
+  await expect(memberBots(page)).toContainText("Боты на сервере");
   await expect(memberBots(page).getByTestId("chat-info-bot")).toHaveCount(1);
   await expect(
     memberBots(page).locator("[data-bot-tag]"),
@@ -378,7 +378,7 @@ test("each bot's row says what that bot can read, and two bots may disagree", as
     "@helper_bot · Видит только обращения к нему",
   );
   await expect(rows.nth(1).getByTestId("chat-info-bot-access")).toHaveText(
-    "@scribe_bot · Видит все новые сообщения группы",
+    "@scribe_bot · Видит все новые сообщения сервера",
   );
   // The access state stays directly below the bot name, above the admin-only switch.
   await expect(rows.nth(0).locator("div.min-w-0 > div").nth(1)).toHaveAttribute(
@@ -462,7 +462,7 @@ test("a group administrator explicitly grants and revokes full bot visibility", 
     { p_chat_id: GROUP, p_bot_id: HELPER.id, p_full: true },
   ]);
   await expect(fullAccess).toHaveAttribute("aria-checked", "true");
-  await expect(row.getByTestId("chat-info-bot-access")).toContainText("Видит все новые сообщения группы");
+  await expect(row.getByTestId("chat-info-bot-access")).toContainText("Видит все новые сообщения сервера");
 
   await fullAccess.click();
   await expect.poll(() => fixture.rpcBodies("chat_bot_set_privacy")).toHaveLength(2);
@@ -481,7 +481,7 @@ test("an open group panel refreshes bot visibility after another administrator c
 
   fixture.setRemotePrivacy("full");
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-  await expect(access).toContainText("Видит все новые сообщения группы");
+  await expect(access).toContainText("Видит все новые сообщения сервера");
   await expect(fullAccess).toHaveAttribute("aria-checked", "true");
 
   fixture.setRemotePrivacy("restricted");
@@ -530,7 +530,7 @@ test("a refusal from the door is said in words, not in SQLSTATE", async ({ page 
     .click();
 
   const modal = page.locator(".kub-modal-panel");
-  await expect(modal).toContainText("Добавлять и убирать ботов может только администратор группы.");
+  await expect(modal).toContainText("Добавлять и убирать ботов может только администратор сервера.");
   await expect(modal).not.toContainText("P0001");
   await expect(modal).not.toContainText("not_an_admin");
 });

@@ -87,7 +87,7 @@ test.describe("bot privacy surfaces, photographed", () => {
         await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
         await openBotSettings(page, { theme, webFont: true });
         await openBotTab(page, "API");
-        const section = page.locator('section[aria-labelledby="bot-section-Приватность в группах"]');
+        const section = page.locator('section[aria-labelledby="bot-section-Приватность на серверах"]');
         await expect(section).toBeVisible();
         await section.scrollIntoViewIfNeeded();
         await page.waitForTimeout(300);

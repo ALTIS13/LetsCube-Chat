@@ -353,7 +353,7 @@ test("the general channel is offered no removal, and every other one is", async 
   const rowsLocator = page.getByTestId("channel-manage-row");
   const general = rowsLocator.filter({ has: page.getByText("Общий", { exact: true }) });
   await expect(general.getByTestId("channel-remove")).toHaveCount(0);
-  await expect(general.getByTestId("channel-row-summary")).toHaveText("Основной канал группы");
+  await expect(general.getByTestId("channel-row-summary")).toHaveText("Основной канал сервера");
   // The column the missing control would have filled stays open, so the rows of
   // one list keep their four columns in line. Photographed at 390 before this:
   // the general channel's pencil sat where every other row's ✕ sits.

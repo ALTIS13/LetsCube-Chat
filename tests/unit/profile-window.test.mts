@@ -612,7 +612,7 @@ test("the person's card has one implementation, drawn by both of its containers"
   assert.match(overlay, /profileChatContext/, "the overlay decides the chat-scoped facts itself");
   assert.match(
     overlay,
-    /roleLabel=\{context\.standing \? chatRoleLabel\(/,
+    /roleLabel=\{context\.standing\s*\?\s*chatRoleLabel\(/,
     "the standing no longer comes from the context",
   );
   assert.match(

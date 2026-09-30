@@ -13,7 +13,7 @@ import {
 import { closeChannelListIfShown } from "./helpers/channelList";
 
 const AT = "2026-09-27T09:00:00.000Z";
-const OWNER = person("11111111-1111-4111-8111-0000000000a1", "Владелец группы");
+const OWNER = person("11111111-1111-4111-8111-0000000000a1", "Владелец сервера");
 const MEMBER = person("11111111-1111-4111-8111-0000000000a2", "Участник группы");
 const CHAT_ID = "22222222-2222-4222-8222-0000000000b1";
 const TOPIC_ID = "44444444-4444-4444-8444-0000000000d1";
