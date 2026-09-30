@@ -36,6 +36,9 @@ export function AudioMessage({ url, unavailable = false, duration = 0, isMe, pla
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [metadataReady, setMetadataReady] = useState(false);
   const [seeking, setSeeking] = useState(false);
+  /** Where the thumb is while it is held, before the seek is made (D-329). */
+  const [scrubTime, setScrubTime] = useState<number | null>(null);
+  const scrubRef = useRef<{ time: number | null } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [metadataWarmupElapsed, setMetadataWarmupElapsed] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -64,6 +67,15 @@ export function AudioMessage({ url, unavailable = false, duration = 0, isMe, pla
   // about a finger lives, so this bubble no longer asks about the pointer
   // either (D-118).
   const playbackVolume = mediaPlayback.volume;
+  // The length the message states (D-329). A browser's recorder writes WebM
+  // without a Duration, so an engine reports Infinity until it has walked the
+  // whole file — every voice note in production is such a file. Telegram
+  // Desktop's player falls back to the length stored with the document when
+  // the stream does not know it (`Instance::streamedDuration`), and the
+  // timeline here does the same until the file says better.
+  const knownDuration = duration > 0 ? duration : 0;
+  const knownDurationRef = useRef(knownDuration);
+  knownDurationRef.current = knownDuration;
 
   const stopProgressLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -89,17 +101,25 @@ export function AudioMessage({ url, unavailable = false, duration = 0, isMe, pla
       audio.removeEventListener("durationchange", finish);
 
       const nextDuration = readMediaDuration(audio);
-      try {
-        audio.currentTime = previousTime;
-      } catch {
-        // Ignore browser-specific seek failures; playback can still proceed.
+      // Back to where it was only while it is still parked at the end. A seek
+      // made meanwhile is the listener's, and putting the old second back over
+      // it was one way a voice note jumped to its start (D-329).
+      const parked = !Number.isFinite(audio.currentTime)
+        || (nextDuration > 0 && audio.currentTime >= nextDuration - 0.05);
+      const settledTime = parked ? previousTime : finiteTime(audio.currentTime);
+      if (parked) {
+        try {
+          audio.currentTime = previousTime;
+        } catch {
+          // Ignore browser-specific seek failures; playback can still proceed.
+        }
       }
 
       durationPrimingRef.current = false;
       if (nextDuration > 0) {
         setDurationSeconds(nextDuration);
         setMetadataReady(true);
-        setCurrentTime(clampTime(previousTime, nextDuration));
+        setCurrentTime(clampTime(settledTime, nextDuration));
       }
     };
 
@@ -175,7 +195,7 @@ export function AudioMessage({ url, unavailable = false, duration = 0, isMe, pla
       if (nextDuration > 0) {
         setDurationSeconds(nextDuration);
         setMetadataReady(true);
-      } else if (audio.duration === Infinity) {
+      } else if (audio.duration === Infinity && knownDurationRef.current <= 0) {
         primeInfiniteDuration();
       }
       setMetadataWarmupElapsed(true);
@@ -259,7 +279,10 @@ export function AudioMessage({ url, unavailable = false, duration = 0, isMe, pla
     const nextDuration = readMediaDuration(audio);
     setDurationSeconds(nextDuration);
     setMetadataReady(nextDuration > 0);
-    if (nextDuration === 0 && audio.duration === Infinity) {
+    // Finding the length means parking the element at its end and bringing it
+    // back, and this runs again on every `canplay` a seek produces. With the
+    // length already known from the message there is nothing to find.
+    if (nextDuration === 0 && audio.duration === Infinity && knownDurationRef.current <= 0) {
       primeInfiniteDuration();
       return;
     }
@@ -278,27 +301,80 @@ export function AudioMessage({ url, unavailable = false, duration = 0, isMe, pla
   };
 
   const commitSeek = useCallback((nextTime: number) => {
-    if (playbackItem && mediaPlayback.isCurrent(playbackItem.id) && !mediaPlayback.isActiveElement(audioRef.current)) {
+    // While this message is the player's current one, the player owns its
+    // clock — on this bubble's element or on its own — and the slider shows
+    // that clock. Seeking the element behind the player's back left the
+    // slider on the old second for a render; the input was put back to it,
+    // and a second change event sought there, so a seek to the middle landed
+    // where it had been playing (D-329, reproduced in Chromium: 20, then
+    // 0.91 a millisecond later).
+    if (playbackItem && mediaPlayback.isCurrent(playbackItem.id)) {
       mediaPlayback.seek(nextTime);
       return;
     }
     const audio = audioRef.current;
-    if (!audio || durationSeconds <= 0) return;
-    const safeTime = clampTime(nextTime, durationSeconds);
+    const timeline = Math.max(durationSeconds, knownDuration);
+    if (!audio || timeline <= 0) return;
+    const safeTime = clampTime(nextTime, timeline);
     audio.currentTime = safeTime;
     setCurrentTime(safeTime);
-  }, [durationSeconds, mediaPlayback, playbackItem]);
+  }, [durationSeconds, knownDuration, mediaPlayback, playbackItem]);
+  const commitSeekRef = useRef(commitSeek);
+  commitSeekRef.current = commitSeek;
+  const syncFromAudioRef = useRef(syncFromAudio);
+  syncFromAudioRef.current = syncFromAudio;
 
   const handleSeekChange = (e: ChangeEvent<HTMLInputElement>) => {
     const nextTime = Number(e.currentTarget.value);
     if (!Number.isFinite(nextTime)) return;
+    const scrub = scrubRef.current;
+    if (scrub) {
+      // Held: the thumb follows the finger and the seek waits for the
+      // release, as in Telegram Desktop, whose slider only moves the time
+      // label while it is dragged and seeks in `finishSeeking`. One seek per
+      // gesture rather than one per pixel.
+      scrub.time = nextTime;
+      setScrubTime(nextTime);
+      return;
+    }
+    // A key, or a tap the engine reports without a held pointer.
     commitSeek(nextTime);
   };
 
-  const finishSeek = (e: PointerEvent<HTMLInputElement>) => {
-    if (e.currentTarget.disabled) return;
+  const finishScrub = useCallback(() => {
+    const scrub = scrubRef.current;
+    if (!scrub) return;
+    scrubRef.current = null;
     setSeeking(false);
-    syncFromAudio({ force: true });
+    setScrubTime(null);
+    if (scrub.time !== null) commitSeekRef.current(scrub.time);
+    else syncFromAudioRef.current({ force: true });
+  }, []);
+
+  const scrubEndRef = useRef<(() => void) | null>(null);
+  const releaseScrubListeners = useCallback(() => {
+    const end = scrubEndRef.current;
+    if (!end) return;
+    scrubEndRef.current = null;
+    window.removeEventListener("pointerup", end, true);
+    window.removeEventListener("pointercancel", end, true);
+  }, []);
+  useEffect(() => releaseScrubListeners, [releaseScrubListeners]);
+
+  const beginScrub = (e: PointerEvent<HTMLInputElement>) => {
+    if (e.currentTarget.disabled) return;
+    setSeeking(true);
+    scrubRef.current = { time: null };
+    // On the window, not the slider: a mouse let go beside the track never
+    // reaches the input, and the scrub must still end.
+    releaseScrubListeners();
+    const end = () => {
+      releaseScrubListeners();
+      finishScrub();
+    };
+    scrubEndRef.current = end;
+    window.addEventListener("pointerup", end, true);
+    window.addEventListener("pointercancel", end, true);
   };
 
   const fmt = (s: number) =>
@@ -307,9 +383,10 @@ export function AudioMessage({ url, unavailable = false, duration = 0, isMe, pla
   const srcReady = Boolean(audioSrc);
   const isCurrentPlayback = Boolean(playbackItem && mediaPlayback.isCurrent(playbackItem.id));
   const displayPlaying = isCurrentPlayback ? mediaPlayback.isPlaying : playing;
-  const displayDuration = isCurrentPlayback && mediaPlayback.duration > 0 ? mediaPlayback.duration : durationSeconds;
-  const displayCurrentTime = isCurrentPlayback ? mediaPlayback.currentTime : currentTime;
-  const canSeek = srcReady && metadataReady && durationSeconds > 0 && !loadError;
+  const timeline = Math.max(durationSeconds, knownDuration);
+  const displayDuration = isCurrentPlayback ? Math.max(mediaPlayback.duration, timeline) : timeline;
+  const displayCurrentTime = scrubTime ?? (isCurrentPlayback ? mediaPlayback.currentTime : currentTime);
+  const canSeek = srcReady && timeline > 0 && !loadError;
   const canPlayAudio = srcReady && !loadError && (metadataReady || metadataWarmupElapsed);
   const progressRatio = useMemo(() => {
     if (displayDuration <= 0) return 0;
@@ -377,11 +454,8 @@ export function AudioMessage({ url, unavailable = false, duration = 0, isMe, pla
           style={{
             background: `linear-gradient(to right, var(--kub-cyan) ${progressRatio * 100}%, ${trackColor} ${progressRatio * 100}%)`,
           }}
-          onPointerDown={(e) => {
-            if (!e.currentTarget.disabled) setSeeking(true);
-          }}
-          onPointerUp={finishSeek}
-          onPointerCancel={finishSeek}
+          data-scrubbing={seeking ? "true" : undefined}
+          onPointerDown={beginScrub}
           onChange={handleSeekChange}
         />
         <span className="text-[12px] text-[color:var(--kub-muted)]">
@@ -392,7 +466,7 @@ export function AudioMessage({ url, unavailable = false, duration = 0, isMe, pla
               // address is the end of it and «загрузка...» would be a lie
               // that never resolves.
               ? (unavailable ? "Не удалось загрузить голосовое сообщение" : "загрузка...")
-              : `${fmt(currentTime)} / ${metadataReady ? fmt(durationSeconds) : "--:--"}`)}
+              : `${fmt(scrubTime ?? currentTime)} / ${timeline > 0 ? fmt(timeline) : "--:--"}`)}
         </span>
       </div>
     </div>

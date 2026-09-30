@@ -18,6 +18,7 @@ import { MessageActorAvatar } from "@/components/ui/ChatAvatar";
 import type { AvatarVariantUrls, MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 import { AudioMessage } from "./AudioMessage";
 import { cn } from "@/lib/utils";
+import { rendersAsVoicePlayer } from "@/lib/messageMediaSections";
 import { chatRoleColourOnChat, readChatRoleColour } from "@/lib/chatRolePalette";
 import type { ChatRole } from "@/lib/chatRoles";
 import { useAppStore } from "@/store/app.store";
@@ -1626,11 +1627,11 @@ export function MessageBubble({
               );
             })()}
 
-            {isVoiceMessage(message) ? (
+            {rendersAsVoicePlayer(message) ? (
               <AudioMessage
                 url={originalUrl}
                 unavailable={originalUnavailable}
-                duration={parseAudioDuration(message.content)}
+                duration={voiceDurationSeconds(message)}
                 isMe={isMe}
                 playbackItem={createPlaybackItemFromMessage(message, isMe, originalUrl)}
               />
@@ -1750,7 +1751,7 @@ export function MessageBubble({
               </p>
             )}
 
-            {uploading && (isVoiceMessage(message) || message.type === "file" || message.type === "audio") && (
+            {uploading && (rendersAsVoicePlayer(message) || message.type === "file" || message.type === "audio") && (
               <OutgoingUploadLine progress={uploadProgress} onCancel={onDiscardLocalMessage} />
             )}
 
@@ -2353,6 +2354,13 @@ function RoundVideoMessage({
   );
 }
 
+/** The length a voice note was sent with, exact when the message carries it. */
+function voiceDurationSeconds(message: MessageWithSender): number {
+  const durationMs = getMediaMetadataNumber(message, "duration_ms");
+  if (durationMs && durationMs > 0) return durationMs / 1000;
+  return parseAudioDuration(message.content);
+}
+
 function parseAudioDuration(content: string | null | undefined): number {
   const match = content?.match(/(\d{1,2}):(\d{2})/);
   if (!match) return 0;
@@ -2387,7 +2395,7 @@ function createPlaybackItemFromMessage(
     ? isRoundVideoMessage(message)
       ? "video_message"
       : "video"
-    : isVoiceMessage(message)
+    : rendersAsVoicePlayer(message)
       ? "voice"
       : "audio";
   const durationMs = getMediaMetadataNumber(message, "duration_ms") ?? durationStringToMs(message.content);
@@ -2430,14 +2438,6 @@ export function isRoundVideoMessage(message: MessageWithSender): boolean {
   );
 }
 
-function isVoiceMessage(message: MessageWithSender): boolean {
-  if (message.type === "audio") return true;
-  if (message.type === "video") return false;
-  const mediaUrl = message.media_url?.toLowerCase() ?? "";
-  if (/\.(webm|ogg|oga|mp3|wav|m4a|aac)(\?|#|$)/.test(mediaUrl)) return true;
-  const content = message.content?.toLowerCase() ?? "";
-  return content.includes("голосовое") || content.includes("voice");
-}
 
 export function getVisibleMediaCaption(message: MessageWithSender): string | null {
   if (message.type !== "image" && message.type !== "video") return null;

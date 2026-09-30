@@ -349,6 +349,17 @@ export function buildAttachmentMediaMetadata(
       [MEDIA_QUALITY_METADATA_KEY]: attachment.mediaQuality,
     });
   }
+  if (attachment.kind === "voice") {
+    // A voice note's length travels with it (D-329), as it does in Telegram
+    // and Discord. The WebM a browser's recorder writes does not state it, so
+    // until now the only record was the rounded «(00:54)» in the text.
+    return withoutUndefined({
+      kind: "voice",
+      duration_ms: attachment.durationMs ?? null,
+      mime_type: attachment.mimeType,
+      size_bytes: attachment.size,
+    });
+  }
   if (
     attachment.kind !== "image" &&
     attachment.kind !== "video" &&

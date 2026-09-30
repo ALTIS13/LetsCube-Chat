@@ -24574,3 +24574,64 @@ and 390. With the old predicate served, both are red.
 push, and they were the first look at the new list at all. For a visual change
 the look comes before the deploy — as the owner has asked more than once — and
 here the look found the defect.
+
+## D-329 `[x]` A voice note sought to the middle jumped back to where it was playing
+
+**Severity:** high — a tester, 2026-09-29: «не получается перемотать голосовое…
+он позволяет интерфейс выбрать середину, но когда я выбираю середину, он после
+этого перескакивает либо на начало, либо на конец». Every voice note in
+production (75 WebM, 5 WAV on 2026-09-30) is affected once it is playing.
+
+**Cause, reproduced before it was fixed.** While a voice note plays, the
+application's player owns its clock and the bubble's slider shows that clock.
+The bubble sought its `<audio>` directly, behind the player's back, so for one
+render the slider still said the old second; React put the input back to it,
+and a second change event sought there. Traced in Chromium on a file of the
+production shape: `currentTime = 20`, then `currentTime = 0.91` one millisecond
+later, from the same handler. A seek now goes through the player whenever the
+message is its current one, and the player's clock moves in the same render.
+
+Two further ways to land at an end were removed with it. The files a browser's
+recorder writes have no Duration — the Segment and Clusters are of unknown size,
+and an iPhone's add a Cues element at the end with nothing pointing at it — so
+the engine reports `duration` Infinity. The bubble found the length by parking
+the element at its end and bringing it back, on every `canplay`, and a seek made
+meanwhile was overwritten by the old second. The length the message states is
+now the timeline, as Telegram Desktop falls back to the length stored with the
+document (`Instance::streamedDuration`, read 2026-09-30); the parking happens
+only for a message that states none, and never restores over a listener's seek.
+New voice notes carry `media_metadata.duration_ms`, which until now only the
+rounded «(00:54)» in the text recorded.
+
+A held thumb now follows the finger and seeks once on release, as Telegram
+Desktop's slider does (`setChangeFinishedCallback` → `finishSeeking`): one seek
+per gesture rather than one per pixel.
+
+**Evidence:** `voice-seek.spec` builds WebM in both recorder shapes, silent and
+served with byte ranges, and holds a seek before playing, a seek forwards and
+back while playing, and a mouse drag, at 1440 and 390: 12 of 12. With the old
+routing served, the four while-playing cases are red.
+
+**Not measured:** Safari. Playwright's WebKit on Windows cannot play WebM at
+all, so the iPhone's engine was not exercised; the defect's mechanism is in our
+code rather than the engine, and it was reproduced in Chromium.
+
+## D-330 `[x]` A message that said «голосовое» was drawn as an empty voice player
+
+**Severity:** high — the tester's own report of D-329 arrived as one, and so did
+the single word «голосовое» typed to show it: «если написать голосовое, то он
+отправляет голосовое. Что за бред?» Nothing was sent as audio; the text was
+drawn as a player with nothing to play and «загрузка...» under it for good.
+Seven text messages in production were drawn that way on 2026-09-30.
+
+**Cause:** the bubble decided «voice» with a predicate that fell back to the
+words — `content.includes("голосовое") || content.includes("voice")` — for any
+message that was not a video. It now asks what the message is
+(`rendersAsVoicePlayer` in `lib/messageMediaSections.ts`): `audio`, or a `file`
+whose address ends in an audio extension. All 80 voice notes in production are
+`audio`.
+
+**Evidence:** `message-media-sections.test.mts` holds the tester's words as
+text; `voice-word-text.spec` shows four such messages as text and the one voice
+note as the one player, at 1440 and 390, and is red with the old fallback
+served.

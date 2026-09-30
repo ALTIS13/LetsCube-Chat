@@ -375,3 +375,18 @@ test("choosing a video quality does not re-compress an original", () => {
   assert.equal(first.mediaQuality, "original");
   assert.equal(second.mediaQuality, "compact");
 });
+
+test("a voice note is sent with its length, which its WebM does not state (D-329)", () => {
+  const voice = buildAttachmentMediaMetadata(
+    { kind: "voice", mimeType: "audio/webm;codecs=opus", size: 1_482_458, durationMs: 53_840 },
+    { path: "u1/c1-voice.webm" },
+  );
+  assert.deepEqual(voice, {
+    kind: "voice",
+    duration_ms: 53_840,
+    mime_type: "audio/webm;codecs=opus",
+    size_bytes: 1_482_458,
+  });
+  const unknown = buildAttachmentMediaMetadata({ kind: "voice", mimeType: "audio/mp4", size: 10 }, null);
+  assert.equal(unknown?.duration_ms, null, "an unmeasured length is said to be unknown, not zero");
+});

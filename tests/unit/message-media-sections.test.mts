@@ -15,6 +15,7 @@ import {
   isRoundVideoMessageContent,
   isVoiceMessageContent,
   parseMessageMediaCounts,
+  rendersAsVoicePlayer,
   resolveActiveMediaSection,
   selectRussianPluralForm,
   type MessageMediaKind,
@@ -409,4 +410,19 @@ test("an exact total still agrees with the noun beside it, teens included", () =
     const [section] = buildMessageMediaSections([], { counts: { [kind]: total } });
     assert.equal(section.countedLabel, expected, `${kind} ${total}`);
   }
+});
+
+test("a message is drawn as a voice player by its type, never by its words (D-330)", () => {
+  // The tester's own messages of 2026-09-29, each drawn as a player with
+  // nothing to play and «загрузка...» under it for good.
+  for (const content of ["голосовое", "не получается перемотать голосовое", "Голосовое сообщение", "voice chat в четыре"]) {
+    assert.equal(rendersAsVoicePlayer({ type: "text", media_url: null }), false, content);
+  }
+  assert.equal(rendersAsVoicePlayer({ type: "audio", media_url: "https://core.example/storage/v1/object/public/media/a/voice.webm" }), true);
+  assert.equal(rendersAsVoicePlayer({ type: "audio", media_url: null }), true, "an upload in flight is still a voice note");
+  assert.equal(rendersAsVoicePlayer({ type: "file", media_url: "https://core.example/media/b/track.mp3?token=x" }), true, "an audio file sent as a file still plays");
+  assert.equal(rendersAsVoicePlayer({ type: "file", media_url: "https://core.example/media/b/report.pdf" }), false);
+  assert.equal(rendersAsVoicePlayer({ type: "video", media_url: "https://core.example/media/c/clip.webm" }), false, "a video in WebM is a video");
+  assert.equal(rendersAsVoicePlayer({ type: "image", media_url: null }), false);
+  assert.equal(rendersAsVoicePlayer({ type: "system", media_url: null }), false);
 });

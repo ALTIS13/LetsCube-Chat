@@ -51,6 +51,23 @@ export function isRoundVideoMessageContent(message: MessageMediaRow): boolean {
   );
 }
 
+/**
+ * Whether a message is drawn as a voice player (D-330).
+ *
+ * By what the message is, never by what it says. The bubble's predicate used
+ * to fall back to the text, so a message that merely contained «голосовое» or
+ * «voice» was drawn as a player with nothing to play and «загрузка...» under
+ * it for good: a tester's «не получается перемотать голосовое» arrived as one,
+ * and so did the single word «голосовое» typed to show it. Every voice note in
+ * production is `audio` (80 of 80 on 2026-09-30); a `file` whose address ends
+ * in an audio extension is still played, as it was.
+ */
+export function rendersAsVoicePlayer(message: Pick<MessageMediaRow, "type" | "media_url">): boolean {
+  if (message.type === "audio") return true;
+  if (message.type !== "file") return false;
+  return /\.(webm|ogg|oga|mp3|wav|m4a|aac)(\?|#|$)/.test(message.media_url?.toLowerCase() ?? "");
+}
+
 /** A recorded voice note, as opposed to an audio file that was attached. */
 export function isVoiceMessageContent(message: MessageMediaRow): boolean {
   const mediaUrl = message.media_url?.toLowerCase() ?? "";
