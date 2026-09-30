@@ -257,3 +257,32 @@ and byte-identical copies in `.migration-backup/supabase/migrations/`.
   `VoiceCallRing.tsx`, the control in `ChatHeader.tsx`, the record in
   `MessageList.tsx`, the list line in `messagePreview.ts`, and the reader in
   `useVoicePresence.ts`, which hands group rows over before the private rings.
+
+## 6. One task, several locations — tracker item 72
+
+- **Migration** `supabase/migrations/20260930210000_task_for_several_locations.sql`
+  (SHA-256 `4ee77456581b235a6f2ae8c1029a2df4ad55fe6bfe31314819f3b4d37dc84d6a`),
+  rollback `…_task_for_several_locations.rollback.sql`
+  (`8dd2deaa0c2337aed6dd84a97f4a6f57cfa6280d8a3886c87314a32bf4a52b36`), both
+  copied byte-identical into `.migration-backup/`.
+- **What it does.** `task_create_for_locations` makes one task per location
+  through `task_create_v4`, so every check that function makes — the caller's
+  rights at that location, the routing, the event, the notification — is made
+  for each; one transaction, so a refusal at any location leaves none made; a
+  repeat, when asked for, is made for each task by `task_recurrence_create` in
+  the same transaction. Only for `staff_pool` and `manager_pool`, the routes
+  that name nobody; at most 50 locations; each location once, in the order
+  given. `anon` holds no EXECUTE.
+- **Backup:** `/srv/letscube/backups/automated/20260930-062415`, `SHA256SUMS` 15
+  of 15 OK, 161 table-data entries.
+- **Rehearsal**, rolled back, as the QA administrator at two real active
+  locations: two locations with one named twice make two tasks, in the order
+  chosen, both workers' pool tasks with nobody assigned; with a repeat each task
+  gets its own; a route that names a person, and an empty list, are refused by
+  name; a list whose second location does not exist leaves nothing behind; an
+  anonymous caller is refused. **A mutant that caught each location's failure
+  and went on failed the smoke** — the all-or-none check tests what it says.
+- **Applied** at 03:24:38Z as `postgres`; the post-apply smoke passed rolled
+  back, and no rehearsal task is left.
+- **Client:** `lib/taskLocations.ts`, the extra locations under «Локация» in
+  `TaskFormModal.tsx`, and the function's type in `types/database.ts`.

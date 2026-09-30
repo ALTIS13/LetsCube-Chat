@@ -319,7 +319,12 @@ test("the perimeter count only ever shrinks", () => {
   // class list rather than a copy, so they add nothing here. The same holds
   // for the co-executors' search (tracker item 67): it and the assignee's are
   // `TASK_SEARCH_WELL` in that module.
-  assert.ok(total <= 200, `perimeters on the sheet-edge colour grew to ${total}; the ceiling is 200`);
+  //
+  // 197 since 2026-09-30, lowered by measurement. The task form's four
+  // selects — the location, «Кому», the visibility, and «+ Ещё локация»,
+  // which tracker item 72 added — are one class list, `TASK_SELECT_WELL` in
+  // `pages/tasks/taskFieldWell.ts`, where each carried a copy.
+  assert.ok(total <= 197, `perimeters on the sheet-edge colour grew to ${total}; the ceiling is 197`);
 });
 
 /**

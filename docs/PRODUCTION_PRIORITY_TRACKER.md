@@ -3335,7 +3335,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     the line break on an iOS or Android device whose short side is under 600
     — a phone, whichever way it is held — and a tablet still sends.
 
-72. `[ ]` A task for several locations at once — a tester, 2026-09-28: «задачам
+72. `[x]` A task for several locations at once — a tester, 2026-09-28: «задачам
     еще нужна возможность выбрать сразу несколько локаций». A task carries one
     `location_id`, and its route is decided per location: the location's
     workers or managers take it, or its administrator passes it on, so «several
@@ -3346,7 +3346,19 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     person — «Любому работнику локации», «Любому менеджеру локации»,
     «Администратору локации». Saving then makes one task per chosen location, in
     one request, so nothing is half-made. A route to a named person keeps one
-    location, because a person works at one. Not started.
+    location, because a person works at one.
+
+    **Done 2026-09-30.** Two routes, not three: «Администратору локации» names
+    a person — the form requires the location's administrator or an assignee
+    for it — so it keeps one location, with the manager's and the owner's.
+    For the two pools, «+ Ещё локация» under «Локация» adds locations as chips
+    with ×, the form says «По одной задаче на каждую локацию — всего 3», and
+    the button «Создать 3 задачи»; the location's administrator is off, one
+    person at one location. `task_create_for_locations` makes them all or none,
+    the repeat for each (`operations/2026-09-30-database-changes.md` §6).
+    Evidence: `task-many-locations.spec` 8/8 at 1440 and 390, the route-field
+    and period specs green, unit 4452/4452; the form's four selects became one
+    class list, and the edge ratchet came down from 200 to 197.
 
 73. `[x]` People search shows the people being looked for, not everybody whose
     name holds the letters — a tester, 2026-09-29, using the product for work:

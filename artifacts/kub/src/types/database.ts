@@ -1722,6 +1722,29 @@ export interface Database {
         }
         Returns: string
       }
+      /** Tracker item 72: one task per location, all or none, for a route that names nobody. */
+      task_create_for_locations: {
+        Args: {
+          p_location_ids: string[]
+          p_title: string
+          p_description?: string | null
+          p_priority?: TaskPriority
+          p_due_at?: string | null
+          p_chat_id?: string | null
+          p_visibility?: TaskVisibility
+          p_assignment_scope?: TaskAssignmentScope
+          p_target_role?: TaskTargetRole | null
+          p_starts_at?: string | null
+          p_frequency?: string | null
+          p_interval_count?: number | null
+          p_by_weekday?: number[] | null
+          p_by_monthday?: number | null
+          p_recurrence_starts_at?: string | null
+          p_end_at?: string | null
+          p_max_occurrences?: number | null
+        }
+        Returns: string[]
+      }
       task_assign: {
         Args: { p_task_id: string; p_assignee_id: string }
         Returns: void

@@ -3,7 +3,7 @@
 import { taskPeriodError } from "@/lib/taskPeriod";
 import { coassigneeIds, coassigneesChanged, coassigneesRefusal } from "@/lib/taskCoassignees";
 import { TaskCoassigneesField } from "./TaskCoassigneesField";
-import { TASK_SEARCH_WELL } from "./taskFieldWell";
+import { TASK_SEARCH_WELL, TASK_SELECT_WELL } from "./taskFieldWell";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { KubButton, KubIcon, KubInput, KubModal } from "@/components/kub";
@@ -46,6 +46,14 @@ import {
   mapLocationRoutingError,
 } from "@/lib/locationRouting";
 import { routeChoices, routeOfTask } from "@/lib/taskRoute";
+import {
+  createTasksLabel,
+  locationsLeftToAdd,
+  routeTakesSeveralLocations,
+  severalLocationsNote,
+  taskLocationsRefusalText,
+  taskLocationsToSend,
+} from "@/lib/taskLocations";
 import {
   TASK_RECURRENCE_UNAVAILABLE,
   TASK_RECURRENCE_UNAVAILABLE_DETAIL,
@@ -97,6 +105,8 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
   const [visibility, setVisibility] = useState<TaskVisibility>(task?.visibility ?? "staff");
   const [assignmentScope, setAssignmentScope] = useState<TaskAssignmentScope>(task?.assignment_scope ?? "user");
   const [locationId, setLocationId] = useState<string>((task?.location_id as string | null | undefined) ?? "");
+  /** Tracker item 72: the locations after the first, for a route that names nobody. */
+  const [moreLocationIds, setMoreLocationIds] = useState<string[]>([]);
   const [targetRole, setTargetRole] = useState<TaskTargetRole | "">((task?.target_role as TaskTargetRole | null | undefined) ?? "");
   const [routeAdminId, setRouteAdminId] = useState<string>((task?.route_admin_id as string | null | undefined) ?? "");
   const [createdForAdmin, setCreatedForAdmin] = useState(Boolean(task?.created_for_admin));
@@ -210,6 +220,9 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
   // «Получатель» and «Тип назначения» set apart (`lib/taskRoute.ts`).
   const route = routeOfTask(assignmentScope, targetRole);
   const routeOptions = routeChoices(route, canUseAdminTaskControls);
+  const severalLocationsAllowed = routeTakesSeveralLocations(route.id, isEdit);
+  const locationsToSend = taskLocationsToSend(locationId, severalLocationsAllowed ? moreLocationIds : []);
+  const severalLocations = locationsToSend.length > 1;
   const chooseRoute = (id: string) => {
     if (id === route.id) return;
     const next = routeOptions.find((option) => option.id === id);
@@ -217,6 +230,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
     setAssignmentScope(next.scope);
     setTargetRole(next.targetRole);
     if (next.scope !== "user") setAssignee(null);
+    if (!routeTakesSeveralLocations(next.id, isEdit)) setMoreLocationIds([]);
     // «Задача для администратора» is the administrator's route; another route
     // is another addressee, and the box would pull the field straight back.
     if (next.targetRole !== "admin") setCreatedForAdmin(false);
@@ -231,6 +245,10 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
     ),
     [recurrenceFrequency, recurrenceInterval, recurrenceWeekdays, recurrenceMonthday],
   );
+
+  useEffect(() => {
+    if (severalLocations && routeAdminId) setRouteAdminId("");
+  }, [routeAdminId, severalLocations]);
 
   useEffect(() => {
     if (!routeAdminId) return;
@@ -365,6 +383,38 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       return;
     }
 
+    if (useRoutingRpc && severalLocations) {
+      // One request, all or none; the repeat, if any, is made for each task
+      // inside it (`task_create_for_locations`).
+      const { data: ids, error: manyError } = await supabase.rpc("task_create_for_locations", {
+        p_location_ids: locationsToSend,
+        p_title: title.trim(),
+        p_description: description.trim() || null,
+        p_priority: priority,
+        p_due_at: due_iso,
+        p_chat_id: chatId,
+        p_visibility: visibility,
+        p_assignment_scope: assignmentScope,
+        p_target_role: targetRole || null,
+        p_starts_at: starts_iso,
+        p_frequency: recurrenceInput?.frequency ?? null,
+        p_interval_count: recurrenceInput?.intervalCount ?? null,
+        p_by_weekday: recurrenceInput?.byWeekday ?? null,
+        p_by_monthday: recurrenceInput?.byMonthday ?? null,
+        p_recurrence_starts_at: recurrenceInput?.startsAt ?? null,
+        p_end_at: recurrenceInput?.endAt ?? null,
+        p_max_occurrences: recurrenceInput?.maxOccurrences ?? null,
+      });
+      setSubmitting(false);
+      if (manyError) {
+        setError(taskLocationsRefusalText(manyError) ?? mapLocationRoutingError(manyError));
+        return;
+      }
+      const created = Array.isArray(ids) ? (ids as string[]) : [];
+      if (created[0]) onDone(created[0]);
+      return;
+    }
+
     const { data, error: rpcError } = useRoutingRpc
       ? await supabase.rpc("task_create_v4", {
           p_title: title.trim(),
@@ -439,7 +489,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
         <>
           <KubButton variant="ghost" onClick={onClose}>Отмена</KubButton>
           <KubButton variant="primary" loading={submitting} onClick={handleSubmit}>
-            {createdTaskId ? "Открыть задачу" : isEdit ? "Сохранить" : "Создать"}
+            {createdTaskId ? "Открыть задачу" : isEdit ? "Сохранить" : createTasksLabel(locationsToSend.length)}
           </KubButton>
         </>
       }
@@ -582,7 +632,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                     <select
                       value={recurrenceFrequency}
                       onChange={(event) => setRecurrenceFrequency(event.target.value as TaskRecurrenceFrequency)}
-                      className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+                      className={TASK_SELECT_WELL}
                     >
                       {(Object.keys(RECURRENCE_FREQUENCY_LABEL) as TaskRecurrenceFrequency[]).map((value) => (
                         <option key={value} value={value}>{RECURRENCE_FREQUENCY_LABEL[value]}</option>
@@ -730,6 +780,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
         {routing.available ? (
           <div className="grid gap-3">
             <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid min-w-0 content-start gap-2">
               <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
                 <span className="mb-1.5 block uppercase tracking-wide">Локация</span>
                 <select
@@ -738,7 +789,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                     setLocationId(event.target.value);
                     setRouteAdminId("");
                   }}
-                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+                  className={TASK_SELECT_WELL}
                 >
                   <option value="">Без локации</option>
                   {routing.locations.map((location) => (
@@ -748,6 +799,53 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                   ))}
                 </select>
               </label>
+                {severalLocationsAllowed && locationId && (
+                  <div className="grid gap-2" data-testid="task-more-locations">
+                    {moreLocationIds.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {moreLocationIds.map((id) => {
+                          const name = routing.locations.find((location) => location.id === id)?.name ?? "Локация";
+                          return (
+                            <span key={id} className="inline-flex items-center gap-1 rounded-full bg-[var(--kub-inset)] py-1 pl-3 pr-1 text-xs text-[color:var(--kub-text)]" data-testid="task-more-location">
+                              {name}
+                              <button
+                                type="button"
+                                onClick={() => setMoreLocationIds((list) => list.filter((entry) => entry !== id))}
+                                aria-label={`Убрать локацию: ${name}`}
+                                className="kub-icon-action inline-flex h-6 w-6 items-center justify-center rounded-full text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+                              >
+                                <KubIcon name="close" size={12} />
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {locationsLeftToAdd(routing.locations.filter((location) => location.is_active), locationId, moreLocationIds).length > 0 && (
+                      <select
+                        value=""
+                        onChange={(event) => {
+                          const id = event.target.value;
+                          if (id) setMoreLocationIds((list) => (list.includes(id) ? list : [...list, id]));
+                        }}
+                        aria-label="Ещё локация"
+                        data-testid="task-add-location"
+                        className={cn(TASK_SELECT_WELL, "text-[color:var(--kub-muted)]")}
+                      >
+                        <option value="">+ Ещё локация</option>
+                        {locationsLeftToAdd(routing.locations.filter((location) => location.is_active), locationId, moreLocationIds).map((location) => (
+                          <option key={location.id} value={location.id}>{location.name}</option>
+                        ))}
+                      </select>
+                    )}
+                    {severalLocationsNote(locationsToSend.length) && (
+                      <p className="text-[12px] leading-relaxed text-[color:var(--kub-muted)]" data-testid="task-locations-note">
+                        {severalLocationsNote(locationsToSend.length)}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
                 <span className="mb-1.5 block uppercase tracking-wide">Кому</span>
@@ -755,7 +853,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                   value={route.id}
                   onChange={(event) => chooseRoute(event.target.value)}
                   data-testid="task-route"
-                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+                  className={TASK_SELECT_WELL}
                 >
                   {routeOptions.map((option) => (
                     <option key={option.id} value={option.id}>{option.label}</option>
@@ -770,7 +868,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                 <select
                   value={visibility}
                   onChange={(event) => setVisibility(event.target.value as TaskVisibility)}
-                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+                  className={TASK_SELECT_WELL}
                 >
                   {(Object.keys(TASK_VISIBILITY_META) as TaskVisibility[]).map((value) => (
                     <option key={value} value={value}>{TASK_VISIBILITY_META[value].label}</option>
@@ -783,7 +881,8 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                 <select
                   value={routeAdminId}
                   onChange={(event) => setRouteAdminId(event.target.value)}
-                  disabled={!locationId || selectedLocationAdmins.length === 0}
+                  disabled={!locationId || selectedLocationAdmins.length === 0 || severalLocations}
+                  title={severalLocations ? "У каждой локации свой администратор — задачи пойдут без него" : undefined}
                   className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
                 >
                   <option value="">Не выбран</option>

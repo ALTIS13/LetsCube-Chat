@@ -14,3 +14,10 @@ export const TASK_FIELD_WELL =
  */
 export const TASK_SEARCH_WELL =
   "flex items-center gap-2 rounded-xl px-3 h-10 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] transition-all focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]";
+
+/**
+ * The task form's selects — the location, «Кому», the visibility, and since
+ * tracker item 72 «+ Ещё локация». One class list for all of them, as above.
+ */
+export const TASK_SELECT_WELL =
+  "h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]";
