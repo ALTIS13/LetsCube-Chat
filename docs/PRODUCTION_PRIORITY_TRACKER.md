@@ -3176,6 +3176,30 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     with type rules — which needs a `folders` column and is a database change
     for the owner's word (§10), not built here.
 
+    **Reversed on 2026-09-30, on the tester's own second word and the owner's
+    «разбери на задачи… внеси уже в наш проект».** The capsule leaving his
+    folders was not enough: at 18:09 the same day, replying to his own
+    screenshot, «Бро я из-за этого фильтра повешусь скоро… всю малину
+    портит», and in a voice note at 19:14, «у меня не перестает гореть от
+    этого фильтра… убери, пожалуйста… сделай просто как папки системные, и
+    всё». Both of item 69's objections are answered by computing the folders
+    rather than storing them. A system folder is a rule, not a `folders` row,
+    so no snapshot goes stale: a group made tomorrow is in «Группы» without
+    anybody putting it there. And the capsule is removed, so there are not two
+    mechanisms for one separation. **Done** (`lib/systemFolders.ts`): «Все»,
+    then «Личные», «Группы», and «Каналы» and «Боты» while a conversation of
+    that kind exists, then the reader's own folders. There are none at all for
+    a list of one kind. Each counts its unread. A system folder pressed again
+    opens no editor, because a rule has nothing to edit. A system folder whose
+    kind empties gives way to «Все». Bettered against Telegram in one respect:
+    its recommended folders are opt-in, which is the owner's complaint in
+    item 47, and these are there from the start. Not built: hiding a system
+    folder. Telegram deletes a recommended folder like any other; ask if
+    wanted. Evidence: `system-folders.test.mts`; `system-folders.spec` at 1440
+    and 390, 8 of 8, with a mutant that lets a system folder show every chat
+    red on the three cases that use the rule; renders sent to the owner
+    before the push.
+
 70. `[x]` The top of a conversation is one compact line per thing, as in
     Telegram — the owner, 2026-09-28, with two screenshots side by side:
     «посмотри как минималистично/удобно сделана верхняя панель в telegram
@@ -3229,6 +3253,85 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     line, nothing goes until the arrow, the two lines go as one message) and at
     1440 (Enter sends, Shift+Enter breaks); six specs that sent by pressing
     Enter at 390 now send the way the device does (`helpers/composerSend.ts`).
+
+    **A tester's «раз через раз», 2026-09-28 19:14, three hours before the fix
+    shipped:** «когда-то Enter отправляет в итоге сообщение, а когда-то Enter
+    перемещает меня на новую строку». That is the old rule meeting a predictive
+    keyboard: Enter during composition — a word still underlined — was a line
+    break, because the send guard skipped `isComposing`, and any other Enter
+    sent. The fix above removes both halves on a phone.
+
+    **2026-09-30: a phone turned sideways stays a phone.** In landscape an
+    iPhone is 932 wide, above `md`, so it sent on Enter again. Telegram Web A
+    does too, but by accident: its phone layout is `(max-width: 600px)` plus a
+    landscape clause written as one malformed media feature, `(max-width:
+    950px and max-height: 450px)`, which a browser evaluates as false
+    (`src/hooks/useAppLayout.ts`, read 2026-09-30). The native apps do not
+    change with the orientation, and neither does the keyboard, so ours keeps
+    the line break on an iOS or Android device whose short side is under 600
+    — a phone, whichever way it is held — and a tablet still sends.
+
+72. `[ ]` A task for several locations at once — a tester, 2026-09-28: «задачам
+    еще нужна возможность выбрать сразу несколько локаций». A task carries one
+    `location_id`, and its route is decided per location: the location's
+    workers or managers take it, or its administrator passes it on, so «several
+    locations» means one task per location, each routed to its own people. That
+    is how the recurrence already works, and the form says so: «Повтор создаёт
+    отдельные задачи с теми же локацией, получателем…». **Proposed:** in a new
+    task, the location becomes a multi-select for the routes that name no
+    person — «Любому работнику локации», «Любому менеджеру локации»,
+    «Администратору локации». Saving then makes one task per chosen location, in
+    one request, so nothing is half-made. A route to a named person keeps one
+    location, because a person works at one. Not started.
+
+73. `[x]` People search shows the people being looked for, not everybody whose
+    name holds the letters — a tester, 2026-09-29, using the product for work:
+    «когда пользуешься поиском там мало людей и постоянно мелькает «…», «…»…
+    Мы можем не показывать всех пользователей, а только тех кого ищем + поиск
+    по номеру нужен? Или этих додиков конкретных скрыть». Every people search
+    matched a display name that merely *contained* the query: from the second
+    letter in the sidebar (`global_search_v2`), from the first in a new chat and
+    in contacts' «Глобальный поиск» (`profiles ilike %q%`).
+    **Telegram's split, read 2026-09-30.** Its client sends one
+    `contacts.search` and shows the server's `my_results`, the people the
+    reader already has, apart from `results`, the global ones
+    (`SearchAdapterHelper.java`). The API documents the global half as «users
+    found by username substring» (core.telegram.org/method/contacts.search). So
+    a stranger is found by the handle, never by the name he chose to display.
+    People the reader has are matched on the device by a name that starts with
+    the query or has a word that does, or by a handle that starts with it
+    (`MessagesStorage.localSearch`). **Done the same way**
+    (`lib/peopleSearchScope.ts`). Somebody the reader has — a contact, or a
+    member of one of their conversations — is found by the start of a word of
+    the name or of the handle, from the first letter. Anybody else is found by
+    the start of the handle, from the third letter, or by a verified phone
+    number — never by the name. A prefix rather than Telegram's substring for a
+    stranger's handle: the middle of a word is how two letters found strangers
+    nobody was looking for. The sidebar scopes what the server returns, and the
+    new-chat and contacts searches ask the server for strangers by the handle's
+    start only. Evidence: `people-search-scope.test.mts`;
+    `search-people-scope.spec`, 6 of 6 at 1440 and 390, with a server answering
+    as today's does, and a mutant without the rule red on both absence cases;
+    `contacts-member-flow.spec`, whose global-search case now finds the
+    stranger by `@fri` and not by «Дру».
+    **Still open, and not the rule's to settle:** the server still returns the
+    wide match, which the sidebar then trims, so a stranger's row costs one of
+    the 20 slots before it is dropped. Moving the same rule into
+    `global_search_v2` is a migration. And the accounts with offensive names are
+    a moderation question for the owner: renaming or blocking them in the
+    administration panel, which this change does not do.
+
+74. `[ ]` Search by phone for everybody, as Telegram has it. The same tester:
+    «поиск по номеру нужен». It exists — `search_profiles_by_phone`, a whole
+    verified number, E.164 — but answers only an account with `users.view`.
+    In Telegram anybody may look up a whole number, and each person decides
+    who may find them by it («Кто может найти меня по номеру»). **This one is
+    the owner's**, because it is a decision about what everybody's phone number
+    reveals to a stranger (CLAUDE.md §7). **Proposed:** open the lookup to
+    every signed-in account, for a whole verified number only, with Telegram's
+    setting beside the phone in «Конфиденциальность»: «Все» or «Мои контакты».
+    Rate-limit it per account so the directory cannot be walked number by
+    number.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
