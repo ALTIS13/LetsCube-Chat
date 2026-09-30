@@ -11,6 +11,7 @@ interface Folder {
   emoji: string | null;
   unread?: number;
   shared?: boolean;
+  system?: boolean;
 }
 
 interface FolderTabsProps {
@@ -71,7 +72,7 @@ export function FolderTabs({ folders, activeFolder, onFolderChange, onCreate, on
         {folders.map((folder) => {
           const isActive = activeFolder === folder.id;
           const handleClick = () => {
-            if (isActive && onEdit && folder.id !== null) onEdit(folder.id);
+            if (isActive && onEdit && folder.id !== null && !folder.system) onEdit(folder.id);
             else onFolderChange(folder.id);
           };
           return (

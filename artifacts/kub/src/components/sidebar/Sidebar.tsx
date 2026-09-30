@@ -29,7 +29,6 @@ import { useChats } from "@/hooks/useChats";
 import { useFolders } from "@/hooks/useFolders";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import { LIST_MAY_BE_STALE } from "@/lib/plainMessages";
-import { ChatKindFilterBar } from "./ChatKindFilterBar";
 import { ShellSectionRows } from "./ShellSectionRows";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { QuickSwitchList } from "./QuickSwitchList";
@@ -39,15 +38,7 @@ import { chatAddressPath } from "@/lib/chatRoute";
 import { shellSection, shellSectionPath } from "@/lib/shellSection";
 import { useTaskAccessGate } from "@/hooks/useTaskAccess";
 import { useTasksInWork } from "@/hooks/useTasksInWork";
-import {
-  chatKindStorageKey,
-  chatsOfKind,
-  effectiveChatKind,
-  offeredChatKinds,
-  readStoredChatKind,
-  unreadByChatKind,
-  type ChatKindFilter,
-} from "@/lib/chatKind";
+import { chatsInFolder, folderInForce, offeredSystemFolders } from "@/lib/systemFolders";
 import type { Folder } from "@/types/database";
 
 export function Sidebar() {
@@ -90,12 +81,6 @@ export function Sidebar() {
     canManageFolder,
   } = useFolders();
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
-  // Item 47: which kind of conversation the list shows. Kept on this device
-  // for this account, because where a person left the list is where they
-  // expect to find it («where you were is product state»).
-  const [chosenKind, setChosenKind] = useState<ChatKindFilter>(() =>
-    readKeptChatKind(useAppStore.getState().currentUser?.id ?? null),
-  );
   const [showNewChat, setShowNewChat] = useState(false);
   const [editingFolder, setEditingFolder] = useState<Folder | "new" | null>(null);
   // Phone only in effect: the header keeps the field in its control row from
@@ -107,19 +92,6 @@ export function Sidebar() {
   const [sideMenuOpen, setSideMenuOpen] = useState(false);
   const [showNewGroup, setShowNewGroup] = useState(false);
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
-  // Another account on this device keeps its own choice.
-  useEffect(() => {
-    setChosenKind(readKeptChatKind(userId));
-  }, [userId]);
-  const chooseKind = (kind: ChatKindFilter) => {
-    setChosenKind(kind);
-    if (!userId) return;
-    try {
-      window.localStorage.setItem(chatKindStorageKey(userId), kind);
-    } catch {
-      // Unwritable storage costs the choice its persistence and nothing else.
-    }
-  };
 
   // Who has somebody talking in them, read once for the whole list (slice 3).
   // Shared with VoicePresenceRuntime during a call: leaving this sidebar does
@@ -228,25 +200,21 @@ export function Sidebar() {
     if (mobileSection === "profile") setMobileSection("chats");
   };
 
-  const filtered = useMemo(() => chats.filter((chat) => {
-    if (activeFolder === null) return true;
-    return folderChats[activeFolder]?.has(chat.id) ?? false;
-  }), [chats, activeFolder, folderChats]);
+  // Items 47 and 69: the kinds of conversation are system folders beside «Все»
+  // — «Личные», «Группы», and «Каналы» and «Боты» while there are any — and
+  // no longer a capsule on top of the list. A tester: «сделай просто как
+  // папки системные, и всё» (`lib/systemFolders.ts`).
+  const systemFolders = useMemo(
+    () => offeredSystemFolders(chats, folders.map((folder) => folder.name)),
+    [chats, folders],
+  );
+  const shownFolder = folderInForce(activeFolder, systemFolders);
+  const listed = useMemo(
+    () => chatsInFolder(chats, shownFolder, folderChats),
+    [chats, shownFolder, folderChats],
+  );
 
-  // Inside the folder, not beside it: a folder is a personal grouping across
-  // kinds, and the capsule separates the kinds within whatever is on screen.
-  // Tracker item 69: a folder is already a filter, and a second one inside it
-  // was friction — «я создал себе уже отдельную папку, а тут мне еще фильтруют
-  // люди или группы… во всех согласен, но не в отдельной папке». So the
-  // capsule is «Все»'s alone, and a kind chosen there is not carried into a
-  // folder: a group put in «Работа» is found there whatever «Все» shows.
-  const inAllChats = activeFolder === null;
-  const kindOffered = useMemo(() => (inAllChats ? offeredChatKinds(filtered) : []), [filtered, inAllChats]);
-  const kind = inAllChats ? effectiveChatKind(chosenKind, kindOffered) : "all";
-  const kindUnread = useMemo(() => unreadByChatKind(filtered), [filtered]);
-  const listed = useMemo(() => chatsOfKind(filtered, kind), [filtered, kind]);
-
-  const tabs = useMemo<{ id: string | null; name: string; emoji: string | null; unread: number; shared: boolean }[]>(() => [
+  const tabs = useMemo<{ id: string | null; name: string; emoji: string | null; unread: number; shared: boolean; system?: boolean }[]>(() => [
     {
       id: null,
       name: "Все",
@@ -254,6 +222,14 @@ export function Sidebar() {
       unread: chats.reduce((s, c) => s + (c.unread_count ?? 0), 0),
       shared: false,
     },
+    ...systemFolders.map((folder) => ({
+      id: folder.id,
+      name: folder.name,
+      emoji: null,
+      unread: chatsInFolder(chats, folder.id, folderChats).reduce((s, c) => s + (c.unread_count ?? 0), 0),
+      shared: false,
+      system: true,
+    })),
     ...folders.map((f) => {
       const inFolder = folderChats[f.id] ?? new Set<string>();
       const unread = chats
@@ -267,7 +243,7 @@ export function Sidebar() {
         shared: f.scope !== "personal",
       };
     }),
-  ], [chats, folders, folderChats]);
+  ], [chats, folders, folderChats, systemFolders]);
 
   return (
     // The column is a plain box; the material is the layer below, because this
@@ -296,7 +272,7 @@ export function Sidebar() {
             surface, told apart by a hairline (rule 11). */}
         <FolderRail
           folders={tabs}
-          activeFolder={activeFolder}
+          activeFolder={shownFolder}
           onFolderChange={setActiveFolder}
           onCreate={() => setEditingFolder("new")}
           onEdit={editFolder}
@@ -342,21 +318,18 @@ export function Sidebar() {
               <div className="md:hidden">
                 <FolderTabs
                   folders={tabs}
-                  activeFolder={activeFolder}
+                  activeFolder={shownFolder}
                   onFolderChange={setActiveFolder}
                   onCreate={() => setEditingFolder("new")}
                   onEdit={editFolder}
                 />
               </div>
             )}
-            {/* Discord's home rows, above the conversations and above the
-                filter that sorts them (item 41). From `md`; the component
+            {/* Discord's home rows, above the conversations (item 41).
+                From `md`; the component
                 gates itself. Not while a search owns the column: the results
                 belong directly under the field that asked for them. */}
             {!hasSearchQuery && !chatSearchOpen && <ShellSectionRows />}
-            {!hasSearchQuery && !chatSearchOpen && kindOffered.length > 0 && (
-              <ChatKindFilterBar offered={kindOffered} active={kind} unread={kindUnread} onSelect={chooseKind} />
-            )}
           </div>
 
           {isPhone && !hasSearchQuery && !chatSearchOpen && <PwaPushNudge />}
@@ -492,13 +465,4 @@ export function Sidebar() {
       )}
     </div>
   );
-}
-
-function readKeptChatKind(userId: string | null): ChatKindFilter {
-  if (!userId || typeof window === "undefined") return "all";
-  try {
-    return readStoredChatKind(window.localStorage.getItem(chatKindStorageKey(userId)));
-  } catch {
-    return "all";
-  }
 }

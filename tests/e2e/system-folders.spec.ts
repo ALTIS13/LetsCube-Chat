@@ -9,11 +9,11 @@ import {
 } from "./helpers/messageActionsFixture";
 
 /**
- * Tracker item 47 — «всё в кучу сваливается… шум из чатов». The owner's own
- * proposal, a small capsule that filters the list by the kind of conversation:
- * people, groups, bots. Telegram can express it only by building a folder by
- * hand (reference-clients §17), which is why the noise stays; here it is always
- * there while the list holds more than one kind.
+ * Tracker items 47 and 69. The kinds of conversation were a capsule of pills
+ * over the list; a tester asked for it to go — «у меня не перестает гореть от
+ * этого фильтра… сделай просто как папки системные, и всё» — and they are
+ * system folders beside «Все» now: «Личные», «Группы», and «Каналы» and «Боты»
+ * while there are any, each a rule rather than a list (`lib/systemFolders.ts`).
  *
  * A bot's conversation is a private chat with the bot beside it, served the way
  * the chat list reads it: one `chat_bot_members` request.
@@ -88,74 +88,81 @@ async function boot(page: Page, options: { onlyPeople?: boolean; folder?: boolea
   await expect(page.getByTestId("chat-list-item")).toHaveCount(options.onlyPeople ? 1 : 3);
 }
 
-const capsule = (page: Page) => page.getByTestId("chat-kind-filter");
-const pill = (page: Page, kind: string) => capsule(page).locator(`[data-chat-kind="${kind}"]`);
 const rows = (page: Page) => page.getByTestId("chat-list-item");
+const isComputer = (page: Page) => (page.viewportSize()?.width ?? 0) >= 768;
 
-test("the list offers its kinds, and a press shows one kind", async ({ page }) => {
+/** The folders' names in order: the rail's from `md`, the strip's below it. */
+async function folderNames(page: Page): Promise<string[]> {
+  if (isComputer(page)) {
+    return page.getByTestId("folder-rail-item").evaluateAll((items) => items.map((item) => item.getAttribute("aria-label") ?? ""));
+  }
+  return page
+    .getByTestId("folder-tabs-row")
+    .locator("button:not([aria-label='Новая папка'])")
+    .evaluateAll((items) => items.map((item) => (item.textContent ?? "").replace(/\d+/g, "").trim()));
+}
+
+function folder(page: Page, name: string) {
+  return isComputer(page)
+    ? page.getByTestId("folder-rail-item").filter({ hasText: name })
+    : page.getByTestId("folder-tabs-row").getByRole("button", { name: new RegExp(`^${name}`) });
+}
+
+test("the kinds are folders beside «Все», and there is no filter over the list", async ({ page }) => {
   await boot(page);
-  await expect(capsule(page)).toBeVisible();
-  // No «Все» of its own — the folder's «Все» is beside it — and no «Каналы»,
-  // because there is no channel in this list to show.
-  await expect(capsule(page).locator("[data-chat-kind]")).toHaveText([/^Люди/, /^Группы/, "Боты"]);
-  await expect(capsule(page).locator('[aria-pressed="true"]')).toHaveCount(0);
+  // No «Каналы»: there is no channel in this list to show.
+  await expect.poll(() => folderNames(page)).toEqual(["Все", "Личные", "Группы", "Боты"]);
+  await expect(page.getByTestId("chat-kind-filter"), "the capsule is gone").toHaveCount(0);
 
-  await pill(page, "group").click();
+  await folder(page, "Группы").click();
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page).first()).toContainText("Команда проекта");
 
-  await pill(page, "bot").click();
+  await folder(page, "Боты").click();
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page).first()).toContainText("Помощник");
 
-  await pill(page, "person").click();
+  await folder(page, "Личные").click();
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page).first()).toContainText("Анна Смирнова");
 
-  // A kind is a toggle: pressed again, the list is everything again.
-  await pill(page, "person").click();
-  await expect(pill(page, "person")).toHaveAttribute("aria-pressed", "false");
+  await folder(page, "Все").click();
   await expect(rows(page)).toHaveCount(3);
 });
 
-test("a pill that is not chosen still says something waits in its kind", async ({ page }) => {
+test("a system folder says what waits in it, and pressed again opens no editor", async ({ page }) => {
   await boot(page);
-  await pill(page, "bot").click();
-  // Anna's line and the team's are both unread, and neither is on screen.
-  await expect(pill(page, "person").getByTestId("chat-kind-unread")).toBeVisible();
-  await expect(pill(page, "group").getByTestId("chat-kind-unread")).toBeVisible();
-  await expect(pill(page, "bot").getByTestId("chat-kind-unread")).toHaveCount(0);
+  // Anna's line and the team's are both unread.
+  if (isComputer(page)) {
+    await expect(folder(page, "Личные").getByTestId("folder-rail-count")).toHaveText("1");
+    await expect(folder(page, "Группы").getByTestId("folder-rail-count")).toHaveText("1");
+    await expect(folder(page, "Боты").getByTestId("folder-rail-count")).toHaveCount(0);
+  } else {
+    await expect(folder(page, "Личные")).toContainText("1");
+    await expect(folder(page, "Группы")).toContainText("1");
+  }
+  await folder(page, "Группы").click();
+  await folder(page, "Группы").click();
+  await page.waitForTimeout(300);
+  await expect(page.getByRole("dialog"), "a rule has nothing to edit").toHaveCount(0);
+  await expect(rows(page)).toHaveCount(1);
 });
 
-test("the choice is where the list was left, across a reload", async ({ page }) => {
-  await boot(page);
-  await pill(page, "group").click();
-  await expect(rows(page)).toHaveCount(1);
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(pill(page, "group")).toHaveAttribute("aria-pressed", "true");
-  await expect(rows(page)).toHaveCount(1);
-  await expect(rows(page).first()).toContainText("Команда проекта");
-});
-
-test("a list of one kind draws no capsule, which would filter nothing", async ({ page }) => {
+test("a list of one kind has no system folders, which would repeat «Все»", async ({ page }) => {
   await boot(page, { onlyPeople: true });
-  await expect(capsule(page)).toHaveCount(0);
+  await expect(folder(page, "Личные")).toHaveCount(0);
+  await expect(page.getByTestId("chat-kind-filter")).toHaveCount(0);
 });
 
-test("a folder of the reader's own carries no capsule, and no kind chosen elsewhere", async ({ page }) => {
+test("a folder of the reader's own stays its own list, after the system ones", async ({ page }) => {
   // Tracker item 69: «я создал себе уже отдельную папку, а тут мне еще
-  // фильтруют люди или группы… во всех согласен, но не в отдельной папке».
-  // A folder is already a filter; the kind chosen in «Все» made him switch it
-  // back to reach a chat that was in his folder all along.
+  // фильтруют люди или группы… не в отдельной папке».
   await boot(page, { folder: true });
-  await pill(page, "group").click();
+  await expect.poll(() => folderNames(page)).toEqual(["Все", "Личные", "Группы", "Боты", "Работа"]);
+  await folder(page, "Группы").click();
   await expect(rows(page)).toHaveCount(1);
 
-  const folder = (page.viewportSize()?.width ?? 0) >= 768
-    ? page.getByRole("button", { name: /Работа/ }).first()
-    : page.getByTestId("folder-tabs-row").getByText("Работа", { exact: true });
-  await folder.click();
-  await expect(capsule(page)).toHaveCount(0);
-  // Both of the folder's chats, although «Группы» is what «Все» was left on.
+  await folder(page, "Работа").click();
+  // Both of the folder's chats, whatever folder was open before it.
   await expect(rows(page)).toHaveCount(2);
 });

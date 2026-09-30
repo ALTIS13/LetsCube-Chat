@@ -4,6 +4,8 @@ import { KubIcon, KubTooltip } from "@/components/kub";
 import { FOCUS_RING_INSET, PRESS_SINK } from "@/lib/controlSurface";
 import { FOLDER_RAIL_WIDTH } from "@/lib/desktopChatList";
 import { cn } from "@/lib/utils";
+import { systemFolderKind } from "@/lib/systemFolders";
+import type { KubIconName } from "@/components/kub";
 
 /**
  * The folder rail, at the left edge of a computer's window.
@@ -41,6 +43,8 @@ export interface FolderRailTab {
   emoji: string | null;
   unread?: number;
   shared?: boolean;
+  /** «Личные», «Группы» and the rest: a rule, not a list, so there is nothing to edit. */
+  system?: boolean;
 }
 
 /**
@@ -64,6 +68,20 @@ interface FolderRailProps {
   onOpenSideMenu: () => void;
   sideMenuOpen: boolean;
   tasks?: FolderRailTasks | null;
+}
+
+/** A system folder's glyph: whose conversations it holds. */
+function systemFolderIcon(id: string): KubIconName {
+  switch (systemFolderKind(id)) {
+    case "group":
+      return "users";
+    case "channel":
+      return "channel";
+    case "bot":
+      return "bot";
+    default:
+      return "user";
+  }
 }
 
 export function FolderRail({
@@ -177,7 +195,7 @@ export function FolderRail({
               type="button"
               onClick={() => {
                 // The chosen folder edits, as it does in the strip.
-                if (isActive && onEdit && folder.id !== null) onEdit(folder.id);
+                if (isActive && onEdit && folder.id !== null && !folder.system) onEdit(folder.id);
                 else onFolderChange(folder.id);
               }}
               aria-label={folder.name}
@@ -210,6 +228,8 @@ export function FolderRail({
                   <span className="text-lg leading-none">{folder.emoji}</span>
                 ) : folder.id === null ? (
                   <KubIcon name="chats" size={20} />
+                ) : folder.system ? (
+                  <KubIcon name={systemFolderIcon(folder.id)} size={20} />
                 ) : folder.shared ? (
                   <KubIcon name="group" size={20} />
                 ) : (

@@ -503,16 +503,21 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     await expect(rail).toBeVisible();
     expect((await rail.boundingBox())?.width).toBe(RAIL_WIDTH);
 
-    // «Все» plus the one folder, in the order the strip has them.
+    // «Все», the system folder the list's kinds call for, and the one folder of
+    // the reader's own, in the order the strip has them. The reader's folder is
+    // called «Личные», so the system «Личные» stands aside for it (items 47
+    // and 69, `lib/systemFolders.ts`).
     const items = rail.getByTestId("folder-rail-item");
-    await expect(items).toHaveCount(2);
+    await expect(items).toHaveCount(3);
     await expect(items.nth(0)).toHaveAttribute("aria-label", "Все");
-    await expect(items.nth(1)).toHaveAttribute("aria-label", "Личные");
+    await expect(items.nth(1)).toHaveAttribute("aria-label", "Группы");
+    await expect(items.nth(2)).toHaveAttribute("aria-label", "Личные");
+    await expect(items.nth(2)).toHaveAttribute("data-folder-id", FOLDER);
 
     // The counts are the ones the product already computes: each of the sixteen
     // chats has one unread message, and one of them is in «Личные».
     await expect(items.nth(0).getByTestId("folder-rail-count")).toHaveText("16");
-    await expect(items.nth(1).getByTestId("folder-rail-count")).toHaveText("1");
+    await expect(items.nth(2).getByTestId("folder-rail-count")).toHaveText("1");
 
     // Inverted on 2026-09-12, knowingly. This assertion used to require the
     // strip to be visible here, on the grounds that «Telegram ships both
@@ -1160,7 +1165,7 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
   test("a folder on the rail chooses it, and the chosen one edits it", async ({ page }) => {
     test.skip(!isDesktop(page), "the rail is a computer's");
     await boot(page);
-    const personal = page.getByTestId("folder-rail").getByTestId("folder-rail-item").nth(1);
+    const personal = page.getByTestId("folder-rail").locator(`[data-folder-id="${FOLDER}"]`);
     await personal.click();
     await expect(personal).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("chat-list-item")).toHaveCount(1);
