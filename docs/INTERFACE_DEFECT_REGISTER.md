@@ -24687,3 +24687,42 @@ whose address ends in an audio extension. All 80 voice notes in production are
 text; `voice-word-text.spec` shows four such messages as text and the one voice
 note as the one player, at 1440 and 390, and is red with the old fallback
 served.
+
+## D-331 `[ ]` A member cannot conveniently mention another person in a conversation
+
+**Severity:** high for group conversations. Tester report of 2026-09-30,
+19:40 MSK, read from the owner's explicitly authorised private conversation
+on 2026-10-01. The original message and its identifier stay in the ignored
+intake, not in this register. Tracker item 75.
+
+**Reproduction:** open a group conversation, type `@` and the beginning of a
+member's name in the composer, and try to choose that member. There is no
+member completion to choose. A manually typed `@handle` in a received message
+is coloured text, not a profile action.
+
+**Source evidence at `29176d72`:**
+`artifacts/kub/src/components/chat/MessageInput.tsx:1639` is a plain textarea
+whose change handler only updates text. Its suggestion surfaces are bot
+commands and emoji; there is no member-mention completion. The mention branch
+of `artifacts/kub/src/lib/formatText.tsx:275` renders a `span`, without an
+activation action or a resolved person. The absence was already noted in the
+bot-access reading (D-263); it was not a scheduled person-mention task.
+
+**Evidence boundary:** this intake confirms the reported missing interface and
+the source mechanism. It does not establish how a hand-typed handle affects
+the live notification pipeline; that must be measured, not inferred from text
+colour. No message was sent during this audit.
+
+**Next:** implement scoped member completion and an actionable mention,
+following the measured Telegram/Discord clients. Keep a stable recipient
+identity rather than trusting a mutable handle. Candidate selection must not
+send the message; preserve the caret, edits, captions, IME composition and
+phone Enter behaviour. Do not offer strangers from the global directory or
+mass mentions without a separate permission contract.
+
+**Acceptance:** people with the same display name remain distinguishable;
+members and bots are identified correctly; keyboard and touch selection work
+at 1440 and 390 in both themes; Escape closes the list; a selected mention
+opens the person's profile without sending a read receipt. Verify recipient
+notifications, sender exclusion, blocks, mutes, membership changes and account
+switches at their real boundaries before calling this fixed.

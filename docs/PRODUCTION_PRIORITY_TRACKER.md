@@ -3432,7 +3432,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     a moderation question for the owner: renaming or blocking them in the
     administration panel, which this change does not do.
 
-74. `[ ]` Search by phone for everybody, as Telegram has it. The same tester:
+74. `[~]` Search by phone for everybody, as Telegram has it. The same tester:
     «поиск по номеру нужен». It exists — `search_profiles_by_phone`, a whole
     verified number, E.164 — but answers only an account with `users.view`.
     In Telegram anybody may look up a whole number, and each person decides
@@ -3443,6 +3443,44 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     setting beside the phone in «Конфиденциальность»: «Все» or «Мои контакты».
     Rate-limit it per account so the directory cannot be walked number by
     number.
+
+    **2026-10-01 takeover (historical prestate):** an uncommitted Claude candidate exists in
+    `.worktrees/bot-platform` (privacy setting, client search and
+    `20260930235000_phone_search_for_everybody.sql` with rollback). Read-only
+    production checks confirm its new column/table/RPC behaviour are **not
+    applied**. Before continuing: reproduce and close the failed-read privacy
+    overwrite risk; serialise the concurrent lookup limit; reconcile the
+    intended normalisation contract (current test 2 passes / 1 failure); add
+    dedicated privacy/findability and migration rehearsals. Do not call it
+    released or copy its UI ahead of the schema. Details and evidence:
+    [takeover record](operations/2026-10-01-codex-takeover.md).
+
+    **2026-10-01 implementation:** failed-read, stale whole-row, account-change,
+    concurrent-write and focus-refresh races are fixed and behaviorally tested.
+    The SQL limit now serializes per account; direct RPCs reject local/partial
+    numbers. Full fresh-backup restore/rehearsal and exact rollback passed.
+    Migration applied with a raising drift guard; PostgREST authentication/own
+    preference read/foreign RLS checks pass, 82/82 public tables keep RLS.
+    Client integration and verified web rollout remain in progress; this item
+    is not yet closed. [Implementation evidence](operations/2026-10-01-implementation.md).
+
+75. `[~]` Mention a person in a conversation without knowing and typing their
+    handle. Tester report of 2026-09-30, 19:40 MSK; recovered during the Codex
+    takeover of 2026-10-01. **D-331:** member completion in the composer,
+    stable recipient identity, an actionable rendered mention and the actual
+    notification semantics. Read the correct Telegram/Discord client before
+    choosing the interaction; preserve phone Enter, IME, drafts, captions,
+    blocks and membership scope. Source confirms no completion and a rendered
+    `span` today; live mention delivery is not measured. The seven voice notes
+    in the same intake map to existing D-313/D-314, D-329/D-330 and items
+    52-55, 69 and 71, so they are not filed a second time. Intake and the
+    unfinished phone-search candidate:
+    [takeover record](operations/2026-10-01-codex-takeover.md).
+
+    **2026-10-01:** bounded primary-source/current-code contract is ready in
+    [member mentions](operations/2026-10-01-member-mentions-contract.md).
+    Stable UUIDs, text/caption persistence, profile activation and notification
+    privacy are implementation gates; a colored handle does not close D-331.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

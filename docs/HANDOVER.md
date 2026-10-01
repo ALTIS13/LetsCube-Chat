@@ -17,10 +17,31 @@ Read in this order:
    database safety) and §15 (deploying) apply to you exactly as written. Its §1
    «Current Stop Point» and §2 «Deployment baseline» are **stale** — this file
    replaces them;
-5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–51) and the
+5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–75) and the
    decisions log;
-6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-318, with its
+6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-331, with its
    measurement. Search it before filing anything.
+
+**Active resume, 2026-10-01 (Codex implementation).** Owner: this Codex chat. Stage:
+item 74 web rollout and D-331 preparation, not a native release. Main checkout is
+`69d3dcbe`, with the reviewed item 74 client integrated; the healthy web image
+is still `29176d72` until rollout verification below. Claude's separate
+`.worktrees/bot-platform` holds a
+reviewed item 74 candidate (phone lookup, privacy setting and migration).
+Its database migration is applied after a verified full-backup restore rehearsal,
+exact prestate guard and independent review. The client is integrated and awaits
+verified web deployment; do not confuse applied SQL with a released UI.
+All seven voice notes since 2026-09-27 were transcribed locally and reconciled
+with existing tasks; the new member-mention report is D-331 / item 75.
+Next: verify the deployed web, then implement
+D-331 using the [mentions contract](operations/2026-10-01-member-mentions-contract.md);
+do not repeat closed voice, Enter, folder and channel
+work. Android build/install/publication remains on hold. Current evidence,
+tools, outstanding stages and the private-intake boundary are in the
+[takeover record](operations/2026-10-01-codex-takeover.md) and current
+[implementation record](operations/2026-10-01-implementation.md). Later chronological
+blocks below remain historical; in particular item 50 is already closed,
+not waiting on the owner.
 
 **Claude resumed from Codex, 2026-09-27 (evening).** Codex stopped at the
 [checkpoint it left](operations/2026-09-27-claude-resume-after-codex.md); its
