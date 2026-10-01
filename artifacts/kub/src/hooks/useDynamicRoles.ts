@@ -43,6 +43,7 @@ export function useDynamicRoles(options: UseDynamicRolesOptions = {}): DynamicRo
   const supabase = useMemo(() => createClient(), []);
   const rt = useMemo(() => getRealtimeClient(), []);
   const channelIdRef = useRef(`dynamic-roles:${Math.random().toString(36).slice(2)}`);
+  const loadGenerationRef = useRef(0);
   const [available, setAvailable] = useState(false);
   const [checked, setChecked] = useState(false);
   const [loading, setLoading] = useState(enabled);
@@ -54,6 +55,7 @@ export function useDynamicRoles(options: UseDynamicRolesOptions = {}): DynamicRo
 
   const load = useCallback(
     async (options: LoadOptions = {}) => {
+      const generation = ++loadGenerationRef.current;
       const background = options.background === true;
       if (!enabled) {
         setAvailable(false);
@@ -91,6 +93,7 @@ export function useDynamicRoles(options: UseDynamicRolesOptions = {}): DynamicRo
         rolePermissionsQuery,
         userRolesQuery ?? Promise.resolve({ data: [], error: null }),
       ]);
+      if (generation !== loadGenerationRef.current) return;
 
       const firstError = rolesRes.error ?? permissionsRes.error ?? rolePermissionsRes.error ?? userRolesRes.error;
       if (firstError) {
@@ -137,6 +140,7 @@ export function useDynamicRoles(options: UseDynamicRolesOptions = {}): DynamicRo
 
   useEffect(() => {
     void load();
+    return () => { loadGenerationRef.current += 1; };
   }, [load]);
 
   useEffect(() => {
