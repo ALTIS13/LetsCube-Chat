@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { registerHooks } from "node:module";
+import { readFileSync } from "node:fs";
+import { registerHooks, stripTypeScriptTypes } from "node:module";
 import test from "node:test";
 
 let handler;
@@ -112,7 +113,7 @@ function configure(provider) {
 }
 
 for (const provider of ["fcm", "wns"]) {
-  for (const status of ["read", "device_inactive", "claim_lost", "rpc_error", "network_error", "unexpected"]) {
+  for (const status of ["read", "device_inactive", "claim_lost", "not_eligible", "rpc_error", "network_error", "unexpected"]) {
     test(`${provider} never reaches the provider after native recheck ${status}`, async () => {
       configure(provider);
       recheckStatus = status;
@@ -120,8 +121,9 @@ for (const provider of ["fcm", "wns"]) {
       const result = await response.json();
       assert.equal(response.status, 200);
       assert.equal(result.native.sent, 0);
-      assert.equal(result.native.pruned, status === "read" || status === "device_inactive" || status === "claim_lost" ? 1 : 0);
+      assert.equal(result.native.pruned, status === "read" || status === "device_inactive" || status === "claim_lost" || status === "not_eligible" ? 1 : 0);
       assert.equal(result.native.failed, status === "rpc_error" || status === "network_error" || status === "unexpected" ? 1 : 0);
+      assert.equal(result.native.pending, status === "rpc_error" || status === "network_error" || status === "unexpected" ? 1 : 0);
       assert.equal(providerCalls.length, 0);
       assert.equal(requests.filter((entry) => entry.url.pathname === "/rest/v1/rpc/native_push_outbox_delivery_recheck").length, 1);
       assert.equal(requests.filter((entry) => entry.url.pathname === "/rest/v1/notifications_native_push_outbox").length, 0);
@@ -141,3 +143,25 @@ for (const provider of ["fcm", "wns"]) {
     assert.equal(requests.filter((entry) => entry.url.pathname === "/rest/v1/notifications_native_push_outbox").length, 1);
   });
 }
+
+test("omitting native not_eligible parsing is killed by actual FCM and WNS summaries", async () => {
+  const url = new URL("../../supabase/functions/send-push-notifications/index.ts", import.meta.url);
+  const source = readFileSync(url, "utf8");
+  const needle = 'status !== "device_inactive" && status !== "not_eligible" && status !== "claim_lost"';
+  assert.equal(source.split(needle).length - 1, 1);
+  let js = stripTypeScriptTypes(source.replace(needle, 'status !== "device_inactive" && status !== "claim_lost"'));
+  js = js.replace('"npm:web-push@3.6.7"', '"data:text/javascript,export default globalThis.__nativeRecheckWebpush"');
+  js = js.replace(/"(\.\/[^"\n]+\.ts)"/g, (_match, path) => JSON.stringify(new URL(path, url).href));
+  const original = handler;
+  try {
+    await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
+    for (const provider of ["fcm", "wns"]) {
+      configure(provider);
+      recheckStatus = "not_eligible";
+      const result = await (await handler(request())).json();
+      assert.equal(providerCalls.length, 0);
+      assert.deepEqual([result.native.pruned, result.native.failed, result.native.pending], [0, 1, 1]);
+      assert.throws(() => assert.deepEqual([result.native.pruned, result.native.failed, result.native.pending], [1, 0, 0]), { code: "ERR_ASSERTION" });
+    }
+  } finally { handler = original; }
+});

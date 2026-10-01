@@ -38,9 +38,10 @@ type WebPushDeliveryStatus =
   | "foreground"
   | "read"
   | "subscription_inactive"
+  | "not_eligible"
   | "claim_lost";
 
-type NativePushDeliveryStatus = "deliver" | "read" | "device_inactive" | "claim_lost";
+type NativePushDeliveryStatus = "deliver" | "read" | "device_inactive" | "not_eligible" | "claim_lost";
 
 type NativeOutboxRow = {
   id: string;
@@ -386,7 +387,7 @@ async function recheckWebPushDelivery(
   const status = await response.json() as unknown;
   if (
     status !== "deliver" && status !== "foreground" && status !== "read" &&
-    status !== "subscription_inactive" && status !== "claim_lost"
+    status !== "subscription_inactive" && status !== "not_eligible" && status !== "claim_lost"
   ) {
     return { ok: false };
   }
@@ -420,7 +421,7 @@ async function recheckNativePushDelivery(
     if (!response.ok) return { ok: false };
 
     const status = await response.json() as unknown;
-    if (status !== "deliver" && status !== "read" && status !== "device_inactive" && status !== "claim_lost") {
+    if (status !== "deliver" && status !== "read" && status !== "device_inactive" && status !== "not_eligible" && status !== "claim_lost") {
       return { ok: false };
     }
     return { ok: true, status };
@@ -724,6 +725,7 @@ async function deliver(
   if (deliveryStatus === "foreground") return "deferred";
   if (
     deliveryStatus === "read" || deliveryStatus === "subscription_inactive" ||
+    deliveryStatus === "not_eligible" ||
     deliveryStatus === "claim_lost"
   ) {
     return "pruned";
