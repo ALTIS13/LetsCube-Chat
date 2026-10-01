@@ -490,6 +490,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 
 19. `[~]` Roles and permissions. Requested by the owner on 2026-09-04 ("крайне неудобно", "очень перегружена для администратора", "старые fallback роли"), then on the same day: remove the excess without breaking what works, and reassign anyone on a legacy role to a proper one. **Data half done and applied 2026-09-04 (`20260904060000`); the UI half and one owner decision remain.**
 
+    **2026-10-02 bounded read-ordering correction (D-334):** a late query no
+    longer replaces newer roles, restores a disabled consumer or disables the
+    shared preference after unmount. Per-hook generations preserve independent
+    consumers. Mounted RED 10/11, GREEN 11/11, four mutations caught; final full
+    unit gate 4852/4852 without skips. No query, grant, legacy role or permission
+    authority changed. Web publication is pending in the
+    [DND/roles wave](operations/2026-10-02-presence-push-quiet.md); native holds
+    remain. This is not acceptance of the remaining density redesign.
+
     **This entry's first version measured the wrong table, and the correction is the useful part.** It counted `role_permissions` rows and concluded that `owner` and `tech_admin` "grant an identical 40-permission set". They do — and it does not matter, because `has_permission` never reads those rows for them. Verified against production:
 
     ```
@@ -1169,13 +1178,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 
     **Left for the second phase:** the system idle time and the AFK move on
     Windows (a native command, so a Windows release); leaving a call after five
-    hours idle; «не беспокоить» for push notifications, which are sent by the
-    server and still sound; and one race, reasoned rather than observed — a
-    beat from another device that reads the row in the milliseconds before a
-    new choice commits publishes the previous status until its next beat, a
-    minute at most. Serialising the beat on the privacy row (`for update`) is
-    the fix; the same device no longer races itself, since a choice no longer
-    wakes its own heartbeat (asserted in `presence-status.spec.ts`).
+    hours idle. The server DND alert leak and hidden-presence/Windows client
+    bypasses are D-333, in current restored/mounted acceptance:
+    [2026-10-02 record](operations/2026-10-02-presence-push-quiet.md).
+    The previously reasoned cross-device heartbeat race was disproven on
+    2026-10-02 by two real PostgreSQL connections in both lock orderings:
+    the UPSERT already locks the privacy row even when its `WHERE` refuses an
+    old timestamp. No extra `FOR UPDATE` is required or implemented. The same
+    device no longer races itself, since a choice no longer wakes its own
+    heartbeat (asserted in `presence-status.spec.ts`).
 
 
 38. `[ ]` Badges: real icons, and the history a badge carries. Asked for by the

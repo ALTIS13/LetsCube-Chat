@@ -20,7 +20,9 @@ Approved by the owner on 2026-10-01. No Android build/install/publication.
    the public bucket and native release hold. Follow the current
    [consumer record](2026-10-01-signed-media-consumers.md), not the older
    unimplemented-consumer checkpoint below.
-4. [ ] Continue the open presence/AFK/DND and role/bot stages from the tracker.
+4. [~] Continue the open presence/AFK/DND and role/bot stages from the tracker.
+   Item 37 / D-333 private alert gates are in restored SQL and mounted client
+   acceptance; follow [current record](2026-10-02-presence-push-quiet.md).
 
 ## Decisions And Boundaries
 
@@ -41,7 +43,9 @@ Approved by the owner on 2026-10-01. No Android build/install/publication.
 
 ## Resume
 
-Owner: Codex coordinator. Stage: D-208 signed-media consumer acceptance.
+Owner: Codex coordinator. Stage: item 37 / D-333 private DND alert acceptance.
+Current checkpoint is the linked 2026-10-02 record. D-208 source gates and web
+rollout are complete; the following paragraph preserves their acceptance limits.
 First D-331/D-332 web slice `56ae3cc0` is published and independently verified:
 exact sole healthy image, markers and public/container JS/SW parity. Final
 4787/4787 unit tests, 93 mounted cases, 12 pixel/activation cases and deployed

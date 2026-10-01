@@ -24781,3 +24781,46 @@ Released in the verified web slice `56ae3cc0`; its final gates and production
 read-only smoke passed. Keep partial for bundled installed clients: Android
 still contains the previous bundle and is explicitly held. Do not repeat the
 web fix as unfinished. [Evidence](operations/2026-10-01-implementation.md).
+
+## D-333 `[~]` Do Not Disturb still allows external alerts, and hidden presence bypasses local silence
+
+**Severity:** medium, chosen notification/privacy boundary. Found 2026-10-02
+while completing tracker item 37, not from a personal-screen capture.
+
+**Observed causes:** the live shared push filter and captured-ring eligibility
+function never read the private DND choice. Windows Realtime/reconnect toast
+presentation has no DND gate. Local sound derives from the public presence dot,
+so hidden presence replaces DND with `invisible` and unintentionally allows
+sound. Changing the public status design is not the fix.
+
+**Measured RED:** the coordinator's fresh full-restored PG17.6 run has two
+expected failures: actual Web/FCM predelivery rechecks say `deliver`, and a
+real captured recipient ring is eligible under DND. Message/ring controls pass
+before those assertions; no live message or provider call is sent.
+
+**Current acceptance:** four-function guards plus account-owned client
+alert decisions. In-app notifications/unread stay, cancelled rings still get
+dismissed, expiry equality resumes new alerts, suppressed alerts do not replay
+after reconnect, and idle/invisible do not silently become DND. Do not claim
+OS receipt or installed native-client acceptance from these source tests.
+[Current checkpoint and proof](operations/2026-10-02-presence-push-quiet.md).
+
+## D-334 `[~]` An older roles read can replace a newer result or restore a disabled panel
+
+**Severity:** medium, stale interface projection. Found 2026-10-02 in the
+independent roles queue audit, without changing or impersonating grants.
+
+**Observed cause:** `useDynamicRoles` starts overlapping reads without a
+request generation. An old success or refusal can replace a newer result;
+changing `enabled` or `includeAssignments`, or unmounting the consumer, does
+not invalidate the outstanding read. A stale missing-table error can also
+disable the shared roles preference after its consumer has disappeared.
+
+**Source acceptance:** a generation belongs to each mounted hook, advances
+for every load and cleanup, and is checked immediately after the query batch.
+Ten of eleven mounted cases fail on the shipped hook; the independent-consumer
+positive control passes. The corrected hook passes 11/11 and catches 4/4
+omission/shared-generation mutations. Focused roles/realtime gates pass 59/59;
+the full final unit suite passes 4852/4852 without skips. This is not a change
+to database permissions, role authority or queries. Web deployment acceptance
+is pending. [Wave record](operations/2026-10-02-presence-push-quiet.md).

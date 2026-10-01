@@ -3567,6 +3567,23 @@ the light theme's amber is darkened to 3:1 for a dot and reads brownish on its
 own. The mobile variant — a different online mark for somebody only on a phone
 — is noted and not adopted: presence here does not record the device.
 
+**DND notification boundary, verified 2026-10-02.** Discord's official
+[desktop notification guide](https://discord.com/blog/how-to-manage-your-discord-desktop-notifications),
+dated 2026-06-18, distinguishes in-app sounds from mobile push: DND follows
+the account across clients and silences in-app sounds, but mobile pushes still
+arrive. This is DOCUMENTED, not a physical mobile measurement. Idle and
+invisible do not change notification behavior.
+
+**Our deliberate difference:** LETSCUBE's shared DND also pauses external
+alert pushes while its chosen duration holds. It keeps in-app notification
+records/unread counts, rather than changing a permanent notification setting
+or destroying subscriptions. This satisfies the cross-device promise to be
+left alone without depending on an unavailable silent-channel upgrade in the
+held Android release or on an installed Web Push client's sound support.
+Already-accepted provider pushes cannot be recalled. Cancellation of an
+already-ringing call is cleanup, not a new alert, and remains deliverable.
+Implementation and evidence: [item 37 DND](2026-10-02-presence-push-quiet.md).
+
 ## 26. Subject 18 — how a bot is marked, 2026-09-29
 
 D-236's last question: should the mark on a bot be a badge beside the name, a

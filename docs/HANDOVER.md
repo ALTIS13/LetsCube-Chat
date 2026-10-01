@@ -19,11 +19,25 @@ Read in this order:
    replaces them;
 5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–75) and the
    decisions log;
-6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-332, with its
+6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-334, with its
    measurement. Search it before filing anything.
 
 **Active resume, 2026-10-02 (Codex implementation).** Owner: this Codex chat.
-Stage: D-208 web-consumer fixes deployed, remaining live/native acceptance open.
+Stage: item 37 / D-333 SQL accepted and applied once; DND/D-334 web publication
+is next. The source and isolated runner are frozen.
+Source: `910b21ba`; branch `codex/presence-push-quiet-20261002`. The coordinator
+owns the four-function migration and rollout; Hilbert owns isolated SQL checks.
+Goodall and Carson are complete and closed. The coordinator owns publication.
+Evidence/blockers/next action: [DND record](operations/2026-10-02-presence-push-quiet.md).
+Next: reviewed Git integration and exact-SHA web acceptance; do not reapply SQL.
+Combined client units 4852/4852 and server tests 357/357 pass; production build
+is proved. SQL has 39 broad groups/34 mutations plus 6 focused groups/6
+mutations, with actual rollback/reapply and committed poststate proof. Both server leaks
+are reproduced; the alleged heartbeat race is disproven in both lock orderings.
+Android build/install/publication remains held; no native or device changes.
+
+**Prior completed web wave, 2026-10-02.** D-208 consumer fixes are deployed;
+remaining live/native acceptance is open.
 This is not a native release. Item 74 is
 closed. The first D-331 / item 75 and D-332 web slice is deployed from `56ae3cc0`:
 sole healthy exact-SHA image, new markers, unchanged retained old entry and
