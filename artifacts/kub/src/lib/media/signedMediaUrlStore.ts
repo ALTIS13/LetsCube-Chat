@@ -24,9 +24,9 @@
  *
  * ## What renews a signature
  *
- * Reading does. There is no timer, because a timer over a cache would re-sign
- * every object a long-lived tab had ever seen, forever. `get` is called on
- * render; if the answer it is about to give has passed its renewal point it
+ * Reading does. One browser clock belongs to the store's subscriptions and
+ * prompts mounted snapshots to read, rather than re-signing every object a
+ * long-lived tab had ever seen. If an answer has passed its renewal point, `get`
  * queues a replacement and returns the current one anyway — which is still
  * valid, so the picture does not blink while the new address arrives. An object
  * that has scrolled out of the tree stops being read, so it stops being
@@ -46,10 +46,12 @@ import {
   isSignedUrlUsable,
   shouldRenewSignedUrl,
   signedUrlLifetime,
+  SIGNED_URL_MIN_REMAINING_MS,
   SIGNED_URL_TTL_SECONDS,
   type SignedUrlLifetime,
 } from "./signedUrlLifetime.ts";
 import { mediaObjectRefKey, type MediaObjectRef } from "./mediaObjectRef.ts";
+import { signedObjectIdentity } from "./playbackUrlPin.ts";
 
 /** How long a refused or missing object is left alone before being asked again. */
 export const SIGN_FAILURE_COOLDOWN_MS = 30_000;
@@ -110,9 +112,62 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
   let flushScheduled = false;
   let generation = 0;
   let accountId: string | null | undefined;
+  const clockWindow = typeof window === "undefined" ? null : window;
+  const clockDocument = typeof document === "undefined" ? null : document;
+  let clockTimer: number | null = null;
+
+  function nextCheckDelayMs(): number {
+    const nowMs = now();
+    let delay = 60_000;
+    for (const entry of known.values()) {
+      const boundaries = entry.lifetime
+        ? [entry.lifetime.renewAtMs, entry.lifetime.expiresAtMs - SIGNED_URL_MIN_REMAINING_MS]
+        : [entry.retryAtMs];
+      for (const boundary of boundaries) {
+        if (boundary > nowMs) delay = Math.min(delay, boundary - nowMs);
+      }
+    }
+    return Math.max(1, delay);
+  }
+
+  function armClock(): void {
+    if (!clockWindow) return;
+    if (clockTimer !== null) clockWindow.clearTimeout(clockTimer);
+    clockTimer = null;
+    if (!listeners.size || (!known.size && !pending.size && !inFlight.size)) return;
+    clockTimer = clockWindow.setTimeout(checkClock, nextCheckDelayMs());
+  }
+
+  function checkClock(): void {
+    emit();
+  }
+
+  function checkVisible(): void {
+    if (clockDocument?.visibilityState === "visible") checkClock();
+  }
+
+  function startClock(): void {
+    if (!clockWindow) return;
+    clockWindow.addEventListener("online", checkClock);
+    clockWindow.addEventListener("focus", checkClock);
+    clockWindow.addEventListener("pageshow", checkClock);
+    clockDocument?.addEventListener("visibilitychange", checkVisible);
+    armClock();
+  }
+
+  function stopClock(): void {
+    if (!clockWindow) return;
+    if (clockTimer !== null) clockWindow.clearTimeout(clockTimer);
+    clockTimer = null;
+    clockWindow.removeEventListener("online", checkClock);
+    clockWindow.removeEventListener("focus", checkClock);
+    clockWindow.removeEventListener("pageshow", checkClock);
+    clockDocument?.removeEventListener("visibilitychange", checkVisible);
+  }
 
   function emit(): void {
     for (const listener of [...listeners]) listener();
+    armClock();
   }
 
   function evictIfNeeded(): void {
@@ -280,10 +335,33 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
       return known.has(key);
     },
 
+    /**
+     * A spent download offer is not a revocation of already buffered playback.
+     * Only a retained answer for the same object permits its playback pin;
+     * account clearing or an explicit refusal removes that answer immediately.
+     */
+    hasCachedSignatureFor(url: string | null): boolean {
+      const identity = signedObjectIdentity(url);
+      if (!identity) return false;
+      const slash = identity.indexOf("/");
+      if (slash < 1) return false;
+      try {
+        const key = mediaObjectRefKey({
+          bucket: decodeURIComponent(identity.slice(0, slash)),
+          path: decodeURIComponent(identity.slice(slash + 1)),
+        });
+        return Boolean(known.get(key)?.url);
+      } catch {
+        return false;
+      }
+    },
+
     subscribe(listener: () => void): () => void {
       listeners.add(listener);
+      if (listeners.size === 1) startClock();
       return () => {
         listeners.delete(listener);
+        if (listeners.size === 0) stopClock();
       };
     },
 

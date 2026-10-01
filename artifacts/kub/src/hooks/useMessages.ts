@@ -311,7 +311,8 @@ export function useMessages(
     const sameAccount = captureMessageAccount(userId, accountEpoch);
     if (!sameAccount() || chatIdRef.current !== chatId || topicIdRef.current !== topicId) return;
     const requestGeneration = ++historyRequestGenerationRef.current;
-    const isCurrent = () => sameAccount() && chatIdRef.current === chatId && historyRequestGenerationRef.current === requestGeneration;
+    const isCurrent = () => sameAccount() && chatIdRef.current === chatId &&
+      topicIdRef.current === topicId && historyRequestGenerationRef.current === requestGeneration;
     if (!isCurrent()) return;
     const background = options.background === true;
     const heldWhenAsked = useAppStore.getState().messages[chatId] ?? EMPTY_MESSAGES;
@@ -323,7 +324,19 @@ export function useMessages(
     bumpFetch("useMessages");
     if (!background) setHistoryError(null);
     if (!background) setLoading(options.cacheIsStale === true || !hasCachedMessages);
-    if (!userId || !clearedAtCache.hasFresh(chatId, userId)) {
+    // An active, verified conversation stays mounted during a background read.
+    // A reopen/account change still waits; an actual refused mark clears below.
+    const holdsVerifiedBoundary = verifiedChatIdRef.current === chatId &&
+      verifiedAccountEpochRef.current === accountEpoch;
+    const needsBoundaryRead = !userId || !clearedAtCache.hasFresh(chatId, userId);
+    let mustVerifyBoundary = needsBoundaryRead || !holdsVerifiedBoundary;
+    const refuseHistory = (reason: string) => {
+      if (!mustVerifyBoundary) return;
+      setVerifiedChatId(null);
+      setVerifyingChatId(chatId);
+      setHistoryError(reason);
+    };
+    if ((!background || !holdsVerifiedBoundary) && needsBoundaryRead) {
       setVerifiedChatId(null);
       setVerifyingChatId(chatId);
     }
@@ -342,6 +355,11 @@ export function useMessages(
           hasMoreOlderRef.current = false;
           setHasMoreOlder(false);
           return;
+        }
+        if (localClearedAt !== clearedAtRef.current) {
+          mustVerifyBoundary = true;
+          setVerifiedChatId(null);
+          setVerifyingChatId(chatId);
         }
         setClearedAt(localClearedAt);
       } else return;
@@ -375,7 +393,7 @@ export function useMessages(
       if (!isCurrent()) return;
       if (error) {
         console.error("Messages fetch error:", error);
-        if (verifiedChatIdRef.current !== chatId) setHistoryError("Не удалось загрузить историю чата.");
+        refuseHistory("Не удалось загрузить историю чата.");
         return;
       }
       if (data) {
@@ -388,7 +406,7 @@ export function useMessages(
         const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, [...checkedIds]);
         if (!isCurrent()) return;
         if (!fetchedHiddenIds) {
-          if (verifiedChatIdRef.current !== chatId) setHistoryError("Не удалось проверить скрытые сообщения.");
+          refuseHistory("Не удалось проверить скрытые сообщения.");
           return;
         }
         for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -400,14 +418,14 @@ export function useMessages(
           const addedHiddenIds = await fetchHiddenMessageIdSet(supabase, addedIds);
           if (!isCurrent()) return;
           if (!addedHiddenIds) {
-            if (verifiedChatIdRef.current !== chatId) setHistoryError("Не удалось проверить скрытые сообщения.");
+            refuseHistory("Не удалось проверить скрытые сообщения.");
             return;
           }
           for (const id of addedIds) checkedIds.add(id);
           for (const id of addedHiddenIds) fetchedHiddenIds.add(id);
         }
         if ((useAppStore.getState().messages[chatId] ?? EMPTY_MESSAGES) !== existing) {
-          if (verifiedChatIdRef.current !== chatId) setHistoryError("История изменилась во время проверки. Повторите загрузку.");
+          refuseHistory("История изменилась во время проверки. Повторите загрузку.");
           return;
         }
         rememberHiddenMessageIds(fetchedHiddenIds);
@@ -451,7 +469,7 @@ export function useMessages(
     } catch (error) {
       console.error("Messages fetch error:", error);
       reportError(error, { category: "messages_fetch_failed", chatId, background });
-      if (isCurrent() && verifiedChatIdRef.current !== chatId) setHistoryError("Не удалось загрузить историю чата.");
+      if (isCurrent()) refuseHistory("Не удалось загрузить историю чата.");
     } finally {
       if (isCurrent()) setLoading(false);
     }

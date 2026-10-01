@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { KubIcon } from "@/components/kub";
 import type { KubIconName } from "@/components/kub/icons";
@@ -52,12 +52,14 @@ export function FileMessageRow({
   content,
   mediaMetadata,
   url,
+  unavailable = false,
   members = null,
 }: {
   content: string | null | undefined;
   mediaMetadata: unknown;
   /** Null while the file is still on its way, or while its address is being resolved. */
   url: string | null;
+  unavailable?: boolean;
   members?: MemberMentionsInText | null;
 }) {
   const facts = useMemo(() => documentFacts({ content, mediaMetadata }), [content, mediaMetadata]);
@@ -72,6 +74,8 @@ export function FileMessageRow({
     [facts],
   );
   const [open, setOpen] = useState(false);
+  const fileRef = useRef<HTMLButtonElement>(null);
+  const close = useCallback(() => setOpen(false), []);
   const size = formatFileSize(facts.sizeBytes);
   const kindLine = [size, facts.extension === "ФАЙЛ" ? null : facts.extension].filter(Boolean).join(" · ");
 
@@ -85,12 +89,14 @@ export function FileMessageRow({
     <>
       <div className="flex min-w-0 flex-col gap-1">
       <button
+        ref={fileRef}
         type="button"
         onClick={press}
-        disabled={!url}
+        disabled={unavailable || !url}
+        aria-busy={!url && !unavailable}
         data-testid="file-message"
         data-file-preview={preview ?? "download"}
-        aria-label={preview ? `Открыть: ${facts.name}` : `Скачать: ${facts.name}`}
+        aria-label={unavailable ? `Файл недоступен: ${facts.name}` : preview ? `Открыть: ${facts.name}` : `Скачать: ${facts.name}`}
         className={cn(
           "flex w-full min-w-0 max-w-[18rem] items-center gap-3 rounded-lg py-0.5 pr-1 text-left kub-raise-hover",
           FOCUS_RING_INSET,
@@ -111,14 +117,16 @@ export function FileMessageRow({
           <span className="block truncate text-sm font-semibold text-[color:var(--kub-text)]" data-testid="file-message-name">
             {facts.name}
           </span>
-          {kindLine && (
+          {(kindLine || unavailable) && (
             <span className="block truncate text-xs text-[color:var(--kub-muted)]" data-testid="file-message-kind">
-              {kindLine}
+              {unavailable ? <span data-testid="file-message-unavailable">Файл недоступен</span> : kindLine}
             </span>
           )}
         </span>
         <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center text-[color:var(--kub-accent-text)]">
-          {url ? (
+          {unavailable ? (
+            <KubIcon name="file" size={18} tone="muted" />
+          ) : url ? (
             <KubIcon name={preview ? PREVIEW_ICON[preview] : "download"} size={18} />
           ) : (
             <KubIcon name="spinner" size={16} tone="muted" />
@@ -133,7 +141,7 @@ export function FileMessageRow({
       )}
       </div>
       {open && url && preview && (
-        <DocumentViewer facts={facts} url={url} preview={preview} onClose={() => setOpen(false)} />
+        <DocumentViewer facts={facts} url={url} preview={preview} returnTo={fileRef.current} onClose={close} />
       )}
     </>
   );
@@ -148,11 +156,13 @@ function DocumentViewer({
   facts,
   url,
   preview,
+  returnTo,
   onClose,
 }: {
   facts: DocumentFacts;
   url: string;
   preview: DocumentPreview;
+  returnTo: HTMLButtonElement | null;
   onClose: () => void;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -160,7 +170,7 @@ function DocumentViewer({
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    const returnTo = document.activeElement as HTMLElement | null;
+    const opener = returnTo ?? document.activeElement as HTMLElement | null;
     closeRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -172,9 +182,9 @@ function DocumentViewer({
     window.addEventListener("keydown", onKey, true);
     return () => {
       window.removeEventListener("keydown", onKey, true);
-      returnTo?.focus?.();
+      opener?.focus?.({ preventScroll: true });
     };
-  }, [onClose]);
+  }, [onClose, returnTo]);
 
   useEffect(() => {
     if (preview !== "text") return undefined;

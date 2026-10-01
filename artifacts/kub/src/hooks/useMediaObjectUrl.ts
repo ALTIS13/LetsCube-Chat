@@ -162,12 +162,27 @@ export function usePlaybackUrl(
   // Where an expired address was interrupted, so the fresh one can resume there
   // instead of starting the video again from the beginning.
   const resumeAtRef = useRef<number | null>(null);
+  const resumePlayingRef = useRef(false);
+  const retained = useSyncExternalStore(
+    useCallback((listener: () => void) => signedMediaUrls().subscribe(listener), []),
+    () => signedMediaUrls().hasCachedSignatureFor(pinned),
+    () => false,
+  );
 
   useEffect(() => {
     const element = mediaRef.current;
     const engaged = Boolean(element) && (!element!.paused || element!.currentTime > 0);
-    setPinned((current) => choosePlaybackUrl({ pinned: current, incoming, engaged }));
-  }, [incoming, mediaRef]);
+    if (!incoming && !retained) {
+      resumeAtRef.current = null;
+      resumePlayingRef.current = false;
+    }
+    setPinned((current) => {
+      // The download floor must not unload buffered playback during a network
+      // loss. A refusal/account change flips retained even if incoming stays null.
+      if (!incoming && retained && engaged) return current;
+      return choosePlaybackUrl({ pinned: current, incoming, engaged });
+    });
+  }, [incoming, mediaRef, retained]);
 
   // Taking a fresh address means reloading the element, so the position has to
   // be put back by hand once the new one knows how long it is.
@@ -176,14 +191,19 @@ export function usePlaybackUrl(
     if (!element) return;
     const restore = () => {
       const at = resumeAtRef.current;
+      const wasPlaying = resumePlayingRef.current;
       resumeAtRef.current = null;
-      if (at === null || at <= 0) return;
-      try {
-        element.currentTime = at;
-      } catch {
-        // A browser that refuses the seek leaves it at the start, which is the
-        // old behaviour rather than a new failure.
+      resumePlayingRef.current = false;
+      if (at === null) return;
+      if (at > 0) {
+        try {
+          element.currentTime = at;
+        } catch {
+          // A browser that refuses the seek leaves it at the start, which is the
+          // old behaviour rather than a new failure.
+        }
       }
+      if (wasPlaying) void element.play().catch(() => {});
     };
     element.addEventListener("loadedmetadata", restore);
     return () => element.removeEventListener("loadedmetadata", restore);
@@ -193,6 +213,7 @@ export function usePlaybackUrl(
     if (!shouldRetryWithFreshAddress(pinned, incoming)) return false;
     const element = mediaRef.current;
     resumeAtRef.current = element && Number.isFinite(element.currentTime) ? element.currentTime : null;
+    resumePlayingRef.current = Boolean(element && !element.paused);
     setPinned(incoming);
     return true;
   }, [incoming, mediaRef, pinned]);

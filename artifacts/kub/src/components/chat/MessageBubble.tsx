@@ -51,6 +51,7 @@ import { mediaBubbleStyle } from "@/lib/mediaBubbleLayout";
 import { inlineImageSource } from "@/lib/mediaInlineLoad";
 import { resolveOriginalPreviewUrl } from "@/hooks/useMediaVariants";
 import { useMessageMediaSource, usePlaybackUrl } from "@/hooks/useMediaObjectUrl";
+import { mediaObjectRefKey, messageMediaObjectRef } from "@/lib/media/mediaObjectRef";
 import {
   messageActorDisplayName,
   resolveMessageActor,
@@ -1046,16 +1047,11 @@ export function MessageBubble({
    * the voice bubble needs — it is the one shape with nothing to fall back to.
    */
   const { url: originalUrl, settled: originalSettled } = useMessageMediaSource(message);
-  /**
-   * Whether the file cannot be addressed at all, as opposed to not yet.
-   *
-   * Guarded by the column as well as by the resolver: a row whose `media_url`
-   * is null has never had an address, and saying so where the product used to
-   * say «загрузка...» would be a change in the shipped mode. With the column
-   * present, `"public"` always resolves to it, so this is false there by
-   * construction.
-   */
-  const originalUnavailable = Boolean(message.media_url) && originalSettled && !originalUrl;
+  const originalMediaRef = messageMediaObjectRef(message);
+  const mediaIdentity = originalMediaRef ? mediaObjectRefKey(originalMediaRef) : message.media_url;
+  // A persisted object can have only bucket/path columns, without a legacy URL.
+  const hasOriginalMedia = Boolean(message.media_url || originalMediaRef);
+  const originalUnavailable = hasOriginalMedia && originalSettled && !originalUrl;
   const imagePreviewUrl = mediaVariant?.previewUrl ?? originalPreview?.url;
   const inlineOriginalUrl = inlineImageSource(null, originalUrl, message.media_metadata);
   const imageDisplayUrl = message.type === "image"
@@ -1639,6 +1635,7 @@ export function MessageBubble({
 
             {rendersAsVoicePlayer(message) ? (
               <AudioMessage
+                key={mediaIdentity}
                 url={originalUrl}
                 unavailable={originalUnavailable}
                 duration={voiceDurationSeconds(message)}
@@ -1675,6 +1672,7 @@ export function MessageBubble({
               isRoundVideoMessage(message) ? (
                 <UploadVeil uploading={uploading} progress={uploadProgress} onCancel={onDiscardLocalMessage}>
                 <RoundVideoMessage
+                  key={mediaIdentity}
                   url={videoPlaybackUrl}
                   originalUrl={originalUrl}
                   title={message.content ?? "Видео-сообщение"}
@@ -1691,6 +1689,7 @@ export function MessageBubble({
                 <MediaWithCaption caption={mediaCaption} bot={botCommandsInText} members={captionMentions}>
                   <UploadVeil uploading={uploading} progress={uploadProgress} onCancel={onDiscardLocalMessage}>
                   <MediaVideo
+                    key={mediaIdentity}
                     url={videoPlaybackUrl}
                     originalUrl={originalUrl}
                     title={message.content ?? "Видео"}
@@ -1705,14 +1704,15 @@ export function MessageBubble({
                   </UploadVeil>
                 </MediaWithCaption>
               )
-            ) : message.type === "file" && (message.media_url || outgoingPlaceholder) ? (
+            ) : message.type === "file" && (hasOriginalMedia || outgoingPlaceholder) ? (
               // Telegram's file row (tracker item 33): the extension, the name,
               // the size, and a press that opens it in place or downloads it.
               // A file still on its way has nothing to open yet (D-314).
               <FileMessageRow
                 content={message.content}
                 mediaMetadata={message.media_metadata}
-                url={message.media_url ? originalUrl ?? null : null}
+                url={hasOriginalMedia ? originalUrl ?? null : null}
+                unavailable={originalUnavailable}
                 members={captionMentions}
               />
             ) : canUseCompactReplyInline ? (

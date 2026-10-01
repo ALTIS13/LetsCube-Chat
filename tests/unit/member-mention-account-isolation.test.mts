@@ -721,3 +721,71 @@ test("account-boundary omission mutants fail literal runtime assertions", { skip
     console.log(`KILLED account omission: ${mutant}`);
   }
 });
+
+test("delayed old-topic history reply cannot mutate current cached topic before replacement fetch starts", { timeout: 10_000 }, async () => {
+  const oldTopic = "old-topic";
+  const currentTopic = "current-topic";
+  const oldRow = message(A, { id: ID, topic_id: oldTopic, failed: false, content: "old topic reply" });
+  const currentRow = message(A, { id: "55555555-5555-4555-8555-000000000002",
+    topic_id: currentTopic, failed: false, content: "current topic cached" });
+
+  const control = harness();
+  control.refs.topicIdRef.current = oldTopic as any;
+  control.refs.verifiedAccountEpochRef.current = control.store.getState().accountEpoch;
+  const controlClient = readClient(Promise.resolve({ data: [oldRow], error: null }));
+  await control.callback("fetchMessages", { topicId: oldTopic, supabase: controlClient.client })({ background: true });
+  assert.equal(controlClient.requests(), 1, "the same-topic positive control must perform the real read");
+  assert.deepEqual(control.store.getState().messages[CHAT].map((row: any) => row.content), ["old topic reply"]);
+  assert.ok(control.effects.includes("verified"), "the same-topic reply must reach boundary verification");
+
+  const observed: Array<Record<string, any>> = [];
+  for (const answer of ["rows", "refused"] as const) {
+    const old = deferred<any>();
+    const h = harness();
+    h.refs.topicIdRef.current = oldTopic as any;
+    h.refs.verifiedAccountEpochRef.current = h.store.getState().accountEpoch;
+    h.store.getState().setMessages(CHAT, [oldRow]);
+    const oldClient = readClient(old.promise);
+    let hiddenReads = 0;
+    const reading = h.callback("fetchMessages", {
+      topicId: oldTopic,
+      supabase: oldClient.client,
+      clearedAtCache: { hasFresh: () => false },
+      fetchHiddenMessageIdSet: async () => { hiddenReads++; return new Set(); },
+    })({ background: true });
+    try {
+      await flush();
+      assert.equal(oldClient.requests(), 1, "the old topic's history request must already be in flight");
+      assert.equal(h.refs.historyRequestGenerationRef.current, 1);
+
+      // Model the gap before the cached-topic fallback starts its replacement
+      // read: only the active topic changes, while generation remains unchanged.
+      h.refs.topicIdRef.current = currentTopic as any;
+      h.store.getState().setMessages(CHAT, [currentRow]);
+      const before = h.store.getState().messages;
+      const effectCount = h.effects.length;
+      old.resolve(answer === "rows"
+        ? { data: [oldRow], error: null }
+        : { data: null, error: { code: "42501", message: "synthetic old-topic refusal" } });
+      await reading;
+      observed.push({
+        answer,
+        requests: oldClient.requests(),
+        generation: h.refs.historyRequestGenerationRef.current,
+        sameRows: h.store.getState().messages === before,
+        contents: h.store.getState().messages[CHAT].map((row: any) => row.content),
+        hiddenReads,
+        effects: h.effects.slice(effectCount),
+      });
+    } finally {
+      old.resolve({ data: [], error: null });
+      await reading;
+    }
+  }
+  assert.deepEqual(observed, [
+    { answer: "rows", requests: 1, generation: 1, sameRows: true,
+      contents: ["current topic cached"], hiddenReads: 0, effects: [] },
+    { answer: "refused", requests: 1, generation: 1, sameRows: true,
+      contents: ["current topic cached"], hiddenReads: 0, effects: [] },
+  ]);
+});
