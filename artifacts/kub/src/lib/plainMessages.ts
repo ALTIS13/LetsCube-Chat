@@ -220,6 +220,13 @@ export const SEARCH_HISTORY_UNAVAILABLE_DETAIL =
 export const SEARCH_FILTERS_UNAVAILABLE = "Расширенные фильтры по всей истории сейчас недоступны.";
 export const SEARCH_FILTERS_UNAVAILABLE_DETAIL = "Сейчас поиск применяет доступные локальные фильтры.";
 
+/**
+ * A lookup by number refused for its rate (item 74): ten a minute and a
+ * hundred a day. Said as what the person can do about it — wait — and without
+ * the numbers, which are the database's to change.
+ */
+export const SEARCH_PHONE_LIMITED = "Слишком много поисков по номеру. Попробуйте чуть позже.";
+
 // ---------------------------------------------------------------------------
 // Tasks (work-surfaces T-F7)
 // ---------------------------------------------------------------------------
@@ -318,6 +325,7 @@ export const PLAIN_UNAVAILABLE_MESSAGES: readonly string[] = [
   SEARCH_HISTORY_UNAVAILABLE_DETAIL,
   SEARCH_FILTERS_UNAVAILABLE,
   SEARCH_FILTERS_UNAVAILABLE_DETAIL,
+  SEARCH_PHONE_LIMITED,
   TASK_RECURRENCE_UNAVAILABLE,
   TASK_RECURRENCE_UNAVAILABLE_DETAIL,
   TASK_ROUTING_UNAVAILABLE,

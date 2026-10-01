@@ -9,6 +9,8 @@ import {
   type PrivacyPreferences,
 } from "@/lib/privacyPreferences";
 import { isManualStatus, type ManualStatus } from "@/lib/presenceStatus";
+import { isPhoneFindableBy, PHONE_FIND_DEFAULT, type PhoneFindableBy } from "@/lib/phoneFindability";
+import type { Database } from "@/types/database";
 
 export type { PrivacyPreferences };
 
@@ -17,7 +19,7 @@ const gateway: PrivacyGateway = {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("privacy_preferences")
-      .select("presence_visible,forward_origin_visible,manual_status,manual_status_until")
+      .select("presence_visible,forward_origin_visible,manual_status,manual_status_until,phone_findable_by")
       .eq("user_id", userId)
       .maybeSingle();
     // An absent row is not an error — it is the defaults.
@@ -28,27 +30,26 @@ const gateway: PrivacyGateway = {
           forwardOriginVisible: data.forward_origin_visible !== false,
           manualStatus: isManualStatus(data.manual_status) ? data.manual_status : "online",
           manualStatusUntil: typeof data.manual_status_until === "string" ? data.manual_status_until : null,
+          phoneFindableBy: isPhoneFindableBy(data.phone_findable_by) ? data.phone_findable_by : PHONE_FIND_DEFAULT,
         }
       : null;
   },
 
   async write(userId, preferences) {
     const supabase = createClient();
-    // The whole row, every time. An upsert naming one column resets the other
-    // to its column default, which for the forward setting means turning
-    // somebody's opt-out back on because they changed their presence.
-    const { error } = await supabase.from("privacy_preferences").upsert(
-      {
-        user_id: userId,
-        presence_visible: preferences.presenceVisible,
-        forward_origin_visible: preferences.forwardOriginVisible,
-        manual_status: preferences.manualStatus,
-        manual_status_until: preferences.manualStatus === "online" ? null : preferences.manualStatusUntil,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" },
-    );
+    // Insert defaults only when no row exists. Conflict-ignore must precede a
+    // PATCH: a merging upsert resets omitted fields to their column defaults.
+    const { error: insertError } = await supabase.from("privacy_preferences")
+      .upsert({ user_id: userId }, { onConflict: "user_id", ignoreDuplicates: true });
+    if (insertError) throw new Error(insertError.message);
+    const patch: Database["public"]["Tables"]["privacy_preferences"]["Update"] = { updated_at: new Date().toISOString() };
+    if (preferences.presenceVisible !== undefined) patch.presence_visible = preferences.presenceVisible;
+    if (preferences.forwardOriginVisible !== undefined) patch.forward_origin_visible = preferences.forwardOriginVisible;
+    if (preferences.phoneFindableBy !== undefined) patch.phone_findable_by = preferences.phoneFindableBy;
+    const { data, error } = await supabase.from("privacy_preferences")
+      .update(patch).eq("user_id", userId).select("user_id").single();
     if (error) throw new Error(error.message);
+    if (!data) throw new Error("privacy_write_not_saved");
   },
 
   async clearPresence(userId) {
@@ -93,8 +94,8 @@ export function refreshPrivacyPreferences(userId: string | null): Promise<void> 
  * by the database onto each copy at forward time, so it governs what is
  * forwarded next and never what was forwarded already — in either direction.
  *
- * Nothing here affects being found or being written to. That was the condition
- * the setting was asked for under: a colleague must always be reachable.
+ * Phone findability governs exact verified-number resolution separately from
+ * presence and forwards. It does not hide a profile from name/username search.
  */
 export function usePrivacyPreferences() {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
@@ -119,5 +120,12 @@ export function usePrivacyPreferences() {
     [userId],
   );
 
-  return { ...snapshot, setPresenceVisible, setForwardOriginVisible, setManualStatus };
+  const setPhoneFindableBy = useCallback(
+    (value: PhoneFindableBy) => store.setPreference(userId, "phoneFindableBy", value),
+    [userId],
+  );
+
+  const retry = useCallback(() => store.sync(userId), [userId]);
+  return { ...snapshot, ready: store.canEdit(userId), retry,
+    setPresenceVisible, setForwardOriginVisible, setManualStatus, setPhoneFindableBy };
 }

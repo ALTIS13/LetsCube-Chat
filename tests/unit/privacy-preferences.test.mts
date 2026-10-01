@@ -10,7 +10,7 @@ import {
 
 interface Recorder extends PrivacyGateway {
   reads: string[];
-  writes: Array<{ userId: string; presenceVisible: boolean }>;
+  writes: Array<{ userId: string; presenceVisible?: boolean }>;
   rows: Record<string, PrivacyPreferences | undefined>;
   cleared: string[];
   statuses: Array<{ userId: string; status: string; until: string | null }>;
@@ -27,7 +27,7 @@ function recordingGateway(
   failures: { read?: Error; write?: Error; clear?: Error; status?: Error } = {},
 ): Recorder {
   const reads: string[] = [];
-  const writes: Array<{ userId: string; presenceVisible: boolean }> = [];
+  const writes: Array<{ userId: string; presenceVisible?: boolean }> = [];
   const cleared: string[] = [];
   const statuses: Array<{ userId: string; status: string; until: string | null }> = [];
   const rows: Record<string, PrivacyPreferences | undefined> = {};
@@ -48,7 +48,7 @@ function recordingGateway(
     async write(userId, preferences) {
       if (failures.write) throw failures.write;
       writes.push({ userId, presenceVisible: preferences.presenceVisible });
-      rows[userId] = { ...preferences };
+      rows[userId] = { ...(rows[userId] ?? PRIVACY_DEFAULTS), ...preferences };
     },
     async clearPresence(userId) {
       if (failures.clear) throw failures.clear;
@@ -67,7 +67,7 @@ test("an absent row means presence is published", async () => {
   const store = createPrivacyPreferencesStore(recordingGateway());
   await store.sync("user-1");
   assert.deepEqual(store.getSnapshot(), {
-    preferences: { presenceVisible: true, forwardOriginVisible: true, manualStatus: "online", manualStatusUntil: null },
+    preferences: { presenceVisible: true, forwardOriginVisible: true, manualStatus: "online", manualStatusUntil: null, phoneFindableBy: "everybody" },
     loading: false,
     error: null,
     userId: "user-1",
@@ -159,7 +159,7 @@ test("signing out clears the answer and stops claiming to be loading", async () 
   await store.sync("user-1");
   await store.sync(null);
   assert.deepEqual(store.getSnapshot(), {
-    preferences: { presenceVisible: true, forwardOriginVisible: true, manualStatus: "online", manualStatusUntil: null },
+    preferences: { presenceVisible: true, forwardOriginVisible: true, manualStatus: "online", manualStatusUntil: null, phoneFindableBy: "everybody" },
     loading: false,
     error: null,
     userId: null,
@@ -217,10 +217,8 @@ test("a write settles the value, so a later sync costs nothing and changes nothi
   assert.deepEqual(gateway.reads, ["user-1"], "the store already knows what it just wrote");
 });
 
-test("a saved choice survives a store that could never read one", async () => {
-  // The read failed, so the store fell back to the default. The person then
-  // turned presence off and it saved. A later sync must not re-read and hand
-  // the default back — that would silently flip the switch on again.
+test("a store that could never read a choice refuses writes until its retry succeeds", async () => {
+  // Unknown defaults must never be mistaken for someone's stored choice.
   const failures = { read: new Error("unreachable") as Error | undefined };
   const reads: string[] = [];
   const gateway: PrivacyGateway = {
@@ -238,11 +236,13 @@ test("a saved choice survives a store that could never read one", async () => {
   await store.sync("user-1");
   assert.equal(store.getSnapshot().preferences.presenceVisible, true, "the default stood in");
 
-  assert.equal(await store.setPresenceVisible("user-1", false), true);
+  assert.equal(await store.setPresenceVisible("user-1", false), false);
+  failures.read = undefined;
   await store.sync("user-1");
+  assert.equal(await store.setPresenceVisible("user-1", false), true);
 
   assert.equal(store.getSnapshot().preferences.presenceVisible, false, "the choice held");
-  assert.deepEqual(reads, ["user-1"], "and the store did not go back for an answer it has");
+  assert.deepEqual(reads, ["user-1", "user-1"], "a failed read can be retried");
 });
 
 test("a new account never shows the previous one's answer, not even while loading", async () => {

@@ -19,7 +19,10 @@
  * administrative global roles and nobody else: an ordinary person has never
  * been able to find anybody by telephone number. So the people an ordinary
  * person can reach are the people they can recognise, and the list has to show
- * them rather than wait to be spelled at.
+ * them rather than wait to be spelled at. (Since 2026-09-30 a whole number
+ * finds its owner for anybody, in the global search, as the owner allows —
+ * tracker item 74. The reasoning about this list stands: a face is still what
+ * somebody recognises.)
  *
  * Hence the order below: the people you already share a chat with come first.
  * That is the same mechanic Discord's invite dialog and Telegram's contact list

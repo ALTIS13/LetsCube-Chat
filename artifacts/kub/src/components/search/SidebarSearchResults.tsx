@@ -38,6 +38,7 @@ import {
   SEARCH_FILTERS_UNAVAILABLE_DETAIL,
   SEARCH_HISTORY_UNAVAILABLE,
   SEARCH_HISTORY_UNAVAILABLE_DETAIL,
+  SEARCH_PHONE_LIMITED,
 } from "@/lib/plainMessages";
 
 export function SidebarSearchResults({ query }: { query: string }) {
@@ -216,6 +217,16 @@ export function SidebarSearchResults({ query }: { query: string }) {
       {search.filtersLimited && (
         <div className="kub-raise mx-3 mt-3 rounded-xl px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
           {SEARCH_FILTERS_UNAVAILABLE} {SEARCH_FILTERS_UNAVAILABLE_DETAIL}
+        </div>
+      )}
+
+      {search.phoneLimited && (
+        <div
+          className="kub-raise mx-3 mt-3 rounded-xl px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]"
+          role="status"
+          data-testid="search-phone-limited"
+        >
+          {SEARCH_PHONE_LIMITED}
         </div>
       )}
 

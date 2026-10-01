@@ -40,6 +40,7 @@ test.describe("presence privacy setting", () => {
   test("the switch is in the settings and states that reachability is unaffected", async ({ page }) => {
     const role = findFirstAvailableQaRole(["client", "owner", "tech_admin"], { includeDefault: true });
     test.skip(!role, "QA credentials or auth state are not configured");
+    test.skip(process.env.KUB_QA_ALLOW_MUTATIONS !== "1", "this toggles a stored preference; mutations must be explicitly enabled");
 
     await gotoOrSkip(page, "/");
     await loginAsRoleOrSkip(page, role);
@@ -87,7 +88,7 @@ test.describe("presence privacy setting", () => {
       // tests nothing; wait for the write to be acknowledged first.
       const saved = page.waitForResponse(
         (response) =>
-          response.url().includes("privacy_preferences") && response.request().method() === "POST",
+          response.url().includes("privacy_preferences") && response.request().method() === "PATCH",
       );
       await toggle.click();
       const flipped = initial === "true" ? "false" : "true";
@@ -104,7 +105,7 @@ test.describe("presence privacy setting", () => {
       if ((await current.getAttribute("aria-checked")) !== initial) {
         const restored = page.waitForResponse(
           (response) =>
-            response.url().includes("privacy_preferences") && response.request().method() === "POST",
+            response.url().includes("privacy_preferences") && response.request().method() === "PATCH",
         );
         await current.click();
         await expect(current).toHaveAttribute("aria-checked", initial ?? "true");

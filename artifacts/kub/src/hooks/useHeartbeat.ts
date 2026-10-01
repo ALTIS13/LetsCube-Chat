@@ -173,7 +173,7 @@ export function useHeartbeat(): void {
   const publishing = presencePublished({
     userId,
     answerFor: privacy.userId,
-    loading: privacy.loading,
+    loading: privacy.loading || !privacy.ready,
     presenceVisible: privacy.preferences.presenceVisible,
     manual: privacy.preferences.manualStatus,
     until: statusUntilMs(privacy.preferences.manualStatusUntil),

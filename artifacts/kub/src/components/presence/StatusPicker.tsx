@@ -83,6 +83,7 @@ export function StatusPicker({ onChosen }: { onChosen?: () => void }) {
               type="button"
               role="radio"
               aria-checked={selected}
+              disabled={!privacy.ready}
               aria-expanded={option.timed ? open : undefined}
               onClick={() => (option.timed ? setTiming(open ? null : option.id) : choose("online", null))}
               data-testid={`status-option-${option.id}`}
@@ -114,6 +115,7 @@ export function StatusPicker({ onChosen }: { onChosen?: () => void }) {
                   <button
                     key={duration.id}
                     type="button"
+                    disabled={!privacy.ready}
                     onClick={() => choose(option.id, statusUntil(duration, Date.now()))}
                     data-testid={`status-duration-${duration.id}`}
                     className={cn(

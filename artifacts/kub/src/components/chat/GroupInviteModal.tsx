@@ -59,8 +59,11 @@ import type { GroupInvite, Profile } from "@/types/database";
  *
  * The order is the mechanic, not the search box: people you already share a
  * chat with come first, taken from the chat list the store already holds. The
- * one route that would reach a stranger — `search_profiles_by_phone` — refuses
- * every caller without `users.view`, so nothing here offers or implies it.
+ * one route that would reach a stranger — `search_profiles_by_phone` — refused
+ * every caller without `users.view` when this was written, so nothing here
+ * offers or implies it. Since 2026-09-30 it answers anybody for a whole
+ * number, as its owner allows (tracker item 74), in the global search; this
+ * dialog still lists the people the inviter shares a chat with.
  *
  * Who may invite comes from `lib/chatInviteAccess.ts`, a measured copy of
  * `group_invite_create`'s four-branch gate, so an administrator the server
