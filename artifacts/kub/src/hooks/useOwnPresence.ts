@@ -3,7 +3,8 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { refreshPrivacyPreferences, usePrivacyPreferences } from "@/hooks/usePrivacyPreferences";
 import { voiceSelfIdSnapshot, voiceSpeakersSnapshot } from "@/hooks/useVoiceCall";
-import { ownStatus, statusUntilMs, type ManualStatus } from "@/lib/presenceStatus";
+import { manualStatusInForce, ownStatus, statusUntilMs, type ManualStatus } from "@/lib/presenceStatus";
+import { useAppStore } from "@/store/app.store";
 
 /**
  * This person's own presence on this device — tracker item 37. The rules are
@@ -33,6 +34,10 @@ let lastActivityAt = Date.now();
 const DEFAULT_INPUTS = { presenceVisible: true, manual: "online" as ManualStatus, until: null as number | null };
 let inputs = DEFAULT_INPUTS;
 let current: ManualStatus = "online";
+export type OwnAlertPolicy = "wait" | "quiet" | "allow";
+let alertOwner: string | null = null;
+let alertReady = false;
+let currentAlertPolicy: OwnAlertPolicy = "wait";
 const listeners = new Set<() => void>();
 const changeListeners = new Set<() => void>();
 
@@ -43,10 +48,13 @@ const changeListeners = new Set<() => void>();
  */
 function recompute(announce: boolean): void {
   const next = ownStatus({ ...inputs, lastActivityAt, now: Date.now() });
-  if (next === current) return;
+  const nextAlertPolicy = ownAlertPolicySnapshot();
+  const statusChanged = next !== current;
+  if (!statusChanged && nextAlertPolicy === currentAlertPolicy) return;
   current = next;
+  currentAlertPolicy = nextAlertPolicy;
   for (const listener of listeners) listener();
-  if (announce) for (const listener of changeListeners) listener();
+  if (announce && statusChanged) for (const listener of changeListeners) listener();
 }
 
 /** Something the person did. Coming back from idle is published at once. */
@@ -101,6 +109,18 @@ export function ownPresenceSnapshot(): ManualStatus {
   return current;
 }
 
+/** Private alert choice, not the public dot; callbacks evaluate expiry now. */
+export function ownAlertPolicySnapshot(expectedUserId: string | null = useAppStore.getState().currentUser?.id ?? null): OwnAlertPolicy {
+  const userId = useAppStore.getState().currentUser?.id ?? null;
+  if (!alertReady || !userId || userId !== expectedUserId || alertOwner !== userId) return "wait";
+  return manualStatusInForce(inputs.manual, inputs.until, Date.now()) === "dnd" ? "quiet" : "allow";
+}
+
+/** The same private decision, subscribed for a ring already in progress. */
+export function useOwnAlertPolicy(): OwnAlertPolicy {
+  return useSyncExternalStore(subscribe, ownAlertPolicySnapshot, ownAlertPolicySnapshot);
+}
+
 /**
  * The runtime: activity listeners, a tick every 30 seconds for what a listener
  * cannot hear (speech, a playing video, a status running out), and the inputs
@@ -112,6 +132,8 @@ export function useOwnPresenceRuntime(userId: string | null): void {
   const settled = privacy.ready && !privacy.loading && privacy.userId === userId && userId !== null;
 
   useEffect(() => {
+    alertOwner = settled ? userId : null;
+    alertReady = settled;
     inputs = settled
       ? {
           presenceVisible: privacy.preferences.presenceVisible,
@@ -120,7 +142,27 @@ export function useOwnPresenceRuntime(userId: string | null): void {
         }
       : DEFAULT_INPUTS;
     recompute(false);
+    let expiryTimer: number | null = null;
+    function armAlertExpiry(): void {
+      if (typeof window === "undefined" || !settled || inputs.manual !== "dnd" || inputs.until === null) return;
+      const remaining = inputs.until - Date.now();
+      if (remaining <= 0) return;
+      expiryTimer = window.setTimeout(onAlertExpiry, Math.min(remaining, 2_147_483_647));
+    }
+    function onAlertExpiry(): void {
+      expiryTimer = null;
+      recompute(true);
+      armAlertExpiry();
+    }
+    armAlertExpiry();
+    return () => {
+      if (expiryTimer !== null) window.clearTimeout(expiryTimer);
+      alertOwner = null;
+      alertReady = false;
+      recompute(false);
+    };
   }, [
+    userId,
     settled,
     privacy.preferences.manualStatus,
     privacy.preferences.manualStatusUntil,

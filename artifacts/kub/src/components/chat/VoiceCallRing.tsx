@@ -10,8 +10,7 @@ import { FOCUS_RING, PRESS_FILLED } from "@/lib/controlSurface";
 import { voiceRingState, voiceRingView } from "@/lib/voiceRing";
 import { groupRingView } from "@/lib/groupCall";
 import { answerGroupRing, declineGroupRing, useGroupRingPick } from "@/hooks/useGroupCalls";
-import { useOwnPresence } from "@/hooks/useOwnPresence";
-import { statusSilencesSound } from "@/lib/presenceStatus";
+import { useOwnAlertPolicy } from "@/hooks/useOwnPresence";
 import {
   answerVoiceRing,
   cancelVoiceRing,
@@ -159,7 +158,7 @@ export function VoiceCallRing() {
   );
   const [busy, setBusy] = useState(false);
   const { settings } = useAudioSettings();
-  const ownStatus = useOwnPresence();
+  const alertPolicy = useOwnAlertPolicy();
 
   const channelId = pick?.ring.channelId ?? groupPick?.call.channelId ?? null;
   const startedAt = pick?.ring.startedAt ?? groupPick?.rungAt ?? null;
@@ -203,7 +202,7 @@ export function VoiceCallRing() {
         : "idle",
     direction: pick?.direction ?? (groupPick ? "incoming" : null),
     // «Не беспокоить»: the band still shows who is calling, without the ring.
-    enabled: settings.callSoundEnabled && !statusSilencesSound(ownStatus),
+    enabled: settings.callSoundEnabled && alertPolicy === "allow",
   });
   // This component is mounted for the whole signed-in session, whether or not
   // anything is ringing, which makes it the one place a listener that has to

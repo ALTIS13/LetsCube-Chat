@@ -381,7 +381,8 @@ test("desktop notification delivery is owned by Notification Center realtime, no
   assert.match(notificationHook, /desktopBaselineLoadedRef/);
   assert.match(notificationHook, /refresh\(\{ presentNewDesktop: true \}\)/);
   assert.match(notificationHook, /closeDesktopNotificationForRow/);
-  assert.match(notificationHook, /presentedDesktopIdsRef\.current\.delete/);
+  assert.match(notificationHook, /const handled = presentedDesktopIdsRef\.current/);
+  assert.match(notificationHook, /if \(!delivered && !quiet\) handled\.delete/);
   assert.doesNotMatch(messagesHook, /showDesktopMessageNotification/);
 });
 

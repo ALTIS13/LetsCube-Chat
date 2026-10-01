@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { playNotificationSoundFor } from "@/hooks/useCallSound";
+import { ownAlertPolicySnapshot } from "@/hooks/useOwnPresence";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { mapPgError } from "@/lib/errors";
@@ -15,7 +16,7 @@ import {
   notificationPresentationTag,
   updateBrowserAppBadge,
 } from "@/lib/browserNotificationPresentation";
-import { isDesktopApp } from "@/lib/platform/desktop";
+import { getDesktopBridge, isDesktopApp } from "@/lib/platform/desktop";
 import { isNativeAndroid } from "@/lib/platform/capabilities";
 import { closeNativeChatNotification } from "@/lib/platform/nativePush";
 import {
@@ -71,13 +72,45 @@ export function useNotifications() {
   const trimmedDesktopIdsRef = useRef<Set<string>>(new Set());
   const presentedDesktopIdsRef = useRef<Set<string>>(new Set());
   const desktopBaselineLoadedRef = useRef(false);
+  const accountGenerationRef = useRef(0);
 
   const presentDesktopNotification = useCallback((row: Notification) => {
-    presentedDesktopIdsRef.current.add(row.id);
-    void showDesktopNotificationForRow(row).then((delivered) => {
-      if (!delivered) presentedDesktopIdsRef.current.delete(row.id);
+    if (!userId || row.user_id !== userId) return;
+    const handled = presentedDesktopIdsRef.current;
+    let quiet = false;
+    const mayDeliver = () => {
+      if (handled !== presentedDesktopIdsRef.current) return false;
+      const policy = ownAlertPolicySnapshot(userId);
+      if (policy === "quiet") quiet = true;
+      return policy === "allow";
+    };
+    if (!mayDeliver()) {
+      if (quiet) handled.add(row.id);
+      return;
+    }
+    handled.add(row.id);
+    void showDesktopNotificationForRow(row, async () => {
+      const bridge = getDesktopBridge();
+      if (!bridge) throw new Error("desktop_runtime_unavailable");
+      return {
+        // Foreground resolution above this boundary may have awaited a status/account change.
+        sendNotification: (payload) => mayDeliver() ? bridge.notify(payload) : Promise.resolve(false),
+      };
+    }).then((delivered) => {
+      if (!delivered && !quiet) handled.delete(row.id);
     });
-  }, []);
+  }, [userId]);
+
+  useEffect(() => {
+    accountGenerationRef.current += 1;
+    setItems([]);
+    unreadPresentationTagsRef.current = new Map();
+    unreadDesktopIdsRef.current = new Map();
+    trimmedDesktopIdsRef.current = new Set();
+    presentedDesktopIdsRef.current = new Set();
+    desktopBaselineLoadedRef.current = false;
+    return () => { accountGenerationRef.current += 1; };
+  }, [userId]);
 
   const markReadIds = useCallback(async (ids: string[], options: { silent?: boolean } = {}) => {
     const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
@@ -125,6 +158,7 @@ export function useNotifications() {
       setItems([]);
       return;
     }
+    const generation = accountGenerationRef.current;
     setLoading(true);
     bumpFetch("useNotifications");
     const { data, error: err } = await supabase
@@ -133,6 +167,7 @@ export function useNotifications() {
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(PAGE_SIZE);
+    if (generation !== accountGenerationRef.current || useAppStore.getState().currentUser?.id !== userId) return;
     setLoading(false);
     if (err) {
       setError(mapPgError(err));
@@ -175,6 +210,7 @@ export function useNotifications() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
         (payload) => {
+          if (cancelled || useAppStore.getState().currentUser?.id !== userId) return;
           const row = payload.new as Notification;
           if (row.kind === "chat_added" || row.kind === "group_invite") {
             dispatchChatsRefresh({
@@ -211,11 +247,13 @@ export function useNotifications() {
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
         (payload) => {
+          if (cancelled || useAppStore.getState().currentUser?.id !== userId) return;
           const row = payload.new as Notification;
           setItems((prev) => prev.map((n) => (n.id === row.id ? row : n)));
         },
       )
       .subscribe((status) => {
+        if (cancelled || useAppStore.getState().currentUser?.id !== userId) return;
         if (status !== "SUBSCRIBED") return;
         if (subscribedOnce) void refresh({ presentNewDesktop: true });
         subscribedOnce = true;

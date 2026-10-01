@@ -15,8 +15,7 @@ import {
   stopAllCallSounds,
 } from "@/lib/callSoundPlayer";
 import { getAudioSettings } from "@/hooks/useAudioSettings";
-import { ownPresenceSnapshot } from "@/hooks/useOwnPresence";
-import { statusSilencesSound } from "@/lib/presenceStatus";
+import { ownAlertPolicySnapshot } from "@/hooks/useOwnPresence";
 import { useAppStore } from "@/store/app.store";
 
 /**
@@ -87,7 +86,7 @@ export function playNotificationSoundFor(input: {
 }): void {
   const allowed = notificationSoundAllowed({
     // «Не беспокоить» (tracker item 37): notifications come without a sound.
-    enabled: getAudioSettings().notificationSoundEnabled && !statusSilencesSound(ownPresenceSnapshot()),
+    enabled: getAudioSettings().notificationSoundEnabled && ownAlertPolicySnapshot() === "allow",
     ringing: playingCallSound(),
     chatId: input.chatId,
     openChatId: useAppStore.getState().selectedChatId,
