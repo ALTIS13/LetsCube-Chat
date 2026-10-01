@@ -1,4 +1,5 @@
 import React from "react";
+import { readMentionEntities, type MentionEntity, type MessageMentionsV1 } from "./memberMentions.ts";
 
 import {
   botCommandMentionRuns,
@@ -44,10 +45,16 @@ const PATTERNS = [
 
 type Token =
   | { kind: "text"; value: string }
-  | { kind: "code" | "strike" | "bold" | "italic"; value: string }
+  | { kind: "code" | "strike" | "bold" | "italic"; value: string; valueOffset: number }
   | { kind: "url"; href: string }
-  | { kind: "mention"; user: string; lead: string }
-  | { kind: "command"; shown: string; send: string };
+  | { kind: "mention"; user: string }
+  | { kind: "command"; shown: string; send: string }
+  | { kind: "memberMention"; entity: MentionEntity };
+
+export interface MemberMentionsInText {
+  entities: MessageMentionsV1;
+  onOpen: (entity: MentionEntity, trigger: HTMLElement) => void;
+}
 
 /**
  * What a chat needs to know before a `/command` in it is anything but text
@@ -112,11 +119,13 @@ function nextCommandMatch(
   return null;
 }
 
-function nextMatch(input: string, bot: BotCommandsInText | null): { start: number; len: number; token: Token } | null {
+function nextMatch(input: string, bot: BotCommandsInText | null, members: MemberMentionsInText | null, offset: number): { start: number; len: number; token: Token } | null {
   let best: { start: number; len: number; token: Token } | null = null;
+  const member = members?.entities.items.find((entity) => entity.offset >= offset && entity.offset + entity.length <= offset + input.length);
+  if (member) best = { start: member.offset - offset, len: member.length, token: { kind: "memberMention", entity: member } };
   if (bot) {
     const command = nextCommandMatch(input, bot);
-    if (command) best = command;
+    if (command && (!best || command.start < best.start)) best = command;
   }
   for (const { name, re } of PATTERNS) {
     const m = re.exec(input);
@@ -130,7 +139,7 @@ function nextMatch(input: string, bot: BotCommandsInText | null): { start: numbe
       case "strike":
       case "bold":
       case "italic":
-        token = { kind: name, value: m[1] };
+        token = { kind: name, value: m[1], valueOffset: offset + m.index + (name === "bold" || name === "strike" ? 2 : 1) };
         break;
       case "url":
         token = { kind: "url", href: m[0] };
@@ -138,7 +147,7 @@ function nextMatch(input: string, bot: BotCommandsInText | null): { start: numbe
       case "mention":
         // m[1] is leading whitespace (or empty at line start); we want to
         // preserve it as plain text, not consume it as part of the mention.
-        token = { kind: "mention", user: m[2], lead: m[1] };
+        token = { kind: "mention", user: m[2] };
         start += m[1].length;
         consumed = m[0].length - m[1].length;
         break;
@@ -150,12 +159,12 @@ function nextMatch(input: string, bot: BotCommandsInText | null): { start: numbe
   return best;
 }
 
-function tokenize(input: string, bot: BotCommandsInText | null): Token[] {
+function tokenize(input: string, bot: BotCommandsInText | null, members: MemberMentionsInText | null = null, offset = 0): Token[] {
   const out: Token[] = [];
   let cursor = 0;
   while (cursor < input.length) {
     const slice = input.slice(cursor);
-    const hit = nextMatch(slice, bot);
+    const hit = nextMatch(slice, bot, members, offset + cursor);
     if (!hit) {
       out.push({ kind: "text", value: slice });
       break;
@@ -214,8 +223,21 @@ export function isLocationPreviewMessage(content: string): boolean {
   return parseLocationPreview(content) !== null;
 }
 
-function renderToken(t: Token, key: number, bot: BotCommandsInText | null): React.ReactNode {
+function renderToken(t: Token, key: number, bot: BotCommandsInText | null, members: MemberMentionsInText | null = null): React.ReactNode {
+  const formattedChildren = () => {
+    if (!("valueOffset" in t) || !members?.entities.items.some((entity) => entity.offset >= t.valueOffset
+      && entity.offset + entity.length <= t.valueOffset + t.value.length)) return "value" in t ? t.value : null;
+    return tokenize(t.value, bot, members, t.valueOffset).map((child, index) => renderToken(child, index, bot, members));
+  };
   switch (t.kind) {
+    case "memberMention":
+      return <button key={key} type="button" data-member-mention={t.entity.kind === "user" ? t.entity.user_id : t.entity.bot_id}
+        aria-label={`Открыть профиль ${t.entity.label.slice(1)}`}
+        className="pointer-events-auto inline cursor-pointer bg-transparent p-0 font-medium [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+        style={{ color: LINK_COLOR }} onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => { event.preventDefault(); event.stopPropagation(); members?.onOpen(t.entity, event.currentTarget); }}>
+        {t.entity.label}
+      </button>;
     case "command":
       return (
         <button
@@ -244,9 +266,9 @@ function renderToken(t: Token, key: number, bot: BotCommandsInText | null): Reac
     case "text":
       return <React.Fragment key={key}>{t.value}</React.Fragment>;
     case "bold":
-      return <strong key={key}>{t.value}</strong>;
+      return <strong key={key}>{formattedChildren()}</strong>;
     case "italic":
-      return <em key={key}>{t.value}</em>;
+      return <em key={key}>{formattedChildren()}</em>;
     case "code":
       return (
         <code
@@ -258,7 +280,7 @@ function renderToken(t: Token, key: number, bot: BotCommandsInText | null): Reac
         </code>
       );
     case "strike":
-      return <s key={key}>{t.value}</s>;
+      return <s key={key}>{formattedChildren()}</s>;
     case "url":
       return (
         <a
@@ -274,10 +296,7 @@ function renderToken(t: Token, key: number, bot: BotCommandsInText | null): Reac
       );
     case "mention":
       return (
-        <React.Fragment key={key}>
-          {t.lead}
-          <span className="font-medium" style={{ color: LINK_COLOR }}>@{t.user}</span>
-        </React.Fragment>
+        <span key={key} className="font-medium" style={{ color: LINK_COLOR }}>@{t.user}</span>
       );
   }
 }
@@ -285,6 +304,7 @@ function renderToken(t: Token, key: number, bot: BotCommandsInText | null): Reac
 export function FormattedText({
   content,
   bot = null,
+  members = null,
 }: {
   content: string;
   /**
@@ -295,7 +315,9 @@ export function FormattedText({
    * for a command is not run at all.
    */
   bot?: BotCommandsInText | null;
+  members?: MemberMentionsInText | null;
 }) {
+  const validatedMembers = members ? { ...members, entities: readMentionEntities(content, members.entities) } : null;
   const location = parseLocationPreview(content);
   if (location) {
     return (
@@ -317,10 +339,12 @@ export function FormattedText({
 
   // Preserve line breaks while still letting tokens span within a line.
   const lines = content.split("\n");
+  let offset = 0;
   return (
     <>
       {lines.map((line, lineIdx) => {
-        const nodes = tokenize(line, bot).map((token, index) => renderToken(token, index, bot));
+        const nodes = tokenize(line, bot, validatedMembers, offset).map((token, index) => renderToken(token, index, bot, validatedMembers));
+        offset += line.length + 1;
         return (
           <React.Fragment key={lineIdx}>
             {nodes}

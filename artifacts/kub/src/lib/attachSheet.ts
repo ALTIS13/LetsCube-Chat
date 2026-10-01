@@ -270,6 +270,7 @@ export interface AttachSendRequest {
    */
   photoQuality: MediaQuality;
   caption: string;
+  mentionEntities?: import("./memberMentions").MessageMentionsV1;
   source: IncomingFilesSource;
   /**
    * For a file the sheet replaced with a smaller one, the size of what was

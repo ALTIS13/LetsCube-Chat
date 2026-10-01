@@ -1,4 +1,5 @@
 import type { StagedAttachment } from "./stagedAttachments.ts";
+import type { MessageMentionsV1 } from "./memberMentions.ts";
 
 /**
  * Attachments on their way, owned by the application rather than by a chat's
@@ -32,6 +33,7 @@ export interface OutgoingMediaEntry {
   readonly replyToId: string | null;
   /** The caption this attachment carries, or null. */
   readonly caption: string | null;
+  readonly mentionEntities?: MessageMentionsV1;
   readonly attachment: StagedAttachment;
   /** The placeholder's own time, so a retry keeps its place in the order. */
   readonly clientSentAt: string;
@@ -63,9 +65,23 @@ export function outgoingTempId(clientMessageId: string): string {
 }
 
 export function rememberOutgoing(entry: OutgoingMediaEntry, { persist = true }: { persist?: boolean } = {}): void {
-  entries.set(entry.tempId, entry);
+  const snapshot = snapshotOutgoingEntry(entry);
+  entries.set(entry.tempId, snapshot);
   cancelled.delete(entry.attachment.id);
-  if (persist) persistence?.save(entry);
+  if (persist) persistence?.save(snapshot);
+}
+
+/** Keep caption identities immutable without cloning the attachment's bytes. */
+export function snapshotOutgoingEntry(entry: OutgoingMediaEntry): OutgoingMediaEntry {
+  if (entry.mentionEntities === undefined && entry.attachment.mentionEntities === undefined) return entry;
+  return {
+    ...entry,
+    ...(entry.mentionEntities === undefined ? {} : { mentionEntities: structuredClone(entry.mentionEntities) }),
+    attachment: {
+      ...entry.attachment,
+      ...(entry.attachment.mentionEntities === undefined ? {} : { mentionEntities: structuredClone(entry.attachment.mentionEntities) }),
+    },
+  };
 }
 
 export function outgoingEntry(tempId: string): OutgoingMediaEntry | null {

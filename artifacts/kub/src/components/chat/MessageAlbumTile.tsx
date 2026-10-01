@@ -18,6 +18,9 @@ import { signedMediaUrls } from "@/lib/media/mediaUrl";
 import type { MessageWithSender } from "@/types/database";
 import { getVisibleMediaCaption } from "./MessageBubble";
 import { OutgoingUploadPercent, OutgoingUploadRing } from "./OutgoingUploadRing";
+import { FormattedText } from "@/lib/formatText";
+import { createMentionText, trimMentionText } from "@/lib/memberMentions";
+import { useMemberMentionActions } from "@/hooks/useMemberMentions";
 
 const subscribeToMediaUrls = (listener: () => void) => signedMediaUrls().subscribe(listener);
 
@@ -77,6 +80,11 @@ export const MessageAlbumTile = React.memo(function MessageAlbumTile({
       : null;
   const failedPreview = Boolean(previewUrl && failedImageUrls.has(previewUrl));
   const caption = getVisibleMediaCaption(message);
+  const onOpenMention = useMemberMentionActions(message.chat_id, isSelectionMode || Boolean(message.deleted_at));
+  const captionMentions = isSelectionMode || message.deleted_at ? null : {
+    entities: trimMentionText(createMentionText(message.content ?? "", message.mention_entities)).mentionEntities,
+    onOpen: onOpenMention,
+  };
   const reactions = groupReactions(message.reactions, userId);
   const forwardedFrom = forwardOriginName({
     forwardedFromId: message.forwarded_from_id,
@@ -171,8 +179,10 @@ export const MessageAlbumTile = React.memo(function MessageAlbumTile({
         </div>
       )}
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/70 px-2 pb-1 pt-1.5 text-white">
-        {caption && <div className={`overflow-hidden text-ellipsis text-[12px] leading-tight ${compact ? "whitespace-nowrap" : "line-clamp-2"}`} title={caption}>{caption}</div>}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/70 px-2 pb-1 pt-1.5 text-white [--kub-accent-text:#c7d2fe]">
+        {caption && <div className={`overflow-hidden text-ellipsis text-[12px] leading-tight ${compact ? "whitespace-nowrap" : "line-clamp-2"}`} title={caption}>
+          <FormattedText content={caption} members={captionMentions} />
+        </div>}
         <div className="flex min-h-[14px] items-center justify-end gap-1 text-[11px] leading-none tabular-nums">
           {message.pinned && <KubIcon name="pin" size={11} label="Закреплено" />}
           {message.edited_at && <span title="изменено">изм.</span>}

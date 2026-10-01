@@ -4,8 +4,15 @@ import { DISABLED_SINK, DISABLED_SINK_FILLED, FOCUS_RING, FOCUS_RING_WITHIN, PRE
 import { photoSendQualityBadge, photoSendQualitySentence } from "@/lib/mediaQuality";
 import { enterSendsHere } from "@/lib/composerEnter";
 import { cn } from "@/lib/utils";
+import { useMemberMentionPicker } from "@/hooks/useMemberMentions";
+import { MemberMentionMenu } from "../MemberMentionMenu";
+import type { MentionText } from "@/lib/memberMentions";
 
 interface AttachSendBarProps {
+  chatId?: string;
+  topicId?: string | null;
+  snapshot?: MentionText;
+  onSnapshotChange?: (snapshot: MentionText) => void;
   /** The button's accessible name, which is where the count is said: «Отправить 3 фото». */
   sendLabel: string;
   caption: string;
@@ -37,11 +44,14 @@ interface AttachSendBarProps {
 /** Five lines of the caption before it scrolls: 20px of padding and 24px a line. */
 const CAPTION_MAX_HEIGHT = 20 + 24 * 5;
 
-export function AttachSendBar({ sendLabel, caption, onCaptionChange, onSend, hdAvailable, hd, onHdChange, busy }: AttachSendBarProps) {
+export function AttachSendBar({ chatId = "", topicId = null, snapshot, onSnapshotChange, sendLabel, caption, onCaptionChange, onSend, hdAvailable, hd, onHdChange, busy }: AttachSendBarProps) {
   // A field of lines, as both Telegrams' captions are, because the composer's
   // text arrives here whole (tracker item 65): a one-line input drops every
   // line break a browser hands it.
   const captionRef = useRef<HTMLTextAreaElement>(null);
+  const picker = useMemberMentionPicker(chatId, topicId,
+    snapshot ?? { content: caption, mentionEntities: { version: 1, revision: null, items: [] } },
+    (value) => onSnapshotChange?.(value), captionRef, busy || !snapshot || !onSnapshotChange);
   useLayoutEffect(() => {
     const field = captionRef.current;
     if (!field) return;
@@ -52,7 +62,8 @@ export function AttachSendBar({ sendLabel, caption, onCaptionChange, onSend, hdA
   // The composer's own rule: Enter sends and Shift+Enter starts a line, and on
   // a phone Enter starts a line and the arrow sends (tracker item 71).
   const handleCaptionKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing || !enterSendsHere()) return;
+    if (picker.onKeyDown(event)) return;
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || !enterSendsHere()) return;
     event.preventDefault();
     if (!busy) onSend();
   };
@@ -62,17 +73,27 @@ export function AttachSendBar({ sendLabel, caption, onCaptionChange, onSend, hdA
       data-attach-send-bar="floating"
       // Half its resting height as the radius: a pill on one line, and a
       // rounded box rather than a stretched pill when the caption grows.
-      className="relative flex min-h-[3.25rem] items-end gap-2 rounded-[1.625rem] py-1 pl-4 pr-1"
+      // Keep file rows out of the field while the capsule moves or they scroll
+      // beneath it; the glass layer still paints its edge and shadow.
+      className="relative flex min-h-[3.25rem] items-end gap-2 rounded-[1.625rem] bg-[var(--kub-surface-3)] py-1 pl-4 pr-1"
     >
       <KubGlassLayer className="rounded-[1.625rem] border border-[color:var(--glass-line)]" />
+      {picker.open && <div className="absolute inset-x-0 bottom-full mb-2 z-10">
+        <MemberMentionMenu id={picker.listId} candidates={picker.matches} activeIndex={picker.selectedIndex} onChoose={picker.choose} />
+      </div>}
       <label className={cn("relative flex min-w-0 flex-1 items-center rounded-[1.25rem]", FOCUS_RING_WITHIN)}>
         <span className="sr-only">Подпись</span>
         <textarea
           ref={captionRef}
+          {...picker.fieldAttributes}
           rows={1}
           value={caption}
-          onChange={(event) => onCaptionChange(event.target.value)}
+          onChange={(event) => { if (!picker.onChange(event)) onCaptionChange(event.target.value); picker.observeSelection(); }}
+          onSelect={picker.observeSelection}
+          onCompositionStart={picker.onCompositionStart}
+          onCompositionEnd={picker.onCompositionEnd}
           onKeyDown={handleCaptionKeyDown}
+          onPaste={picker.onPaste}
           placeholder="Добавить подпись…"
           enterKeyHint="send"
           data-testid="attach-caption"

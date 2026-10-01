@@ -1,4 +1,5 @@
 import type { Json, MessageWithSender, Profile } from "../types/database.ts";
+import { emptyMessageMentions, type MessageMentionsV1 } from "./memberMentions.ts";
 
 export type SendableMessageType = Extract<MessageWithSender["type"], "text" | "image" | "video" | "audio" | "file">;
 
@@ -8,6 +9,7 @@ export interface OptimisticMessageInput {
   user: Profile;
   type: SendableMessageType;
   content: string | null;
+  mentionEntities?: MessageMentionsV1;
   mediaBucket?: string | null;
   mediaPath?: string | null;
   mediaUrl?: string | null;
@@ -39,6 +41,7 @@ export function buildOptimisticMessage(input: OptimisticMessageInput): MessageWi
     bot_input_field_placeholder: null,
     bot_reply_markup: null,
     content: input.content,
+    ...{ mention_entities: { ...structuredClone(input.mentionEntities ?? emptyMessageMentions()) } },
     type: input.type,
     // Never anything else on a row a client wrote: the column is only ever
     // set by `voice_call_stop`, on a `system` row nothing here can produce.

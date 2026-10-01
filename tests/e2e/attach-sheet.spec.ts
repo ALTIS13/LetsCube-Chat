@@ -181,7 +181,7 @@ test.describe("the attach sheet (D-122)", () => {
     expect(backend.inserts[0]).toMatchObject({ type: "image", content: typed });
     // Spent: not left behind to go a second time as a message of its own.
     await expect(composer).toHaveValue("");
-    expect(await page.evaluate((id) => localStorage.getItem(`kub:draft:${id}`), CHAT_ID)).toBeNull();
+    expect(await page.evaluate(({ userId, chatId }) => localStorage.getItem(`kub:draft:v2:${userId}:${chatId}`), { userId: USER_ID, chatId: CHAT_ID })).toBeNull();
   });
 
   test("closing the sheet without sending gives the composer back what it had", async ({ page }) => {
@@ -194,7 +194,7 @@ test.describe("the attach sheet (D-122)", () => {
     let sheet = await openSheet(page);
     await expect(composer).toHaveValue("");
     // Held, it is still the chat's draft: a reload now would not lose it.
-    expect(await page.evaluate((id) => localStorage.getItem(`kub:draft:${id}`), CHAT_ID)).toBe("Витрина после монтажа");
+    expect(await page.evaluate(({ userId, chatId }) => JSON.parse(localStorage.getItem(`kub:draft:v2:${userId}:${chatId}`) ?? "null")?.content, { userId: USER_ID, chatId: CHAT_ID })).toBe("Витрина после монтажа");
     await page.keyboard.press("Escape");
     await expect(sheet).toHaveCount(0);
     await expect(composer).toHaveValue("Витрина после монтажа");

@@ -1,5 +1,26 @@
 # QA Results
 
+## 2026-10-01 - Member Mentions And Account Isolation Web Candidate
+
+The final frozen source passed typecheck, production build (`sw.js build
+b2e67dbde156af9d`, 41.03s) and **4787/4787** unit tests, zero failures,
+cancellations or skips. The 93-case mounted Chromium desktop/mobile and WebKit
+matrix passed; final document/album activation and composer/caption refresh
+passed 12/12, with all 16 synthetic images inspected at 390/1440 in both themes.
+The native-observer feedback and delayed child-layout defects have actual
+red/green/omission controls; painted frames also pass with observer delivery
+deliberately disabled. Album mentions retain real pointer activation and at
+least 4.5:1 contrast on the worst backdrop, not just a clickable-looking label.
+
+Stable-UUID admission and recipient eligibility were accepted on a full fresh
+isolated database restore, then in an authenticated live transaction rolled
+back without committed fixtures. The guarded SQL and compatible Edge entrypoint
+are applied; notification-row/HTTP proof is not OS push receipt. The API build
+and 357 server tests are reused because their inputs did not change. No native
+build, install, publication, physical iPhone receipt or Android acceptance is
+claimed; Android remains on hold. Independent web deployment verification is
+the remaining gate. [Evidence and next stage](operations/2026-10-01-implementation.md).
+
 ## 2026-09-27 - Ordinary Member Contacts And Channel Web Rollout
 
 The private contacts migration was applied after a verified production backup,

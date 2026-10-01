@@ -23,18 +23,31 @@ Read in this order:
    measurement. Search it before filing anything.
 
 **Active resume, 2026-10-01 (Codex implementation).** Owner: this Codex chat. Stage:
-item 74 web rollout and D-331 preparation, not a native release. Main checkout is
-`69d3dcbe`, with the reviewed item 74 client integrated; the healthy web image
-is still `29176d72` until rollout verification below. Claude's separate
-`.worktrees/bot-platform` holds a
-reviewed item 74 candidate (phone lookup, privacy setting and migration).
-Its database migration is applied after a verified full-backup restore rehearsal,
-exact prestate guard and independent review. The client is integrated and awaits
-verified web deployment; do not confuse applied SQL with a released UI.
+D-331 / D-332 final client verification, not a native release. Main `bde5b8ed` is the sole healthy
+web image. Item 74 is released: guarded SQL, independent fresh-backup restore,
+authenticated RLS checks, reviewed client integration, exact public/container
+artifact parity and read-only settings smoke in Chromium desktop/mobile and
+WebKit mobile. Claude's preserved candidate is on the pushed
+`codex/phone-findability-20261001` branch; its foreign document deletion remains
+unstaged. Do not repeat the closed phone stage.
 All seven voice notes since 2026-09-27 were transcribed locally and reconciled
 with existing tasks; the new member-mention report is D-331 / item 75.
-Next: verify the deployed web, then implement
-D-331 using the [mentions contract](operations/2026-10-01-member-mentions-contract.md);
+The guarded mention SQL and compatible Edge entrypoint are applied; fresh full
+restore and rolled-back authenticated live acceptance passed. Server source is
+committed locally as `26a274cb`; the client is not published. Account-epoch
+isolation, caption/outbox ownership and stale edit/history responses are covered
+by focused regressions. The WebKit observer feedback and attachment first-focus
+gap are fixed. The 93-case mounted matrix passed, followed by document/album
+caption hit-testing and inspected 390/1440 dark/light pixels. A later full run
+exposed a real delayed composer inset; the earlier 4786/4786 result is not the
+final release gate. Direct child-layout measurement now passes normal and
+observer-disabled painted-frame checks, and its omission fails all four cases.
+Final frozen-source typecheck and production build passed; the full unit gate
+passed 4787/4787 with zero failures, cancellations or skips. Final pixel refresh
+passed 12/12; all 16 composer/caption/document/album images were inspected at
+390/1440 in both themes. Web publication is the remaining gate.
+Next: review/push and independently prove web deployment
+using the [mentions contract](operations/2026-10-01-member-mentions-contract.md);
 do not repeat closed voice, Enter, folder and channel
 work. Android build/install/publication remains on hold. Current evidence,
 tools, outstanding stages and the private-intake boundary are in the

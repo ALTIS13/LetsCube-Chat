@@ -112,7 +112,6 @@ import {
   commitPreparedStagedAttachments,
   markStagedAttachmentSendFailed,
   runScopedStagedPreparation,
-  runScopedStagedSendAttempt,
   selectStagedAttachmentsForSend,
   transitionStagedAttachmentChat,
   type StagedUploadScopeToken,
@@ -133,13 +132,19 @@ import {
   outgoingEntry,
   outgoingTempId,
   rememberOutgoing,
+  type OutgoingMediaEntry,
 } from "@/lib/outgoingMedia";
+import { browserOutboxStorage } from "@/lib/outbox/outboxStorage";
+import type { OutboxEntry } from "@/lib/outbox/outboxRules";
+import { appOutbox } from "@/lib/outbox/appOutbox";
 import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
 import { useChannelPreviews } from "@/hooks/useChannelPreviews";
 import { useChannelUnread } from "@/hooks/useChannelUnread";
 import { channelReadKey } from "@/lib/channelUnread";
 import { scheduleMarkChannelRead } from "@/lib/channelReadMarks";
 import type { Json, MessageWithSender } from "@/types/database";
+import { createMentionText, emptyMessageMentions, trimMentionText, type MessageMentionsV1 } from "@/lib/memberMentions";
+import { buildOptimisticMessage } from "@/lib/optimisticMessage";
 import { uploadAttachmentBytes } from "@/lib/attachmentUpload";
 import { WAITING_UPLOAD_SWEEP_MS } from "@/lib/outbox/backgroundUploads";
 import { useReloadGuard } from "@/hooks/useReloadGuard";
@@ -147,6 +152,18 @@ import { useReloadGuard } from "@/hooks/useReloadGuard";
 interface ChatWindowProps {
   chatId: string;
 }
+
+interface CaptionPrefixOwner {
+  userId: string;
+  row: MessageWithSender;
+  accepted: boolean;
+  attempt?: Promise<MessageWithSender | null>;
+}
+
+// Client-only linkage; the existing media serializer keeps it, never the RPC payload.
+type CaptionLinkedMedia = OutgoingMediaEntry & {
+  captionPrefix?: { entry: OutboxEntry; accepted: boolean };
+};
 
 const EMPTY_GENERAL_TOPIC_IDS: string[] = [];
 
@@ -274,7 +291,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
    * step past the oldest loaded picture asks for.
    */
   const [openMediaId, setOpenMediaId] = useState<string | null>(null);
-  const [draftRestore, setDraftRestore] = useState<{ id: string; text: string } | null>(null);
+  const [draftRestore, setDraftRestore] = useState<{ id: string; text: string; mentionEntities?: MessageMentionsV1 } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   // Both pieces of chrome run over the conversation, so both have to report the
   // height the list pads itself by. The composer is the one that moves most —
@@ -299,6 +316,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   const restingVisualHeightRef = useRef<number | null>(null);
   const stagedAttachmentsRef = useRef<StagedAttachment[]>([]);
+  const captionPrefixOwnersRef = useRef(new Map<string, CaptionPrefixOwner>());
   const cancelledAttachmentIdsRef = useRef<Set<string>>(new Set());
   const uploadRegistryRef = useRef<ReturnType<typeof createStagedUploadHandleRegistry> | null>(null);
   const uploadScopeRef = useRef<ReturnType<typeof createStagedUploadScope> | null>(null);
@@ -378,6 +396,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   // row would otherwise go out as whoever signed in next.
   const abortUploadsIfAccountChanged = useCallback(() => {
     if (useAppStore.getState().currentUser?.id === userId) return;
+    captionPrefixOwnersRef.current.clear();
     void uploadRegistry.abortAll();
     // D-314: the placeholders of the account that left go with its uploads,
     // from every conversation they were put in.
@@ -1092,257 +1111,373 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     // A placeholder sent again (D-314): its reply, topic and place in the
     // order are the ones it was first sent with, not the view's.
     origin?: { replyToId: string | null; topicId: string | null | undefined; clientSentAt: string },
+    mentionEntities?: MessageMentionsV1,
   ): Promise<boolean> => {
     if (!userId) {
       showAppAlert("Войдите в аккаунт, чтобы отправлять файлы.", "Вложения");
       return false;
     }
 
-    const scopeToken = uploadScope.capture();
-    // D-314: from the press on, this send belongs to the chat and the topic it
-    // was pressed in and to the account that pressed it, not to what is on
-    // screen when the upload finishes.
-    const sendChatId = scopeToken.chatId;
-    const sendTopicId = origin ? origin.topicId : messageTopicId;
-    const sameAccount = () => useAppStore.getState().currentUser?.id === userId;
-    const captionText = caption.trim();
-    const targets = prepareMediaAlbumTargets(selectStagedAttachmentsForSend(
-      explicitTargets ?? stagedAttachmentsRef.current,
-      onlyAttachmentId,
-    ));
-    if (!targets.length) return false;
-
-    // D-286: from here the caption belongs to the attachment, not to this
-    // call. The attach sheet closes on send and keeps nothing; the composer
-    // restores what it cleared, but a sheet has nowhere to restore to. Without
-    // this the retry of a failed send had no caption to send.
-    const captionCarrier = captionCarrierId(targets, captionText, false);
-    for (const attachment of targets) {
-      updateStagedAttachment(attachment.id, (current) => ({
-        ...current,
-        caption: attachment.id === captionCarrier ? captionText : null,
-        albumId: attachment.albumId,
-        albumIndex: attachment.albumIndex,
-        albumCount: attachment.albumCount,
-      }));
-    }
-
-    let sentAny = false;
-    const firstTarget = targets[0];
-    if (captionText && (firstTarget?.kind === "voice" || firstTarget?.kind === "video_message")) {
-      const textResult = await runScopedStagedSendAttempt(
-        uploadScope,
-        scopeToken,
-        () => sendMessage(captionText, replyTo?.id ?? undefined),
-      );
-      if (textResult.status === "stale") return false;
-      if (textResult.status === "failed") {
-        updateStagedAttachment(firstTarget.id, (current) =>
-          markStagedAttachmentSendFailed(current, current.uploaded)
-        );
-        return false;
+    let accountEpoch = 0;
+    const sendEpoch = accountEpoch;
+    const stopAccountWatch = useAppStore.subscribe((state, previous) => {
+      if (state.currentUser?.id !== previous.currentUser?.id) {
+        accountEpoch += 1;
+        captionPrefixOwnersRef.current.clear();
       }
-      sentAny = true;
-      // The caption is a message of its own now, so the attachment must not
-      // send it a second time when it is retried.
-      if (captionCarrier) {
-        updateStagedAttachment(captionCarrier, (current) => ({ ...current, caption: null }));
+    });
+    const sameAccount = () => accountEpoch === sendEpoch && useAppStore.getState().currentUser?.id === userId;
+    try {
+      if (!sameAccount()) return false;
+      const scopeToken = uploadScope.capture();
+      // D-314: from the press on, this send belongs to the chat and the topic it
+      // was pressed in and to the account that pressed it, not to what is on
+      // screen when the upload finishes.
+      const sendChatId = scopeToken.chatId;
+      const sendTopicId = origin ? origin.topicId : messageTopicId;
+      const captionSnapshot = trimMentionText(createMentionText(caption, mentionEntities ?? explicitTargets?.[0]?.mentionEntities));
+      const captionText = captionSnapshot.content;
+      const targets = prepareMediaAlbumTargets(selectStagedAttachmentsForSend(
+        explicitTargets ?? stagedAttachmentsRef.current,
+        onlyAttachmentId,
+      ));
+      if (!targets.length) return false;
+
+      // D-286: from here the caption belongs to the attachment, not to this
+      // call. The attach sheet closes on send and keeps nothing; the composer
+      // restores what it cleared, but a sheet has nowhere to restore to. Without
+      // this the retry of a failed send had no caption to send.
+      const captionCarrier = captionCarrierId(targets, captionText, false);
+      const claimCaption = (owner: StagedAttachment) => {
+        for (const target of targets) {
+          const carried = target.id === owner.id ? captionText : null;
+          updateStagedAttachment(target.id, (current) => ({ ...current, caption: carried,
+            mentionEntities: carried ? captionSnapshot.mentionEntities : undefined }));
+          const tempId = outgoingTempId(target.clientMessageId);
+          const entry = outgoingEntry(tempId);
+          if (!entry) continue;
+          rememberOutgoing({ ...entry, caption: carried,
+            mentionEntities: carried ? captionSnapshot.mentionEntities : undefined,
+            attachment: { ...entry.attachment, caption: carried, mentionEntities: carried ? captionSnapshot.mentionEntities : undefined } });
+          patchOutgoingPlaceholder(sendChatId, tempId, (message) => ({ ...message,
+            content: getStagedAttachmentMessageContent(target, carried),
+            mention_entities: carried ? { ...captionSnapshot.mentionEntities } : { ...emptyMessageMentions() } }));
+        }
+      };
+      for (const attachment of targets) {
+        updateStagedAttachment(attachment.id, (current) => ({
+          ...current,
+          caption: attachment.id === captionCarrier ? captionText : null,
+          mentionEntities: attachment.id === captionCarrier ? captionSnapshot.mentionEntities : undefined,
+          albumId: attachment.albumId,
+          albumIndex: attachment.albumIndex,
+          albumCount: attachment.albumCount,
+        }));
       }
-    }
 
-    const replyToId = origin ? origin.replyToId : replyTo?.id ?? null;
+      let sentAny = false;
+      let captionAllocated = false;
+      const firstTarget = targets[0];
+      const replyToId = origin ? origin.replyToId : replyTo?.id ?? null;
+      const originalEntry = firstTarget ? outgoingEntry(outgoingTempId(firstTarget.clientMessageId)) as CaptionLinkedMedia | null : null;
+      const restoredPrefix = originalEntry?.captionPrefix;
+      if (firstTarget && restoredPrefix?.entry.userId === userId && restoredPrefix.entry.chatId === sendChatId &&
+          !captionPrefixOwnersRef.current.has(firstTarget.id)) {
+        const author = useAppStore.getState().currentUser;
+        if (!author || !sameAccount()) return false;
+        const entry = restoredPrefix.entry;
+        const shown = useAppStore.getState().messages[sendChatId]?.find((message) =>
+          message.user_id === userId && message.client_message_id === entry.clientMessageId);
+        captionPrefixOwnersRef.current.set(firstTarget.id, { userId,
+          accepted: restoredPrefix.accepted || Boolean(shown && !shown.failed && !shown.pending && !shown.checking),
+          row: { ...buildOptimisticMessage({ chatId: entry.chatId, topicId: entry.topicId, user: author,
+            type: "text", content: entry.content, mentionEntities: entry.mentionEntities, replyToId: entry.replyToId,
+            clientMessageId: entry.clientMessageId, clientSentAt: entry.clientSentAt, tempId: entry.tempId }),
+            pending: false, failed: true } });
+      }
+      // An explicit empty composer snapshot is not a staged-only retry.
+      if (firstTarget && !captionText && mentionEntities !== undefined) {
+        const prefixOwner = captionPrefixOwnersRef.current.get(firstTarget.id);
+        if (prefixOwner?.userId === userId && !prefixOwner.accepted && !prefixOwner.attempt) {
+          captionPrefixOwnersRef.current.delete(firstTarget.id);
+          if (originalEntry) {
+            const { captionPrefix: _prefix, ...unlinked } = originalEntry;
+            rememberOutgoing(unlinked);
+          }
+        }
+      }
+      if (firstTarget && (firstTarget.kind === "voice" || firstTarget.kind === "video_message") &&
+          (captionText || captionPrefixOwnersRef.current.has(firstTarget.id))) {
+        let prefixOwner = captionPrefixOwnersRef.current.get(firstTarget.id);
+        if (prefixOwner?.userId !== userId) prefixOwner = undefined;
+        if (!prefixOwner) {
+          const author = useAppStore.getState().currentUser;
+          if (!author || !sameAccount()) return false;
+          const clientMessageId = crypto.randomUUID();
+          prefixOwner = { userId, accepted: false, row: {
+            ...buildOptimisticMessage({ chatId: sendChatId, topicId: sendTopicId ?? null, user: author,
+              type: "text", content: captionText, mentionEntities: captionSnapshot.mentionEntities,
+              replyToId, clientMessageId, clientSentAt: new Date().toISOString(), tempId: outgoingTempId(clientMessageId) }),
+            pending: false, failed: true,
+          } };
+          captionPrefixOwnersRef.current.set(firstTarget.id, prefixOwner);
+        } else if (!prefixOwner.accepted && !prefixOwner.attempt && captionText &&
+            (captionText !== prefixOwner.row.content || (mentionEntities !== undefined &&
+              captionSnapshot.mentionEntities.revision !== createMentionText(prefixOwner.row.content ?? "", prefixOwner.row.mention_entities).mentionEntities.revision))) {
+          prefixOwner.row = { ...prefixOwner.row, content: captionText, mention_entities: { ...captionSnapshot.mentionEntities } };
+        }
+        // The prefix row owns the snapshot from its first attempt, including refusal.
+        captionAllocated = true;
+        if (captionCarrier) {
+          updateStagedAttachment(captionCarrier, (current) => ({ ...current, caption: null, mentionEntities: undefined }));
+        }
+      }
 
-    // D-314, Telegram's half. From the press on, each attachment is in its
-    // conversation as a placeholder with its own preview and progress, and out
-    // of the tray above the composer: the send belongs to the conversation now,
-    // so it is found there by whoever opens it, and it is stopped or sent again
-    // from there. The previews are not freed here — the placeholders show them.
-    const author = useAppStore.getState().currentUser;
-    const placedAt = new Map<string, string>();
-    let lastPlaced: string | null = null;
-    for (const attachment of targets) {
-      const clientSentAt: string = origin && targets.length === 1
-        ? origin.clientSentAt
-        : nextClientSentAt(lastPlaced, Date.now());
-      lastPlaced = clientSentAt;
-      placedAt.set(attachment.id, clientSentAt);
-      const carried = !sentAny && attachment.id === captionCarrier ? captionText : null;
-      const tempId = outgoingTempId(attachment.clientMessageId);
-      rememberOutgoing({
-        tempId,
-        chatId: sendChatId,
-        topicId: sendTopicId,
-        replyToId,
-        caption: carried,
-        attachment: { ...attachment, status: "failed", progress: null, error: null, caption: carried },
-        clientSentAt,
+      const prefixOwner = firstTarget ? captionPrefixOwnersRef.current.get(firstTarget.id) : undefined;
+      const prefixEntry = (owner: CaptionPrefixOwner): OutboxEntry => ({
+        userId: owner.userId, chatId: owner.row.chat_id, topicId: owner.row.topic_id ?? null,
+        clientMessageId: owner.row.client_message_id!, tempId: owner.row.id,
+        type: "text", content: owner.row.content,
+        mentionEntities: createMentionText(owner.row.content ?? "", owner.row.mention_entities).mentionEntities,
+        replyToId: owner.row.reply_to_id, forwardedFromId: null, mediaBucket: null, mediaPath: null, mediaUrl: null,
+        clientSentAt: owner.row.client_sent_at!, attempts: 0, nextAttemptAt: 0,
       });
-      if (author) {
-        const placeholder = buildAttachmentPlaceholder({
-          chatId: sendChatId,
-          topicId: sendTopicId ?? null,
-          user: author,
-          attachment,
-          caption: carried,
-          replyToId,
-          clientSentAt,
-          tempId,
-        });
-        useAppStore.getState().addMessage(sendChatId, placeholder);
-        useAppStore.getState().updateChatLastMessage(sendChatId, placeholder);
-      }
-    }
-    const placedIds = new Set(targets.map((attachment) => attachment.id));
-    setStagedAttachments((current) => current.some((attachment) => placedIds.has(attachment.id))
-      ? current.filter((attachment) => !placedIds.has(attachment.id))
-      : current);
-    const failures: string[] = [];
-    const failureNoticeKey = `attachment-upload:${scopeToken.chatId}:${targets[0].id}`;
-    let previousSentAt: string | null = null;
 
-    // Three uploads at a time, and the messages inserted in the order the files
-    // were picked. A failure is that attachment's alone: it keeps its reason and
-    // «Повторить», and the attachments after it still go (D-113, D-114). The
-    // order and the concurrency are decided in `lib/attachmentSendQueue.ts`.
-    await runOrderedSend(targets, {
-      concurrency: ATTACHMENT_UPLOAD_CONCURRENCY,
-      isActive: sameAccount,
-      isWanted: (attachment) =>
-        !cancelledAttachmentIdsRef.current.has(attachment.id) && !isOutgoingCancelled(attachment.id),
-      upload: (attachment) => attachment.uploaded
-        ? Promise.resolve(attachment.uploaded)
-        : uploadStagedAttachment(attachment, scopeToken),
-      onUploaded: (attachment, uploaded) => {
-        patchOutgoingPlaceholder(sendChatId, outgoingTempId(attachment.clientMessageId), (message) => ({
-          ...message,
-          upload_progress: 100,
-        }));
-        updateStagedAttachment(attachment.id, (current) => ({
-          ...current,
-          status: "sending",
-          progress: 100,
-          uploaded,
-          error: null,
-        }));
-      },
-      onUploadFailed: (attachment, error) => {
-        // Why, as the server's answer says it, and the file's name (D-113).
-        // The reason and the status say nothing about what the file holds.
-        const failure = describeUploadFailure(error);
-        const uploadErrorMessage = uploadFailureMessage(attachment.name, failure);
-        console.warn("[attachments] upload failed.", failure.reason, failure.status ?? "no answer");
-        reportError(new Error("attachment_upload_failed"), {
-          category: "attachment_upload_failed",
-          attachmentKind: attachment.kind,
-          mimeType: attachment.mimeType,
-          fileSize: attachment.file.size,
-          reason: failure.reason,
-          status: failure.status,
-          limitBytes: failure.limitBytes,
-        });
-        // Unanswered, or the storage down in front of it: the network's or the
-        // service's, not the file's. It waits with its clock and goes again by
-        // itself — from here, or from the background when this chat is closed
-        // (tracker item 52) — Telegram's outbox, where a voice note never has
-        // to be recorded twice. No notice: nothing has failed yet.
-        if (uploadMayWait(failure)) {
-          patchOutgoingPlaceholder(sendChatId, outgoingTempId(attachment.clientMessageId), (message) => {
-            const { upload_progress: _progress, ...rest } = message;
-            return { ...rest, pending: true, failed: false, send_error: null, upload_waiting: true };
-          });
-          updateStagedAttachment(attachment.id, (current) => ({ ...current, status: "failed", progress: null, error: null }));
-          return;
-        }
-        // The placeholder says so, with the reason, and keeps «Повторить»:
-        // the file is held by `outgoingMedia` until it is sent or discarded.
-        patchOutgoingPlaceholder(sendChatId, outgoingTempId(attachment.clientMessageId), (message) => {
-          const { upload_progress: _progress, ...rest } = message;
-          return { ...rest, pending: false, failed: true, send_error: uploadErrorMessage };
-        });
-        updateStagedAttachment(attachment.id, (current) => ({
-          ...current,
-          status: "failed",
-          progress: null,
-          error: uploadErrorMessage,
-        }));
-        failures.push(uploadErrorMessage);
-        const feedback = uploadFailureFeedback(failures);
-        if (feedback) showActionFeedback({ kind: "error", key: failureNoticeKey, ...feedback });
-      },
-      insert: async (attachment, uploaded) => {
-        // The placeholder's own time, so the row lands where the placeholder
-        // stood; later than the message before it either way, so the pick
-        // order holds even when two inserts start within one millisecond.
-        const clientSentAt = nextClientSentAt(previousSentAt, Date.parse(placedAt.get(attachment.id) ?? "") || Date.now());
-        previousSentAt = clientSentAt;
-        const captionSentWithAttachment = Boolean(captionText) && !sentAny;
-        const content = getStagedAttachmentMessageContent(attachment, captionSentWithAttachment ? captionText : null);
+      // D-314, Telegram's half. From the press on, each attachment is in its
+      // conversation as a placeholder with its own preview and progress, and out
+      // of the tray above the composer: the send belongs to the conversation now,
+      // so it is found there by whoever opens it, and it is stopped or sent again
+      // from there. The previews are not freed here — the placeholders show them.
+      const author = useAppStore.getState().currentUser;
+      const placedAt = new Map<string, string>();
+      let lastPlaced: string | null = null;
+      for (const attachment of targets) {
+        const clientSentAt: string = origin && targets.length === 1
+          ? origin.clientSentAt
+          : nextClientSentAt(lastPlaced, Date.now());
+        lastPlaced = clientSentAt;
+        placedAt.set(attachment.id, clientSentAt);
+        const carried = !captionAllocated && attachment.id === captionCarrier ? captionText : null;
         const tempId = outgoingTempId(attachment.clientMessageId);
-        const sendResult = await runCommittedStagedSendAttempt(
-          sameAccount,
-          () => sendMediaMessage({
-            targetChatId: sendChatId,
-            topicId: sendTopicId,
-            type: getStagedAttachmentMessageType(attachment),
-            content,
-            mediaBucket: uploaded.bucket,
-            mediaPath: uploaded.path,
-            mediaUrl: uploaded.publicUrl,
+        const entry: CaptionLinkedMedia = {
+          tempId,
+          chatId: sendChatId,
+          topicId: sendTopicId,
+          replyToId,
+          caption: carried,
+          mentionEntities: carried ? captionSnapshot.mentionEntities : undefined,
+          attachment: { ...attachment, status: "failed", progress: null, error: null, caption: carried, mentionEntities: carried ? captionSnapshot.mentionEntities : undefined },
+          clientSentAt,
+          ...(prefixOwner && attachment.id === firstTarget.id ? {
+            captionPrefix: { entry: structuredClone(prefixEntry(prefixOwner)), accepted: prefixOwner.accepted },
+          } : {}),
+        };
+        rememberOutgoing(entry);
+        if (author) {
+          const placeholder = buildAttachmentPlaceholder({
+            chatId: sendChatId,
+            topicId: sendTopicId ?? null,
+            user: author,
+            attachment: { ...attachment, mentionEntities: carried ? captionSnapshot.mentionEntities : undefined },
+            caption: carried,
             replyToId,
-            clientMessageId: attachment.clientMessageId,
             clientSentAt,
-            mediaMetadata: getStagedAttachmentMediaMetadata(attachment, uploaded),
             tempId,
-          }),
-        );
-        // The bytes are up either way: a refused row is retried as a row, from
-        // its own failed message, and needs the file no longer. The preview is
-        // freed once the stored picture has had time to replace it on screen.
-        if (sendResult.status !== "stale") {
-          const entry = forgetOutgoing(tempId);
-          if (entry) releaseOutgoingPreview(entry.attachment);
-        }
-
-        if (sendResult.status === "stale") return false;
-        if (sendResult.status === "failed") {
-          reportError(new Error("staged_attachment_send_failed"), {
-            category: "attachment_send_failed",
-            attachmentKind: attachment.kind,
-            mimeType: attachment.mimeType,
-            fileSize: attachment.file.size,
           });
-          updateStagedAttachment(attachment.id, (current) =>
-            markStagedAttachmentSendFailed(current, uploaded)
-          );
-          return false;
+          useAppStore.getState().addMessage(sendChatId, placeholder);
+          useAppStore.getState().updateChatLastMessage(sendChatId, placeholder);
         }
-
-        if (captionSentWithAttachment) {
-          for (const target of targets) {
-            updateStagedAttachment(target.id, (current) => ({ ...current, caption: null }));
-            // The caption has gone out with this one, so the others of the send
-            // no longer carry it — not on screen, and not into a retry.
-            if (target.id === attachment.id) continue;
-            const otherId = outgoingTempId(target.clientMessageId);
-            const other = outgoingEntry(otherId);
-            if (other?.caption) {
-              rememberOutgoing({ ...other, caption: null, attachment: { ...other.attachment, caption: null } });
-              patchOutgoingPlaceholder(sendChatId, otherId, (message) => ({
-                ...message,
-                content: getStagedAttachmentMessageContent(target, null),
-              }));
+      }
+      const placedIds = new Set(targets.map((attachment) => attachment.id));
+      setStagedAttachments((current) => current.some((attachment) => placedIds.has(attachment.id))
+        ? current.filter((attachment) => !placedIds.has(attachment.id))
+        : current);
+      if (prefixOwner && firstTarget) {
+        if (!prefixOwner.accepted) {
+          const owner = prefixOwner;
+          // A reopened view must not overwrite the runner's existing prefix waiter.
+          if (!owner.attempt && appOutbox.has(owner.row.client_message_id!)) {
+            patchOutgoingPlaceholder(sendChatId, outgoingTempId(firstTarget.clientMessageId), (message) => ({
+              ...message, pending: true, failed: false, upload_waiting: true,
+            }));
+            return false;
+          }
+          const textResult = await runCommittedStagedSendAttempt(sameAccount, () => {
+            let attempt = owner.attempt;
+            if (!attempt) {
+              attempt = retryMessageSend(owner.row).finally(() => {
+                if (owner.attempt === attempt) owner.attempt = undefined;
+              });
+              owner.attempt = attempt;
             }
+            return attempt;
+          });
+          if (!sameAccount() || textResult.status === "stale" || captionPrefixOwnersRef.current.get(firstTarget.id) !== owner) return false;
+          if (textResult.status === "failed") {
+            // Ordinary refusals leave the runner: retain this sole text owner on the device too.
+            const prefixStorage = browserOutboxStorage();
+            await prefixStorage.put(structuredClone(prefixEntry(owner)));
+            const retainedMedia = outgoingEntry(outgoingTempId(firstTarget.clientMessageId)) as CaptionLinkedMedia | null;
+            const prefixStillShown = useAppStore.getState().messages[sendChatId]?.some((message) =>
+              message.user_id === userId && message.client_message_id === owner.row.client_message_id);
+            if (sameAccount() && !prefixStillShown && (captionPrefixOwnersRef.current.get(firstTarget.id) !== owner ||
+                (retainedMedia && retainedMedia.captionPrefix?.entry.clientMessageId !== owner.row.client_message_id))) {
+              await prefixStorage.remove(owner.row.client_message_id!);
+              return false;
+            }
+            if (!sameAccount() || captionPrefixOwnersRef.current.get(firstTarget.id) !== owner) return false;
+            patchOutgoingPlaceholder(sendChatId, outgoingTempId(firstTarget.clientMessageId), (message) => ({
+              ...message, pending: false, failed: true, upload_waiting: false,
+            }));
+            return false;
+          }
+          owner.accepted = true;
+          const entry = outgoingEntry(outgoingTempId(firstTarget.clientMessageId));
+          if (entry) {
+            const linked: CaptionLinkedMedia = { ...entry,
+              captionPrefix: { entry: structuredClone(prefixEntry(owner)), accepted: true } };
+            rememberOutgoing(linked);
           }
         }
         sentAny = true;
-        removeStagedAttachment(attachment.id);
-        return true;
-      },
-    });
+      }
+      const failures: string[] = [];
+      const failureNoticeKey = `attachment-upload:${scopeToken.chatId}:${targets[0].id}`;
+      let previousSentAt: string | null = null;
 
-    if (sentAny && !origin) setReplyTo(null);
-    return sentAny;
-  }, [messageTopicId, replyTo?.id, removeStagedAttachment, sendMediaMessage, sendMessage, updateStagedAttachment, uploadScope, uploadStagedAttachment, userId]);
+      // Three uploads at a time, and the messages inserted in the order the files
+      // were picked. A failure is that attachment's alone: it keeps its reason and
+      // «Повторить», and the attachments after it still go (D-113, D-114). The
+      // order and the concurrency are decided in `lib/attachmentSendQueue.ts`.
+      await runOrderedSend(targets, {
+        concurrency: ATTACHMENT_UPLOAD_CONCURRENCY,
+        isActive: sameAccount,
+        isWanted: (attachment) =>
+          !cancelledAttachmentIdsRef.current.has(attachment.id) && !isOutgoingCancelled(attachment.id),
+        upload: (attachment) => attachment.uploaded
+          ? Promise.resolve(attachment.uploaded)
+          : uploadStagedAttachment(attachment, scopeToken),
+        onUploaded: (attachment, uploaded) => {
+          patchOutgoingPlaceholder(sendChatId, outgoingTempId(attachment.clientMessageId), (message) => ({
+            ...message,
+            upload_progress: 100,
+          }));
+          updateStagedAttachment(attachment.id, (current) => ({
+            ...current,
+            status: "sending",
+            progress: 100,
+            uploaded,
+            error: null,
+          }));
+        },
+        onUploadFailed: (attachment, error) => {
+          // Why, as the server's answer says it, and the file's name (D-113).
+          // The reason and the status say nothing about what the file holds.
+          const failure = describeUploadFailure(error);
+          const uploadErrorMessage = uploadFailureMessage(attachment.name, failure);
+          console.warn("[attachments] upload failed.", failure.reason, failure.status ?? "no answer");
+          reportError(new Error("attachment_upload_failed"), {
+            category: "attachment_upload_failed",
+            attachmentKind: attachment.kind,
+            mimeType: attachment.mimeType,
+            fileSize: attachment.file.size,
+            reason: failure.reason,
+            status: failure.status,
+            limitBytes: failure.limitBytes,
+          });
+          // Unanswered, or the storage down in front of it: the network's or the
+          // service's, not the file's. It waits with its clock and goes again by
+          // itself — from here, or from the background when this chat is closed
+          // (tracker item 52) — Telegram's outbox, where a voice note never has
+          // to be recorded twice. No notice: nothing has failed yet.
+          if (uploadMayWait(failure)) {
+            patchOutgoingPlaceholder(sendChatId, outgoingTempId(attachment.clientMessageId), (message) => {
+              const { upload_progress: _progress, ...rest } = message;
+              return { ...rest, pending: true, failed: false, send_error: null, upload_waiting: true };
+            });
+            updateStagedAttachment(attachment.id, (current) => ({ ...current, status: "failed", progress: null, error: null }));
+            return;
+          }
+          // The placeholder says so, with the reason, and keeps «Повторить»:
+          // the file is held by `outgoingMedia` until it is sent or discarded.
+          patchOutgoingPlaceholder(sendChatId, outgoingTempId(attachment.clientMessageId), (message) => {
+            const { upload_progress: _progress, ...rest } = message;
+            return { ...rest, pending: false, failed: true, send_error: uploadErrorMessage };
+          });
+          updateStagedAttachment(attachment.id, (current) => ({
+            ...current,
+            status: "failed",
+            progress: null,
+            error: uploadErrorMessage,
+          }));
+          failures.push(uploadErrorMessage);
+          const feedback = uploadFailureFeedback(failures);
+          if (feedback) showActionFeedback({ kind: "error", key: failureNoticeKey, ...feedback });
+        },
+        insert: async (attachment, uploaded) => {
+          if (!sameAccount()) return false;
+          // The placeholder's own time, so the row lands where the placeholder
+          // stood; later than the message before it either way, so the pick
+          // order holds even when two inserts start within one millisecond.
+          const clientSentAt = nextClientSentAt(previousSentAt, Date.parse(placedAt.get(attachment.id) ?? "") || Date.now());
+          previousSentAt = clientSentAt;
+          // Once a row owns the caption, even a refused row keeps it for retry.
+          // A failed upload has no row yet, so the next upload may carry it.
+          const captionSentWithAttachment = Boolean(captionText) && !captionAllocated;
+          if (captionSentWithAttachment) captionAllocated = true;
+          if (captionSentWithAttachment) claimCaption(attachment);
+          const content = getStagedAttachmentMessageContent(attachment, captionSentWithAttachment ? captionText : null);
+          const tempId = outgoingTempId(attachment.clientMessageId);
+          const sendResult = await runCommittedStagedSendAttempt(
+            sameAccount,
+            () => sendMediaMessage({
+              targetChatId: sendChatId,
+              topicId: sendTopicId,
+              type: getStagedAttachmentMessageType(attachment),
+              content,
+              ...(captionSentWithAttachment ? { mentionEntities: captionSnapshot.mentionEntities } : {}),
+              mediaBucket: uploaded.bucket,
+              mediaPath: uploaded.path,
+              mediaUrl: uploaded.publicUrl,
+              replyToId,
+              clientMessageId: attachment.clientMessageId,
+              clientSentAt,
+              mediaMetadata: getStagedAttachmentMediaMetadata(attachment, uploaded),
+              tempId,
+            }),
+          );
+          if (!sameAccount() || sendResult.status === "stale") return false;
+          // The bytes are up either way: a refused row is retried as a row, from
+          // its own failed message, and needs the file no longer. The preview is
+          // freed once the stored picture has had time to replace it on screen.
+          const entry = forgetOutgoing(tempId);
+          if (entry) releaseOutgoingPreview(entry.attachment);
+          if (captionPrefixOwnersRef.current.get(attachment.id)?.accepted) captionPrefixOwnersRef.current.delete(attachment.id);
+          if (sendResult.status === "failed") {
+            reportError(new Error("staged_attachment_send_failed"), {
+              category: "attachment_send_failed",
+              attachmentKind: attachment.kind,
+              mimeType: attachment.mimeType,
+              fileSize: attachment.file.size,
+            });
+            updateStagedAttachment(attachment.id, (current) =>
+              markStagedAttachmentSendFailed(current, uploaded)
+            );
+            return false;
+          }
+          sentAny = true;
+          removeStagedAttachment(attachment.id);
+          return true;
+        },
+      });
+
+      if (!sameAccount()) return false;
+      if (sentAny && !origin) setReplyTo(null);
+      return sentAny;
+    } finally {
+      stopAccountWatch();
+    }
+  }, [messageTopicId, replyTo?.id, removeStagedAttachment, retryMessageSend, sendMediaMessage, updateStagedAttachment, uploadScope, uploadStagedAttachment, userId]);
 
   /**
    * «Повторить» on a failed message. A placeholder whose bytes never reached
@@ -1357,7 +1492,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         replyToId: entry.replyToId,
         topicId: entry.topicId,
         clientSentAt: entry.clientSentAt,
-      });
+      }, entry.mentionEntities);
       return;
     }
     void retryMessageSend(message);
@@ -1407,6 +1542,22 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
   /** «Удалить» on a failed message, and «Отменить» on one still uploading. */
   const discardSend = useCallback((message: MessageWithSender) => {
+    if (message.type === "text") {
+      if (message.user_id !== useAppStore.getState().currentUser?.id) return;
+      for (const [attachmentId, owner] of captionPrefixOwnersRef.current) {
+        if (owner.row.user_id === message.user_id && (owner.row.id === message.id ||
+            (message.client_message_id && owner.row.client_message_id === message.client_message_id))) {
+          captionPrefixOwnersRef.current.delete(attachmentId);
+        }
+      }
+      for (const entry of outgoingEntriesForChat(message.chat_id) as CaptionLinkedMedia[]) {
+        if (entry.captionPrefix?.entry.userId === message.user_id &&
+            entry.captionPrefix.entry.clientMessageId === message.client_message_id) {
+          const { captionPrefix: _prefix, ...unlinked } = entry;
+          rememberOutgoing(unlinked);
+        }
+      }
+    }
     const entry = cancelOutgoing(message.id);
     if (entry) {
       useAppStore.getState().removeMessage(entry.chatId, entry.tempId);
@@ -1419,7 +1570,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const retryStagedAttachment = useCallback((attachmentId: string) => {
     // With the caption the send was asked for, not without it (D-286).
     const attachment = stagedAttachmentsRef.current.find((item) => item.id === attachmentId);
-    void sendStagedAttachments(attachment?.caption ?? "", attachmentId);
+    void sendStagedAttachments(attachment?.caption ?? "", attachmentId, undefined, undefined, attachment?.mentionEntities);
   }, [sendStagedAttachments]);
 
   /**
@@ -1431,9 +1582,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
    * Each message goes through `forwardMessage`, which has the server copy it
    * with its media and its previews (D-083).
    */
-  const sendForwardDraft = useCallback(async (comment: string, draft: MessageWithSender[]) => {
+  const sendForwardDraft = useCallback(async (comment: string, draft: MessageWithSender[], mentionEntities?: MessageMentionsV1) => {
     setPendingForward(null);
-    if (comment.trim()) await sendMessage(comment.trim());
+    if (comment.trim()) await sendMessage(comment, undefined, mentionEntities);
     // The messages go to the chat on screen, and arriving in its feed is their
     // confirmation — see `forwardFeedback`. Only a failure is said.
     for (let index = 0; index < draft.length; index += 1) {
@@ -1473,23 +1624,23 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       originalSizes: request.originalSizes,
     });
     if (!staged.length) return;
-    await sendStagedAttachments(request.caption, undefined, staged);
+    await sendStagedAttachments(request.caption, undefined, staged, undefined, request.mentionEntities);
   }, [sendStagedAttachments, stageFiles]);
 
-  const handleSend = useCallback((content: string) => {
+  const handleSend = useCallback((content: string, mentionEntities?: MessageMentionsV1) => {
     if (forwardDraft) {
-      void sendForwardDraft(content, forwardDraft);
+      void sendForwardDraft(content, forwardDraft, mentionEntities);
       return true;
     }
     if (stagedAttachmentsRef.current.length) {
-      return sendStagedAttachments(content);
+      return sendStagedAttachments(content, undefined, undefined, undefined, mentionEntities);
     }
     if (!userId) {
       showAppAlert("Войдите в аккаунт, чтобы отправлять сообщения.", "Сообщение");
       return false;
     }
     const replyToId = replyTo?.id;
-    void sendMessage(content, replyToId);
+    void sendMessage(content, replyToId, mentionEntities);
     setReplyTo(null);
     return true;
   }, [forwardDraft, replyTo?.id, sendForwardDraft, sendMessage, sendStagedAttachments, userId]);
@@ -1711,10 +1862,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   }, [deleteMessagesForEveryone, hideMessagesForMe]);
 
   const handleEditFailedSend = useCallback((msg: MessageWithSender) => {
-    if (msg.type !== "text") return;
-    discardLocalMessage(msg.id);
-    setDraftRestore({ id: `${msg.id}:${Date.now()}`, text: msg.content ?? "" });
-  }, [discardLocalMessage]);
+    if (msg.type !== "text" || msg.user_id !== useAppStore.getState().currentUser?.id) return;
+    discardSend(msg);
+    setDraftRestore({ id: `${msg.id}:${Date.now()}`, text: msg.content ?? "", mentionEntities: createMentionText(msg.content ?? "", msg.mention_entities).mentionEntities });
+  }, [discardSend]);
 
   const handleDragEnter = useCallback((event: DragEvent<HTMLDivElement>) => {
     if (!hasDraggedFiles(event.dataTransfer)) return;
@@ -2103,8 +2254,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         >
           <MessageInput
             chatId={chatId}
+            topicId={messageTopicId}
             replyTo={replyTo}
             jumpControlOnScreen={jumpControlOnScreen}
+            onLayoutChange={measureComposerHeight}
             onCancelReply={() => setReplyTo(null)}
             onSend={handleSend}
             onEdit={editMessage}

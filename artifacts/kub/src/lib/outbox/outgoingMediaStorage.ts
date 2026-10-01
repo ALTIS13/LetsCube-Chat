@@ -16,7 +16,7 @@
  * memory as before.
  */
 
-import type { OutgoingMediaEntry } from "../outgoingMedia.ts";
+import { snapshotOutgoingEntry, type OutgoingMediaEntry } from "../outgoingMedia.ts";
 
 /** The largest file kept across a restart. A voice note is well under 2 MB. */
 export const PERSIST_LIMIT_BYTES = 25 * 1024 * 1024;
@@ -42,7 +42,7 @@ export function toPersisted(userId: string, entry: OutgoingMediaEntry): Persiste
   return {
     tempId: entry.tempId,
     userId,
-    entry: { ...entry, attachment: { ...entry.attachment, previewUrl: null, uploaded: null } },
+    entry: snapshotOutgoingEntry({ ...entry, attachment: { ...entry.attachment, previewUrl: null, uploaded: null } }),
   };
 }
 
@@ -57,7 +57,7 @@ export function memoryOutgoingMediaStorage(): OutgoingMediaStorage {
       records.delete(tempId);
     },
     async list(userId) {
-      return [...records.values()].filter((record) => record.userId === userId).map((record) => record.entry);
+      return [...records.values()].filter((record) => record.userId === userId).map((record) => snapshotOutgoingEntry(record.entry));
     },
   };
 }

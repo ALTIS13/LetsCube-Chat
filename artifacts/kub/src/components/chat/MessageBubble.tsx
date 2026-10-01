@@ -23,7 +23,9 @@ import { chatRoleColourOnChat, readChatRoleColour } from "@/lib/chatRolePalette"
 import type { ChatRole } from "@/lib/chatRoles";
 import { useAppStore } from "@/store/app.store";
 import { messageAuthorProfileTarget } from "@/lib/messageAuthorProfile";
-import { FormattedText, isLocationPreviewMessage, type BotCommandsInText } from "@/lib/formatText";
+import { FormattedText, isLocationPreviewMessage, type BotCommandsInText, type MemberMentionsInText } from "@/lib/formatText";
+import { createMentionText, readMentionEntities, trimMentionText } from "@/lib/memberMentions";
+import { useMemberMentionActions } from "@/hooks/useMemberMentions";
 import { KubIcon } from "@/components/kub";
 import { FileMessageRow } from "./FileMessageRow";
 import { useChatMediaPlayback, VideoCircleProgressRing, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
@@ -565,6 +567,7 @@ interface MeasuredTextWithMetaProps {
   compound?: boolean;
   /** What makes a `/command` in this body pressable, or null (D-263). */
   bot?: BotCommandsInText | null;
+  members?: MemberMentionsInText | null;
 }
 
 function MeasuredTextWithMeta({
@@ -576,6 +579,7 @@ function MeasuredTextWithMeta({
   measureKey,
   compound = false,
   bot = null,
+  members = null,
 }: MeasuredTextWithMetaProps) {
   const [placement, setPlacement] = useState<MetaPlacement>(() => getInitialMetaPlacement(content));
   // The meta is taken out of the text flow and pinned to the bubble's bottom
@@ -831,7 +835,7 @@ function MeasuredTextWithMeta({
         className={cn(textClassName, placement === "inline" && "w-fit")}
       >
         <span ref={textContentRef} data-message-text-content="true">
-          <FormattedText content={content} bot={bot} />
+          <FormattedText content={content} bot={bot} members={members} />
         </span>
         {/* A spacer, not the meta itself. It keeps the last line from running
             under the timestamp — and because it is the only thing left in the
@@ -998,6 +1002,12 @@ export function MessageBubble({
    * than used.
    */
   const botCommandsInText = isSelectionMode ? null : botCommands;
+  const onOpenMention = useMemberMentionActions(message.chat_id, isSelectionMode || Boolean(message.deleted_at));
+  const memberMentionsInText: MemberMentionsInText | null = isSelectionMode || message.deleted_at ? null : {
+    entities: readMentionEntities(message.content ?? "", message.mention_entities), onOpen: onOpenMention,
+  };
+  const captionMentions = memberMentionsInText ? { ...memberMentionsInText,
+    entities: trimMentionText(createMentionText(message.content ?? "", message.mention_entities)).mentionEntities } : null;
   const textContent = message.content ?? "";
   /**
    * Who wrote the original, where the reader may know (D-291).
@@ -1636,7 +1646,7 @@ export function MessageBubble({
                 playbackItem={createPlaybackItemFromMessage(message, isMe, originalUrl)}
               />
             ) : message.type === "image" && message.media_url ? (
-              <MediaWithCaption caption={mediaCaption} bot={botCommandsInText}>
+              <MediaWithCaption caption={mediaCaption} bot={botCommandsInText} members={captionMentions}>
                 <UploadVeil uploading={uploading} progress={uploadProgress} onCancel={onDiscardLocalMessage}>
                 <MediaImage
                   url={imageDisplayUrl}
@@ -1678,7 +1688,7 @@ export function MessageBubble({
                 />
                 </UploadVeil>
               ) : (
-                <MediaWithCaption caption={mediaCaption} bot={botCommandsInText}>
+                <MediaWithCaption caption={mediaCaption} bot={botCommandsInText} members={captionMentions}>
                   <UploadVeil uploading={uploading} progress={uploadProgress} onCancel={onDiscardLocalMessage}>
                   <MediaVideo
                     url={videoPlaybackUrl}
@@ -1703,6 +1713,7 @@ export function MessageBubble({
                 content={message.content}
                 mediaMetadata={message.media_metadata}
                 url={message.media_url ? originalUrl ?? null : null}
+                members={captionMentions}
               />
             ) : canUseCompactReplyInline ? (
               <div
@@ -1714,7 +1725,7 @@ export function MessageBubble({
                 )}
               >
                 <span className="min-w-0 flex-1">
-                  <FormattedText content={message.content ?? ""} bot={botCommandsInText} />
+                  <FormattedText content={message.content ?? ""} bot={botCommandsInText} members={memberMentionsInText} />
                 </span>
                 <span
                   data-message-footer="true"
@@ -1726,6 +1737,7 @@ export function MessageBubble({
             ) : canUseMeasuredTextMeta ? (
               <MeasuredTextWithMeta
                 bot={botCommandsInText}
+                members={memberMentionsInText}
                 content={message.content ?? ""}
                 textClassName={cn(
                   "min-w-0 max-w-full kub-message-text whitespace-pre-wrap text-[color:var(--kub-text)]",
@@ -1747,7 +1759,7 @@ export function MessageBubble({
                   widthClasses.text
                 )}
               >
-                <FormattedText content={message.content ?? ""} bot={botCommandsInText} />
+                <FormattedText content={message.content ?? ""} bot={botCommandsInText} members={memberMentionsInText} />
               </p>
             )}
 
@@ -2051,18 +2063,20 @@ function MediaWithCaption({
   children,
   caption,
   bot = null,
+  members = null,
 }: {
   children: ReactNode;
   caption: string | null;
   /** A caption is message text too, so a command in one runs (D-263). */
   bot?: BotCommandsInText | null;
+  members?: MemberMentionsInText | null;
 }) {
   return (
     <div className="flex max-w-full flex-col gap-1.5">
       {children}
       {caption && (
         <p className="min-w-0 max-w-full whitespace-pre-wrap kub-message-text text-[color:var(--kub-text)]">
-          <FormattedText content={caption} bot={bot} />
+          <FormattedText content={caption} bot={bot} members={members} />
         </p>
       )}
     </div>

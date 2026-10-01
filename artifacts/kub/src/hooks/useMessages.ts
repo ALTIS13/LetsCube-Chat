@@ -24,6 +24,7 @@ import { scheduleMarkChatDelivered, scheduleMarkChatRead } from "@/lib/deliveryR
 import { FORWARD_RPC, forwardInsertPayload, forwardRpcArgs, type ForwardMessageResult } from "@/lib/messageForward";
 import { MESSAGE_SELECT_WITH_JOINS } from "@/lib/messageProjection";
 import { appOutbox } from "@/lib/outbox/appOutbox";
+import { createMentionText, trimMentionText } from "@/lib/memberMentions";
 import { buildOptimisticMessage, type SendableMessageType } from "@/lib/optimisticMessage";
 import {
   REACTION_LIMIT_RPC,
@@ -89,6 +90,11 @@ const EMPTY_MESSAGES: MessageWithSender[] = [];
  */
 const fetchedMessageScopes = new Set<string>();
 
+function captureMessageAccount(userId: string | null | undefined, epoch: number): () => boolean {
+  return () => Boolean(userId && useAppStore.getState().currentUser?.id === userId &&
+    useAppStore.getState().accountEpoch === epoch);
+}
+
 function loadClearedAt(
   supabase: ReturnType<typeof createClient>,
   chatId: string,
@@ -106,8 +112,11 @@ function loadClearedAt(
 }
 
 interface SendMessageInput {
+  /** A retry may only reuse the original author's local snapshot. */
+  ownerUserId?: string | null;
   type: SendableMessageType;
   content: string | null;
+  mentionEntities?: import("@/lib/memberMentions").MessageMentionsV1;
   mediaBucket?: string | null;
   mediaPath?: string | null;
   mediaUrl?: string | null;
@@ -166,11 +175,6 @@ export function useMessages(
   const verifiedChatIdRef = useRef(verifiedChatId);
   verifiedChatIdRef.current = verifiedChatId;
   const [hiddenMessageIds, setHiddenMessageIds] = useState<Set<string>>(() => new Set());
-  useLayoutEffect(() => {
-    setVerifiedChatId(null);
-    setVerifyingChatId(null);
-    setHistoryError(null);
-  }, [chatId]);
   /**
    * The refusal the composer shows beside itself, or null.
    *
@@ -206,6 +210,15 @@ export function useMessages(
   const updateChatLastMessage = useAppStore((s) => s.updateChatLastMessage);
   const currentUser = useAppStore((s) => s.currentUser);
   const userId = currentUser?.id ?? null;
+  const accountEpoch = useAppStore((s) => s.accountEpoch);
+  const verifiedAccountEpochRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    verifiedAccountEpochRef.current = null;
+    setVerifiedChatId(null);
+    setVerifyingChatId(null);
+    setHistoryError(null);
+  }, [chatId, accountEpoch]);
 
   const supabase = createClient(); // REST-операции
   const rt = getRealtimeClient();  // WebSocket каналы
@@ -213,7 +226,7 @@ export function useMessages(
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingChannelRef = useRef<ReturnType<typeof rt.channel> | null>(null);
 
-  const currentUserRef = useRef(currentUser);
+  const currentUserRef = Object.assign(useRef(currentUser), { accountEpoch });
   currentUserRef.current = currentUser;
   const chatIdRef = useRef(chatId);
   chatIdRef.current = chatId;
@@ -223,6 +236,7 @@ export function useMessages(
   const hiddenMessageIdsRef = useRef(hiddenMessageIds);
   useEffect(() => { hiddenMessageIdsRef.current = hiddenMessageIds; }, [hiddenMessageIds]);
   const loadingOlderRef = useRef(loadingOlder);
+  const olderRequestOwnerRef = useRef<symbol | null>(null);
   useEffect(() => { loadingOlderRef.current = loadingOlder; }, [loadingOlder]);
   const hasMoreOlderRef = useRef(hasMoreOlder);
   useEffect(() => { hasMoreOlderRef.current = hasMoreOlder; }, [hasMoreOlder]);
@@ -248,6 +262,8 @@ export function useMessages(
         : LIST_READ_PENDING,
     );
     setClearedAt(null);
+    olderRequestOwnerRef.current = null;
+    loadingOlderRef.current = false;
     setLoadingOlder(false);
     setHasMoreOlder(false);
     setOlderError(null);
@@ -258,11 +274,11 @@ export function useMessages(
       clearTimeout(typingTimer.current);
       typingTimer.current = null;
     }
-  }, [chatId, topicId]);
+  }, [chatId, topicId, accountEpoch]);
 
   useEffect(() => {
     setHiddenMessageIds((current) => (current.size ? new Set() : current));
-  }, [chatId]);
+  }, [chatId, accountEpoch]);
 
   /** Dismisses the refusal beside the composer without sending anything. */
   const clearActionRefusal = useCallback(() => {
@@ -292,8 +308,11 @@ export function useMessages(
 
   const fetchMessages = useCallback(async (options: FetchMessagesOptions = {}) => {
     if (!chatId) return;
+    const sameAccount = captureMessageAccount(userId, accountEpoch);
+    if (!sameAccount() || chatIdRef.current !== chatId || topicIdRef.current !== topicId) return;
     const requestGeneration = ++historyRequestGenerationRef.current;
-    const isCurrent = () => chatIdRef.current === chatId && historyRequestGenerationRef.current === requestGeneration;
+    const isCurrent = () => sameAccount() && chatIdRef.current === chatId && historyRequestGenerationRef.current === requestGeneration;
+    if (!isCurrent()) return;
     const background = options.background === true;
     const heldWhenAsked = useAppStore.getState().messages[chatId] ?? EMPTY_MESSAGES;
     const hasCachedMessages = heldWhenAsked.some((message) =>
@@ -413,6 +432,7 @@ export function useMessages(
         setHasMoreOlder(nextHasMoreOlder);
         setOlderError(null);
         setHistoryError(null);
+        verifiedAccountEpochRef.current = useAppStore.getState().accountEpoch;
         setVerifiedChatId(chatId);
         setVerifyingChatId(null);
         fetchedMessageScopes.add(getPinnedKey(chatId, topicId));
@@ -435,7 +455,7 @@ export function useMessages(
     } finally {
       if (isCurrent()) setLoading(false);
     }
-  }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat, userId]);
+  }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat, userId, accountEpoch]);
   // The latest read, for the channel below. The channel is the chat's, not the
   // scope's — its filter is the chat and its handlers read the scope from refs —
   // so a scope that resolves or changes must not leave and rejoin it: every
@@ -447,18 +467,22 @@ export function useMessages(
   // this chat on the account's hides channel. The list has already taken a
   // hidden row out of the store; this conversation also stops drawing it if
   // it arrives again, and reads an unhidden one back.
-  useEffect(() => hiddenMessagesLive.subscribe((event) => {
-    if (event.chatId !== chatIdRef.current) return;
-    const next = new Set(hiddenMessageIdsRef.current);
-    if (event.hidden) next.add(event.messageId);
-    else next.delete(event.messageId);
-    hiddenMessageIdsRef.current = next;
-    setHiddenMessageIds(next);
-    if (!event.hidden) void fetchMessagesRef.current({ background: true });
-  }), []);
+  useEffect(() => {
+    const sameAccount = captureMessageAccount(userId, accountEpoch);
+    return hiddenMessagesLive.subscribe((event) => {
+      if (!sameAccount() || event.chatId !== chatIdRef.current) return;
+      const next = new Set(hiddenMessageIdsRef.current);
+      if (event.hidden) next.add(event.messageId);
+      else next.delete(event.messageId);
+      hiddenMessageIdsRef.current = next;
+      setHiddenMessageIds(next);
+      if (!event.hidden) void fetchMessagesRef.current({ background: true });
+    });
+  }, [userId, accountEpoch]);
 
   useEffect(() => {
     if (!chatId || !userId) return;
+    const sameAccount = captureMessageAccount(userId, accountEpoch);
     const cached = useAppStore.getState().messages[chatId] ?? [];
     if (!cached.length) return;
     let active = true;
@@ -477,7 +501,7 @@ export function useMessages(
         loadClearedAt(supabase, chatId, userId),
         heard ? Promise.resolve(new Set<string>()) : fetchHiddenMessageIdSet(supabase, heldIds),
       ]);
-      if (!active) return;
+      if (!active || !sameAccount()) return;
       if (mark === undefined) {
         setHistoryError("Не удалось проверить историю чата.");
         return;
@@ -501,11 +525,12 @@ export function useMessages(
       setMessages(chatId, visible);
       setClearedAt(mark);
       setHistoryError(null);
+      verifiedAccountEpochRef.current = useAppStore.getState().accountEpoch;
       setVerifiedChatId(chatId);
       setVerifyingChatId(null);
     })();
     return () => { active = false; };
-  }, [chatId, userId, supabase, rememberHiddenMessageIds, setMessages, fetchMessages]);
+  }, [chatId, userId, supabase, rememberHiddenMessageIds, setMessages, fetchMessages, accountEpoch]);
 
   // Opening a chat. One this session has already fetched renders from the
   // store and is revalidated once, when its channel has joined (the handler
@@ -551,7 +576,8 @@ export function useMessages(
 
   const refreshMessageById = useCallback(async (messageId: string) => {
     const activeChatId = chatIdRef.current;
-    if (!activeChatId) return;
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    if (!activeChatId || !sameAccount()) return;
     const current = useAppStore.getState().messages[activeChatId] ?? [];
     if (!current.some((message) => message.id === messageId)) return;
 
@@ -560,7 +586,7 @@ export function useMessages(
       .select(MESSAGE_SELECT_WITH_JOINS)
       .eq("id", messageId)
       .single();
-    if (!data) return;
+    if (!sameAccount() || chatIdRef.current !== activeChatId || !data) return;
 
     const nextMessage = data as unknown as MessageWithSender;
     if (nextMessage.chat_id !== activeChatId) return;
@@ -572,7 +598,7 @@ export function useMessages(
     if (localClearedAt && new Date(nextMessage.created_at).getTime() <= new Date(localClearedAt).getTime()) return;
 
     const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]));
-    if (!fetchedHiddenIds) return;
+    if (!sameAccount() || chatIdRef.current !== activeChatId || !fetchedHiddenIds) return;
     rememberHiddenMessageIds(fetchedHiddenIds);
     const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
     if (effectiveHiddenIds.has(nextMessage.id)) return;
@@ -586,7 +612,8 @@ export function useMessages(
 
   const loadOlderMessages = useCallback(async () => {
     const activeChatId = chatIdRef.current;
-    if (!activeChatId || loadingOlderRef.current || !hasMoreOlderRef.current) return { loaded: 0 };
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    if (!activeChatId || !sameAccount() || loadingOlderRef.current || !hasMoreOlderRef.current) return { loaded: 0 };
     const historyGeneration = historyRequestGenerationRef.current;
     const activeTopicId = topicIdRef.current;
     const activeGeneralTopicIds = generalTopicIdsRef.current;
@@ -606,6 +633,8 @@ export function useMessages(
       return { loaded: 0 };
     }
 
+    const requestOwner = Symbol();
+    olderRequestOwnerRef.current = requestOwner;
     loadingOlderRef.current = true;
     setLoadingOlder(true);
     setOlderError(null);
@@ -632,7 +661,7 @@ export function useMessages(
 
       if (error) throw error;
       const rawFetched = (data ?? []) as unknown as MessageWithSender[];
-      if (chatIdRef.current !== activeChatId || topicIdRef.current !== activeTopicId || historyRequestGenerationRef.current !== historyGeneration) return { loaded: 0 };
+      if (!sameAccount() || chatIdRef.current !== activeChatId || topicIdRef.current !== activeTopicId || historyRequestGenerationRef.current !== historyGeneration) return { loaded: 0 };
       const fetched = rawFetched.slice(0, MESSAGE_PAGE_SIZE).reverse();
       const nextHasMoreOlder = rawFetched.length > MESSAGE_PAGE_SIZE;
       if (!fetched.length) {
@@ -644,7 +673,7 @@ export function useMessages(
       const olderIds = getMessageAndReplyIds(fetched);
       const hiddenReadAt = Date.now();
       const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, olderIds);
-      if (chatIdRef.current !== activeChatId || topicIdRef.current !== activeTopicId || historyRequestGenerationRef.current !== historyGeneration) return { loaded: 0 };
+      if (!sameAccount() || chatIdRef.current !== activeChatId || topicIdRef.current !== activeTopicId || historyRequestGenerationRef.current !== historyGeneration) return { loaded: 0 };
       if (!fetchedHiddenIds) throw new Error("hidden_message_ids_unavailable");
       rememberHiddenMessageIds(fetchedHiddenIds);
       hiddenMessagesLive.markVerified(activeChatId, olderIds, hiddenReadAt);
@@ -668,29 +697,34 @@ export function useMessages(
       return { loaded: visibleFetched.length };
     } catch (error) {
       console.error("Older messages fetch error:", error);
-      if (chatIdRef.current === activeChatId && historyRequestGenerationRef.current === historyGeneration) {
+      if (sameAccount() && chatIdRef.current === activeChatId && historyRequestGenerationRef.current === historyGeneration) {
         setOlderError("Не удалось загрузить более ранние сообщения.");
       }
       return { loaded: 0 };
     } finally {
-      loadingOlderRef.current = false;
-      setLoadingOlder(false);
+      // A newer history read can discard this result without taking its busy claim.
+      if (sameAccount() && chatIdRef.current === activeChatId && topicIdRef.current === activeTopicId && olderRequestOwnerRef.current === requestOwner) {
+        olderRequestOwnerRef.current = null;
+        loadingOlderRef.current = false;
+        setLoadingOlder(false);
+      }
     }
   }, [rememberHiddenMessageIds, setMessages, supabase]);
 
   const fetchMessageById = useCallback(async (messageId: string): Promise<EnsureMessageLoadedResult> => {
     const activeChatId = chatIdRef.current;
-    if (!activeChatId) return { ok: false, reason: "not-found" };
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    if (!activeChatId || !sameAccount()) return { ok: false, reason: "not-found" };
     const { data } = await supabase
       .from("messages")
       .select(MESSAGE_SELECT_WITH_JOINS)
       .eq("id", messageId)
       .eq("chat_id", activeChatId)
       .maybeSingle();
-    if (!data) return { ok: false, reason: "not-found" };
+    if (!sameAccount() || chatIdRef.current !== activeChatId || !data) return { ok: false, reason: "not-found" };
     const message = data as unknown as MessageWithSender;
     const hiddenIds = await fetchHiddenMessageIdSet(supabase, [message.id, message.reply_to_id].filter(Boolean) as string[]);
-    if (!hiddenIds) return { ok: false, reason: "unavailable" };
+    if (!sameAccount() || chatIdRef.current !== activeChatId || !hiddenIds) return { ok: false, reason: "unavailable" };
     if (hiddenIds.has(message.id)) {
       rememberHiddenMessageIds(hiddenIds);
       return { ok: false, reason: "hidden" };
@@ -714,18 +748,22 @@ export function useMessages(
   useEffect(() => {
     if (!chatId) return;
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    const sameAccount = captureMessageAccount(userId, accountEpoch);
+    let disposed = false;
+    const isActive = () => !disposed && sameAccount() && chatIdRef.current === chatId && topicIdRef.current === topicId;
     let reconcileTimer: ReturnType<typeof setTimeout> | null = null;
     const scheduleReconcile = (delay = ACTIVE_CHAT_RECONCILE_DELAY_MS) => {
+      if (!isActive()) return;
       if (reconcileTimer) clearTimeout(reconcileTimer);
       reconcileTimer = setTimeout(() => {
         reconcileTimer = null;
-        if (!chatIdRef.current) return;
+        if (!isActive()) return;
         void fetchMessages({ background: true });
       }, delay);
     };
     const handleRefresh = (event: Event) => {
       const detail = (event as CustomEvent<ChatsRefreshDetail>).detail;
-      if (detail?.reason !== "message-realtime" || detail.chatId !== chatIdRef.current) return;
+      if (!isActive() || detail?.reason !== "message-realtime" || detail.chatId !== chatId) return;
       if (!detail.messageId) {
         scheduleReconcile();
         return;
@@ -733,6 +771,7 @@ export function useMessages(
       if (timers.has(detail.messageId)) return;
       const timer = setTimeout(() => {
         timers.delete(detail.messageId!);
+        if (!isActive()) return;
         const current = useAppStore.getState().messages[chatIdRef.current ?? ""] ?? [];
         if (current.some((message) => message.id === detail.messageId)) return;
         void fetchMessageById(detail.messageId!).then((result) => {
@@ -743,12 +782,13 @@ export function useMessages(
     };
     window.addEventListener(KUB_CHATS_REFRESH_EVENT, handleRefresh);
     return () => {
+      disposed = true;
       timers.forEach((timer) => clearTimeout(timer));
       timers.clear();
       if (reconcileTimer) clearTimeout(reconcileTimer);
       window.removeEventListener(KUB_CHATS_REFRESH_EVENT, handleRefresh);
     };
-  }, [chatId, fetchMessageById, fetchMessages]);
+  }, [chatId, topicId, userId, accountEpoch, fetchMessageById, fetchMessages]);
 
   // Coming back. Back online always reconciles — that is a real reconnect, and
   // it is one handler now rather than two timers fetching the same history. A
@@ -795,6 +835,8 @@ export function useMessages(
   }, [chatId, fetchMessages]);
 
   const fetchPinnedMessages = useCallback(async () => {
+    const sameAccount = captureMessageAccount(userId, accountEpoch);
+    if (!sameAccount()) return;
     if (!chatId) {
       // Nothing to read, which is the one place an empty list is the answer.
       setPinnedMessages([]);
@@ -807,6 +849,7 @@ export function useMessages(
     const user = currentUserRef.current;
     if (user) {
       localClearedAt = await loadClearedAt(supabase, chatId, user.id);
+      if (!sameAccount() || chatIdRef.current !== chatId) return;
       if (localClearedAt === undefined) {
         setPinnedMessages([]);
         setPinnedRead((current) => listReadRefused(current, { subject: fetchKey, message: "Не удалось проверить историю чата." }));
@@ -828,6 +871,7 @@ export function useMessages(
     const { data, error } = await query
       .order("created_at", { ascending: false })
       .limit(50);
+    if (!sameAccount() || chatIdRef.current !== chatId) return;
     if (error) {
       console.error("Pinned messages fetch error:", error);
       // A refused read is not an empty one (D-140). The rows already on screen
@@ -840,6 +884,7 @@ export function useMessages(
     }
     const pinnedRows = (data ?? []) as unknown as MessageWithSender[];
     const pinnedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(pinnedRows));
+    if (!sameAccount() || chatIdRef.current !== chatId) return;
     if (!pinnedHiddenIds) {
       setPinnedRead((current) => listReadRefused(current, { subject: fetchKey, message: "Не удалось проверить скрытые сообщения." }));
       return;
@@ -854,7 +899,7 @@ export function useMessages(
     // `clearedAt` is read through its ref: as a dependency, the message fetch
     // setting it made this whole fetch run a second time for any chat that had
     // ever been cleared.
-  }, [chatId, topicId, generalTopicIds, supabase, rememberHiddenMessageIds]);
+  }, [chatId, topicId, generalTopicIds, supabase, rememberHiddenMessageIds, userId, accountEpoch]);
 
   useEffect(() => { fetchPinnedMessages(); }, [fetchPinnedMessages]);
 
@@ -863,16 +908,18 @@ export function useMessages(
   // канал не пересоздавался на каждое heartbeat-echo (Task #48).
   useEffect(() => {
     if (!chatId || !userId) return;
+    const sameAccount = captureMessageAccount(userId, accountEpoch);
     const channelName = `messages:chat:${chatId}:typing`;
     const ch = rt.channel(channelName, { config: { broadcast: { ack: false } } });
     ch.on("broadcast", { event: "typing" }, (payload: { payload?: { userId?: string; topicId?: string | null } }) => {
+      if (!sameAccount()) return;
       const activeTopicId = topicIdRef.current;
       const incomingTopicId = payload.payload?.topicId ?? null;
       const topicMatches = activeTopicId === undefined || incomingTopicId === activeTopicId;
       if (topicMatches && payload.payload?.userId !== currentUserRef.current?.id) {
         setIsTyping(true);
         if (typingTimer.current) clearTimeout(typingTimer.current);
-        typingTimer.current = setTimeout(() => setIsTyping(false), 3000);
+        typingTimer.current = setTimeout(() => { if (sameAccount()) setIsTyping(false); }, 3000);
       }
     }).subscribe((status: string) => {
       if (import.meta.env.DEV) console.debug("[messages:typing]", chatId, status);
@@ -886,12 +933,13 @@ export function useMessages(
       typingChannelRef.current = null;
       unregisterChannel(channelName);
     };
-  }, [chatId, userId, rt]);
+  }, [chatId, userId, rt, accountEpoch]);
 
   const sendTyping = useCallback(() => {
     const ch = typingChannelRef.current;
     const user = currentUserRef.current;
-    if (!chatIdRef.current || !user || !ch) return;
+    const sameAccount = captureMessageAccount(user?.id, currentUserRef.accountEpoch);
+    if (!chatIdRef.current || !user || !ch || !sameAccount()) return;
     ch.send({
       type: "broadcast",
       event: "typing",
@@ -910,13 +958,16 @@ export function useMessages(
     if (!chatId || !userId) return;
 
     const channelName = `messages:chat:${chatId}`;
+    const sameAccount = captureMessageAccount(userId, accountEpoch);
+    let active = true;
+    const isCurrent = () => active && sameAccount() && chatIdRef.current === chatId;
     const channel = rt
       .channel(channelName)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
         async (payload: { new: MessageWithSender }) => {
-          if (payload.new.chat_id !== chatIdRef.current) return;
+          if (!isCurrent() || payload.new.chat_id !== chatIdRef.current) return;
           const localClearedAt = clearedAtRef.current;
           const clearedAtMs = localClearedAt ? new Date(localClearedAt).getTime() : null;
           if (clearedAtMs && new Date(payload.new.created_at).getTime() <= clearedAtMs) return;
@@ -968,10 +1019,10 @@ export function useMessages(
             .select(MESSAGE_SELECT_WITH_JOINS)
             .eq("id", payload.new.id)
             .maybeSingle();
-          if (!data) return;
+          if (!isCurrent() || !data) return;
           const nextMessage = data as unknown as MessageWithSender;
           const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]));
-          if (!fetchedHiddenIds) return;
+          if (!isCurrent() || !fetchedHiddenIds) return;
           if (fetchedHiddenIds.size) rememberHiddenMessageIds(fetchedHiddenIds);
           const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
           if (effectiveHiddenIds.has(nextMessage.id)) return;
@@ -985,7 +1036,7 @@ export function useMessages(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
         async (payload: { new: { id: string; chat_id: string; deleted_at: string | null } }) => {
-          if (payload.new.chat_id !== chatIdRef.current) return;
+          if (!isCurrent() || payload.new.chat_id !== chatIdRef.current) return;
           // Re-fetch the row (pulls in sender + reactions + cleared content
           // for soft-deletes).  We patch in place so soft-deletes keep their
           // slot in the stream and render as a "сообщение удалено" placeholder
@@ -995,11 +1046,12 @@ export function useMessages(
             .select(MESSAGE_SELECT_WITH_JOINS)
             .eq("id", payload.new.id)
             .single();
+          if (!isCurrent()) return;
           if (data) {
             const current = useAppStore.getState().messages[payload.new.chat_id] ?? [];
             const nextMessage = data as unknown as MessageWithSender;
             const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]));
-            if (!fetchedHiddenIds) return;
+            if (!isCurrent() || !fetchedHiddenIds) return;
             if (fetchedHiddenIds.size) rememberHiddenMessageIds(fetchedHiddenIds);
             const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
             if (effectiveHiddenIds.has(nextMessage.id)) return;
@@ -1016,6 +1068,7 @@ export function useMessages(
         }
       )
       .subscribe((status: string) => {
+        if (!isCurrent()) return;
         if (import.meta.env.DEV) console.debug("[messages:chat]", chatId, status);
         if (status === "SUBSCRIBED") {
           // For a reopened chat this is its one revalidation; for a new one it
@@ -1023,39 +1076,42 @@ export function useMessages(
           // reconnect it brings back whatever the outage cost.
           subscribedChatIdRef.current = chatId;
           window.setTimeout(() => {
-            if (chatIdRef.current === chatId) void fetchMessagesRef.current({ background: true });
+            if (isCurrent()) void fetchMessagesRef.current({ background: true });
           }, ACTIVE_CHAT_RECONCILE_DELAY_MS);
         }
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           if (subscribedChatIdRef.current === chatId) subscribedChatIdRef.current = null;
           window.setTimeout(() => {
-            if (chatIdRef.current === chatId) void fetchMessagesRef.current({ background: true });
+            if (isCurrent()) void fetchMessagesRef.current({ background: true });
           }, ACTIVE_CHAT_RECONNECT_DELAY_MS);
         }
       });
     registerChannel(channelName);
 
     return () => {
-      if (subscribedChatIdRef.current === chatId) subscribedChatIdRef.current = null;
+      active = false;
+      if (sameAccount() && subscribedChatIdRef.current === chatId) subscribedChatIdRef.current = null;
       rt.removeChannel(channel);
       unregisterChannel(channelName);
     };
-  }, [chatId, userId, rt, addMessage, rememberHiddenMessageIds, setMessages, shouldMarkDeliveredForPrivateChat, supabase, updateChatLastMessage]);
+  }, [chatId, userId, rt, addMessage, rememberHiddenMessageIds, setMessages, shouldMarkDeliveredForPrivateChat, supabase, updateChatLastMessage, accountEpoch]);
 
   useEffect(() => {
     if (!chatId || !userId) return;
     const channelName = `reactions:chat:${chatId}`;
+    const sameAccount = captureMessageAccount(userId, accountEpoch);
     let fallbackTimer: number | null = null;
 
     const scheduleFallbackRefetch = () => {
       if (fallbackTimer) window.clearTimeout(fallbackTimer);
       fallbackTimer = window.setTimeout(() => {
         fallbackTimer = null;
-        void fetchMessages({ background: true });
+        if (sameAccount()) void fetchMessages({ background: true });
       }, 300);
     };
 
     const handleReactionChange = (payload: { new?: { message_id?: string | null }; old?: { message_id?: string | null } }) => {
+      if (!sameAccount()) return;
       const messageId = payload.new?.message_id ?? payload.old?.message_id ?? null;
       if (!messageId) {
         scheduleFallbackRefetch();
@@ -1081,12 +1137,14 @@ export function useMessages(
       rt.removeChannel(channel);
       unregisterChannel(channelName);
     };
-  }, [chatId, userId, rt, fetchMessages, refreshMessageById]);
+  }, [chatId, userId, rt, fetchMessages, refreshMessageById, accountEpoch]);
 
   useEffect(() => {
     if (!chatId || !userId) return;
     const channelName = `profiles:chat:${chatId}`;
+    const sameAccount = captureMessageAccount(userId, accountEpoch);
     const handleProfileUpdate = (payload: { new?: Profile }) => {
+      if (!sameAccount()) return;
       const profile = payload.new;
       const activeChatId = chatIdRef.current;
       if (!profile || !activeChatId) return;
@@ -1122,12 +1180,13 @@ export function useMessages(
       rt.removeChannel(channel);
       unregisterChannel(channelName);
     };
-  }, [chatId, userId, rt, setMessages]);
+  }, [chatId, userId, rt, setMessages, accountEpoch]);
 
   useEffect(() => {
     if (!chatId || !userId) return;
+    const sameAccount = captureMessageAccount(userId, accountEpoch);
     const markReadWhenVisible = () => {
-      if (document.visibilityState !== "visible") return;
+      if (!sameAccount() || document.visibilityState !== "visible") return;
       const activeChatId = chatIdRef.current;
       if (!activeChatId) return;
       const latestIncoming = [...(useAppStore.getState().messages[activeChatId] ?? [])]
@@ -1137,7 +1196,7 @@ export function useMessages(
     };
     document.addEventListener("visibilitychange", markReadWhenVisible);
     return () => document.removeEventListener("visibilitychange", markReadWhenVisible);
-  }, [chatId, userId, supabase]);
+  }, [chatId, userId, supabase, accountEpoch]);
 
   // The insert, its acknowledgement and the chat's `updated_at` live in the
   // outbox since tracker item 52 (`lib/outbox/appOutbox.ts`): every row is
@@ -1145,8 +1204,18 @@ export function useMessages(
 
   const sendLocalMessage = useCallback(async (input: SendMessageInput) => {
     const user = currentUserRef.current;
+    const epoch = currentUserRef.accountEpoch;
+    const sameAccount = () => Boolean(user && useAppStore.getState().currentUser?.id === user.id &&
+      useAppStore.getState().accountEpoch === epoch);
+    if (!sameAccount()) return null;
+    if (input.ownerUserId !== undefined && input.ownerUserId !== user?.id) return null;
     const activeChatId = input.targetChatId ?? chatIdRef.current;
-    const trimmedContent = input.type === "text" ? (input.content ?? "").trim() : input.content;
+    const textSnapshot = input.mentionEntities === undefined ? null
+      : createMentionText(input.content ?? "", input.mentionEntities);
+    const normalizedSnapshot = textSnapshot && input.type === "text" ? trimMentionText(textSnapshot) : textSnapshot;
+    const mentionEntities = normalizedSnapshot?.mentionEntities;
+    const trimmedContent = normalizedSnapshot ? normalizedSnapshot.content
+      : input.type === "text" ? (input.content ?? "").trim() : input.content;
     if (!activeChatId || !user || (input.type === "text" && !trimmedContent)) return null;
 
     const clientMessageId = input.clientMessageId ?? crypto.randomUUID();
@@ -1159,6 +1228,7 @@ export function useMessages(
       user,
       type: input.type,
       content: trimmedContent,
+      mentionEntities,
       mediaBucket: input.mediaBucket,
       mediaPath: input.mediaPath,
       mediaUrl: input.mediaUrl,
@@ -1184,6 +1254,7 @@ export function useMessages(
       topicId: messageTopicId,
       type: input.type,
       content: trimmedContent ?? null,
+      ...(mentionEntities === undefined ? {} : { mentionEntities }),
       replyToId: input.replyToId ?? null,
       forwardedFromId: input.forwardedFromId ?? null,
       mediaBucket: input.mediaBucket ?? null,
@@ -1196,6 +1267,7 @@ export function useMessages(
       nextAttemptAt: 0,
     });
 
+    if (!sameAccount()) return null;
     if (outcome.kind === "sent") {
       // A send that went through is the only thing that can prove a refusal is
       // over, so it is what clears it.
@@ -1228,10 +1300,11 @@ export function useMessages(
     return null;
   }, [addMessage, replaceMessage, updateChatLastMessage]);
 
-  const sendMessage = useCallback(async (content: string, replyToId?: string) => {
+  const sendMessage = useCallback(async (content: string, replyToId?: string, mentionEntities?: import("@/lib/memberMentions").MessageMentionsV1) => {
     return sendLocalMessage({
       type: "text",
       content,
+      mentionEntities,
       replyToId: replyToId ?? null,
     });
   }, [sendLocalMessage]);
@@ -1246,6 +1319,7 @@ export function useMessages(
     /** That chat's topic at the press; undefined keeps the open topic's. */
     topicId?: string | null;
     content: string | null;
+    mentionEntities?: import("@/lib/memberMentions").MessageMentionsV1;
     mediaUrl: string;
     mediaBucket?: string | null;
     mediaPath?: string | null;
@@ -1259,6 +1333,7 @@ export function useMessages(
     return sendLocalMessage({
       type: input.type,
       content: input.content,
+      mentionEntities: input.mentionEntities,
       mediaBucket: input.mediaBucket ?? null,
       mediaPath: input.mediaPath ?? null,
       mediaUrl: input.mediaUrl,
@@ -1275,8 +1350,10 @@ export function useMessages(
   const retryMessageSend = useCallback(async (message: MessageWithSender) => {
     if (!message.failed && !message.checking) return null;
     return sendLocalMessage({
+      ownerUserId: message.user_id,
       type: message.type as SendableMessageType,
       content: message.content,
+      ...(message.mention_entities === undefined ? {} : { mentionEntities: createMentionText(message.content ?? "", message.mention_entities).mentionEntities }),
       mediaBucket: message.media_bucket,
       mediaPath: message.media_path,
       mediaUrl: message.media_url,
@@ -1304,17 +1381,22 @@ export function useMessages(
   // ── Edit ────────────────────────────────────────────────────────────────
   // UPDATE the row; the realtime UPDATE handler above will replace the message
   // with the freshly-joined data, so no manual store push is needed here.
-  const editMessage = useCallback(async (messageId: string, newContent: string) => {
-    const trimmed = newContent.trim();
+  const editMessage = useCallback(async (messageId: string, newContent: string, mentionEntities?: import("@/lib/memberMentions").MessageMentionsV1) => {
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
+    const text = trimMentionText(createMentionText(newContent, mentionEntities));
+    const trimmed = text.content;
     if (!chatId || !trimmed) return { ok: false, error: "Введите текст сообщения." };
     try {
       const { data, error } = await supabase
         .from("messages")
-        .update({ content: trimmed, edited_at: new Date().toISOString() })
+        .update({ content: trimmed, edited_at: new Date().toISOString(),
+          ...(mentionEntities === undefined ? {} : { mention_entities: text.mentionEntities as unknown as Json }) })
         .eq("id", messageId)
         .eq("chat_id", chatId)
         .select("id")
         .maybeSingle();
+      if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
       if (error) return { ok: false, error: mapPgError(error) };
       if (data?.id !== messageId) return { ok: false, error: "Сообщение недоступно для редактирования." };
       return { ok: true, error: null };
@@ -1327,10 +1409,13 @@ export function useMessages(
   // Set deleted_at; realtime UPDATE handler removes the bubble from view.
   const deleteMessage = useCallback(async (messageId: string) => {
     if (!chatId) return { ok: false, error: "Чат не выбран." };
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     const { error } = await supabase
       .from("messages")
       .update({ deleted_at: new Date().toISOString() })
       .eq("id", messageId);
+    if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     if (error) {
       console.error("Delete error:", error);
       return { ok: false, error: mapPgError(error) };
@@ -1340,7 +1425,10 @@ export function useMessages(
 
   const hideMessageForMe = useCallback(async (messageId: string) => {
     if (!chatId) return { ok: false, error: "Чат не выбран." };
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     const { error } = await supabase.rpc("hide_message_for_me", { p_message_id: messageId });
+    if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     if (error) {
       console.error("Hide message for me error:", error);
       return { ok: false, error: mapPgError(error) || "Не удалось скрыть сообщение." };
@@ -1358,11 +1446,14 @@ export function useMessages(
 
   const hideMessagesForMe = useCallback(async (messageIds: string[]) => {
     if (!chatId) return { ok: false, error: "Чат не выбран.", failed: messageIds.length };
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие.", failed: messageIds.length };
     const uniqueIds = Array.from(new Set(messageIds)).filter(Boolean);
     if (!uniqueIds.length) return { ok: true, error: null, failed: 0 };
     const failed: string[] = [];
     for (const messageId of uniqueIds) {
       const { error } = await supabase.rpc("hide_message_for_me", { p_message_id: messageId });
+      if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие.", failed: uniqueIds.length };
       if (error) {
         console.error("Bulk hide message for me error:", error);
         failed.push(messageId);
@@ -1396,7 +1487,8 @@ export function useMessages(
   const deleteMessagesForEveryone = useCallback(async (items: MessageWithSender[]) => {
     const activeChatId = chatIdRef.current;
     const user = currentUserRef.current;
-    if (!activeChatId || !user) return { ok: false, error: "Чат не выбран." };
+    const sameAccount = captureMessageAccount(user?.id, currentUserRef.accountEpoch);
+    if (!activeChatId || !user || !sameAccount()) return { ok: false, error: "Чат не выбран." };
     const batches = deletionBatches(items.map((item) => item.id));
     if (!batches.length) return { ok: true, error: null };
 
@@ -1405,10 +1497,12 @@ export function useMessages(
       const failures: string[] = [];
       for (const message of own) {
         const result = await deleteMessage(message.id);
+        if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
         if (!result.ok) failures.push(result.error ?? "Не удалось удалить сообщение.");
       }
       if (others.length) {
         const hidden = await hideMessagesForMe(others.map((message) => message.id));
+        if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
         if (!hidden.ok) failures.push(hidden.error ?? "Не удалось скрыть сообщения.");
       }
       if (!failures.length) return { ok: true, error: null };
@@ -1437,6 +1531,7 @@ export function useMessages(
     const deleted = new Set<string>();
     for (const [index, batch] of batches.entries()) {
       const { data, error } = await supabase.rpc(DELETE_FOR_EVERYONE_RPC, { p_message_ids: batch });
+      if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
       if (error) {
         if (index === 0 && isMissingRpcError(error)) {
           rpcAvailability.markMissing(DELETE_FOR_EVERYONE_RPC);
@@ -1456,8 +1551,11 @@ export function useMessages(
   // ── Pin / unpin ─────────────────────────────────────────────────────────
   const togglePin = useCallback(async (messageId: string, currentlyPinned: boolean) => {
     if (!chatId) return { ok: false, error: "Чат не выбран." };
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     const rpcName = currentlyPinned ? "unpin_message" : "pin_message";
     const { data, error } = await supabase.rpc(rpcName, { p_message_id: messageId });
+    if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     if (error) {
       console.error("Pin error:", error);
       return { ok: false, error: mapPgError(error) };
@@ -1496,7 +1594,8 @@ export function useMessages(
     targetChatId: string,
   ): Promise<ForwardMessageResult> => {
     const user = currentUserRef.current;
-    if (!user) return { ok: false, error: "Войдите в аккаунт, чтобы пересылать сообщения." };
+    const sameAccount = captureMessageAccount(user?.id, currentUserRef.accountEpoch);
+    if (!user || !sameAccount()) return { ok: false, error: "Войдите в аккаунт, чтобы пересылать сообщения." };
     const target = {
       chatId: targetChatId,
       userId: user.id,
@@ -1506,6 +1605,7 @@ export function useMessages(
     let forwarded: { created_at: string } | null = null;
     if (rpcAvailability.shouldTry(FORWARD_RPC)) {
       const { data, error } = await supabase.rpc(FORWARD_RPC, forwardRpcArgs(src, target));
+      if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
       if (!error && data) {
         rpcAvailability.markPresent(FORWARD_RPC);
         forwarded = data as unknown as { created_at: string };
@@ -1522,6 +1622,7 @@ export function useMessages(
         .insert(forwardInsertPayload(src, target))
         .select(MESSAGE_SELECT_WITH_JOINS)
         .single();
+      if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
       if (error || !data) {
         console.error("Forward error:", error);
         return { ok: false, error: mapPgError(error) };
@@ -1531,6 +1632,7 @@ export function useMessages(
     // Ordering only. The message is delivered once the copy exists, so the
     // answer to this bump must not turn a delivered forward into a failure.
     await supabase.from("chats").update({ updated_at: forwarded.created_at }).eq("id", targetChatId);
+    if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     return { ok: true, error: null };
   }, [supabase]);
 
@@ -1553,14 +1655,15 @@ export function useMessages(
   // can produce; no path could reach it.
   const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
     const user = currentUserRef.current;
-    if (!user) return;
+    const sameAccount = captureMessageAccount(user?.id, currentUserRef.accountEpoch);
+    if (!user || !sameAccount()) return;
     const activeChatId = chatId;
     const shown = activeChatId
       ? (useAppStore.getState().messages[activeChatId] ?? []).find((message) => message.id === messageId)
       : undefined;
     const painted = shown ? shown.reactions : null;
     const showReactions = (reactions: unknown) => {
-      if (!activeChatId) return;
+      if (!activeChatId || !sameAccount()) return;
       const current = useAppStore.getState().messages[activeChatId] ?? [];
       setMessages(activeChatId, current.map((message) =>
         message.id === messageId ? { ...message, reactions: reactions as MessageWithSender["reactions"] } : message,
@@ -1568,6 +1671,7 @@ export function useMessages(
     };
     /** Put the reactions back as they were, and say in a person's words why. */
     const refuse = (error: unknown) => {
+      if (!sameAccount()) return;
       console.error("Reaction error:", error);
       if (shown) showReactions(painted);
       setActionRefusal(mapPgError(error));
@@ -1599,6 +1703,7 @@ export function useMessages(
         const { data, error: lookupError } = await supabase.from("reactions")
           .select("id,message_id,user_id,emoji,created_at")
           .eq("message_id", messageId).eq("user_id", user.id);
+        if (!sameAccount()) return null;
         if (lookupError) return lookupError;
         mine = (data ?? []) as NonNullable<MessageWithSender["reactions"]>;
       }
@@ -1610,12 +1715,14 @@ export function useMessages(
           .eq("message_id", messageId).eq("user_id", user.id);
         if (scope.kind === "ids") removal = removal.in("id", scope.ids);
         const { error } = await removal;
+        if (!sameAccount()) return null;
         // The insert used to run anyway. It then met the database's limit, and
         // two console lines stood for one visibly wrong screen.
         if (error) return error;
       }
       if (plan.add) {
         const { error } = await supabase.from("reactions").insert({ message_id: messageId, user_id: user.id, emoji: plan.add });
+        if (!sameAccount()) return null;
         if (error) return error;
       }
       return null;
@@ -1623,9 +1730,11 @@ export function useMessages(
 
     if (rpcAvailability.shouldTry(SET_REACTION_RPC)) {
       const outcome = reactionRpcOutcome(await supabase.rpc(SET_REACTION_RPC, { p_message_id: messageId, p_emoji: emoji }));
+      if (!sameAccount()) return;
       if (outcome.kind === "missing") {
         rpcAvailability.markMissing(SET_REACTION_RPC);
         const failure = await toggleAsBefore();
+        if (!sameAccount()) return;
         if (failure) return refuse(failure);
       } else {
         // It answered, refusal included, so the server has it.
@@ -1638,12 +1747,14 @@ export function useMessages(
       }
     } else {
       const failure = await toggleAsBefore();
+      if (!sameAccount()) return;
       if (failure) return refuse(failure);
     }
 
     const { data: updatedMsg } = await supabase.from("messages")
       .select(MESSAGE_SELECT_WITH_JOINS)
       .eq("id", messageId).single();
+    if (!sameAccount()) return;
     if (updatedMsg && activeChatId) {
       const current = useAppStore.getState().messages[activeChatId] ?? [];
       setMessages(activeChatId, current.map((m) => m.id === messageId ? (updatedMsg as unknown as MessageWithSender) : m));
@@ -1652,7 +1763,10 @@ export function useMessages(
 
   const clearChatForMe = useCallback(async () => {
     if (!chatId) return { ok: false, error: "Чат не выбран." };
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     const { error } = await supabase.rpc("clear_chat_for_me", { p_chat_id: chatId });
+    if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     if (error) {
       console.error("Clear chat for me error:", error);
       return { ok: false, error: mapPgError(error) };
@@ -1662,6 +1776,7 @@ export function useMessages(
     if (chatIdRef.current === chatId) historyRequestGenerationRef.current += 1;
     setMessages(chatId, []);
     if (chatIdRef.current !== chatId) return { ok: true, error: null };
+    verifiedAccountEpochRef.current = useAppStore.getState().accountEpoch;
     setVerifiedChatId(chatId);
     setVerifyingChatId(null);
     setHistoryError(null);
@@ -1679,7 +1794,8 @@ export function useMessages(
   // every render of this hook rendered the conversation for any render of the
   // chat window — a chat list update, a composer resize — though no message
   // had changed.
-  const boundaryVerified = Boolean(chatId && userId && verifyingChatId !== chatId && verifiedChatId === chatId);
+  const boundaryVerified = Boolean(chatId && userId && verifiedAccountEpochRef.current === accountEpoch &&
+    verifyingChatId !== chatId && verifiedChatId === chatId);
   const visibleMessages = useMemo(() => {
     if (!boundaryVerified) return EMPTY_MESSAGES;
     const scoped = chatMessages.filter((message) =>

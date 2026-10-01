@@ -1,6 +1,21 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
+type HeightObservation = { observer: ResizeObserver; node: HTMLElement };
+const heightObservations = new Set<HeightObservation>();
+let reobserveFrame: number | null = null;
+
+// A sync commit can also resize a sibling measured by another hook instance.
+// Pause only our observations for this delivery; the commit still lands now.
+function pauseHeightObservations() {
+  for (const { observer, node } of heightObservations) observer.unobserve(node);
+  if (reobserveFrame !== null) return;
+  reobserveFrame = requestAnimationFrame(() => {
+    reobserveFrame = null;
+    for (const { observer, node } of heightObservations) observer.observe(node, { box: "border-box" });
+  });
+}
+
 /** The box being measured, or null while it is not mounted. */
 type Measured<T extends HTMLElement> = {
   /** Attach to the box. A callback ref, so a box that mounts later is seen. */
@@ -26,10 +41,10 @@ type Measured<T extends HTMLElement> = {
  * see different things. The layout effect catches every change that re-renders
  * the caller before the browser paints — `setState` from a layout effect is
  * flushed synchronously — so a reply preview never paints at the wrong height.
- * The observer catches what no commit of the caller describes: a textarea
- * growing a line as the reader types (that commit belongs to the composer, not
- * to the component holding this hook), a font arriving, a wrapped label
- * reflowing. Both land in the frame that shows the change; see the observer.
+ * A child that changes its own layout calls `measure` from its layout effect:
+ * waiting for native delivery can leave the caller's inset a frame behind.
+ * The observer remains the fallback for external changes, such as a font
+ * arriving or a wrapped label reflowing without a React commit.
  *
  * `Math.ceil` on purpose. A fractional height rounded down leaves a sub-pixel
  * strip of the conversation under the chrome; rounded up it costs at most one
@@ -47,11 +62,14 @@ export function useMeasuredHeight<T extends HTMLElement>(resetKey?: unknown): Me
   // message sat 46px under the composer.
   const [node, setNode] = useState<T | null>(null);
   const [height, setHeight] = useState(0);
+  const measuredHeightRef = useRef(0);
 
   const measure = useCallback(() => {
     const current = nodeRef.current;
     const next = current ? Math.ceil(current.getBoundingClientRect().height) : 0;
-    setHeight((value) => (value === next ? value : next));
+    if (measuredHeightRef.current === next) return;
+    measuredHeightRef.current = next;
+    setHeight(next);
   }, []);
 
   const ref = useCallback((element: T | null) => {
@@ -64,6 +82,9 @@ export function useMeasuredHeight<T extends HTMLElement>(resetKey?: unknown): Me
     // is already assigned, so the first height is right before the first paint
     // and the re-render this schedules only attaches the observer.
     measure();
+  });
+
+  useLayoutEffect(() => {
     if (!node) return undefined;
 
     // Committed inside the callback, not scheduled for the next frame.
@@ -81,13 +102,18 @@ export function useMeasuredHeight<T extends HTMLElement>(resetKey?: unknown): Me
     // frames the same way. That jump is "текст прыгает, когда печатаю".
     //
     // `flushSync` commits the caller before this callback returns, so its layout
-    // effects — the list's padding and its bottom anchor — run before the
-    // browser paints. It cannot loop: nothing laid out from this height is an
-    // ancestor or a sibling of the box being observed, so the commit resizes
-    // nothing at this box's depth, and an unchanged height is not a state
-    // update at all.
+    // effects — the list's padding and its bottom anchor — run before paint.
+    // It can also flush pending work outside this callback: in WebKit the dock
+    // commit changed the sibling header from 56px to 89.328125px at the same
+    // DOM depth, producing an undelivered notification. Pause all this hook's
+    // observations, not arbitrary third-party observers. Each caller's layout
+    // effect above measures the changed siblings in the same commit. Only
+    // re-observation waits for the next frame; unchanged initial deliveries
+    // must not restart that cycle.
     const observer = typeof ResizeObserver !== "undefined"
       ? new ResizeObserver(() => {
+        if (Math.ceil(node.getBoundingClientRect().height) === measuredHeightRef.current) return;
+        pauseHeightObservations();
         flushSync(measure);
       })
       : null;
@@ -101,9 +127,16 @@ export function useMeasuredHeight<T extends HTMLElement>(resetKey?: unknown): Me
     // the inset driven to 320px: the dock grew to 390px, the observer stayed
     // silent, the padding stayed at 94px, and the newest message sat 296px
     // under the composer.
-    observer?.observe(node, { box: "border-box" });
+    const observation = observer ? { observer, node } : null;
+    if (observation) heightObservations.add(observation);
+    if (reobserveFrame === null) observer?.observe(node, { box: "border-box" });
     return () => {
+      if (observation) heightObservations.delete(observation);
       observer?.disconnect();
+      if (heightObservations.size === 0 && reobserveFrame !== null) {
+        cancelAnimationFrame(reobserveFrame);
+        reobserveFrame = null;
+      }
     };
   }, [measure, node, resetKey]);
 

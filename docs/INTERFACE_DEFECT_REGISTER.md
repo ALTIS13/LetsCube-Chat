@@ -24688,7 +24688,7 @@ text; `voice-word-text.spec` shows four such messages as text and the one voice
 note as the one player, at 1440 and 390, and is red with the old fallback
 served.
 
-## D-331 `[ ]` A member cannot conveniently mention another person in a conversation
+## D-331 `[~]` A member cannot conveniently mention another person in a conversation
 
 **Severity:** high for group conversations. Tester report of 2026-09-30,
 19:40 MSK, read from the owner's explicitly authorised private conversation
@@ -24726,3 +24726,20 @@ at 1440 and 390 in both themes; Escape closes the list; a selected mention
 opens the person's profile without sending a read receipt. Verify recipient
 notifications, sender exclusion, blocks, mutes, membership changes and account
 switches at their real boundaries before calling this fixed.
+
+## D-332 `[~]` An account switch can retain the previous account's unsent local messages
+
+**Severity:** high, account privacy boundary. Found during the independent
+D-331 source review on 2026-10-01, not taken from a personal-message capture.
+Existing before the mention implementation.
+
+**Reproduction:** A leaves a failed or pending local message, signs out, B signs
+in without reloading and opens a shared group. `setCurrentUser` clears chat
+selection/list but retains the messages map; the history merge can preserve A's
+local rows, including text and addressed identities. Scoped outbox storage alone
+does not protect this shared in-memory projection.
+
+**Next:** clear account-owned projections when the account identity changes,
+retain them for same-account profile updates, and reject late A completions
+before they mutate B's history. Runtime account-switch and mounted acceptance
+are required; source review is not production proof.

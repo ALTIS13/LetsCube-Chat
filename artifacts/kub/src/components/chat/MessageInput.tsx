@@ -70,7 +70,7 @@ import {
   type BotCommand,
 } from "@/lib/botChatSurfaces";
 import { locationMessageText, type AttachIncoming, type AttachSendRequest } from "@/lib/attachSheet";
-import { textAfterSheet, textForSheet } from "@/lib/attachCaptionHandoff";
+import { textForSheet } from "@/lib/attachCaptionHandoff";
 import { ComposerRecordingRow, type ComposerRecordingPreview } from "./ComposerRecordingRow";
 import {
   lockProgress,
@@ -88,9 +88,11 @@ import {
 } from "@/lib/recordingGesture";
 import type { VoiceRecordResult } from "@/hooks/useVoiceRecorder";
 import { useReloadGuard } from "@/hooks/useReloadGuard";
+import { useMemberMentionPicker } from "@/hooks/useMemberMentions";
+import { MemberMentionMenu } from "./MemberMentionMenu";
+import { createMentionText, rebaseMentionText, trimMentionText, concatMentionText, type MentionText, type MessageMentionsV1 } from "@/lib/memberMentions";
+import { readMentionDraft, writeMentionDraft } from "@/lib/memberMentionDrafts";
 
-const DRAFT_PREFIX = "kub:draft:";
-const draftKey = (chatId: string) => `${DRAFT_PREFIX}${chatId}`;
 const MOBILE_RECORDER_LONG_PRESS_MS = 320;
 const RECORDER_TAP_MOVE_PX = 10;
 /** How long the hint left by a press too short to be a recording stays (D-130, R7). */
@@ -105,10 +107,11 @@ function forwardDraftSummary(messages: MessageWithSender[]): string {
 
 interface MessageInputProps {
   chatId: string;
+  topicId?: string | null;
   replyTo: MessageWithSender | null;
   onCancelReply: () => void;
-  onSend: (content: string) => void | boolean | Promise<unknown>;
-  onEdit?: (messageId: string, newContent: string) => Promise<{ ok: boolean; error: string | null }>;
+  onSend: (content: string, mentionEntities?: MessageMentionsV1) => void | boolean | Promise<unknown>;
+  onEdit?: (messageId: string, newContent: string, mentionEntities?: MessageMentionsV1) => Promise<{ ok: boolean; error: string | null }>;
   onSendVoice?: (blob: Blob, durationMs: number, mimeType: string) => void | Promise<void>;
   onSendVideoMessage?: (blob: Blob, durationMs: number, mimeType: string) => void | Promise<void>;
   onTyping?: () => void;
@@ -117,7 +120,7 @@ interface MessageInputProps {
   onRemoveAttachment?: (attachmentId: string) => void;
   onRetryAttachment?: (attachmentId: string) => void;
   onCancelAttachment?: (attachmentId: string) => void;
-  draftOverride?: { id: string; text: string } | null;
+  draftOverride?: { id: string; text: string; mentionEntities?: MessageMentionsV1 } | null;
   focusRequestKey?: number;
   onFocusChange?: (focused: boolean) => void;
   /**
@@ -166,10 +169,13 @@ interface MessageInputProps {
    * recorder button that the mode hint hangs over (D-326).
    */
   jumpControlOnScreen?: boolean;
+  /** Commit the dock's measured height before a child layout change paints. */
+  onLayoutChange?: () => void;
 }
 
 export function MessageInput({
   chatId,
+  topicId = null,
   replyTo,
   onCancelReply,
   onSend,
@@ -194,8 +200,20 @@ export function MessageInput({
   onDismissRefusal,
   bot = null,
   jumpControlOnScreen = false,
+  onLayoutChange,
 }: MessageInputProps) {
-  const [text, setText] = useState("");
+  const userId = useAppStore((state) => state.currentUser?.id ?? null);
+  const draftScope = `${userId}:${chatId}`;
+  const [storedText, setStoredText] = useState<{ scope: string; snapshot: MentionText }>(() => ({ scope: "", snapshot: createMentionText("") }));
+  const snapshot = storedText.scope === draftScope ? storedText.snapshot : createMentionText("");
+  const text = snapshot.content;
+  const setSnapshot = useCallback((next: MentionText) => setStoredText({ scope: draftScope, snapshot: next }), [draftScope]);
+  const setText = useCallback((next: string | ((value: string) => string)) => {
+    setStoredText((current) => {
+      const source = current.scope === draftScope ? current.snapshot : createMentionText("");
+      return { scope: draftScope, snapshot: rebaseMentionText(source, typeof next === "function" ? next(source.content) : next) };
+    });
+  }, [draftScope]);
   const [editError, setEditError] = useState<string | null>(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
@@ -204,7 +222,7 @@ export function MessageInput({
    * (tracker item 65, `lib/attachCaptionHandoff.ts`); null when it holds none.
    * A send spends it; any other way out gives it back.
    */
-  const [heldForSheet, setHeldForSheet] = useState<string | null>(null);
+  const [heldForSheet, setHeldForSheet] = useState<MentionText | null>(null);
   /** The «Команды» button's own list. «/» opens the same list without it. */
   const [showCommands, setShowCommands] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -268,6 +286,8 @@ export function MessageInput({
   const isEditing = editingMessage !== null && editingMessage.chat_id === chatId;
   const isEditingRef = useRef(isEditing);
   isEditingRef.current = isEditing;
+  const mentionPicker = useMemberMentionPicker(chatId, topicId, snapshot, setSnapshot, textareaRef,
+    showAttach || showEmoji || showCommands || isComposing);
   const muteState = useMuteState(chatId);
 
   /**
@@ -309,13 +329,21 @@ export function MessageInput({
       setStarting(false);
     }
   }, [bot, starting]);
-  const preEditTextRef = useRef<string | null>(null);
+  const preEditTextRef = useRef<MentionText | null>(null);
+  const editSessionRef = useRef(0);
   const composerSendScopeRef = useRef<ReturnType<typeof createComposerSendScope> | null>(null);
   if (!composerSendScopeRef.current) composerSendScopeRef.current = createComposerSendScope(chatId);
   const composerSendScope = composerSendScopeRef.current;
   const voiceRecordingScopeTokenRef = useRef<ComposerSendToken | null>(null);
   const videoRecordingScopeTokenRef = useRef<ComposerSendToken | null>(null);
   const delayedAttachmentScopeTokenRef = useRef<ComposerSendToken | null>(null);
+  const sheetScopeTokenRef = useRef<ComposerSendToken | null>(null);
+
+  // Store transitions include a batched cancel/reopen of the same row, which
+  // an effect depending on its ID would never see.
+  useLayoutEffect(() => useAppStore.subscribe((state, previous) => {
+    if (state.editingMessage !== previous.editingMessage) editSessionRef.current += 1;
+  }), []);
 
   useLayoutEffect(() => {
     voiceHold.cancel();
@@ -323,6 +351,7 @@ export function MessageInput({
     voiceRecordingScopeTokenRef.current = null;
     videoRecordingScopeTokenRef.current = null;
     delayedAttachmentScopeTokenRef.current = null;
+    sheetScopeTokenRef.current = null;
     voiceHoldActiveRef.current = false;
     videoHoldActiveRef.current = false;
     holdRecorderStateRef.current = null;
@@ -349,28 +378,26 @@ export function MessageInput({
       videoHoldActiveRef.current = false;
       holdRecorderStateRef.current = null;
     };
-  }, [chatId, composerSendScope, voiceHold.cancel]);
+  }, [chatId, userId, topicId, composerSendScope, voiceHold.cancel]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const saved = localStorage.getItem(draftKey(chatId));
-    setText(saved ?? "");
+    setSnapshot(userId ? readMentionDraft(localStorage, userId, chatId) : createMentionText(""));
     // What the sheet held was saved as the previous chat's draft, below.
     setHeldForSheet(null);
     preEditTextRef.current = null;
     setEditingMessage(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatId]);
+  }, [chatId, userId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (isEditing) return;
+    if (isEditing || !userId || storedText.scope !== draftScope) return;
     // While the sheet holds the text it is still this chat's draft: a reload
     // with the sheet open must not lose it.
-    const draft = heldForSheet === null ? text : textAfterSheet(heldForSheet, text);
-    if (draft) localStorage.setItem(draftKey(chatId), draft);
-    else localStorage.removeItem(draftKey(chatId));
-  }, [text, heldForSheet, chatId, isEditing]);
+    const draft = heldForSheet === null ? snapshot : concatMentionText(heldForSheet, snapshot);
+    writeMentionDraft(localStorage, userId, chatId, draft);
+  }, [snapshot, heldForSheet, chatId, userId, isEditing, storedText.scope, draftScope]);
 
   // Any way out of the sheet but a send gives the composer its text back, as
   // Telegram Desktop's cancel does; a send has already spent it.
@@ -378,8 +405,8 @@ export function MessageInput({
     if (showAttach || heldForSheet === null) return;
     const held = heldForSheet;
     setHeldForSheet(null);
-    setText((current) => textAfterSheet(held, current));
-  }, [showAttach, heldForSheet]);
+    setSnapshot(concatMentionText(held, snapshot));
+  }, [showAttach, heldForSheet, setSnapshot]);
 
   useEffect(() => () => onFocusChange?.(false), [onFocusChange]);
 
@@ -437,8 +464,8 @@ export function MessageInput({
   useEffect(() => {
     if (!isEditing || !editingMessage) return;
     setEditError(null);
-    if (preEditTextRef.current === null) preEditTextRef.current = text;
-    setText(editingMessage.content ?? "");
+    if (preEditTextRef.current === null) preEditTextRef.current = snapshot;
+    setSnapshot(createMentionText(editingMessage.content ?? "", editingMessage.mention_entities));
     setTimeout(() => textareaRef.current?.focus(), 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingMessage?.id]);
@@ -448,7 +475,7 @@ export function MessageInput({
     setEditingMessage(null);
     preEditTextRef.current = null;
     setHeldForSheet(null);
-    setText(draftOverride.text);
+    setSnapshot(createMentionText(draftOverride.text, draftOverride.mentionEntities));
     setShowEmoji(false);
     setShowAttach(false);
     setTimeout(() => textareaRef.current?.focus(), 0);
@@ -465,9 +492,9 @@ export function MessageInput({
   const exitEditMode = useCallback(() => {
     setEditError(null);
     setEditingMessage(null);
-    setText(preEditTextRef.current ?? "");
+    setSnapshot(preEditTextRef.current ?? createMentionText(""));
     preEditTextRef.current = null;
-  }, [setEditingMessage]);
+  }, [setEditingMessage, setSnapshot]);
 
   const stageCameraFile = useCallback((file: File, scopeToken: ComposerSendToken | null) => {
     if (!onStageFiles) return;
@@ -909,13 +936,15 @@ export function MessageInput({
   // seeds the sheet's caption from it — so it is neither sent separately nor
   // lost to one of the two.
   const takeTextForSheet = useCallback(() => {
+    sheetScopeTokenRef.current = composerSendScope.capture();
     const taken = textForSheet(textareaRef.current?.value ?? "", isEditingRef.current);
     if (taken === null) return;
-    setHeldForSheet((held) => held ?? taken);
+    setHeldForSheet((held) => held ?? rebaseMentionText(snapshot, taken));
     setText("");
-  }, []);
+  }, [snapshot, setText, composerSendScope]);
 
   const sendFromSheet = useCallback((request: AttachSendRequest) => {
+    if (!sheetScopeTokenRef.current || !composerSendScope.isActive(sheetScopeTokenRef.current)) return;
     // The caption carried the composer's text; sent, it is spent.
     setHeldForSheet(null);
     setShowAttach(false);
@@ -924,7 +953,7 @@ export function MessageInput({
       return;
     }
     onStageFiles?.(request.files, request.source === "drop" ? "paste" : request.source, { compress: request.compress });
-  }, [onSendMedia, onStageFiles]);
+  }, [onSendMedia, onStageFiles, composerSendScope]);
 
   // The sheet shows the place first; this sends the message the one-tap item
   // sent, and only from the sheet's own row.
@@ -953,31 +982,36 @@ export function MessageInput({
   const handleSend = useCallback(async () => {
     const sendToken = composerSendScope.capture();
     const currentText = textareaRef.current?.value ?? text;
-    const trimmed = currentText.trim();
+    const outgoingSnapshot = trimMentionText(rebaseMentionText(snapshot, currentText));
+    const trimmed = outgoingSnapshot.content;
     // Messages waiting to be forwarded are sent by the send itself, with or
     // without a comment typed beside them.
     if (!trimmed && !hasAttachments && !hasForwardDraft) return;
     if (isEditing && editingMessage && onEdit) {
       if (!trimmed) return;
+      const editSession = ++editSessionRef.current;
       setEditError(null);
       let result: { ok: boolean; error: string | null };
       try {
-        result = await onEdit(editingMessage.id, trimmed);
+        result = await onEdit(editingMessage.id, trimmed, outgoingSnapshot.mentionEntities);
       } catch {
         result = { ok: false, error: "Проверьте соединение и повторите попытку." };
       }
-      if (!composerSendScope.isActive(sendToken)) return;
+      if (!composerSendScope.isActive(sendToken)
+        || useAppStore.getState().editingMessage?.id !== editingMessage.id
+        || editSessionRef.current !== editSession) return;
       if (!result.ok) {
         setEditError(`Не удалось сохранить изменение. ${result.error ?? "Повторите попытку."}`);
         return;
       }
       setEditingMessage(null);
-      setText(preEditTextRef.current ?? "");
+      setSnapshot(preEditTextRef.current ?? createMentionText(""));
       preEditTextRef.current = null;
     } else {
       const previousText = currentText;
+      const previousSnapshot = rebaseMentionText(snapshot, currentText);
       setText("");
-      if (typeof window !== "undefined") localStorage.removeItem(draftKey(chatId));
+      if (typeof window !== "undefined" && userId) writeMentionDraft(localStorage, userId, chatId, createMentionText(""));
       setShowEmoji(false);
       if (textareaRef.current) {
         textareaRef.current.focus();
@@ -1007,12 +1041,13 @@ export function MessageInput({
       const outgoing = bot ? addressTypedBotCommand(trimmed, bot.addressing, bot.commands) : trimmed;
       let result: unknown;
       try {
-        result = await onSend(outgoing);
+        const addressed = rebaseMentionText(outgoingSnapshot, outgoing);
+        result = await onSend(outgoing, addressed.mentionEntities);
       } catch (error) {
         restoreComposerTextIfCurrent(composerSendScope, sendToken, previousText, {
-          restoreText: setText,
+          restoreText: (restored) => setSnapshot(rebaseMentionText(previousSnapshot, restored)),
           writeDraft: (sourceChatId, draft) => {
-            if (typeof window !== "undefined") localStorage.setItem(draftKey(sourceChatId), draft);
+            if (typeof window !== "undefined" && userId) writeMentionDraft(localStorage, userId, sourceChatId, rebaseMentionText(previousSnapshot, draft));
           },
           focus: () => textareaRef.current?.focus(),
         });
@@ -1020,9 +1055,9 @@ export function MessageInput({
       }
       if (result === false) {
         restoreComposerTextIfCurrent(composerSendScope, sendToken, previousText, {
-          restoreText: setText,
+          restoreText: (restored) => setSnapshot(rebaseMentionText(previousSnapshot, restored)),
           writeDraft: (sourceChatId, draft) => {
-            if (typeof window !== "undefined") localStorage.setItem(draftKey(sourceChatId), draft);
+            if (typeof window !== "undefined" && userId) writeMentionDraft(localStorage, userId, sourceChatId, rebaseMentionText(previousSnapshot, draft));
           },
           focus: () => textareaRef.current?.focus(),
         });
@@ -1034,9 +1069,10 @@ export function MessageInput({
     if (textareaRef.current) {
       textareaRef.current.focus();
     }
-  }, [text, hasAttachments, hasForwardDraft, onSend, isEditing, editingMessage, onEdit, setEditingMessage, chatId, composerSendScope, bot]);
+  }, [text, snapshot, userId, hasAttachments, hasForwardDraft, onSend, isEditing, editingMessage, onEdit, setEditingMessage, chatId, composerSendScope, bot, setSnapshot, setText]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionPicker.onKeyDown(e)) return;
     if (e.key === "Escape") {
       if (showEmoji || showAttach) {
         e.preventDefault();
@@ -1050,7 +1086,7 @@ export function MessageInput({
     }
     // On a phone Enter is a line break and the arrow sends, as in Telegram
     // (tracker item 71, `lib/composerEnter.ts`); elsewhere Enter sends.
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !isComposing && enterSendsHere()) {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229 && !isComposing && enterSendsHere()) {
       e.preventDefault();
       if (!isAttachmentBusy && (hasText || hasAttachments || hasForwardDraft)) void handleSend();
       return;
@@ -1059,6 +1095,7 @@ export function MessageInput({
   };
 
   const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    mentionPicker.onPaste(event);
     const data = event.clipboardData;
     if (!data || !onStageFiles || isEditing) return;
     const files: File[] = [];
@@ -1115,6 +1152,12 @@ export function MessageInput({
     // tests all stayed green, because a layout effect runs before paint and
     // the clamp has therefore always landed first.
   }, [maxComposerHeight, text]);
+
+  // The parent does not render on every keystroke. Its history inset must see
+  // this commit even when a native observer has not delivered the new height.
+  useLayoutEffect(() => {
+    onLayoutChange?.();
+  });
 
   const insertEmoji = (emoji: string) => {
     const el = textareaRef.current;
@@ -1384,7 +1427,10 @@ export function MessageInput({
             if (sheetWebcamShot) setSheetWebcamShot(null);
             else onIncomingMediaTaken?.();
           }}
-          initialCaption={heldForSheet ?? ""}
+          chatId={chatId}
+          topicId={topicId}
+          initialCaption={heldForSheet?.content ?? ""}
+          initialMentionEntities={heldForSheet?.mentionEntities}
           onClose={() => setShowAttach(false)}
           onSendMedia={sendFromSheet}
           onSendLocation={sendLocationFromSheet}
@@ -1525,7 +1571,13 @@ export function MessageInput({
         {/* The bot's commands, above the capsules and below everything else the
             composer stacks there — a reply, a forward, a refusal all outrank a
             list of what could be typed next (D-126). */}
-        {commandMenuVariant && (
+        {mentionPicker.open && (
+          <div className="mb-2">
+            <MemberMentionMenu id={mentionPicker.listId} candidates={mentionPicker.matches}
+              activeIndex={mentionPicker.selectedIndex} onChoose={mentionPicker.choose} />
+          </div>
+        )}
+        {!mentionPicker.open && commandMenuVariant && (
           <BotCommandMenu
             commands={botCommands}
             matches={commandMatches}
@@ -1638,13 +1690,15 @@ export function MessageInput({
 
           <textarea
             ref={textareaRef}
+            {...mentionPicker.fieldAttributes}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => { if (!mentionPicker.onChange(e)) setText(e.target.value); mentionPicker.observeSelection(); }}
+            onSelect={mentionPicker.observeSelection}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
-            onFocus={() => onFocusChange?.(true)}
+            onCompositionStart={() => { setIsComposing(true); mentionPicker.onCompositionStart(); }}
+            onCompositionEnd={() => { setIsComposing(false); mentionPicker.onCompositionEnd(); }}
+            onFocus={() => { onFocusChange?.(true); mentionPicker.observeSelection(); }}
             onBlur={() => onFocusChange?.(false)}
             placeholder="Сообщение…"
             rows={1}

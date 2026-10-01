@@ -31,10 +31,13 @@ import {
   type ChatMuteSnapshot,
 } from '@/lib/chatMute'
 import { mapPgError } from '@/lib/errors'
+import { appOutbox } from '@/lib/outbox/appOutbox'
 
 interface AppState {
   // Current user
   currentUser: Profile | null
+  /** Changes only at an account boundary, including logout/relogin as the same person. */
+  accountEpoch: number
   setCurrentUser: (user: Profile | null) => void
 
   // Selected chat
@@ -374,6 +377,7 @@ function latestTimestamp(a: string | null | undefined, b: string | null | undefi
 
 export const useAppStore = create<AppState>((set, get) => ({
   currentUser: null,
+  accountEpoch: 0,
   /**
    * Shallow-compare significant fields and DROP no-op writes.
    *
@@ -398,8 +402,14 @@ export const useAppStore = create<AppState>((set, get) => ({
    * ради которого всё это писалось, остаётся закрытым.
    */
   setCurrentUser: (user) => set((state) => {
-    if (state.currentUser && state.currentUser.id !== user?.id) {
-      return { currentUser: user, chats: [], selectedChatId: null, selectedTopicId: null };
+    if ((state.currentUser?.id ?? null) !== (user?.id ?? null)) {
+      // Fence ACK callbacks before the new account is published, not after a React effect.
+      appOutbox.stop();
+      return { currentUser: user, accountEpoch: state.accountEpoch + 1, chats: [], messages: {},
+        replyToMessage: null, editingMessage: null, forwardingMessages: null, pendingForward: null,
+        messageSelection: null, messageDeleteRequest: null,
+        // First profile load must keep a pending deep-link selection.
+        ...(state.currentUser ? { selectedChatId: null, selectedTopicId: null } : {}) };
     }
     if (!user || !state.currentUser) return { currentUser: user };
     const unchanged = isHeartbeatOnlyProfileChange(

@@ -15,6 +15,7 @@ import {
   type DocumentPreview,
 } from "@/lib/documentPreview";
 import { saveMediaAs } from "@/lib/messageMediaActions";
+import { FormattedText, type MemberMentionsInText } from "@/lib/formatText";
 import { cn } from "@/lib/utils";
 
 /**
@@ -51,11 +52,13 @@ export function FileMessageRow({
   content,
   mediaMetadata,
   url,
+  members = null,
 }: {
   content: string | null | undefined;
   mediaMetadata: unknown;
   /** Null while the file is still on its way, or while its address is being resolved. */
   url: string | null;
+  members?: MemberMentionsInText | null;
 }) {
   const facts = useMemo(() => documentFacts({ content, mediaMetadata }), [content, mediaMetadata]);
   const preview = useMemo(
@@ -125,7 +128,7 @@ export function FileMessageRow({
       {facts.caption && (
         // Under the file, as Telegram draws a document's caption.
         <p data-testid="file-message-caption" className="kub-message-text min-w-0 max-w-[18rem] whitespace-pre-wrap break-words text-[color:var(--kub-text)]">
-          {facts.caption}
+          <FormattedText content={facts.caption} members={members} />
         </p>
       )}
       </div>

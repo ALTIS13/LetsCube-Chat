@@ -1,4 +1,5 @@
 import type { MediaQuality } from "./mediaQuality";
+import { sliceMentionText, type MessageMentionsV1 } from "./memberMentions.ts";
 
 export type StagedAttachmentKind = "image" | "video" | "audio" | "voice" | "video_message" | "file";
 
@@ -55,6 +56,8 @@ export interface StagedAttachment {
    * `captionCarrierId` in `lib/attachmentSendQueue.ts`.
    */
   caption?: string | null;
+  /** Metadata belongs only to this attachment's authored caption. */
+  mentionEntities?: MessageMentionsV1;
   durationMs?: number;
   width?: number;
   height?: number;
@@ -97,6 +100,18 @@ export function stagedAttachmentTextContent(
   const typed = caption?.trim() ?? "";
   if (kind === "image" || kind === "video") return typed;
   return typed || fileName;
+}
+
+/** Filename and recorded-media labels are not authored mention captions. */
+export function stagedAttachmentMentionEntities(
+  kind: StagedAttachmentKind,
+  caption: string | null | undefined,
+  mentionEntities: MessageMentionsV1 | undefined,
+): MessageMentionsV1 | undefined {
+  if (mentionEntities === undefined || !caption?.trim() || kind === "voice" || kind === "video_message") return undefined;
+  const start = caption.length - caption.trimStart().length;
+  const end = caption.trimEnd().length;
+  return sliceMentionText({ content: caption, mentionEntities }, start, end).mentionEntities;
 }
 
 export const CHAT_MEDIA_BUCKET = "media";

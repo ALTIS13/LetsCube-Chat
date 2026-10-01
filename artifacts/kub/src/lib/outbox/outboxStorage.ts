@@ -22,13 +22,13 @@ export function memoryOutboxStorage(): OutboxStorage {
   const entries = new Map<string, OutboxEntry>();
   return {
     async put(entry) {
-      entries.set(entry.clientMessageId, { ...entry });
+      entries.set(entry.clientMessageId, structuredClone(entry));
     },
     async remove(clientMessageId) {
       entries.delete(clientMessageId);
     },
     async list(userId) {
-      return [...entries.values()].filter((entry) => entry.userId === userId).map((entry) => ({ ...entry }));
+      return [...entries.values()].filter((entry) => entry.userId === userId).map((entry) => structuredClone(entry));
     },
   };
 }

@@ -19,8 +19,14 @@ import {
 import { browserOutgoingMediaStorage } from "./outgoingMediaStorage";
 
 const storage = browserOutgoingMediaStorage();
+let activeUserId: string | null = null;
+let accountEpoch = 0;
 
 export function keepOutgoingMediaFor(userId: string | null): void {
+  if (activeUserId !== userId) {
+    activeUserId = userId;
+    accountEpoch += 1;
+  }
   persistOutgoingWith(
     userId
       ? {
@@ -45,7 +51,10 @@ function previewFor(entry: OutgoingMediaEntry): string | null {
 }
 
 export async function restoreOutgoingMedia(userId: string): Promise<OutgoingMediaEntry[]> {
+  if (activeUserId !== userId) return [];
+  const epoch = accountEpoch;
   const kept = await storage.list(userId);
+  if (epoch !== accountEpoch || activeUserId !== userId) return [];
   const restored: OutgoingMediaEntry[] = [];
   for (const entry of kept) {
     if (outgoingEntry(entry.tempId)) continue;

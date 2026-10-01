@@ -1,7 +1,8 @@
 import type { Json, MessageWithSender, Profile } from "../types/database.ts";
 import { buildAttachmentMediaMetadata } from "./mediaCompression.ts";
 import { buildOptimisticMessage } from "./optimisticMessage.ts";
-import { stagedAttachmentTextContent, type StagedAttachment } from "./stagedAttachments.ts";
+import type { MessageMentionsV1 } from "./memberMentions.ts";
+import { stagedAttachmentMentionEntities, stagedAttachmentTextContent, type StagedAttachment } from "./stagedAttachments.ts";
 
 /**
  * The placeholder an attachment puts in its conversation at the press (D-314),
@@ -45,6 +46,7 @@ export function buildAttachmentPlaceholder(input: {
   user: Profile;
   attachment: StagedAttachment;
   caption: string | null;
+  mentionEntities?: MessageMentionsV1;
   replyToId: string | null;
   clientSentAt: string;
   tempId: string;
@@ -56,6 +58,7 @@ export function buildAttachmentPlaceholder(input: {
       user: input.user,
       type: attachmentMessageType(input.attachment),
       content: attachmentMessageContent(input.attachment, input.caption),
+      mentionEntities: stagedAttachmentMentionEntities(input.attachment.kind, input.caption, input.mentionEntities ?? input.attachment.mentionEntities),
       mediaUrl: input.attachment.previewUrl,
       replyToId: input.replyToId,
       mediaMetadata: buildAttachmentMediaMetadata(input.attachment, null) as Json | undefined,

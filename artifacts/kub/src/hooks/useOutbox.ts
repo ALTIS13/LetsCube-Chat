@@ -27,6 +27,7 @@ import { useAppStore } from "@/store/app.store";
  */
 export function useOutbox(): void {
   const userId = useAppStore((state) => state.currentUser?.id ?? null);
+  const accountEpoch = useAppStore((state) => state.accountEpoch);
 
   useEffect(() => {
     if (!userId) return undefined;
@@ -38,7 +39,7 @@ export function useOutbox(): void {
       if (!active) return;
       const store = useAppStore.getState();
       const user = store.currentUser;
-      if (!user || user.id !== userId) return;
+      if (!user || user.id !== userId || store.accountEpoch !== accountEpoch) return;
       for (const entry of waiting) {
         store.addMessage(entry.chatId, {
           ...buildAttachmentPlaceholder({
@@ -47,6 +48,7 @@ export function useOutbox(): void {
             user,
             attachment: entry.attachment,
             caption: entry.caption,
+            mentionEntities: entry.mentionEntities,
             replyToId: entry.replyToId,
             clientSentAt: entry.clientSentAt,
             tempId: entry.tempId,
@@ -63,7 +65,7 @@ export function useOutbox(): void {
       if (!active) return;
       const store = useAppStore.getState();
       const user = store.currentUser;
-      if (!user || user.id !== userId) return;
+      if (!user || user.id !== userId || store.accountEpoch !== accountEpoch) return;
       for (const entry of waiting) {
         // `addMessage` upserts by id and by client id, so a bubble already on
         // screen is not drawn twice.
@@ -75,6 +77,7 @@ export function useOutbox(): void {
             user,
             type: entry.type,
             content: entry.content,
+            mentionEntities: entry.mentionEntities,
             mediaBucket: entry.mediaBucket,
             mediaPath: entry.mediaPath,
             mediaUrl: entry.mediaUrl,
@@ -109,5 +112,5 @@ export function useOutbox(): void {
       appOutbox.stop();
       keepOutgoingMediaFor(null);
     };
-  }, [userId]);
+  }, [userId, accountEpoch]);
 }

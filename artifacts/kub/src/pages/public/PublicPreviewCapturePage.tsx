@@ -131,7 +131,7 @@ export default function PublicPreviewCapturePage() {
   const [sideMenuOpen, setSideMenuOpen] = useState(false);
   const [messages, setMessages] = useState<MessageWithSender[]>([]);
   const { ref: chromeRef, height: chromeHeight } = useMeasuredHeight<HTMLDivElement>();
-  const { ref: composerRef, height: composerHeight } = useMeasuredHeight<HTMLDivElement>();
+  const { ref: composerRef, height: composerHeight, measure: measureComposerHeight } = useMeasuredHeight<HTMLDivElement>();
   const {
     request: mediaSendRequest,
     handleIncomingFiles,
@@ -441,6 +441,7 @@ export default function PublicPreviewCapturePage() {
                   chatId={activeChat.id}
                   replyTo={replyTo}
                   jumpControlOnScreen={jumpControlOnScreen}
+                  onLayoutChange={measureComposerHeight}
                   onCancelReply={() => setReplyTo(null)}
                   onSend={() => undefined}
                   onEdit={editLocally}

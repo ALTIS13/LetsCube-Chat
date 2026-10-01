@@ -738,6 +738,8 @@ export interface Database {
           /** Separate from markup so older Android bundles still render bot buttons. */
           bot_input_field_placeholder: string | null
           content: string | null
+          /** Missing in legacy cached rows; parsed before any profile action. */
+          mention_entities?: Json
           type: 'text' | 'image' | 'video' | 'audio' | 'file' | 'sticker' | 'system'
           media_bucket: string | null
           media_path: string | null
@@ -788,6 +790,7 @@ export interface Database {
           bot_id?: string | null
           bot_reply_markup?: Json | null
           content?: string | null
+          mention_entities?: Json
           type?: 'text' | 'image' | 'video' | 'audio' | 'file' | 'sticker' | 'system'
           media_bucket?: string | null
           media_path?: string | null
@@ -806,6 +809,7 @@ export interface Database {
           bot_id?: string | null
           bot_reply_markup?: Json | null
           content?: string | null
+          mention_entities?: Json
           edited_at?: string | null
           media_bucket?: string | null
           media_metadata?: Json | null

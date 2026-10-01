@@ -255,7 +255,9 @@ test.describe("composer typing frames", () => {
     expect(lineHeight, "the composer did not grow by a line when the draft wrapped").toBeGreaterThan(12);
 
     // Three characters that still fit, the one that wraps, one more on the new
-    // line, and two deletions — the second of which unwraps it again.
+    // line, and three deletions. WebKit keeps the caret's extra line at the
+    // fill-discovered boundary after two Backspaces (also with the old hook);
+    // one character below it really unwraps, so shrink frames are exercised.
     const field = composer(page);
     await field.fill(DRAFT.slice(0, length - 3));
     await page.waitForTimeout(800);
@@ -274,7 +276,7 @@ test.describe("composer typing frames", () => {
       await page.keyboard.type(character);
       await page.waitForTimeout(350);
     }
-    for (const label of ["Backspace", "Backspace (unwraps)"]) {
+    for (const label of ["Backspace", "Backspace", "Backspace (unwraps)"]) {
       labels.push(label);
       await page.keyboard.press("Backspace");
       await page.waitForTimeout(350);

@@ -66,6 +66,7 @@ import { AttachLocationPanel } from "./AttachLocationPanel";
 import { AttachMoreMenu } from "./AttachMoreMenu";
 import { AttachPlaceholderPanel } from "./AttachPlaceholderPanel";
 import { AttachSendBar } from "./AttachSendBar";
+import { createMentionText, rebaseMentionText, trimMentionText, type MessageMentionsV1 } from "@/lib/memberMentions";
 import { AttachTabs, attachPanelElementId, attachTabElementId } from "./AttachTabs";
 import { AttachVideoProgressRow, AttachVideoQualityRow } from "./AttachVideoQuality";
 import { attachPickKind, type AttachPick } from "./attachTypes";
@@ -90,6 +91,9 @@ export interface AttachSheetProps {
    * Telegram (tracker item 65). Read once, when the sheet opens.
    */
   initialCaption?: string;
+  initialMentionEntities?: MessageMentionsV1;
+  chatId?: string;
+  topicId?: string | null;
 }
 
 /**
@@ -124,6 +128,9 @@ export default function AttachSheet({
   onSendLocation,
   onOpenWebcam,
   initialCaption = "",
+  initialMentionEntities,
+  chatId = "",
+  topicId = null,
 }: AttachSheetProps) {
   const baseId = useId();
   const titleId = `${baseId}-title`;
@@ -139,7 +146,9 @@ export default function AttachSheet({
   // Picked files are in this sheet and nowhere else, so a quiet restart waits
   // for them (`lib/reloadGuard.ts`).
   useReloadGuard(gallery.length + files.length > 0, "attach-sheet");
-  const [caption, setCaption] = useState(initialCaption);
+  const [captionSnapshot, setCaptionSnapshot] = useState(() => createMentionText(initialCaption, initialMentionEntities));
+  const caption = captionSnapshot.content;
+  const setCaption = (value: string) => setCaptionSnapshot((current) => rebaseMentionText(current, value));
   const [menuOpen, setMenuOpen] = useState(false);
   // Remembered between sends, per device, since 2026-09-21. The tester called
   // ours «настройка HD», which is what a person calls a control that looks like
@@ -226,12 +235,12 @@ export default function AttachSheet({
 
   // The keyboard goes down and the focus comes into the sheet; a desktop gets its
   // focus back when the sheet closes, a phone does not raise its keyboard again.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     previous?.blur();
-    const frame = requestAnimationFrame(() => tabRefs.current[ATTACH_SHEET_DEFAULT_TAB]?.focus({ preventScroll: true }));
+    // Own Escape before the first paint, not one frame after the sheet opens.
+    tabRefs.current[ATTACH_SHEET_DEFAULT_TAB]?.focus({ preventScroll: true });
     return () => {
-      cancelAnimationFrame(frame);
       if (!phone && previous && document.contains(previous)) previous.focus({ preventScroll: true });
     };
   }, [phone]);
@@ -361,6 +370,7 @@ export default function AttachSheet({
     // «Отмена», rather than behind a sheet that has already closed. A send asked
     // for as originals is never encoded — that is what «Отправить без сжатия»
     // means.
+    const outgoingCaption = trimMentionText(captionSnapshot);
     const prepared = plan.compress ? await ladder.prepare(plan.send) : { files: plan.send, origins: undefined };
     // Cancelled: the selection stays where it was and nothing is sent.
     if (!prepared) return;
@@ -368,7 +378,8 @@ export default function AttachSheet({
       files: prepared.files,
       originalSizes: prepared.origins,
       compress: plan.compress,
-      caption: caption.trim(),
+      caption: outgoingCaption.content,
+      mentionEntities: outgoingCaption.mentionEntities,
       source: chosen[0].source,
       // Named on every send rather than defaulted somewhere downstream, so
       // the one place that decides is the one the person pressed.
@@ -595,6 +606,10 @@ export default function AttachSheet({
         />
       ) : null}
       <AttachSendBar
+        chatId={chatId}
+        topicId={topicId}
+        snapshot={captionSnapshot}
+        onSnapshotChange={setCaptionSnapshot}
         sendLabel={mediaSendTitle(chosenFiles)}
         caption={caption}
         onCaptionChange={setCaption}

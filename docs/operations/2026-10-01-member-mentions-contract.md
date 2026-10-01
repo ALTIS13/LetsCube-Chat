@@ -3,7 +3,21 @@
 Date: 2026-10-01. Owner: Codex coordinator; this document is the bounded
 prerequisite sidecar for the already approved continuation.
 
-## Resume And Authority
+## Current Integration Status
+
+The prerequisite contract below is historical. Item 74 is deployed; mention SQL
+and the compatible Edge entrypoint are now applied with fresh restore rehearsal
+and authenticated rolled-back live acceptance. The client is implemented but
+not yet published: the mounted matrix, caption activation and observer/child
+layout corrections passed. Final frozen-source typecheck/build and 4787/4787
+unit tests passed without failures, cancellations or skips. Final pixel refresh
+passed 12/12 and all 16 images were inspected. Deployment verification remains;
+earlier green gates are historical, not waived failures.
+See the [current implementation record](2026-10-01-implementation.md), especially
+"D-331 Server Applied; Final Client Gate", for actual evidence and rollback.
+This update does not claim native receipt or lift the Android release hold.
+
+## Original Resume And Authority
 
 - Stage: implementation-ready source/reference contract, not a product fix.
 - Evidence: main at `29176d72e6b1686a61bd91ef322d592f115e40e6`, current
@@ -260,7 +274,7 @@ Preserve `kind=message`,
 `notifications_message_user_once_idx(user_id, payload->>'message_id')` and the
 existing route/tag/read/album aggregation. Compute `payload.mentioned` separately
 for each recipient as existence of a valid user entity with that UUID. Omitted
-means false for old rows. Do not copy entity arrays, target IDs, labels or private
+means false for old rows. Do not copy entity arrays, target IDs, metadata labels or private
 preference decisions into every recipient's payload. Bot entities never notify
 the bot owner as a person. Server author identity controls self exclusion.
 
@@ -299,8 +313,14 @@ with current source eligibility and current preferences; retain their independen
 subscription/device owner, foreground, read and claim checks. A block, mute,
 leave, ban, deletion or account rebind after enqueue must stop pending delivery.
 Do not rely on enqueue-time checks alone. A sent external card cannot be recalled;
-retain existing generic push title/body and sanitized route/tag without mention
-text or recipient lists. No service-role secret enters the client.
+retain the existing external Web/FCM/WNS privacy builders' generic display and
+sanitized route/tag without entity metadata or recipient lists. The inspected
+SQL `_notification_push_payload` itself is not generic: it whitelists existing
+sender/preview fields. Preserve that whitelist rather than changing unrelated
+ordinary-message semantics; visible @ text in an ordinary preview is not an
+entity/recipient array. New terminal recheck statuses must be understood by the
+Edge dispatcher before the SQL producer can return them. No service-role secret
+enters the client.
 
 Client annotation scope is `hooks/useNotifications.ts`,
 `lib/messageNotificationProjection.ts`, `notificationRows.ts` and existing

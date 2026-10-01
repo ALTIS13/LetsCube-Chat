@@ -9,6 +9,10 @@ import {
 } from "./helpers/messageActionsFixture";
 import { sendFromField } from "./helpers/composerSend";
 
+// A controlling SW bypasses page/context network mocks on reload in WebKit.
+// This suite measures the durable outbox, not SW routing or cache behavior.
+test.use({ serviceWorkers: "block" });
+
 /**
  * Tracker item 52. Two testers, on their first day: a message written without a
  * connection could not be sent later — it turned red at once, and a restart

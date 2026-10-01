@@ -17,9 +17,12 @@
  * What the order does not buy: a photo picked after a video still appears
  * after the video. Its bytes are up by then, so it follows the video at once.
  *
- * Imports nothing, so `node --test` loads it directly:
+ * Pure helpers, so `node --test` loads it directly:
  * `tests/unit/attachment-send-queue.test.mts`.
  */
+
+import type { MessageMentionsV1 } from "./memberMentions.ts";
+import { stagedAttachmentMentionEntities } from "./stagedAttachments.ts";
 
 /**
  * Three: enough that a photo is not held behind a video, few enough that a
@@ -190,4 +193,18 @@ export function captionCarrierId<T extends { id: string }>(
   if (alreadySent) return null;
   if (!caption.trim()) return null;
   return targets[0]?.id ?? null;
+}
+
+/** One authored caption snapshot, never copied onto silent album siblings. */
+export function attachmentCaptionFields(
+  attachmentId: string,
+  carrierId: string | null,
+  caption: string,
+  mentionEntities?: MessageMentionsV1,
+): { caption: string | null; mentionEntities?: MessageMentionsV1 } {
+  if (attachmentId !== carrierId) return { caption: null };
+  const typed = caption.trim();
+  if (!typed) return { caption: null };
+  if (mentionEntities === undefined) return { caption: typed };
+  return { caption: typed, mentionEntities: stagedAttachmentMentionEntities("image", caption, mentionEntities) };
 }

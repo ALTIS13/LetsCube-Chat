@@ -42,6 +42,12 @@ function isMissingMediaMetadataError(error: unknown): boolean {
   return text.includes("media_metadata") && (text.includes("column") || text.includes("schema cache") || text.includes("pgrst204") || text.includes("42703"));
 }
 
+function isMissingMentionEntitiesError(error: unknown): boolean {
+  const record = error as { code?: unknown; message?: unknown; details?: unknown } | null;
+  const text = `${String(record?.code ?? "")} ${String(record?.message ?? "")} ${String(record?.details ?? "")}`.toLowerCase();
+  return text.includes("mention_entities") && (text.includes("column") || text.includes("schema cache") || text.includes("pgrst204") || text.includes("42703"));
+}
+
 async function landedCopy(entry: OutboxEntry): Promise<MessageWithSender | null> {
   try {
     const { data } = await createClient()
@@ -69,6 +75,7 @@ async function sendEntry(entry: OutboxEntry): Promise<SendAttempt<MessageWithSen
     topic_id: entry.topicId,
     user_id: entry.userId,
     content: entry.content,
+    ...(entry.mentionEntities === undefined ? {} : { mention_entities: { ...entry.mentionEntities } }),
     type: entry.type,
     media_bucket: entry.mediaBucket,
     media_path: entry.mediaPath,
@@ -96,6 +103,10 @@ async function sendEntry(entry: OutboxEntry): Promise<SendAttempt<MessageWithSen
       const landed = await landedCopy(entry);
       return landed ? { sent: landed } : { failed: { timedOut: true } };
     }
+  }
+  // A legacy row cannot acknowledge metadata the server explicitly refused.
+  if (entry.mentionEntities !== undefined && isMissingMentionEntitiesError(result.error)) {
+    return { failed: { status: result.status, error: result.error, retainForRetry: true } };
   }
   if (result.data) return { sent: result.data as unknown as MessageWithSender };
   const landed = await landedCopy(entry);

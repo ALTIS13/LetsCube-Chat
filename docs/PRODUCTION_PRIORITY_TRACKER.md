@@ -3432,7 +3432,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     a moderation question for the owner: renaming or blocking them in the
     administration panel, which this change does not do.
 
-74. `[~]` Search by phone for everybody, as Telegram has it. The same tester:
+74. `[x]` Search by phone for everybody, as Telegram has it. The same tester:
     «поиск по номеру нужен». It exists — `search_profiles_by_phone`, a whole
     verified number, E.164 — but answers only an account with `users.view`.
     In Telegram anybody may look up a whole number, and each person decides
@@ -3461,8 +3461,11 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     numbers. Full fresh-backup restore/rehearsal and exact rollback passed.
     Migration applied with a raising drift guard; PostgREST authentication/own
     preference read/foreign RLS checks pass, 82/82 public tables keep RLS.
-    Client integration and verified web rollout remain in progress; this item
-    is not yet closed. [Implementation evidence](operations/2026-10-01-implementation.md).
+    Client integrated at `69d3dcbe`, released as the sole healthy web image
+    `bde5b8ed`. New marker absent in old image, present in new/public; public JS
+    SHA256 equals the healthy container artifact. Read-only deployed settings
+    smoke: 3/3 (Chromium desktop/mobile, WebKit mobile), no preference writes.
+    [Implementation evidence](operations/2026-10-01-implementation.md).
 
 75. `[~]` Mention a person in a conversation without knowing and typing their
     handle. Tester report of 2026-09-30, 19:40 MSK; recovered during the Codex

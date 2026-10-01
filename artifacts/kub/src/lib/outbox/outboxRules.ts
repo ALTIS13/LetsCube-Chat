@@ -21,6 +21,7 @@
 
 import type { Json } from "../../types/database.ts";
 import type { SendableMessageType } from "../optimisticMessage.ts";
+import type { MessageMentionsV1 } from "../memberMentions.ts";
 
 export interface OutboxEntry {
   clientMessageId: string;
@@ -29,6 +30,8 @@ export interface OutboxEntry {
   topicId: string | null;
   type: SendableMessageType;
   content: string | null;
+  /** Absent on legacy sends; retries keep the original snapshot and revision. */
+  mentionEntities?: MessageMentionsV1;
   replyToId: string | null;
   forwardedFromId: string | null;
   mediaBucket: string | null;

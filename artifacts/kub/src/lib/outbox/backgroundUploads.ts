@@ -32,6 +32,8 @@ export const WAITING_UPLOAD_SWEEP_MS = 30_000;
 export interface BackgroundUploadDeps {
   /** The signed-in account now. A change stops the sender between two steps. */
   currentUserId(): string | null;
+  /** Optional session boundary, including a logout/relogin as the same account. */
+  currentAccountEpoch?(): number;
   /** Whether the device says it has a network at all. */
   online(): boolean;
   /** Everything on its way, from every conversation. */
@@ -86,28 +88,32 @@ export function createBackgroundUploadSender(deps: BackgroundUploadDeps): Backgr
     if (!deps.online()) return;
     const userId = deps.currentUserId();
     if (!userId) return;
+    const accountEpoch = deps.currentAccountEpoch?.();
+    const sameAccount = () => deps.currentUserId() === userId && deps.currentAccountEpoch?.() === accountEpoch;
     // A conversation whose upload the network cut is not tried again in this
     // pass: what comes after it in that chat would overtake it, and the same
     // network would cut it too. Other conversations still go.
     const held = new Set<string>();
     for (const entry of waitingNow()) {
-      if (deps.currentUserId() !== userId) return;
+      if (!sameAccount()) return;
       if (held.has(entry.chatId) || deps.viewed(entry.chatId)) continue;
       const shown = deps.placeholder(entry.chatId, entry.tempId);
       if (!shown?.upload_waiting || deps.cancelled(entry.attachment.id)) continue;
+      const ownsEntry = () => sameAccount() && !deps.cancelled(entry.attachment.id);
       // The claim, before anything is awaited: the view's own sender and the
       // next trigger both pass over it from here.
       deps.patch(entry.chatId, entry.tempId, (message) => ({ ...message, upload_waiting: false, upload_progress: 0 }));
       try {
         const uploaded = await deps.upload(entry, (progress) => {
-          if (deps.cancelled(entry.attachment.id)) return;
+          if (!ownsEntry()) return;
           deps.patch(entry.chatId, entry.tempId, (message) => ({ ...message, upload_progress: progress }));
         });
-        if (deps.cancelled(entry.attachment.id) || deps.currentUserId() !== userId) continue;
+        if (!ownsEntry()) continue;
         await deps.insert(entry, uploaded);
+        if (!ownsEntry()) continue;
         deps.forget(entry);
       } catch (error) {
-        if (deps.cancelled(entry.attachment.id)) continue;
+        if (!ownsEntry()) continue;
         const failure = deps.describe(error);
         if (uploadMayWait(failure)) {
           // Still nobody answering, or the storage still down: back to
