@@ -19,42 +19,30 @@ Read in this order:
    replaces them;
 5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–75) and the
    decisions log;
-6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-331, with its
+6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-332, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-01 (Codex implementation).** Owner: this Codex chat. Stage:
-D-331 / D-332 final client verification, not a native release. Main `bde5b8ed` is the sole healthy
-web image. Item 74 is released: guarded SQL, independent fresh-backup restore,
-authenticated RLS checks, reviewed client integration, exact public/container
-artifact parity and read-only settings smoke in Chromium desktop/mobile and
-WebKit mobile. Claude's preserved candidate is on the pushed
-`codex/phone-findability-20261001` branch; its foreign document deletion remains
-unstaged. Do not repeat the closed phone stage.
-All seven voice notes since 2026-09-27 were transcribed locally and reconciled
-with existing tasks; the new member-mention report is D-331 / item 75.
-The guarded mention SQL and compatible Edge entrypoint are applied; fresh full
-restore and rolled-back authenticated live acceptance passed. Server source is
-committed locally as `26a274cb`; the client is not published. Account-epoch
-isolation, caption/outbox ownership and stale edit/history responses are covered
-by focused regressions. The WebKit observer feedback and attachment first-focus
-gap are fixed. The 93-case mounted matrix passed, followed by document/album
-caption hit-testing and inspected 390/1440 dark/light pixels. A later full run
-exposed a real delayed composer inset; the earlier 4786/4786 result is not the
-final release gate. Direct child-layout measurement now passes normal and
-observer-disabled painted-frame checks, and its omission fails all four cases.
-Final frozen-source typecheck and production build passed; the full unit gate
-passed 4787/4787 with zero failures, cancellations or skips. Final pixel refresh
-passed 12/12; all 16 composer/caption/document/album images were inspected at
-390/1440 in both themes. Web publication is the remaining gate.
-Next: review/push and independently prove web deployment
-using the [mentions contract](operations/2026-10-01-member-mentions-contract.md);
-do not repeat closed voice, Enter, folder and channel
-work. Android build/install/publication remains on hold. Current evidence,
-tools, outstanding stages and the private-intake boundary are in the
-[takeover record](operations/2026-10-01-codex-takeover.md) and current
-[implementation record](operations/2026-10-01-implementation.md). Later chronological
-blocks below remain historical; in particular item 50 is already closed,
-not waiting on the owner.
+**Active resume, 2026-10-01 (Codex implementation).** Owner: this Codex chat.
+Stage: D-208 signed-media consumer acceptance, not a native release. Item 74 is
+closed. The first D-331 / item 75 and D-332 web slice is deployed from `56ae3cc0`:
+sole healthy exact-SHA image, new markers, unchanged retained old entry and
+public/container JS/SW parity. Final gates: typecheck/build, 4787/4787 unit
+tests without skips, 93 mounted cases, 12 final visual/activation cases and
+16 inspected 390/1440 dark/light images. Deployed read-only QA passed 3/3 with
+no preference writes or captures. The mention SQL/Edge entrypoint and fresh
+restore/live rolled-back acceptance are complete; do not apply them again.
+Installed Android and OS push receipt are not accepted by that web evidence.
+Source workers are closed; Android build/install/publication stays on hold.
+Next: prove actual FILE, ChatAvatar and mounted long-session consumers in
+signed-only synthetic fixtures, then authenticated acceptance. Keep the bucket
+public; its private switch requires compatible installed-Android proof.
+All seven voice notes are reconciled, not new intake work. Claude's pushed
+phone candidate and foreign document deletion remain preserved. Evidence,
+tools and boundaries: [takeover](operations/2026-10-01-codex-takeover.md),
+[implementation](operations/2026-10-01-implementation.md),
+[mentions contract](operations/2026-10-01-member-mentions-contract.md).
+Do not repeat closed voice, Enter, folder, channel or phone work. The later
+chronological blocks are historical; item 50 is already closed.
 
 **Claude resumed from Codex, 2026-09-27 (evening).** Codex stopped at the
 [checkpoint it left](operations/2026-09-27-claude-resume-after-codex.md); its

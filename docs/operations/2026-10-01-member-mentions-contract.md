@@ -7,12 +7,14 @@ prerequisite sidecar for the already approved continuation.
 
 The prerequisite contract below is historical. Item 74 is deployed; mention SQL
 and the compatible Edge entrypoint are now applied with fresh restore rehearsal
-and authenticated rolled-back live acceptance. The client is implemented but
-not yet published: the mounted matrix, caption activation and observer/child
+and authenticated rolled-back live acceptance. The first web client slice is
+published as `56ae3cc0`: the mounted matrix, caption activation and observer/child
 layout corrections passed. Final frozen-source typecheck/build and 4787/4787
 unit tests passed without failures, cancellations or skips. Final pixel refresh
-passed 12/12 and all 16 images were inspected. Deployment verification remains;
-earlier green gates are historical, not waived failures.
+passed 12/12 and all 16 images were inspected. Exact-SHA healthy deployment,
+old/new markers and public/container JS/SW parity passed. Deployed read-only
+QA passed 3/3 without preference writes or captures. Earlier green gates are
+historical, not waived failures; installed-client/OS receipt remains separate.
 See the [current implementation record](2026-10-01-implementation.md), especially
 "D-331 Server Applied; Final Client Gate", for actual evidence and rollback.
 This update does not claim native receipt or lift the Android release hold.

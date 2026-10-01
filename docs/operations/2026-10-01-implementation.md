@@ -14,6 +14,8 @@ Approved by the owner on 2026-10-01. No Android build/install/publication.
    review and web deployment verification.
 2. [~] D-331 / item 75: member mentions. Establish stable identity, scoped
    completion, activation and notification boundaries before implementation.
+   First web slice and D-332 account isolation are released and accepted;
+   installed-client/OS receipt acceptance remains separate and Android is held.
 3. [ ] D-208: finish signed-media privacy; preserve the native release hold.
 4. [ ] Continue the open presence/AFK/DND and role/bot stages from the tracker.
 
@@ -36,19 +38,17 @@ Approved by the owner on 2026-10-01. No Android build/install/publication.
 
 ## Resume
 
-Owner: Codex coordinator. Stage: D-331 and D-332 final client gates, after the
-reviewed SQL/Edge source commit `26a274cb`, fresh full restore and actual live
-authenticated rollback acceptance. Web remains `bde5b8ed`; no mention producer
-published yet. Source workers are frozen. The final 93-case browser matrix and
-caption follow-ups passed. A later full gate exposed delayed composer padding;
-direct child-layout measurement passes normal and forced no-delivery frame
-checks, with a four-case failing omission control. Final frozen-source
-typecheck/build and 4787/4787 unit tests passed; final pixel refresh passed 12/12
-and all 16 images were inspected. The profile-action probe now observes initial
-read RPCs instead of a 500ms sleep. Next:
-review commit trees, deploy and verify actual
-image/public bytes. Item 74 is closed; its pushed candidate and foreign document
-deletion are preserved. Android/native hold is unchanged.
+Owner: Codex coordinator. Stage: D-208 signed-media consumer acceptance.
+First D-331/D-332 web slice `56ae3cc0` is published and independently verified:
+exact sole healthy image, markers and public/container JS/SW parity. Final
+4787/4787 unit tests, 93 mounted cases, 12 pixel/activation cases and deployed
+read-only 3/3 smoke passed. SQL/Edge apply and fresh restore/live rolled-back
+acceptance are complete; do not repeat them. Source workers are closed.
+Blocker: none for synthetic D-208 consumers; private-bucket activation is
+blocked on compatible installed-Android upgrade proof. Next: red/green the
+actual path-only FILE, group-avatar and mounted long-session consumers below.
+Item 74 and voice intake are closed; the foreign document deletion is preserved.
+No native build/install/publication; Android hold is unchanged.
 
 ## Evidence So Far
 
@@ -354,3 +354,25 @@ The fixture flag was absent from the production build. Final pixel refresh
 passed 12/12; all 16 composer/caption/document/album images at 390/1440 in both
 themes were inspected on that unchanged source. Independent deployment
 verification remains before first-slice publication.
+
+## First Web Slice Released
+
+Server commit `26a274cb` and client commit
+`56ae3cc0c9a049a4c36363e7743fc2fe5be757cf` were reviewed as a separate
+`origin/main..HEAD` step; 284 own-tree alias imports resolved. The reviewed
+candidate was pushed to `codex/member-mentions-20261001` before `main`.
+Coolify reached the exact client commit with one healthy replica. Public entry
+`/assets/index-BCrQq7Yo.js`, SHA256
+`729c585a1eb83f2d9f8bec64cbd3cf9aff07c4cb71ac56ed97c8aec5ba6cad28`,
+contains member picker, V2 draft, account epoch and refused caption markers.
+The prior `/assets/index-CH7gbNHe.js` remains byte-identical and lacks the new
+picker marker. Both new entry and service worker match container bytes.
+
+Post-deploy read-only QA passed 3/3 in Chromium desktop/mobile and WebKit
+mobile: actual QA Auth and own-preference HTTP 200, exactly one selected option,
+zero preference writes. Screenshots, trace, video and error-context snapshots
+were disabled; each QA session was locally logged out. This is browser
+acceptance, not an installed PWA/native device test or OS push receipt.
+The owned synthetic dev server was stopped after verification. D-208's
+unimplemented consumer cases above are the next checkpoint; its public bucket
+and the Android/native release hold are unchanged.

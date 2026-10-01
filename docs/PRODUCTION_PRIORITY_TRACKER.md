@@ -3473,8 +3473,9 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     stable recipient identity, an actionable rendered mention and the actual
     notification semantics. Read the correct Telegram/Discord client before
     choosing the interaction; preserve phone Enter, IME, drafts, captions,
-    blocks and membership scope. Source confirms no completion and a rendered
-    `span` today; live mention delivery is not measured. The seven voice notes
+    blocks and membership scope. At the intake baseline, source had no completion
+    and only a rendered `span`; live mention delivery was then unmeasured.
+    The seven voice notes
     in the same intake map to existing D-313/D-314, D-329/D-330 and items
     52-55, 69 and 71, so they are not filed a second time. Intake and the
     unfinished phone-search candidate:
@@ -3484,6 +3485,17 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     [member mentions](operations/2026-10-01-member-mentions-contract.md).
     Stable UUIDs, text/caption persistence, profile activation and notification
     privacy are implementation gates; a colored handle does not close D-331.
+
+    **First web slice accepted, 2026-10-01:** `56ae3cc0` implements human/bot
+    completion, stable UUID activation, drafts/captions/retry/edit transport and
+    D-332 account isolation. Guarded SQL/Edge and recipient-local notification
+    eligibility passed fresh full restore and authenticated rolled-back live
+    acceptance. Final 4787/4787 unit, 93 mounted, 12 pixel/activation and 3/3
+    deployed read-only tests passed. Exact healthy image, old/new markers and
+    public/container JS/SW parity are verified. Item remains partial only for
+    installed-client/OS receipt acceptance; no APK changed. Next web stage:
+    D-208 actual signed-media consumers, without a private-bucket switch.
+    [Release evidence](operations/2026-10-01-implementation.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

@@ -1,6 +1,6 @@
 # QA Results
 
-## 2026-10-01 - Member Mentions And Account Isolation Web Candidate
+## 2026-10-01 - Member Mentions And Account Isolation Web Rollout
 
 The final frozen source passed typecheck, production build (`sw.js build
 b2e67dbde156af9d`, 41.03s) and **4787/4787** unit tests, zero failures,
@@ -18,8 +18,12 @@ back without committed fixtures. The guarded SQL and compatible Edge entrypoint
 are applied; notification-row/HTTP proof is not OS push receipt. The API build
 and 357 server tests are reused because their inputs did not change. No native
 build, install, publication, physical iPhone receipt or Android acceptance is
-claimed; Android remains on hold. Independent web deployment verification is
-the remaining gate. [Evidence and next stage](operations/2026-10-01-implementation.md).
+claimed; Android remains on hold. Client commit `56ae3cc0` reached one healthy
+exact-SHA web image. New markers, unchanged retained previous entry and public/
+container JS/SW parity passed. Post-deploy read-only QA passed 3/3 in Chromium
+desktop/mobile and WebKit mobile without preference writes or captures; QA
+Auth sessions were locally logged out. D-208 actual signed-media consumers are
+next; the bucket remains public. [Evidence and next stage](operations/2026-10-01-implementation.md).
 
 ## 2026-09-27 - Ordinary Member Contacts And Channel Web Rollout
 

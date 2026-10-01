@@ -24727,6 +24727,16 @@ opens the person's profile without sending a read receipt. Verify recipient
 notifications, sender exclusion, blocks, mutes, membership changes and account
 switches at their real boundaries before calling this fixed.
 
+**2026-10-01 first web slice accepted:** stable-UUID completion and profile
+actions, text/caption/edit/retry ownership and eligibility checks are deployed
+as `56ae3cc0`. 4787/4787 final unit tests, 93 mounted cases, 12 final visual/
+activation cases and all 16 inspected 390/1440 dark/light images passed.
+Fresh restore and authenticated live rollback proved notification rows and
+block/member/mute boundaries; exact web image/assets and read-only 3/3 smoke
+passed. Keep partial for installed-client/OS receipt acceptance: that is not
+proved by HTTP or synthetic WebKit. Android release remains on hold.
+[Evidence](operations/2026-10-01-implementation.md).
+
 ## D-332 `[~]` An account switch can retain the previous account's unsent local messages
 
 **Severity:** high, account privacy boundary. Found during the independent
@@ -24739,7 +24749,11 @@ selection/list but retains the messages map; the history merge can preserve A's
 local rows, including text and addressed identities. Scoped outbox storage alone
 does not protect this shared in-memory projection.
 
-**Next:** clear account-owned projections when the account identity changes,
-retain them for same-account profile updates, and reject late A completions
-before they mutate B's history. Runtime account-switch and mounted acceptance
-are required; source review is not production proof.
+**2026-10-01 web correction accepted:** account-owned projections clear at an
+identity boundary, same-account profile updates retain them, and account/epoch
+guards reject late history/edit/realtime/outbox completions. Actual runtime and
+mounted A/B, A/null/A and restart cases pass, including omission controls.
+Released in the verified web slice `56ae3cc0`; its final gates and production
+read-only smoke passed. Keep partial for bundled installed clients: Android
+still contains the previous bundle and is explicitly held. Do not repeat the
+web fix as unfinished. [Evidence](operations/2026-10-01-implementation.md).
