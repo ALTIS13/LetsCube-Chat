@@ -1018,6 +1018,8 @@ export interface Database {
            * `presence_beat` publishes idle from. Readable by its owner alone.
            */
           last_active_at: string | null
+          /** Tracker item 74: who can find this person by their verified number. */
+          phone_findable_by: "everybody" | "contacts"
           created_at: string
           updated_at: string
         }
@@ -1028,6 +1030,7 @@ export interface Database {
           manual_status?: "online" | "idle" | "dnd" | "invisible"
           manual_status_until?: string | null
           last_active_at?: string | null
+          phone_findable_by?: "everybody" | "contacts"
           created_at?: string
           updated_at?: string
         }
@@ -1037,6 +1040,7 @@ export interface Database {
           manual_status?: "online" | "idle" | "dnd" | "invisible"
           manual_status_until?: string | null
           last_active_at?: string | null
+          phone_findable_by?: "everybody" | "contacts"
           updated_at?: string
         }
         Relationships: [

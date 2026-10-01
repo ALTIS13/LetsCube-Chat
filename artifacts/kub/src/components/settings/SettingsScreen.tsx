@@ -36,11 +36,13 @@ import { IosCallsSection } from "@/components/settings/IosCallsSection";
 import { SessionDevicesSection } from "@/components/settings/SessionDevicesSection";
 import { ProfileDecorationSection } from "@/components/settings/ProfileDecorationSection";
 import { StatusPicker, useChosenStatus } from "@/components/presence/StatusPicker";
+import { PhoneSearchSetting } from "@/components/settings/PhoneSearchSetting";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
 import { getBuildMetadata } from "@/lib/monitoring";
 import { getVisibleReleaseVersion } from "@/lib/releaseVersionLabel";
 import { STATUS_OPTIONS } from "@/lib/presenceStatus";
+import { phoneFindSummary } from "@/lib/phoneFindability";
 import {
   SETTINGS_SECTION_TITLES,
   audioSummary,
@@ -111,7 +113,7 @@ const THEME_OPTIONS: ReadonlyArray<{ value: Theme; label: string; icon: KubIconN
 ];
 
 /** The heavy sections, which stay unmounted until their row is opened. */
-type DisclosureId = "phone" | "decoration" | "audio" | "application" | "blocked" | "devices" | "status";
+type DisclosureId = "phone" | "decoration" | "audio" | "application" | "blocked" | "devices" | "status" | "phone-search";
 
 export interface SettingsScreen {
   ready: boolean;
@@ -743,6 +745,23 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
               <StatusPicker />
             </DisclosureRow>
           )}
+          {shows("phone-search") && (
+            /* Tracker item 74: Telegram's «кто может найти меня по номеру»,
+               first among what others learn about a person, as Telegram puts
+               the phone number first among its privacy settings. */
+            <DisclosureRow
+              id="phone-search"
+              /* `search`, not `phone`: «Телефон» in the profile already wears
+                 the telephone, and this row is about being found (D-148). */
+              icon="search"
+              title="Поиск по номеру"
+              value={phoneFindSummary(privacy.preferences.phoneFindableBy)}
+              open={openSections.has("phone-search")}
+              onToggle={toggleSection}
+            >
+              <PhoneSearchSetting />
+            </DisclosureRow>
+          )}
           {shows("presence") && (
             <SettingsRow
               icon={privacy.preferences.presenceVisible ? "eye" : "eyeOff"}
@@ -754,7 +773,7 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
               <KubSwitch
                 aria-label="Показывать, когда я в сети"
                 checked={privacy.preferences.presenceVisible}
-                disabled={privacy.loading}
+                disabled={!privacy.ready}
                 onCheckedChange={(next) => void privacy.setPresenceVisible(next)}
               />
             </SettingsRow>
@@ -783,13 +802,16 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
               <KubSwitch
                 aria-label="Показывать моё имя в пересланных сообщениях"
                 checked={privacy.preferences.forwardOriginVisible}
-                disabled={privacy.loading}
+                disabled={!privacy.ready}
                 onCheckedChange={(next) => void privacy.setForwardOriginVisible(next)}
               />
             </SettingsRow>
           )}
-          {privacy.error && (shows("presence") || shows("forward-origin")) && (
-            <RowNote tone="danger">Не удалось сохранить настройку. Попробуйте ещё раз.</RowNote>
+          {privacy.error && (shows("presence") || shows("forward-origin") || shows("phone-search")) && (
+            <RowNote tone="danger">
+              <span>{privacy.ready ? "Не удалось сохранить настройку. Попробуйте ещё раз." : "Не удалось загрузить настройки конфиденциальности."}</span>
+              {!privacy.ready && <button type="button" className="ml-2 underline" onClick={() => void privacy.retry()}>Повторить</button>}
+            </RowNote>
           )}
           {shows("blocked") && (
             <DisclosureRow

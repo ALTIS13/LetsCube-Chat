@@ -33,7 +33,12 @@
  * and telling somebody they are giving that up would be describing a feature
  * that does not exist. What removal actually costs is the verification itself,
  * which has a 120-second cooldown and per-hour and per-day limits, so it is not
- * free to redo. That is what the line says.
+ * free to redo. That is what the line said.
+ *
+ * **Since 2026-09-30 the obvious line is true** (tracker item 74): anybody
+ * signed in finds a verified number's owner, as the owner's «Поиск по номеру»
+ * allows, and a removed number finds nobody. So the line says that first —
+ * measured again rather than carried over.
  *
  * The photograph's line is the fallback the avatar really draws: `ChatAvatar`
  * renders the person's initials when `avatar_url` is absent, in chats and on the
@@ -62,12 +67,13 @@ export function avatarRemovalPrompt(): AdminConfirmPrompt {
 /**
  * Removing one's own verified telephone number.
  *
- * The cost is the verification, not discoverability — see the module note.
+ * Both costs: being found by the number, and the verification — see the
+ * module note.
  */
 export function phoneRemovalPrompt(): AdminConfirmPrompt {
   return {
     title: "Удалить номер телефона?",
-    description: "Чтобы вернуть его, номер придётся подтвердить заново.",
+    description: "По номеру вас больше не найдут. Чтобы вернуть его, номер придётся подтвердить заново.",
     confirmLabel: "Удалить номер",
     cancelLabel: "Отмена",
     tone: "danger",

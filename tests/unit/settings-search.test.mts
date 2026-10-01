@@ -38,7 +38,7 @@ test("an empty query is the whole screen, in the order the screen draws it", () 
   assert.deepEqual(idsOf(all), [
     "name", "username", "bio", "phone", "decoration",
     "push", "push-messages", "push-tasks", "push-invites",
-    "status", "presence", "forward-origin", "blocked", "devices",
+    "status", "phone-search", "presence", "forward-origin", "blocked", "devices",
     "theme", "message-text-size", "audio", "updates",
   ]);
   // Whitespace is not a query. A field holding only spaces must not empty the
@@ -89,6 +89,7 @@ test("a heading finds the whole block under it", () => {
   // than one row.
   assert.deepEqual(idsOf(matchSettingsRows("конфиденциальность", EVERYONE)), [
     "status",
+    "phone-search",
     "presence",
     "forward-origin",
     "blocked",
@@ -195,10 +196,16 @@ test("the catalogue is not handed out for mutation", () => {
   // (slice F of the call proposal); 17 since 2026-09-20, when «Размер текста
   // сообщений» joined the application section (D-287); 18 since 2026-09-21,
   // when «Имя при пересылке» joined the privacy section; 19 since 2026-09-30,
-  // when «Мой статус» joined it (tracker item 37). The number is the point of
+  // when «Мой статус» joined it (tracker item 37); 20 when phone findability
+  // joined it (tracker item 74). The number is the point of
   // this line — a row that vanishes is invisible — so it is moved
   // deliberately rather than widened into a range.
-  assert.equal(SETTINGS_ROWS.length, 19);
+  assert.equal(SETTINGS_ROWS.length, 20);
+});
+
+test("phone findability is reachable by the question a person brings to settings", () => {
+  assert.deepEqual(idsOf(matchSettingsRows("кто может найти", EVERYONE)), ["phone-search"]);
+  assert.deepEqual(idsOf(matchSettingsRows("найти меня", EVERYONE)), ["phone-search"]);
 });
 
 test("the status row is found by the status a person wants, not by its label", () => {

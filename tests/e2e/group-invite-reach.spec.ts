@@ -27,10 +27,10 @@ import {
  *
  *   - `Profiles are viewable by everyone` is the live SELECT policy, so a blank
  *     list was never protecting anything.
- *   - `public.search_profiles_by_phone` returns early unless the caller holds
+ *   - `public.search_profiles_by_phone` returned early unless the caller held
  *     `users.view`, which four administrative global roles hold and nobody
- *     else. An ordinary person has never been able to find anybody by
- *     telephone number, so nothing here offers or implies it.
+ *     else, so nothing here offers or implies it. (Since 2026-09-30 it
+ *     answers anybody for a whole number, in the global search — item 74.)
  *   - 'ivan_petrov' ILIKE '%ivan petrov%' is **false**. This screen replaced
  *     «_» with a space before searching, and 4 of the 11 usernames on this
  *     deployment contain one — typed out in full, those people could not be

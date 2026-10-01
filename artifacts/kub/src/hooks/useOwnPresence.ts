@@ -109,7 +109,7 @@ export function ownPresenceSnapshot(): ManualStatus {
  */
 export function useOwnPresenceRuntime(userId: string | null): void {
   const privacy = usePrivacyPreferences();
-  const settled = !privacy.loading && privacy.userId === userId && userId !== null;
+  const settled = privacy.ready && !privacy.loading && privacy.userId === userId && userId !== null;
 
   useEffect(() => {
     inputs = settled

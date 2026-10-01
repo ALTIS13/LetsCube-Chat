@@ -18,10 +18,11 @@ async function readPhoneSearchMigration() {
   return readFile(new URL(name, migrationDirectory), "utf8");
 }
 
-test("phone search accepts only explicit complete E.164 input", () => {
+test("phone search accepts whole international and Russian numbers, never partial input", () => {
   assert.equal(normalizePhoneSearchQuery("+7 999 123-45-67"), "+79991234567");
   assert.equal(normalizePhoneSearchQuery("+44 (7700) 900123"), "+447700900123");
-  assert.equal(normalizePhoneSearchQuery("89991234567"), null);
+  assert.equal(normalizePhoneSearchQuery("89991234567"), "+79991234567");
+  assert.equal(normalizePhoneSearchQuery("7 (999) 123-45-67"), "+79991234567");
   assert.equal(normalizePhoneSearchQuery("9991234567"), null);
   assert.equal(normalizePhoneSearchQuery("+7999"), null);
   assert.equal(normalizePhoneSearchQuery("+79991234567 ext 1"), null);

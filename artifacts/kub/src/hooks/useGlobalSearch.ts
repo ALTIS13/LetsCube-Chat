@@ -106,6 +106,8 @@ interface UseGlobalSearchResult {
   filtersLimited: boolean;
   usedFallback: boolean;
   error: string | null;
+  /** The database refused a lookup by number: too many in a minute or a day (item 74). */
+  phoneLimited: boolean;
 }
 
 let rpcAvailability: "unknown" | "available" | "missing" = "unknown";
@@ -134,6 +136,7 @@ export function useGlobalSearch({
   const [filtersLimited, setFiltersLimited] = useState(false);
   const [usedFallback, setUsedFallback] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [phoneLimited, setPhoneLimited] = useState(false);
   const requestIdRef = useRef(0);
 
   useEffect(() => {
@@ -166,7 +169,15 @@ export function useGlobalSearch({
           currentUserId,
           limit,
         }),
-        fetchPhoneSearchResults({ supabase, query: searchQuery, type: activeType, limit }),
+        fetchPhoneSearchResults({
+          supabase,
+          query: searchQuery,
+          type: activeType,
+          limit,
+          onLimited: () => {
+            if (requestIdRef.current === currentRequestId) setPhoneLimited(true);
+          },
+        }),
         fetchBotSearchResults({ supabase, query: searchQuery, type: activeType, limit }),
       ]);
 
@@ -193,12 +204,14 @@ export function useGlobalSearch({
       setUsedFallback(false);
       setFiltersLimited(false);
       setError(null);
+      setPhoneLimited(false);
       setMigrationMissing(rpcAvailability === "missing");
       return;
     }
 
     setLoading(true);
     setError(null);
+    setPhoneLimited(false);
 
     if (type === "bot") {
       void fetchBotSearchResults({ supabase, query: searchQuery, type, limit }).then((bots) => {
@@ -232,7 +245,15 @@ export function useGlobalSearch({
 
           if (!error) {
             const [phone, bots] = await Promise.all([
-              fetchPhoneSearchResults({ supabase, query: searchQuery, type, limit }),
+              fetchPhoneSearchResults({
+                supabase,
+                query: searchQuery,
+                type,
+                limit,
+                onLimited: () => {
+                  if (requestIdRef.current === currentRequestId) setPhoneLimited(true);
+                },
+              }),
               fetchBotSearchResults({ supabase, query: searchQuery, type, limit }),
             ]);
             if (requestIdRef.current !== currentRequestId) return;
@@ -297,7 +318,15 @@ export function useGlobalSearch({
 
         rpcAvailability = "available";
         const [phone, bots] = await Promise.all([
-          fetchPhoneSearchResults({ supabase, query: searchQuery, type, limit }),
+          fetchPhoneSearchResults({
+            supabase,
+            query: searchQuery,
+            type,
+            limit,
+            onLimited: () => {
+              if (requestIdRef.current === currentRequestId) setPhoneLimited(true);
+            },
+          }),
           fetchBotSearchResults({ supabase, query: searchQuery, type, limit }),
         ]);
         if (requestIdRef.current !== currentRequestId) return;
@@ -357,6 +386,7 @@ export function useGlobalSearch({
     filtersLimited,
     usedFallback,
     error,
+    phoneLimited,
   };
 }
 
@@ -378,16 +408,27 @@ function mapRpcRow(row: RpcGlobalSearchRow): GlobalSearchResult {
   };
 }
 
+/**
+ * The database's own refusal of a lookup for its rate — ten a minute and a
+ * hundred a day outside staff (`search_profiles_by_phone`, item 74).
+ */
+function isPhoneLookupLimited(error: { message?: string | null } | null | undefined): boolean {
+  return (error?.message ?? "").includes("phone_lookup_rate_limited");
+}
+
 async function fetchPhoneSearchResults({
   supabase,
   query,
   type,
   limit,
+  onLimited,
 }: {
   supabase: ReturnType<typeof createClient>;
   query: string;
   type: GlobalSearchDataType | "all";
   limit: number;
+  /** Told when the database refuses the lookup for its rate (item 74). */
+  onLimited?: () => void;
 }): Promise<GlobalSearchResult[]> {
   if (type !== "all" && type !== "user") return [];
   if (phoneRpcAvailability === "missing") return [];
@@ -403,6 +444,8 @@ async function fetchPhoneSearchResults({
   if (error) {
     if (isMissingSearchFunctionError(error, "search_profiles_by_phone")) {
       phoneRpcAvailability = "missing";
+    } else if (isPhoneLookupLimited(error)) {
+      onLimited?.();
     } else if (import.meta.env.DEV) {
       console.warn("[global-search] phone rpc failed", error);
     }

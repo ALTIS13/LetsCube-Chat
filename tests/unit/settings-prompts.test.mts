@@ -41,15 +41,10 @@ test("neither sentence explains the machine", () => {
   }
 });
 
-test("the telephone's line does not promise a feature that does not exist", () => {
-  // The obvious wording is «вас перестанут находить по номеру», and it is
-  // false: `public.search_profiles_by_phone` refuses every caller without
-  // `users.view`, so an ordinary person has never been able to find anybody
-  // that way. Measured on production on 2026-09-15 before the line was written.
+test("removing a verified number names the loss of findability and reverification", () => {
+  // Item 74 opens verified-number lookup subject to the person's own privacy.
   const prompt = phoneRemovalPrompt();
-  assert.doesNotMatch(prompt.description, /находить|найти|поиск/iu);
-  // What it does cost is the verification, which is what the line says.
-  assert.match(prompt.description, /подтвердить|подтверждени/iu);
+  assert.equal(prompt.description, "По номеру вас больше не найдут. Чтобы вернуть его, номер придётся подтвердить заново.");
 });
 
 test("the photograph's line names the fallback the avatar really draws", () => {

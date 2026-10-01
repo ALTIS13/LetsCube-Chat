@@ -13,6 +13,7 @@
  */
 
 import type { ManualStatus } from "./presenceStatus.ts";
+import type { PhoneFindableBy } from "./phoneFindability.ts";
 
 export interface PrivacyPreferences {
   /** Publish "last seen" and the online dot to other people. */
@@ -37,6 +38,12 @@ export interface PrivacyPreferences {
   manualStatus: ManualStatus;
   /** When it runs out, as ISO; null for «навсегда», and always for «online». */
   manualStatusUntil: string | null;
+  /**
+   * Who can find this person by their verified number (tracker item 74):
+   * everybody, as in Telegram when nothing is stored, or only the people they
+   * have saved. The lookup reads it in the database; nothing here enforces it.
+   */
+  phoneFindableBy: PhoneFindableBy;
 }
 
 export interface PrivacyPreferencesState {
@@ -56,7 +63,8 @@ export interface PrivacyPreferencesState {
 export interface PrivacyGateway {
   /** `null` when the person has no row yet, which means the defaults. */
   read(userId: string): Promise<PrivacyPreferences | null>;
-  write(userId: string, preferences: PrivacyPreferences): Promise<void>;
+  /** Only the changed fields: another device may have changed the others. */
+  write(userId: string, preferences: PrivacyPreferencePatch): Promise<void>;
   /** Erase what was already published. Only called when hiding presence. */
   clearPresence(userId: string): Promise<void>;
   /**
@@ -66,6 +74,10 @@ export interface PrivacyGateway {
    */
   setStatus(userId: string, status: ManualStatus, until: string | null): Promise<void>;
 }
+
+export type PrivacyPreferencePatch = Partial<Pick<PrivacyPreferences,
+  "presenceVisible" | "forwardOriginVisible" | "phoneFindableBy"
+>>;
 
 export const PRIVACY_DEFAULTS: Readonly<PrivacyPreferences> = Object.freeze({
   presenceVisible: true,
@@ -77,6 +89,7 @@ export const PRIVACY_DEFAULTS: Readonly<PrivacyPreferences> = Object.freeze({
   forwardOriginVisible: true,
   manualStatus: "online",
   manualStatusUntil: null,
+  phoneFindableBy: "everybody",
 });
 
 const INITIAL: PrivacyPreferencesState = {
@@ -100,6 +113,8 @@ export function createPrivacyPreferencesStore(gateway: PrivacyGateway) {
   let inFlight: Promise<void> | null = null;
   /** Moves on every write, so a read that started before one cannot undo it. */
   let revision = 0;
+  let accountEpoch = 0;
+  let writeTail: Promise<unknown> = Promise.resolve();
   const listeners = new Set<() => void>();
 
   function emit(next: PrivacyPreferencesState): void {
@@ -132,16 +147,17 @@ export function createPrivacyPreferencesStore(gateway: PrivacyGateway) {
   function read(userId: string): Promise<void> {
     if (inFlight) return inFlight;
     const startedAt = revision;
-    inFlight = (async () => {
+    const epoch = accountEpoch;
+    const pending = (async () => {
       try {
         const row = await gateway.read(userId);
         // A reply that arrives after the account changed belongs to nobody,
         // and one that started before a write would put the old value back.
-        if (activeUserId !== userId || revision !== startedAt) return;
-        settle(row ? { ...PRIVACY_DEFAULTS, ...row } : { ...PRIVACY_DEFAULTS });
+        if (activeUserId !== userId || accountEpoch !== epoch || revision !== startedAt) return;
         loadedFor = userId;
+        settle(row ? { ...PRIVACY_DEFAULTS, ...row } : { ...PRIVACY_DEFAULTS });
       } catch (error) {
-        if (activeUserId !== userId || revision !== startedAt) return;
+        if (activeUserId !== userId || accountEpoch !== epoch || revision !== startedAt) return;
         // A failed read leaves the defaults in place rather than guessing at
         // something more private or less private than the person chose. On a
         // refresh the answer already held stays.
@@ -149,9 +165,10 @@ export function createPrivacyPreferencesStore(gateway: PrivacyGateway) {
         settle(PRIVACY_DEFAULTS, messageOf(error));
       }
     })().finally(() => {
-      inFlight = null;
+      if (inFlight === pending) inFlight = null;
     });
-    return inFlight;
+    inFlight = pending;
+    return pending;
   }
 
   /**
@@ -160,10 +177,42 @@ export function createPrivacyPreferencesStore(gateway: PrivacyGateway) {
    * setting means publishing presence the person had turned off.
    */
   function reset(userId: string | null): void {
+    accountEpoch += 1;
+    revision += 1;
     activeUserId = userId;
     loadedFor = null;
     inFlight = null;
+    writeTail = Promise.resolve();
     emit(userId ? { ...INITIAL, userId } : SIGNED_OUT);
+  }
+
+  function canEdit(userId: string | null): boolean {
+    return userId !== null && activeUserId === userId && loadedFor === userId;
+  }
+
+  function writeChoice(
+    userId: string | null,
+    patch: Partial<PrivacyPreferences>,
+    save: (account: string) => Promise<void>,
+  ): Promise<boolean> {
+    if (!canEdit(userId)) return Promise.resolve(false);
+    const account = userId!;
+    const epoch = accountEpoch;
+    const operation = writeTail.then(async () => {
+      if (accountEpoch !== epoch || !canEdit(account)) return false;
+      const previous = state.preferences;
+      revision += 1;
+      settle({ ...previous, ...patch });
+      try {
+        await save(account);
+      } catch (error) {
+        if (accountEpoch === epoch && activeUserId === account) settle(previous, messageOf(error));
+        return false;
+      }
+      return accountEpoch === epoch && activeUserId === account;
+    });
+    writeTail = operation;
+    return operation;
   }
 
   return {
@@ -177,6 +226,8 @@ export function createPrivacyPreferencesStore(gateway: PrivacyGateway) {
     getSnapshot(): PrivacyPreferencesState {
       return state;
     },
+
+    canEdit,
 
     /** Idempotent: repeated calls for the same account do not re-query. */
     sync(userId: string | null): Promise<void> {
@@ -196,63 +247,36 @@ export function createPrivacyPreferencesStore(gateway: PrivacyGateway) {
      */
     refresh(userId: string | null): Promise<void> {
       if (!userId || activeUserId !== userId || loadedFor !== userId) return Promise.resolve();
-      return read(userId);
+      const epoch = accountEpoch;
+      // A focus refresh must not read the pre-PATCH row and undo the choice
+      // being saved. Reads begun before a newer write still use revision guards.
+      return writeTail.then(() => {
+        if (accountEpoch !== epoch || !canEdit(userId)) return;
+        return read(userId);
+      });
     },
 
-    /**
-     * One writer for both switches, because the row is written as a whole.
-     *
-     * An upsert of `{ user_id, presence_visible }` would reset
-     * `forward_origin_visible` to its column default on every presence change —
-     * silently turning somebody's opt-out back on. The gateway takes the whole
-     * preference object for that reason.
-     */
-    async setPreference<K extends keyof PrivacyPreferences>(
+    /** A partial update cannot overwrite a choice made on another device. */
+    async setPreference<K extends keyof PrivacyPreferencePatch>(
       userId: string | null,
       key: K,
       value: PrivacyPreferences[K],
     ): Promise<boolean> {
-      if (!userId) return false;
-      const previous = state.preferences;
-      const next = { ...previous, [key]: value };
-      revision += 1;
-      settle(next);
-      try {
-        await gateway.write(userId, next);
-      } catch (error) {
-        settle(previous, messageOf(error));
-        return false;
-      }
-      loadedFor = userId;
-      return true;
+      const patch = { [key]: value } as PrivacyPreferencePatch;
+      return writeChoice(userId, patch, (account) => gateway.write(account, patch));
     },
 
     async setPresenceVisible(userId: string | null, visible: boolean): Promise<boolean> {
-      if (!userId) return false;
-      const previous = state.preferences;
-      const next = { ...previous, presenceVisible: visible };
-      revision += 1;
-      settle(next);
-      try {
-        await gateway.write(userId, next);
-      } catch (error) {
-        settle(previous, messageOf(error));
-        return false;
-      }
-      loadedFor = userId;
-
       // Turning it off clears what was already published, so the change is
       // immediate for everyone rather than only for what happens next. A
       // failure here is not a failed setting — the preference is saved and the
       // heartbeat has stopped — so the stale value is left to expire.
-      if (!visible) {
-        try {
-          await gateway.clearPresence(userId);
-        } catch {
-          /* noop: see above */
+      return writeChoice(userId, { presenceVisible: visible }, async (account) => {
+        await gateway.write(account, { presenceVisible: visible });
+        if (!visible && activeUserId === account) {
+          try { await gateway.clearPresence(account); } catch { /* expires on its own */ }
         }
-      }
-      return true;
+      });
     },
 
     /**
@@ -261,20 +285,9 @@ export function createPrivacyPreferencesStore(gateway: PrivacyGateway) {
      * change now rather than at the next heartbeat.
      */
     async setManualStatus(userId: string | null, status: ManualStatus, until: string | null): Promise<boolean> {
-      if (!userId) return false;
-      const previous = state.preferences;
       const end = status === "online" ? null : until;
-      const next = { ...previous, manualStatus: status, manualStatusUntil: end };
-      revision += 1;
-      settle(next);
-      try {
-        await gateway.setStatus(userId, status, end);
-      } catch (error) {
-        settle(previous, messageOf(error));
-        return false;
-      }
-      loadedFor = userId;
-      return true;
+      return writeChoice(userId, { manualStatus: status, manualStatusUntil: end },
+        (account) => gateway.setStatus(account, status, end));
     },
   };
 }
