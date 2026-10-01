@@ -1,6 +1,19 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-09-27.
+Status: active production-hardening tracker, updated 2026-10-02.
+
+**2026-10-02 D-208 consumer integration:** actual ChatAvatar acceptance is
+16/16 synthetic cases at 390/1440 in both themes. The frozen FILE matrix passed
+69/69 in Chromium/WebKit. FILE path-only/refusal/focus, active-history remount,
+late-topic isolation, mounted renewal/playback and replacement-object reset
+fixes passed their focused checks. Source `ebb93d6f` passed typecheck, production
+build and 4832/4832 units without skips; independent rollout verification follows.
+Fresh member signing, outsider refusal, expiry and renewal passed read-only;
+zero eligible non-author QA FILE rows means live FILE acceptance stays open.
+The bucket remains public, Android is still on hold and no native release or
+private switch is part of this wave. Follow the current
+[consumer checkpoint](operations/2026-10-01-signed-media-consumers.md), not the
+older unverified-consumer list below.
 
 **2026-09-27 ordinary-user flow (web deployed):** a private contact
 list, working group text-channel scope for ordinary participants including

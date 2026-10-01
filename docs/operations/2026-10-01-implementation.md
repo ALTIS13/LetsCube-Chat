@@ -16,7 +16,10 @@ Approved by the owner on 2026-10-01. No Android build/install/publication.
    completion, activation and notification boundaries before implementation.
    First web slice and D-332 account isolation are released and accepted;
    installed-client/OS receipt acceptance remains separate and Android is held.
-3. [ ] D-208: finish signed-media privacy; preserve the native release hold.
+3. [~] D-208: signed-media consumers fixed and in final acceptance; preserve
+   the public bucket and native release hold. Follow the current
+   [consumer record](2026-10-01-signed-media-consumers.md), not the older
+   unimplemented-consumer checkpoint below.
 4. [ ] Continue the open presence/AFK/DND and role/bot stages from the tracker.
 
 ## Decisions And Boundaries
@@ -44,9 +47,10 @@ exact sole healthy image, markers and public/container JS/SW parity. Final
 4787/4787 unit tests, 93 mounted cases, 12 pixel/activation cases and deployed
 read-only 3/3 smoke passed. SQL/Edge apply and fresh restore/live rolled-back
 acceptance are complete; do not repeat them. Source workers are closed.
-Blocker: none for synthetic D-208 consumers; private-bucket activation is
-blocked on compatible installed-Android upgrade proof. Next: red/green the
-actual path-only FILE, group-avatar and mounted long-session consumers below.
+Blocker: live non-author QA FILE unavailable; private-bucket activation is
+blocked on compatible installed-Android upgrade proof. Next: finish full gates
+and independent web-rollout verification for the fixed FILE, group-avatar and
+mounted long-session consumers in the linked consumer record.
 Item 74 and voice intake are closed; the foreign document deletion is preserved.
 No native build/install/publication; Android hold is unchanged.
 
@@ -376,3 +380,13 @@ acceptance, not an installed PWA/native device test or OS push receipt.
 The owned synthetic dev server was stopped after verification. D-208's
 unimplemented consumer cases above are the next checkpoint; its public bucket
 and the Android/native release hold are unchanged.
+
+## D-208 Consumer Slice, 2026-10-02
+
+The unimplemented-consumer checkpoint immediately above is superseded by the
+[current consumer record](2026-10-01-signed-media-consumers.md). Actual group
+avatars, path-only/refused FILEs, WebKit focus, background history privacy and
+mounted signature renewal/playback are implemented and tested. Same-message
+attachment replacement has its own actual MessageBubble regression. The final
+FILE matrix passed 69/69; full-gate and rollout receipts follow in that record.
+No private-bucket switch, Android work or production message write is implied.

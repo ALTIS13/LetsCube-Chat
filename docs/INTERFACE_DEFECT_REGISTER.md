@@ -13922,6 +13922,27 @@ a path to a removed file would be worse than a visibly dead URL.
 
 ---
 
+### 2026-10-01 — consumer acceptance, not private-bucket activation
+
+The historical claim above that real-member signing had not been attempted is
+superseded: fresh read-only member signing, outsider denial, expiry and renewal
+passed. Actual ChatAvatar passed 16 synthetic cases; the frozen FILE matrix
+passed 69/69 in Chromium/WebKit, and mounted renewal/playback plus actual
+MessageBubble replacement identity passed 43/43. The actual FILE path-only, refusal, WebKit
+focus and active-history-unmount failures were reproduced, not inferred from
+resolver tests. The [consumer record](operations/2026-10-01-signed-media-consumers.md)
+holds the measured boundaries and remaining gates.
+The 2026-10-02 final cleanup test also proves cancellation of a shortened store
+timer; no production source changed for that strengthening. Final full-suite
+and rollout receipts are maintained in the linked record.
+
+Fresh SQL still reports `media.public = true`; D-208 remains open. No eligible
+non-author QA FILE was found. Live FILE and actual deployed long-session/native
+acceptance are not replaced by the accelerated synthetic clock. Android remains
+on hold, so no private-bucket switch is authorised by this slice.
+
+---
+
 ## D-106 — closed 2026-09-15, and it was closed by somebody else's work
 
 Not fixed here: **already fixed by D-173**, and the entry had gone stale.

@@ -22,7 +22,7 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-332, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-01 (Codex implementation).** Owner: this Codex chat.
+**Active resume, 2026-10-02 (Codex implementation).** Owner: this Codex chat.
 Stage: D-208 signed-media consumer acceptance, not a native release. Item 74 is
 closed. The first D-331 / item 75 and D-332 web slice is deployed from `56ae3cc0`:
 sole healthy exact-SHA image, new markers, unchanged retained old entry and
@@ -32,9 +32,17 @@ tests without skips, 93 mounted cases, 12 final visual/activation cases and
 no preference writes or captures. The mention SQL/Edge entrypoint and fresh
 restore/live rolled-back acceptance are complete; do not apply them again.
 Installed Android and OS push receipt are not accepted by that web evidence.
-Source workers are closed; Android build/install/publication stays on hold.
-Next: prove actual FILE, ChatAvatar and mounted long-session consumers in
-signed-only synthetic fixtures, then authenticated acceptance. Keep the bucket
+Current slice: source is frozen and workers are closed. Actual ChatAvatar passed
+16 cases, FILE passed 69/69 in Chromium/WebKit, and mounted renewal/playback plus
+replacement identity passed 43/43. The late-topic guard and shortened-timer cleanup
+review fixes have red/green proof. Evidence and current gates:
+[signed-media consumers](operations/2026-10-01-signed-media-consumers.md).
+Blocker: no eligible non-author QA FILE; deployed long-session seek and compatible
+installed Android remain separate acceptance. No production mutations, device
+changes or cloud minutes. Android build/install/publication stays on hold.
+Final gate: 4832/4832 units without skips, typecheck and real production build.
+Source: `ebb93d6f`. Next: independently verify the reviewed web rollout.
+Keep the bucket
 public; its private switch requires compatible installed-Android proof.
 All seven voice notes are reconciled, not new intake work. Claude's pushed
 phone candidate and foreign document deletion remain preserved. Evidence,
