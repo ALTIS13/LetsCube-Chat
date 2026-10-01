@@ -2,18 +2,22 @@
 
 Status: active production-hardening tracker, updated 2026-10-02.
 
-**2026-10-02 D-208 consumer integration:** actual ChatAvatar acceptance is
+**2026-10-02 D-208 web-consumer fixes deployed:** actual ChatAvatar acceptance is
 16/16 synthetic cases at 390/1440 in both themes. The frozen FILE matrix passed
 69/69 in Chromium/WebKit. FILE path-only/refusal/focus, active-history remount,
 late-topic isolation, mounted renewal/playback and replacement-object reset
 fixes passed their focused checks. Source `ebb93d6f` passed typecheck, production
-build and 4832/4832 units without skips; independent rollout verification follows.
+build and 4832/4832 units without skips. Reviewed `c31ed22f` reached the exact
+healthy image; new/retained content and public/container hash parity passed.
+Deployed read-only signed-avatar/account-switch QA passed 4/4 without captures.
 Fresh member signing, outsider refusal, expiry and renewal passed read-only;
 zero eligible non-author QA FILE rows means live FILE acceptance stays open.
 The bucket remains public, Android is still on hold and no native release or
 private switch is part of this wave. Follow the current
 [consumer checkpoint](operations/2026-10-01-signed-media-consumers.md), not the
-older unverified-consumer list below.
+older unverified-consumer list below. Live FILE/group-avatar and deployed
+long-session/native acceptance remain separate; do not repeat the completed
+synthetic consumer suite without a changed input or new failure.
 
 **2026-09-27 ordinary-user flow (web deployed):** a private contact
 list, working group text-channel scope for ordinary participants including

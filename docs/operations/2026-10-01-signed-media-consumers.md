@@ -54,7 +54,7 @@ the signed address of the same object does not remount it.
 
 ## Evidence And Limits
 
-Current acceptance checkpoint, not final publication:
+Final local acceptance; publication receipt follows below:
 
 - Actual ChatAvatar: 16/16 synthetic Chromium cases, 390/1440, both themes;
   signed `src/srcSet`, signed-original fallback and refusal monogram. All 16
@@ -107,14 +107,42 @@ the strengthened test and both visual-server opt-ins, passed **4832/4832** with
 zero failures, cancellations or skips. The repaired idle assertion still rejects
 both omitted scheduling and a delayed renewal rule in fresh omission runs.
 Source commit: `ebb93d6f17180d58790a5203f6aaf78927036ee5`.
-Web rollout verification remains pending at this checkpoint. No native builds,
-installs, release changes, SQL/Edge changes, cloud-device sessions or production
-message writes occurred.
+No native builds, installs, native release changes, SQL/Edge changes,
+cloud-device sessions or production message writes occurred.
+
+## Web Publication, 2026-10-02
+
+The two owned commits were reviewed as their own `origin/main..HEAD` step;
+74 alias imports resolved against the commits' own trees. Candidate
+`codex/signed-media-consumers-20261002` was pushed before `main`.
+Coolify finished `c31ed22ffa787f160d1a39903bd345917ae7f0bb`, with exactly one
+healthy replica running that image. The public entry is
+`/assets/index-LbL6mooT.js`, SHA256
+`7c5c98ab83c9041daf1fc7dfe42891e731db6b8ac743090c07eec06992802770`.
+It contains the refusal and retained-signature markers absent from the baseline.
+The retained `/assets/index-BCrQq7Yo.js` is byte-identical to its prestate and
+still lacks those markers. Public entry and service worker hashes match the
+running container's files. This verifies the rollout, not just its webhook.
+
+Deployed read-only QA passed 4/4 without skips: signed chat-list avatar in
+Chromium desktop/mobile and WebKit mobile, plus removal of a client-only signed
+chat row after switching QA accounts in the same desktop page. Capture, trace,
+video and Playwright's failure-context snapshot were off; output directories
+contain only `.last-run.json`. These tests do not open a real conversation or
+write messages. Contexts were closed; the account-switch test explicitly logs
+the first account out. No installed PWA/native-device or long-session result is
+claimed. The owned synthetic dev server and both source workers were stopped.
+
+Rollback: revert only source commit `ebb93d6f` on a reviewed candidate, rerun
+affected gates and verify the resulting web image/content before completing
+the rollback. Do not remove the retained asset volume or change the bucket's
+mode; neither database nor backend configuration changed in this slice.
 
 ## Remaining Acceptance
 
 Do not close D-208 or flip the bucket on these tests alone. Required next proof:
-an eligible real-member FILE; actual deployed long-session renewal and media
-seek; compatible installed Android acceptance after the owner resumes Android;
+an eligible real-member FILE and group-avatar consumer; actual deployed
+long-session renewal and media seek; compatible installed Android acceptance
+after the owner resumes Android;
 then the separately controlled private-bucket switch with rollback. Keep
 source/synthetic/deployed-browser/physical evidence distinct.

@@ -13935,6 +13935,9 @@ holds the measured boundaries and remaining gates.
 The 2026-10-02 final cleanup test also proves cancellation of a shortened store
 timer; no production source changed for that strengthening. Final full-suite
 and rollout receipts are maintained in the linked record.
+The final gate passed 4832/4832 without skips. Source `ebb93d6f` shipped through
+reviewed `c31ed22f`, proven by the exact healthy image, new/retained markers and
+public/container hashes; deployed read-only avatar/account-switch QA passed 4/4.
 
 Fresh SQL still reports `media.public = true`; D-208 remains open. No eligible
 non-author QA FILE was found. Live FILE and actual deployed long-session/native

@@ -23,7 +23,8 @@ Read in this order:
    measurement. Search it before filing anything.
 
 **Active resume, 2026-10-02 (Codex implementation).** Owner: this Codex chat.
-Stage: D-208 signed-media consumer acceptance, not a native release. Item 74 is
+Stage: D-208 web-consumer fixes deployed, remaining live/native acceptance open.
+This is not a native release. Item 74 is
 closed. The first D-331 / item 75 and D-332 web slice is deployed from `56ae3cc0`:
 sole healthy exact-SHA image, new markers, unchanged retained old entry and
 public/container JS/SW parity. Final gates: typecheck/build, 4787/4787 unit
@@ -41,7 +42,11 @@ Blocker: no eligible non-author QA FILE; deployed long-session seek and compatib
 installed Android remain separate acceptance. No production mutations, device
 changes or cloud minutes. Android build/install/publication stays on hold.
 Final gate: 4832/4832 units without skips, typecheck and real production build.
-Source: `ebb93d6f`. Next: independently verify the reviewed web rollout.
+Source `ebb93d6f` is deployed through reviewed `c31ed22f`: exact healthy image,
+new/retained markers and public/container hash parity. Deployed read-only QA
+passed 4/4, without captures or conversation writes. Next: remaining live
+FILE/group-avatar/long-session acceptance when eligible; continue the independent
+presence/AFK/DND and role/bot queue while Android remains on hold.
 Keep the bucket
 public; its private switch requires compatible installed-Android proof.
 All seven voice notes are reconciled, not new intake work. Claude's pushed

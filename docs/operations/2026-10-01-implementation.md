@@ -48,9 +48,10 @@ exact sole healthy image, markers and public/container JS/SW parity. Final
 read-only 3/3 smoke passed. SQL/Edge apply and fresh restore/live rolled-back
 acceptance are complete; do not repeat them. Source workers are closed.
 Blocker: live non-author QA FILE unavailable; private-bucket activation is
-blocked on compatible installed-Android upgrade proof. Next: finish full gates
-and independent web-rollout verification for the fixed FILE, group-avatar and
-mounted long-session consumers in the linked consumer record.
+blocked on compatible installed-Android upgrade proof. Source `ebb93d6f` passed
+full gates and independent web-rollout verification through `c31ed22f`.
+Next: remaining real-consumer/long-session acceptance in the linked record,
+and the independent presence/AFK/DND and role/bot stages while Android is held.
 Item 74 and voice intake are closed; the foreign document deletion is preserved.
 No native build/install/publication; Android hold is unchanged.
 
@@ -388,5 +389,7 @@ The unimplemented-consumer checkpoint immediately above is superseded by the
 avatars, path-only/refused FILEs, WebKit focus, background history privacy and
 mounted signature renewal/playback are implemented and tested. Same-message
 attachment replacement has its own actual MessageBubble regression. The final
-FILE matrix passed 69/69; full-gate and rollout receipts follow in that record.
+FILE matrix passed 69/69, final units passed 4832/4832 without skips, and
+reviewed `c31ed22f` reached the verified healthy image. Read-only deployed QA
+passed 4/4. The linked record holds content hashes, rollback and remaining gates.
 No private-bucket switch, Android work or production message write is implied.
