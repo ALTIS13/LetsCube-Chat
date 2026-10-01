@@ -495,9 +495,10 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     shared preference after unmount. Per-hook generations preserve independent
     consumers. Mounted RED 10/11, GREEN 11/11, four mutations caught; final full
     unit gate 4852/4852 without skips. No query, grant, legacy role or permission
-    authority changed. Web publication is pending in the
-    [DND/roles wave](operations/2026-10-02-presence-push-quiet.md); native holds
-    remain. This is not acceptance of the remaining density redesign.
+    authority changed. Web publication is accepted through `9cd89a70`, with
+    exact image/content proof and deployed read-only 4/4 regression smoke in
+    the [DND/roles wave](operations/2026-10-02-presence-push-quiet.md). Native
+    holds remain. This is not acceptance of the remaining density redesign.
 
     **This entry's first version measured the wrong table, and the correction is the useful part.** It counted `role_permissions` rows and concluded that `owner` and `tech_admin` "grant an identical 40-permission set". They do — and it does not matter, because `has_permission` never reads those rows for them. Verified against production:
 
@@ -1179,7 +1180,10 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     **Left for the second phase:** the system idle time and the AFK move on
     Windows (a native command, so a Windows release); leaving a call after five
     hours idle. The server DND alert leak and hidden-presence/Windows client
-    bypasses are D-333, in current restored/mounted acceptance:
+    bypasses are D-333, backend/shared-web accepted on 2026-10-02 after
+    restored/mounted gates, guarded single SQL apply, independent RLS/poststate
+    checks and exact-image web rollout. Installed/native local-alert and OS
+    receipt acceptance remain separate; Android is held:
     [2026-10-02 record](operations/2026-10-02-presence-push-quiet.md).
     The previously reasoned cross-device heartbeat race was disproven on
     2026-10-02 by two real PostgreSQL connections in both lock orderings:

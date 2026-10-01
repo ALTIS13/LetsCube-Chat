@@ -24798,11 +24798,14 @@ expected failures: actual Web/FCM predelivery rechecks say `deliver`, and a
 real captured recipient ring is eligible under DND. Message/ring controls pass
 before those assertions; no live message or provider call is sent.
 
-**Current acceptance:** four-function guards plus account-owned client
-alert decisions. In-app notifications/unread stay, cancelled rings still get
+**Backend/shared-web acceptance, 2026-10-02:** four-function guards plus
+account-owned client alert decisions. In-app notifications/unread stay, cancelled rings still get
 dismissed, expiry equality resumes new alerts, suppressed alerts do not replay
-after reconnect, and idle/invisible do not silently become DND. Do not claim
-OS receipt or installed native-client acceptance from these source tests.
+after reconnect, and idle/invisible do not silently become DND. The guarded SQL
+is applied once and its independent poststate/RLS check passes. The source is
+deployed through `9cd89a70`, with exact image/content proof and read-only 4/4
+bootstrap/account smoke. Keep partial for installed/native local-alert and OS
+receipt acceptance; Android is held. Do not repeat the accepted backend/web fix.
 [Current checkpoint and proof](operations/2026-10-02-presence-push-quiet.md).
 
 ## D-334 `[~]` An older roles read can replace a newer result or restore a disabled panel
@@ -24822,5 +24825,7 @@ Ten of eleven mounted cases fail on the shipped hook; the independent-consumer
 positive control passes. The corrected hook passes 11/11 and catches 4/4
 omission/shared-generation mutations. Focused roles/realtime gates pass 59/59;
 the full final unit suite passes 4852/4852 without skips. This is not a change
-to database permissions, role authority or queries. Web deployment acceptance
-is pending. [Wave record](operations/2026-10-02-presence-push-quiet.md).
+to database permissions, role authority or queries. Web is accepted through
+`9cd89a70`, with exact image/content proof and read-only 4/4 regression smoke.
+Keep partial only for the older embedded Android bundle, whose upgrade remains
+held; do not repeat the web fix. [Wave record](operations/2026-10-02-presence-push-quiet.md).

@@ -1,5 +1,29 @@
 # QA Results
 
+## 2026-10-02 - Private DND And Roles Read-Ordering Web Rollout
+
+Frozen combined source passed typecheck, real production web build (`sw.js
+build 8390c08cb81b8e57`, 13.13s), **4852/4852** units and API build followed
+by **357/357** server tests, without failures or skips. Mounted DND cases pass
+9/9 with 13/13 omissions caught; mounted roles ordering passes 11/11 with
+4/4 mutations caught. These regressions were red against the shipped behavior.
+
+A fresh full PG17.6 restore passed 39 broad SQL groups/34 mutations and six
+focused claim groups/six mutations, with real two-connection interleavings,
+terminal/no-replay cycles, cancellation progress, bounded settlement, exact
+rollback/catalog parity and reapplication. The live rollback-only control
+passed before the four-function guarded single apply. Independent committed
+poststate confirms expected bodies/owners/ACLs and zero public tables without
+RLS. No schema, grants, preferences or dispatcher configuration changed.
+
+The source wave reached sole healthy image `9cd89a70`; new/retained executable
+markers and public/container JS/SW hash parity passed. Deployed read-only QA
+passed **4/4** in Chromium 1440/390 and WebKit 390, including account-switch
+isolation. No conversation/message/preference mutation or capture occurred.
+This is not physical DND sound, OS receipt, enabled voice dispatch or installed
+Android acceptance. No native build/install/release or cloud session occurred;
+Android remains held. [Detailed evidence and next queue](operations/2026-10-02-presence-push-quiet.md).
+
 ## 2026-10-01 - Member Mentions And Account Isolation Web Rollout
 
 The final frozen source passed typecheck, production build (`sw.js build

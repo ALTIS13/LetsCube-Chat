@@ -16,13 +16,16 @@ Approved by the owner on 2026-10-01. No Android build/install/publication.
    completion, activation and notification boundaries before implementation.
    First web slice and D-332 account isolation are released and accepted;
    installed-client/OS receipt acceptance remains separate and Android is held.
-3. [~] D-208: signed-media consumers fixed and in final acceptance; preserve
+3. [~] D-208: signed-media consumers fixed and web rollout accepted; remaining
+   live/non-author FILE and long-session checks are separate. Preserve
    the public bucket and native release hold. Follow the current
    [consumer record](2026-10-01-signed-media-consumers.md), not the older
    unimplemented-consumer checkpoint below.
 4. [~] Continue the open presence/AFK/DND and role/bot stages from the tracker.
-   Item 37 / D-333 private alert gates are in restored SQL and mounted client
-   acceptance; follow [current record](2026-10-02-presence-push-quiet.md).
+   Item 37 / D-333 backend/shared-web private alert gates and D-334 web roles
+   ordering are accepted; follow [current record](2026-10-02-presence-push-quiet.md).
+   Next independent queue: D-258 Bot API new document/video/voice bytes upload
+   contract. Native idle/AFK and installed local-alert acceptance stay separate.
 
 ## Decisions And Boundaries
 
@@ -43,7 +46,8 @@ Approved by the owner on 2026-10-01. No Android build/install/publication.
 
 ## Resume
 
-Owner: Codex coordinator. Stage: item 37 / D-333 private DND alert acceptance.
+Owner: Codex coordinator. Stage: item 37 / D-333 backend/shared-web and D-334
+web accepted; SQL applied once and exact-image rollout/read-only smoke passed.
 Current checkpoint is the linked 2026-10-02 record. D-208 source gates and web
 rollout are complete; the following paragraph preserves their acceptance limits.
 First D-331/D-332 web slice `56ae3cc0` is published and independently verified:
@@ -55,7 +59,8 @@ Blocker: live non-author QA FILE unavailable; private-bucket activation is
 blocked on compatible installed-Android upgrade proof. Source `ebb93d6f` passed
 full gates and independent web-rollout verification through `c31ed22f`.
 Next: remaining real-consumer/long-session acceptance in the linked record,
-and the independent presence/AFK/DND and role/bot stages while Android is held.
+and the independent Bot API upload-contract/roles-density queue while Android
+is held. Windows idle/AFK and five-hour idle-call acceptance remain separate.
 Item 74 and voice intake are closed; the foreign document deletion is preserved.
 No native build/install/publication; Android hold is unchanged.
 

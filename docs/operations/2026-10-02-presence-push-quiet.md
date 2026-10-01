@@ -54,7 +54,7 @@ as a burst when DND ends; new eligible notifications resume then.
 5. [x] Independent review, scoped/full server regression gates, byte-identical
    migration-backup copies, rollback-only live rehearsal, guarded single apply
    and independently read poststate. Keep native holds unchanged.
-6. [~] Commit/push reviewed owned paths and verify the resulting web image and
+6. [x] Commit/push reviewed owned paths and verify the resulting web image and
    executable private-alert marker in new/retained entries, not the webhook.
 
 ## RED And Race Evidence
@@ -75,8 +75,8 @@ hidden in both orders. Its existing tuple lock already serializes the writes;
 The first coordinator GREEN run passed ordinary enqueue, hidden presence,
 expiry equality, idle/invisible/absent/caller controls, all alert kinds and
 terminal Web/FCM delivery rechecks. Its album test referenced a nonexistent
-outbox `user_id`; that harness error is being corrected to join the group,
-not excused as a product failure or a green result.
+outbox `user_id`; the harness was corrected to join the group before the final
+runs below, not excused as a product failure or a green result.
 
 The review-requested **actual terminal** cycle then found two further RED cases
 in the two-function candidate. Complete album and already-claimed ring controls
@@ -193,13 +193,45 @@ preference or dispatcher configuration change. The SQL archives and apply
 receipt remain root-only in the directory above. Do not reapply this migration
 or enable voice dispatch as a supposed follow-up acceptance step.
 
+## Web Publication And Read-Only Acceptance
+
+The owned source commits `e320dfc7`, `058e36d4` and `eab3c2ed` were pushed to
+the candidate first, then fast-forwarded into `main` with `9cd89a70`. Before
+each integration/push, `origin/main..HEAD` was read separately and 48 alias
+imports were resolved against the commits' own trees. The foreign deletion
+of `docs/CODEX_START_PROMPT.md` in the bot-platform worktree is preserved.
+
+The deployed source wave reached the sole healthy image
+`l64kyyu1sysev2izzjjbizhe:9cd89a7065bb498f91e6739b3f9fa13a1da508b9`.
+Its public entry `/assets/index-CnzTxZ8s.js` has SHA256
+`3ae640cb14776e764ea1eae4b966f5836a188bc9a63776e9da0c2f61775b4ffb`.
+The executable private-alert decision is present there and absent from the
+retained `/assets/index-LbL6mooT.js`, whose old bytes remain unchanged. Public
+entry and service-worker hashes match the running container. The first probe
+observed two replicas during rollover; acceptance waited for one healthy
+replica. Later documentation-only publications do not change this source proof.
+
+Deployed read-only smoke passed **4/4**: signed chat-avatar bootstrap in
+Chromium 1440, Chromium 390 and WebKit 390, plus QA account-switch isolation
+in Chromium 1440. `KUB_QA_ALLOW_MUTATIONS=0`; screenshots, traces and videos
+were off. No conversation was opened or message/preference written. The
+first account was explicitly logged out for switching; contexts are closed.
+The output directory contains only `.last-run.json`, 45 bytes.
+
+These are deployed bootstrap/account/media regression checks, not physical
+DND sound, OS push receipt, installed Android or enabled voice-dispatch proof.
+No layout changed in this wave, no cloud minutes were spent and no native
+build/install/release occurred. Android's existing hold remains in force.
+
 ## Resume
 
-Owner: coordinator. Stage: reviewed web integration/publication after accepted
-SQL apply. Goodall and Carson are closed; Hilbert's runner is frozen. Full
-client/server and restored SQL gates have passed, including the live rolled-back
-control and independent committed poststate. Next: publish only the owned
-commits, verify exact image/new-and-retained content, then read-only web smoke.
+Owner: coordinator. Stage: backend/shared-web DND and web roles read-ordering
+accepted; all workers are closed. SQL is already applied once. Native/installed
+local-alert and OS receipt acceptance remains separate, with Android held.
+Next independent queue: D-258 Bot API document/video/voice bytes upload
+contract; retain the existing closed photos/read-all/settings results. Remaining
+Windows idle/AFK, five-hour idle-call and roles-density work is not completed
+by this bounded wave. Current short resume is in `docs/HANDOVER.md`.
 
 Archive SHA256:
 `fbb7b3ad00150d66b6a76b9e4ac0e530475b031b3d9f26ffd78036630b321b16`.

@@ -23,18 +23,17 @@ Read in this order:
    measurement. Search it before filing anything.
 
 **Active resume, 2026-10-02 (Codex implementation).** Owner: this Codex chat.
-Stage: item 37 / D-333 SQL accepted and applied once; DND/D-334 web publication
-is next. The source and isolated runner are frozen.
-Source: `910b21ba`; branch `codex/presence-push-quiet-20261002`. The coordinator
-owns the four-function migration and rollout; Hilbert owns isolated SQL checks.
-Goodall and Carson are complete and closed. The coordinator owns publication.
-Evidence/blockers/next action: [DND record](operations/2026-10-02-presence-push-quiet.md).
-Next: reviewed Git integration and exact-SHA web acceptance; do not reapply SQL.
-Combined client units 4852/4852 and server tests 357/357 pass; production build
-is proved. SQL has 39 broad groups/34 mutations plus 6 focused groups/6
-mutations, with actual rollback/reapply and committed poststate proof. Both server leaks
-are reproduced; the alleged heartbeat race is disproven in both lock orderings.
-Android build/install/publication remains held; no native or device changes.
+Stage: item 37 / D-333 backend/shared-web and D-334 web accepted. SQL is applied
+once; do not reapply it. Source: `e320dfc7`, `058e36d4`, `eab3c2ed`, integrated
+through `9cd89a70` on `main`. All three workers are closed. Evidence, production
+image/content proof, 4852/4852 units, 357/357 server tests, restored SQL mutation
+checks and deployed read-only 4/4 smoke: [DND record](operations/2026-10-02-presence-push-quiet.md).
+Remaining: installed/native local-alert acceptance, Windows idle/AFK and the
+five-hour idle-call policy; no OS receipt is claimed by web smoke. Android
+build/install/publication remains held; no native or device changes.
+Next independent queue: D-258 new document/video/voice bytes upload contract
+for the Bot API, with bounded ownership, quota and idempotency checks; roles
+UI density remains open. Do not repeat closed bot photos/read-all/settings.
 
 **Prior completed web wave, 2026-10-02.** D-208 consumer fixes are deployed;
 remaining live/native acceptance is open.
