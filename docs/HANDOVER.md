@@ -23,17 +23,22 @@ Read in this order:
    measurement. Search it before filing anything.
 
 **Active resume, 2026-10-02 (Codex implementation).** Owner: this Codex chat.
-Stage: D-258 bounded document/video/voice bytes accepted in production.
-SQL applied once at 14:45 MSK, do not reapply. Exact Gateway/web/worker revision
-`2900eeb7` is healthy; public synthetic canary passed 9/9 with cleanup verified.
+Stage: D-258 bounded document/video/voice bytes accepted; read-only media audit complete.
+SQL applied once at 14:45 MSK, do not reapply. Gateway/worker revision `2900eeb7`
+and accepted-copy web content from `2bb761ed` are healthy; documentation-only
+deploys may advance the web image tag without changing those bytes. Public synthetic canary
+passed 9/9 with cleanup verified; strengthened deployed documentation passed 3/3.
 Source baseline `c0b79cb0`, branch `codex/bot-inline-media-20261002`.
 All workers are closed. Evidence: 4946 unit passes / one explicit Android Gradle
 exclusion, 107 scoped cases, 26 new SQL cases, seven full PG17 restore groups,
 14 actual Linux parser cases, typechecks/builds and public-documentation matrix.
 Current apply/deploy result and remaining gates belong to the
 [media ingest record](operations/2026-10-02-bot-inline-media.md), not a new
-blind migration run. Android build/install/publication stays held. Next:
-finish acceptance-documentation publication, then bounded orphan/quota reconciliation;
+blind migration run. The [read-only audit](operations/2026-10-02-bot-media-reconciliation.md)
+passed 9/9 fixture cases and the guarded PG17 production snapshot: 21 completed
+QA admissions / 35,430 bytes, matching Storage metadata, no reserved leases.
+No files, receipts or quota were removed. Android build/install/publication stays held.
+Next: reviewed lifecycle/fencing contract before any destructive reconciliation;
 Windows idle/AFK, five-hour idle-call and roles-density remain open.
 Prior D-333/D-334 backend/shared-web DND/read-ordering wave is accepted and its
 SQL already applied once: [DND record](operations/2026-10-02-presence-push-quiet.md).

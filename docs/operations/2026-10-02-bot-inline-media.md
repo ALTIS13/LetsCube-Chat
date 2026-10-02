@@ -9,8 +9,10 @@ runtime/SQL/SDK integration; coordinator owns deployment and live acceptance.
 Android build/install/publication remains held. SQL is already applied once;
 do not reapply the first-install file. No native release is part of
 this backend/shared-web wave. Gateway/web/worker source `2900eeb7` is healthy,
-and the synthetic public-API canary passed 9/9. Next: publish the accepted
-documentation, then design bounded orphan/quota reconciliation; no automatic
+and the synthetic public-API canary passed 9/9. Accepted-copy web `2bb761ed`
+passed deployed documentation 3/3. The [read-only audit](2026-10-02-bot-media-reconciliation.md)
+then passed 9/9 fixture cases and the guarded production snapshot. Next: reviewed
+lifecycle/fencing contract before orphan/quota reconciliation; no automatic
 cleanup or quota release is part of this wave.
 
 ## Observed Cause
@@ -199,16 +201,16 @@ match the exact running web container. New media/quota markers are present;
 the retained `/assets/index-CnzTxZ8s.js` is unchanged, SHA256
 `3ae640cb14776e764ea1eae4b966f5836a188bc9a63776e9da0c2f61775b4ffb`,
 and lacks the new media-limit marker. Public-table RLS omission count remains 0.
-The acceptance-documentation publication follows; its content changes do not
-require another Gateway deploy or migration.
+The acceptance-documentation publication is recorded below; its content changes
+require neither another Gateway deploy nor a migration.
 
 The final acceptance copy passed KUB typecheck and an actual web build
 (`sw.js build d9324cbfbe9c2199`, 19.79s). Five literal rendered assertions now
 cover the supported PDF heading, 6 MiB/9 MiB bounds, PDF page/password bound,
 stable receipt semantics and absence of the obsolete candidate notice. The
-strengthened spec is red against the still-published candidate copy and green
-locally in Chromium 1440/390 and WebKit 390 (3/3); deployed green is the final
-publication check. Restored Chrome inspected the exact updated element in both
+strengthened spec was red against the published candidate copy and green
+locally in Chromium 1440/390 and WebKit 390 (3/3). Restored Chrome inspected
+the exact updated element in both
 themes at 1440/390 with no console errors. Viewport/media overrides were reset,
 the ephemeral tab closed and all three owned dev servers stopped.
 The final read-only nine-file review approved the copy with no P1/P2 blockers;
@@ -216,3 +218,20 @@ its remaining lease-time wording was corrected to 1-120 seconds. Independent
 production aggregate proof for the exact `d258:` QA key prefix shows 21 complete
 admissions, all with results/completion timestamps, and 35,430 retained charged
 bytes across the three attempts. No quota was reset by QA cleanup.
+
+## Accepted Documentation Publication
+
+Reviewed copy `2bb761ed120b3489cf6422b2c74d9d7ef86a5f90` was pushed to the
+candidate branch before the main fast-forward. Its one outgoing commit was read
+separately; both alias imports resolve in its own tree. The sole healthy web
+replica carries that exact image. The strengthened public spec is now deployed
+green **3/3**, with mutations and all captures off.
+
+Public entry `/assets/index-CWBgVg3u.js` SHA256
+`e5e2d0993054d46996c5b30e55954d139217d75cc0a57e7056984a6fe999436d`
+and service worker SHA256
+`74d2cd9a7e779853db9af7e9465c61c2d35097489a74c0c8cfd7b6801f2b0cbc`
+match the container. The new PDF heading is present and `Кандидат D-258` is
+absent. Both retained old entries keep their established hashes; the immediately
+previous `index-4fvXYyBb.js` still contains the candidate notice. Gateway/worker
+remain on accepted runtime `2900eeb7`; no extra rollout of them was needed.

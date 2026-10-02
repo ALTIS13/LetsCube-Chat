@@ -1,10 +1,29 @@
 # QA Results
 
+## 2026-10-02 - Read-Only Bot Media Audit
+
+`scripts/bot-media-ingest-audit.sql` passed independent read-only review and
+**9/9** focused cases on actual PostgreSQL 18.4, without skips. Known controls
+cover aggregates, canonical cross-author and soft-deleted references, drift,
+read-only DML/DDL refusal, exact lease expiry, the 20,000/20,001 boundary,
+two-connection repeatable-read interleaving and indexed Storage lookups.
+Semantic mutants change the measured outcomes; output contains no identifiers.
+
+The exact guarded source then ran against healthy production PG17.6 at
+15:35:14 MSK, in READ ONLY REPEATABLE READ ending in ROLLBACK. It returned
+21 complete admissions / 35,430 charged bytes, 21 matching Storage metadata
+rows, intact result identities, zero reservations and zero canonical references
+after the synthetic QA chats were deleted. No cleanup, quota refund or schema
+change occurred. Missing canonical references are not proof of safe orphan
+deletion; legacy URLs, HTTP and actual object bytes are outside this audit.
+Full evidence: [audit record](operations/2026-10-02-bot-media-reconciliation.md).
+
 ## 2026-10-02 - Bounded Bot Media Upload Production Acceptance
 
 D-258 new PDF/video/voice bytes and durable photo admission are deployed from
 `2900eeb71e76cb763fa5a4720c3e7cb49e162ef8`. The sole healthy Gateway, web and
-worker images carry that exact revision. Fresh backup and guarded SQL were
+worker images initially carried that exact revision; accepted-copy web followed
+at `2bb761ed` as recorded below. Fresh backup and guarded SQL were
 verified before the one apply at 14:45 MSK; do not reapply.
 
 Source gates: 4946 successful units / one explicit Android Gradle exclusion,
@@ -20,8 +39,11 @@ Deployed public documentation passed **3/3** in Chromium 1440/390 and WebKit
 hashes match; the retained old entry is unchanged. Local exact documentation
 elements were pixel-inspected at 1440/390 in both themes through restored Chrome.
 No private media/provider messages/native release/paid cloud session occurred.
-The acceptance-copy publication follows. Orphan/quota reconciliation remains
-open, not silently implemented by these tests.
+Accepted-copy web `2bb761ed` then reached one healthy replica. The strengthened
+spec was red against the obsolete candidate notice and green 3/3 both locally
+and deployed. Public/container JS/SW parity and both retained old entries pass;
+the obsolete candidate notice is absent from new bytes. Orphan/quota
+reconciliation remains open, not silently implemented by these tests.
 Full evidence: [media ingest record](operations/2026-10-02-bot-inline-media.md).
 
 ## 2026-10-02 - Private DND And Roles Read-Ordering Web Rollout

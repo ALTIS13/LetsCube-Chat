@@ -7,12 +7,20 @@ durable token-bound admission, insert-only Storage, retained quota and exact-onc
 receipt are implemented. Independent review approved the frozen integration;
 4946 unit passes / one explicitly excluded Android Gradle probe, 107 scoped
 tests, 26 new SQL cases, full PG17 restore and actual Linux parser checks pass.
-Exact healthy Gateway/web/worker revision `2900eeb7` and the synthetic public-API
+Exact healthy runtime Gateway/worker revision `2900eeb7` and the synthetic public-API
 canary passed: 9/9, seven formats, original receipt on retry, exact downloaded
 bytes, reference resends and an unmentioned incoming user photo. QA cleanup is
 verified. Follow the [active record](operations/2026-10-02-bot-inline-media.md).
-Android remains held. Bounded orphan reconciliation/quota reclamation is the
-next server follow-up; roles density, Windows AFK and idle-call policy stay open.
+Accepted-copy web `2bb761ed` passed strengthened deployed documentation 3/3,
+new/old marker checks and public/container byte parity.
+The [read-only aggregate audit](operations/2026-10-02-bot-media-reconciliation.md)
+is complete: 9/9 PG18 fixture cases, independent approval and an actual guarded
+PG17 snapshot. Its 21 complete QA receipts retain 35,430 bytes and matching
+Storage metadata; no reserved leases, deletion or refund. Absence of canonical
+references is a candidate signal, not orphan proof.
+Android remains held. Bounded orphan reconciliation/quota reclamation still needs
+a reviewed lifecycle/fencing contract before destructive work; roles density,
+Windows AFK and idle-call policy stay open.
 
 **2026-10-02 D-208 web-consumer fixes deployed:** actual ChatAvatar acceptance is
 16/16 synthetic cases at 390/1440 in both themes. The frozen FILE matrix passed
