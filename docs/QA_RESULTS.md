@@ -14,6 +14,11 @@ zero reservations; 386 selected URL rows partition into 381 parsed other-bucket
 and five unsupported forms. No observed receipt references or purge overlaps.
 This is not orphan/absence proof: unknown URL coverage and writer/generation/
 purge fences remain open. No files, charges, schema or app runtime were changed.
+Source `cf939e71` reached sole healthy exact-revision web, with unchanged
+public/container entry/SW and both retained-entry hashes; no production captures.
+Schema-only live catalog at 22:57 MSK confirms nine relations, 40 origin-enabled
+user triggers and 49 selected trigger/RPC functions. Guard UPDATE columns still
+exclude URL/preview-only edits; the old purge claim body hash is unchanged.
 Full evidence: [resolver](operations/2026-10-02-bot-media-reference-resolver.md).
 
 ## 2026-10-02 - Durable Bot Upload Attempts Rollout

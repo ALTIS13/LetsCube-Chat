@@ -10,7 +10,10 @@ proof. All 28 complete receipts / 47,240 bytes remain, zero reservations.
 No runtime/schema/media/accounting changes. Follow the
 [resolver evidence](operations/2026-10-02-bot-media-reference-resolver.md) and
 [source writer inventory](operations/2026-10-02-bot-media-writer-inventory.md).
-Next: fresh live trigger/catalog prestate and no-delete reference admission;
+Fresh live schema-only prestate at 22:57 MSK confirms nine relations, 40 enabled
+triggers and 49 selected trigger/RPC functions; the path guard still excludes
+URL-only/preview-only changes, and the old purge body hash is unchanged.
+Next: drift/backup/restore-gated no-delete reference admission;
 D-103 must hold ingest-owned objects until the shared seal/intent protocol is
 proven. All owned workers are closed; native holds remain.
 

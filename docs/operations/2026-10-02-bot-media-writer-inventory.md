@@ -7,6 +7,12 @@ device access or production mutation was performed. Migration definitions below
 are repository evidence, not a claim that every definition is currently installed.
 This is a bounded inventory of the named paths, not exhaustive proof of all writers.
 
+The coordinator subsequently captured a separate schema-only live catalog at
+22:57 MSK; see [resolver acceptance](2026-10-02-bot-media-reference-resolver.md#next-boundary).
+It confirms the named path-guard update columns and unchanged purge claim body,
+not every claim in this source inventory or complete fencing. Do not repeat the
+accepted reference audit solely because the original inventory was source-only.
+
 Resume: documentation worker; inventory complete; evidence is the linked source;
 blocker for reclamation is missing shared reference/generation/external-I/O fencing;
 next action is the coordinator's read-only reference audit, then an independently

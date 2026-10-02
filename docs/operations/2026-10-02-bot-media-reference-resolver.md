@@ -126,11 +126,51 @@ All charges remain; no production/schema/message/Storage mutation occurred.
 
 ## Next Boundary
 
-Next: fresh live writer/trigger catalog followed by no-delete reference
-admission for ingest-owned objects. D-103 must hold those objects until it
+Fresh schema-only writer/trigger catalog ran at
+`2026-10-02T19:57:09.205429Z` (22:57 MSK) with the same pinned PG17.6 target and
+READ ONLY REPEATABLE READ/ROLLBACK. It observes nine relations, 40 enabled
+non-internal triggers and 49 selected trigger/RPC functions; no row contents,
+function bodies or query tokens left the trusted database. Metadata/body hashes
+were retained privately, with no production mutation.
+
+The current path guard's UPDATE columns are `user_id`, `forwarded_from_id`,
+`media_bucket`, `media_path`, `bot_id`; URL-only/preview-only changes are outside
+that trigger. The live purge claim body still has MD5
+`6c8c495fff5655465d4f788389bdd1ae` (drift marker) / SHA256
+`22ae6a8dadb994f1803bbf5b030827fa6fb1c86d350adbf898f64b7a43c3b097`.
+These observations confirm the inventoried boundaries, not the proposed fences.
+The first private observer summary omitted that hash because `regprocedure`
+qualified the signature with `public.`; the retained catalog already contained
+it. Explicit qualified/unqualified controls exposed the omission and the
+corrected lookup verified the same snapshot, without rerunning SQL or changing
+data.
+
+Next: reviewed no-delete reference admission for ingest-owned objects, using
+that live catalog only after fresh drift/backup/restore gates. D-103 must hold
+those objects until it
 participates in the same seal/intent protocol; disabling a new reclaimer does
 not disable the existing deleter. Then avatar and variant source/target fences,
 generation-bound external-I/O recovery and exactly-once quota release.
 Five unsupported URL forms remain blocking uncertainty; even zero would not
 substitute for those fences. Keep cleanup disabled until the actual database
 interleavings and exactly-once retained-charge release are accepted.
+
+## Shared Source And Web Acceptance
+
+Source `cf939e712ee9b324730116ea821ba9baa3bdef13` was pushed to the candidate
+branch first, then `main`, after the separate outgoing-commit review, ancestry
+and own-tree import checks. Foreign worktree document deletion was preserved.
+The sole healthy web image reached that exact revision; the transient two-image
+rollover was not counted as final acceptance.
+
+New/retained markers and public/container hashes match:
+entry `/assets/index-CWBgVg3u.js` SHA256
+`e5e2d0993054d46996c5b30e55954d139217d75cc0a57e7056984a6fe999436d`,
+SW `74d2cd9a7e779853db9af7e9465c61c2d35097489a74c0c8cfd7b6801f2b0cbc`.
+Retained `/assets/index-CnzTxZ8s.js` is still
+`3ae640cb14776e764ea1eae4b966f5836a188bc9a63776e9da0c2f61775b4ffb` and
+`/assets/index-4fvXYyBb.js` is still
+`92d1793a93293abc343c88079dee8aab0a550a58e95ec326ba409f218cc356c1`.
+No production captures. Healthy Gateway/worker remain `856e03e4`; their watched
+source diff is empty. This documentation closeout may advance the web tag while
+retaining those accepted bytes. No APK/EXE build, install or publication occurred.

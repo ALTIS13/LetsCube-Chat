@@ -30,8 +30,11 @@ PG17 READ ONLY observation at 22:48 MSK. Source/evidence:
 [writer inventory](operations/2026-10-02-bot-media-writer-inventory.md).
 All owned workers are closed. Blocker: five unsupported URL forms and missing
 writer/generation/D-103/external-I/O fences; scans are not deletion permission.
-Next action: fresh live writer/trigger catalog, then a reviewed no-delete
-reference-admission foundation for ingest-owned objects. Make D-103 hold those
+Fresh live schema-only catalog at 22:57 MSK confirms nine relations, 40 enabled
+user triggers and 49 selected trigger/RPC functions; path guard excludes
+URL-only/preview-only updates and the old purge body hash is unchanged.
+Next action: reviewed no-delete reference-admission foundation for ingest-owned
+objects after fresh drift/backup/restore gates. Make D-103 hold those
 objects until it participates in the same seal/intent protocol; its current
 claim-to-DELETE interval is not fenced. Avatar/variant participation and
 exactly-once charge release follow separately. No automatic cleanup/refund.
