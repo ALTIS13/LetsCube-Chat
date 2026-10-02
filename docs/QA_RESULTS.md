@@ -18,6 +18,9 @@ control returns 0 protected / 1 ordinary row; direct protected lease is denied.
 No provider calls; all fictional rows rolled back. Retained receipts remain
 28 / 47,240 bytes, zero reserved. This is not cleanup, refund or proof of past
 provider terminality; ordinary-bucket races remain open. Do not reapply.
+Source `c2c3e46d` reached sole healthy exact-revision web; new/retained markers
+and public/container JS/SW hashes pass with unchanged app bytes. Owned isolated
+restore container removed only after exact guards; backups/receipts retained.
 Evidence: [purge hold](operations/2026-10-02-bot-media-purge-hold.md).
 
 ## 2026-10-02 - Encoded Bot Media Reference Preflight

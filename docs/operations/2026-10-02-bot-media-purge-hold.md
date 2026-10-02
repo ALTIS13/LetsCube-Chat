@@ -4,7 +4,7 @@ Owner: Codex coordinator. Base `2c14927a`, candidate branch
 `codex/bot-inline-media-20261002`.
 Plan: [checklist](../superpowers/plans/2026-10-02-bot-media-purge-hold.md).
 Status: reviewed SQL applied once and independently verified on production
-at 23:57 MSK on 2026-10-02. Source publication/exact web proof is next.
+at 23:57 MSK on 2026-10-02; source publication/exact web proof accepted.
 
 ## Cause And Change
 
@@ -142,10 +142,32 @@ receipts remain 28 / 47,240 bytes, reserved zero. Do not reapply or automaticall
 roll back: a rollback restores the unsafe route. Lost acknowledgement always
 requires installed-state observation rather than another execution.
 
+## Publication And Cleanup
+
+Source `c2c3e46d764ccb846add5c7aaca8fe1bd5d738f3` was pushed to the candidate
+branch first, then `main`, after separate outgoing-commit and own-tree alias
+checks. The sole healthy exact-revision web image is
+`l64kyyu1sysev2izzjjbizhe:c2c3e46d764ccb846add5c7aaca8fe1bd5d738f3`.
+The initial still-old image and later successful rollover are separate evidence;
+an `in_progress` Coolify row was not counted as deployment acceptance or retried.
+
+Public/container entry `/assets/index-CWBgVg3u.js` SHA256 remains
+`e5e2d0993054d46996c5b30e55954d139217d75cc0a57e7056984a6fe999436d`;
+SW remains `74d2cd9a7e779853db9af7e9465c61c2d35097489a74c0c8cfd7b6801f2b0cbc`.
+Both retained entries have the accepted prior hashes. New PDF markers remain,
+obsolete candidate notice stays absent from the current entry and present in
+the retained previous entry. No production captures. Gateway remains healthy
+at `856e03e4`; no watched worker/Gateway source changed.
+
+The owned isolated restore container was removed by its verified exact ID
+after label, image, network/ports/mounts, cron and fictional-row cleanup checks.
+Production containers and root-only backups/receipts were untouched. Hold-test
+workers are closed. A documentation-only closeout may advance the web image tag
+without changing accepted application bytes.
+
 ## Next Boundary
 
-After verified source publication, resume no-delete reference admission/generation
-work, followed by avatar and
+Resume no-delete reference admission/generation work, followed by avatar and
 variant writer/I/O participation. D-103 must later join the generation-bound
 single seal/DELETE-intent authority before this whole-bucket hold can be lifted.
 No native build/install/publication, physical-device proof or paid minutes.

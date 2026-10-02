@@ -7,6 +7,9 @@ Owner: Codex coordinator. This is the next safety contract after the accepted
 [read-only audit](2026-10-02-bot-media-reconciliation.md), not a deployed cleanup
 feature. The reference preflight is read-only. No new migration, scheduled
 cleanup, Storage deletion or quota refund is enabled by this document.
+The later [whole-bucket D-103 hold](2026-10-02-bot-media-purge-hold.md) is applied
+once and verified; its new claim body and queue CHECK supersede the old claim
+baseline below. It adds no reclamation, generation or reference admission.
 
 Ruling: keep reclamation disabled until every reference writer and external-I/O
 outcome participates in the same lifecycle. Cost: unused objects remain charged

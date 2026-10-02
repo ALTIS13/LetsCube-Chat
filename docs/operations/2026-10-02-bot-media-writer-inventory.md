@@ -12,11 +12,13 @@ The coordinator subsequently captured a separate schema-only live catalog at
 It confirms the named path-guard update columns and unchanged purge claim body,
 not every claim in this source inventory or complete fencing. Do not repeat the
 accepted reference audit solely because the original inventory was source-only.
+The later [whole-bucket D-103 hold](2026-10-02-bot-media-purge-hold.md) is applied
+once/verified. It supersedes old claim eligibility below, not the missing shared
+generation/reference/remote-I/O protocol. Reference preflight is already accepted.
 
 Resume: documentation worker; inventory complete; evidence is the linked source;
 blocker for reclamation is missing shared reference/generation/external-I/O fencing;
-next action is the coordinator's read-only reference audit, then an independently
-reviewed no-delete fence slice.
+next action is an independently reviewed no-delete admission foundation.
 
 ## Baseline and boundary
 

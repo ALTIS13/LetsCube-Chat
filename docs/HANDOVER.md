@@ -22,19 +22,22 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-334, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-02 (Codex implementation).** Owner: this Codex chat;
+**Active resume, 2026-10-03 (Codex implementation).** Owner: this Codex chat;
 branch `codex/bot-inline-media-20261002`. Stage: D-103 whole-`chat-media` forward
 hold has reviewed frozen source, final **36/36** focused cases and full same-image
 PG17 restore/race/rollback proof. Source/evidence:
 [purge hold](operations/2026-10-02-bot-media-purge-hold.md).
-All owned workers are closed. SQL was applied once and independently verified
+Hold workers are closed; one read-only reviewer is checking the next foundation.
+SQL was applied once and independently verified
 at 23:57 MSK after backup `20261002-235719`; new claim body and validated queue
 CHECK are installed. Policies, access, other functions and complete ledgers are
 unchanged. Protected/ordinary rolled-back control returned 0/1. Never reapply.
 Blocker:
 missing writer/generation/external-I/O fences; this hold is not reclamation.
-Next action: finish reviewed source publication/exact deployment proof, then
-no-delete reference-admission foundation. Avatar/variant participation and
+Source `c2c3e46d` reached sole healthy exact-revision web with unchanged accepted
+entry/SW and retained files. Owned restore container removed; backups retained.
+Next action: no-delete reference-admission foundation after lock/coverage review.
+Avatar/variant participation and
 exactly-once charge release follow separately. No automatic cleanup/refund.
 The 28 complete receipts / 47,240 bytes and zero reservations remain the frozen
 prestate and verified poststate. The accepted [resolver](operations/2026-10-02-bot-media-reference-resolver.md)

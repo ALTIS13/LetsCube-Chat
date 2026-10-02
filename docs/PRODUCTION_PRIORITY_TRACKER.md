@@ -1,6 +1,6 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-02.
+Status: active production-hardening tracker, updated 2026-10-03.
 
 **Current continuation, 2026-10-02:** whole-`chat-media` D-103 forward claim hold
 and queue CHECK are applied once/verified at 23:57 MSK after fresh backup
@@ -9,10 +9,12 @@ rollback proof and independent review without P1/P2 pass. Actual rolled-back
 production control returns 0 protected / 1 ordinary; policies/authority/ledgers
 are unchanged. Retained receipts: 28 / 47,240 bytes, zero reserved. Do not
 reapply; no cleanup/refund/generation authority or native release was added.
-Next: finish source publication, then no-delete reference-admission foundation;
+Source `c2c3e46d` reached sole healthy exact-revision web; public/container entry,
+SW and retained-file hashes are unchanged. Owned restore container removed.
+Next: no-delete reference-admission foundation after lock/coverage review;
 avatar/variant I/O and generation-bound removal/charge release follow separately.
 Evidence: [purge hold](operations/2026-10-02-bot-media-purge-hold.md).
-All owned workers are closed; Android hold and A063 exclusion remain.
+Hold workers are closed; Android hold and A063 exclusion remain.
 
 **Accepted earlier advisory, 2026-10-02:** encoded reference advisory v2 is accepted:
 **21/21** actual PG18 tests, independent spec/quality review without P1/P2,

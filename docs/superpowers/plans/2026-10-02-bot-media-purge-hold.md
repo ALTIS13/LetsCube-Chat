@@ -28,8 +28,9 @@ Admission/generation, avatar/variant and external-I/O fencing follow separately.
   rollback/reapply rehearsal. Apply once only after exact source/drift gates;
   verify catalog, rolled-back protected claim behavior and unchanged ledger.
   Applied once at 23:57 MSK; receipt and independent poststate are verified.
-- [ ] Publish owned reviewed changes, verify the running web revision and
+- [x] Publish owned reviewed changes, verify the running web revision and
   unchanged asset bytes, close workers and update the active resume.
+  Source `c2c3e46d` is accepted; exact owned isolated restore container removed.
 
 ## Safety Gates
 
