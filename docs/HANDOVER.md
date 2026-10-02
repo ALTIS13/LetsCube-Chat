@@ -38,8 +38,12 @@ Prior deployed ingest, audit and reference evidence remain in the
 [ingest record](operations/2026-10-02-bot-inline-media.md),
 [read-only audit](operations/2026-10-02-bot-media-reconciliation.md) and
 [lifecycle contract](operations/2026-10-02-bot-media-lifecycle.md).
-Next: fresh backup/full-restore rehearsal before additive SQL apply and
-mandatory-RPC runtime deployment; publication is candidate-branch only until then.
+Current continuation: fresh backup `20261002-194924` and full PG17.6 isolated
+restore pass nine groups plus actual role denials and exact reapply refusal.
+Production apply is still pending; follow the current
+[rollout checkpoint](operations/2026-10-02-bot-upload-intents-rollout.md).
+Next: reviewed guarded apply with another fresh backup, then mandatory-RPC
+runtime deployment; publication is candidate-branch only until the SQL gate.
 Writer/generation/purge fencing and legacy/encoded reference coverage remain
 open; no deletion or quota release is authorised by this candidate.
 Android build/install/publication remains held. Realme RMX3830 is authorised
