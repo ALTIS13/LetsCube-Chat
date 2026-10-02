@@ -2,15 +2,16 @@
 
 ## Resume
 
-Owner: Codex coordinator. Stage: D-258 frozen candidate; guarded rollout.
+Owner: Codex coordinator. Stage: D-258 bounded upload accepted in production.
 Source baseline: `c0b79cb0`; branch `codex/bot-inline-media-20261002`.
 All three workers are closed. Goodall independently approved the final
 runtime/SQL/SDK integration; coordinator owns deployment and live acceptance.
 Android build/install/publication remains held. SQL is already applied once;
 do not reapply the first-install file. No native release is part of
-this backend/shared-web wave. Next: deliberately deploy the Gateway,
-run the synthetic public-API canary, then update this record
-with the actual running image and acceptance rather than a webhook result.
+this backend/shared-web wave. Gateway/web/worker source `2900eeb7` is healthy,
+and the synthetic public-API canary passed 9/9. Next: publish the accepted
+documentation, then design bounded orphan/quota reconciliation; no automatic
+cleanup or quota release is part of this wave.
 
 ## Observed Cause
 
@@ -156,9 +157,62 @@ the durable ledger deliberately survives rollback.
 
 ## Remaining Boundaries
 
-Public-API acceptance and exact running-image proof are separate from the source,
-fixture and restored-DB evidence above. Do not close D-258 based only on these
-checks. Operator orphan reconciliation and quota reclamation are outstanding:
+Public-API acceptance and exact running-image proof are recorded below separately
+from the source, fixture and restored-DB evidence. Operator orphan reconciliation
+and quota reclamation are outstanding:
 resolve unknown commit outcomes and prove no message references before removing
 only receipt-owned objects. This wave does not reset quota on bot deletion,
 claim unlimited storage or automatically reclaim failed admissions.
+
+## Production Acceptance
+
+The reviewed candidate was pushed to its own branch, then fast-forwarded into
+`main` at `2900eeb71e76cb763fa5a4720c3e7cb49e162ef8`. The outgoing range was
+read separately, and all two alias imports in the three commits resolved in
+their own trees. Gateway auto-deploy is disabled; deployment
+`ldxhqznw2zngrr3qjy6irze4` was deliberately requested. Acceptance waited for
+the old replica to leave. Web, Gateway and worker then each had one healthy
+exact-revision image. Gateway runs as `node`, with FFmpeg 5.1.9 and Poppler 22.12.
+
+The real public API passed **9/9** in a newly created dedicated QA group:
+WebM/Ogg/MP3 voice, MP4/WebM video, PDF and PNG; byte-exact signed-URL download;
+unchanged original receipt on an identical retry; a different payload with the
+same key refused as 409; same-chat `file_id` resend; exactly 14 bot messages;
+and a user's new photo delivered to the full-access bot without mention/reply.
+The exact QA group was deleted, token revoked and bot returned to pending
+deletion. No personal media or provider messages were used or logged.
+
+Two earlier attempts exposed harness errors, not product failures: total-row
+count included one group-join system message, then the user-photo fixture used
+the wrong bucket/path. Current web uploads use `media/{user_id}/...`; live
+catalog policy and the actual `chatAttachmentUploadPath` confirmed it before
+the fixture was corrected. Both attempts cleaned their exact QA state. Their
+admissions remain conservatively charged; the test does not reclaim objects.
+
+Public documentation passed **3/3** deployed Chromium 1440/390 and WebKit 390
+checks with mutations/screenshots/traces/video off. Public entry
+`/assets/index-4fvXYyBb.js` SHA256
+`92d1793a93293abc343c88079dee8aab0a550a58e95ec326ba409f218cc356c1`
+and service worker SHA256
+`0649fb894d2621ca5ad171fdc558c1892f60cc6322302ca1ae225b59c496ebe3`
+match the exact running web container. New media/quota markers are present;
+the retained `/assets/index-CnzTxZ8s.js` is unchanged, SHA256
+`3ae640cb14776e764ea1eae4b966f5836a188bc9a63776e9da0c2f61775b4ffb`,
+and lacks the new media-limit marker. Public-table RLS omission count remains 0.
+The acceptance-documentation publication follows; its content changes do not
+require another Gateway deploy or migration.
+
+The final acceptance copy passed KUB typecheck and an actual web build
+(`sw.js build d9324cbfbe9c2199`, 19.79s). Five literal rendered assertions now
+cover the supported PDF heading, 6 MiB/9 MiB bounds, PDF page/password bound,
+stable receipt semantics and absence of the obsolete candidate notice. The
+strengthened spec is red against the still-published candidate copy and green
+locally in Chromium 1440/390 and WebKit 390 (3/3); deployed green is the final
+publication check. Restored Chrome inspected the exact updated element in both
+themes at 1440/390 with no console errors. Viewport/media overrides were reset,
+the ephemeral tab closed and all three owned dev servers stopped.
+The final read-only nine-file review approved the copy with no P1/P2 blockers;
+its remaining lease-time wording was corrected to 1-120 seconds. Independent
+production aggregate proof for the exact `d258:` QA key prefix shows 21 complete
+admissions, all with results/completion timestamps, and 35,430 retained charged
+bytes across the three attempts. No quota was reset by QA cleanup.

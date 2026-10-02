@@ -123,17 +123,17 @@ export const BOT_API_METHOD_GROUPS: readonly BotApiMethodGroup[] = [
       },
       {
         name: "sendVideo",
-        summary: "MP4 или WebM: доступный объект или file_id. Кандидат D-258 добавляет новые байты до 6 МиБ.",
+        summary: "MP4 или WebM: новые байты до 6 МиБ, доступный объект или file_id.",
         input: "chat_id, одно из video / media / file_id, idempotency_key",
       },
       {
         name: "sendDocument",
-        summary: "PDF: доступный объект или file_id. Кандидат D-258 добавляет новые байты до 6 МиБ и безопасное имя файла.",
+        summary: "PDF: новые байты до 6 МиБ с безопасным именем файла, доступный объект или file_id.",
         input: "chat_id, одно из document / media / file_id, idempotency_key",
       },
       {
         name: "sendVoice",
-        summary: "WebM, Ogg или MP3: доступный объект или file_id. Кандидат D-258 добавляет новые байты до 6 МиБ.",
+        summary: "WebM, Ogg или MP3: новые байты до 6 МиБ, доступный объект или file_id.",
         input: "chat_id, одно из voice / media / file_id, idempotency_key",
       },
       {
@@ -224,7 +224,7 @@ export const BOT_PHOTO_EXAMPLE = `{
   "idempotency_key": "photo-20260926-01"
 }`;
 
-export const BOT_INLINE_MEDIA_EXAMPLE = `// Кандидат D-258: после публикации серверного контракта.
+export const BOT_INLINE_MEDIA_EXAMPLE = `// sendDocument: загрузка нового PDF.
 import { readFile } from "node:fs/promises";
 
 const bytes = await readFile("report.pdf");

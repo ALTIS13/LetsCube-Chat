@@ -30,6 +30,11 @@ test.describe("public LETSCUBE Bot API documentation", () => {
     }
 
     const docs = page.getByRole("main");
+    await expect(page.getByRole("heading", { name: "sendDocument: загрузка PDF", exact: true })).toBeVisible();
+    await expect(docs).toContainText("Максимум 6 МиБ исходных байтов и 9 МиБ JSON.");
+    await expect(docs).toContainText("PDF — без пароля, не более 10000 страниц.");
+    await expect(docs).toContainText("Неизменный повтор возвращает исходную квитанцию без нового сообщения.");
+    await expect(docs).not.toContainText("Кандидат D-258");
     for (const requiredText of [
       "getMe",
       "sendMessage",

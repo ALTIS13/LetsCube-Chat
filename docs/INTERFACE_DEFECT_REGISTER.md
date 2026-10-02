@@ -19455,7 +19455,7 @@ already built on one of the two answers, and which one was never written down.
 
 ---
 
-## D-258 `[~]` A bot cannot upload a photo, or attach one to a message
+## D-258 `[x]` A bot cannot upload a photo, or attach one to a message
 
 **Reported by the same tester, 2026-09-19:** «еще бы боту дать возможность
 загружать фото / прикреплять к сообщениям».
@@ -19512,6 +19512,17 @@ and exact running Gateway are accepted. Details and current rollout status:
 [media ingest record](operations/2026-10-02-bot-inline-media.md).
 Failed admissions remain charged; safe operator reconciliation/cleanup is a
 follow-up, not a completed auto-reclaim feature.
+
+**2026-10-02 bounded upload accepted in production:** Gateway revision
+`2900eeb71e76cb763fa5a4720c3e7cb49e162ef8` is the sole healthy replica. The
+public-API synthetic canary passed 9/9: seven formats, byte-exact downloads,
+unchanged retry receipts with exactly 14 bot messages, conflicting payload
+refusal, `file_id` resends and a user's unmentioned incoming photo. The exact
+QA group was removed, QA token revoked and QA bot returned to pending deletion.
+This closes the reported new-media gap within the documented 6 MiB/type bounds;
+arbitrary documents, standalone multipart upload and automatic quota reclamation
+are not claimed. The earlier candidate paragraph is the source checkpoint,
+not the current deployment status.
 
 ---
 

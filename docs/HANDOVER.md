@@ -23,9 +23,9 @@ Read in this order:
    measurement. Search it before filing anything.
 
 **Active resume, 2026-10-02 (Codex implementation).** Owner: this Codex chat.
-Stage: D-258 new document/video/voice bytes, frozen and independently approved;
-SQL applied once at 14:45 MSK, do not reapply. Gateway rollout and the public
-synthetic canary are coordinator-owned.
+Stage: D-258 bounded document/video/voice bytes accepted in production.
+SQL applied once at 14:45 MSK, do not reapply. Exact Gateway/web/worker revision
+`2900eeb7` is healthy; public synthetic canary passed 9/9 with cleanup verified.
 Source baseline `c0b79cb0`, branch `codex/bot-inline-media-20261002`.
 All workers are closed. Evidence: 4946 unit passes / one explicit Android Gradle
 exclusion, 107 scoped cases, 26 new SQL cases, seven full PG17 restore groups,
@@ -33,7 +33,7 @@ exclusion, 107 scoped cases, 26 new SQL cases, seven full PG17 restore groups,
 Current apply/deploy result and remaining gates belong to the
 [media ingest record](operations/2026-10-02-bot-inline-media.md), not a new
 blind migration run. Android build/install/publication stays held. Next:
-complete live Bot API acceptance, then bounded orphan/quota reconciliation;
+finish acceptance-documentation publication, then bounded orphan/quota reconciliation;
 Windows idle/AFK, five-hour idle-call and roles-density remain open.
 Prior D-333/D-334 backend/shared-web DND/read-ordering wave is accepted and its
 SQL already applied once: [DND record](operations/2026-10-02-presence-push-quiet.md).

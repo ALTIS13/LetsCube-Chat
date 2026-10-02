@@ -180,11 +180,11 @@ export function BotDocsPage() {
                   тема или кнопки. Входящие обновления содержат attachment.file_id; getFile
                   выдаёт короткоживущую ссылку для чтения вложения.
                 </p>
-                <CodeBlock title="sendDocument: кандидат загрузки PDF" code={BOT_INLINE_MEDIA_EXAMPLE} />
+                <CodeBlock title="sendDocument: загрузка PDF" code={BOT_INLINE_MEDIA_EXAMPLE} />
                 <div className="space-y-3 text-sm leading-7 text-[color:var(--kub-muted)]">
                   <p>
-                    Кандидат D-258 ещё не подтверждён в опубликованном Gateway. Его контракт:
-                    document для PDF, video для MP4/WebM, voice для WebM/Ogg/MP3; внутри —
+                    Для новых файлов используйте document для PDF, video для MP4/WebM,
+                    voice для WebM/Ogg/MP3; внутри —
                     mime_type и bytes_base64. Максимум 6 МиБ исходных байтов и 9 МиБ JSON.
                     Это не multipart Telegram и не самостоятельный метод uploadFile.
                   </p>

@@ -1,5 +1,29 @@
 # QA Results
 
+## 2026-10-02 - Bounded Bot Media Upload Production Acceptance
+
+D-258 new PDF/video/voice bytes and durable photo admission are deployed from
+`2900eeb71e76cb763fa5a4720c3e7cb49e162ef8`. The sole healthy Gateway, web and
+worker images carry that exact revision. Fresh backup and guarded SQL were
+verified before the one apply at 14:45 MSK; do not reapply.
+
+Source gates: 4946 successful units / one explicit Android Gradle exclusion,
+107 focused runtime/SDK cases, 26 new SQL cases, seven full PG17 restore groups,
+14 actual Linux parser cases and KUB/API/PocketFlow typechecks/builds. The real
+public-API synthetic canary passed **9/9**: seven formats, byte-exact download,
+unchanged retry receipt and exactly 14 bot messages, 409 payload conflict,
+`file_id` resends and an unmentioned incoming user photo. Its exact QA group
+was removed, token revoked and bot returned to pending deletion.
+
+Deployed public documentation passed **3/3** in Chromium 1440/390 and WebKit
+390 with all captures/mutations off. Public/container entry and service-worker
+hashes match; the retained old entry is unchanged. Local exact documentation
+elements were pixel-inspected at 1440/390 in both themes through restored Chrome.
+No private media/provider messages/native release/paid cloud session occurred.
+The acceptance-copy publication follows. Orphan/quota reconciliation remains
+open, not silently implemented by these tests.
+Full evidence: [media ingest record](operations/2026-10-02-bot-inline-media.md).
+
 ## 2026-10-02 - Private DND And Roles Read-Ordering Web Rollout
 
 Frozen combined source passed typecheck, real production web build (`sw.js

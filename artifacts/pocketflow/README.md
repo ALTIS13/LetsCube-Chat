@@ -65,11 +65,11 @@ Found while building this and recorded in
 
 - **The larger upload contract is still absent (G-1).** Readable same-chat
   files can already be sent back with `sendFileById`; inline photo bytes are
-  also supported. The D-258 candidate adds `sendBytes` for bounded new photos,
+  also supported. D-258 adds `sendBytes` for bounded new photos,
   PDFs, videos and voice recordings. It is not a standalone `uploadFile`
   endpoint, arbitrary-document upload or Telegram multipart compatibility.
-  Candidate adapter support is not proof that a running Gateway has deployed
-  the new server/SQL contract.
+  The server/SQL contract passed a synthetic public-API canary on 2026-10-02;
+  deployment of a particular PocketFlow instance remains separate evidence.
 - **No inline mode (G-2)** and **no polls (G-3)**.
 - **No `editMessageReplyMarkup` (G-4)** — `editMessageText` carries
   `reply_markup`, so editing markup costs a text round trip.
@@ -84,7 +84,7 @@ Found while building this and recorded in
 `/selftest` reports each of these as `UNSUPPORTED` with its reason, so the day
 the platform gains one, the report changes on its own.
 
-## Bounded new media: D-258 candidate
+## Bounded new media: D-258
 
 The adapter's `sendBytes` sends one new source as JSON/base64, at most
 **6,291,456 bytes (6 MiB)**. Accepted kinds and MIME types:
@@ -129,10 +129,11 @@ normally creates a new key; **after an uncertain outcome or a process restart,
 reuse a persisted explicit key and unchanged body**, not a new one. The adapter
 does not create durable storage for that key on the caller's behalf.
 `quota_exceeded` is never retried automatically. An active equivalent lease
-returns `rate_limited` with `retry_after: 120`; admission may also return a
-shorter wait. `conflict` must not be bypassed with a fresh key.
+returns `rate_limited` with the remaining lease time in `retry_after`
+(1-120 seconds); process admission may return a shorter wait. `conflict` must
+not be bypassed with a fresh key.
 
-Candidate service budgets are explicit: HTTP buffering admits 4 uploads per
+Service budgets are explicit: HTTP buffering admits 4 uploads per
 Gateway and 1 per bot; SQL reserves at most 60 MiB/24h, 256 MiB retained and
 1000 objects per bot, and 600 MiB/24h, 2 GiB retained and 20000 objects globally.
 Failed reservations stay charged; identical retries and readable `file_id`
