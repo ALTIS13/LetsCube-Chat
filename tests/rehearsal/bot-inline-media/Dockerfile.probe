@@ -1,0 +1,7 @@
+FROM fkd10qwlo4qod9e6gtyzzuwk:2b96d57e7cc9a9e017b7600ef2139009cd833cb4
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils && rm -rf /var/lib/apt/lists/*
+WORKDIR /qa
+COPY inlineMedia.mjs probe.mjs ./
+USER node
+ENTRYPOINT ["node", "/qa/probe.mjs"]
