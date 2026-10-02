@@ -2,6 +2,17 @@
 
 Status: active production-hardening tracker, updated 2026-10-02.
 
+**Current source checkpoint, 2026-10-02:** D-258 upload-attempt runtime `9b41605d`
+is committed on `codex/bot-inline-media-20261002`, SQL `bb0bec42` passes 13/13
+PG18 cases. SQL/runtime/final independent spec/quality reviews approve without
+P1/P2. Actual handler/repository/PG integration passes 5/5,
+focused uploads 28/28 and bounded units 4930 passes / 13 existing conditional
+skips, with the held Android Gradle probe excluded separately. No new production
+apply/deploy or cleanup. Reviewed source is pushed to the candidate branch only;
+main is unchanged. Candidate-only push precedes fresh-backup/full-restore
+rehearsal; mandatory new-RPC runtime must not reach main before SQL apply.
+Continue from the [upload-intent record](operations/2026-10-02-bot-media-upload-intents.md).
+
 **2026-10-02 D-258 bounded media ingest deployed:** new PDF/video/voice bytes and
 durable token-bound admission, insert-only Storage, retained quota and exact-once
 receipt are implemented. Independent review approved the frozen integration;

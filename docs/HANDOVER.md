@@ -23,33 +23,29 @@ Read in this order:
    measurement. Search it before filing anything.
 
 **Active resume, 2026-10-02 (Codex implementation).** Owner: this Codex chat.
-Stage: D-258 bounded document/video/voice bytes accepted; reference preflight and lifecycle contract complete.
-SQL applied once at 14:45 MSK, do not reapply. Gateway/worker revision `2900eeb7`
-and accepted-copy web content from `2bb761ed` are healthy; documentation-only
-deploys may advance the web image tag without changing those bytes. Public synthetic canary
-passed 9/9 with cleanup verified; strengthened deployed documentation passed 3/3.
-Source baseline `c0b79cb0`, branch `codex/bot-inline-media-20261002`.
-All workers are closed. Evidence: 4946 unit passes / one explicit Android Gradle
-exclusion, 107 scoped cases, 26 new SQL cases, seven full PG17 restore groups,
-14 actual Linux parser cases, typechecks/builds and public-documentation matrix.
-Current apply/deploy result and remaining gates belong to the
-[media ingest record](operations/2026-10-02-bot-inline-media.md), not a new
-blind migration run. The [read-only audit](operations/2026-10-02-bot-media-reconciliation.md)
-passed 9/9 fixture cases and the guarded PG17 production snapshot: 21 completed
-QA admissions / 35,430 bytes, matching Storage metadata, no reserved leases.
-No files, receipts or quota were removed. Android build/install/publication stays held.
-The [reference preflight/lifecycle contract](operations/2026-10-02-bot-media-lifecycle.md)
-passed 8/8 actual PG18 fixture cases, seven source mutants and independent spec/quality
-review. Exact reviewed SQL passed the PG17 production READ ONLY snapshot at 16:11 MSK:
-21 complete receipts / 35,430 bytes; observed reference and purge overlap counts zero.
-Legacy/encoded URL coverage remains unresolved; no deletion or quota release.
-Next: source/restore rehearsal of writer/generation fences and external-I/O outcome
-recovery before destructive reconciliation; do not mistake this contract for shipped cleanup.
-Windows idle/AFK, five-hour idle-call and roles-density remain open.
-Realme RMX3830 is authorised for installed Android QA (`0.1.11` / build `12`
-read from the device); A063 is assigned to Apollo.RGA and must not be touched.
-Prior D-333/D-334 backend/shared-web DND/read-ordering wave is accepted and its
-SQL already applied once: [DND record](operations/2026-10-02-presence-push-quiet.md).
+Stage: D-258 external-I/O upload-attempt source candidate accepted, branch
+`codex/bot-inline-media-20261002`; runtime `9b41605d` and SQL `bb0bec42` are
+committed and independently approved for spec/quality. Workers are closed.
+Reviewed source is pushed to the candidate branch only; `main` is unchanged.
+Evidence and remaining gates:
+[upload intents](operations/2026-10-02-bot-media-upload-intents.md).
+Runtime integration passes 5/5 on actual isolated PostgreSQL, focused upload
+cases 28/28, bounded units 4930 passes / 13 conditional skips; the held Android
+Gradle probe is excluded separately. No new SQL or runtime deployment.
+The earlier ingest SQL was applied once at 14:45 MSK: do not reapply it.
+Read-only verification confirms healthy web `ebb050a3`, Gateway/worker `2900eeb7`.
+Prior deployed ingest, audit and reference evidence remain in the
+[ingest record](operations/2026-10-02-bot-inline-media.md),
+[read-only audit](operations/2026-10-02-bot-media-reconciliation.md) and
+[lifecycle contract](operations/2026-10-02-bot-media-lifecycle.md).
+Next: fresh backup/full-restore rehearsal before additive SQL apply and
+mandatory-RPC runtime deployment; publication is candidate-branch only until then.
+Writer/generation/purge fencing and legacy/encoded reference coverage remain
+open; no deletion or quota release is authorised by this candidate.
+Android build/install/publication remains held. Realme RMX3830 is authorised
+for installed QA (`0.1.11` / build `12` last read); A063 is assigned to Apollo.RGA
+and must not be touched. Windows AFK, five-hour idle-call and roles density remain
+open. Prior DND SQL is already applied: [DND record](operations/2026-10-02-presence-push-quiet.md).
 Do not repeat closed bot photos/read-all/settings or claim OS/native receipt.
 
 **Prior completed web wave, 2026-10-02.** D-208 consumer fixes are deployed;
