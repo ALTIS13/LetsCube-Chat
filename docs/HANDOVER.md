@@ -23,7 +23,7 @@ Read in this order:
    measurement. Search it before filing anything.
 
 **Active resume, 2026-10-02 (Codex implementation).** Owner: this Codex chat.
-Stage: D-258 bounded document/video/voice bytes accepted; read-only media audit complete.
+Stage: D-258 bounded document/video/voice bytes accepted; reference preflight and lifecycle contract complete.
 SQL applied once at 14:45 MSK, do not reapply. Gateway/worker revision `2900eeb7`
 and accepted-copy web content from `2bb761ed` are healthy; documentation-only
 deploys may advance the web image tag without changing those bytes. Public synthetic canary
@@ -38,8 +38,16 @@ blind migration run. The [read-only audit](operations/2026-10-02-bot-media-recon
 passed 9/9 fixture cases and the guarded PG17 production snapshot: 21 completed
 QA admissions / 35,430 bytes, matching Storage metadata, no reserved leases.
 No files, receipts or quota were removed. Android build/install/publication stays held.
-Next: reviewed lifecycle/fencing contract before any destructive reconciliation;
+The [reference preflight/lifecycle contract](operations/2026-10-02-bot-media-lifecycle.md)
+passed 8/8 actual PG18 fixture cases, seven source mutants and independent spec/quality
+review. Exact reviewed SQL passed the PG17 production READ ONLY snapshot at 16:11 MSK:
+21 complete receipts / 35,430 bytes; observed reference and purge overlap counts zero.
+Legacy/encoded URL coverage remains unresolved; no deletion or quota release.
+Next: source/restore rehearsal of writer/generation fences and external-I/O outcome
+recovery before destructive reconciliation; do not mistake this contract for shipped cleanup.
 Windows idle/AFK, five-hour idle-call and roles-density remain open.
+Realme RMX3830 is authorised for installed Android QA (`0.1.11` / build `12`
+read from the device); A063 is assigned to Apollo.RGA and must not be touched.
 Prior D-333/D-334 backend/shared-web DND/read-ordering wave is accepted and its
 SQL already applied once: [DND record](operations/2026-10-02-presence-push-quiet.md).
 Do not repeat closed bot photos/read-all/settings or claim OS/native receipt.

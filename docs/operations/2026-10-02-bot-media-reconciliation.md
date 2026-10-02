@@ -86,3 +86,10 @@ period and bounded revalidation of all supported references, actual Storage API
 outcome reconciliation after timeouts, and exactly-once retained-quota release
 without resetting the rolling daily budget. Do not infer those capabilities
 from successful inventory tests.
+
+The next [reference preflight and lifecycle contract](2026-10-02-bot-media-lifecycle.md)
+is now independently reviewed and verified: 8/8 additional actual PostgreSQL
+fixtures, seven source mutants and the exact-input PG17 read-only snapshot.
+It adds preview/variant/literal-URL/hold/purge observations but deliberately keeps
+encoded and otherwise unrecognized URLs unresolved. No destructive reconciler
+or retained-quota release was enabled.
