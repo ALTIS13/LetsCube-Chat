@@ -1,10 +1,14 @@
 # Bot Media Upload Intents
 
 Date: 2026-10-02. Owner: Codex coordinator.
-Stage: reviewed non-destructive source/isolated-database rehearsal; candidate only.
+Stage recorded here: reviewed non-destructive source/isolated-database rehearsal.
+Current deployment and remaining work are in the
+[rollout record](2026-10-02-bot-upload-intents-rollout.md); this source checkpoint
+does not supersede its completed production gates.
 Base: `ebb050a3101117dfdac07f23fdac3cf82338d521`.
-Published source: `9b41605d` / `bb0bec42` on `codex/bot-inline-media-20261002`,
-not `main`. Plan, operational record and active resumes accompany that candidate.
+Source candidate: `9b41605d` / `bb0bec42` was published first on
+`codex/bot-inline-media-20261002`, with production publication held at that stage.
+Plan, operational record and active resumes accompanied that candidate.
 Plan: [implementation checklist](../superpowers/plans/2026-10-02-bot-media-upload-intents.md).
 Contract: [media lifecycle](2026-10-02-bot-media-lifecycle.md).
 

@@ -23,17 +23,21 @@ Read in this order:
    measurement. Search it before filing anything.
 
 **Active resume, 2026-10-02 (Codex implementation).** Owner: this Codex chat.
-Stage: D-258 external-I/O upload-attempt source candidate accepted, branch
+Stage: D-258 external-I/O upload-attempt rollout accepted, branch
 `codex/bot-inline-media-20261002`; runtime `9b41605d` and SQL `bb0bec42` are
-committed and independently approved for spec/quality. Workers are closed.
-Reviewed runtime source remains on the candidate branch; `main` is unchanged.
+committed and independently approved for spec/quality. Reviewed source reached
+the candidate branch and `main`; healthy Gateway/worker runtime is `856e03e4`.
+Web accepted at that revision has unchanged content; docs-only closeout may
+advance its image tag. All owned workers are closed.
 Evidence and remaining gates:
 [upload intents](operations/2026-10-02-bot-media-upload-intents.md).
 Runtime integration passes 5/5 on actual isolated PostgreSQL, focused upload
 cases 28/28, bounded units 4930 passes / 13 conditional skips; the held Android
-Gradle probe is excluded separately. No new runtime deployment yet.
+Gradle probe is excluded separately. Actual-provider canary passes 9/9; separate
+DB/Storage verification confirms seven ACK attempts / seven complete receipts
+and matching objects, with no repeat upload on completed retry.
 The earlier ingest SQL was applied once at 14:45 MSK: do not reapply it.
-Read-only verification confirms healthy web `ebb050a3`, Gateway/worker `2900eeb7`.
+The earlier web `ebb050a3` and Gateway/worker `2900eeb7` baselines are superseded.
 Prior deployed ingest, audit and reference evidence remain in the
 [ingest record](operations/2026-10-02-bot-inline-media.md),
 [read-only audit](operations/2026-10-02-bot-media-reconciliation.md) and
@@ -44,10 +48,11 @@ Additive upload-intent SQL is applied once at 20:17 MSK after fresh backup
 `20261002-201708`; pinned-target and independent body/ACL/RLS/policy checks pass.
 Do not reapply it. Follow the current
 [rollout checkpoint](operations/2026-10-02-bot-upload-intents-rollout.md).
-Next: publish the reviewed mandatory-RPC runtime and verify exact healthy
-images/content plus the synthetic actual-provider canary. The SQL gate is met.
-Writer/generation/purge fencing and legacy/encoded reference coverage remain
-open; no deletion or quota release is authorised by this candidate.
+Current checkpoint: provider and exact runtime/content gates are met. This is
+the documentation closeout; do not resend QA files or reopen completed reviews.
+Next: writer/generation/purge fencing and legacy/encoded reference coverage.
+All 28 charged receipts / 47,240 bytes remain retained; no deletion or quota
+release is authorised by this rollout.
 Android build/install/publication remains held. Realme RMX3830 is authorised
 for installed QA (`0.1.11` / build `12` last read); A063 is assigned to Apollo.RGA
 and must not be touched. Windows AFK, five-hour idle-call and roles density remain

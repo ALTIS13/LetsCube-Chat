@@ -57,6 +57,13 @@ When the change is about order, make the patch script assert
 `indexOf(a) < indexOf(b)` and exit non-zero, then confirm with rendered
 coordinates.
 
+**A bucket name is not a semantic label.** On 2026-10-02 a bot-upload observer
+joined `media` while the real producer and commit RPC used `chat-media`: seven
+uploaded and byte-verified objects became zero joined rows. A read-only control
+found seven in the real bucket and zero in the guessed one; the corrected
+observer passed without resending. Derive bucket/path identity from the actual
+producer and its database consumer before treating an empty join as loss.
+
 **A checklist needs the sentence a user would say.** `docs/operations/voice.md`
 had seven production checks, all passing, all about signalling and bookkeeping.
 Nobody had ever heard anybody: no remote track was ever attached to anything

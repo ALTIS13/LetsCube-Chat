@@ -1,5 +1,29 @@
 # QA Results
 
+## 2026-10-02 - Durable Bot Upload Attempts Rollout
+
+The reviewed upload-attempt SQL is applied once at 20:17 MSK after fresh backup
+`20261002-201708`, full isolated PG17.6 restore/rehearsal and independent
+body/ACL/RLS/unchanged-policy verification. Runtime Gateway/worker/web at
+`856e03e495cc53ba6b9cbbb2b74427bcb0e85409` are healthy; old/new Gateway markers
+and web public/container JS/SW plus retained-entry hashes pass.
+
+Actual-provider synthetic canary **9/9**: seven formats, downloaded bytes,
+completed retry, payload conflict, file references and unmentioned incoming
+photo. Independent READ ONLY database check confirms seven ACK attempts,
+seven complete charged receipts / 11,810 bytes, matching chat identities and
+seven matching `chat-media` objects. Exact QA group/token/bot cleanup passes;
+objects and charges remain. Overall: 28 complete receipts / 47,240 bytes,
+28 matching metadata rows, zero reservations.
+
+Observer wrong-chat attribution is covered by RED/GREEN **8/8** and two exposed
+omission mutations. Its first live check used the wrong bucket and is retained
+as failed instrument evidence; corrected bucket check passes on the same
+cohort without resending. No native/device/cloud session, media deletion or
+quota release. Fault-injected crash/lost-response cases remain isolated/source
+evidence, not production fault injection.
+Full evidence: [rollout](operations/2026-10-02-bot-upload-intents-rollout.md).
+
 ## 2026-10-02 - Read-Only Bot Media Audit
 
 `scripts/bot-media-ingest-audit.sql` passed independent read-only review and

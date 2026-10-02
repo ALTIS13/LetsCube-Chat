@@ -2,21 +2,28 @@
 
 Status: active production-hardening tracker, updated 2026-10-02.
 
-**Current source checkpoint, 2026-10-02:** D-258 upload-attempt runtime `9b41605d`
+**Current rollout checkpoint, 2026-10-02:** D-258 upload-attempt runtime `9b41605d`
 is committed on `codex/bot-inline-media-20261002`, SQL `bb0bec42` passes 13/13
 PG18 cases. SQL/runtime/final independent spec/quality reviews approve without
 P1/P2. Actual handler/repository/PG integration passes 5/5,
 focused uploads 28/28 and bounded units 4930 passes / 13 existing conditional
-skips, with the held Android Gradle probe excluded separately. Reviewed runtime
-source remains on the candidate branch; main is unchanged. No new runtime
-deployment or media cleanup yet.
+skips, with the held Android Gradle probe excluded separately. Reviewed source
+reached candidate/main; exact healthy Gateway/worker/web `856e03e4`, new/old
+bundle markers and public/container web parity pass. Actual-provider canary
+passes 9/9; independent cohort verification passes seven ACK attempts, seven
+complete charged receipts / 11,810 bytes and matching `chat-media` objects.
 Continue from the [upload-intent record](operations/2026-10-02-bot-media-upload-intents.md).
 Fresh backup `20261002-194924` and full PG17.6 restore are now accepted: nine
 groups, actual role-switched denials and whole-file reapply refusal. Fresh backup
 `20261002-201708` precedes the single guarded SQL apply at 20:17 MSK; independent
-body/owner/ACL/RLS/policy verification passes. Do not reapply. Runtime publication
-and provider canary remain pending in the
+body/owner/ACL/RLS/policy verification passes. Do not reapply or repeat the canary.
+All owned workers are closed. Documentation closeout and remaining fencing
+work are in the
 [current rollout](operations/2026-10-02-bot-upload-intents-rollout.md).
+Current aggregate: 28 complete charged receipts / 47,240 bytes, 28 matching
+Storage metadata rows, zero reservations. No media deletion/refund is enabled.
+Docs-only closeout can advance the web tag without changing accepted bytes or
+the Gateway/worker runtime revision.
 
 **2026-10-02 D-258 bounded media ingest deployed:** new PDF/video/voice bytes and
 durable token-bound admission, insert-only Storage, retained quota and exact-once
