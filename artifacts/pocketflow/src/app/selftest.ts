@@ -71,6 +71,10 @@ const SECTION_ORDER = [
 ] as const;
 
 const PROBE = "selftest.probe";
+const BYTE_PROBE_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8/x8AAwMCAO+aQ1cAAAAASUVORK5CYII=",
+  "base64",
+);
 const ICON: Record<CheckStatus, string> = {
   PASS: "✅",
   FAIL: "❌",
@@ -319,6 +323,38 @@ const CHECKS: Check[] = [
         return { status: "PASS", detail: `${before.length} команд зарегистрировано` };
       } catch (error) {
         return fail(error);
+      }
+    },
+  },
+  {
+    id: "media.send_bytes",
+    section: "Media",
+    title: "новые байты PNG (sendBytes / getFile)",
+    requires: "sendBytes",
+    async run({ ctx, chatId, runId }) {
+      if (!ctx.bot.sendBytes) return { status: "FAIL", detail: "sendBytes заявлен, но метод отсутствует" };
+      if (!ctx.bot.supports("getFile")) return { status: "SKIPPED", detail: "для проверки вложения нужен getFile" };
+      let sent: { id: MessageId; chatId: ChatId } | undefined;
+      try {
+        sent = await ctx.bot.sendBytes({
+          chatId, kind: "photo", mimeType: "image/png", bytes: BYTE_PROBE_PNG,
+          idempotencyKey: `pf-byte-probe-${runId}`,
+        });
+        const file = await ctx.bot.getFile(sent.chatId, sent.id);
+        if (file.mimeType !== "image/png" || file.byteSize !== 68 || file.expiresInSeconds !== 60) {
+          return { status: "FAIL", detail: "getFile вернул неверные метаданные тестового PNG" };
+        }
+        return { status: "PASS", detail: "PNG отправлен; getFile подтвердил 68 байт и ссылку на 60 секунд. Другие форматы не проверялись" };
+      } catch (error) {
+        return fail(error);
+      } finally {
+        if (sent && ctx.bot.supports("deleteMessage")) {
+          try {
+            await ctx.bot.deleteMessage(sent.chatId, sent.id);
+          } catch (error) {
+            return fail(error);
+          }
+        }
       }
     },
   },

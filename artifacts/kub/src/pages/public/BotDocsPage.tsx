@@ -8,6 +8,7 @@ import {
   BOT_CALLBACK_EXAMPLE,
   BOT_COMMANDS_EXAMPLE,
   BOT_ERROR_EXAMPLE,
+  BOT_INLINE_MEDIA_EXAMPLE,
   BOT_PHOTO_EXAMPLE,
   BOT_SUCCESS_EXAMPLE,
   BOT_UPDATE_EXAMPLE,
@@ -179,6 +180,36 @@ export function BotDocsPage() {
                   тема или кнопки. Входящие обновления содержат attachment.file_id; getFile
                   выдаёт короткоживущую ссылку для чтения вложения.
                 </p>
+                <CodeBlock title="sendDocument: кандидат загрузки PDF" code={BOT_INLINE_MEDIA_EXAMPLE} />
+                <div className="space-y-3 text-sm leading-7 text-[color:var(--kub-muted)]">
+                  <p>
+                    Кандидат D-258 ещё не подтверждён в опубликованном Gateway. Его контракт:
+                    document для PDF, video для MP4/WebM, voice для WebM/Ogg/MP3; внутри —
+                    mime_type и bytes_base64. Максимум 6 МиБ исходных байтов и 9 МиБ JSON.
+                    Это не multipart Telegram и не самостоятельный метод uploadFile.
+                  </p>
+                  <p>
+                    Видео: H.264 с необязательным AAC в MP4, VP8/VP9 с необязательным
+                    Opus/Vorbis в WebM. Голосовые: Opus/Vorbis в WebM/Ogg или MP3.
+                    Длительность — до 30 минут, сторона кадра — до 4096 пикселей.
+                    PDF — без пароля, не более 10000 страниц.
+                  </p>
+                  <p>
+                    Передавайте ровно один источник: байты, media или file_id. Base64 должен
+                    быть каноническим, без префикса data: и пробелов; URL не принимается.
+                    Только document допускает file_name до 128 символов, без пути и управляющих
+                    символов. Размер, длительность и размеры кадра определяет сервер по
+                    содержимому, а не по полям клиента. Для новых байтов пока недоступны
+                    темы, ответы и кнопки; отправка по file_id сохраняет эти возможности.
+                  </p>
+                  <p>
+                    Ответ — квитанция с message_id, chat_id, bot_id, type и created_at.
+                    Неизменный повтор возвращает исходную квитанцию без нового сообщения.
+                    getFile принимает идентификатор доступного сообщения; URL действует 60
+                    секунд. В обновлениях вложение содержит file_id, byte_size и, когда
+                    применимо, file_name и duration в секундах.
+                  </p>
+                </div>
               </div>
             </DocSection>
 
@@ -257,11 +288,19 @@ export function BotDocsPage() {
                 />
                 <GuidanceRow
                   term="Повторные запросы"
-                  description="Для 429 ждите retry_after секунд. Для 5xx применяйте ограниченный exponential backoff с jitter; постоянные 4xx не повторяйте."
+                  description="Для rate_limited ждите retry_after секунд, сохраняя ключ и тело. quota_exceeded (429) автоматически не повторяйте: retry_after для квоты нет. Для 5xx применяйте ограниченный exponential backoff с jitter; постоянные 4xx не повторяйте."
                 />
                 <GuidanceRow
                   term="Лимиты"
                   description="Ограничения независимы для токена, метода, чата и получателя. Не создавайте параллельный всплеск после паузы."
+                />
+                <GuidanceRow
+                  term="Загрузка байтов: кандидат"
+                  description="Gateway принимает до 4 больших запросов одновременно и до 1 на бота. Активная эквивалентная загрузка возвращает rate_limited с оставшимся retry_after от 1 до 120 секунд. Истёкшую загрузку повторяют с прежним ключом и телом; конфликт с другим телом нельзя обходить новым ключом."
+                />
+                <GuidanceRow
+                  term="Квоты байтов: кандидат"
+                  description="На бота: 60 МиБ за 24 часа, 256 МиБ сохранённых загрузок и 1000 объектов. Общий бюджет: 600 МиБ за 24 часа, 2 ГиБ и 20000 объектов. Неудачные зарезервированные загрузки также учитываются; неизменный повтор и переотправка по file_id не списывают байты второй раз. Автоматическое освобождение неподтверждённых объектов пока не обещается."
                 />
                 <GuidanceRow
                   term="Webhook retries"

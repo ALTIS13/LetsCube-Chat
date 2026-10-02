@@ -23,17 +23,21 @@ Read in this order:
    measurement. Search it before filing anything.
 
 **Active resume, 2026-10-02 (Codex implementation).** Owner: this Codex chat.
-Stage: item 37 / D-333 backend/shared-web and D-334 web accepted. SQL is applied
-once; do not reapply it. Source: `e320dfc7`, `058e36d4`, `eab3c2ed`, integrated
-through `9cd89a70` on `main`. All three workers are closed. Evidence, production
-image/content proof, 4852/4852 units, 357/357 server tests, restored SQL mutation
-checks and deployed read-only 4/4 smoke: [DND record](operations/2026-10-02-presence-push-quiet.md).
-Remaining: installed/native local-alert acceptance, Windows idle/AFK and the
-five-hour idle-call policy; no OS receipt is claimed by web smoke. Android
-build/install/publication remains held; no native or device changes.
-Next independent queue: D-258 new document/video/voice bytes upload contract
-for the Bot API, with bounded ownership, quota and idempotency checks; roles
-UI density remains open. Do not repeat closed bot photos/read-all/settings.
+Stage: D-258 new document/video/voice bytes, frozen and independently approved;
+SQL applied once at 14:45 MSK, do not reapply. Gateway rollout and the public
+synthetic canary are coordinator-owned.
+Source baseline `c0b79cb0`, branch `codex/bot-inline-media-20261002`.
+All workers are closed. Evidence: 4946 unit passes / one explicit Android Gradle
+exclusion, 107 scoped cases, 26 new SQL cases, seven full PG17 restore groups,
+14 actual Linux parser cases, typechecks/builds and public-documentation matrix.
+Current apply/deploy result and remaining gates belong to the
+[media ingest record](operations/2026-10-02-bot-inline-media.md), not a new
+blind migration run. Android build/install/publication stays held. Next:
+complete live Bot API acceptance, then bounded orphan/quota reconciliation;
+Windows idle/AFK, five-hour idle-call and roles-density remain open.
+Prior D-333/D-334 backend/shared-web DND/read-ordering wave is accepted and its
+SQL already applied once: [DND record](operations/2026-10-02-presence-push-quiet.md).
+Do not repeat closed bot photos/read-all/settings or claim OS/native receipt.
 
 **Prior completed web wave, 2026-10-02.** D-208 consumer fixes are deployed;
 remaining live/native acceptance is open.

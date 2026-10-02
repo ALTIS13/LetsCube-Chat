@@ -2,6 +2,16 @@
 
 Status: active production-hardening tracker, updated 2026-10-02.
 
+**2026-10-02 D-258 media-ingest candidate:** new PDF/video/voice bytes and
+durable token-bound admission, insert-only Storage, retained quota and exact-once
+receipt are implemented. Independent review approved the frozen integration;
+4946 unit passes / one explicitly excluded Android Gradle probe, 107 scoped
+tests, 26 new SQL cases, full PG17 restore and actual Linux parser checks pass.
+Gateway/public-API acceptance is still the rollout gate, not supplied by source
+tests. Follow the [active record](operations/2026-10-02-bot-inline-media.md).
+Android remains held. Bounded orphan reconciliation/quota reclamation is the
+next server follow-up; roles density, Windows AFK and idle-call policy stay open.
+
 **2026-10-02 D-208 web-consumer fixes deployed:** actual ChatAvatar acceptance is
 16/16 synthetic cases at 390/1440 in both themes. The frozen FILE matrix passed
 69/69 in Chromium/WebKit. FILE path-only/refusal/focus, active-history remount,

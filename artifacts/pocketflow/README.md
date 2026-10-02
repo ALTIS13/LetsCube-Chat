@@ -63,11 +63,13 @@ Each run is stored, so two runs can be compared after a platform change.
 Found while building this and recorded in
 `docs/proposals/2026-09-19-pocketflow-reference-bot.md`. The short version:
 
-- **A bot cannot send a file (G-1).** `sendPhoto` and its siblings take a
-  storage object path, the gateway requires the object to already exist, and
-  nothing in the public API lets a bot upload one or learn the path of a file it
-  received. So QR codes, format conversion and «send it back» are absent rather
-  than broken.
+- **The larger upload contract is still absent (G-1).** Readable same-chat
+  files can already be sent back with `sendFileById`; inline photo bytes are
+  also supported. The D-258 candidate adds `sendBytes` for bounded new photos,
+  PDFs, videos and voice recordings. It is not a standalone `uploadFile`
+  endpoint, arbitrary-document upload or Telegram multipart compatibility.
+  Candidate adapter support is not proof that a running Gateway has deployed
+  the new server/SQL contract.
 - **No inline mode (G-2)** and **no polls (G-3)**.
 - **No `editMessageReplyMarkup` (G-4)** — `editMessageText` carries
   `reply_markup`, so editing markup costs a text round trip.
@@ -81,6 +83,65 @@ Found while building this and recorded in
 
 `/selftest` reports each of these as `UNSUPPORTED` with its reason, so the day
 the platform gains one, the report changes on its own.
+
+## Bounded new media: D-258 candidate
+
+The adapter's `sendBytes` sends one new source as JSON/base64, at most
+**6,291,456 bytes (6 MiB)**. Accepted kinds and MIME types:
+
+| kind | MIME types | wire field |
+|---|---|---|
+| `photo` | JPEG, PNG, WebP, GIF (`image/jpeg`, `image/png`, `image/webp`, `image/gif`) | `photo` |
+| `document` | PDF (`application/pdf`) | `document` |
+| `video` | MP4, WebM (`video/mp4`, `video/webm`) | `video` |
+| `voice` | WebM, Ogg, MP3 (`audio/webm`, `audio/ogg`, `audio/mpeg`) | `voice` |
+
+```typescript
+if (!bot.supports("sendBytes") || !bot.sendBytes) {
+  throw new Error("This transport has no bounded byte sender");
+}
+const sent = await bot.sendBytes({
+  chatId,
+  kind: "document",
+  mimeType: "application/pdf",
+  bytes: pdfBytes,
+  fileName: "report.pdf",
+  // Persist this unique logical-operation key before making the call.
+  idempotencyKey: savedOperationKey,
+});
+```
+
+Check `supports("sendBytes")` and that the optional method exists before use;
+other transports need not implement it. Absence must be reported, not silently
+treated as a sent message. The result is the normal `SentMessage` receipt, not
+a new standalone file handle. A subsequent `getFile(chatId, sent.id)` returns
+the readable file and a URL lasting **60 seconds**; persist `fileId`, not URL.
+
+Only PDF takes `fileName` (up to 128 characters, basename without controls).
+Duration and dimensions are measured by the server, not accepted from callers.
+New bytes do not accept topics, replies, buttons, file ids, storage references
+or URLs; `sendFileById` retains its existing options. The adapter rejects bad
+types/sizes before HTTP, but only the Gateway validates actual media content.
+
+One key and a snapshot of the bytes are created before the retry loop. A 5xx
+or lost response therefore retries the same operation. A separate logical call
+normally creates a new key; **after an uncertain outcome or a process restart,
+reuse a persisted explicit key and unchanged body**, not a new one. The adapter
+does not create durable storage for that key on the caller's behalf.
+`quota_exceeded` is never retried automatically. An active equivalent lease
+returns `rate_limited` with `retry_after: 120`; admission may also return a
+shorter wait. `conflict` must not be bypassed with a fresh key.
+
+Candidate service budgets are explicit: HTTP buffering admits 4 uploads per
+Gateway and 1 per bot; SQL reserves at most 60 MiB/24h, 256 MiB retained and
+1000 objects per bot, and 600 MiB/24h, 2 GiB retained and 20000 objects globally.
+Failed reservations stay charged; identical retries and readable `file_id`
+resends do not charge again. No automatic orphan reclamation is promised.
+
+`/selftest` exercises one 68-byte PNG send and its `getFile` metadata, then
+deletes that known probe message if supported. It explicitly does **not** claim
+PDF/video/voice codec acceptance or downloaded-byte integrity. The larger
+standalone upload capability remains `UNSUPPORTED`, separate from `sendBytes`.
 
 ## Running it
 

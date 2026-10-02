@@ -122,9 +122,19 @@ export const BOT_API_METHOD_GROUPS: readonly BotApiMethodGroup[] = [
         input: "chat_id, одно из photo / media / file_id, idempotency_key",
       },
       {
-        name: "sendVideo / sendDocument / sendVoice",
-        summary: "Отправка разрешенного объекта chat-media или повторная отправка по file_id из того же чата.",
-        input: "chat_id, одно из media / file_id, idempotency_key",
+        name: "sendVideo",
+        summary: "MP4 или WebM: доступный объект или file_id. Кандидат D-258 добавляет новые байты до 6 МиБ.",
+        input: "chat_id, одно из video / media / file_id, idempotency_key",
+      },
+      {
+        name: "sendDocument",
+        summary: "PDF: доступный объект или file_id. Кандидат D-258 добавляет новые байты до 6 МиБ и безопасное имя файла.",
+        input: "chat_id, одно из document / media / file_id, idempotency_key",
+      },
+      {
+        name: "sendVoice",
+        summary: "WebM, Ogg или MP3: доступный объект или file_id. Кандидат D-258 добавляет новые байты до 6 МиБ.",
+        input: "chat_id, одно из voice / media / file_id, idempotency_key",
       },
       {
         name: "sendChatAction",
@@ -138,7 +148,7 @@ export const BOT_API_METHOD_GROUPS: readonly BotApiMethodGroup[] = [
       },
       {
         name: "getFile",
-        summary: "Короткоживущая ссылка на доступное боту вложение.",
+        summary: "Ссылка на доступное вложение на 60 секунд, file_name, file_size и MIME-тип. Ссылку нельзя хранить вместо file_id.",
         input: "chat_id, message_id",
       },
     ],
@@ -213,6 +223,31 @@ export const BOT_PHOTO_EXAMPLE = `{
   "caption": "Готово",
   "idempotency_key": "photo-20260926-01"
 }`;
+
+export const BOT_INLINE_MEDIA_EXAMPLE = `// Кандидат D-258: после публикации серверного контракта.
+import { readFile } from "node:fs/promises";
+
+const bytes = await readFile("report.pdf");
+if (bytes.length === 0 || bytes.length > 6291456) {
+  throw new Error("PDF must contain 1..6291456 bytes");
+}
+
+// Сохраните этот ключ и тело до отправки.
+// При потерянном ответе повторите их без изменений.
+const body = {
+  chat_id: "11111111-1111-4111-8111-111111111111",
+  document: {
+    mime_type: "application/pdf",
+    bytes_base64: bytes.toString("base64"),
+    file_name: "report.pdf",
+  },
+  caption: "Готовый отчёт",
+  idempotency_key: "report-20261002-01",
+};
+const sent = await callBot("sendDocument", body);
+// sent: message_id, chat_id, bot_id, type, created_at.
+// An identical retry returns the original receipt, not a new message.
+// Это квитанция LETSCUBE, не Telegram Message.`;
 
 export const BOT_CALLBACK_EXAMPLE = `{
   "chat_id": "11111111-1111-4111-8111-111111111111",

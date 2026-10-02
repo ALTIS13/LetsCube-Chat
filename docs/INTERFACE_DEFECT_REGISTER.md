@@ -19500,6 +19500,19 @@ other kind of file — a document, a video, a voice note — has no upload path,
 PocketFlow's gap list (`artifacts/pocketflow/src/transport/letscube.ts`) still
 describes G-1 from before the photo half closed.
 
+**2026-10-02 frozen candidate, not yet live acceptance:** new `document`,
+`video` and `voice` byte sources are implemented for PDF, MP4/WebM and
+WebM/Ogg/MP3. PocketFlow has a real `sendBytes` adapter/selftest; standalone
+`uploadFile` remains unsupported. Authenticated admission, a 6 MiB bound,
+durable token/lease ownership, byte-verified duplicate Storage, conservative
+rolling/retained quotas and atomic receipt/message commit cover the upload.
+Independent review, 107 scoped tests, 26 new SQL cases, seven full PG17 restore
+groups and 14 actual Linux parser cases pass. Keep `[~]` until the public API
+and exact running Gateway are accepted. Details and current rollout status:
+[media ingest record](operations/2026-10-02-bot-inline-media.md).
+Failed admissions remain charged; safe operator reconciliation/cleanup is a
+follow-up, not a completed auto-reclaim feature.
+
 ---
 
 ## D-259 `[x]` A join was one opaque await, so a fifteen-second failure could only be reported as «не подключается»

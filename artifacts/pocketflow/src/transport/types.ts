@@ -11,7 +11,7 @@
  *   |                | LETSCUBE                   | Telegram            |
  *   |----------------|----------------------------|---------------------|
  *   | chat / message | UUID strings               | 64-bit integers     |
- *   | a file to send | a storage object reference | a file_id or upload |
+ *   | a file to send | file_id / typed JSON bytes | a file_id or upload |
  *   | a write        | `idempotency_key` required | no such field       |
  *   | a date         | timestamptz string         | unix seconds        |
  *
@@ -28,12 +28,10 @@
  * больше signed 32-bit"). A Telegram adapter stringifies on the way in and
  * parses on the way out; the application never holds the number.
  *
- * `idempotencyKey` deliberately does NOT appear on the send options. It is not
- * a property of "send this message" — it is a property of "this HTTP call may
- * be retried", which is the transport's business. The LETSCUBE adapter mints
- * one per logical send and reuses it across its own retries; a Telegram adapter
- * throws it away. An application that had to invent one would be an application
- * that knows which platform it is on.
+ * The adapter normally creates one idempotency key per logical send and reuses
+ * it across retries. `sendBytes` also accepts an explicit key so a caller can
+ * persist an uncertain operation across process restarts. A second call with
+ * a new key is a new send, not a recovery attempt.
  */
 
 /** Opaque on purpose — see the file comment. */
@@ -154,6 +152,20 @@ export type SendFileByIdOptions = {
   keyboard?: InlineKeyboard;
 };
 
+/** Typed new bytes, not a URL or an existing file handle. At most 6 MiB. */
+export type SendBytesOptions = {
+  chatId: ChatId;
+  bytes: Uint8Array;
+  caption?: string;
+  /** Persist before sending if the operation must survive an unknown outcome. */
+  idempotencyKey?: string;
+} & (
+  | { kind: "photo"; mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" }
+  | { kind: "document"; mimeType: "application/pdf"; fileName?: string }
+  | { kind: "video"; mimeType: "video/mp4" | "video/webm" }
+  | { kind: "voice"; mimeType: "audio/webm" | "audio/ogg" | "audio/mpeg" }
+);
+
 export type SendTextOptions = {
   chatId: ChatId;
   text: string;
@@ -217,6 +229,7 @@ export type TransportCapability =
   | "chatAction"
   | "getFile"
   | "sendFileById"
+  | "sendBytes"
   | "uploadFile"
   | "setMyCommands"
   | "getMyCommands"
@@ -254,6 +267,7 @@ export class TransportError extends Error {
 
   /** Whether trying the same call again could plausibly succeed. */
   get retryable(): boolean {
+    if (this.code === "quota_exceeded") return false;
     if (this.code === "rate_limited") return true;
     if (this.status === null) return true; // a transport-level failure: no answer at all
     return this.status >= 500;
@@ -290,6 +304,8 @@ export interface BotTransport {
    * already points at, so nobody gains access to anything.
    */
   sendFileById(options: SendFileByIdOptions): Promise<SentMessage>;
+  /** Optional capability; old transports stay valid. No topics/replies/buttons. */
+  sendBytes?(options: SendBytesOptions): Promise<SentMessage>;
   editText(options: EditTextOptions): Promise<void>;
   deleteMessage(chatId: ChatId, messageId: MessageId): Promise<void>;
   sendChatAction(chatId: ChatId, action: ChatAction, topicId?: string): Promise<void>;

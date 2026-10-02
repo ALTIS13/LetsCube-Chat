@@ -20,6 +20,7 @@ import {
   type IncomingMembership,
   type IncomingMessage,
   type MessageId,
+  type SendBytesOptions,
   type SendFileByIdOptions,
   type SendTextOptions,
   type Sender,
@@ -43,14 +44,13 @@ import {
  *   - every writing method requires an `idempotency_key`;
  *   - the envelope is `{ok, result}` / `{ok: false, error: {code, ...}}`.
  *
- * **Why the idempotency key is minted here and not by the caller.** The key's
+ * **Why the idempotency key is normally minted here.** The key's
  * job is to make a *retry* harmless, so it has to be stable across the retries
  * of one logical send and different between two sends that happen to carry the
  * same text. Both halves of that are properties of this HTTP client, not of the
- * application: `call()` mints one key and reuses it for every attempt of that
- * call. An application that minted its own would either reuse one by accident
- * (silently dropping a message, because the gateway returns the first result
- * with `duplicate: true`) or mint a fresh one per attempt (defeating the point).
+ * application: each sender mints one key before `call()` retries. `sendBytes`
+ * permits an explicit durable key for recovery across restarts; callers must
+ * reuse the same payload, not create a fresh key after an uncertain outcome.
  */
 
 const SUPPORTED: ReadonlySet<TransportCapability> = new Set<TransportCapability>([
@@ -66,6 +66,7 @@ const SUPPORTED: ReadonlySet<TransportCapability> = new Set<TransportCapability>
   // Shipped 2026-09-19 (D-248): the four media methods accept a `file_id`
   // in place of a storage object reference, which is Telegram’s own model.
   "sendFileById",
+  "sendBytes",
   "sendPhoto",
   "sendDocument",
   "setMyCommands",
@@ -84,15 +85,12 @@ const SUPPORTED: ReadonlySet<TransportCapability> = new Set<TransportCapability>
  * reference, which is Telegram’s own model and the fix G-1 asked for. So a bot
  * can send back a file it was sent.
  *
- * It still cannot put **new** bytes anywhere: there is no upload method, and
- * the storage path a media message names is not something a bot can learn or
- * create. That is the larger half of G-1 and it is open. See
- * `docs/proposals/2026-09-19-pocketflow-reference-bot.md`.
+ * New photo/PDF/video/voice bytes can be sent through a bounded 6 MiB JSON
+ * source. G-1's broader standalone upload and larger/arbitrary document
+ * contract is still open; `sendBytes` must not imply an `uploadFile` endpoint.
  */
 export const LETSCUBE_GAPS: ReadonlyMap<TransportCapability, string> = new Map([
-  // G-1 is half closed. A bot can now send back a file it was sent; it still
-  // cannot put new bytes anywhere, which is the larger half.
-  ["uploadFile", "no upload method exists in the public Bot API (G-1, still open)"],
+  ["uploadFile", "no standalone upload endpoint; new bytes are bounded to 6 MiB typed sends (larger G-1 contract open)"],
   ["editMessageReplyMarkup", "only editMessageText exists; it carries reply_markup (G-4)"],
   ["inlineMode", "no inline_query / answerInlineQuery / chosen_inline_result (G-2)"],
   ["poll", "no sendPoll and no poll / poll_answer update (G-3)"],
@@ -116,6 +114,15 @@ const MEDIA_METHOD: Record<FileKind, string> = {
   voice: "sendVoice",
 };
 
+const INLINE_MIME: Readonly<Record<FileKind, readonly string[]>> = {
+  photo: ["image/jpeg", "image/png", "image/webp", "image/gif"],
+  document: ["application/pdf"],
+  video: ["video/mp4", "video/webm"],
+  voice: ["audio/webm", "audio/ogg", "audio/mpeg"],
+};
+const MAX_INLINE_BYTES = 6 * 1024 * 1024;
+const INLINE_OPTION_KEYS = new Set(["chatId", "kind", "mimeType", "bytes", "caption", "idempotencyKey", "fileName"]);
+
 type Json = Record<string, unknown>;
 
 function asRecord(value: unknown): Json | null {
@@ -126,6 +133,32 @@ function asRecord(value: unknown): Json | null {
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function inlineSource(options: SendBytesOptions): Json {
+  const value = asRecord(options);
+  const invalid = () => new TransportError({ code: "validation_failed", message: "invalid inline media options", status: 400 });
+  if (!value || Object.keys(value).some((key) => !INLINE_OPTION_KEYS.has(key)) ||
+      typeof value.kind !== "string" || !Object.hasOwn(INLINE_MIME, value.kind) ||
+      typeof value.mimeType !== "string" || !INLINE_MIME[value.kind as FileKind].includes(value.mimeType) ||
+      !asString(value.chatId) || !(value.bytes instanceof Uint8Array) ||
+      value.bytes.byteLength === 0 || value.bytes.byteLength > MAX_INLINE_BYTES) throw invalid();
+  if (value.caption !== undefined && (typeof value.caption !== "string" || value.caption.length < 1 || value.caption.length > 4096)) throw invalid();
+  if (value.idempotencyKey !== undefined && (typeof value.idempotencyKey !== "string" ||
+      !/^[A-Za-z0-9._:-]{8,128}$/.test(value.idempotencyKey))) throw invalid();
+  let fileName: string | undefined;
+  if (value.fileName !== undefined) {
+    if (value.kind !== "document" || typeof value.fileName !== "string" || value.fileName.length > 128 ||
+        /[/\\\u0000-\u001f\u007f-\u009f]/.test(value.fileName)) throw invalid();
+    fileName = value.fileName.trim();
+    if (!fileName || fileName === "." || fileName === "..") throw invalid();
+  }
+  // Encode before any await: caller mutation must not change a retry's bytes.
+  return {
+    mime_type: value.mimeType,
+    bytes_base64: Buffer.from(value.bytes).toString("base64"),
+    ...(fileName !== undefined ? { file_name: fileName } : {}),
+  };
 }
 
 function asNumber(value: unknown): number | null {
@@ -447,6 +480,24 @@ export class LetscubeTransport implements BotTransport {
     if (!id) {
       throw new TransportError({ code: "internal_error", message: "the send returned no id" });
     }
+    const createdAt = asString(result?.created_at);
+    return {
+      id: id as MessageId,
+      chatId: (asString(result?.chat_id) ?? options.chatId) as ChatId,
+      date: createdAt && !Number.isNaN(Date.parse(createdAt)) ? new Date(createdAt) : null,
+    };
+  }
+
+  async sendBytes(options: SendBytesOptions): Promise<SentMessage> {
+    const source = inlineSource(options);
+    const result = asRecord(await this.#call(MEDIA_METHOD[options.kind], {
+      chat_id: options.chatId,
+      [options.kind]: source,
+      ...(options.caption !== undefined ? { caption: options.caption } : {}),
+      idempotency_key: options.idempotencyKey ?? this.#idempotencyKey(),
+    }));
+    const id = asString(result?.message_id);
+    if (!id) throw new TransportError({ code: "internal_error", message: "the send returned no id" });
     const createdAt = asString(result?.created_at);
     return {
       id: id as MessageId,
