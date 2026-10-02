@@ -1,5 +1,25 @@
 # QA Results
 
+## 2026-10-02 - Bot Media Purge Hold
+
+Whole-`chat-media` D-103 claim hold and stale-call queue CHECK are applied once
+at 23:57 MSK after verified backup `20261002-235719`. Full same-image PG17.6
+restore, seven rehearsal groups, six actual role-switch denials, rollback,
+reapply refusal and a real already-running old claim interleaving pass.
+Independent frozen-source review approved without P1/P2; final sequential
+regression passes **36/36**, zero failures/cancellations/skips. The earlier
+worker startup failure and its reruns are recorded separately, not added up
+to manufacture single-run acceptance.
+
+Independent production post-check confirms exact body/validated CHECK and
+preserved OID/ACL/settings; policies, other functions, table authority and
+complete receipt/attempt ledgers are unchanged. Rolled-back service-role
+control returns 0 protected / 1 ordinary row; direct protected lease is denied.
+No provider calls; all fictional rows rolled back. Retained receipts remain
+28 / 47,240 bytes, zero reserved. This is not cleanup, refund or proof of past
+provider terminality; ordinary-bucket races remain open. Do not reapply.
+Evidence: [purge hold](operations/2026-10-02-bot-media-purge-hold.md).
+
 ## 2026-10-02 - Encoded Bot Media Reference Preflight
 
 Read-only advisory v2 passes **21/21** actual PostgreSQL 18.4 cases (12 resolver,

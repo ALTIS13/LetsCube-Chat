@@ -2,7 +2,19 @@
 
 Status: active production-hardening tracker, updated 2026-10-02.
 
-**Current continuation, 2026-10-02:** encoded reference advisory v2 is accepted:
+**Current continuation, 2026-10-02:** whole-`chat-media` D-103 forward claim hold
+and queue CHECK are applied once/verified at 23:57 MSK after fresh backup
+`20261002-235719`. Final focused **36/36**, same-image PG17 full restore/race/
+rollback proof and independent review without P1/P2 pass. Actual rolled-back
+production control returns 0 protected / 1 ordinary; policies/authority/ledgers
+are unchanged. Retained receipts: 28 / 47,240 bytes, zero reserved. Do not
+reapply; no cleanup/refund/generation authority or native release was added.
+Next: finish source publication, then no-delete reference-admission foundation;
+avatar/variant I/O and generation-bound removal/charge release follow separately.
+Evidence: [purge hold](operations/2026-10-02-bot-media-purge-hold.md).
+All owned workers are closed; Android hold and A063 exclusion remain.
+
+**Accepted earlier advisory, 2026-10-02:** encoded reference advisory v2 is accepted:
 **21/21** actual PG18 tests, independent spec/quality review without P1/P2,
 exact pinned PG17 READ ONLY observation at 22:48 MSK. Of 386 URL rows, 381 are
 parsed other-bucket references and five remain unsupported; this is not orphan
@@ -12,10 +24,9 @@ No runtime/schema/media/accounting changes. Follow the
 [source writer inventory](operations/2026-10-02-bot-media-writer-inventory.md).
 Fresh live schema-only prestate at 22:57 MSK confirms nine relations, 40 enabled
 triggers and 49 selected trigger/RPC functions; the path guard still excludes
-URL-only/preview-only changes, and the old purge body hash is unchanged.
-Next: drift/backup/restore-gated no-delete reference admission;
-D-103 must hold ingest-owned objects until the shared seal/intent protocol is
-proven. All owned workers are closed; native holds remain.
+URL-only/preview-only changes. The old purge body hash was unchanged at that
+snapshot; the later whole-bucket hold above supersedes that claim baseline.
+The advisory is not writer/generation admission or permission to remove files.
 
 **Current rollout checkpoint, 2026-10-02:** D-258 upload-attempt runtime `9b41605d`
 is committed on `codex/bot-inline-media-20261002`, SQL `bb0bec42` passes 13/13
