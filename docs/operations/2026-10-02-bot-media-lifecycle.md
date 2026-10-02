@@ -181,3 +181,20 @@ reference. URL coverage remains unresolved for all receipts. No bytes/HTTP
 inventory, deletion, quota release, migration, app installation or cloud-device
 session occurred. Provider terminality, writer/generation fences, D-103 ownership
 and exactly-once retained accounting remain the next destructive-stage gates.
+
+## Shared Revision And Deployment
+
+SQL/tests commit `10262625`, contract/evidence `df343b6f` were pushed to the
+candidate branch and `main` after separate outgoing-commit review and own-tree
+alias checks. Foreign `.worktrees/bot-platform` document deletion was preserved.
+All bounded workers are closed; native apps and backend runtime were unchanged.
+
+The sole healthy web image at acceptance was
+`l64kyyu1sysev2izzjjbizhe:df343b6f8cd85f5171c94f5e7cb9bd767f90e38b`.
+Public/container entry and SW hashes matched, unchanged from the preceding
+documentation deploy: entry `e5e2d0993054d46996c5b30e55954d139217d75cc0a57e7056984a6fe999436d`,
+SW `74d2cd9a7e779853db9af7e9465c61c2d35097489a74c0c8cfd7b6801f2b0cbc`.
+The accepted PDF marker remained present, obsolete candidate notice absent;
+both retained old entries kept their prior hashes. The normal two-container
+rollover was not counted as final acceptance. A documentation closeout may
+advance the web image tag without changing these bytes.

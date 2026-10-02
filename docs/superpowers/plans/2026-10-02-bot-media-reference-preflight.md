@@ -41,4 +41,8 @@ Cross-author references, preview bucket semantics, encoded/legacy URLs, an alrea
 - [x] Map current message, forward, variant, avatar and purge writers from source and live catalog; distinguish current code from proposed fences.
 - [x] Define immutable receipt retention, expired-lease fencing, unknown Storage outcomes, object-reference fencing, exactly-once retained-only quota release and separate rolling budget.
 - [x] Independently review SQL/tests and contract, then execute only the reviewed read-only SQL against production with aggregate-only evidence and exact input hash.
-- [ ] Verify focused diff/syntax/links; commit only owned files and preserve foreign changes. Before an authorised push read outgoing commits separately and verify the deployed revision/content independently.
+- [x] Verify focused diff/syntax/links; commit only owned files and preserve foreign changes. Before an authorised push read outgoing commits separately and verify the deployed revision/content independently.
+
+Acceptance: SQL `10262625`, contract/evidence `df343b6f` shared in main; exact healthy
+web revision and unchanged public/container JS/SW plus retained entries verified.
+See the [durable acceptance record](../../operations/2026-10-02-bot-media-lifecycle.md).
