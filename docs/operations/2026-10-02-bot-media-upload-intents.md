@@ -122,6 +122,11 @@ physical/native acceptance is inferred from these backend checks.
 
 ## Remaining Gates
 
+Continuation status is maintained in the
+[production rollout record](2026-10-02-bot-upload-intents-rollout.md): full PG17
+restore and guarded additive SQL apply are now accepted. The list below records
+the source candidate's original gates, not a request to repeat completed work.
+
 1. Keep the reviewed candidate on its own branch. Before any production apply:
    fresh verified backup, full isolated production restore, exact migration and
    rollback rehearsal, drift guards, and independent post-apply verification.

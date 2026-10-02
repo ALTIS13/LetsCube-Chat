@@ -26,12 +26,12 @@ Read in this order:
 Stage: D-258 external-I/O upload-attempt source candidate accepted, branch
 `codex/bot-inline-media-20261002`; runtime `9b41605d` and SQL `bb0bec42` are
 committed and independently approved for spec/quality. Workers are closed.
-Reviewed source is pushed to the candidate branch only; `main` is unchanged.
+Reviewed runtime source remains on the candidate branch; `main` is unchanged.
 Evidence and remaining gates:
 [upload intents](operations/2026-10-02-bot-media-upload-intents.md).
 Runtime integration passes 5/5 on actual isolated PostgreSQL, focused upload
 cases 28/28, bounded units 4930 passes / 13 conditional skips; the held Android
-Gradle probe is excluded separately. No new SQL or runtime deployment.
+Gradle probe is excluded separately. No new runtime deployment yet.
 The earlier ingest SQL was applied once at 14:45 MSK: do not reapply it.
 Read-only verification confirms healthy web `ebb050a3`, Gateway/worker `2900eeb7`.
 Prior deployed ingest, audit and reference evidence remain in the
@@ -40,10 +40,12 @@ Prior deployed ingest, audit and reference evidence remain in the
 [lifecycle contract](operations/2026-10-02-bot-media-lifecycle.md).
 Current continuation: fresh backup `20261002-194924` and full PG17.6 isolated
 restore pass nine groups plus actual role denials and exact reapply refusal.
-Production apply is still pending; follow the current
+Additive upload-intent SQL is applied once at 20:17 MSK after fresh backup
+`20261002-201708`; pinned-target and independent body/ACL/RLS/policy checks pass.
+Do not reapply it. Follow the current
 [rollout checkpoint](operations/2026-10-02-bot-upload-intents-rollout.md).
-Next: reviewed guarded apply with another fresh backup, then mandatory-RPC
-runtime deployment; publication is candidate-branch only until the SQL gate.
+Next: publish the reviewed mandatory-RPC runtime and verify exact healthy
+images/content plus the synthetic actual-provider canary. The SQL gate is met.
 Writer/generation/purge fencing and legacy/encoded reference coverage remain
 open; no deletion or quota release is authorised by this candidate.
 Android build/install/publication remains held. Realme RMX3830 is authorised

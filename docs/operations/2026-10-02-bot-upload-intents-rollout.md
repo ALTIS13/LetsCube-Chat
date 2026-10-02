@@ -7,8 +7,9 @@ Source acceptance: [upload intents](2026-10-02-bot-media-upload-intents.md).
 
 ## Resume
 
-Stage: fresh full PostgreSQL 17 restore accepted; guarded production apply next.
-No production SQL or new runtime has been applied by this rollout yet.
+Stage: guarded additive SQL applied once at 20:17 MSK; independent verification
+accepted. Reviewed mandatory-RPC runtime publication and provider canary next.
+No new runtime has been deployed by this rollout yet.
 No Android build/install/publication or destructive media cleanup is included.
 
 ## Gates
@@ -28,9 +29,9 @@ No Android build/install/publication or destructive media cleanup is included.
   membership/INHERIT/SET chains provide no client/service/authenticator path to
   `postgres` or `supabase_admin`. Restored defaults, old function catalogs,
   table/column grants and policies remain unchanged.
-- [ ] Independently review the narrow guarded production-apply helper.
-- [ ] Take another verified before-state backup and apply the additive SQL once.
-- [ ] Independently verify new bodies/owners/RLS/ACL and unchanged old functions
+- [x] Independently review the narrow guarded production-apply helper.
+- [x] Take another verified before-state backup and apply the additive SQL once.
+- [x] Independently verify new bodies/owners/RLS/ACL and unchanged old functions
   and Storage policies; reload the PostgREST schema cache.
 - [ ] Publish the mandatory-RPC runtime only after the database gate passes.
 - [ ] Verify exact running revisions and a synthetic actual-provider canary.
@@ -72,6 +73,29 @@ The actual web build also passes: `sw.js build d9324cbfbe9c2199`, built in
 37.28 seconds. Existing sourcemap and large-chunk warnings are present; no
 unrelated frontend patch is claimed. QA account/disposable-bot preflight passes
 with zero mutations. It does not substitute for the post-deploy canary.
+
+## Production Apply
+
+Fresh before-state backup `20261002-201708` passes checksums and archive listing.
+Database archive SHA-256:
+`ce5d860480fe9fac2daeba06577af7b4fd9bec8f6c657a6c5ebbd6644bf30c26`.
+An additional full archive bound to the pinned production socket/cluster has
+SHA-256 `284be0be4da28181b5a763444259da9e9096a293d2ea7976860075d044966185`.
+Both are root-only and remain server-side. Before/after identity, old function
+bodies/ACLs and the policy fingerprint are guarded.
+
+The apply helper records a prepared attempt durably before its single SQL call.
+Lost acknowledgements are independently reconciled, never blindly retried or
+rolled back. An immediately absent table after a disconnected call is UNKNOWN:
+a delayed commit is not ruled out. The reviewed envelope passes 9/9 behavioral
+cases, including a forced late commit and a prepared-record omission mutant.
+
+At `2026-10-02T17:17:45.891Z`, attempt and apply receipts report `verified`.
+A separate SSH/psql connection confirms PostgreSQL 17.6, both exact new bodies,
+`postgres` ownership, empty search paths, service-role-only execution and private
+ledger RLS. Initial rows/policies/direct grants/unsafe owner paths are zero;
+all public tables retain RLS, old function metadata and Storage policies are
+unchanged. PostgREST schema cache reload is complete. Do not reapply the SQL.
 
 ## Rollback And Remaining Work
 

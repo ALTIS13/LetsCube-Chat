@@ -7,14 +7,15 @@ is committed on `codex/bot-inline-media-20261002`, SQL `bb0bec42` passes 13/13
 PG18 cases. SQL/runtime/final independent spec/quality reviews approve without
 P1/P2. Actual handler/repository/PG integration passes 5/5,
 focused uploads 28/28 and bounded units 4930 passes / 13 existing conditional
-skips, with the held Android Gradle probe excluded separately. No new production
-apply/deploy or cleanup. Reviewed source is pushed to the candidate branch only;
-main is unchanged. Candidate-only push precedes fresh-backup/full-restore
-rehearsal; mandatory new-RPC runtime must not reach main before SQL apply.
+skips, with the held Android Gradle probe excluded separately. Reviewed runtime
+source remains on the candidate branch; main is unchanged. No new runtime
+deployment or media cleanup yet.
 Continue from the [upload-intent record](operations/2026-10-02-bot-media-upload-intents.md).
 Fresh backup `20261002-194924` and full PG17.6 restore are now accepted: nine
-groups, actual role-switched denials and whole-file reapply refusal. Guarded
-production apply/runtime gates remain pending in the
+groups, actual role-switched denials and whole-file reapply refusal. Fresh backup
+`20261002-201708` precedes the single guarded SQL apply at 20:17 MSK; independent
+body/owner/ACL/RLS/policy verification passes. Do not reapply. Runtime publication
+and provider canary remain pending in the
 [current rollout](operations/2026-10-02-bot-upload-intents-rollout.md).
 
 **2026-10-02 D-258 bounded media ingest deployed:** new PDF/video/voice bytes and
