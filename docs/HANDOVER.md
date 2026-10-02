@@ -23,7 +23,7 @@ Read in this order:
    measurement. Search it before filing anything.
 
 **Active resume, 2026-10-03 (Codex implementation).** Owner: this Codex chat;
-branch `codex/bot-inline-media-20261002`, base `3df67f1c`. Stage: immutable logical
+branch `codex/bot-inline-media-20261002`, implementation `0f2be27a`. Stage: immutable logical
 identity/bindings **applied once and independently verified at 01:07 MSK**, after
 backup `20261003-010706`. Evidence:
 [logical identity](operations/2026-10-03-bot-media-logical-identity.md). Final **42/42**
@@ -32,8 +32,11 @@ and 12 operator cases pass without skips; full same-image PG17 restore passed
 Independent source/test/operator review has no P1/P2. Original rows, policies,
 access and function fingerprints are unchanged; 28 identities / 7 attempt bindings,
 28 complete receipts / 47,240 bytes / zero reserved. Both owned restore copies
-were removed; backups retained; bounded workers closed. Do not reapply SQL.
-Next: Git/publication closeout, then full-set message resolver. Whole-chat-media
+were removed; backups retained; bounded workers closed. Source is on candidate/main;
+sole healthy exact-revision web, public/container JS/SW and retained-file parity
+pass. Gateway/worker remain healthy `856e03e4` with no watched-path delta;
+docs-only closeout may advance web tag without changing accepted bytes.
+Do not reapply SQL. Next: full-set message resolver. Whole-chat-media
 purge hold remains; physical
 generation/admission/seal/delete/refund and native release are not part of this
 slice. Preserve foreign `bot-platform` dirty deletion. Do not repeat completed SQL.

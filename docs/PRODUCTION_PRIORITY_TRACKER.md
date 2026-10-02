@@ -10,8 +10,11 @@ mutant pass. Independent source/test/operator review has no remaining P1/P2.
 Evidence: [logical identity](operations/2026-10-03-bot-media-logical-identity.md).
 28 identities / 7 attempt bindings; original rows/policies/authority unchanged,
 28 complete receipts / 47,240 bytes / zero reserved. Owned restore copies removed,
-backups retained, bounded workers closed. Finish Git/publication closeout, then
-full-set message resolver. No physical-generation claim or native release; do not
+backups retained, bounded workers closed. Source `0f2be27a` is on candidate/main;
+sole healthy exact-revision web and public/container current/retained JS/SW parity
+pass. Gateway/worker stay healthy `856e03e4` without watched-path delta; docs-only
+closeout can advance web tag without application-byte changes. Next: full-set
+message resolver. No physical-generation claim or native release; do not
 repeat identity or accepted D-103 SQL.
 
 **Accepted hold, 2026-10-02:** whole-`chat-media` D-103 forward claim hold

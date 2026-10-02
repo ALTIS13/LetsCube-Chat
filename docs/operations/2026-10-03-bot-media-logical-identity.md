@@ -3,7 +3,8 @@
 Owner: Codex coordinator; branch `codex/bot-inline-media-20261002`, base `3df67f1c`.
 Stage: stage 1 is applied once and independently verified in production at
 **01:07 MSK on 2026-10-03**. Final reviewed-source **42/42**, operator **12/12**
-and full same-image PG17 proof pass. Git/publication closeout follows. This is stage 1 of the
+and full same-image PG17 proof pass. Source `0f2be27a` is published and its exact
+healthy web deployment is verified. This is stage 1 of the
 [admission foundation](2026-10-03-bot-media-admission-foundation.md), not message
 admission, a physical Storage generation, sealing, deletion or refunds.
 
@@ -106,8 +107,27 @@ migration or old accepted SQL; use independent observation after an uncertain AC
 This SQL/test/documentation slice changes no client bundle or shell. Existing
 upload runtime regressions, old-function/authority fingerprints and actual PG17
 proof are the affected-boundary checks; a frontend/native build would not establish
-the new database behavior. Publication still requires the outgoing-own-tree import
-gate and exact running-image/public-content verification described in `CLAUDE.md`.
+the new database behavior.
+
+## Publication
+
+Implementation `0f2be27ae07e20dd55c81dd7c10bb1080a3a9222` is pushed to the existing
+candidate branch and `main`. The separate outgoing-commit review contains only
+the ten owned SQL/archive/test/documentation files. Own-tree import resolution,
+committed-vs-reviewed SQL bytes, whitespace and local documentation links pass;
+the foreign `bot-platform` dirty deletion remains untouched.
+
+The first verification correctly refused the temporary two-container rolling
+overlap. After it settled, the sole healthy web image is the exact implementation
+revision. Public/container entry and service-worker hashes match, new/old content
+markers pass, both retained older entries remain byte-identical. Accepted current
+entry `/assets/index-CWBgVg3u.js` and service-worker bytes are unchanged; no
+production capture or signed-in UI mutation was used. Documentation-only closeout
+pushes may advance this image tag without changing accepted application bytes.
+
+Gateway and worker are independently observed healthy at `856e03e4`. Their actual
+Coolify watch paths have zero commits since that revision, so no backend rebuild
+is required or claimed. The database hooks are already installed/verified.
 
 ## Rollback And Next Step
 
