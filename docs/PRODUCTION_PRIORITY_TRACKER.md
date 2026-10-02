@@ -14,7 +14,11 @@ SW and retained-file hashes are unchanged. Owned restore container removed.
 Next: no-delete reference-admission foundation after lock/coverage review;
 avatar/variant I/O and generation-bound removal/charge release follow separately.
 Evidence: [purge hold](operations/2026-10-02-bot-media-purge-hold.md).
-Hold workers are closed; Android hold and A063 exclusion remain.
+The [foundation contract](operations/2026-10-03-bot-media-admission-foundation.md)
+records the source-reviewed order: logical identity/bindings, full message
+resolver, then table-level admission with actual lock/authorization interleavings.
+None of those new slices is implemented; logical UUID is not physical Storage
+generation. All bounded workers are closed; Android hold/A063 exclusion remain.
 
 **Accepted earlier advisory, 2026-10-02:** encoded reference advisory v2 is accepted:
 **21/21** actual PG18 tests, independent spec/quality review without P1/P2,
