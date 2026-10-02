@@ -141,6 +141,11 @@ design-plugin calls.
 
 ## Reference Preflight Acceptance
 
+The following v1 evidence is historical. The v2 follow-up and its new aggregate
+partition are in [reference resolver](2026-10-02-bot-media-reference-resolver.md);
+writer source boundaries are in [inventory](2026-10-02-bot-media-writer-inventory.md).
+Neither closes the all-writer/generation/external-I/O reclamation gates.
+
 Implemented `scripts/bot-media-reference-preflight.sql` and its focused server
 test. The accepted canonical audit/shared fixture are unchanged. Actual PG18.4
 fixtures passed 8/8 without skips; the canonical-only control saw one referenced

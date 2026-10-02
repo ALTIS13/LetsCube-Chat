@@ -2,6 +2,18 @@
 
 Status: active production-hardening tracker, updated 2026-10-02.
 
+**Current continuation, 2026-10-02:** encoded reference advisory v2 is accepted:
+**21/21** actual PG18 tests, independent spec/quality review without P1/P2,
+exact pinned PG17 READ ONLY observation at 22:48 MSK. Of 386 URL rows, 381 are
+parsed other-bucket references and five remain unsupported; this is not orphan
+proof. All 28 complete receipts / 47,240 bytes remain, zero reservations.
+No runtime/schema/media/accounting changes. Follow the
+[resolver evidence](operations/2026-10-02-bot-media-reference-resolver.md) and
+[source writer inventory](operations/2026-10-02-bot-media-writer-inventory.md).
+Next: fresh live trigger/catalog prestate and no-delete reference admission;
+D-103 must hold ingest-owned objects until the shared seal/intent protocol is
+proven. All owned workers are closed; native holds remain.
+
 **Current rollout checkpoint, 2026-10-02:** D-258 upload-attempt runtime `9b41605d`
 is committed on `codex/bot-inline-media-20261002`, SQL `bb0bec42` passes 13/13
 PG18 cases. SQL/runtime/final independent spec/quality reviews approve without

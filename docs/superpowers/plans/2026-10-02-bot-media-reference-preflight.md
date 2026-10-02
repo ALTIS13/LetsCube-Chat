@@ -1,5 +1,9 @@
 # Bot Media Reference Preflight Implementation Plan
 
+Historical v1 plan, completed. The read-only source is extended to v2 by the
+[reference resolver follow-up](../../operations/2026-10-02-bot-media-reference-resolver.md).
+Do not repeat this plan or interpret its literal-only coverage as current.
+
 > **For agentic workers:** Use superpowers:subagent-driven-development for the bounded SQL task and independent review. The coordinator owns the lifecycle contract and handoff.
 
 **Goal:** Extend read-only evidence beyond canonical message columns without authorising deletion or quota release.

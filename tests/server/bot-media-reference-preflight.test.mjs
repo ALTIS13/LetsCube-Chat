@@ -77,26 +77,150 @@ async function seed(db) {
   return rows;
 }
 const metric=(rows,receipt_entries,charged_bytes)=>({rows,receipt_entries,charged_bytes});
+
+test("encoded legacy message is a reference even when the preview bucket is unknown",async(t)=>{
+  const db=await fixture(t); await seed(db);
+  const report=await observe(db,clock(source()));
+  assert.equal(report.receipts_with_observed_reference,7,"literal-only audit loses the seventh encoded reference");
+  assert.deepEqual(report.reference_surfaces.legacy_message_urls,metric(3,2,136));
+  assert.equal(report.coverage.deletion_authorized,false);
+});
+
+test("URL decoder preserves exact identity and leaves unsupported forms unresolved",async(t)=>{
+  const db=await fixture(t),r=request(1);
+  await db.service(reserveSql(r)); await object(db,r);
+  const prefix="https://core.letscube.ru/storage/v1/object/public/";
+  const encoded=r.path.replaceAll("/","%2f");
+  const url=prefix+"chat-media/"+r.path;
+  const cases=[
+    ["literal",url,"literal_chat_media",1],
+    ["query and fragment",url+"?token=fictional#ignored","literal_chat_media",1],
+    ["encoded separators",prefix+"chat-media/"+encoded,"encoded_chat_media",1],
+    ["encoded unreserved",url.replace("/bots/","/%62ots/"),"encoded_chat_media",1],
+    ["encoded bucket",prefix+"%63hat-media/"+r.path,"encoded_chat_media",1],
+    ["signed",url.replace("/public/","/sign/")+"?token=fictional","literal_chat_media",1],
+    ["authenticated",url.replace("/public/","/authenticated/"),"literal_chat_media",1],
+    ["rendered",url.replace("/object/public/","/render/image/public/"),"literal_chat_media",1],
+    ["authority case and default port",url.replace("https://core.letscube.ru/","HTTPS://CORE.LETSCUBE.RU:443/"),"literal_chat_media",1],
+    ["case-sensitive path",url.replace("/bots/","/BOTS/"),"literal_chat_media",0],
+    ["other bucket",prefix+"media/"+r.path,"known_other_bucket",0],
+    ["encoded other bucket",prefix+"%6dedia/"+encoded,"known_other_bucket",0],
+    ["foreign origin",url.replace("core.letscube.ru","foreign.invalid"),"unresolved",0],
+    ["suffix host",url.replace("core.letscube.ru","core.letscube.ru.foreign.invalid"),"unresolved",0],
+    ["userinfo",url.replace("core.letscube.ru","user@core.letscube.ru"),"unresolved",0],
+    ["unexpected port",url.replace("core.letscube.ru","core.letscube.ru:444"),"unresolved",0],
+    ["relative",url.replace("https://core.letscube.ru",""),"unresolved",0],
+    ["malformed escape",url+"%GG","unresolved",0],
+    ["nested encoding",prefix+"chat-media/"+encoded.replaceAll("%2f","%252f"),"unresolved",0],
+    ["NUL",url+"%00","unresolved",0],
+    ["control",url+"%0a","unresolved",0],
+    ["DEL",url+"%7f","unresolved",0],
+    ["encoded question",url+"%3fextra","unresolved",0],
+    ["encoded fragment",url+"%23extra","unresolved",0],
+    ["backslash",url+"%5cextra","unresolved",0],
+    ["dot segment",prefix+"chat-media/../"+r.path,"unresolved",0],
+    ["encoded dot segment",prefix+"chat-media/%2e%2e/"+r.path,"unresolved",0],
+    ["empty segment",prefix+"chat-media//"+r.path,"unresolved",0],
+    ["non-ASCII escape",url+"%c3%a9","unresolved",0],
+    ["raw non-ASCII",url+"\u00e9","unresolved",0],
+    ["path limit boundary",prefix+"chat-media/"+"a".repeat(1024),"literal_chat_media",0],
+    ["path limit exceeded",prefix+"chat-media/"+"a".repeat(1025),"unresolved",0],
+    ["bucket limit boundary",prefix+"a".repeat(128)+"/file","known_other_bucket",0],
+    ["bucket limit exceeded",prefix+"a".repeat(129)+"/file","unresolved",0],
+    ["URL limit boundary",url+"?"+"a".repeat(8192-url.length-1),"literal_chat_media",1],
+    ["URL limit exceeded",url+"?"+"a".repeat(8193-url.length-1),"unresolved",0],
+  ];
+  for(const [label,value,kind,hits] of cases) {
+    await db.exec(`delete from public.profiles; insert into public.profiles(id,avatar_url) values ('${uuid(70)}',${quote(value)});`);
+    const report=await observe(db);
+    assert.equal(report.receipts_with_observed_reference,hits,label);
+    assert.deepEqual(report.coverage.url_classes,{
+      literal_chat_media:kind==="literal_chat_media"?1:0,encoded_chat_media:kind==="encoded_chat_media"?1:0,
+      known_other_bucket:kind==="known_other_bucket"?1:0,unresolved:kind==="unresolved"?1:0,
+    },label);
+    assert.equal(report.coverage.encoded_or_unrecognized_urls_unresolved_for_all_receipts,true,label);
+    assert.equal(report.coverage.deletion_authorized,false,label);
+    assert.equal(report.coverage.quota_release_authorized,false,label);
+  }
+});
+
+test("encoded purge path observes the same object removed by the existing worker",async(t)=>{
+  const db=await fixture(t),r=request(1);
+  await db.service(reserveSql(r)); await object(db,r);
+  await db.exec(`insert into private.message_media_purge(bucket,path,status) values
+    ('chat-media',${quote(r.path.replaceAll("/","%2F"))},'pending'),
+    ('chat-media',${quote(r.path+"%GG")},'pending');`);
+  const report=await observe(db);
+  assert.equal(report.purge_overlap.rows,1);
+  assert.equal(report.purge_overlap.receipt_entries,1);
+  assert.equal(report.purge_overlap.unresolved_chat_media_path_rows,1);
+});
+
+test("decoder safety mutants fail independent literal identity/classification oracles",async(t)=>{
+  const db=await fixture(t),r=request(1);
+  await db.service(reserveSql(r)); await object(db,r);
+  const url=publicUrl(r),prefix="https://core.letscube.ru/storage/v1/object/public/chat-media/";
+  const cases=[
+    ["foreign authority","^https://core[.]letscube[.]ru(?::443)?","^https://[^/]+",
+      url.replace("core.letscube.ru","foreign.invalid"),0,"unresolved"],
+    ["second decode","THEN p.value ELSE '' END","THEN replace(p.value,'%25','%') ELSE '' END",
+      prefix+r.path.replaceAll("/","%252F"),0,"unresolved"],
+    ["path case folding","u.path=r.object_path","lower(u.path)=lower(r.object_path)",
+      url.replace("/bots/","/BOTS/"),0,"literal_chat_media"],
+    ["URL cap","octet_length(u.url)<=8192","octet_length(u.url)<=8193",
+      url+"?"+"a".repeat(8193-url.length-1),0,"unresolved"],
+    ["path cap","octet_length(p.path) BETWEEN 1 AND 1024","octet_length(p.path) BETWEEN 1 AND 1025",
+      prefix+"a".repeat(1025),0,"unresolved"],
+    ["bucket cap","{1,128}","{1,129}",
+      prefix.replace("chat-media/","a".repeat(129)+"/")+"file",0,"unresolved"],
+    ["encoded reference omitted","u.resolved AND u.bucket='chat-media'","u.resolved AND u.url_class='literal_chat_media' AND u.bucket='chat-media'",
+      prefix+r.path.replaceAll("/","%2F"),1,"encoded_chat_media"],
+  ];
+  const verifyCase=(report,hits,kind)=>{
+    assert.equal(report.receipts_with_observed_reference,hits);
+    assert.deepEqual(report.coverage.url_classes,{
+      literal_chat_media:kind==="literal_chat_media"?1:0,encoded_chat_media:kind==="encoded_chat_media"?1:0,
+      known_other_bucket:kind==="known_other_bucket"?1:0,unresolved:kind==="unresolved"?1:0,
+    });
+  };
+  for(const [label,anchor,replacement,value,hits,kind] of cases) {
+    assert.ok(source().includes(anchor),label);
+    await db.exec(`delete from public.profiles; insert into public.profiles(id,avatar_url) values ('${uuid(70)}',${quote(value)});`);
+    verifyCase(await observe(db),hits,kind);
+    const report=await observe(db,source().replace(anchor,replacement));
+    assert.throws(()=>verifyCase(report,hits,kind),{code:"ERR_ASSERTION"},label);
+  }
+  await db.exec(`insert into private.message_media_purge(bucket,path,status) values
+    ('chat-media',${quote(r.path.replaceAll("/","%2F"))},'pending');`);
+  assert.equal((await observe(db)).purge_overlap.rows,1);
+  const mutant=await observe(db,source().replace("o.path=r.object_path","p.path=r.object_path"));
+  assert.throws(()=>assert.equal(mutant.purge_overlap.rows,1),{code:"ERR_ASSERTION"},"encoded purge omission");
+});
+
 function verify(report) {
-  assert.equal(report.report,"bot_media_reference_preflight_v1");
+  assert.equal(report.report,"bot_media_reference_preflight_v2");
   assert.deepEqual(report.limits,{receipt_entries_max:20000,statement_timeout_ms:15000,lock_timeout_ms:2000});
   assert.deepEqual(report.charged,{entries:7,bytes:476,reserved_entries:6,complete_entries:1,
     complete_result_message_id_present:1,complete_completed_at_present:1});
   assert.deepEqual(report.reference_surfaces,{
     canonical_messages:metric(2,1,68),preview_paths_in_message_bucket:metric(1,1,68),
     preview_bucket_unknown:metric(1,1,68),preview_bucket_mismatch:metric(1,1,68),
-    variant_sources:metric(1,1,68),variant_targets:metric(2,1,68),legacy_message_urls:metric(2,1,68),
+    variant_sources:metric(1,1,68),variant_targets:metric(2,1,68),legacy_message_urls:metric(3,2,136),
     profile_avatar_urls:metric(1,1,68),chat_avatar_urls:metric(1,1,68),bot_avatar_urls:metric(1,1,68),
   });
-  assert.equal(report.receipts_with_observed_reference,6);
-  assert.equal(report.receipts_with_observed_noncanonical_but_no_canonical_message,5);
+  assert.equal(report.receipts_with_observed_reference,7);
+  assert.equal(report.receipts_with_observed_noncanonical_but_no_canonical_message,6);
   assert.deepEqual(report.content_report_holds,{associated_rows:5,open_rows:4,open_receipt_entries:3});
   assert.deepEqual(report.purge_overlap,{rows:8,receipt_entries:7,pending_rows:4,done_rows:1,kept_rows:1,failed_rows:1,
     unknown_status_rows:1,pending_unclaimed_rows:1,pending_claim_strictly_expired_rows:1,
-    pending_claim_active_or_boundary_rows:2,receipt_entries_with_observed_reference:6});
+    pending_claim_active_or_boundary_rows:2,receipt_entries_with_observed_reference:7,unresolved_chat_media_path_rows:0});
   assert.equal(report.coverage.nonempty_url_rows,7);
   assert.equal(report.coverage.known_literal_chat_media_endpoint_rows,5);
   assert.equal(report.coverage.encoded_or_unrecognized_url_rows,2);
+  assert.deepEqual(report.coverage.url_classes,{literal_chat_media:5,encoded_chat_media:1,known_other_bucket:0,unresolved:1});
+  assert.equal(report.coverage.single_pass_ascii_subset,true);
+  assert.equal(report.coverage.url_bytes_max,8192);
+  assert.equal(report.coverage.decoded_path_bytes_max,1024);
   assert.equal(report.coverage.encoded_or_unrecognized_urls_unresolved_for_all_receipts,true);
   assert.equal(report.coverage.preview_ui_bucket_is_parent_message_bucket,true);
   assert.equal(report.coverage.preview_purge_null_bucket_fallback_is_media,true);
@@ -116,12 +240,12 @@ test("source preserves literal RR READ ONLY/timeouts/cap/final rollback and no w
   assert.doesNotMatch(code,/\b(INSERT|UPDATE|DELETE|TRUNCATE|CREATE|ALTER|DROP|GRANT|REVOKE|COPY|COMMIT)\b/i);
   assert.doesNotMatch(code,/\b(user_id|owner_token_id|content_sha256|request_fingerprint)\b/i);
 });
-test("actual canonical-only RED has one receipt versus six observed references; extended literal control is GREEN",async(t)=>{
+test("actual canonical-only RED has one receipt versus seven observed references; expanded control is GREEN",async(t)=>{
   const db=await fixture(t); await seed(db);
   const old=await observe(db,read("scripts/bot-media-ingest-audit.sql"));
   assert.equal(old.canonical_columns_and_db_metadata_candidates.receipts_with_any_canonical_reference,1);
-  assert.throws(()=>assert.equal(old.canonical_columns_and_db_metadata_candidates.receipts_with_any_canonical_reference,6),{code:"ERR_ASSERTION"});
-  t.diagnostic("EXPECTED RED canonical-only reference coverage: actual 1, required 6; no accepted audit edit");
+  assert.throws(()=>assert.equal(old.canonical_columns_and_db_metadata_candidates.receipts_with_any_canonical_reference,7),{code:"ERR_ASSERTION"});
+  t.diagnostic("EXPECTED RED canonical-only reference coverage: actual 1, required 7; no accepted audit edit");
   verify(await observe(db,clock(source())));
 });
 test("empty positive control emits zeros but never resolves URL coverage or authorizes deletion",async(t)=>{
@@ -138,7 +262,7 @@ test("parent bucket and strict purge claim equality distinguish known/mismatch/u
   const p=report.purge_overlap;
   assert.equal(p.pending_unclaimed_rows+p.pending_claim_strictly_expired_rows+p.pending_claim_active_or_boundary_rows,p.pending_rows);
   assert.equal(report.reference_surfaces.preview_bucket_unknown.receipt_entries,1);
-  assert.equal(report.receipts_with_observed_reference,6,"unknown preview bucket is not a known reference");
+  assert.equal(report.receipts_with_observed_reference,7,"unknown preview alone is not a known reference; encoded URL is");
 });
 test("five executable semantic mutants break independent literal counts",async(t)=>{
   const db=await fixture(t); await seed(db);
@@ -146,7 +270,7 @@ test("five executable semantic mutants break independent literal counts",async(t
     ["FROM public.messages m\n)","FROM public.messages m WHERE m.deleted_at IS NULL\n)"],
     ["WHEN p.media_bucket='chat-media' THEN","WHEN p.media_bucket='chat-media' OR p.media_bucket IS NULL THEN"],
     ["v.source_path=r.object_path","v.source_path=r.object_path AND v.status='ready'"],
-    ["u.known_literal_endpoint AND u.literal_url=t.literal_url","u.known_literal_endpoint AND u.kind<>'legacy_message_urls' AND u.literal_url=t.literal_url"],
+    ["u.path=r.object_path","u.path=r.object_path AND u.kind<>'legacy_message_urls'"],
     ["claimed_until<transaction_timestamp()","claimed_until<=transaction_timestamp()"],
   ]) {
     assert.ok(source().includes(anchor));

@@ -1,5 +1,21 @@
 # QA Results
 
+## 2026-10-02 - Encoded Bot Media Reference Preflight
+
+Read-only advisory v2 passes **21/21** actual PostgreSQL 18.4 cases (12 resolver,
+nine unchanged canonical audit), no skips. Shipped literal-only RED saw six
+references instead of seven; v2 sees seven. Independent review approved without
+P1/P2. Eight new executable decoder mutants plus seven retained semantic/cap/
+read-only mutations fail independent literal oracles or are refused.
+
+Exact reviewed SQL ran on pinned PG17.6 in READ ONLY REPEATABLE READ ending in
+ROLLBACK at 22:48 MSK. Aggregate: 28 complete receipts / 47,240 bytes,
+zero reservations; 386 selected URL rows partition into 381 parsed other-bucket
+and five unsupported forms. No observed receipt references or purge overlaps.
+This is not orphan/absence proof: unknown URL coverage and writer/generation/
+purge fences remain open. No files, charges, schema or app runtime were changed.
+Full evidence: [resolver](operations/2026-10-02-bot-media-reference-resolver.md).
+
 ## 2026-10-02 - Durable Bot Upload Attempts Rollout
 
 The reviewed upload-attempt SQL is applied once at 20:17 MSK after fresh backup
