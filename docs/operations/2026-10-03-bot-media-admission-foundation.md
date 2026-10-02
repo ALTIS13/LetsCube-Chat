@@ -26,8 +26,11 @@ applied/verified. Do not repeat its SQL, canary, restore or closed regressions.
    moderation scrubbing. Removing a message-edge is not Storage DELETE/refund.
    Preserve direct permitted writes, forward RPC/fallback and bot `file_id`.
 
-These are **not implemented yet**. Start with identity RED controls and its
-reviewable source; do not claim the whole foundation from a new UUID column.
+Stage 1 has [applied/verified identity and immutable bindings](2026-10-03-bot-media-logical-identity.md):
+final **42/42**, 12 operator cases, same-image PG17 full restore and independent
+source/test/operator approval; one guarded production application at 01:07 MSK
+after backup `20261003-010706`. Stages 2 and 3 are **not implemented yet**. Do not
+claim the whole foundation from a new UUID column or repeat stage 1 SQL.
 Registry/backfill/initial observations require an atomic bootstrap without a
 writer window. Backfill never proves absent references or provider terminality.
 
@@ -87,5 +90,6 @@ unresolved as absent. Same-image PG17 backup/restore/rollback and independent
 review remain mandatory before any production SQL. None of those new behavioral
 tests or migrations were run by this source/design assessment.
 
-All bounded review workers are closed. No runtime/schema/client/device changes,
-production captures, Storage calls or paid device minutes in this assessment.
+This source/design assessment itself made no runtime/schema/client/device changes,
+production captures, Storage calls or paid device-minute use. Current implementation
+status and workers are in the linked identity record and HANDOVER, not this older assessment.

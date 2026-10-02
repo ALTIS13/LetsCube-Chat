@@ -2,7 +2,19 @@
 
 Status: active production-hardening tracker, updated 2026-10-03.
 
-**Current continuation, 2026-10-02:** whole-`chat-media` D-103 forward claim hold
+**Current continuation, 2026-10-03:** logical identity/bindings stage 1 is applied
+once and independently verified at **01:07 MSK**, after backup `20261003-010706`.
+Final focused **42/42**, 12 operator cases, same-image PG17 full-restore proof
+(7 groups, 15 actual role/table denials), old-snapshot races and actual catalog
+mutant pass. Independent source/test/operator review has no remaining P1/P2.
+Evidence: [logical identity](operations/2026-10-03-bot-media-logical-identity.md).
+28 identities / 7 attempt bindings; original rows/policies/authority unchanged,
+28 complete receipts / 47,240 bytes / zero reserved. Owned restore copies removed,
+backups retained, bounded workers closed. Finish Git/publication closeout, then
+full-set message resolver. No physical-generation claim or native release; do not
+repeat identity or accepted D-103 SQL.
+
+**Accepted hold, 2026-10-02:** whole-`chat-media` D-103 forward claim hold
 and queue CHECK are applied once/verified at 23:57 MSK after fresh backup
 `20261002-235719`. Final focused **36/36**, same-image PG17 full restore/race/
 rollback proof and independent review without P1/P2 pass. Actual rolled-back
@@ -17,8 +29,8 @@ Evidence: [purge hold](operations/2026-10-02-bot-media-purge-hold.md).
 The [foundation contract](operations/2026-10-03-bot-media-admission-foundation.md)
 records the source-reviewed order: logical identity/bindings, full message
 resolver, then table-level admission with actual lock/authorization interleavings.
-None of those new slices is implemented; logical UUID is not physical Storage
-generation. All bounded workers are closed; Android hold/A063 exclusion remain.
+Identity is now applied/verified; resolver/admission remain open.
+Logical UUID is not physical Storage generation. Android hold/A063 exclusion remain.
 
 **Accepted earlier advisory, 2026-10-02:** encoded reference advisory v2 is accepted:
 **21/21** actual PG18 tests, independent spec/quality review without P1/P2,

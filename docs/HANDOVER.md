@@ -23,6 +23,22 @@ Read in this order:
    measurement. Search it before filing anything.
 
 **Active resume, 2026-10-03 (Codex implementation).** Owner: this Codex chat;
+branch `codex/bot-inline-media-20261002`, base `3df67f1c`. Stage: immutable logical
+identity/bindings **applied once and independently verified at 01:07 MSK**, after
+backup `20261003-010706`. Evidence:
+[logical identity](operations/2026-10-03-bot-media-logical-identity.md). Final **42/42**
+and 12 operator cases pass without skips; full same-image PG17 restore passed
+7 groups / 15 role-table denials and actual old-snapshot races/catalog mutant.
+Independent source/test/operator review has no P1/P2. Original rows, policies,
+access and function fingerprints are unchanged; 28 identities / 7 attempt bindings,
+28 complete receipts / 47,240 bytes / zero reserved. Both owned restore copies
+were removed; backups retained; bounded workers closed. Do not reapply SQL.
+Next: Git/publication closeout, then full-set message resolver. Whole-chat-media
+purge hold remains; physical
+generation/admission/seal/delete/refund and native release are not part of this
+slice. Preserve foreign `bot-platform` dirty deletion. Do not repeat completed SQL.
+
+**Prior accepted hold, 2026-10-03.** Owner: this Codex chat;
 branch `codex/bot-inline-media-20261002`. Stage: D-103 whole-`chat-media` forward
 hold has reviewed frozen source, final **36/36** focused cases and full same-image
 PG17 restore/race/rollback proof. Source/evidence:
@@ -38,8 +54,8 @@ Blocker:
 missing writer/generation/external-I/O fences; this hold is not reclamation.
 Source `c2c3e46d` reached sole healthy exact-revision web with unchanged accepted
 entry/SW and retained files. Owned restore container removed; backups retained.
-Next action: identity RED controls and immutable logical bindings, then resolver
-and message admission in the linked order. These new slices are not implemented.
+At that checkpoint, identity RED controls/bindings, then resolver/admission were
+next; the active resume above supersedes this earlier source-only state.
 Avatar/variant participation and
 exactly-once charge release follow separately. No automatic cleanup/refund.
 The 28 complete receipts / 47,240 bytes and zero reservations remain the frozen
