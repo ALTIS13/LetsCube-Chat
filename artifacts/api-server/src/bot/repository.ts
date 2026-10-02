@@ -1,4 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
+import { INLINE_MEDIA_EXTENSION, type InlineMediaMime } from "#bot/inlineMedia";
 
 import { BotApiError } from "#bot/errors";
 import {
@@ -52,6 +54,9 @@ export interface BotServiceClient extends BotRpcClient {
         objectPath: string,
         expiresInSeconds: number,
       ): PromiseLike<SignedUrlResult>;
+      download(path: string, options: Record<string, never>, parameters: { signal: AbortSignal; cache: "no-store" }): {
+        asStream(): PromiseLike<{ data: ReadableStream<Uint8Array> | null; error: unknown }>;
+      };
     };
   };
   channel(
@@ -156,6 +161,20 @@ export interface BotMethodRepository {
     mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
     bytes: Buffer;
   }): Promise<void>;
+  uploadInlineMedia(input: {
+    botId: string; chatId: string; objectPath: string;
+    mimeType: InlineMediaMime; bytes: Buffer;
+  }): Promise<void>;
+  reserveInlineMedia(input: {
+    botId: string; tokenId: string; chatId: string;
+    kind: Extract<BotMessageCommand["kind"], "image" | "video" | "file" | "audio">;
+    idempotencyKey: string; requestFingerprint: string; objectPath: string;
+    mimeType: InlineMediaMime; sizeBytes: number; contentSha256: string; leaseId: string;
+  }): Promise<BotOperationResult<unknown> & { leaseId: string | null }>;
+  commitInlineMedia(input: {
+    botId: string; tokenId: string; idempotencyKey: string; requestFingerprint: string;
+    leaseId: string; payload: Record<string, unknown>;
+  }): Promise<BotOperationResult<unknown>>;
   replaceCommands(input: {
     botId: string;
     commands: Array<{ command: string; description: string }>;
@@ -260,6 +279,14 @@ export function createBotServiceClient(
 ): BotServiceClient {
   const { url, serviceRoleKey } = resolveBotAuthConfig(environment);
   return createClient(url, serviceRoleKey, {
+    global: {
+      fetch: (input, init) => fetch(input, {
+        ...init,
+        signal: init?.signal
+          ? AbortSignal.any([init.signal, AbortSignal.timeout(45_000)])
+          : AbortSignal.timeout(45_000),
+      }),
+    },
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -332,6 +359,16 @@ export async function authenticateBotToken(
 }
 
 function databaseError(error: unknown, method: string): BotApiError {
+  if (method.startsWith("bot_media_ingest_") && error && typeof error === "object") {
+    const row = error as Record<string, unknown>;
+    if (row.code === "55000" && row.message === "bot_media_ingest_busy") {
+      const retry = typeof row.details === "string" && /^\d{1,3}$/.test(row.details) ? Number(row.details) : 120;
+      return new BotApiError("rate_limited", Math.max(1, Math.min(120, retry)));
+    }
+    if (row.code === "55000" && row.message === "bot_media_ingest_lease_expired") return new BotApiError("rate_limited", 1);
+    if (row.code === "54000" && row.message === "bot_media_ingest_quota_exceeded") return new BotApiError("quota_exceeded");
+    if (row.code === "42501" && row.message === "bot_media_ingest_token_revoked") return new BotApiError("unauthorized");
+  }
   const code =
     error && typeof error === "object" && "code" in error
       ? (error as { code?: unknown }).code
@@ -437,16 +474,6 @@ const METHOD_BY_KIND: Record<BotMessageCommand["kind"], string> = {
 
 // A Supabase bucket id, and nothing that could be spliced into a storage path.
 const BUCKET_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-const PHOTO_SUFFIX: Record<
-  "image/jpeg" | "image/png" | "image/webp" | "image/gif",
-  string
-> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "image/gif": "gif",
-};
-
 function uploadAlreadyExists(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const row = error as Record<string, unknown>;
@@ -536,6 +563,54 @@ function fileMetadata(value: unknown): BotFileMetadata {
 export function createBotMethodRepository(
   client: BotServiceClient = createBotServiceClient(),
 ): BotMethodRepository {
+  const uploadInlineMedia: BotMethodRepository["uploadInlineMedia"] = async (input) => {
+    const suffix = INLINE_MEDIA_EXTENSION[input.mimeType];
+    const prefix = `${input.chatId.toLowerCase()}/bots/${input.botId.toLowerCase()}/`;
+    if (!UUID_RE.test(input.botId) || !UUID_RE.test(input.chatId) || !suffix ||
+        !input.objectPath.startsWith(prefix) ||
+        !new RegExp(`^[0-9a-f]{64}\\.${suffix}$`).test(input.objectPath.slice(prefix.length)) ||
+        !Buffer.isBuffer(input.bytes) || input.bytes.length < 1 || input.bytes.length > MAX_INLINE_PHOTO_BYTES) {
+      throw internalError();
+    }
+    let response: StorageUploadResult;
+    try {
+      response = await client.storage.from("chat-media").upload(input.objectPath, input.bytes,
+        { contentType: input.mimeType, upsert: false });
+    } catch { throw internalError(); }
+    if (!response.error) {
+      if (response.data?.path !== input.objectPath) throw internalError();
+      return;
+    }
+    if (!uploadAlreadyExists(response.error)) throw internalError();
+    // A 409 proves a name exists, not that it contains the bytes we reserved.
+    const controller = new AbortController();
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(45_000)]);
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      const downloaded = await client.storage.from("chat-media").download(input.objectPath, {},
+        { signal, cache: "no-store" }).asStream();
+      if (downloaded.error || !downloaded.data) throw internalError();
+      reader = downloaded.data.getReader();
+      const hash = createHash("sha256");
+      let length = 0;
+      for (;;) {
+        const part = await reader.read();
+        if (part.done) break;
+        length += part.value.byteLength;
+        if (length > input.bytes.length) throw new BotApiError("conflict");
+        hash.update(part.value);
+      }
+      if (length !== input.bytes.length || hash.digest("hex") !== createHash("sha256").update(input.bytes).digest("hex")) {
+        throw new BotApiError("conflict");
+      }
+    } catch (error) {
+      throw error instanceof BotApiError ? error : internalError();
+    } finally {
+      controller.abort();
+      await reader?.cancel().catch(() => {});
+      reader?.releaseLock();
+    }
+  };
   return {
     async getMe(botId) {
       const value = await callRpc(client, "bot_get_me_internal", {
@@ -584,39 +659,26 @@ export function createBotMethodRepository(
       });
     },
 
-    async uploadPhoto(input) {
-      const suffix = PHOTO_SUFFIX[input.mimeType];
-      const prefix = `${input.chatId.toLowerCase()}/bots/${input.botId.toLowerCase()}/`;
-      if (
-        !UUID_RE.test(input.botId) ||
-        !UUID_RE.test(input.chatId) ||
-        !suffix ||
-        !input.objectPath.startsWith(prefix) ||
-        !new RegExp(`^[0-9a-f]{64}\\.${suffix}$`).test(
-          input.objectPath.slice(prefix.length),
-        ) ||
-        !Buffer.isBuffer(input.bytes) ||
-        input.bytes.length < 1 ||
-        input.bytes.length > MAX_INLINE_PHOTO_BYTES
-      ) {
-        throw new BotApiError("internal_error");
-      }
-
-      let response: StorageUploadResult;
-      try {
-        response = await client.storage.from("chat-media").upload(
-          input.objectPath,
-          input.bytes,
-          { contentType: input.mimeType, upsert: false },
-        );
-      } catch {
-        throw internalError();
-      }
-      if (response.error) {
-        if (!uploadAlreadyExists(response.error)) throw internalError();
-      } else if (response.data?.path !== input.objectPath) {
-        throw internalError();
-      }
+    uploadPhoto: uploadInlineMedia,
+    uploadInlineMedia,
+    async reserveInlineMedia(input) {
+      const value = await callRpc(client, "bot_media_ingest_reserve_internal", {
+        p_bot_id: input.botId, p_token_id: input.tokenId, p_chat_id: input.chatId,
+        p_method: METHOD_BY_KIND[input.kind], p_idempotency_key: input.idempotencyKey,
+        p_request_fingerprint: input.requestFingerprint, p_object_path: input.objectPath,
+        p_content_type: input.mimeType, p_byte_size: input.sizeBytes,
+        p_content_sha256: input.contentSha256, p_lease_id: input.leaseId,
+      });
+      const result = operationResult(value);
+      const leaseId = (value as Record<string, unknown>).lease_id;
+      if (result.duplicate ? leaseId !== null : typeof leaseId !== "string" || !UUID_RE.test(leaseId)) throw internalError();
+      return { ...result, leaseId: leaseId as string | null };
+    },
+    async commitInlineMedia(input) {
+      return operationResult(await callRpc(client, "bot_media_ingest_commit_internal", {
+        p_bot_id: input.botId, p_token_id: input.tokenId, p_idempotency_key: input.idempotencyKey,
+        p_request_fingerprint: input.requestFingerprint, p_lease_id: input.leaseId, p_payload: input.payload,
+      }));
     },
 
     async replaceCommands(input) {

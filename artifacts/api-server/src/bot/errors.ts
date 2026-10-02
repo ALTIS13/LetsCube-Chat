@@ -10,6 +10,7 @@ export const BOT_API_ERROR_STATUS = {
   conflict: 409,
   payload_too_large: 413,
   rate_limited: 429,
+  quota_exceeded: 429,
   internal_error: 500,
 } as const;
 
@@ -25,6 +26,7 @@ const BOT_API_ERROR_MESSAGE: Record<BotApiErrorCode, string> = {
   conflict: "Conflict",
   payload_too_large: "Payload too large",
   rate_limited: "Too many requests",
+  quota_exceeded: "Media storage quota exceeded",
   internal_error: "Internal server error",
 };
 

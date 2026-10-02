@@ -7,6 +7,7 @@ const idempotencyKeySchema = z
   .max(128)
   .regex(/^[A-Za-z0-9._:-]+$/);
 export const MAX_INLINE_PHOTO_BYTES = 6 * 1024 * 1024;
+export const MAX_INLINE_MEDIA_BYTES = 6 * 1024 * 1024;
 
 export const callbackButtonSchema = z
   .object({
@@ -109,18 +110,56 @@ function mediaMessageFields(allowedMimeTypes: readonly string[]) {
   };
 }
 
-function mediaMessageSchema(allowedMimeTypes: readonly string[]) {
-  return z
-    .object(mediaMessageFields(allowedMimeTypes))
-    .strict()
-    .superRefine((value, context) => {
-      if ((value.media === undefined) === (value.file_id === undefined)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "media_or_file_id_required",
-        });
-      }
+const inlineMediaBytesSchema = z
+  .string()
+  .min(4)
+  .max(Math.ceil(MAX_INLINE_MEDIA_BYTES / 3) * 4)
+  .regex(/^[A-Za-z0-9+/]+={0,2}$/)
+  .refine((value) => {
+    const bytes = Buffer.from(value, "base64");
+    return bytes.length > 0 && bytes.length <= MAX_INLINE_MEDIA_BYTES &&
+      bytes.toString("base64") === value;
+  }, "invalid_inline_media_bytes");
+
+const inlineDocumentFileNameSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[^/\\\u0000-\u001f\u007f-\u009f]+$/)
+  .transform((value) => value.trim())
+  .refine((value) => value !== "" && value !== "." && value !== "..", "invalid_file_name");
+
+function refineInlineMediaMessage(
+  value: {
+    media?: unknown;
+    file_id?: string;
+    topic_id?: string;
+    reply_to_message_id?: string;
+    reply_markup?: unknown;
+  },
+  inline: unknown,
+  context: z.RefinementCtx,
+) {
+  const supplied = [value.media, value.file_id, inline].filter(
+    (item) => item !== undefined,
+  ).length;
+  if (supplied !== 1) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "media_file_id_or_inline_required",
     });
+  }
+  if (
+    inline !== undefined &&
+    (value.topic_id !== undefined ||
+      value.reply_to_message_id !== undefined ||
+      value.reply_markup !== undefined)
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "inline_media_reply_not_supported",
+    });
+  }
 }
 
 const photoMimeTypes = [
@@ -168,13 +207,33 @@ const sendPhotoSchema = z
       });
     }
   });
-const sendVideoSchema = mediaMessageSchema(["video/mp4", "video/webm"]);
-const sendDocumentSchema = mediaMessageSchema(["application/pdf"]);
-const sendVoiceSchema = mediaMessageSchema([
-  "audio/webm",
-  "audio/ogg",
-  "audio/mpeg",
-]);
+const videoMimeTypes = ["video/mp4", "video/webm"] as const;
+const voiceMimeTypes = ["audio/webm", "audio/ogg", "audio/mpeg"] as const;
+const sendVideoSchema = z
+  .object({
+    ...mediaMessageFields(videoMimeTypes),
+    video: z.object({ mime_type: z.enum(videoMimeTypes), bytes_base64: inlineMediaBytesSchema }).strict().optional(),
+  })
+  .strict()
+  .superRefine((value, context) => refineInlineMediaMessage(value, value.video, context));
+const sendDocumentSchema = z
+  .object({
+    ...mediaMessageFields(["application/pdf"]),
+    document: z.object({
+      mime_type: z.literal("application/pdf"),
+      bytes_base64: inlineMediaBytesSchema,
+      file_name: inlineDocumentFileNameSchema.optional(),
+    }).strict().optional(),
+  })
+  .strict()
+  .superRefine((value, context) => refineInlineMediaMessage(value, value.document, context));
+const sendVoiceSchema = z
+  .object({
+    ...mediaMessageFields(voiceMimeTypes),
+    voice: z.object({ mime_type: z.enum(voiceMimeTypes), bytes_base64: inlineMediaBytesSchema }).strict().optional(),
+  })
+  .strict()
+  .superRefine((value, context) => refineInlineMediaMessage(value, value.voice, context));
 
 const sendChatActionSchema = z
   .object({

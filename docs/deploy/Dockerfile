@@ -149,7 +149,7 @@ COPY --chown=node:node --from=build /app/artifacts/api-server/dist/pino-*.mjs /a
 COPY --chown=node:node --from=build /app/artifacts/api-server/dist/thread-stream-worker.mjs /app/artifacts/api-server/dist/
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl ffmpeg poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 USER node

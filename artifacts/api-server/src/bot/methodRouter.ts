@@ -3,6 +3,7 @@ import { createHmac } from "node:crypto";
 import type { Request, RequestHandler } from "express";
 
 import { BotApiError, botSuccess, toBotApiErrorResponse } from "#bot/errors";
+import { isMediaUploadMethod, type BotMediaAdmission } from "#bot/mediaAdmission";
 import { createCommandHandlers } from "#bot/methods/commands";
 import { createIdentityHandlers } from "#bot/methods/identity";
 import {
@@ -106,6 +107,7 @@ export function createBotMethodRouter(input: {
   tokenRepository: BotTokenRepository;
 }): RequestHandler {
   return async (request, response) => {
+    const mediaAdmission = response.locals?.botGatewayMediaAdmission as BotMediaAdmission | undefined;
     let cleanupAbortListeners = (): void => undefined;
     let longPollSignal: AbortSignal | undefined;
     const requestId =
@@ -149,7 +151,7 @@ export function createBotMethodRouter(input: {
         longPollSignal = abortController.signal;
       }
       const bot =
-        method === "sendPhoto" && response.locals.botGatewayBot
+        isMediaUploadMethod(method) && response.locals.botGatewayBot
           ? (response.locals.botGatewayBot as AuthenticatedBot)
           : await input.tokenRepository.authenticateBotToken(
               exactAuthorizationHeader(request),
@@ -157,6 +159,8 @@ export function createBotMethodRouter(input: {
       const body = parseBotMethodInput(method, request.body);
       const context: BotMethodContext = { bot, requestId };
       if (longPollSignal) context.signal = longPollSignal;
+      if (mediaAdmission && (request.aborted || response.destroyed)) return;
+      mediaAdmission?.startHandler();
       const result = await handler(context, body);
       if (!response.destroyed && !response.writableEnded) {
         response.json(botSuccess(result));
@@ -166,6 +170,7 @@ export function createBotMethodRouter(input: {
       const failure = toBotApiErrorResponse(error, requestId);
       response.status(failure.status).json(failure.body);
     } finally {
+      mediaAdmission?.release();
       cleanupAbortListeners();
     }
   };

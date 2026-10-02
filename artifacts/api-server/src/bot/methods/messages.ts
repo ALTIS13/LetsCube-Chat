@@ -1,4 +1,6 @@
 import { BotApiError } from "#bot/errors";
+import { createHash, randomUUID } from "node:crypto";
+import { decodeInlineMedia, inspectInlineMedia, INLINE_MEDIA_EXTENSION, type InlineMediaMime, type MediaProbe } from "#bot/inlineMedia";
 import type {
   BotMethodFingerprint,
   BotMethodHandlers,
@@ -6,6 +8,7 @@ import type {
 import type {
   BotMessageCommand,
   BotMethodRepository,
+  AuthenticatedBot,
 } from "#bot/repository";
 import { MAX_INLINE_PHOTO_BYTES, type BotMethodInputMap } from "#bot/schemas";
 
@@ -114,19 +117,30 @@ async function sendMedia(
   method: MediaMethod,
   repository: BotMethodRepository,
   fingerprint: BotMethodFingerprint,
-  botId: string,
+  bot: AuthenticatedBot,
   input: BotMethodInputMap[MediaMethod],
+  probe?: MediaProbe,
 ): Promise<unknown> {
+  const botId = bot.botId;
   const media = input.media;
   const fileId = input.file_id;
-  const photo = "photo" in input ? input.photo : undefined;
+  const inlineFields = {
+    photo: "photo" in input ? input.photo : undefined,
+    document: "document" in input ? input.document : undefined,
+    video: "video" in input ? input.video : undefined,
+    voice: "voice" in input ? input.voice : undefined,
+  };
+  const field = { sendPhoto: "photo", sendDocument: "document", sendVideo: "video", sendVoice: "voice" } as const;
+  const inline = inlineFields[field[method]];
+  const photo = inlineFields.photo;
+  const inlineCount = Object.values(inlineFields).filter(value => value !== undefined).length;
   if (
     Number(media !== undefined) +
       Number(fileId !== undefined) +
-      Number(photo !== undefined) !==
+      inlineCount !==
       1 ||
-    (photo !== undefined && method !== "sendPhoto") ||
-    (photo !== undefined &&
+    (inlineCount > 0 && inline === undefined) ||
+    (inline !== undefined &&
       (input.topic_id !== undefined ||
         input.reply_to_message_id !== undefined ||
         input.reply_markup !== undefined))
@@ -136,9 +150,37 @@ async function sendMedia(
   if (media !== undefined && !MEDIA_MIME[method].has(media.mime_type)) {
     throw new BotApiError("validation_failed");
   }
-  const bytes = photo === undefined ? undefined : photoBytes(photo);
+  if (inline !== undefined && !MEDIA_MIME[method].has(inline.mime_type)) throw new BotApiError("validation_failed");
+  const bytes = inline === undefined ? undefined : photo !== undefined ? photoBytes(photo) : decodeInlineMedia(inline);
   const kind = MEDIA_KIND[method];
   const requestFingerprint = fingerprint(method, input);
+  if (inline !== undefined && bytes !== undefined) {
+    if (!/^[0-9a-f]{64}$/.test(requestFingerprint)) throw new BotApiError("internal_error");
+    const mime = inline.mime_type as InlineMediaMime;
+    const objectPath = `${input.chat_id.toLowerCase()}/bots/${botId.toLowerCase()}/${requestFingerprint}.${INLINE_MEDIA_EXTENSION[mime]}`;
+    const leaseId = randomUUID();
+    const reservation = await repository.reserveInlineMedia({
+      botId, tokenId: bot.tokenId, chatId: input.chat_id, kind,
+      idempotencyKey: input.idempotency_key, requestFingerprint, objectPath,
+      mimeType: mime, sizeBytes: bytes.length,
+      contentSha256: createHash("sha256").update(bytes).digest("hex"), leaseId,
+    });
+    if (reservation.duplicate) return reservation.result;
+    if (reservation.leaseId !== leaseId) throw new BotApiError("internal_error");
+    const metadata = photo ? {} : await inspectInlineMedia(bytes, mime,
+      "file_name" in inline ? inline.file_name : undefined, probe);
+    await repository.uploadInlineMedia({ botId, chatId: input.chat_id, objectPath, mimeType: mime, bytes });
+    const operation = await repository.commitInlineMedia({
+      botId, tokenId: bot.tokenId, idempotencyKey: input.idempotency_key,
+      requestFingerprint, leaseId,
+      payload: {
+        ...(input.caption ? { text: input.caption } : {}),
+        media_bucket: "chat-media", media_path: objectPath,
+        media_metadata: { mime_type: mime, size: bytes.length, size_bytes: bytes.length, kind, ...metadata },
+      },
+    });
+    return operation.result;
+  }
   const preflight = await repository.preflightMediaCommand({
     botId,
     chatId: input.chat_id,
@@ -148,29 +190,7 @@ async function sendMedia(
   });
   if (preflight.duplicate) return preflight.result;
 
-  let object = media;
-  if (photo !== undefined && bytes !== undefined) {
-    if (!/^[0-9a-f]{64}$/.test(requestFingerprint)) {
-      throw new BotApiError("internal_error");
-    }
-    // The keyed fingerprint makes this path retry-stable but not guessable.
-    const objectPath =
-      `${input.chat_id.toLowerCase()}/bots/${botId.toLowerCase()}/${requestFingerprint}.` +
-      PHOTO_EXTENSION[photo.mime_type];
-    await repository.uploadPhoto({
-      botId,
-      chatId: input.chat_id,
-      objectPath,
-      mimeType: photo.mime_type,
-      bytes,
-    });
-    object = {
-      bucket: "chat-media",
-      object_path: objectPath,
-      mime_type: photo.mime_type,
-      size_bytes: bytes.length,
-    };
-  }
+  const object = media;
 
   // A re-send introduces no object, so it takes no upload grant. Asking for one
   // would fail anyway: `bot_upload_authorize_internal` requires a path under
@@ -215,6 +235,7 @@ export function createMessageHandlers(
   repository: BotMethodRepository,
   fingerprint: BotMethodFingerprint,
   publishChatAction: BotChatActionPublisher,
+  probe?: MediaProbe,
 ): Pick<
   BotMethodHandlers,
   | "sendMessage"
@@ -244,13 +265,13 @@ export function createMessageHandlers(
     },
 
     sendPhoto: (context, input) =>
-      sendMedia("sendPhoto", repository, fingerprint, context.bot.botId, input),
+      sendMedia("sendPhoto", repository, fingerprint, context.bot, input, probe),
     sendVideo: (context, input) =>
-      sendMedia("sendVideo", repository, fingerprint, context.bot.botId, input),
+      sendMedia("sendVideo", repository, fingerprint, context.bot, input, probe),
     sendDocument: (context, input) =>
-      sendMedia("sendDocument", repository, fingerprint, context.bot.botId, input),
+      sendMedia("sendDocument", repository, fingerprint, context.bot, input, probe),
     sendVoice: (context, input) =>
-      sendMedia("sendVoice", repository, fingerprint, context.bot.botId, input),
+      sendMedia("sendVoice", repository, fingerprint, context.bot, input, probe),
 
     async sendChatAction(context, input) {
       const operation = await repository.executeMessageCommand({

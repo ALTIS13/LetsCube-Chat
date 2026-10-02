@@ -5,6 +5,7 @@ import type { Logger } from "pino";
 import pinoHttp from "pino-http";
 
 import { BotApiError, toBotApiErrorResponse } from "#bot/errors";
+import { acquireMediaAdmission, isMediaUploadMethod, type BotMediaAdmission } from "#bot/mediaAdmission";
 import {
   createBotMethodRouter,
   exactAuthorizationHeader,
@@ -81,27 +82,48 @@ export function createBotGatewayApp(input: {
     );
   }
   const standardJson = express.json({ limit: "256kb", strict: true });
-  // Six MiB of photo bytes expands to eight MiB of base64 plus JSON fields.
-  const photoJson = express.json({ limit: "9mb", strict: true });
+  // Six MiB of media bytes expands to eight MiB of base64 plus JSON fields.
+  const mediaJson = express.json({ limit: "9mb", strict: true });
   app.post(
     "/bot/v1/:method",
     async (request, response, next) => {
-      if (request.params.method !== "sendPhoto") return next();
+      if (!isMediaUploadMethod(request.params.method)) return next();
       try {
         response.locals.botGatewayBot =
           await input.tokenRepository.authenticateBotToken(
             exactAuthorizationHeader(request),
           );
+        if (request.aborted || response.destroyed) return;
+        const releasePermit = acquireMediaAdmission(response.locals.botGatewayBot.botId);
+        let handlerStarted = false;
+        const release = () => {
+          releasePermit();
+          request.removeListener("aborted", releaseBeforeHandler);
+          response.removeListener("close", releaseBeforeHandler);
+        };
+        const releaseBeforeHandler = () => {
+          if (!handlerStarted) release();
+        };
+        response.locals.botGatewayMediaAdmission = {
+          startHandler() { handlerStarted = true; },
+          release,
+        } satisfies BotMediaAdmission;
+        request.once("aborted", releaseBeforeHandler);
+        response.once("close", releaseBeforeHandler);
         next();
       } catch (error) {
+        response.locals.botGatewayMediaAdmission?.release();
         next(error);
       }
     },
     (request, response, next) =>
-      (request.params.method === "sendPhoto" ? photoJson : standardJson)(
+      (isMediaUploadMethod(request.params.method) ? mediaJson : standardJson)(
         request,
         response,
-        next,
+        (error) => {
+          if (error) response.locals.botGatewayMediaAdmission?.release();
+          next(error);
+        },
       ),
     createBotMethodRouter({
       handlers: input.handlers,

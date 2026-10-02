@@ -106,9 +106,9 @@ test("JPEG, PNG, WebP, and GIF signatures are accepted without uploading a compl
   ] as const;
   let preflights = 0;
   const repository = {
-    async preflightMediaCommand() {
+    async reserveInlineMedia() {
       preflights += 1;
-      return { result: { message_id: MESSAGE_ID }, duplicate: true };
+      return { result: { message_id: MESSAGE_ID }, duplicate: true, leaseId: null };
     },
     async uploadPhoto() {
       throw new Error("completed retry uploaded bytes");
@@ -129,7 +129,7 @@ test("JPEG, PNG, WebP, and GIF signatures are accepted without uploading a compl
 test("a forbidden or removed chat is rejected before service-role upload", async () => {
   let uploads = 0;
   const repository = {
-    async preflightMediaCommand() {
+    async reserveInlineMedia() {
       throw new BotApiError("forbidden");
     },
     async uploadPhoto() {
@@ -152,14 +152,14 @@ test("inline photo paths use canonical UUID casing expected by the database", as
   const upperBotId = "BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB";
   let uploadedPath: string | undefined;
   const repository = {
-    async preflightMediaCommand() {
-      return { result: null, duplicate: false };
+    async reserveInlineMedia(input: { leaseId: string }) {
+      return { result: null, duplicate: false, leaseId: input.leaseId };
     },
-    async uploadPhoto(input: { objectPath: string }) {
+    async uploadInlineMedia(input: { objectPath: string }) {
       uploadedPath = input.objectPath;
     },
     async authorizeMedia() {},
-    async executeMessageCommand() {
+    async commitInlineMedia() {
       return { result: { message_id: MESSAGE_ID }, duplicate: false };
     },
   } as unknown as BotMethodRepository;
@@ -181,21 +181,22 @@ test("inline photo paths use canonical UUID casing expected by the database", as
   );
 });
 
-test("inline photo preflights, uploads into its chat, grants, then sends", async () => {
+test("inline photo reserves, uploads into its chat, then commits grant and message", async () => {
   const events: string[] = [];
   const repository = {
-    async preflightMediaCommand(input: Record<string, unknown>) {
-      events.push("preflight");
-      assert.deepEqual(input, {
-        botId: BOT_ID,
-        chatId: CHAT_ID,
-        kind: "image",
-        idempotencyKey: "photo-inline-0001",
-        requestFingerprint: "f".repeat(64),
-      });
-      return { result: null, duplicate: false };
+    async reserveInlineMedia(input: Record<string, unknown>) {
+      events.push("reserve");
+      assert.equal(input.botId, BOT_ID);
+      assert.equal(input.tokenId, context.bot.tokenId);
+      assert.equal(input.chatId, CHAT_ID);
+      assert.equal(input.kind, "image");
+      assert.equal(input.idempotencyKey, "photo-inline-0001");
+      assert.equal(input.requestFingerprint, "f".repeat(64));
+      assert.equal(input.objectPath, OBJECT_PATH);
+      assert.equal(input.sizeBytes, 68);
+      return { result: null, duplicate: false, leaseId: input.leaseId };
     },
-    async uploadPhoto(input: Record<string, unknown>) {
+    async uploadInlineMedia(input: Record<string, unknown>) {
       events.push("upload");
       assert.equal(input.botId, BOT_ID);
       assert.equal(input.chatId, CHAT_ID);
@@ -203,36 +204,23 @@ test("inline photo preflights, uploads into its chat, grants, then sends", async
       assert.equal(input.mimeType, "image/png");
       assert.deepEqual(input.bytes, Buffer.from(PHOTO_BASE64, "base64"));
     },
-    async authorizeMedia(input: Record<string, unknown>) {
-      events.push("authorize");
-      assert.deepEqual(input, {
-        botId: BOT_ID,
-        chatId: CHAT_ID,
-        bucket: "chat-media",
-        objectPath: OBJECT_PATH,
-        mimeType: "image/png",
-        sizeBytes: 68,
-        expiresInSeconds: 60,
-      });
-    },
-    async executeMessageCommand(input: Record<string, unknown>) {
-      events.push("execute");
-      assert.deepEqual(input, {
-        botId: BOT_ID,
-        chatId: CHAT_ID,
-        kind: "image",
-        payload: {
+    async authorizeMedia() { throw new Error("non-atomic grant"); },
+    async commitInlineMedia(input: Record<string, unknown>) {
+      events.push("commit");
+      assert.equal(input.botId, BOT_ID);
+      assert.equal(input.tokenId, context.bot.tokenId);
+      assert.equal(input.idempotencyKey, "photo-inline-0001");
+      assert.equal(input.requestFingerprint, "f".repeat(64));
+      assert.deepEqual(input.payload, {
           media_bucket: "chat-media",
           media_path: OBJECT_PATH,
           media_metadata: {
             mime_type: "image/png",
             size: 68,
+            size_bytes: 68,
             kind: "image",
           },
           text: "New photo",
-        },
-        idempotencyKey: "photo-inline-0001",
-        requestFingerprint: "f".repeat(64),
       });
       return { result: { message_id: MESSAGE_ID }, duplicate: false };
     },
@@ -246,7 +234,7 @@ test("inline photo preflights, uploads into its chat, grants, then sends", async
   });
 
   assert.deepEqual(await handlers.sendPhoto(context, input), { message_id: MESSAGE_ID });
-  assert.deepEqual(events, ["preflight", "upload", "authorize", "execute"]);
+  assert.deepEqual(events, ["reserve", "upload", "commit"]);
 });
 
 test("service-role storage upload is insert-only and bound to the bot's chat path", async () => {
@@ -312,6 +300,11 @@ test("only an exact Storage duplicate permits an idempotent upload retry", async
         return {
           upload() {
             return Promise.resolve({ data: null, error: uploadError });
+          },
+          download() {
+            return { asStream: async () => ({ data: new ReadableStream({ start(controller) {
+              controller.enqueue(bytes); controller.close();
+            } }), error: null }) };
           },
         };
       },
