@@ -2,7 +2,21 @@
 
 Status: active production-hardening tracker, updated 2026-10-03.
 
-**Current continuation, 2026-10-03:** logical identity/bindings stage 1 is applied
+**Current continuation, 2026-10-03:** full-set private message resolver is applied
+once/independently verified after backup `20261003-015239`. Final **63/63**,
+four same-image PG17 semantic groups, six actual client denials, four catalog
+mutants, full restore/rollback and exact evidence manifests pass. No open P1/P2;
+workers closed and owned copy removed; backups retained. Canonical, URL and
+parent-bucket preview observations are independent; malformed/unsupported/
+unregistered/conflicting pointers remain holds. No old rows/policies/authority
+or consumer code changes. Evidence:
+[message reference set](operations/2026-10-03-bot-message-media-references.md).
+Next: table-level AFTER STATEMENT admission with actual concurrency and
+authorization proof. Whole-chat-media hold and Android/native release hold remain.
+Do not repeat any accepted SQL/preflight. Publishing still requires exact healthy
+source-image/public-container parity, never webhook-only acceptance.
+
+**Prior accepted stage 1, 2026-10-03:** logical identity/bindings is applied
 once and independently verified at **01:07 MSK**, after backup `20261003-010706`.
 Final focused **42/42**, 12 operator cases, same-image PG17 full-restore proof
 (7 groups, 15 actual role/table denials), old-snapshot races and actual catalog
@@ -13,8 +27,8 @@ Evidence: [logical identity](operations/2026-10-03-bot-media-logical-identity.md
 backups retained, bounded workers closed. Source `0f2be27a` is on candidate/main;
 sole healthy exact-revision web and public/container current/retained JS/SW parity
 pass. Gateway/worker stay healthy `856e03e4` without watched-path delta; docs-only
-closeout can advance web tag without application-byte changes. Next: full-set
-message resolver. No physical-generation claim or native release; do not
+closeout can advance web tag without application-byte changes. The full-set
+resolver above supersedes its earlier next action. No physical-generation claim or native release; do not
 repeat identity or accepted D-103 SQL.
 
 **Accepted hold, 2026-10-02:** whole-`chat-media` D-103 forward claim hold
@@ -32,7 +46,7 @@ Evidence: [purge hold](operations/2026-10-02-bot-media-purge-hold.md).
 The [foundation contract](operations/2026-10-03-bot-media-admission-foundation.md)
 records the source-reviewed order: logical identity/bindings, full message
 resolver, then table-level admission with actual lock/authorization interleavings.
-Identity is now applied/verified; resolver/admission remain open.
+Identity and message resolver are now applied/verified; admission remains open.
 Logical UUID is not physical Storage generation. Android hold/A063 exclusion remain.
 
 **Accepted earlier advisory, 2026-10-02:** encoded reference advisory v2 is accepted:

@@ -23,23 +23,23 @@ Read in this order:
    measurement. Search it before filing anything.
 
 **Active resume, 2026-10-03 (Codex implementation).** Owner: this Codex chat;
-branch `codex/bot-inline-media-20261002`, implementation `0f2be27a`. Stage: immutable logical
-identity/bindings **applied once and independently verified at 01:07 MSK**, after
-backup `20261003-010706`. Evidence:
-[logical identity](operations/2026-10-03-bot-media-logical-identity.md). Final **42/42**
-and 12 operator cases pass without skips; full same-image PG17 restore passed
-7 groups / 15 role-table denials and actual old-snapshot races/catalog mutant.
-Independent source/test/operator review has no P1/P2. Original rows, policies,
-access and function fingerprints are unchanged; 28 identities / 7 attempt bindings,
-28 complete receipts / 47,240 bytes / zero reserved. Both owned restore copies
-were removed; backups retained; bounded workers closed. Source is on candidate/main;
-sole healthy exact-revision web, public/container JS/SW and retained-file parity
-pass. Gateway/worker remain healthy `856e03e4` with no watched-path delta;
-docs-only closeout may advance web tag without changing accepted bytes.
-Do not reapply SQL. Next: full-set message resolver. Whole-chat-media
-purge hold remains; physical
-generation/admission/seal/delete/refund and native release are not part of this
-slice. Preserve foreign `bot-platform` dirty deletion. Do not repeat completed SQL.
+branch `codex/bot-inline-media-20261002`, baseline `41b27c19`. Stage:
+full-set private message reference resolver **applied once/independently verified**,
+after fresh backup `20261003-015239`.
+Evidence/contract: [message reference set](operations/2026-10-03-bot-message-media-references.md).
+Final **63/63** with exact executed/reviewed/current manifests, no skips; PG17 full
+restore/rollback, four semantic groups, six actual client denials and four catalog
+mutants pass. No open P1/P2. Both workers closed; exact owned copy removed,
+backups retained. Next: AFTER STATEMENT admission with actual lock/authorization
+interleaving proof. Do not repeat resolver SQL or accepted preflight. Stage 1
+remains applied once/verified at 01:07 MSK:
+[logical identity](operations/2026-10-03-bot-media-logical-identity.md), 28 identities /
+7 attempt bindings, 28 complete receipts / 47,240 bytes / zero reserved. Do not
+reapply its SQL. Whole-chat-media purge hold remains; physical generation,
+admission/seal/delete/refund and native release are outside this slice. Publication
+requires exact healthy source-image/public-container parity; no consumer code or
+backend watched-path delta is involved. Preserve
+foreign `bot-platform` dirty deletion. Android build/install/publication stays held.
 
 **Prior accepted hold, 2026-10-03.** Owner: this Codex chat;
 branch `codex/bot-inline-media-20261002`. Stage: D-103 whole-`chat-media` forward

@@ -29,8 +29,11 @@ applied/verified. Do not repeat its SQL, canary, restore or closed regressions.
 Stage 1 has [applied/verified identity and immutable bindings](2026-10-03-bot-media-logical-identity.md):
 final **42/42**, 12 operator cases, same-image PG17 full restore and independent
 source/test/operator approval; one guarded production application at 01:07 MSK
-after backup `20261003-010706`. Stages 2 and 3 are **not implemented yet**. Do not
-claim the whole foundation from a new UUID column or repeat stage 1 SQL.
+after backup `20261003-010706`. Stage 2 is now
+[applied/verified](2026-10-03-bot-message-media-references.md): final 63/63,
+same-image PG17 restore/rollback and independent review, followed by one guarded
+application after backup `20261003-015239`. Stage 3 remains **not implemented**.
+Do not claim the whole foundation from identities or a resolver, or repeat either SQL.
 Registry/backfill/initial observations require an atomic bootstrap without a
 writer window. Backfill never proves absent references or provider terminality.
 
