@@ -25,6 +25,13 @@ const context = {
   bot: { botId: BOT_ID, tokenId: "44444444-4444-4444-8444-444444444444" },
   requestId: "photo-test-request",
 } as BotMethodContext;
+const uploadIdentity = { tokenId: context.bot.tokenId, idempotencyKey: "photo-intent-0001",
+  requestFingerprint: "f".repeat(64), leaseId: "55555555-5555-4555-8555-555555555555" };
+async function intentRpc(name: string, args: Record<string, unknown>) {
+  assert.ok(name === "bot_media_upload_begin_internal" || name === "bot_media_upload_finish_internal");
+  return { data: { attempt_id: args.p_lease_id ?? args.p_attempt_id,
+    state: name === "bot_media_upload_begin_internal" ? "pending" : args.p_outcome }, error: null };
+}
 
 test("sendPhoto accepts bounded inline image bytes without a storage path", () => {
   const input = parseBotMethodInput("sendPhoto", {
@@ -241,6 +248,7 @@ test("service-role storage upload is insert-only and bound to the bot's chat pat
   const bytes = Buffer.from(PHOTO_BASE64, "base64");
   const calls: string[] = [];
   const client = {
+    rpc: intentRpc,
     storage: {
       from(bucket: string) {
         calls.push("bucket");
@@ -263,6 +271,7 @@ test("service-role storage upload is insert-only and bound to the bot's chat pat
   const repository = createBotMethodRepository(client);
 
   await repository.uploadPhoto({
+    ...uploadIdentity,
     botId: BOT_ID,
     chatId: CHAT_ID,
     objectPath: OBJECT_PATH,
@@ -280,6 +289,7 @@ test("storage refuses a path outside the authorized chat before any upload call"
 
   await assert.rejects(
     () => repository.uploadPhoto({
+      ...uploadIdentity,
       botId: BOT_ID,
       chatId: MESSAGE_ID,
       objectPath: OBJECT_PATH,
@@ -295,6 +305,7 @@ test("only an exact Storage duplicate permits an idempotent upload retry", async
   const bytes = Buffer.from(PHOTO_BASE64, "base64");
   let uploadError: unknown = { status: 409, statusCode: "ResourceAlreadyExists" };
   const repository = createBotMethodRepository({
+    rpc: intentRpc,
     storage: {
       from() {
         return {
@@ -311,6 +322,7 @@ test("only an exact Storage duplicate permits an idempotent upload retry", async
     },
   } as unknown as BotServiceClient);
   const input = {
+    ...uploadIdentity,
     botId: BOT_ID,
     chatId: CHAT_ID,
     objectPath: OBJECT_PATH,

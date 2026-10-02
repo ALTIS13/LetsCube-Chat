@@ -169,7 +169,8 @@ async function sendMedia(
     if (reservation.leaseId !== leaseId) throw new BotApiError("internal_error");
     const metadata = photo ? {} : await inspectInlineMedia(bytes, mime,
       "file_name" in inline ? inline.file_name : undefined, probe);
-    await repository.uploadInlineMedia({ botId, chatId: input.chat_id, objectPath, mimeType: mime, bytes });
+    await repository.uploadInlineMedia({ botId, tokenId: bot.tokenId, chatId: input.chat_id,
+      idempotencyKey: input.idempotency_key, requestFingerprint, leaseId, objectPath, mimeType: mime, bytes });
     const operation = await repository.commitInlineMedia({
       botId, tokenId: bot.tokenId, idempotencyKey: input.idempotency_key,
       requestFingerprint, leaseId,

@@ -157,12 +157,14 @@ export interface BotMethodRepository {
   uploadPhoto(input: {
     botId: string;
     chatId: string;
+    tokenId: string; idempotencyKey: string; requestFingerprint: string; leaseId: string;
     objectPath: string;
     mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
     bytes: Buffer;
   }): Promise<void>;
   uploadInlineMedia(input: {
     botId: string; chatId: string; objectPath: string;
+    tokenId: string; idempotencyKey: string; requestFingerprint: string; leaseId: string;
     mimeType: InlineMediaMime; bytes: Buffer;
   }): Promise<void>;
   reserveInlineMedia(input: {
@@ -359,7 +361,7 @@ export async function authenticateBotToken(
 }
 
 function databaseError(error: unknown, method: string): BotApiError {
-  if (method.startsWith("bot_media_ingest_") && error && typeof error === "object") {
+  if ((method.startsWith("bot_media_ingest_") || method.startsWith("bot_media_upload_")) && error && typeof error === "object") {
     const row = error as Record<string, unknown>;
     if (row.code === "55000" && row.message === "bot_media_ingest_busy") {
       const retry = typeof row.details === "string" && /^\d{1,3}$/.test(row.details) ? Number(row.details) : 120;
@@ -367,6 +369,7 @@ function databaseError(error: unknown, method: string): BotApiError {
     }
     if (row.code === "55000" && row.message === "bot_media_ingest_lease_expired") return new BotApiError("rate_limited", 1);
     if (row.code === "54000" && row.message === "bot_media_ingest_quota_exceeded") return new BotApiError("quota_exceeded");
+    if (row.code === "54000" && row.message === "bot_media_upload_attempts_exceeded") return new BotApiError("quota_exceeded");
     if (row.code === "42501" && row.message === "bot_media_ingest_token_revoked") return new BotApiError("unauthorized");
   }
   const code =
@@ -563,15 +566,31 @@ function fileMetadata(value: unknown): BotFileMetadata {
 export function createBotMethodRepository(
   client: BotServiceClient = createBotServiceClient(),
 ): BotMethodRepository {
-  const uploadInlineMedia: BotMethodRepository["uploadInlineMedia"] = async (input) => {
-    const suffix = INLINE_MEDIA_EXTENSION[input.mimeType];
-    const prefix = `${input.chatId.toLowerCase()}/bots/${input.botId.toLowerCase()}/`;
-    if (!UUID_RE.test(input.botId) || !UUID_RE.test(input.chatId) || !suffix ||
-        !input.objectPath.startsWith(prefix) ||
-        !new RegExp(`^[0-9a-f]{64}\\.${suffix}$`).test(input.objectPath.slice(prefix.length)) ||
-        !Buffer.isBuffer(input.bytes) || input.bytes.length < 1 || input.bytes.length > MAX_INLINE_PHOTO_BYTES) {
-      throw internalError();
-    }
+  type UploadInput = Parameters<BotMethodRepository["uploadInlineMedia"]>[0];
+  const checkUploadAttempt = (value: unknown, attemptId: string, state: string) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw internalError();
+    const row = value as Record<string, unknown>;
+    if (typeof row.attempt_id !== "string" || row.attempt_id.toLowerCase() !== attemptId.toLowerCase() ||
+        row.state !== state) throw internalError();
+  };
+  const beginUploadAttempt = async (input: UploadInput) => {
+    const value = await callRpc(client, "bot_media_upload_begin_internal", {
+      p_bot_id: input.botId, p_token_id: input.tokenId, p_chat_id: input.chatId,
+      p_idempotency_key: input.idempotencyKey, p_request_fingerprint: input.requestFingerprint,
+      p_lease_id: input.leaseId, p_object_path: input.objectPath, p_content_type: input.mimeType,
+      p_byte_size: input.bytes.length,
+      p_content_sha256: createHash("sha256").update(input.bytes).digest("hex"),
+    });
+    checkUploadAttempt(value, input.leaseId, "pending");
+  };
+  const finishUploadAttempt = async (input: UploadInput, outcome: "acknowledged" | "unknown") => {
+    const value = await callRpc(client, "bot_media_upload_finish_internal", {
+      p_bot_id: input.botId, p_idempotency_key: input.idempotencyKey,
+      p_attempt_id: input.leaseId, p_outcome: outcome,
+    });
+    checkUploadAttempt(value, input.leaseId, outcome);
+  };
+  const uploadBytes = async (input: UploadInput) => {
     let response: StorageUploadResult;
     try {
       response = await client.storage.from("chat-media").upload(input.objectPath, input.bytes,
@@ -610,6 +629,35 @@ export function createBotMethodRepository(
       await reader?.cancel().catch(() => {});
       reader?.releaseLock();
     }
+  };
+  const uploadInlineMedia: BotMethodRepository["uploadInlineMedia"] = async (input) => {
+    const suffix = INLINE_MEDIA_EXTENSION[input.mimeType];
+    const prefix = `${input.chatId.toLowerCase()}/bots/${input.botId.toLowerCase()}/`;
+    if (!UUID_RE.test(input.botId) || !UUID_RE.test(input.chatId) || !suffix ||
+        !UUID_RE.test(input.tokenId) || !UUID_RE.test(input.leaseId) ||
+        typeof input.idempotencyKey !== "string" ||
+        !/^[A-Za-z0-9._:-]{8,128}$/.test(input.idempotencyKey) ||
+        !TOKEN_HASH_RE.test(input.requestFingerprint) ||
+        input.objectPath !== prefix + input.requestFingerprint + "." + suffix ||
+        !input.objectPath.startsWith(prefix) ||
+        !new RegExp(`^[0-9a-f]{64}\\.${suffix}$`).test(input.objectPath.slice(prefix.length)) ||
+        !Buffer.isBuffer(input.bytes) || input.bytes.length < 1 || input.bytes.length > MAX_INLINE_PHOTO_BYTES) {
+      throw internalError();
+    }
+    // Preserve the bytes admitted by SQL even across an asynchronous RPC wait.
+    input = { ...input, bytes: Buffer.from(input.bytes) };
+    await beginUploadAttempt(input);
+    try {
+      await uploadBytes(input);
+    } catch (error) {
+      // A failed request is not proof that Storage stopped processing PUT.
+      // If this write also fails, the durable pending row remains a hold.
+      await finishUploadAttempt(input, "unknown").catch(() => {});
+      throw error instanceof BotApiError ? error : internalError();
+    }
+    // Lost acknowledgement never permits message commit; do not replace
+    // an observed successful outcome with unknown if its RPC reply is lost.
+    await finishUploadAttempt(input, "acknowledged");
   };
   return {
     async getMe(botId) {

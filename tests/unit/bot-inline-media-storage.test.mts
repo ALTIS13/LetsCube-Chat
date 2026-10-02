@@ -5,14 +5,21 @@ import { toBotApiErrorResponse } from "../../artifacts/api-server/src/bot/errors
 
 const botId = "33333333-3333-4333-8333-333333333333", chatId = "11111111-1111-4111-8111-111111111111";
 const input = { botId, chatId, objectPath: `${chatId}/bots/${botId}/${"a".repeat(64)}.pdf`,
+  tokenId: "44444444-4444-4444-8444-444444444444", leaseId: "55555555-5555-4555-8555-555555555555",
+  idempotencyKey: "storage-intent-0001", requestFingerprint: "a".repeat(64),
   mimeType: "application/pdf" as const, bytes: Buffer.from("synthetic equal bytes") };
+async function intentRpc(name: string, args: Record<string, unknown>) {
+  assert.ok(name === "bot_media_upload_begin_internal" || name === "bot_media_upload_finish_internal");
+  return { data: { attempt_id: args.p_lease_id ?? args.p_attempt_id,
+    state: name === "bot_media_upload_begin_internal" ? "pending" : args.p_outcome }, error: null };
+}
 
 for (const mode of ["equal", "changed", "short", "oversize", "broken"] as const) {
   test(`Storage 409 streams and verifies bytes (${mode}), without deletion`, async () => {
     let reads = 0, cancelled = false, downloadSignal: AbortSignal | undefined;
     const expected = input.bytes;
     const body = mode === "changed" ? Buffer.from("synthetic other bytes") : mode === "short" ? expected.subarray(0, -1) : mode === "oversize" ? Buffer.alloc(expected.length + 1) : expected;
-    const repository = createBotMethodRepository({ storage: { from(bucket: string) {
+    const repository = createBotMethodRepository({ rpc: intentRpc, storage: { from(bucket: string) {
       assert.equal(bucket, "chat-media");
       return {
         async upload(path: string, bytes: Buffer, options: unknown) {
@@ -43,7 +50,7 @@ for (const mode of ["equal", "changed", "short", "oversize", "broken"] as const)
 }
 
 test("non-duplicate storage errors never download and never expose provider detail", async () => {
-  const repository = createBotMethodRepository({ storage: { from() { return {
+  const repository = createBotMethodRepository({ rpc: intentRpc, storage: { from() { return {
     upload: async () => ({ data: null, error: { status: 403, message: "private provider detail" } }),
     download() { throw new Error("not a duplicate"); },
   }; } } } as unknown as BotServiceClient);
