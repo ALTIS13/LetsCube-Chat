@@ -24933,7 +24933,8 @@ and 200/500 (concurrent membership); the loaded fixture-only retention/binding/
 VOLATILE repair is green. STABLE mutant produces 405/25006 and exact fault
 restoration passes. Review gaps corrected; 46-source manifest, copied-row
 multiplicities and startup/missing-relation failure controls pass. Outbox drops
-actual 500/55P03; app/gateway busy recovery remains open, not a production fix.
+actual 500/55P03 at that source; the later caller extension below supersedes
+that retry gap, not the production authority boundary.
 [HTTP evidence and honest limits](operations/2026-10-03-bot-media-http-boundaries.md).
 
 **Next / acceptance:** repair the loaded writer in disposable fixtures first,
@@ -24947,9 +24948,14 @@ final source hashes match. PostgREST 14.12 RC/commit is configuration capture on
 not HTTP acceptance. Review findings fixed/rerun, both workers closed, exact owned
 copy removed. [Combined evidence](operations/2026-10-03-bot-media-combined-coverage.md).
 Isolated HTTP commit/rollback is covered by the later HTTP extension. Actual
-app/gateway busy retry policy and production gates remain open. No live exploit,
+app/Gateway busy recovery is now implemented on the candidate: 57/57 focused,
+7/7 compiled mutation, 27/27 browser/IndexedDB and final 9/9 exact PostgREST/PG17
+caller cases pass; final 71-source freeze and copied-row/rollback/cleanup proof
+match. Review findings corrected and rerun. Runtime authority, inline-ingest,
+external I/O and production gates remain open. No live exploit,
 migration or provider request
 was performed. [Evidence and frozen inputs](operations/2026-10-03-bot-media-authority-waits.md).
+[Caller extension and limits](operations/2026-10-03-bot-media-busy-recovery.md).
 
 ## D-337 `[ ]` A forward RPC can commit after source or destination access is revoked during its epoch wait
 
@@ -25003,7 +25009,11 @@ refusal pass under the exact isolated PostgREST 14.12 runtime, within the 18/18
 gate. No extra committed effects on refusal or duplicate. Gateway early-return
 repair and caller busy gaps are detailed in
 [HTTP evidence](operations/2026-10-03-bot-media-http-boundaries.md).
-Actual app/gateway busy retry policy, remaining lifecycle,
+Actual app/Gateway retry extension now passes focused/mutation/browser and
+exact full-PG17 HTTP gates, with preserved actor/identity and fresh denial. It is
+source-only; retained-authority/coverage/preflight SQL remains test-only.
+[Caller evidence](operations/2026-10-03-bot-media-busy-recovery.md).
+Inline-ingest/external I/O, remaining lifecycle,
 attribution/preferences and production safety gates remain.
 No live account, migration, message or Storage/provider operation was used.
 [Evidence and current limits](operations/2026-10-03-bot-media-authority-waits.md).

@@ -168,6 +168,9 @@ export function createBotMethodRouter(input: {
     } catch (error) {
       if (response.destroyed || response.writableEnded) return;
       const failure = toBotApiErrorResponse(error, requestId);
+      if (failure.body.error.code === "service_unavailable" && failure.body.error.retry_after !== undefined) {
+        response.setHeader("Retry-After", failure.body.error.retry_after.toString());
+      }
       response.status(failure.status).json(failure.body);
     } finally {
       mediaAdmission?.release();

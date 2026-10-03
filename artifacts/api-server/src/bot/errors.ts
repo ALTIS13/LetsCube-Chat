@@ -12,6 +12,7 @@ export const BOT_API_ERROR_STATUS = {
   rate_limited: 429,
   quota_exceeded: 429,
   internal_error: 500,
+  service_unavailable: 503,
 } as const;
 
 export type BotApiErrorCode = keyof typeof BOT_API_ERROR_STATUS;
@@ -28,6 +29,7 @@ const BOT_API_ERROR_MESSAGE: Record<BotApiErrorCode, string> = {
   rate_limited: "Too many requests",
   quota_exceeded: "Media storage quota exceeded",
   internal_error: "Internal server error",
+  service_unavailable: "Service unavailable",
 };
 
 export type BotApiSuccess<T> = {
@@ -56,7 +58,7 @@ export class BotApiError extends Error {
     this.code = code;
     this.status = BOT_API_ERROR_STATUS[code];
     if (
-      code === "rate_limited" &&
+      (code === "rate_limited" || code === "service_unavailable") &&
       Number.isSafeInteger(retryAfter) &&
       (retryAfter ?? 0) > 0 &&
       (retryAfter ?? 0) <= 86_400

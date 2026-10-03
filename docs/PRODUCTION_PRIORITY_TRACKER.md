@@ -2,20 +2,22 @@
 
 Status: active production-hardening tracker, updated 2026-10-03.
 
-**Current continuation, 2026-10-03:** exact isolated PostgREST 14.12/full PG17.6
-HTTP gate **18/18**; two old-preflight RED cases, repaired fixture-only gateway
-4/4. STABLE mutation exposes 405/25006 and exact recovery passes. Final 46-source
-pre-import/current manifest, copied-row multiplicities, baseline relation-loss
-and startup-fault cleanup pass after one review's five P2 gaps were corrected.
-Workers/sessions closed; all three exact owned HTTP copies removed, backups retained.
+**Current continuation, 2026-10-03:** source-only actual-app/Gateway busy recovery
+implemented: exact 500/55P03 retains queued identity/payload; message-only Gateway
+503/retry_after/Retry-After 2, no internal retry/PUT. Focused **57/57**, compiled
+mutation **7/7** (six mutants), browser/real IndexedDB **27/27**, final exact
+isolated PostgREST 14.12/full PG17.6 actual caller HTTP **9/9** pass. Final 71-source
+manifest, bootstrap rollback and unchanged copied rows/relations pass. Review's
+two P2 findings corrected, affected gates rerun; no final findings. Both owned
+copies removed/absence checked; production runtime unchanged, backups retained.
 **D-336/D-337, item 78 remain open for runtime**, not installed fixes.
-Actual outbox 500/55P03 removes the queue entry, and gateway has no specific busy
-contract. Next: narrow busy recovery through actual app send/ACK and gateway
-envelope, then inline-ingest/remaining lifecycle acceptance. Prior combined
+Caller retry is implemented on this candidate, not deployed. Next: actual
+inline-ingest caller/HTTP, external I/O and remaining lifecycle acceptance. Prior
+HTTP 18/18 and its old-preflight evidence, combined
 41/41, 5/9 mutants, 23/23 controls and prior authority evidence stay separate,
 not repeated or relabelled. No production SQL write/main deployment, admission/
 reclaim authority, device operation or native publication. Evidence:
-[HTTP results and remaining gates](operations/2026-10-03-bot-media-http-boundaries.md),
+[caller results and remaining gates](operations/2026-10-03-bot-media-busy-recovery.md),
 [combined rehearsal](operations/2026-10-03-bot-media-combined-coverage.md).
 Whole-chat-media/native holds remain; never replay the
 accepted SQL below. A concurrent authorised tester intake adds items 76/77 and
@@ -3755,13 +3757,22 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     drops the persisted entry: automatic busy recovery is NOT complete. Actual
     app send/ACK, IndexedDB, inline ingest and lifecycle remain separate gates.
     [HTTP evidence and next slice](operations/2026-10-03-bot-media-http-boundaries.md).
+    **Caller recovery progress:** actual private app send/ACK retains exact
+    500/55P03 entries and retries with the original actor/payload/client ID;
+    message-only Gateway returns sanitized 503 and two-second retry hints,
+    without automatic retry/PUT. Final 57/57 focused, 7/7 compiled mutation,
+    27/27 browser/IndexedDB and 9/9 exact PostgREST/PG17 actual caller cases pass.
+    Review's allowlist/race findings corrected; final 71-source manifest,
+    rollback/copied rows and exact-owned cleanup/production parity pass.
+    Source-only, not runtime authority installation or all-green release.
+    [Caller evidence](operations/2026-10-03-bot-media-busy-recovery.md).
     Repair only the loaded fixture bodies first. Preserve exact actor/access,
     idempotent retries, grants/receipts/accounting, ready variants and attribution;
     require unchanged literal refusal oracles and no current committed effects.
     Prove actual source/destination locks and all mutators' order, including
     unchanged ingest prefix; a fresh SELECT before another wait is insufficient.
-    Isolated HTTP commit/rollback is now covered; actual app/gateway busy retry
-    policy and remaining lifecycle acceptance stay open. No runtime
+    Isolated HTTP commit/rollback and actual app/gateway busy retry are covered
+    on the candidate; inline-ingest/external I/O and lifecycle remain open. No runtime
     migration or reclamation follows from this test-only checkpoint.
     [Measured waits, hashes and next action](operations/2026-10-03-bot-media-authority-waits.md).
 

@@ -71,15 +71,17 @@ const UNANSWERED_WORDS = ["failed to fetch", "networkerror", "network error", "l
  *
  * `status` is the HTTP status the client saw: 0 when no response came back,
  * which is what PostgREST's client reports for a fetch that failed. A gateway's
- * 502/503/504 is the network's too: the database never saw the request.
+ * 502/503/504 is the network's too. PostgREST reports a rolled-back lock
+ * refusal (55P03) as 500: retry that exact SQLSTATE, not arbitrary server errors.
  */
 export function classifySendFailure(input: { status?: number | null; error?: unknown; timedOut?: boolean }): SendFailure {
   if (input.timedOut) return "unanswered";
   const status = input.status ?? null;
   if (status === 0) return "unanswered";
   if (status === 502 || status === 503 || status === 504) return "unanswered";
-  if (status !== null && status >= 400) return "refused";
   const error = input.error;
+  if (status === 500 && error && typeof error === "object" && "code" in error && error.code === "55P03") return "unanswered";
+  if (status !== null && status >= 400) return "refused";
   if (error instanceof TypeError) return "unanswered";
   const message =
     typeof error === "string"

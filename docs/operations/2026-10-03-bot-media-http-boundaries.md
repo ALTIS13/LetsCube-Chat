@@ -5,6 +5,10 @@ Owner: this Codex chat. Starting source `6b818392`, branch
 [combined coverage](2026-10-03-bot-media-combined-coverage.md), not installation
 of the retained-authority or coverage prototypes.
 
+**Successor:** [actual-app/Gateway busy recovery](2026-10-03-bot-media-busy-recovery.md)
+implements the caller policy on the candidate branch. The gaps/results below
+are the historical `5db656bd` characterization, not its updated source state.
+
 ## Boundary
 
 A fresh verified backup `20261003-171555` was restored, including roles and the

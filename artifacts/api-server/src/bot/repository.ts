@@ -360,7 +360,26 @@ export async function authenticateBotToken(
   return repository.authenticateBotToken(header);
 }
 
-function databaseError(error: unknown, method: string): BotApiError {
+function idempotentMessageWrite(method: string, args: Record<string, unknown>): boolean {
+  if (typeof args.p_idempotency_key !== "string" ||
+      !/^[A-Za-z0-9._:-]{8,128}$/.test(args.p_idempotency_key) ||
+      typeof args.p_request_fingerprint !== "string" ||
+      !TOKEN_HASH_RE.test(args.p_request_fingerprint)) return false;
+  // Exact RPCs with SQL replay receipts; never infer safety from a bot_* prefix.
+  switch (method) {
+    case "bot_message_command_internal":
+      return ["sendMessage", "sendPhoto", "sendVideo", "sendDocument", "sendVoice",
+        "editMessageText", "deleteMessage"].includes(args.p_method as string);
+    case "bot_media_command_preflight_internal":
+      return ["sendPhoto", "sendVideo", "sendDocument", "sendVoice"].includes(args.p_method as string);
+    case "bot_media_ingest_commit_internal":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function databaseError(error: unknown, method: string, args: Record<string, unknown>): BotApiError {
   if ((method.startsWith("bot_media_ingest_") || method.startsWith("bot_media_upload_")) && error && typeof error === "object") {
     const row = error as Record<string, unknown>;
     if (row.code === "55000" && row.message === "bot_media_ingest_busy") {
@@ -377,6 +396,10 @@ function databaseError(error: unknown, method: string): BotApiError {
       ? (error as { code?: unknown }).code
       : undefined;
   switch (code) {
+    case "55P03":
+      return idempotentMessageWrite(method, args)
+        ? new BotApiError("service_unavailable", 2)
+        : internalError();
     case "22023":
     case "22P02":
       return new BotApiError("validation_failed");
@@ -407,7 +430,7 @@ async function callRpc(
   } catch {
     throw internalError();
   }
-  if (response.error) throw databaseError(response.error, name);
+  if (response.error) throw databaseError(response.error, name, args);
   return response.data;
 }
 

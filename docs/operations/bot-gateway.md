@@ -328,6 +328,18 @@ the original `idempotency_key`; a changed body with the same key is a conflict.
 Rate-limit responses include `retry_after`, which callers must honor without
 creating a retry burst.
 
+### Candidate Message Busy Contract, 2026-10-03
+
+On `codex/bot-inline-media-20261002` only (not deployed), an exact database
+55P03 on allowlisted receipt-backed message command/media preflight/ingest commit
+returns HTTP 503 `service_unavailable`, `retry_after: 2` and `Retry-After: 2`.
+Wait at least two seconds and repeat the original request with the same
+idempotency key and body. A changed body is still a conflict; current authority
+is checked again. Do not retry arbitrary 500s or repeat a Storage PUT on that
+basis. Command-list and unrelated operations stay outside this contract;
+existing ingest 55000 rate-limit semantics are unchanged. See
+[caller proof and production limits](2026-10-03-bot-media-busy-recovery.md).
+
 ## 2026-08-31 Production Canary
 
 The production migration was applied only after fresh backup

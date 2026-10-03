@@ -32,11 +32,12 @@ const ANNA = person("b5111111-1111-4111-8111-000000000002", "Анна Смирн
 const TEAM = "b5222222-2222-4222-8222-000000000001";
 const FIRST = "Макет главной готов";
 
-type Server = "answer" | "unreachable" | "refuse";
+type Server = "answer" | "unreachable" | "refuse" | "busy" | "internal" | "lost";
 
-async function boot(page: Page) {
+async function boot(page: Page, theme: "dark" | "light" = "dark") {
   await openFixture(page, {
     me: ME,
+    theme,
     people: [ANNA],
     chats: [chat(TEAM, "group", "Команда проекта", AT)],
     memberships: [membership(TEAM, ME, "owner", AT), membership(TEAM, ANNA, "member", AT)],
@@ -51,6 +52,12 @@ async function boot(page: Page) {
       if (server.server === "unreachable") return route.abort("internetdisconnected");
       const body = (request.postDataJSON() ?? {}) as Record<string, unknown>;
       server.inserts.push(body);
+      if (server.server === "busy" || server.server === "internal") {
+        return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({
+          code: server.server === "busy" ? "55P03" : "XX000", details: null, hint: null,
+          message: server.server === "busy" ? "fixture_coverage_busy" : "fictional_internal_error",
+        }) });
+      }
       if (server.server === "refuse") {
         return route.fulfill({
           status: 403,
@@ -64,6 +71,7 @@ async function boot(page: Page) {
         client_sent_at: body.client_sent_at ?? null,
       };
       server.landed.set(String(body.client_message_id), row);
+      if (server.server === "lost") return route.abort("internetdisconnected");
       return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(row) });
     }
     // «Did it land?» — asked after an attempt that got no answer.
@@ -155,5 +163,81 @@ test.describe("messages written without a connection (item 52)", () => {
     await write(page, "Это не пройдёт");
     await expect(state(page, "Это не пройдёт", "Не удалось отправить")).toBeVisible();
     expect(server.inserts.length).toBe(1);
+  });
+});
+
+async function durableEntries(page: Page) {
+  return page.evaluate(async () => new Promise<Record<string, unknown>[]>((resolve, reject) => {
+    const opening = indexedDB.open("kub-outbox", 1);
+    opening.onerror = () => reject(new Error("fictional outbox unavailable"));
+    opening.onsuccess = () => {
+      const db = opening.result, tx = db.transaction("entries", "readonly");
+      let entries: Record<string, unknown>[] = [];
+      tx.objectStore("entries").getAll().onsuccess = (event) => { entries = (event.target as IDBRequest).result; };
+      tx.oncomplete = () => { db.close(); resolve(entries); };
+      tx.onerror = () => { db.close(); reject(new Error("fictional outbox read failed")); };
+    };
+  }));
+}
+
+test.describe("narrow busy recovery through real application and IndexedDB", () => {
+  test.beforeEach(async ({ request }) => { await requireFixtureServer(request); });
+
+  for (const theme of ["dark", "light"] as const) {
+    test(`busy message survives reload and keeps one identity in ${theme}`, async ({ page }, info) => {
+      const server = await boot(page, theme); server.server = "busy";
+      await write(page, "Проверка временной блокировки");
+      await expect(state(page, "Проверка временной блокировки", "Отправляется")).toBeVisible();
+      await expect.poll(async () => (await durableEntries(page)).length).toBe(1);
+      await expect.poll(async () => (await durableEntries(page))[0]?.attempts ?? 0).toBeGreaterThanOrEqual(1);
+      const stored = (await durableEntries(page))[0];
+      expect(stored.content).toBe("Проверка временной блокировки");
+      await page.screenshot({ path: info.outputPath(`outbox-busy-${theme}.png`) });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await expect(state(page, "Проверка временной блокировки", "Отправляется")).toBeVisible();
+      await expect.poll(async () => (await durableEntries(page))[0]?.attempts ?? 0).toBeGreaterThan(Number(stored.attempts));
+      expect((await durableEntries(page))[0].clientMessageId).toBe(stored.clientMessageId);
+      server.server = "answer";
+      // No online event: the scheduled retry must also work by itself.
+      await expect.poll(() => server.landed.size).toBe(1);
+      await expect(state(page, "Проверка временной блокировки", "Отправляется")).toHaveCount(0);
+      await expect(state(page, "Проверка временной блокировки", "Не удалось отправить")).toHaveCount(0);
+      await expect.poll(async () => (await durableEntries(page)).length).toBe(0);
+      expect(new Set(server.inserts.map((row) => row.client_message_id)).size).toBe(1);
+      expect(server.inserts.every((row) => row.chat_id === TEAM && row.user_id === ME.id)).toBe(true);
+    });
+  }
+
+  test("revoked authority after busy becomes final, not a new cached send", async ({ page }) => {
+    const server = await boot(page); server.server = "busy";
+    await write(page, "Право отправки отозвано");
+    await expect.poll(async () => (await durableEntries(page)).length).toBe(1);
+    await expect.poll(async () => (await durableEntries(page))[0]?.attempts ?? 0).toBeGreaterThanOrEqual(1);
+    server.server = "refuse";
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect(state(page, "Право отправки отозвано", "Не удалось отправить")).toBeVisible();
+    await expect.poll(async () => (await durableEntries(page)).length).toBe(0);
+    const calls = server.inserts.length;
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await page.waitForTimeout(2_100);
+    expect(server.inserts.length).toBe(calls); expect(server.landed.size).toBe(0);
+  });
+
+  test("an unrelated 500 is refused and is not put in a busy loop", async ({ page }) => {
+    const server = await boot(page); server.server = "internal";
+    await write(page, "Окончательная ошибка сервера");
+    await expect(state(page, "Окончательная ошибка сервера", "Не удалось отправить")).toBeVisible();
+    expect((await durableEntries(page)).length).toBe(0);
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await page.waitForTimeout(2_100); expect(server.inserts.length).toBe(1);
+  });
+
+  test("immediate lost-response ACK removes the durable entry without a second POST", async ({ page }) => {
+    const server = await boot(page); server.server = "lost";
+    await write(page, "Ответ потерялся после доставки");
+    await expect.poll(() => server.landed.size).toBe(1);
+    await expect(state(page, "Ответ потерялся после доставки", "Отправляется")).toHaveCount(0);
+    await expect.poll(async () => (await durableEntries(page)).length).toBe(0);
+    await page.waitForTimeout(2_100); expect(server.inserts.length).toBe(1);
   });
 });
