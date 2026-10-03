@@ -138,10 +138,17 @@ generation-aware DELETE and exactly-once release. Never infer those from these
 message tests. No production write, device installation, native release, paid
 device minute, capture or external Storage/provider call belongs to this slice.
 
-Next bounded stage: the prefix review's actual authorization-after-wait cases,
-with baseline/candidate separated, plus caller/isolation inventory. A deliberately
-divergent retained binding versus the current resolver needs its own isolated
-case; existing ledger scans are not that proof. Exact PG17/full-schema/bootstrap/
+The next bounded waited-authority characterization is now recorded in
+[actual waits and strict gates](2026-10-03-bot-media-authority-waits.md): 25/25
+diagnostic cases, 24/24 accepted-hook comparison, but strict authority acceptance
+is RED in both modes. D-336/D-337 expose existing file-id/forward windows, not a
+coverage regression or an accepted repair. The
+[caller/isolation inventory](2026-10-03-bot-media-caller-isolation-inventory.md)
+is complete only as bounded source inventory; effective configuration and retry
+behavior remain unaccepted. Next: test-only authority repair with unchanged
+strict denial oracles and actual lock-order proof. A deliberately divergent
+retained binding versus the current resolver still needs its own isolated case;
+existing ledger scans are not that proof. Exact PG17/full-schema/bootstrap/
 rollback and every non-message participant remain separate gates. No production
 admission migration or reclaim entrypoint is authorized by this test checkpoint.
 

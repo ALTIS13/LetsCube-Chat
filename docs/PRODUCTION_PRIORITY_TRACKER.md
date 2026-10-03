@@ -2,17 +2,21 @@
 
 Status: active production-hardening tracker, updated 2026-10-03.
 
-**Current continuation, 2026-10-03:** different transaction-wide try-only message
-coverage is a **test-only** prototype: final **33/33**, no skips, local PG18.4
-fictional databases. Independent review found two P2 oracle gaps; both are fixed
-and exposed by real executable NOWAIT-omission/cached-scan mutants. Four targeted
-review-fix cases and the frozen-input full run pass. No new production SQL,
-admission/reclaim authority, device operation, native publication or deployment.
-Evidence: [coverage protocol](operations/2026-10-03-bot-media-coverage-protocol.md),
-[prefix review](operations/2026-10-03-bot-media-coverage-prefix-review.md).
-Next: actual baseline/candidate authorization-after-existing-wait cases and
-caller/isolation inventory, then PG17/full-schema/bootstrap/rollback and other
-lifecycle participants. Whole-chat-media/native holds remain; never replay the
+**Current continuation, 2026-10-03:** local existing-wait characterization is
+complete: **25/25 diagnostic cases**, **24/24 accepted-hook comparison**, no skips,
+PG18.4 fictional databases. Strict authority gates are **RED, 0/2 in each mode**:
+file-id and forward RPCs commit after concurrent authority revocation. These are
+open **D-336/D-337, item 78**, not fixed defects. Independent frozen-test review
+has no P1/P2. Existing ingest protections pass the bounded waits. The prior
+**33/33** coverage/mutant evidence is reused with five unchanged inputs.
+No new production SQL, admission/reclaim authority, device operation, native
+publication or deployment. Evidence:
+[waits and strict gates](operations/2026-10-03-bot-media-authority-waits.md),
+[caller/isolation inventory](operations/2026-10-03-bot-media-caller-isolation-inventory.md).
+Next: test-only authority repair through actual gateway RPCs/retries and source/
+destination checks, strict GREEN and real lock-order proof; then PG17/full-schema/
+bootstrap/rollback, effective caller isolation/retries and other lifecycle
+participants. Whole-chat-media/native holds remain; never replay the
 accepted SQL below. A concurrent authorised tester intake adds items 76/77 and
 keeps VPN item 53 open, rather than duplicating it:
 [feedback](operations/2026-10-03-tester-feedback.md). No phone update is implied.
@@ -3710,6 +3714,24 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     Require privacy-safe migration rehearsal and account/device sync, plus
     `mute parent + enable one child` and the inverse acceptance cases before
     release. [Intake](operations/2026-10-03-tester-feedback.md).
+
+78. `[ ]` Preserve current message authority across existing writer waits.
+    **D-336/D-337, 2026-10-03:** controlled fictional local sessions reproduce
+    file-id copies after privacy restriction/removal/later join epoch, and
+    forward copies after source hiding/clearing or source/destination removal.
+    Both accepted hooks and the coverage prototype reproduce them; a fresh
+    request refuses. Diagnostic **25/25** is characterization, not repair;
+    strict actual-gateway and forward gates are **0/2 RED in each mode**.
+    Ingest's bounded retained-lock/revocation/expiry protections pass unchanged.
+    Repair only the loaded fixture bodies first. Preserve exact actor/access,
+    idempotent retries, grants/receipts/accounting, ready variants and attribution;
+    require unchanged literal refusal oracles and no current committed effects.
+    Prove actual source/destination locks and all mutators' order, including
+    unchanged ingest prefix; a fresh SELECT before another wait is insufficient.
+    Direct fallback, bans/mutes/topics, effective caller isolation/retries and
+    exact PG17/full-schema/rollback acceptance remain separate gates. No runtime
+    migration or reclamation follows from this test-only checkpoint.
+    [Measured waits, hashes and next action](operations/2026-10-03-bot-media-authority-waits.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

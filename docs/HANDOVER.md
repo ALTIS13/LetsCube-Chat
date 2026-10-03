@@ -17,27 +17,34 @@ Read in this order:
    database safety) and §15 (deploying) apply to you exactly as written. Its §1
    «Current Stop Point» and §2 «Deployment baseline» are **stale** — this file
    replaces them;
-5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–77) and the
+5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–78) and the
    decisions log;
-6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-335, with its
+6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-337, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-03 (Codex test-only coverage).** Owner: this Codex chat;
-branch `codex/bot-inline-media-20261002`, baseline `e9d713d4`. Stage: transaction-wide
-try-only message coverage prototype verified locally, **33/33**, no skips,
-PostgreSQL 18.4 with fictional rows. Source/evidence:
-[protocol and review corrections](operations/2026-10-03-bot-media-coverage-protocol.md),
-[independent prefix review](operations/2026-10-03-bot-media-coverage-prefix-review.md).
-Two independent-review P2 oracle weaknesses are corrected and killed by executable
-mutants; four strengthened targeted cases and the frozen-input full run pass.
-This is not a production admission migration, PG17/full-schema acceptance,
-authorization-after-wait proof, physical generation or reclamation. Blocker:
-existing authority waits, caller/isolation inventory and all other lifecycle
-participants. Next: actual baseline/candidate prefix-wait authorization cases;
-then exact PG17/bootstrap/rollback and remaining lifecycle gates, no delete/refund.
+**Active resume, 2026-10-03 (Codex local authority-wait characterization).** Owner:
+this Codex chat; branch `codex/bot-inline-media-20261002`, source `15abed3d`.
+Stage: **25/25 diagnostic cases** on local PG18.4 fictional rows; accepted-hook
+comparison **24/24**. Strict fresh-authority gates are **RED, 0/2 in each mode**:
+actual gateway file-id and forward RPCs can commit after authority revocation
+during an existing wait. **D-336/D-337 and item 78 remain open, not fixed.**
+Source/evidence: [waits and strict gates](operations/2026-10-03-bot-media-authority-waits.md),
+[source-only caller/isolation inventory](operations/2026-10-03-bot-media-caller-isolation-inventory.md).
+Independent test review has no P1/P2; all workers are closed. The earlier
+[33/33 coverage/mutant proof](operations/2026-10-03-bot-media-coverage-protocol.md)
+is reused with its five inputs unchanged, not rerun. Existing ingest protections
+pass the bounded wait cases; this does not accept all C6-C9 or non-message holders.
+Blocker: loaded file-id/forward authority windows and effective caller isolation/
+retry behavior. Next: narrow test-only authority repair through actual gateway
+RPCs/retries and source/destination checks; require unchanged strict refusal
+oracles to turn GREEN and prove lock order. Then exact PG17/full-schema/bootstrap/
+rollback and remaining lifecycle gates, no delete/refund or production admission.
 Earlier applied identity/resolver/observation/hold SQL below stays applied once;
 never replay it. No production write/deploy or native/device operation in this
 prototype. Android/native HOLD and A063 exclusion remain.
+Owner's Oct 3 constraints: use only owned accounts and license-permitted
+components; do not bypass tool safety controls. This slice used no accounts,
+installed components, personal captures or paid device minutes.
 The user's concurrent tester intake is separate: two voice notes and one text
 were read narrowly, transcribed locally and reconciled in
 [October 3 feedback](operations/2026-10-03-tester-feedback.md). Keep existing VPN

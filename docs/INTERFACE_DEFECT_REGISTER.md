@@ -24890,3 +24890,60 @@ photo/voice/file fallback labels, grouped messages, account switch, DND/mute and
 foreground/background plus locked/unlocked states. Preserve exact chat/message
 activation and chat-scoped read/history cleanup. Source tests alone do not close
 the reported system-card defect.
+
+## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
+
+**Severity:** high, message authority boundary. Tracker item 78. Found 2026-10-03
+in disposable fictional local PostgreSQL sessions, not from a live account or
+personal-message capture. Existing accepted-hook behavior, not introduced by the
+test-only coverage prototype.
+
+**Observed reproduction:** leave an UPDATE of the sending bot's membership open;
+the source remains visible to another session. The actual send or gateway command
+reads old source authority, then reaches the existing membership epoch SHARE
+wait. Commit privacy restriction, membership removal or a later join epoch.
+A fresh request refuses, but the waiting request commits a media copy plus its
+idempotent result; the gateway command also commits its operation result.
+
+**Measured:** actual transaction-id waiter/blocker, granted membership RowShareLock,
+fresh-request denials and literal committed-state checks. Six waited cases and
+two control groups pass as explicit gap characterization in baseline/candidate.
+The unchanged strict command refusal oracle fails in both modes: no expected
+`P0002`. Passing diagnostic tests do not close this defect.
+
+**Next / acceptance:** repair the loaded writer in disposable fixtures first,
+cover actual gateway command and successful/denied retries, and require strict
+fresh-authority refusal without new message/result/grant/accounting effects.
+Authority must remain protected through later waits; prove mutator and ingest
+lock order, not just another plain SELECT. Exact PG17/full-schema/rollback and
+production gates remain open. No live exploit, migration or provider request
+was performed. [Evidence and frozen inputs](operations/2026-10-03-bot-media-authority-waits.md).
+
+## D-337 `[ ]` A forward RPC can commit after source or destination access is revoked during its epoch wait
+
+**Severity:** high, source/destination audience boundary. Tracker item 78. Found
+2026-10-03 in fictional local PostgreSQL sessions; not live production proof.
+The captured forward RPC reproduces this with accepted hooks and candidate
+coverage. Direct client fallback is outside this measured slice.
+
+**Observed reproduction:** hold the destination bot-membership UPDATE and let
+`forward_message` read authority then block on its actual destination epoch SHARE
+wait. Commit source hiding/clearing, source membership removal or destination
+membership removal before releasing that blocker. A fresh RPC refuses, while
+the old request commits the attributed forward and matching ready variants.
+Its retry reruns authority and refuses.
+
+**Measured:** captured/compiled function hashes and catalog/ACL/trigger checks,
+actual row/transaction blocker observations, four waited authority gaps, no-wait
+controls and committed-state oracles. Canonical pointer change, scrubbed deletion
+and removed source row correctly refuse; pointer equality is not audience
+authority. Strict hidden-source refusal fails in both modes, despite successful
+wait/control setup. The twelve passing diagnostic cases characterize the gap.
+
+**Next / acceptance:** protect and recheck exact source/destination authority
+through all subsequent waits in a test-only fixture candidate. Require unchanged
+strict refusal and no new committed effects, preserving attribution, variants and
+idempotent success. Cover mutator lock order, direct fallback and bans/mutes/topics
+separately; then exact PG17/full-schema/rollback and production safety gates.
+No live account, migration, message or Storage/provider operation was used.
+[Evidence and current limits](operations/2026-10-03-bot-media-authority-waits.md).
