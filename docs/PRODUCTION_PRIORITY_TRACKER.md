@@ -2,7 +2,17 @@
 
 Status: active production-hardening tracker, updated 2026-10-03.
 
-**Current continuation, 2026-10-03:** full PG17.6/PostgREST deferred PUT **4/4**,
+**Current continuation, 2026-10-03:** avatar/variant source gate **73/73**,
+no skips; 42-input source/package/native/PG hashes match. Actual worker stale
+publication/overwrite and captured queue stale-claim consumption are reproduced.
+Two review P2s corrected; final scoped review has no findings. Worker jobs/SQL
+settled, 23 owned local PG copies absent, both workers closed. D-338/D-339 remain
+open for runtime; prototypes are not installed. Next: source-epoch/durable-intent
+contract across setters/queue/scan, disposable runtime wiring, then full-schema
+HTTP and real Storage capability proof. No main/prod SQL/native/provider action.
+[Avatar/variant evidence](operations/2026-10-03-media-avatar-concurrency.md).
+
+**Prior full deferred HTTP, 2026-10-03:** full PG17.6/PostgREST deferred PUT **4/4**,
 two startup controls and lost-handle cleanup/compiled omission mutant pass.
 Final 47-input hashes, bootstrap rollback, copied rows and catalog-only equality
 match; all three owned copies absent, HTTP/SQL work closed, backups retained.
@@ -3816,6 +3826,17 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     equality match; three owned copies absent, no HTTP/SQL work outstanding.
     Review gaps corrected, no final P1/P2; controlled Storage remains non-provider.
     [Full deferred evidence](operations/2026-10-03-bot-media-deferred-full-http.md).
+    **Avatar/variant source progress:** actual compiled worker/installed SDK/sharp
+    fictional schedules reproduce stale ready/failed/missing-source publication,
+    stable profile target overwrite and the accepted-PUT/publication gap (D-338).
+    Captured queue SQL/real enqueue triggers reproduce old finish/retry consuming
+    a newer claim (D-339). Final combined source gate passes 73/73 with no skips
+    and a matching 42-input manifest; two review findings in test coverage were
+    corrected and final scoped review has no P1/P2. All jobs/SQL settled and 23
+    final owned local PG copies are absent. Atomic URL-guarded publication and
+    token-scoped queue overloads are test-only. Logical source epochs, durable
+    source/target intents, runtime integration and actual Storage remain open.
+    [Measured schedules and contract](operations/2026-10-03-media-avatar-concurrency.md).
     Repair only the loaded fixture bodies first. Preserve exact actor/access,
     idempotent retries, grants/receipts/accounting, ready variants and attribution;
     require unchanged literal refusal oracles and no current committed effects.

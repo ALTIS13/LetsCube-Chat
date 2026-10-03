@@ -25027,3 +25027,63 @@ Inline-ingest/external I/O, remaining lifecycle,
 attribution/preferences and production safety gates remain.
 No live account, migration, message or Storage/provider operation was used.
 [Evidence and current limits](operations/2026-10-03-bot-media-authority-waits.md).
+
+## D-338 `[ ]` Late avatar work replaces newer variants and can overwrite their bytes
+
+**Severity:** high, stale avatar publication/data integrity. Tracker item 78.
+Found 2026-10-03 against the actual compiled worker, installed SDK and sharp with
+fictional fetch-only DB/Storage schedules; not live provider proof.
+
+**Surface:** `artifacts/api-server/src/workers/mediaVariantsWorker.ts:839`
+(source GET/PUT), `:1045` (separate DELETE/INSERT), and
+`artifacts/api-server/src/workers/mediaVariantRules.ts:250` (stable profile target).
+
+**Observed reproduction:** pause old avatar A at GET or PUT; change the owner to
+B and complete B; resume A. The current ready rows become A ready, A failed or
+A `source_missing` rows although the owner still points to B. Profile targets
+reuse their addresses, so a late successful A PUT also replaces B bytes. Chat
+source-path-qualified targets retain B bytes but do not prevent stale rows.
+Accepted PUT followed by failed publication and failed failure-record insertion
+leaves two controlled objects with no own variant rows or durable pre-PUT intent.
+
+**Measured:** the literal current-B oracle first failed in both scopes and passed
+for isolated current work. A compiled test-only idle URL reload cannot prevent a
+change between its check and DELETE, or undo an earlier overwrite. Independent
+adapter-failure collection rejects swallowed assertion failures. Unrelated
+profile/message rows remain unchanged. The test-only atomic SQL publisher has
+bounded lock/rollback/refusal proof, not runtime wiring or source-epoch protection.
+
+**Next / acceptance:** bind all avatar setters and queued/scan work to distinct
+logical source epochs; retain durable source/target intents before external I/O;
+separate new attempt addresses and publish atomically under exact epoch/target
+binding. Same-URL reuse is not an incarnation. No deletion/refund follows, and
+this defect remains open until the actual runtime and affected writers pass.
+[Schedules, source proof and limits](operations/2026-10-03-media-avatar-concurrency.md).
+
+## D-339 `[ ]` An old variant job can finish or retry a newer avatar claim
+
+**Severity:** high, queue ownership/data integrity. Tracker item 78. Found
+2026-10-03 in owned local PostgreSQL 18.4 using captured queue functions and real
+avatar-enqueue triggers; not production SQL/runtime proof.
+
+**Surface:** `.migration-backup/supabase/migrations/20260913120000_media_variant_job_queue.sql`
+(`media_variant_job_finish` and `media_variant_job_retry`); current worker calls
+the old signatures without an owned claim token.
+
+**Observed reproduction:** A claims; an actual avatar UPDATE resets the job;
+B claims the same scope/owner. Stale A finish deletes B's job, or stale A retry
+clears B's token and changes its backoff. Independent literal false-return and
+whole-B-snapshot preservation oracles go RED. A fabricated false return cannot
+hide the mutated row. Another scope with the same UUID and unrelated rows survive.
+
+**Measured:** 12/12 captured-SQL/prototype/control cases pass with no skips.
+Test-only token-scoped overloads refuse stale/null tokens, accept B, retain the
+60-second first retry, and deny untrusted roles. Two actual installed predicate
+omissions fail the same literal oracle; original definitions/owners/ACLs/config
+and catalog digest are restored. Owned fixture directories are removed.
+
+**Next / acceptance:** carry the exact owned token through actual claim,
+finish/retry and scan fallback; integrate with source epoch and atomic publication
+without erasing admitted external attempts. A claim token alone is not an I/O
+fence or cleanup authority. Neither overload is installed; D-339 remains open.
+[Source gate and limits](operations/2026-10-03-media-avatar-concurrency.md).

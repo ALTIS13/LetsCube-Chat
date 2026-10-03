@@ -19,10 +19,29 @@ Read in this order:
    replaces them;
 5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–78) and the
    decisions log;
-6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-337, with its
+6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-339, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-03 (Codex full-schema deferred HTTP).** Owner: this Codex
+**Active resume, 2026-10-03 (Codex avatar/variant source gates).** Owner: this
+Codex chat; branch `codex/bot-inline-media-20261002`, start `b76cf7c5`.
+Stage: actual compiled avatar worker + installed SDK/sharp, fictional fetch-only
+DB/Storage schedules + captured local PG18.4 queue/atomic-publication prototypes.
+Final **73/73** (15 worker, 12 publication/ABA, 12 queue, 34 unchanged controls),
+no skips; 42-input source/package/native/PG pre/post manifest matches. Initial
+current-publication oracle RED 0/2; stale ready/failed/missing-source publication,
+profile byte overwrite, accepted-PUT/publication gap and stale queue consumption
+are measured. Two review P2s corrected with actual wrong-target mutants and
+retained A-old -> B -> A-new; final re-review has no P1/P2. All owned jobs/SQL
+settled, 23 final local PG copies absent, workers closed.
+[Source evidence and next contract](operations/2026-10-03-media-avatar-concurrency.md).
+**D-338/D-339 remain open for runtime.** Next: source-epoch + durable source/target
+intent contract across setters/queue/scan, then actual-worker disposable wiring,
+full PG17/PostgREST and separately owned Storage/physical-generation proof.
+No production SQL/main deployment, cleanup/refund, device or native action.
+Preserve accepted HTTP evidence, whole-`chat-media` HOLD, Android/native HOLD and
+A063 exclusion; do not replay applied SQL or restart completed caller gates.
+
+**Prior full-schema deferred HTTP, 2026-10-03.** Owner: this Codex
 chat; branch `codex/bot-inline-media-20261002`, runtime source `3976348f`, accepted
 local checkpoint `2cadd611` (candidate pushed/remote SHA verified). Stage: real
 full PG17.6/PostgREST deferred takeover **4/4**, two startup fault controls and

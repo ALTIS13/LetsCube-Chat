@@ -18,6 +18,16 @@ not full-schema/PostgREST/provider proof. The separate
 4/4 with controlled Storage, exact links and owned cleanup; it does not prove
 physical generation or provider terminality. The participant inventory remains open.
 
+Coordinator update: the [avatar/variant source gate](2026-10-03-media-avatar-concurrency.md)
+now executes the avatar/queue rows below. The actual worker reproduces late A
+publication/overwrite and the accepted-PUT/publication gap; real captured queue
+SQL reproduces stale claim consumption. Final combined gate is 73/73 with no
+skips and a matching 42-input manifest; two test-coverage P2s were corrected and
+final scoped review has no findings. Jobs/SQL settled, 23 owned local PG copies
+are absent and both workers are closed. Test-only SQL prototypes
+are not runtime repairs. D-338/D-339, source epoch/intent integration and real
+Storage capability proof remain open.
+
 The [current resume](../HANDOVER.md#L25) and
 [final inline report](2026-10-03-bot-media-inline-http.md#L46) supersede the earlier
 trial checkpoint. No private receipts, credentials, copied personal rows, remote
@@ -193,8 +203,10 @@ an assertion fails. Do not replace a real RPC with a fabricated SQLSTATE.
 
 ## Minimal Follow-On Fault Matrix
 
-All rows below are proposals. Start with the two deferred cases above; subsequent
-rows require their own bounded approval/fixture contract, not a combined rewrite.
+The two deferred rows are executed in the linked local/full-schema gates. The
+avatar and PUT/publication-gap rows now have the linked source counterexamples
+and bounded prototypes, not runtime protection. The physical-incarnation row
+remains a proposal; no deletion, refund or combined rewrite is authorized here.
 
 | Fault / Schedule | Independent Invariant / Expected Gap |
 | --- | --- |
