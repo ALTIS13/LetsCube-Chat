@@ -22,28 +22,28 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-337, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-03 (Codex local authority repair).** Owner: this Codex
-chat; branch `codex/bot-inline-media-20261002`, starting source `f12514e6`.
-Stage: test-only actual send/gateway/forward repair, frozen final **50/50** on
-local PG18.4 fictional rows; exact-source independent review has no P1/P2 and its
-worker is closed. Final **13 mutation variants / 21 expected literal failures**
-pass, no skips/cancellations/setup errors; all finite test sessions completed.
-Executed/reviewed/current hashes match. **D-336/D-337
-and item 78 remain open for runtime, not installed fixes.** Evidence:
-[repair, frozen inputs and remaining gates](operations/2026-10-03-bot-media-authority-repair.md),
-[original waits](operations/2026-10-03-bot-media-authority-waits.md),
-[caller/isolation inventory](operations/2026-10-03-bot-media-caller-isolation-inventory.md).
-The earlier [33/33 coverage/mutant proof](operations/2026-10-03-bot-media-coverage-protocol.md)
-is reused after rechecking all five unchanged hashes. Blocker: full-schema/PG17
-authority and mutator-prefix proof, effective caller isolation/retries, and
-remaining lifecycle gates. Next: exact
-PG17/full-schema/bootstrap/rollback and real ban/mute/topic/fallback boundaries.
-Continue the approved checkpoint after diagnostic closeout; do not invent a new
-approval gate. The abandoned review hang was a local test's self-owned lock,
-corrected with exact fixture cleanup, not a production incident.
-Earlier applied identity/resolver/observation/hold SQL below stays applied once;
-never replay it. No production write/deploy or native/device operation in this
-prototype. Android/native HOLD and A063 exclusion remain.
+**Active resume, 2026-10-03 (Codex full-schema authority rehearsal).** Owner:
+this Codex chat; branch `codex/bot-inline-media-20261002`, starting source
+`092629c6`. Stage: test-only PG17.6 full-schema repair, **18/18 behavior + 19/19
+concurrency**, **11 mutation variants / 15 expected failures**, 18/25 positive
+before/after controls; final execution/current hashes match. Private-block,
+direct-forward INSERT fallback, sanction retention and two candidate FK/cascade
+regressions are covered. Both review workers and all finite sessions are closed;
+all three exact owned isolated containers removed, copied-row/function/trigger
+rollback hashes verified, backups retained. Evidence:
+[full schema, RED/GREEN, frozen inputs and limits](operations/2026-10-03-bot-media-authority-full-schema.md).
+Prior [50/50 PG18 repair](operations/2026-10-03-bot-media-authority-repair.md)
+is reused after rechecking all eight unchanged inputs. **D-336/D-337 and item 78
+remain open for runtime, not installed fixes.** Blocker: combined whole-message
+coverage / enclosing callers, effective API isolation/commit/retries and remaining
+lifecycle proof. Next: fresh full-schema PG17 combined coverage and actual
+nested/non-media callers, then gateway/outbox fresh-authority retries. Use the
+[caller inventory](operations/2026-10-03-bot-media-caller-isolation-inventory.md).
+Continue the approved checkpoint, not completed stages or a new approval round.
+Earlier applied identity/resolver/observation/hold SQL stays applied once; never
+replay it. No production SQL write/main deploy or native/device operation in
+this prototype. Whole-chat-media purge hold, Android/native HOLD and A063
+exclusion remain.
 Owner's Oct 3 constraints: use only owned accounts and license-permitted
 components; do not bypass tool safety controls. This slice used no accounts,
 installed components, personal captures or paid device minutes.

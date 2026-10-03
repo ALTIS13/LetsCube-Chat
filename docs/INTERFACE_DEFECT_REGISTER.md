@@ -24918,12 +24918,21 @@ review pass; final 13 variants / 21 expected literal failures pass. This is not 
 runtime fix; PG17/full schema and caller gates stay open.
 [Candidate and exact inputs](operations/2026-10-03-bot-media-authority-repair.md).
 
+**Full-schema extension, 2026-10-03:** PG17.6 full restore, actual source-reply /
+topic / privacy prefix and exact-mode refusal cases pass within the 18/18 behavior
++ 19/19 concurrent gate. Eleven compiled mutation variants expose 15 literal
+failures; 18/25 positive controls and copied-row/function/trigger rollback pass.
+All exact owned containers and both workers are closed. This remains test-only;
+the original 50/50 inputs are unchanged, not replaced by these smaller oracles.
+[Full-schema evidence](operations/2026-10-03-bot-media-authority-full-schema.md).
+
 **Next / acceptance:** repair the loaded writer in disposable fixtures first,
 cover actual gateway command and successful/denied retries, and require strict
 fresh-authority refusal without new message/result/grant/accounting effects.
 Authority must remain protected through later waits; prove mutator and ingest
-lock order, not just another plain SELECT. Exact PG17/full-schema/rollback and
-production gates remain open. No live exploit, migration or provider request
+lock order, not just another plain SELECT. Combined full-schema coverage,
+enclosing callers, effective API isolation/retries and production gates remain
+open. No live exploit, migration or provider request
 was performed. [Evidence and frozen inputs](operations/2026-10-03-bot-media-authority-waits.md).
 
 ## D-337 `[ ]` A forward RPC can commit after source or destination access is revoked during its epoch wait
@@ -24954,10 +24963,20 @@ NOWAIT. A different actor can still hide the source. Frozen final 50/50 and
 exact-source review and all 13 mutation variants pass. D-337 remains open
 for runtime. [Candidate, mutations and limits](operations/2026-10-03-bot-media-authority-repair.md).
 
+**Full-schema extension, 2026-10-03:** real private-recipient blocks and stale
+direct forward INSERT exposed additional RED cases. The fixture now checks the
+actual block predicate and retained authority on that INSERT path; actor/peer/chat
+sentinels fence bans/mutes/blocks and membership topology. Candidate FK waits and
+profile/chat cascade regressions were separately RED and corrected. Final PG17.6
+18/18 behavior + 19/19 concurrency, 11 variants / 15 expected failures and exact
+rollback hashes pass; all owned containers removed. No runtime installation or
+exhaustive UPDATE/admin-writer claim follows.
+[Full-schema evidence](operations/2026-10-03-bot-media-authority-full-schema.md).
+
 **Next / acceptance:** protect and recheck exact source/destination authority
 through all subsequent waits in a test-only fixture candidate. Require unchanged
 strict refusal and no new committed effects, preserving attribution, variants and
-idempotent success. Cover mutator lock order, direct fallback and bans/mutes/topics
-separately; then exact PG17/full-schema/rollback and production safety gates.
+idempotent success. Combined coverage, enclosing/nested callers, effective API
+isolation/commit/retries, attribution/preferences and production safety gates remain.
 No live account, migration, message or Storage/provider operation was used.
 [Evidence and current limits](operations/2026-10-03-bot-media-authority-waits.md).

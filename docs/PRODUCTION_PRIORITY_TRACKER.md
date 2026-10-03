@@ -2,20 +2,20 @@
 
 Status: active production-hardening tracker, updated 2026-10-03.
 
-**Current continuation, 2026-10-03:** test-only authority repair has frozen final
-**50/50** on PG18.4 fictional databases, with exact-source independent review
-approved and worker closed. Final **13 variants / 21 expected literal failures**
-pass without skips/cancellations/setup errors; executed/reviewed/current hashes match.
-**D-336/D-337, item 78 remain open
-for runtime**, not installed fixes. Original baseline strict denials remain RED.
-The prior **33/33** coverage/mutant evidence is reused after five hash rechecks.
-No new production SQL, admission/reclaim authority, device operation, native
-publication or deployment. Evidence:
-[repair and frozen inputs](operations/2026-10-03-bot-media-authority-repair.md),
-[original waits and strict gates](operations/2026-10-03-bot-media-authority-waits.md),
-[caller/isolation inventory](operations/2026-10-03-bot-media-caller-isolation-inventory.md).
-Next: PG17/full-schema authority/mutator
-prefixes, bootstrap/rollback, effective caller isolation/retries and other lifecycle
+**Current continuation, 2026-10-03:** test-only full-schema PG17.6 authority repair
+passes **18/18 behavior + 19/19 concurrency**, **11 mutation variants / 15 expected
+failures** and 18/25 positive before/after controls. Frozen execution/current
+hashes match; both workers closed and all three exact owned isolated containers
+removed. Copied-row/function/trigger rollback hashes match; backups retained.
+The prior **50/50 PG18 repair and 13/21 mutations** are reused after checking all
+eight frozen inputs unchanged. **D-336/D-337, item 78 remain open for runtime**,
+not installed fixes. No production SQL write, main deployment, admission/reclaim
+authority, device operation or native publication. Evidence:
+[full-schema rehearsal and remaining gates](operations/2026-10-03-bot-media-authority-full-schema.md),
+[prior repair](operations/2026-10-03-bot-media-authority-repair.md),
+[caller inventory](operations/2026-10-03-bot-media-caller-isolation-inventory.md).
+Next: combined full-schema whole-message coverage, enclosing/nested callers,
+effective API isolation/commit, gateway/outbox retries and other lifecycle
 participants. Whole-chat-media/native holds remain; never replay the
 accepted SQL below. A concurrent authorised tester intake adds items 76/77 and
 keeps VPN item 53 open, rather than duplicating it:
@@ -3728,13 +3728,20 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     hashes match. Source/reply/type/access
     retention, cached/unique-conflict exits and NOWAIT hiding INSERT/UPDATE are
     covered locally, not installed. [Repair evidence](operations/2026-10-03-bot-media-authority-repair.md).
+    **Full-schema progress:** PG17.6 18/18 behavior + 19/19 concurrency, 11 variants /
+    15 expected failures, 18/25 positive controls. Actual private block, direct
+    authenticated forward INSERT, bans/mutes/topics, real privacy prefix and
+    candidate FK/cascade compatibility are now covered in the isolated copy.
+    Exact copied-row/function/trigger rollback hashes match; all owned containers
+    removed. This does not install a runtime repair.
+    [Full-schema evidence](operations/2026-10-03-bot-media-authority-full-schema.md).
     Repair only the loaded fixture bodies first. Preserve exact actor/access,
     idempotent retries, grants/receipts/accounting, ready variants and attribution;
     require unchanged literal refusal oracles and no current committed effects.
     Prove actual source/destination locks and all mutators' order, including
     unchanged ingest prefix; a fresh SELECT before another wait is insufficient.
-    Direct fallback, bans/mutes/topics, effective caller isolation/retries and
-    exact PG17/full-schema/rollback acceptance remain separate gates. No runtime
+    Combined whole-message coverage, enclosing/nested callers, effective API
+    isolation/commit/retries and remaining lifecycle acceptance stay open. No runtime
     migration or reclamation follows from this test-only checkpoint.
     [Measured waits, hashes and next action](operations/2026-10-03-bot-media-authority-waits.md).
 
