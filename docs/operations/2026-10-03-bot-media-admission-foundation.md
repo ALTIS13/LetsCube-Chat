@@ -32,7 +32,13 @@ source/test/operator approval; one guarded production application at 01:07 MSK
 after backup `20261003-010706`. Stage 2 is now
 [applied/verified](2026-10-03-bot-message-media-references.md): final 63/63,
 same-image PG17 restore/rollback and independent review, followed by one guarded
-application after backup `20261003-015239`. Stage 3 remains **not implemented**.
+application after backup `20261003-015239`. Stage 3's
+[observations-only fallback](2026-10-03-bot-message-media-observations.md) is now
+applied once/verified after backup `20261003-030013`, with final 65/65, full PG17
+restore/rollback and independent review. Actual multi-statement, nested and ON CONFLICT sessions
+refute naive sorted per-statement shared object fences with `40P01`.
+Admission remains **not implemented**. Current observations do not close that
+gap or authorize deletion/refund. Do not repeat the fallback SQL.
 Do not claim the whole foundation from identities or a resolver, or repeat either SQL.
 Registry/backfill/initial observations require an atomic bootstrap without a
 writer window. Backfill never proves absent references or provider terminality.
@@ -47,8 +53,9 @@ A test-only closer must not wait for message, membership or Storage rows.
 Unknown coverage requires a shared coverage fence: an existing unknown hold
 must block close, and an unknown writer after close must not bypass it.
 
-This lock contract is **unproven**, especially across multiple statements,
-nested writes and INSERT ON CONFLICT. Sorting one handler is insufficient.
+This particular sorted per-statement lock contract is now **refuted** across
+multiple statements, nested writes and INSERT ON CONFLICT. Sorting one handler
+is insufficient; this does not refute every transaction-wide protocol.
 Use actual independent PostgreSQL sessions and preserve the existing lock
 prefixes in [writer inventory](2026-10-02-bot-media-writer-inventory.md).
 If those interleavings fail, ship only identity/observations with admission

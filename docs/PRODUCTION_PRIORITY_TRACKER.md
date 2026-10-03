@@ -2,7 +2,23 @@
 
 Status: active production-hardening tracker, updated 2026-10-03.
 
-**Current continuation, 2026-10-03:** full-set private message resolver is applied
+**Current continuation, 2026-10-03:** private AFTER STATEMENT observations-only
+fallback is applied once/independently verified at 03:00 MSK after backup
+`20261003-030013`. Final **65/65**, exact source/test/operator manifests, full
+same-image PG17 restore/backfill/role denials/catalog mutants/rollback and
+independent review pass. Old policies, trigger enable-state, authority and
+accounting unchanged; 740 held observations / zero registered at this snapshot,
+not orphan or reclamation proof. Workers closed; owned restore copy removed,
+backups retained. Evidence:
+[message observations](operations/2026-10-03-bot-message-media-observations.md).
+Actual multistatement/nested/ON CONFLICT sessions refute the naive sorted shared
+object fence ordering with `40P01`; admission remains open. Next: different
+transaction-wide protocol plus physical-generation/avatar/variant/external-I/O
+acceptance. Whole-chat-media and native/Android release holds remain. No cleanup,
+refund or replay of accepted SQL. Publication still requires exact healthy
+revision/public-container parity after push.
+
+**Prior accepted stage 2, 2026-10-03:** full-set private message resolver is applied
 once/independently verified after backup `20261003-015239`. Final **63/63**,
 four same-image PG17 semantic groups, six actual client denials, four catalog
 mutants, full restore/rollback and exact evidence manifests pass. No open P1/P2;
@@ -11,8 +27,8 @@ parent-bucket preview observations are independent; malformed/unsupported/
 unregistered/conflicting pointers remain holds. No old rows/policies/authority
 or consumer code changes. Evidence:
 [message reference set](operations/2026-10-03-bot-message-media-references.md).
-Next: table-level AFTER STATEMENT admission with actual concurrency and
-authorization proof. Whole-chat-media hold and Android/native release hold remain.
+The observations-only continuation above supersedes its earlier next action;
+admission/auth-after-wait proof remains open. Whole-chat-media and Android/native release holds remain.
 Do not repeat any accepted SQL/preflight. Publishing still requires exact healthy
 source-image/public-container parity, never webhook-only acceptance.
 

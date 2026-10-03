@@ -23,15 +23,25 @@ Read in this order:
    measurement. Search it before filing anything.
 
 **Active resume, 2026-10-03 (Codex implementation).** Owner: this Codex chat;
-branch `codex/bot-inline-media-20261002`, baseline `41b27c19`. Stage:
-full-set private message reference resolver **applied once/independently verified**,
-after fresh backup `20261003-015239`.
-Evidence/contract: [message reference set](operations/2026-10-03-bot-message-media-references.md).
-Final **63/63** with exact executed/reviewed/current manifests, no skips; PG17 full
-restore/rollback, four semantic groups, six actual client denials and four catalog
-mutants pass. No open P1/P2. Both workers closed; exact owned copy removed,
-backups retained. Next: AFTER STATEMENT admission with actual lock/authorization
-interleaving proof. Do not repeat resolver SQL or accepted preflight. Stage 1
+branch `codex/bot-inline-media-20261002`, baseline `8aa1243f`. Stage:
+AFTER STATEMENT observations-only fallback **applied once/independently verified**
+at 03:00 MSK after fresh backup `20261003-030013`.
+Evidence/contract: [observations and actual fence counterexample](operations/2026-10-03-bot-message-media-observations.md).
+Five real-session tests expose sorted per-statement fences' `40P01` in multi-statement,
+nested and ON CONFLICT cases. Apply the approved fallback, not unproven admission.
+Final **65/65**, no skips, exact executed/reviewed/current manifests; full same-image
+PG17 restore/backfill, nine actual role denials, four behavior groups/catalog
+mutants and rollback pass. Independent review has no remaining P1/P2. All workers
+closed, exact owned restore container removed; backups retained. Private table and
+four statement hooks installed; 740 held observations, zero registered at this
+snapshot. This is not orphan/broken-file or reclamation proof. Old policies,
+authority, trigger enable-state and accounting remain unchanged. Blocker for
+source publication: exact healthy revision/public-container parity after push.
+Next: different transaction-wide admission/coverage protocol and remaining
+physical-generation/avatar/variant/external-I/O acceptance, never automatic cleanup.
+The full-set resolver remains applied once/verified after backup `20261003-015239`:
+[message reference set](operations/2026-10-03-bot-message-media-references.md),
+63/63, exact healthy `8aa1243f` web/public-container parity. Do not repeat it. Stage 1
 remains applied once/verified at 01:07 MSK:
 [logical identity](operations/2026-10-03-bot-media-logical-identity.md), 28 identities /
 7 attempt bindings, 28 complete receipts / 47,240 bytes / zero reserved. Do not
