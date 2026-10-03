@@ -118,8 +118,11 @@ evidence at that source; use `bot-media-app-outbox-http.fixture.mjs` for the new
 private send/ACK acceptance. Earlier authority and coverage evidence is reused,
 not renamed or automatically rerun.
 
-Next: actual inline-ingest caller/HTTP and external-I/O boundaries, followed by
-the remaining physical-generation/avatar/variant lifecycle proof. Review a
+The later [inline HTTP extension](2026-10-03-bot-media-inline-http.md) now covers
+six actual-handler/RPC cases with controlled Storage; it is separate from the
+9/9 above and does not prove real provider I/O.
+Next: actual Storage SDK/external-I/O boundaries, followed by the remaining
+physical-generation/avatar/variant lifecycle proof. Review a
 production migration and rollback only after those gates; do not replay the
 already accepted identity/resolver/observation/hold SQL or enable reclamation.
 

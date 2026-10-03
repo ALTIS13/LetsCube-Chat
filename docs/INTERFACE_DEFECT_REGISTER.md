@@ -24957,6 +24957,13 @@ migration or provider request
 was performed. [Evidence and frozen inputs](operations/2026-10-03-bot-media-authority-waits.md).
 [Caller extension and limits](operations/2026-10-03-bot-media-busy-recovery.md).
 
+**Inline extension:** exact actual-handler/PostgREST/full PG17.6 6/6 passes with
+controlled Storage; precise delivery/observation/logical-generation assertions,
+45-source freeze, ACL/RLS/policy rollback and copied rows match. Review/fault
+controls pass and exact owned copies are absent. Runtime repair, real provider
+I/O and physical generation remain open; this does not close D-336.
+[Inline evidence](operations/2026-10-03-bot-media-inline-http.md).
+
 ## D-337 `[ ]` A forward RPC can commit after source or destination access is revoked during its epoch wait
 
 **Severity:** high, source/destination audience boundary. Tracker item 78. Found
@@ -25013,6 +25020,9 @@ Actual app/Gateway retry extension now passes focused/mutation/browser and
 exact full-PG17 HTTP gates, with preserved actor/identity and fresh denial. It is
 source-only; retained-authority/coverage/preflight SQL remains test-only.
 [Caller evidence](operations/2026-10-03-bot-media-busy-recovery.md).
+The subsequent controlled inline-handler HTTP gate passes 6/6 with exact linkage,
+expanded rollback and cleanup evidence; no real provider/generation or runtime
+installation claim follows. [Inline gate](operations/2026-10-03-bot-media-inline-http.md).
 Inline-ingest/external I/O, remaining lifecycle,
 attribution/preferences and production safety gates remain.
 No live account, migration, message or Storage/provider operation was used.

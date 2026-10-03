@@ -22,7 +22,24 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-337, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-03 (Codex caller busy recovery).** Owner: this Codex chat;
+**Active resume, 2026-10-03 (Codex inline HTTP recovery).** Owner: this Codex chat;
+branch `codex/bot-inline-media-20261002`, runtime source `3976348f`. Stage:
+actual inline handler/repository plus exact PostgREST 14.12/full PG17.6 **6/6**
+pass with controlled fictional Storage, not real provider I/O. Final 45-source
+pre-import/current manifest, expanded ACL/RLS/policy rollback and copied-row
+multiplicities match. Five review gaps plus fault-probe cleanup corrected;
+six real oracle/fault controls and separate partial-restore/post-mutant failures
+pass, final scoped review has no findings. Exact owned trial/final containers
+removed and ID/name absence independently checked; partial fault copy also absent,
+backups retained. Production database container/cluster identity unchanged.
+Evidence: [inline HTTP and limits](operations/2026-10-03-bot-media-inline-http.md).
+Blocker: provider terminality/physical generation and remaining participants.
+Next: actual Storage SDK/external-I/O gate, then avatar/variant/lifecycle proof.
+**D-336/D-337 and item 78 remain open for runtime.** No production SQL/main
+deployment, automatic cleanup/refund, device operation or native publication.
+Do not repeat completed caller/HTTP gates or replay accepted SQL.
+
+**Prior caller busy recovery, 2026-10-03.** Owner: this Codex chat;
 branch `codex/bot-inline-media-20261002`, starting source `5db656bd`. Stage:
 source-only caller recovery implemented: exact app 500/55P03 retains the original
 entry and schedules retry; allowlisted Gateway message writes expose sanitized

@@ -2,7 +2,19 @@
 
 Status: active production-hardening tracker, updated 2026-10-03.
 
-**Current continuation, 2026-10-03:** source-only actual-app/Gateway busy recovery
+**Current continuation, 2026-10-03:** actual inline handler/repository and exact
+PostgREST 14.12/full PG17.6 **6/6** pass with controlled fictional Storage.
+Final 45-source manifest, expanded ACL/RLS/policy rollback and copied-row
+multiplicities match. Five review gaps and one fault-probe cleanup gap corrected;
+six real fault/oracle probes plus partial-restore/post-mutant failure cleanup pass.
+Trial/final copies removed and independently absent; partial fault copy absent,
+backups retained, production database container/cluster identity unchanged.
+No runtime authority installation, provider PUT/generation claim, cleanup/refund,
+main deployment or native operation. D-336/D-337 and item 78 remain open.
+Next: actual Storage SDK/external-I/O, then avatar/variant/lifecycle participants.
+[Inline evidence](operations/2026-10-03-bot-media-inline-http.md).
+
+**Prior caller progress, 2026-10-03:** source-only actual-app/Gateway busy recovery
 implemented: exact 500/55P03 retains queued identity/payload; message-only Gateway
 503/retry_after/Retry-After 2, no internal retry/PUT. Focused **57/57**, compiled
 mutation **7/7** (six mutants), browser/real IndexedDB **27/27**, final exact
@@ -3766,13 +3778,21 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     rollback/copied rows and exact-owned cleanup/production parity pass.
     Source-only, not runtime authority installation or all-green release.
     [Caller evidence](operations/2026-10-03-bot-media-busy-recovery.md).
+    **Inline HTTP progress:** actual inline handler/repository and real PostgREST
+    RPCs pass 6/6 on fresh full PG17.6; controlled Storage only. Final 45-source
+    manifest, expanded catalog-security rollback and unchanged copied rows pass.
+    Six real oracle/fault controls and partial/post-mutant cleanup failures pass;
+    review findings corrected, exact owned copies absent, backups retained.
+    No real provider PUT, terminality or physical generation follows.
+    [Inline evidence and next gate](operations/2026-10-03-bot-media-inline-http.md).
     Repair only the loaded fixture bodies first. Preserve exact actor/access,
     idempotent retries, grants/receipts/accounting, ready variants and attribution;
     require unchanged literal refusal oracles and no current committed effects.
     Prove actual source/destination locks and all mutators' order, including
     unchanged ingest prefix; a fresh SELECT before another wait is insufficient.
     Isolated HTTP commit/rollback and actual app/gateway busy retry are covered
-    on the candidate; inline-ingest/external I/O and lifecycle remain open. No runtime
+    on the candidate; controlled inline-ingest HTTP is covered, real external I/O
+    and lifecycle remain open. No runtime
     migration or reclamation follows from this test-only checkpoint.
     [Measured waits, hashes and next action](operations/2026-10-03-bot-media-authority-waits.md).
 
