@@ -2,11 +2,14 @@
 
 Status: active production-hardening tracker, updated 2026-10-03.
 
-**Current continuation, 2026-10-03:** actual Storage SDK/owned loopback HTTP 9/9
-and compiled control/mutations 5/5; with existing unit controls 21/21 pass. Final
-25-source/four-package manifest matches. No runtime edit or real provider/SQL
-durability claim. Next: deferred PUT across real SQL lease takeover, then physical
-generation/avatar/variant participants. Holds remain; D-336/D-337 are open.
+**Current continuation, 2026-10-03:** deferred PUT across actual captured SQL/local
+PG18.4 lease takeover **5/5**, zero skips. Stale-lease mutation and independent
+first/late assertion cleanup pass; review P2 fixed through RED/GREEN, no final
+findings. Final 25-source/four-executable manifest matches; five owned PG copies
+absent, no calls/SQL outstanding. No runtime edit/full-schema/provider claim.
+Next: full PG17/PostgREST transfer, then physical generation/avatar/variant
+participants. Holds remain; D-336/D-337 are open.
+[Deferred schedule](operations/2026-10-03-bot-media-deferred-put.md),
 [SDK boundary](operations/2026-10-03-bot-media-storage-sdk-http.md),
 [next participant/fault inventory](operations/2026-10-03-bot-media-external-io-next.md).
 
@@ -3798,6 +3801,12 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     package manifest matches. Controlled RPC/provider replies, not durable SQL,
     provider terminality or physical generation. No runtime change.
     [SDK evidence](operations/2026-10-03-bot-media-storage-sdk-http.md).
+    **Deferred PUT:** actual captured SQL/local PG18.4 **5/5** including stale
+    lease and first/late assertion controls. Independent exact error collection
+    fixes a review P2 through RED/GREEN. Frozen 25-source/four-executable hashes
+    match; five owned copies absent, no calls/SQL outstanding. Controlled
+    Storage, not full-schema/PostgREST/provider acceptance; no runtime patch.
+    [Deferred evidence](operations/2026-10-03-bot-media-deferred-put.md).
     Repair only the loaded fixture bodies first. Preserve exact actor/access,
     idempotent retries, grants/receipts/accounting, ready variants and attribution;
     require unchanged literal refusal oracles and no current committed effects.

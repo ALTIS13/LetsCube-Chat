@@ -9,6 +9,13 @@ physical incarnation binding and non-message lifecycle participation are unprove
 Next implementable increment: defer one fictional old PUT across lease takeover
 and a newer real SQL commit; assert retained attempt history and unchanged charge.
 
+Coordinator update: the proposed [deferred source gate](2026-10-03-bot-media-deferred-put.md)
+is now executed **5/5** on actual captured SQL/local PG18.4 with fake Storage,
+including a stale-lease mutant and independent first/late assertion cleanup.
+Exact source/executable hashes match and five owned copies are absent. This is
+not full-schema/PostgREST/provider proof; next transfer that schedule to the owned
+full PG17/PostgREST boundary. The participant inventory below remains open.
+
 The [current resume](../HANDOVER.md#L25) and
 [final inline report](2026-10-03-bot-media-inline-http.md#L46) supersede the earlier
 trial checkpoint. No private receipts, credentials, copied personal rows, remote

@@ -54,7 +54,8 @@ terminality, quota refund, migration, main deployment or native operation is
 involved. HTTP RPC replies here do not prove durable intent or authorization.
 Existing broader authority REDs remain open; there is no all-green release claim.
 
-Next: [deferred PUT across real SQL lease takeover](2026-10-03-bot-media-external-io-next.md#smallest-next-source-test),
-then the separate deployed-equivalent Storage/generation and avatar/variant
-participants. No DB transaction may span network I/O. Whole-chat-media and
+The [deferred SQL-subset gate](2026-10-03-bot-media-deferred-put.md) now passes 5/5
+on owned local PG18.4, with controlled Storage only. Next: full PG17/PostgREST
+transfer, then the separate deployed-equivalent Storage/generation and avatar/
+variant participants. No DB transaction may span network I/O. Whole-chat-media and
 Android/native holds stay in force; do not replay accepted SQL or enable cleanup.

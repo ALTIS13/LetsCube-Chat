@@ -22,17 +22,19 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-337, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-03 (Codex Storage SDK boundary).** Owner: this Codex chat;
+**Active resume, 2026-10-03 (Codex deferred PUT).** Owner: this Codex chat;
 branch `codex/bot-inline-media-20261002`, runtime source `3976348f`, accepted inline
-checkpoint `a4ee56de` (candidate pushed/remote SHA verified). Stage: actual installed
-SDK/owned loopback HTTP **9/9** plus compiled control/mutations **5/5**; together
-with unchanged Storage unit controls **21/21** pass. Final 25-source/four-package
-manifest matches. No runtime patch/provider/SQL durability claim in SDK fixture.
-Evidence: [SDK cases and limits](operations/2026-10-03-bot-media-storage-sdk-http.md),
+checkpoint `a4ee56de`, SDK checkpoint `6ae0a9f3` (candidate pushed/remote SHA verified).
+Stage: deferred PUT across actual captured SQL/local PG18.4 takeover **5/5**,
+including stale-lease mutation and first/late assertion cleanup. Final 25-source/
+four-executable manifest matches; all five owned PG copies absent, no outstanding
+calls/SQL. Review P2 corrected through actual RED/GREEN; final reread has no findings.
+Evidence: [schedule and limits](operations/2026-10-03-bot-media-deferred-put.md),
+[unchanged installed SDK HTTP 21/21](operations/2026-10-03-bot-media-storage-sdk-http.md),
 [exact full-PG17 inline 6/6 and cleanup](operations/2026-10-03-bot-media-inline-http.md).
 Owned trial/final/partial copies are absent, backups retained. Blocker: provider
-terminality/physical generation and remaining participants. Next: deferred PUT
-across real SQL lease takeover, then avatar/variant/lifecycle proof;
+terminality/physical generation and remaining participants. Next: transfer deferred
+schedule to fresh full PG17/PostgREST, then avatar/variant/lifecycle proof;
 [participant and fault inventory](operations/2026-10-03-bot-media-external-io-next.md).
 **D-336/D-337 and item 78 remain open for runtime.** No production SQL/main
 deployment, automatic cleanup/refund, device operation or native publication.
