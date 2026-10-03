@@ -3916,10 +3916,22 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 82. `[ ]` Verify faithful database recovery, including extension-member ACLs
     and database settings. **D-342**, measured during the D-338 isolated restore,
     not an active production outage. Full roles/custom dump restore omitted
-    the database-level search_path setting and custom USAGE/grant-option rights
+    database-level `app.settings.jwt_secret`/`app.settings.jwt_exp` settings and custom USAGE/grant-option rights
     on graphql/graphql_public schemas. Other deltas are explicit-default versus
     NULL ACL representation and array ordering, not established permission loss.
     Checksums/pg_restore listing alone do not prove restored authorization/config.
+    Direct structured readback corrected the earlier search_path diagnosis;
+    setting values remain private and are not reproduced in documentation.
+    R4 clone-only reconstruction reaches exact object-permission/role hashes,
+    but correctly refuses 21 default-ACL order differences omitted from that
+    inner hash inventory; complete DDL also differs. Reviewed local controls
+    62/62 are not full PG17 acceptance. R5 default-ACL capture is being validated;
+    no new copy/candidate SQL is admitted while the DDL boundary is unresolved.
+    Backup PLUS supplemental live catalog is not backup-alone recovery proof.
+    Final R5-v2 source controls 80/80 retain native-order refusal and independent
+    historical extension-privilege capture. Two review P2s are corrected with
+    actual mixed-plan/strict-error RED and successful native controls; full
+    PG17 dispatch remains closed.
     Fix the isolated-copy reconstruction first, using native typed ACL entries,
     then audit the recovery procedure/backup coverage separately. Require exact
     grants/grantors/options, roles/settings and complete schema DDL readback;

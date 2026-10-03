@@ -28,12 +28,19 @@ The latest owner request authorizes readiness-gated production deployment withou
 another approval round; database backup/rehearsal/rollback requirements still apply.
 Stage: D-338 source-observation prototype reviewed, local PG18.4 **45/45**;
 compatibility P2 corrected with actual presence-CHECK RED/positive controls.
-Full PG17 restore gate is not accepted: three strict refusals, all exact owned
+Full PG17 restore gate is not accepted: four strict refusals, all exact owned
 copies removed, backups retained; no candidate SQL applied. Latest expanded gate
-shows omitted extension-schema rights/database search_path and ACL representation/
-ordering differences. Item 82/D-342 owns the independent recovery-fidelity risk.
-Hardened r3 operator controls **21/21** include real local PG ACL representation;
-typed, exact reconstruction and the full-DDL/role/ACL gate remain in progress.
+repairs typed object ACLs and the two missing application settings on the copy,
+with exact native pre-COMMIT hashes. R4 still refuses 21 default-ACL order
+differences outside that hash inventory; full schema DDL also differs. Reviewed
+R4 local controls **62/62** include real SQL refusal/rollback and teardown faults.
+R5 source adds default-ACL capture and historical extension-privilege diagnostics;
+final frozen local controls **80/80** after two review P2 corrections: native
+preflight now precedes every repair class, and error controls require the exact
+SQLSTATE/primary message. Full copied-PG17 review/rehearsal is not
+accepted and dispatch remains closed. Native role-order incompatibility refuses.
+Item 82/D-342 owns recovery fidelity. This procedure needs the backup PLUS live
+catalog capture, so it does not prove recovery from the backup alone.
 [Observation evidence and remaining boundaries](operations/2026-10-04-avatar-source-observation.md).
 Parallel [latest tester intake](operations/2026-10-04-tester-feedback.md) added
 items 79-81 / D-340-D-341; contacts deduplicated under item 36/D-316. Current UI
@@ -49,6 +56,7 @@ worker HTTP 6/6 + 2 role denials, 10 operator controls, exact rollback; unit
 deployment; RLS/policies/grants/triggers unchanged. Owned remote copy removed,
 backups retained; two stopped startup directories remain after a tool refusal.
 Next: [D-338 epoch/intent acceptance slice](operations/2026-10-03-avatar-source-epoch-next.md),
+starting with the [closed restore/reference gate](operations/2026-10-04-avatar-restore-next.md),
 using the new read-only live catalog and preserving D-336/D-337 evidence. No
 media deletion/refund, native release or device operation is authorized here.
 Whole-`chat-media` HOLD, Android/native HOLD and A063 exclusion remain unchanged.

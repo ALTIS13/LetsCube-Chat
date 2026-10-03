@@ -61,7 +61,7 @@ fixture is not full Auth/RLS/constraint or production equivalence.
 
 ## Full-Copy Restore Gate
 
-Three fresh, isolated full PG17 restores refused strict catalog equality before
+Four fresh, isolated full PG17 restores refused strict catalog equality before
 candidate SQL was applied. All exact owned containers are absent; verified
 backups are retained. Production container/database identity remains unchanged.
 The second restore retained full before/restored metadata for structured diagnosis:
@@ -94,13 +94,116 @@ The third restore applied the 39 exact owner-default representation repairs,
 but expanded comparison still refused: 18 table/one function ACL arrays reorder,
 private schema/two net routines have explicit-default-to-NULL changes, and
 graphql/graphql_public schemas lose custom USAGE/grant-option entries. Roles and
-memberships match; the ALL/postgres database search_path setting is absent.
+memberships match; the ALL/postgres database application settings are absent.
+Direct inspection of setting names corrected the initial search_path diagnosis:
+the missing record contains `app.settings.jwt_secret` and `app.settings.jwt_exp`.
+Values remain private; no setting value was printed or copied into this report.
 Full schema DDL equality is not established. These are distinct findings, not
 one harmless aggregate-order change. New item 82/D-342 tracks recovery fidelity
 separately from avatar observation. The next source slice uses native typed ACL
 entries for exact clone reconstruction and vetted database settings, preserving
 raw readback instead of normalizing missing rights. No production recovery or
 backup-script modification has occurred.
+
+The prepared-copy contract uses the verified full backup **plus supplemental
+live catalog/settings capture**. Reconstruction from that capture cannot prove
+faithful recovery from the backup alone. Item 82/D-342 remains open until the
+durable backup/recovery procedure itself retains and restores the missing state.
+The clone-only repair scope is the two measured application settings; persisted
+database search_path repair is excluded. Session-local search_path for catalog
+measurement/self-checking is a different, non-persistent operation.
+
+### Fourth Restore And Remaining Coverage
+
+The exact reviewed R4 copy/rehearsal closures contain seven/fourteen files. Final
+combined local controls pass **62/62**, zero failures, cancellations or skips;
+helper controls account for 40. Real wrong ACL, role attribute, membership,
+configuration value/order and grant-option changes raise the specific
+`P0001/avatar_epoch_restore_fidelity` before COMMIT and roll back. Native hashes
+retain nested array order, duplicates and NULLs. Real pending-SQL and native
+log-read teardown faults preserve the primary failure after exact owned PG stop
+and path removal. Five helper-source/four binary pins match before/after.
+
+R4 applied clone-only typed object-ACL and application-settings reconstruction.
+The native object-permission and role/settings hashes then match, but the outer
+catalog gate correctly refuses: **21 schema-scoped default ACL arrays** reorder,
+seven each for routines, tables and sequences. Before/after have 27 default-ACL
+records; the typed hash inventory captured none. All other captured metadata,
+after the already specified active-column projection, matches. This is a concrete
+coverage gap, not permission to sort away ACL order. No epoch SQL was applied.
+Independent exact ID/name absence and unchanged production identity were verified;
+the fresh backup and private diagnostics remain retained.
+
+The complete DDL also differs: four CHECK expressions have parenthesis-only
+text differences, one policy lists the same two roles in a different order,
+twelve default-ACL blocks reorder lines and two additional schema-ACL blocks
+appear. Those are diagnostic classifications, NOT an equivalence oracle. In
+particular, the extension initial-privilege cause of the two extra blocks still
+needs actual native catalog evidence. No blanket whitespace, parenthesis, role
+or statement sorting is accepted. Same-copy installed/rollback DDL comparisons
+remain byte-exact.
+
+R5 preparation stays unexecuted while that DDL boundary is unresolved. Its new
+native default-ACL capture/control first fails against the old query (actual
+zero instead of the one specifically owned default); the corrected capture
+passes and an actual default privilege change triggers pre-COMMIT refusal and
+rollback. The generic fixture has its own baseline defaults, so this oracle
+selects the literal fictional owner/schema rather than guessing a global count.
+Full helper reconstruction, frozen-input review and the copied PG17 rehearsal
+are separate remaining gates, not implied by this focused positive control.
+Independent review retains the refusal and defines the
+[next native/reference acceptance contract](2026-10-04-avatar-restore-next.md).
+It requires actual role-order, expression and initial-extension-privilege proof;
+the reference operator is not implemented or approved by this report.
+
+### R5 Local Source Gate
+
+The preceding **73/73** run did not close independent review: two P2s remained
+in mixed transaction composition and the error oracle. Final R5-v2 combined
+local result is **80/80**, zero failures/cancellations/skips: 19 copy controls,
+nine rehearsal controls and 52 helper controls. Fourteen source
+pins, 19 configured binary/extension-input pins and the helper-report pin match
+before/after. Exact current helper PG directories are absent and matching native
+processes are zero. The pending-SQL and failed-log-read cleanup faults remain
+part of this final run, not substituted by callback-only tests.
+
+The mixed transaction's native order guard formerly followed setting and ordinary
+ACL repairs. Actual local event-trigger/sequence controls are non-transactional
+observations, so rollback cannot erase evidence of an earlier repair attempt:
+the old composition is RED, with five ACL attempts observing preceding settings.
+The separated preflight now refuses at the exact expected P0001 before all repair
+classes, with zero observed attempts. A valid mixed settings/object/default repair
+also commits the three independently captured native permission/role/hash records
+exactly. PostgreSQL's [DDL event-trigger boundary](https://www.postgresql.org/docs/18/event-trigger-definition.html)
+excludes shared database objects; the probe observes the preceding settings at
+ordinary ACL attempts, not a claimed ALTER DATABASE event.
+
+The prior marker-only error predicate accepts three wrong-error controls and is
+RED 0/3. The corrected predicate requires literal P0001 and the exact primary
+exception message. An actual native 42601 syntax failure retaining the same marker
+is rejected; unrelated adapter failures cannot supply the intended refusal.
+The focused corrected controls pass 5/5; the helper plan export has its own API
+RED before implementation and preserves the accepted standalone wrapper.
+
+Real schema-scoped table/sequence/routine default repairs preserve raw source
+ACLs, options and unrelated data/roles/settings. Default content, grant option,
+scope and omission mutants fail the native pre-COMMIT fingerprint and roll back.
+Different role creation order demonstrates a native unrepresentable ordinal;
+the helper refuses it instead of claiming that reordered GRANT commands repair
+every source array. Unsupported global/type/schema changes stay refused.
+
+The new extension-history diagnostic first has an incorrect plpgsql-only fixture
+assumption: native inspection finds zero extension initial-ACL records there.
+The final control uses the existing cached `pg_stat_statements` 1.12 extension,
+whose script explicitly sets privileges. A native presence control establishes
+one exact view record; omitted capture is RED 0/1 and complete capture is GREEN.
+An actual current PUBLIC SELECT revoke changes current ACLs while historical
+initial ACLs, extension version and membership stay exact. No system-catalog
+write, external component installation or global PATH change is involved.
+
+R5 remains unexecuted remotely. The actual launcher refuses obsolete R4 approval
+before importing its changed operator; source-only approval must not enable
+dispatch. These are local-source results, not full PG17 or production acceptance.
 
 ## Still Open
 

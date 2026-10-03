@@ -25166,7 +25166,9 @@ was applied because the restore gate refused. Exact owned ID/name are absent;
 backup retained and production container/database identity unchanged.
 
 **Actual delta:** roles and memberships match, but the ALL/postgres database
-search_path setting is absent. Raw graphql/graphql_public schema ACLs lose
+`app.settings.jwt_secret`/`app.settings.jwt_exp` settings are absent, not
+search_path as initially reported. This correction comes from the actual raw
+record's setting names; values remain private. Raw graphql/graphql_public schema ACLs lose
 custom USAGE rights and an original grant option. Private schema and two net
 functions change explicit-default ACLs to NULL; 18 table/one function ACL arrays
 only reorder entries after 39 owner-default representation repairs. Those latter
@@ -25175,7 +25177,22 @@ described as empty/revoked rights. Complete schema DDL equality is not accepted.
 
 **Consequence:** a checksum-valid/listable backup is not yet a proven equivalent
 recovery procedure. Restoring without those rights/settings may change access
-and name resolution. This is not permission to restore or rewrite production.
+and application configuration. This is not permission to restore or rewrite production.
+
+**R4 follow-up:** clone-only typed object-ACL/two-setting reconstruction reaches
+exact native permission/role hashes, but the full gate still refuses 21
+schema-scoped default-ACL order differences omitted from that inner inventory.
+Complete schema DDL remains unequal. Final reviewed local controls 62/62 do not
+establish full PG17 acceptance. Copy ID/name are absent; production identity is
+unchanged and the backup is retained. Supplemental live capture repairs are not
+proof of backup-alone recovery. R5 adds native default-ACL capture and remains
+unexecuted until its full-DDL boundary is validated; do not normalize differences.
+The final R5-v2 local source controls are 80/80 with exact frozen inputs; native
+default-order incompatibility refuses and historical extension ACL capture is
+independent of current rights. Source acceptance does not reopen remote dispatch.
+Review P2s about mixed repair ordering and permissive error matching are corrected:
+all native preflight guards precede catalog mutations, and actual wrong-SQLSTATE
+errors cannot satisfy the expected refusal. Full PG17 fidelity remains unproven.
 
 **Next / acceptance:** faithfully reconstruct the isolated copy using PostgreSQL
 typed ACL entries, preserving original grantor/grantee/privilege/options/order;
