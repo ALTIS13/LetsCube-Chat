@@ -58,10 +58,12 @@ bound. These durations measure settling, not total PG shutdown or provider laten
 
 Reuse [installed SDK HTTP 21/21](2026-10-03-bot-media-storage-sdk-http.md) and
 [full PG17 inline HTTP 6/6](2026-10-03-bot-media-inline-http.md) only for their
-unchanged boundaries. Next transfer this concurrent schedule to a fresh owned
-full PG17.6/PostgREST copy, then complete the
+unchanged boundaries. The concurrent schedule has transferred to an owned
+full PG17.6/PostgREST copy; next complete the
 [participant/physical-generation gates](2026-10-03-bot-media-external-io-next.md).
-Full-schema observation hooks, deployed Storage, physical incarnation,
+The [full-schema transfer](2026-10-03-bot-media-deferred-full-http.md) now passes
+4/4 with exact observation/identity/grant links, controlled Storage only. Its
+proof is separate from this subset gate. Deployed Storage, physical incarnation,
 provider terminality, avatar/variant/lifecycle participation remain unproven here.
 No production SQL/main deployment, cleanup/refund, device action or native release
 follows. D-336/D-337 and item 78 stay open for runtime; existing authority REDs

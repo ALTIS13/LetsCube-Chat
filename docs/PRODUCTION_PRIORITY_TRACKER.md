@@ -2,13 +2,15 @@
 
 Status: active production-hardening tracker, updated 2026-10-03.
 
-**Current continuation, 2026-10-03:** deferred PUT across actual captured SQL/local
-PG18.4 lease takeover **5/5**, zero skips. Stale-lease mutation and independent
-first/late assertion cleanup pass; review P2 fixed through RED/GREEN, no final
-findings. Final 25-source/four-executable manifest matches; five owned PG copies
-absent, no calls/SQL outstanding. No runtime edit/full-schema/provider claim.
-Next: full PG17/PostgREST transfer, then physical generation/avatar/variant
-participants. Holds remain; D-336/D-337 are open.
+**Current continuation, 2026-10-03:** full PG17.6/PostgREST deferred PUT **4/4**,
+two startup controls and lost-handle cleanup/compiled omission mutant pass.
+Final 47-input hashes, bootstrap rollback, copied rows and catalog-only equality
+match; all three owned copies absent, HTTP/SQL work closed, backups retained.
+Review P2s corrected; final source review has no P1/P2. Controlled Storage, no
+runtime patch or provider/physical-generation claim. Next: avatar/variant/
+lifecycle source gates and deployed-equivalent physical-generation proof.
+Holds remain; D-336/D-337 are open.
+[Full deferred HTTP](operations/2026-10-03-bot-media-deferred-full-http.md),
 [Deferred schedule](operations/2026-10-03-bot-media-deferred-put.md),
 [SDK boundary](operations/2026-10-03-bot-media-storage-sdk-http.md),
 [next participant/fault inventory](operations/2026-10-03-bot-media-external-io-next.md).
@@ -3807,13 +3809,20 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     match; five owned copies absent, no calls/SQL outstanding. Controlled
     Storage, not full-schema/PostgREST/provider acceptance; no runtime patch.
     [Deferred evidence](operations/2026-10-03-bot-media-deferred-put.md).
+    **Full deferred HTTP:** full PG17.6/PostgREST **4/4**, exact attempt/logical
+    identity/grant/ledger/canonical observation links and cached-repeat invariants.
+    Two startup controls and lost-handle cleanup/compiled omission mutant pass.
+    Final 47-input hashes, copied rows, bootstrap rollback and catalog-only
+    equality match; three owned copies absent, no HTTP/SQL work outstanding.
+    Review gaps corrected, no final P1/P2; controlled Storage remains non-provider.
+    [Full deferred evidence](operations/2026-10-03-bot-media-deferred-full-http.md).
     Repair only the loaded fixture bodies first. Preserve exact actor/access,
     idempotent retries, grants/receipts/accounting, ready variants and attribution;
     require unchanged literal refusal oracles and no current committed effects.
     Prove actual source/destination locks and all mutators' order, including
     unchanged ingest prefix; a fresh SELECT before another wait is insufficient.
     Isolated HTTP commit/rollback and actual app/gateway busy retry are covered
-    on the candidate; controlled inline-ingest HTTP is covered, real external I/O
+    on the candidate; controlled inline/deferred-ingest HTTP is covered, real external I/O
     and lifecycle remain open. No runtime
     migration or reclamation follows from this test-only checkpoint.
     [Measured waits, hashes and next action](operations/2026-10-03-bot-media-authority-waits.md).

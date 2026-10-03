@@ -22,23 +22,25 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-337, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-03 (Codex deferred PUT).** Owner: this Codex chat;
-branch `codex/bot-inline-media-20261002`, runtime source `3976348f`, accepted inline
-checkpoint `a4ee56de`, SDK checkpoint `6ae0a9f3` (candidate pushed/remote SHA verified).
-Stage: deferred PUT across actual captured SQL/local PG18.4 takeover **5/5**,
-including stale-lease mutation and first/late assertion cleanup. Final 25-source/
-four-executable manifest matches; all five owned PG copies absent, no outstanding
-calls/SQL. Review P2 corrected through actual RED/GREEN; final reread has no findings.
-Evidence: [schedule and limits](operations/2026-10-03-bot-media-deferred-put.md),
-[unchanged installed SDK HTTP 21/21](operations/2026-10-03-bot-media-storage-sdk-http.md),
-[exact full-PG17 inline 6/6 and cleanup](operations/2026-10-03-bot-media-inline-http.md).
-Owned trial/final/partial copies are absent, backups retained. Blocker: provider
-terminality/physical generation and remaining participants. Next: transfer deferred
-schedule to fresh full PG17/PostgREST, then avatar/variant/lifecycle proof;
-[participant and fault inventory](operations/2026-10-03-bot-media-external-io-next.md).
+**Active resume, 2026-10-03 (Codex full-schema deferred HTTP).** Owner: this Codex
+chat; branch `codex/bot-inline-media-20261002`, runtime source `3976348f`, accepted
+local checkpoint `2cadd611` (candidate pushed/remote SHA verified). Stage: real
+full PG17.6/PostgREST deferred takeover **4/4**, two startup fault controls and
+lost-handle cleanup/compiled omission mutant pass. Final 47-input manifest,
+bootstrap rollback, copied rows and catalog-only equality match. All three owned
+copies are absent, backups retained, HTTP/SQL work closed. Review findings fixed;
+final source review has no P1/P2. Evidence:
+[full-schema schedule/limits](operations/2026-10-03-bot-media-deferred-full-http.md).
+Reuse unchanged [local 5/5](operations/2026-10-03-bot-media-deferred-put.md),
+[installed SDK 21/21](operations/2026-10-03-bot-media-storage-sdk-http.md) and
+[inline full-PG17 6/6](operations/2026-10-03-bot-media-inline-http.md).
+Blocker: provider terminality/physical generation and remaining participants.
+Next: avatar setter/variant/lifecycle concurrency source gates and separately
+owned deployed-equivalent Storage/physical-generation proof;
+[participant inventory](operations/2026-10-03-bot-media-external-io-next.md).
 **D-336/D-337 and item 78 remain open for runtime.** No production SQL/main
 deployment, automatic cleanup/refund, device operation or native publication.
-Do not repeat completed caller/HTTP gates or replay accepted SQL.
+Workers closed. Do not repeat completed caller/HTTP gates or replay accepted SQL.
 
 **Prior caller busy recovery, 2026-10-03.** Owner: this Codex chat;
 branch `codex/bot-inline-media-20261002`, starting source `5db656bd`. Stage:

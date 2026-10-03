@@ -13,8 +13,10 @@ Coordinator update: the proposed [deferred source gate](2026-10-03-bot-media-def
 is now executed **5/5** on actual captured SQL/local PG18.4 with fake Storage,
 including a stale-lease mutant and independent first/late assertion cleanup.
 Exact source/executable hashes match and five owned copies are absent. This is
-not full-schema/PostgREST/provider proof; next transfer that schedule to the owned
-full PG17/PostgREST boundary. The participant inventory below remains open.
+not full-schema/PostgREST/provider proof. The separate
+[full-schema transfer](2026-10-03-bot-media-deferred-full-http.md) now passes
+4/4 with controlled Storage, exact links and owned cleanup; it does not prove
+physical generation or provider terminality. The participant inventory remains open.
 
 The [current resume](../HANDOVER.md#L25) and
 [final inline report](2026-10-03-bot-media-inline-http.md#L46) supersede the earlier
@@ -135,7 +137,9 @@ do not revive that ordering as an accepted cross-writer protocol.
 
 ## Smallest Next Source Test
 
-Proposed, **not implemented or executed here**: add one deferred-I/O test with two
+Historical sidecar proposal, now implemented/executed by the coordinator in
+the [local 5/5](2026-10-03-bot-media-deferred-put.md) and
+[full-schema 4/4](2026-10-03-bot-media-deferred-full-http.md) gates: one deferred-I/O test with two
 terminal variants to the existing
 [real SQL/runtime harness](../../tests/server/bot-media-upload-runtime.test.mjs#L16).
 It exercises actual handlers/repository and real reserve/begin/finish/commit,
@@ -207,10 +211,9 @@ active/quarantined/deleting/released state; these are not current receipt states
 Its 24-hour grace and exactly-once release rules are proposals, not permission to
 age out pending/unknown work. Runtime `media_gone/410` is not shipped by this slice.
 
-After the bounded source oracle, the coordinator can transfer its schedule to a
-fresh owned full-schema HTTP copy using supplied request/query/idle exec/blocker/
-digest/check adapters; preserve copied rows and catalog security. This alone still
-uses fake Storage. A separately authorized isolated actual-SDK/Storage gate must
+The bounded source oracle and concurrent full-schema HTTP transfer are now
+executed; their copied-row/catalog and exact-link evidence are in the reports
+above. This alone still uses fake Storage. A separately authorized isolated actual-SDK/Storage gate must
 pin the deployed SDK/Storage implementation, prove normal PUT/GET and duplicate
 controls, then observe lost/delayed replies and determine whether physical identity
 and conditional operations are supported; an absent capability leaves HOLD and
@@ -222,9 +225,10 @@ under a reviewed concurrency contract before any closer is enabled. No DB
 transaction may span network I/O. No successful DELETE, absent-reference proof,
 quota release, production SQL/main deploy or native publication is asserted here.
 
-## Sidecar Validation
+## Historical Sidecar Validation
 
-Only this report is written. Validation is relative-link/line-target resolution
+The original sidecar wrote only this report. Its validation was relative-link/line-target resolution
 and whitespace checking of this file, plus source self-review: 82 relative links
 and line targets resolve; trailing whitespace is absent. No application
-suite, completed inline case, SQL session or provider/device operation is rerun.
+suite, completed inline case, SQL session or provider/device operation was rerun
+by that sidecar. Coordinator implementation/execution updates are linked above.
