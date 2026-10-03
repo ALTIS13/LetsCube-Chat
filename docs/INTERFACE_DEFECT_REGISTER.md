@@ -24926,6 +24926,16 @@ All exact owned containers and both workers are closed. This remains test-only;
 the original 50/50 inputs are unchanged, not replaced by these smaller oracles.
 [Full-schema evidence](operations/2026-10-03-bot-media-authority-full-schema.md).
 
+**HTTP extension, 2026-10-03:** isolated exact PostgREST 14.12/PG17.6 final
+18/18 covers HTTP transactions, actual gateway and outbox runner. Two previously
+uncovered cached-preflight oracles are RED with literal 200/409 (target binding)
+and 200/500 (concurrent membership); the loaded fixture-only retention/binding/
+VOLATILE repair is green. STABLE mutant produces 405/25006 and exact fault
+restoration passes. Review gaps corrected; 46-source manifest, copied-row
+multiplicities and startup/missing-relation failure controls pass. Outbox drops
+actual 500/55P03; app/gateway busy recovery remains open, not a production fix.
+[HTTP evidence and honest limits](operations/2026-10-03-bot-media-http-boundaries.md).
+
 **Next / acceptance:** repair the loaded writer in disposable fixtures first,
 cover actual gateway command and successful/denied retries, and require strict
 fresh-authority refusal without new message/result/grant/accounting effects.
@@ -24936,8 +24946,9 @@ caller extension passes 41/41, five compiled mutants / nine literal failures and
 final source hashes match. PostgREST 14.12 RC/commit is configuration capture only,
 not HTTP acceptance. Review findings fixed/rerun, both workers closed, exact owned
 copy removed. [Combined evidence](operations/2026-10-03-bot-media-combined-coverage.md).
-Actual HTTP commit/rollback, gateway/outbox retries and production gates remain
-open. No live exploit, migration or provider request
+Isolated HTTP commit/rollback is covered by the later HTTP extension. Actual
+app/gateway busy retry policy and production gates remain open. No live exploit,
+migration or provider request
 was performed. [Evidence and frozen inputs](operations/2026-10-03-bot-media-authority-waits.md).
 
 ## D-337 `[ ]` A forward RPC can commit after source or destination access is revoked during its epoch wait
@@ -24987,7 +24998,12 @@ rollback, assertion-fault restoration and 15 pre-import/final hashes match.
 PostgREST 14.12 RC/commit configuration is captured, not HTTP acceptance. Review
 findings fixed/rerun, both workers closed, exact owned copy removed.
 [Combined evidence](operations/2026-10-03-bot-media-combined-coverage.md).
-Actual HTTP commit/rollback, gateway/outbox retries, attribution/preferences and
-production safety gates remain.
+**Later HTTP extension:** real forward RPC commit/deduplication and current mute
+refusal pass under the exact isolated PostgREST 14.12 runtime, within the 18/18
+gate. No extra committed effects on refusal or duplicate. Gateway early-return
+repair and caller busy gaps are detailed in
+[HTTP evidence](operations/2026-10-03-bot-media-http-boundaries.md).
+Actual app/gateway busy retry policy, remaining lifecycle,
+attribution/preferences and production safety gates remain.
 No live account, migration, message or Storage/provider operation was used.
 [Evidence and current limits](operations/2026-10-03-bot-media-authority-waits.md).

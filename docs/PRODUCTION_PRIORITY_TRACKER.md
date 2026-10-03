@@ -2,21 +2,22 @@
 
 Status: active production-hardening tracker, updated 2026-10-03.
 
-**Current continuation, 2026-10-03:** test-only full-schema PG17.6 authority repair
-passes **18/18 behavior + 19/19 concurrency**, **11 mutation variants / 15 expected
-failures** and 18/25 positive before/after controls. Frozen execution/current
-hashes match; both workers closed and all three exact owned isolated containers
-removed. Copied-row/function/trigger rollback hashes match; backups retained.
-The prior **50/50 PG18 repair and 13/21 mutations** are reused after checking all
-eight frozen inputs unchanged. **D-336/D-337, item 78 remain open for runtime**,
-not installed fixes. No production SQL write, main deployment, admission/reclaim
-authority, device operation or native publication. Evidence:
-[full-schema rehearsal and remaining gates](operations/2026-10-03-bot-media-authority-full-schema.md),
-[prior repair](operations/2026-10-03-bot-media-authority-repair.md),
-[caller inventory](operations/2026-10-03-bot-media-caller-isolation-inventory.md).
-Next: combined full-schema whole-message coverage, enclosing/nested callers,
-effective API isolation/commit, gateway/outbox retries and other lifecycle
-participants. Whole-chat-media/native holds remain; never replay the
+**Current continuation, 2026-10-03:** exact isolated PostgREST 14.12/full PG17.6
+HTTP gate **18/18**; two old-preflight RED cases, repaired fixture-only gateway
+4/4. STABLE mutation exposes 405/25006 and exact recovery passes. Final 46-source
+pre-import/current manifest, copied-row multiplicities, baseline relation-loss
+and startup-fault cleanup pass after one review's five P2 gaps were corrected.
+Workers/sessions closed; all three exact owned HTTP copies removed, backups retained.
+**D-336/D-337, item 78 remain open for runtime**, not installed fixes.
+Actual outbox 500/55P03 removes the queue entry, and gateway has no specific busy
+contract. Next: narrow busy recovery through actual app send/ACK and gateway
+envelope, then inline-ingest/remaining lifecycle acceptance. Prior combined
+41/41, 5/9 mutants, 23/23 controls and prior authority evidence stay separate,
+not repeated or relabelled. No production SQL write/main deployment, admission/
+reclaim authority, device operation or native publication. Evidence:
+[HTTP results and remaining gates](operations/2026-10-03-bot-media-http-boundaries.md),
+[combined rehearsal](operations/2026-10-03-bot-media-combined-coverage.md).
+Whole-chat-media/native holds remain; never replay the
 accepted SQL below. A concurrent authorised tester intake adds items 76/77 and
 keeps VPN item 53 open, rather than duplicating it:
 [feedback](operations/2026-10-03-tester-feedback.md). No phone update is implied.
@@ -3744,13 +3745,23 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     HTTP commit/retry acceptance. One review's three P2 verification findings were
     fixed and rerun; both workers closed, exact owned copy removed, backup retained.
     [Combined evidence](operations/2026-10-03-bot-media-combined-coverage.md).
+    **HTTP progress:** final isolated exact PostgREST 14.12/PG17.6 **18/18**,
+    two literal old-preflight RED failures (200/409 target binding; 200/500
+    concurrent membership). Fixture-only preflight retention/binding/VOLATILE
+    repair passes; compiled STABLE mutant returns 405/25006, exact restoration
+    and assertion-fault recovery pass. Final 46-source import-graph manifest,
+    copied-row multiplicities, missing baseline relation and startup-fault
+    cleanup verified after one review/fresh-copy rerun. Outbox actual 500/55P03
+    drops the persisted entry: automatic busy recovery is NOT complete. Actual
+    app send/ACK, IndexedDB, inline ingest and lifecycle remain separate gates.
+    [HTTP evidence and next slice](operations/2026-10-03-bot-media-http-boundaries.md).
     Repair only the loaded fixture bodies first. Preserve exact actor/access,
     idempotent retries, grants/receipts/accounting, ready variants and attribution;
     require unchanged literal refusal oracles and no current committed effects.
     Prove actual source/destination locks and all mutators' order, including
     unchanged ingest prefix; a fresh SELECT before another wait is insufficient.
-    Actual HTTP commit/rollback, gateway/outbox fresh-authority retries and
-    remaining lifecycle acceptance stay open. No runtime
+    Isolated HTTP commit/rollback is now covered; actual app/gateway busy retry
+    policy and remaining lifecycle acceptance stay open. No runtime
     migration or reclamation follows from this test-only checkpoint.
     [Measured waits, hashes and next action](operations/2026-10-03-bot-media-authority-waits.md).
 

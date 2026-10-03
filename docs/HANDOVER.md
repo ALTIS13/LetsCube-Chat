@@ -22,28 +22,32 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-337, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-03 (Codex combined coverage rehearsal).** Owner:
-this Codex chat; branch `codex/bot-inline-media-20261002`, starting source
-`73ccd190`. Stage: test-only PG17.6 combined whole-message coverage and retained
-authority, **41/41**, **5 compiled mutants / 9 exact failures**, **23/23** repeated
-controls. Real text/edit/pin, nested member/system message, delete RPC/ledger,
-savepoint lifetime and independent-session atomic refusals are covered. Current
-15-source pre-import/final manifest matches the executed receipt; copied-row/
-control/function/trigger rollback and assertion-fault restoration pass. One
-whole-stage review's three P2 verification findings were fixed and rerun; both
-workers/all finite sessions are closed, exact owned copy removed, backup retained.
-Evidence:
-[combined coverage, callers and API configuration](operations/2026-10-03-bot-media-combined-coverage.md).
+**Active resume, 2026-10-03 (Codex HTTP boundaries).** Owner: this Codex chat;
+branch `codex/bot-inline-media-20261002`, starting source `6b818392`. Stage:
+test-only exact PostgREST 14.12 / full PG17.6 HTTP **18/18** (7 transactions,
+4 actual gateway, 7 actual outbox-runner/separate-adapter cases). Old preflight
+has two literal RED failures: cached target rebound 200/409 and concurrent
+membership change 200/500. Loaded fixture-only preflight repair passes; compiled
+STABLE mutant gives 405/25006, exact definition/digest and assertion-fault recovery
+pass. Final 46-source pre-import/current manifest matches; copied row multiplicities,
+baseline relation-loss detection and detached-startup failure cleanup pass. One
+whole-stage review's five P2 gaps were corrected and the fresh-copy gate rerun.
+Both workers/all finite sessions closed; all three exact owned HTTP copies removed,
+absence and unchanged production runtime verified; backups retained.
+Evidence: [HTTP results, limits and retry gaps](operations/2026-10-03-bot-media-http-boundaries.md).
+**D-336/D-337 and item 78 remain open for runtime.** Actual outbox 500/55P03 drops
+the queue entry; gateway maps it to generic internal error. Blocker/next: narrow
+busy recovery through actual app send/ACK and gateway envelope, then inline-ingest
+and remaining lifecycle proof. Serialized memory restart is not IndexedDB proof;
+HTTP is an isolated exact-binary acceptance, not live proxy/Auth/provider proof.
+Continue that checkpoint, not a new approval round or completed rehearsals.
+Prior **41/41**, 5/9 mutants and 23/23 combined controls remain separate:
+[combined coverage and callers](operations/2026-10-03-bot-media-combined-coverage.md).
 Prior **18/18 + 19/19**, 11/15 mutation authority evidence remains separate:
 [full schema, RED/GREEN, frozen inputs and limits](operations/2026-10-03-bot-media-authority-full-schema.md).
 Prior [50/50 PG18 repair](operations/2026-10-03-bot-media-authority-repair.md)
-is reused after rechecking all eight unchanged inputs. **D-336/D-337 and item 78
-remain open for runtime, not installed fixes.** PostgREST 14.12 configuration
-capture confirms RC/commit, but not HTTP completion. Blocker/next: actual isolated
-HTTP commit/rollback and gateway/outbox fresh-authority retries, then remaining
-lifecycle proof. Continue that next stage, not the completed rehearsal. Use the
+is reused, not rerun or replaced by smaller HTTP oracles. Use the
 [caller inventory](operations/2026-10-03-bot-media-caller-isolation-inventory.md).
-Continue the approved checkpoint, not completed stages or a new approval round.
 Earlier applied identity/resolver/observation/hold SQL stays applied once; never
 replay it. No production SQL write/main deploy or native/device operation in
 this prototype. Whole-chat-media purge hold, Android/native HOLD and A063
