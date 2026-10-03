@@ -4,7 +4,8 @@ Owner: Codex coordinator; existing branch `codex/bot-inline-media-20261002`,
 base `8aa1243f`. Stage 3 of the approved
 [foundation](2026-10-03-bot-media-admission-foundation.md).
 Source verified; **applied once/independently verified** at 03:00 MSK on
-2026-10-03 after backup `20261003-030013`. Source publication parity is pending.
+2026-10-03 after backup `20261003-030013`. Source `1f26c356` is published with
+exact healthy web revision/public-container parity verified.
 
 ## Ruling And Contract
 
@@ -115,6 +116,24 @@ including existing writer lock prefixes and after-wait authorization. Physical
 Storage incarnation, late PUT, avatar/variant participation and generation-bound
 close/removal/charge release remain separate gates. No closer/deletion entrypoint
 or shared reference counter is introduced by this fallback.
+
+## Publication
+
+Reviewed outgoing `origin/main..HEAD` independently and resolved aliases against
+their own commit tree: one owned source commit, zero alias imports. Source
+`1f26c356e1d5f7d0a47c906c296b59a5f83a314f` reached candidate/main. The first
+Coolify build failed on Docker Registry's `502` for the Node base image, not
+application source; old healthy web stayed available. One deliberate retry of
+the same revision succeeded without config changes or SQL replay. Disk had 66 GB
+free. The retry emitted a real production build marker before acceptance.
+
+Sole healthy web container carries that exact source tag. Public/container entry
+`/assets/index-CWBgVg3u.js` and service worker hashes match and are unchanged from
+the accepted prior revision; retained Cnz/4fv entries match too. New/old markers
+pass, candidate notice remains removed; captures zero. Gateway/worker remain two
+healthy `856e03e4` replicas with no `artifacts/api-server` watched-path delta.
+Documentation-only closeout may advance the web tag; verify its exact image and
+content parity separately. No native build/install/publication was performed.
 
 ## Boundaries
 

@@ -15,8 +15,10 @@ Actual multistatement/nested/ON CONFLICT sessions refute the naive sorted shared
 object fence ordering with `40P01`; admission remains open. Next: different
 transaction-wide protocol plus physical-generation/avatar/variant/external-I/O
 acceptance. Whole-chat-media and native/Android release holds remain. No cleanup,
-refund or replay of accepted SQL. Publication still requires exact healthy
-revision/public-container parity after push.
+refund or replay of accepted SQL. Source `1f26c356` is on candidate/main and
+reached sole healthy exact-revision web; unchanged public/container entry/SW and
+retained-file hashes plus old/new markers pass. Gateway/worker remain healthy
+`856e03e4` without watched-path changes. Docs-only closeout can advance web tag.
 
 **Prior accepted stage 2, 2026-10-03:** full-set private message resolver is applied
 once/independently verified after backup `20261003-015239`. Final **63/63**,

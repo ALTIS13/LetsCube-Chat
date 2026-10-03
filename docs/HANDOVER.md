@@ -23,7 +23,7 @@ Read in this order:
    measurement. Search it before filing anything.
 
 **Active resume, 2026-10-03 (Codex implementation).** Owner: this Codex chat;
-branch `codex/bot-inline-media-20261002`, baseline `8aa1243f`. Stage:
+branch `codex/bot-inline-media-20261002`, implementation source `1f26c356`. Stage:
 AFTER STATEMENT observations-only fallback **applied once/independently verified**
 at 03:00 MSK after fresh backup `20261003-030013`.
 Evidence/contract: [observations and actual fence counterexample](operations/2026-10-03-bot-message-media-observations.md).
@@ -35,8 +35,12 @@ mutants and rollback pass. Independent review has no remaining P1/P2. All worker
 closed, exact owned restore container removed; backups retained. Private table and
 four statement hooks installed; 740 held observations, zero registered at this
 snapshot. This is not orphan/broken-file or reclamation proof. Old policies,
-authority, trigger enable-state and accounting remain unchanged. Blocker for
-source publication: exact healthy revision/public-container parity after push.
+authority, trigger enable-state and accounting remain unchanged. Source `1f26c356`
+is on candidate/main and reached sole healthy exact-revision web: unchanged
+entry/SW, retained-file hashes and new/old markers match public/container bytes.
+Gateway/worker remain healthy `856e03e4`, with no watched-path changes. A docs-only
+closeout can advance the web tag without changing these accepted application bytes.
+Blocker: actual admission/coverage and physical-generation/external-I/O proof.
 Next: different transaction-wide admission/coverage protocol and remaining
 physical-generation/avatar/variant/external-I/O acceptance, never automatic cleanup.
 The full-set resolver remains applied once/verified after backup `20261003-015239`:
