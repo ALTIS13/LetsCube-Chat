@@ -2,7 +2,15 @@
 
 Status: active production-hardening tracker, updated 2026-10-03.
 
-**Current continuation, 2026-10-03:** actual inline handler/repository and exact
+**Current continuation, 2026-10-03:** actual Storage SDK/owned loopback HTTP 9/9
+and compiled control/mutations 5/5; with existing unit controls 21/21 pass. Final
+25-source/four-package manifest matches. No runtime edit or real provider/SQL
+durability claim. Next: deferred PUT across real SQL lease takeover, then physical
+generation/avatar/variant participants. Holds remain; D-336/D-337 are open.
+[SDK boundary](operations/2026-10-03-bot-media-storage-sdk-http.md),
+[next participant/fault inventory](operations/2026-10-03-bot-media-external-io-next.md).
+
+**Prior inline progress, 2026-10-03:** actual inline handler/repository and exact
 PostgREST 14.12/full PG17.6 **6/6** pass with controlled fictional Storage.
 Final 45-source manifest, expanded ACL/RLS/policy rollback and copied-row
 multiplicities match. Five review gaps and one fault-probe cleanup gap corrected;
@@ -3785,6 +3793,11 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     review findings corrected, exact owned copies absent, backups retained.
     No real provider PUT, terminality or physical generation follows.
     [Inline evidence and next gate](operations/2026-10-03-bot-media-inline-http.md).
+    **SDK boundary:** actual installed SDK/loopback HTTP 9/9 plus compiled
+    control/mutations 5/5, joint unchanged-unit gate 21/21. Final 25-source/four-
+    package manifest matches. Controlled RPC/provider replies, not durable SQL,
+    provider terminality or physical generation. No runtime change.
+    [SDK evidence](operations/2026-10-03-bot-media-storage-sdk-http.md).
     Repair only the loaded fixture bodies first. Preserve exact actor/access,
     idempotent retries, grants/receipts/accounting, ready variants and attribution;
     require unchanged literal refusal oracles and no current committed effects.
