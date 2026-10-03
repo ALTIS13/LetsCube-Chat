@@ -3735,13 +3735,22 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     Exact copied-row/function/trigger rollback hashes match; all owned containers
     removed. This does not install a runtime repair.
     [Full-schema evidence](operations/2026-10-03-bot-media-authority-full-schema.md).
+    **Combined progress:** full PG17.6 41/41 (18 authority + 6 coverage + 9 real
+    enclosing/non-media callers + 3 isolation + 5 two-session/savepoint groups),
+    5 compiled mutants / 9 literal failures, 23/23 repeated controls. Exact
+    copied-row/control/function/trigger rollback, committed-mutant fault recovery
+    and 15 pre-import/final input hashes pass.
+    PostgREST 14.12 safe configuration capture confirms RC/commit; this is not
+    HTTP commit/retry acceptance. One review's three P2 verification findings were
+    fixed and rerun; both workers closed, exact owned copy removed, backup retained.
+    [Combined evidence](operations/2026-10-03-bot-media-combined-coverage.md).
     Repair only the loaded fixture bodies first. Preserve exact actor/access,
     idempotent retries, grants/receipts/accounting, ready variants and attribution;
     require unchanged literal refusal oracles and no current committed effects.
     Prove actual source/destination locks and all mutators' order, including
     unchanged ingest prefix; a fresh SELECT before another wait is insufficient.
-    Combined whole-message coverage, enclosing/nested callers, effective API
-    isolation/commit/retries and remaining lifecycle acceptance stay open. No runtime
+    Actual HTTP commit/rollback, gateway/outbox fresh-authority retries and
+    remaining lifecycle acceptance stay open. No runtime
     migration or reclamation follows from this test-only checkpoint.
     [Measured waits, hashes and next action](operations/2026-10-03-bot-media-authority-waits.md).
 

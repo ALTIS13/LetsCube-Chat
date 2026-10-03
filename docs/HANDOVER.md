@@ -22,22 +22,26 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-337, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-03 (Codex full-schema authority rehearsal).** Owner:
+**Active resume, 2026-10-03 (Codex combined coverage rehearsal).** Owner:
 this Codex chat; branch `codex/bot-inline-media-20261002`, starting source
-`092629c6`. Stage: test-only PG17.6 full-schema repair, **18/18 behavior + 19/19
-concurrency**, **11 mutation variants / 15 expected failures**, 18/25 positive
-before/after controls; final execution/current hashes match. Private-block,
-direct-forward INSERT fallback, sanction retention and two candidate FK/cascade
-regressions are covered. Both review workers and all finite sessions are closed;
-all three exact owned isolated containers removed, copied-row/function/trigger
-rollback hashes verified, backups retained. Evidence:
+`73ccd190`. Stage: test-only PG17.6 combined whole-message coverage and retained
+authority, **41/41**, **5 compiled mutants / 9 exact failures**, **23/23** repeated
+controls. Real text/edit/pin, nested member/system message, delete RPC/ledger,
+savepoint lifetime and independent-session atomic refusals are covered. Current
+15-source pre-import/final manifest matches the executed receipt; copied-row/
+control/function/trigger rollback and assertion-fault restoration pass. One
+whole-stage review's three P2 verification findings were fixed and rerun; both
+workers/all finite sessions are closed, exact owned copy removed, backup retained.
+Evidence:
+[combined coverage, callers and API configuration](operations/2026-10-03-bot-media-combined-coverage.md).
+Prior **18/18 + 19/19**, 11/15 mutation authority evidence remains separate:
 [full schema, RED/GREEN, frozen inputs and limits](operations/2026-10-03-bot-media-authority-full-schema.md).
 Prior [50/50 PG18 repair](operations/2026-10-03-bot-media-authority-repair.md)
 is reused after rechecking all eight unchanged inputs. **D-336/D-337 and item 78
-remain open for runtime, not installed fixes.** Blocker: combined whole-message
-coverage / enclosing callers, effective API isolation/commit/retries and remaining
-lifecycle proof. Next: fresh full-schema PG17 combined coverage and actual
-nested/non-media callers, then gateway/outbox fresh-authority retries. Use the
+remain open for runtime, not installed fixes.** PostgREST 14.12 configuration
+capture confirms RC/commit, but not HTTP completion. Blocker/next: actual isolated
+HTTP commit/rollback and gateway/outbox fresh-authority retries, then remaining
+lifecycle proof. Continue that next stage, not the completed rehearsal. Use the
 [caller inventory](operations/2026-10-03-bot-media-caller-isolation-inventory.md).
 Continue the approved checkpoint, not completed stages or a new approval round.
 Earlier applied identity/resolver/observation/hold SQL stays applied once; never

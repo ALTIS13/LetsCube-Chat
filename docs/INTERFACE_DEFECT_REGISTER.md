@@ -24930,8 +24930,13 @@ the original 50/50 inputs are unchanged, not replaced by these smaller oracles.
 cover actual gateway command and successful/denied retries, and require strict
 fresh-authority refusal without new message/result/grant/accounting effects.
 Authority must remain protected through later waits; prove mutator and ingest
-lock order, not just another plain SELECT. Combined full-schema coverage,
-enclosing callers, effective API isolation/retries and production gates remain
+lock order, not just another plain SELECT. Combined PG17.6 coverage/enclosing
+caller extension passes 41/41, five compiled mutants / nine literal failures and
+23/23 repeated controls; rollback, assertion-fault restoration and 15 pre-import/
+final source hashes match. PostgREST 14.12 RC/commit is configuration capture only,
+not HTTP acceptance. Review findings fixed/rerun, both workers closed, exact owned
+copy removed. [Combined evidence](operations/2026-10-03-bot-media-combined-coverage.md).
+Actual HTTP commit/rollback, gateway/outbox retries and production gates remain
 open. No live exploit, migration or provider request
 was performed. [Evidence and frozen inputs](operations/2026-10-03-bot-media-authority-waits.md).
 
@@ -24976,7 +24981,13 @@ exhaustive UPDATE/admin-writer claim follows.
 **Next / acceptance:** protect and recheck exact source/destination authority
 through all subsequent waits in a test-only fixture candidate. Require unchanged
 strict refusal and no new committed effects, preserving attribution, variants and
-idempotent success. Combined coverage, enclosing/nested callers, effective API
-isolation/commit/retries, attribution/preferences and production safety gates remain.
+idempotent success. Combined PG17.6 coverage/enclosing caller extension passes
+41/41, five compiled mutants / nine literal failures and 23/23 repeated controls;
+rollback, assertion-fault restoration and 15 pre-import/final hashes match.
+PostgREST 14.12 RC/commit configuration is captured, not HTTP acceptance. Review
+findings fixed/rerun, both workers closed, exact owned copy removed.
+[Combined evidence](operations/2026-10-03-bot-media-combined-coverage.md).
+Actual HTTP commit/rollback, gateway/outbox retries, attribution/preferences and
+production safety gates remain.
 No live account, migration, message or Storage/provider operation was used.
 [Evidence and current limits](operations/2026-10-03-bot-media-authority-waits.md).
