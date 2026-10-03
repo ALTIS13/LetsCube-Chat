@@ -22,7 +22,26 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-339, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-03 (Codex avatar/variant source gates).** Owner: this
+**Active resume, 2026-10-03 (Codex implementation resumed).** Owner: this Codex
+chat; branch `codex/bot-inline-media-20261002`, base `0ac96a70`, initially clean.
+The latest owner request authorizes readiness-gated production deployment without
+another approval round; database backup/rehearsal/rollback requirements still apply.
+Stage: D-339 exact-claim queue repair deployed at runtime `8da252ad`; web/worker/
+Gateway sole healthy replicas and old/new markers verified. SQL applied once
+after backup `20261003-222036`; raw catalog sort mismatch was independently
+reconciled by exact full-signature records, not a retry or weakened comparison.
+Evidence: worker 9/9, local PG18.4 14/14, full PG17/PostgREST SQL 6/6 and actual
+worker HTTP 6/6 + 2 role denials, 10 operator controls, exact rollback; unit
+4,941 pass / 0 fail / 13 existing optional skips. Live NULL-only RPC 4/4 after
+deployment; RLS/policies/grants/triggers unchanged. Owned remote copy removed,
+backups retained; two stopped startup directories remain after a tool refusal.
+Next: [D-338 epoch/intent acceptance slice](operations/2026-10-03-avatar-source-epoch-next.md),
+using the new read-only live catalog and preserving D-336/D-337 evidence. No
+media deletion/refund, native release or device operation is authorized here.
+Whole-`chat-media` HOLD, Android/native HOLD and A063 exclusion remain unchanged.
+[Exact-claim implementation and rollout record](operations/2026-10-03-media-claim-token-rollout.md).
+
+**Prior avatar/variant source gates, 2026-10-03.** Owner: this
 Codex chat; branch `codex/bot-inline-media-20261002`, start `b76cf7c5`.
 Stage: actual compiled avatar worker + installed SDK/sharp, fictional fetch-only
 DB/Storage schedules + captured local PG18.4 queue/atomic-publication prototypes.
@@ -34,7 +53,7 @@ are measured. Two review P2s corrected with actual wrong-target mutants and
 retained A-old -> B -> A-new; final re-review has no P1/P2. All owned jobs/SQL
 settled, 23 final local PG copies absent, workers closed.
 [Source evidence and next contract](operations/2026-10-03-media-avatar-concurrency.md).
-**D-338/D-339 remain open for runtime.** Next: source-epoch + durable source/target
+**At that prior checkpoint D-338/D-339 were open; D-339 is now repaired above.** Next: source-epoch + durable source/target
 intent contract across setters/queue/scan, then actual-worker disposable wiring,
 full PG17/PostgREST and separately owned Storage/physical-generation proof.
 No production SQL/main deployment, cleanup/refund, device or native action.

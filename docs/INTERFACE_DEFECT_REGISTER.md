@@ -25060,14 +25060,14 @@ binding. Same-URL reuse is not an incarnation. No deletion/refund follows, and
 this defect remains open until the actual runtime and affected writers pass.
 [Schedules, source proof and limits](operations/2026-10-03-media-avatar-concurrency.md).
 
-## D-339 `[ ]` An old variant job can finish or retry a newer avatar claim
+## D-339 `[x]` An old variant job can finish or retry a newer avatar claim
 
 **Severity:** high, queue ownership/data integrity. Tracker item 78. Found
 2026-10-03 in owned local PostgreSQL 18.4 using captured queue functions and real
 avatar-enqueue triggers; not production SQL/runtime proof.
 
-**Surface:** `.migration-backup/supabase/migrations/20260913120000_media_variant_job_queue.sql`
-(`media_variant_job_finish` and `media_variant_job_retry`); current worker calls
+**Original surface:** `.migration-backup/supabase/migrations/20260913120000_media_variant_job_queue.sql`
+(`media_variant_job_finish` and `media_variant_job_retry`); baseline worker calls
 the old signatures without an owned claim token.
 
 **Observed reproduction:** A claims; an actual avatar UPDATE resets the job;
@@ -25082,8 +25082,18 @@ Test-only token-scoped overloads refuse stale/null tokens, accept B, retain the
 omissions fail the same literal oracle; original definitions/owners/ACLs/config
 and catalog digest are restored. Owned fixture directories are removed.
 
-**Next / acceptance:** carry the exact owned token through actual claim,
-finish/retry and scan fallback; integrate with source epoch and atomic publication
-without erasing admitted external attempts. A claim token alone is not an I/O
-fence or cleanup authority. Neither overload is installed; D-339 remains open.
+**Runtime repair, 2026-10-03:** migration `20261003183925` applied once after
+verified backup `20261003-222036`; worker `8da252ad` carries its own accepted
+claim token on finish/retry, without legacy fallback. Old overloads are inert
+false for rolling callers. Local PG18.4 14/14, actual worker/SDK 9/9, full
+PG17/PostgREST SQL 6/6 and worker HTTP 6/6 + 2 role denials pass; exact rollback,
+whole B row, backoff/exhaustion, real lock and mutants are verified. Production
+functions/owners/ACL/config are exact by signature; only aggregate sort order
+differed. Sole healthy exact-revision worker and two token markers are verified,
+live NULL-only HTTP 4/4 passes, RLS/policies/grants/triggers unchanged.
+
+**Remaining scope:** scan/avatar I/O admission, source epoch and atomic
+publication belong to D-338; admitted external attempts must survive. A claim
+token alone is not an I/O fence, physical version or cleanup authority.
+[Runtime rollout and limits](operations/2026-10-03-media-claim-token-rollout.md).
 [Source gate and limits](operations/2026-10-03-media-avatar-concurrency.md).

@@ -2,7 +2,19 @@
 
 Status: active production-hardening tracker, updated 2026-10-03.
 
-**Current continuation, 2026-10-03:** avatar/variant source gate **73/73**,
+**Current continuation, 2026-10-03:** D-339 exact queue-claim settlement deployed
+at runtime `8da252ad`: sole healthy web/worker/Gateway, old/new worker and Gateway
+markers, public/container JS hash match and live NULL-only RPC 4/4. SQL applied
+once after verified backup `20261003-222036`; full-signature readback reconciled
+only database aggregate sort order, with all definitions/owners/ACL/config exact.
+Worker 9/9, local PG18.4 14/14, full PG17 SQL 6/6 and actual HTTP 6/6 + 2 denials,
+10 operator controls; full unit 4,941 pass / 0 fail / 13 existing optional skips.
+Owned remote copy removed, backups retained. D-338/D-336/D-337 and item 78 remain
+open; no deletion/refund/provider/native action. Next:
+[epoch/intent slice](operations/2026-10-03-avatar-source-epoch-next.md).
+[Rollout proof and limits](operations/2026-10-03-media-claim-token-rollout.md).
+
+**Prior avatar continuation, 2026-10-03:** avatar/variant source gate **73/73**,
 no skips; 42-input source/package/native/PG hashes match. Actual worker stale
 publication/overwrite and captured queue stale-claim consumption are reproduced.
 Two review P2s corrected; final scoped review has no findings. Worker jobs/SQL

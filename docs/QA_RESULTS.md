@@ -1,5 +1,28 @@
 # QA Results
 
+## 2026-10-03 - Exact Variant Claim Ownership
+
+D-339 queue repair runtime `8da252ad` is deployed: sole healthy web/worker/Gateway
+replicas, old/new worker token and Gateway busy markers, public/container JS
+byte-hash equality. Actual live NULL-only new/legacy RPCs pass 4/4 after deploy.
+SQL applied once after verified backup `20261003-222036`; RLS/policies/grants/
+triggers remain unchanged. Initial raw catalog mismatch was only overloaded
+signature sort order; separately reviewed exact-field reconciliation passed,
+without SQL replay or dropping comparison fields.
+
+Actual worker/SDK 9/9, local PG18.4 14/14, full PG17/PostgREST six SQL contracts,
+six worker HTTP schedules + two role denials, ten operator controls and 34
+unchanged built-worker controls pass. Full unit rerun: 4,941 passed / 0 failed /
+13 previous optional skips; web/API typecheck and real builds pass. First loaded
+unit run's Android dry-run timeout and the isolated-harness faults are recorded,
+not counted as successes. Final source-bound review has no P1/P2.
+
+Owned remote copy removed by exact guards, backups retained. Two stopped startup
+directories remain after the tool refused removal; no running servers there.
+No native/device/provider deletion/refund action. D-338/D-336/D-337 remain open.
+[Proof and boundaries](operations/2026-10-03-media-claim-token-rollout.md),
+[next acceptance slice](operations/2026-10-03-avatar-source-epoch-next.md).
+
 ## 2026-10-02 - Bot Media Purge Hold
 
 Whole-`chat-media` D-103 claim hold and stale-call queue CHECK are applied once
