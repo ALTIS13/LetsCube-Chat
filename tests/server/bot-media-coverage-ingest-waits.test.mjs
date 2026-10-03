@@ -7,6 +7,7 @@ import {
 import {
   begin, finish, object, commitSql,
 } from "./bot-media-logical-identity.fixture.mjs";
+import { repairEnabled, installAuthorityRepair } from "./bot-media-authority-repair.fixture.mjs";
 
 const baseline = process.env.BOT_MEDIA_COVERAGE_BASELINE === "1";
 const failure = (outcome, code, name) => {
@@ -16,6 +17,7 @@ const failure = (outcome, code, name) => {
 
 async function fixture(t) {
   const db = await coverageFixture(t), r = db.a.receipt;
+  if (repairEnabled) await installAuthorityRepair(db);
   await begin(db, r);
   await object(db, r);
   await finish(db, r);

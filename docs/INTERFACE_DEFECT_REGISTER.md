@@ -24911,6 +24911,13 @@ two control groups pass as explicit gap characterization in baseline/candidate.
 The unchanged strict command refusal oracle fails in both modes: no expected
 `P0002`. Passing diagnostic tests do not close this defect.
 
+**Local repair, 2026-10-03:** the fixture-only candidate now rechecks retained
+target/source authority, actual payload reply and current kind, including cached
+send/gateway exits and saved-target binding. Frozen final 50/50 and exact-source
+review pass; final 13 variants / 21 expected literal failures pass. This is not a
+runtime fix; PG17/full schema and caller gates stay open.
+[Candidate and exact inputs](operations/2026-10-03-bot-media-authority-repair.md).
+
 **Next / acceptance:** repair the loaded writer in disposable fixtures first,
 cover actual gateway command and successful/denied retries, and require strict
 fresh-authority refusal without new message/result/grant/accounting effects.
@@ -24939,6 +24946,13 @@ controls and committed-state oracles. Canonical pointer change, scrubbed deletio
 and removed source row correctly refuse; pointer equality is not audience
 authority. Strict hidden-source refusal fails in both modes, despite successful
 wait/control setup. The twelve passing diagnostic cases characterize the gap.
+
+**Local repair, 2026-10-03:** the fixture-only candidate retains source and both
+actor memberships, rechecks current visibility/type, guards both cached and
+unique-conflict returns, and fences hidden-entry INSERT/UPDATE with actor-keyed
+NOWAIT. A different actor can still hide the source. Frozen final 50/50 and
+exact-source review and all 13 mutation variants pass. D-337 remains open
+for runtime. [Candidate, mutations and limits](operations/2026-10-03-bot-media-authority-repair.md).
 
 **Next / acceptance:** protect and recheck exact source/destination authority
 through all subsequent waits in a test-only fixture candidate. Require unchanged

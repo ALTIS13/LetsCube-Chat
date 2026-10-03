@@ -22,23 +22,25 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-337, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-03 (Codex local authority-wait characterization).** Owner:
-this Codex chat; branch `codex/bot-inline-media-20261002`, source `15abed3d`.
-Stage: **25/25 diagnostic cases** on local PG18.4 fictional rows; accepted-hook
-comparison **24/24**. Strict fresh-authority gates are **RED, 0/2 in each mode**:
-actual gateway file-id and forward RPCs can commit after authority revocation
-during an existing wait. **D-336/D-337 and item 78 remain open, not fixed.**
-Source/evidence: [waits and strict gates](operations/2026-10-03-bot-media-authority-waits.md),
-[source-only caller/isolation inventory](operations/2026-10-03-bot-media-caller-isolation-inventory.md).
-Independent test review has no P1/P2; all workers are closed. The earlier
-[33/33 coverage/mutant proof](operations/2026-10-03-bot-media-coverage-protocol.md)
-is reused with its five inputs unchanged, not rerun. Existing ingest protections
-pass the bounded wait cases; this does not accept all C6-C9 or non-message holders.
-Blocker: loaded file-id/forward authority windows and effective caller isolation/
-retry behavior. Next: narrow test-only authority repair through actual gateway
-RPCs/retries and source/destination checks; require unchanged strict refusal
-oracles to turn GREEN and prove lock order. Then exact PG17/full-schema/bootstrap/
-rollback and remaining lifecycle gates, no delete/refund or production admission.
+**Active resume, 2026-10-03 (Codex local authority repair).** Owner: this Codex
+chat; branch `codex/bot-inline-media-20261002`, starting source `f12514e6`.
+Stage: test-only actual send/gateway/forward repair, frozen final **50/50** on
+local PG18.4 fictional rows; exact-source independent review has no P1/P2 and its
+worker is closed. Final **13 mutation variants / 21 expected literal failures**
+pass, no skips/cancellations/setup errors; all finite test sessions completed.
+Executed/reviewed/current hashes match. **D-336/D-337
+and item 78 remain open for runtime, not installed fixes.** Evidence:
+[repair, frozen inputs and remaining gates](operations/2026-10-03-bot-media-authority-repair.md),
+[original waits](operations/2026-10-03-bot-media-authority-waits.md),
+[caller/isolation inventory](operations/2026-10-03-bot-media-caller-isolation-inventory.md).
+The earlier [33/33 coverage/mutant proof](operations/2026-10-03-bot-media-coverage-protocol.md)
+is reused after rechecking all five unchanged hashes. Blocker: full-schema/PG17
+authority and mutator-prefix proof, effective caller isolation/retries, and
+remaining lifecycle gates. Next: exact
+PG17/full-schema/bootstrap/rollback and real ban/mute/topic/fallback boundaries.
+Continue the approved checkpoint after diagnostic closeout; do not invent a new
+approval gate. The abandoned review hang was a local test's self-owned lock,
+corrected with exact fixture cleanup, not a production incident.
 Earlier applied identity/resolver/observation/hold SQL below stays applied once;
 never replay it. No production write/deploy or native/device operation in this
 prototype. Android/native HOLD and A063 exclusion remain.

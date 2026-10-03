@@ -152,6 +152,13 @@ existing ledger scans are not that proof. Exact PG17/full-schema/bootstrap/
 rollback and every non-message participant remain separate gates. No production
 admission migration or reclaim entrypoint is authorized by this test checkpoint.
 
+The following [authority repair candidate](2026-10-03-bot-media-authority-repair.md)
+now has frozen final 50/50, exact-source approval and 13 executable mutation
+variants / 21 expected literal failures, no skips/cancellations/setup errors.
+Executed/reviewed/current hashes match. These are disposable PG18.4 fixtures, not deployed fixes;
+the original baseline stays RED. All five earlier 33/33 inputs were rechecked
+unchanged. PG17/full-schema/caller and non-message lifecycle gates stay open.
+
 ## Primary References
 
 PostgreSQL's [transaction advisory try-lock functions](https://www.postgresql.org/docs/17/functions-admin.html#FUNCTIONS-ADVISORY-LOCKS)

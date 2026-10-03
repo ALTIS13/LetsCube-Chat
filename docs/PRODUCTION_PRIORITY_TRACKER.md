@@ -2,20 +2,20 @@
 
 Status: active production-hardening tracker, updated 2026-10-03.
 
-**Current continuation, 2026-10-03:** local existing-wait characterization is
-complete: **25/25 diagnostic cases**, **24/24 accepted-hook comparison**, no skips,
-PG18.4 fictional databases. Strict authority gates are **RED, 0/2 in each mode**:
-file-id and forward RPCs commit after concurrent authority revocation. These are
-open **D-336/D-337, item 78**, not fixed defects. Independent frozen-test review
-has no P1/P2. Existing ingest protections pass the bounded waits. The prior
-**33/33** coverage/mutant evidence is reused with five unchanged inputs.
+**Current continuation, 2026-10-03:** test-only authority repair has frozen final
+**50/50** on PG18.4 fictional databases, with exact-source independent review
+approved and worker closed. Final **13 variants / 21 expected literal failures**
+pass without skips/cancellations/setup errors; executed/reviewed/current hashes match.
+**D-336/D-337, item 78 remain open
+for runtime**, not installed fixes. Original baseline strict denials remain RED.
+The prior **33/33** coverage/mutant evidence is reused after five hash rechecks.
 No new production SQL, admission/reclaim authority, device operation, native
 publication or deployment. Evidence:
-[waits and strict gates](operations/2026-10-03-bot-media-authority-waits.md),
+[repair and frozen inputs](operations/2026-10-03-bot-media-authority-repair.md),
+[original waits and strict gates](operations/2026-10-03-bot-media-authority-waits.md),
 [caller/isolation inventory](operations/2026-10-03-bot-media-caller-isolation-inventory.md).
-Next: test-only authority repair through actual gateway RPCs/retries and source/
-destination checks, strict GREEN and real lock-order proof; then PG17/full-schema/
-bootstrap/rollback, effective caller isolation/retries and other lifecycle
+Next: PG17/full-schema authority/mutator
+prefixes, bootstrap/rollback, effective caller isolation/retries and other lifecycle
 participants. Whole-chat-media/native holds remain; never replay the
 accepted SQL below. A concurrent authorised tester intake adds items 76/77 and
 keeps VPN item 53 open, rather than duplicating it:
@@ -3723,6 +3723,11 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     request refuses. Diagnostic **25/25** is characterization, not repair;
     strict actual-gateway and forward gates are **0/2 RED in each mode**.
     Ingest's bounded retained-lock/revocation/expiry protections pass unchanged.
+    **Local repair progress:** frozen final 50/50; exact-source review approved,
+    worker closed. Final 13 variants / 21 expected literal failures pass, frozen
+    hashes match. Source/reply/type/access
+    retention, cached/unique-conflict exits and NOWAIT hiding INSERT/UPDATE are
+    covered locally, not installed. [Repair evidence](operations/2026-10-03-bot-media-authority-repair.md).
     Repair only the loaded fixture bodies first. Preserve exact actor/access,
     idempotent retries, grants/receipts/accounting, ready variants and attribution;
     require unchanged literal refusal oracles and no current committed effects.

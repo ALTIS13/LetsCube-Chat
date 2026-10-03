@@ -4,8 +4,9 @@ import {
   coverageFixture, trusted, messageInsert, quote, uuid, session, settled,
   accounting, observations,
 } from "./bot-media-coverage.fixture.mjs";
+import { repairEnabled, installAuthorityRepair } from "./bot-media-authority-repair.fixture.mjs";
 
-const requireFresh = process.env.BOT_MEDIA_AUTH_REQUIRE_FRESH === "1";
+const requireFresh = process.env.BOT_MEDIA_AUTH_REQUIRE_FRESH === "1" || repairEnabled;
 const baseline = process.env.BOT_MEDIA_COVERAGE_BASELINE === "1";
 const sendSignature = "public.bot_send_message_internal(uuid,uuid,text,jsonb,text)";
 const sendHash = "7786e30e6ad6e9184fc88cf46dba8868d3bafbc7821dc088103c2c2ca3b022c8";
@@ -18,6 +19,7 @@ async function fixture(t) {
     where oid=${quote(sendSignature)}::regprocedure`);
   assert.deepEqual(body, { hash: sendHash, prosecdef: true, provolatile: "v",
     owner: "postgres", proconfig: ['search_path=""'] });
+  if (repairEnabled) await installAuthorityRepair(db);
   t.diagnostic(`local PostgreSQL ${db.version}; ${baseline ? "accepted message hooks" : "coverage prototype"}; fictional rows, not full-schema/live acceptance`);
   return db;
 }

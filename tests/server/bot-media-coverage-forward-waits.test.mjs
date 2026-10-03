@@ -6,10 +6,11 @@ import {
   coverageFixture, session, settled, accounting, installForward, trusted,
   authenticated, asActor, actor, uuid, quote, messageInsert, mediaUrl, observations,
 } from "./bot-media-coverage.fixture.mjs";
+import { repairEnabled, installAuthorityRepair } from "./bot-media-authority-repair.fixture.mjs";
 
 const sourceChat = uuid(3), destination = uuid(11), sourceId = uuid(8100);
 const forwardSignature = "public.forward_message(uuid,uuid,uuid,timestamptz,uuid)";
-const strict = process.env.BOT_MEDIA_AUTH_REQUIRE_FRESH === "1";
+const strict = process.env.BOT_MEDIA_AUTH_REQUIRE_FRESH === "1" || repairEnabled;
 const mode = process.env.BOT_MEDIA_COVERAGE_BASELINE === "1" ? "baseline" : "prototype";
 const root = new URL("../../", import.meta.url);
 const captured = [
@@ -84,8 +85,10 @@ async function fixture(t) {
       ('${sourceId}','${destination}','${uuid(7002)}','chat-media',${quote(db.a.receipt.path)},
         'video_poster','media','fixture/wrong-chat.webp','image/webp',null,null,null,'ready');`);
   assert.deepEqual((await observations(db, sourceId)).map(row => row.reference_state), ["registered", "registered"]);
+  if (repairEnabled) await installAuthorityRepair(db, { forward: true });
+  const expectedCatalog = repairEnabled ? await catalog(db) : before;
   t.diagnostic(`${mode}; PostgreSQL ${db.version}; captured forward + epoch bodies/catalog verified`);
-  return { db, before, unchanged: async () => assert.deepEqual(await catalog(db), before, "RPC and epoch hooks remain unchanged") };
+  return { db, before, unchanged: async () => assert.deepEqual(await catalog(db), expectedCatalog, "tested RPC and epoch hooks remain unchanged during the operation") };
 }
 
 const call = key => `select (public.forward_message('${sourceId}','${destination}','${key}',null,null)).id;`;
