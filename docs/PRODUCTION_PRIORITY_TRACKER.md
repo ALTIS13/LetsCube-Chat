@@ -1,6 +1,6 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-03.
+Status: active production-hardening tracker, updated 2026-10-04.
 
 **Current continuation, 2026-10-03:** D-339 exact queue-claim settlement deployed
 at runtime `8da252ad`: sole healthy web/worker/Gateway, old/new worker and Gateway
@@ -1079,6 +1079,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     **Discord** by CLAUDE.md §7. Four things, and the first is a **regression
     already located**, not a wish.
 
+    **Tester renewal, 2026-10-04:** profile-to-contacts addition is requested
+    again. Deduplicate against **D-316**, whose full-card action is already
+    accepted; do not build another contacts backend or invent mutual-friend
+    approvals. Identify the actual installed build and entry/tier before
+    reopening that fix. Current `UserProfileOverlay.tsx:137` loads contact data
+    only in the full tier; check compact-to-full reachability, unknown/loading,
+    self/saved states and failed add feedback. The exact reported surface is
+    not established. [New bounded intake](operations/2026-10-04-tester-feedback.md).
+
     **a. «У нас пропала возможность открыть профиль пользователя не заходя в
     ЛС с ним.»** Confirmed in the source before this was written:
     `ChatList.tsx:362` offers «Открыть профиль», and its `run` is
@@ -1905,6 +1914,13 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     разделим эти два понятия, основные группы большие будут также
     серверами, а эти микро чаты уже групповыми чатами». The heavy object is a
     **сервер**, the light one a **групповой чат**.
+
+    **Superseded noun decision, 2026-10-04:** the owner's new direction is
+    heavy **Группа**, ad-hoc multiuser conversation created during joint calls
+    **Групповой чат**. New **item 81 / D-341** owns the UI-only consistency
+    task. The Server wording below records the previous decision, not the
+    current target; do not replay its historical rename literally. Entity,
+    ownership, call and internal identifier contracts remain unchanged.
 
     **There is no name collision — an earlier draft of this entry claimed one
     and the owner was right to ask why.** «Почему занято, если у нас две
@@ -3859,6 +3875,59 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     and lifecycle remain open. No runtime
     migration or reclamation follows from this test-only checkpoint.
     [Measured waits, hashes and next action](operations/2026-10-03-bot-media-authority-waits.md).
+
+79. `[ ]` Ordinary compact emoji presentation in message bubbles. New tester
+    intake, 2026-10-04; **D-340**, reported appearance request, not a reproduced
+    renderer defect. Avoid forced jumbo standalone emoji and keep an ordinary
+    bubble/readable footer. Exact desired pixel size and installed artifact
+    are unknown; inspect the actual renderer/build before patching. Cover one
+    and multiple emoji, mixed emoji/text, Unicode sequences, replies and
+    message actions at 390/1440 in both themes. Do not conflate message sizing
+    with picker target item 15/D-082, paid extras item 24 or reaction chips.
+    No frontend change or visual acceptance in this intake.
+    [Requirements and limits](operations/2026-10-04-tester-feedback.md).
+
+80. `[ ]` Telegram-style publication channels, distinct from Group text topics
+    and Group chats. New tester intake, 2026-10-04: readers consume published
+    messages; only authorized publishers may post. **Feature request**, not
+    another D-169 vocabulary fix. Define creator/publisher delegation, reader
+    membership/subscription, private/invited access and any optional discussion
+    before implementation. Check current deployed authorization: a `channel`
+    label or hidden composer is not write refusal. Trusted text/media/bot/
+    edit/forward paths must share the contract; reader denial needs a same-role
+    publisher positive and access-removal controls. Any later SQL change needs
+    its own approved backup/rehearsal/rollback gate. No such change is approved
+    or applied by this documentation intake.
+    [Intake and source distinctions](operations/2026-10-04-tester-feedback.md).
+
+81. `[ ]` Owner-directed UI terminology: **Server -> Group** for the heavy
+    object, **Group chats** for ad-hoc multiuser conversations created during
+    joint calls. Russian UI: **Группа / Групповой чат**. **D-341**, 2026-10-04;
+    intentionally supersedes item 45's old heavy Server noun, not its call or
+    ownership mechanics. Audit shared vocabulary, creation/sidebar/header,
+    settings/roles/member/invite dialogs, confirmation/error text and service
+    wording, including Russian inflection. Preserve `group`, `dm_group`,
+    `channel`, components, RPC/schema/route/storage identifiers and permissions.
+    Do not rename infrastructure servers or unrelated category/notification
+    grouping. Keep channel vocabulary distinct. Verify both entities and entry
+    points at 390/1440, both themes, without ambiguous labels or overflow.
+    [Owner decision and boundaries](operations/2026-10-04-tester-feedback.md).
+
+82. `[ ]` Verify faithful database recovery, including extension-member ACLs
+    and database settings. **D-342**, measured during the D-338 isolated restore,
+    not an active production outage. Full roles/custom dump restore omitted
+    the database-level search_path setting and custom USAGE/grant-option rights
+    on graphql/graphql_public schemas. Other deltas are explicit-default versus
+    NULL ACL representation and array ordering, not established permission loss.
+    Checksums/pg_restore listing alone do not prove restored authorization/config.
+    Fix the isolated-copy reconstruction first, using native typed ACL entries,
+    then audit the recovery procedure/backup coverage separately. Require exact
+    grants/grantors/options, roles/settings and complete schema DDL readback;
+    do not erase ACL differences or patch production to match a bad copy.
+    Production backup/recovery-script changes need independent review and their
+    own verified reversible rollout. No production restoration is authorized by
+    this observation, and no owner/media row was printed.
+    [Restore gate and limits](operations/2026-10-04-avatar-source-observation.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

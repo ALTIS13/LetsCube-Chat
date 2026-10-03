@@ -17,16 +17,29 @@ Read in this order:
    database safety) and §15 (deploying) apply to you exactly as written. Its §1
    «Current Stop Point» and §2 «Deployment baseline» are **stale** — this file
    replaces them;
-5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–78) and the
+5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–82) and the
    decisions log;
-6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-339, with its
+6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-342, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-03 (Codex implementation resumed).** Owner: this Codex
+**Active resume, 2026-10-04 (Codex implementation continued).** Owner: this Codex
 chat; branch `codex/bot-inline-media-20261002`, base `0ac96a70`, initially clean.
 The latest owner request authorizes readiness-gated production deployment without
 another approval round; database backup/rehearsal/rollback requirements still apply.
-Stage: D-339 exact-claim queue repair deployed at runtime `8da252ad`; web/worker/
+Stage: D-338 source-observation prototype reviewed, local PG18.4 **45/45**;
+compatibility P2 corrected with actual presence-CHECK RED/positive controls.
+Full PG17 restore gate is not accepted: three strict refusals, all exact owned
+copies removed, backups retained; no candidate SQL applied. Latest expanded gate
+shows omitted extension-schema rights/database search_path and ACL representation/
+ordering differences. Item 82/D-342 owns the independent recovery-fidelity risk.
+Hardened r3 operator controls **21/21** include real local PG ACL representation;
+typed, exact reconstruction and the full-DDL/role/ACL gate remain in progress.
+[Observation evidence and remaining boundaries](operations/2026-10-04-avatar-source-observation.md).
+Parallel [latest tester intake](operations/2026-10-04-tester-feedback.md) added
+items 79-81 / D-340-D-341; contacts deduplicated under item 36/D-316. Current UI
+target is heavy **Group**, call-created ad-hoc **Group chats**, replacing only
+item 45's old Server noun. Implementation remains queued, not silently applied.
+D-339 exact-claim queue repair remains deployed at runtime `8da252ad`; web/worker/
 Gateway sole healthy replicas and old/new markers verified. SQL applied once
 after backup `20261003-222036`; raw catalog sort mismatch was independently
 reconciled by exact full-signature records, not a retry or weakened comparison.

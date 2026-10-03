@@ -24265,6 +24265,15 @@ from the card, then the saved state; a saved contact shown as one) were red
 before and are green on Chromium 1440, WebKit and Chromium 390; the whole file
 36/36. Frames at 390 and 1440 in both themes were looked at.
 
+**Renewed intake, 2026-10-04, not a demonstrated regression:** the tester again
+requests adding a person to contacts from their profile. This remains deduplicated
+under tracker item 36, not a second contacts feature or mutual-friend graph.
+Current `UserProfileOverlay.tsx:137` enables contact reads only in the full tier;
+`MemberCard.tsx:329` supplies the add action when contact props exist. Establish
+the reported entry/tier and installed artifact, then verify the accepted full
+action and compact-to-full path before reopening this historical fix. No device
+reproduction or app edit in the [new intake](operations/2026-10-04-tester-feedback.md).
+
 ## D-317 `[x]` On the installed iPhone the contacts header sits under the status bar
 
 2026-09-27, tester's screenshot: «Контакты» drawn over the clock and the add
@@ -25097,3 +25106,81 @@ publication belong to D-338; admitted external attempts must survive. A claim
 token alone is not an I/O fence, physical version or cleanup authority.
 [Runtime rollout and limits](operations/2026-10-03-media-claim-token-rollout.md).
 [Source gate and limits](operations/2026-10-03-media-avatar-concurrency.md).
+
+## D-340 `[ ]` Emoji-only message presentation is reported oversized
+
+**Severity:** low, reported legibility/appearance request; tracker item 79.
+New authorised tester text/caption intake, 2026-10-04, after the October 3
+watermark. Product requirement: ordinary compact emoji in a normal message
+bubble instead of forced oversized standalone treatment. Raw rows and image
+addresses remain ignored; attached images were not downloaded/rendered.
+
+**Reported scenario:** read messages consisting of emoji and compare ordinary
+and enlarged presentation. Exact client/build, pixel sizes, emoji count and
+renderer cause are not measured. This is a reported request, not a visual RED.
+
+**Starting surface:** `artifacts/kub/src/components/chat/MessageBubble.tsx:1743`
+renders message text; `artifacts/kub/src/hooks/useMessageTextSize.ts:10` connects
+the reader's text-size preference. These anchors do not prove a jumbo branch
+or the tester's installed bytes. Picker touch targets (D-082/item 15), reactions
+and future paid visual extras (item 24) are separate requirements.
+
+**Next / acceptance:** identify the real supported artifact and current emoji
+renderer, settle the ordinary bubble sizing, then use fictional one/multiple
+emoji, mixed text and Unicode-sequence controls, including replies/footer/actions.
+Inspect 390/1440 light/dark pixels; preserve accessible text-size choices and
+reaction geometry. No application change or visual acceptance yet.
+[Bounded intake and limits](operations/2026-10-04-tester-feedback.md).
+
+## D-341 `[ ]` Heavy-object UI still says Server after the owner selected Group
+
+**Severity:** low, product terminology consistency; tracker item 81.
+Direct owner direction, 2026-10-04: heavy **Group**, call-created ad-hoc multiuser
+**Group chat**. Russian **Группа / Групповой чат**. This intentionally supersedes
+the old Server choice recorded in item 45, not an accidental regression of it.
+
+**Source evidence:** `artifacts/kub/src/lib/chatVocabulary.ts:109` returns Server
+for the heavy kind; `components/sidebar/NewGroupModal.tsx:75` also uses Server
+wording. `components/chat/MicroGroupSection.tsx:115` already names Group chat.
+No production screen/device inspection is claimed.
+
+**Consequence:** applying the new direction in only one entry point would make
+the same entity appear to have different names across creation, sidebar, header,
+settings, invitations and confirmations. The two product objects must remain
+distinguishable without inventing a database type rename.
+
+**Next / acceptance:** audit user-facing nouns and Russian inflection, replace
+heavy Server with Group, keep ad-hoc call-created objects Group chats and channel
+labels separate. Preserve `group`, `dm_group`, `channel`, all internal identifiers,
+routes/RPCs/storage paths and authority. Infrastructure servers and unrelated
+category/notification grouping are excluded. Check 390/1440 light/dark, both
+objects and all affected entry points. UI implementation remains open.
+[Owner decision and intake](operations/2026-10-04-tester-feedback.md).
+
+## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
+
+**Severity:** high recovery-equivalence risk, not a current production outage;
+tracker item 82. Measured on a fresh network-isolated PG17.6 copy, 2026-10-04,
+after a verified backup/full roles/custom dump restore. No candidate epoch SQL
+was applied because the restore gate refused. Exact owned ID/name are absent;
+backup retained and production container/database identity unchanged.
+
+**Actual delta:** roles and memberships match, but the ALL/postgres database
+search_path setting is absent. Raw graphql/graphql_public schema ACLs lose
+custom USAGE rights and an original grant option. Private schema and two net
+functions change explicit-default ACLs to NULL; 18 table/one function ACL arrays
+only reorder entries after 39 owner-default representation repairs. Those latter
+differences are not evidence of effective permission loss and must not be
+described as empty/revoked rights. Complete schema DDL equality is not accepted.
+
+**Consequence:** a checksum-valid/listable backup is not yet a proven equivalent
+recovery procedure. Restoring without those rights/settings may change access
+and name resolution. This is not permission to restore or rewrite production.
+
+**Next / acceptance:** faithfully reconstruct the isolated copy using PostgreSQL
+typed ACL entries, preserving original grantor/grantee/privilege/options/order;
+refuse unsupported targets rather than weakening equality. Restore only vetted
+database settings on that copy; then require full DDL/role/raw-ACL readback.
+Separately review the backup/recovery procedure and durable coverage before its
+own reversible deployment. Application-row/media/provider/native actions remain
+outside this task. [Source-observation record](operations/2026-10-04-avatar-source-observation.md).
