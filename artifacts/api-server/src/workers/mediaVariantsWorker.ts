@@ -125,6 +125,7 @@ interface VariantJob {
   scope: "message" | "profile" | "chat";
   target_id: string;
   attempts: number;
+  claim_token: string;
 }
 
 let started = false;
@@ -312,9 +313,10 @@ function dueForScan(): boolean {
  * still finds the work, a minute or thirty later than the queue would have.
  */
 async function claimVariantJobs(supabase: SupabaseClient, limit: number): Promise<VariantJob[]> {
+  const claimToken = randomUUID();
   const { data, error } = await supabase.rpc("media_variant_jobs_claim", {
     p_limit: limit,
-    p_claim_token: randomUUID(),
+    p_claim_token: claimToken,
     p_now: new Date().toISOString(),
   });
   if (error) {
@@ -328,11 +330,14 @@ async function claimVariantJobs(supabase: SupabaseClient, limit: number): Promis
     return [];
   }
   queueWarningLogged = false;
-  return ((data ?? []) as VariantJob[]).filter((job) => job.scope && job.target_id);
+  return ((data ?? []) as VariantJob[])
+    .filter((job) => job.scope && job.target_id)
+    .map((job) => ({ ...job, claim_token: claimToken }));
 }
 
 async function finishVariantJob(supabase: SupabaseClient, job: VariantJob): Promise<void> {
   const { error } = await supabase.rpc("media_variant_job_finish", {
+    p_claim_token: job.claim_token,
     p_scope: job.scope,
     p_target_id: job.target_id,
   });
@@ -352,6 +357,7 @@ async function retryVariantJob(
   const { error } = await supabase.rpc("media_variant_job_retry", {
     p_scope: job.scope,
     p_target_id: job.target_id,
+    p_claim_token: job.claim_token,
     p_error: sanitizeVariantErrorCode(errorCode),
     p_now: new Date().toISOString(),
   });
