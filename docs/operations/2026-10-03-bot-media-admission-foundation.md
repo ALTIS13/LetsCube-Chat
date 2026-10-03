@@ -39,6 +39,9 @@ restore/rollback and independent review. Actual multi-statement, nested and ON C
 refute naive sorted per-statement shared object fences with `40P01`.
 Admission remains **not implemented**. Current observations do not close that
 gap or authorize deletion/refund. Do not repeat the fallback SQL.
+The next [transaction-wide try-only prototype](2026-10-03-bot-media-coverage-protocol.md)
+is isolated under tests, not production SQL. It replaces the refuted per-object
+ordering experiment, not the whole lifecycle acceptance contract.
 Do not claim the whole foundation from identities or a resolver, or repeat either SQL.
 Registry/backfill/initial observations require an atomic bootstrap without a
 writer window. Backfill never proves absent references or provider terminality.

@@ -24853,3 +24853,40 @@ to database permissions, role authority or queries. Web is accepted through
 `9cd89a70`, with exact image/content proof and read-only 4/4 regression smoke.
 Keep partial only for the older embedded Android bundle, whose upgrade remains
 held; do not repeat the web fix. [Wave record](operations/2026-10-02-presence-push-quiet.md).
+
+## D-335 `[ ]` System chat notification previews lack useful sender/message context
+
+**Severity:** medium, reported usability defect; exact affected client/build and
+root cause are not yet established. Tracker item 76. Source: one authorised tester
+voice note of 2026-10-02, 14:22 MSK, read and transcribed locally Oct 3. The same
+note requests per-channel/topic alerts, which is separate feature item 77, not
+the cause of this defect.
+
+**Reported reproduction:** receive a chat message and open the phone's system
+notification shade. The tester sees that LETSCUBE has messages but cannot tell
+who wrote or what the message concerns without opening the application.
+
+**Evidence boundary:** the voice report establishes the complaint, not a measured
+missing field in a live push. Client/build, screen lock, OS privacy settings and
+application preview choices are unmeasured. No personal screen was captured or
+message/provider request sent. Raw audio and transcripts stay ignored; only this
+product summary is tracked. [Intake](operations/2026-10-03-tester-feedback.md).
+
+**Current-source mechanism, not device reproduction:**
+`supabase/functions/send-push-notifications/native-push-privacy.ts:10` deliberately
+redacts native account content until recipient authentication on the installed
+client is possible. `fcm.ts:56` applies that generic title/body to modern and
+legacy envelopes; `android/app/src/main/java/com/kub/messenger/ChatPushNotifications.java:83`
+draws them. The reviewed native path has no independent user preview toggle.
+Web projection at `send-push-notifications/index.ts:793` differs. Removing the
+redaction would regress late-push/logout/account-switch safety, not safely fix
+the report. No device was used for this bounded source review.
+
+**Next / acceptance:** trace the exact sender/body projection and actual supported
+client presenter, with a fictional/redacted message and identifiable installed
+artifact. Show author/context only when preview settings and access permit it;
+never override lock-screen privacy or reveal blocked/hidden content. Cover text,
+photo/voice/file fallback labels, grouped messages, account switch, DND/mute and
+foreground/background plus locked/unlocked states. Preserve exact chat/message
+activation and chat-scoped read/history cleanup. Source tests alone do not close
+the reported system-card defect.

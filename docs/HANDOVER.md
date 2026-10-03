@@ -17,12 +17,35 @@ Read in this order:
    database safety) and §15 (deploying) apply to you exactly as written. Its §1
    «Current Stop Point» and §2 «Deployment baseline» are **stale** — this file
    replaces them;
-5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–75) and the
+5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–77) and the
    decisions log;
-6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-334, with its
+6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-335, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-03 (Codex implementation).** Owner: this Codex chat;
+**Active resume, 2026-10-03 (Codex test-only coverage).** Owner: this Codex chat;
+branch `codex/bot-inline-media-20261002`, baseline `e9d713d4`. Stage: transaction-wide
+try-only message coverage prototype verified locally, **33/33**, no skips,
+PostgreSQL 18.4 with fictional rows. Source/evidence:
+[protocol and review corrections](operations/2026-10-03-bot-media-coverage-protocol.md),
+[independent prefix review](operations/2026-10-03-bot-media-coverage-prefix-review.md).
+Two independent-review P2 oracle weaknesses are corrected and killed by executable
+mutants; four strengthened targeted cases and the frozen-input full run pass.
+This is not a production admission migration, PG17/full-schema acceptance,
+authorization-after-wait proof, physical generation or reclamation. Blocker:
+existing authority waits, caller/isolation inventory and all other lifecycle
+participants. Next: actual baseline/candidate prefix-wait authorization cases;
+then exact PG17/bootstrap/rollback and remaining lifecycle gates, no delete/refund.
+Earlier applied identity/resolver/observation/hold SQL below stays applied once;
+never replay it. No production write/deploy or native/device operation in this
+prototype. Android/native HOLD and A063 exclusion remain.
+The user's concurrent tester intake is separate: two voice notes and one text
+were read narrowly, transcribed locally and reconciled in
+[October 3 feedback](operations/2026-10-03-tester-feedback.md). Keep existing VPN
+item 53 open; notification preview item 76/D-335 and per-channel/topic preferences
+item 77 are new intake work, not proven fixes. Task feedback distinguishes accepted
+web work from the older embedded mobile bundle; it does not lift Android HOLD.
+
+**Prior accepted observations, 2026-10-03.** Owner: this Codex chat;
 branch `codex/bot-inline-media-20261002`, implementation source `1f26c356`. Stage:
 AFTER STATEMENT observations-only fallback **applied once/independently verified**
 at 03:00 MSK after fresh backup `20261003-030013`.

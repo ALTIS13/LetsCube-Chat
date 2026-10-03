@@ -2,7 +2,22 @@
 
 Status: active production-hardening tracker, updated 2026-10-03.
 
-**Current continuation, 2026-10-03:** private AFTER STATEMENT observations-only
+**Current continuation, 2026-10-03:** different transaction-wide try-only message
+coverage is a **test-only** prototype: final **33/33**, no skips, local PG18.4
+fictional databases. Independent review found two P2 oracle gaps; both are fixed
+and exposed by real executable NOWAIT-omission/cached-scan mutants. Four targeted
+review-fix cases and the frozen-input full run pass. No new production SQL,
+admission/reclaim authority, device operation, native publication or deployment.
+Evidence: [coverage protocol](operations/2026-10-03-bot-media-coverage-protocol.md),
+[prefix review](operations/2026-10-03-bot-media-coverage-prefix-review.md).
+Next: actual baseline/candidate authorization-after-existing-wait cases and
+caller/isolation inventory, then PG17/full-schema/bootstrap/rollback and other
+lifecycle participants. Whole-chat-media/native holds remain; never replay the
+accepted SQL below. A concurrent authorised tester intake adds items 76/77 and
+keeps VPN item 53 open, rather than duplicating it:
+[feedback](operations/2026-10-03-tester-feedback.md). No phone update is implied.
+
+**Prior accepted observations, 2026-10-03:** private AFTER STATEMENT observations-only
 fallback is applied once/independently verified at 03:00 MSK after backup
 `20261003-030013`. Final **65/65**, exact source/test/operator manifests, full
 same-image PG17 restore/backfill/role denials/catalog mutants/rollback and
@@ -3053,6 +3068,14 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     **Still open:** a confirmation on a real Android phone switching a VPN —
     the report's own case, which no emulator here reproduces.
 
+    **2026-10-03 renewed report:** the latest second voice note, sent Oct 2,
+    again asks whether VPN/server switching can recover without restarting.
+    Do not duplicate this item or call it fixed from web source. Record exact
+    installed client/build and force the case on the designated handset once
+    its existing bundle and the candidate are identifiable. Android build/
+    installation/publication HOLD is unchanged. No VPN/routing changes were
+    made during this intake. [Intake](operations/2026-10-03-tester-feedback.md).
+
 54. `[x]` A server's channels show what is happening in them — same report,
     with two screenshots forwarded from a second tester comparing Telegram's
     topic list with our «Каналы» drawer. Никитос: «он совершенно прав… ты не
@@ -3656,6 +3679,37 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     installed-client/OS receipt acceptance; no APK changed. Next web stage:
     D-208 actual signed-media consumers, without a private-bucket switch.
     [Release evidence](operations/2026-10-01-implementation.md).
+
+76. `[ ]` System chat notifications must give useful sender/message context
+    when the user's preview/privacy choices permit it. Tester voice note of
+    2026-10-02, 14:22 MSK, read and transcribed locally Oct 3. **D-335:** the
+    reported shade only signals LETSCUBE/messages; author/body are missing.
+    Current FCM source deliberately redacts personal content for late-push/
+    account-switch safety; the native presenter draws that generic body. A
+    device-specific regression is not proved. Do not remove the protection.
+    Safe account-authenticated context and preview controls need a contract.
+    Trace the
+    exact installed client/build, sent projection, native presenter and OS
+    lock-screen/privacy settings before patching; never force private previews.
+    Preserve redaction, blocks, mutes, DND, account ownership, exact routing and
+    chat-scoped read/history behavior. Verify text, media, multiple messages,
+    foreground/background and locked/unlocked cards at supported real client
+    boundaries. No production message/provider request was sent in this intake.
+    [Evidence and limits](operations/2026-10-03-tester-feedback.md).
+
+77. `[ ]` Account-owned notification preferences for individual channels/topics.
+    Same voice note: silence a busy parent chat while explicitly enabling one
+    relevant channel/topic; other users keep their own choices. Current scoped
+    source has chat-level mute and category preferences, not a topic/channel
+    override contract. Read the exact reference client before choosing the UI
+    and semantics; distinguish a server channel from a group topic. Derive
+    inheritance/explicit enable/disable and their interactions with DND,
+    mentions, blocks, access removal, archived/deleted topics and temporary
+    mutes. A local setting alone is not delivery suppression: trusted enqueue/
+    predelivery, Web/FCM, in-app sound and Windows presentation must agree.
+    Require privacy-safe migration rehearsal and account/device sync, plus
+    `mute parent + enable one child` and the inverse acceptance cases before
+    release. [Intake](operations/2026-10-03-tester-feedback.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
