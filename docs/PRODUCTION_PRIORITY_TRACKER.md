@@ -3991,6 +3991,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     separately, not successful evidence. Both scoped stages are complete;
     native-type census/refusal and the exact PG17 profile are next prerequisites.
     [CHECK endpoints and remaining controls](operations/2026-10-04-avatar-check-roundtrip.md).
+    Native-type source continuation passes **69/69**, six compiled mutants;
+    adjacent source checks **191/191**. Legacy selected-only common-loss oracle
+    is RED0/1. New direct type/enum/range retention and namespace binding refuse
+    matching nonempty semantics. Nine-input independent source review accepted,
+    repeated191/191, no P1/P2. Candidate-only; SQL queries unexecuted,
+    no native counts/full recovery implied. Fresh owned native producer and
+    calibration are next; PG17 is separately unexecuted, never an alias of18.
+    [Type-source checkpoint](operations/2026-10-04-avatar-type-census.md),
+    [exact PG17 prerequisites](operations/2026-10-04-avatar-pg17-prerequisites.md).
     [Approved class-coverage plan](operations/2026-10-04-avatar-class-coverage-next.md#next-small-step).
     This closes no semantic/provenance/PG17 gap by itself; strict full-DDL veto
     remains unchanged, unenumerated classes remain unknown/refused.

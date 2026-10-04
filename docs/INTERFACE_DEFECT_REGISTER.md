@@ -25253,6 +25253,19 @@ fidelity; this defect remains open and the strict full-DDL veto is unchanged.
 [Routine proof and guard status](operations/2026-10-04-avatar-routine-census.md),
 [CHECK roundtrip scope](operations/2026-10-04-avatar-check-roundtrip.md).
 
+**Type-source continuation, 2026-10-04:** direct `pg_type` enumeration/refusal
+passes **69/69**, including six compiled mutants; adjacent source suites
+**191/191**. Actual old selected-only common-loss oracle is RED0/1, not a
+native count or false-admission claim about the full operator. Generated arrays,
+row types, enum/range children and raw namespace bindings are retained; equal
+nonempty sets still refuse unsupported semantics. Independent nine-input source
+review accepted without P1/P2 and repeated191/191; candidate-only.
+SQL queries remain unexecuted and PG17 stays separately unaccepted. Next:
+fresh owned native producer/calibration, then independently pinned PG17 setup.
+This defect remains open; full-DDL/provenance/HOLD boundaries are unchanged.
+[Source proof and next native gate](operations/2026-10-04-avatar-type-census.md),
+[PG17 prerequisites](operations/2026-10-04-avatar-pg17-prerequisites.md).
+
 **Next / acceptance:** faithfully reconstruct the isolated copy using PostgreSQL
 typed ACL entries, preserving original grantor/grantee/privilege/options/order;
 refuse unsupported targets rather than weakening equality. Restore only vetted

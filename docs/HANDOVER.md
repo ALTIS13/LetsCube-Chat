@@ -22,7 +22,22 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-342, with its
    measurement. Search it before filing anything.
 
-**Active routine slice, 2026-10-04 (Codex).** Owner: this chat, branch
+**Active type-source slice, 2026-10-04 (Codex).** Owner: this chat, branch
+`codex/bot-inline-media-20261002`, base `2403aa55`. Fresh direct `pg_type`
+census/refusal source passes **69/69**, including six compiled mutants;
+changed plus adjacent source checks pass **191/191**, no skips. The actual
+selected-only baseline fails the new common-loss oracle (0/1 RED). Generated
+arrays/table row types remain visible; matching nonempty sets still refuse,
+and missing namespaces cannot yield an empty-scope receipt. Independent source
+review accepted all nine source/doc inputs without P1/P2 and repeated 191/191.
+Final exact-byte candidate commit is tracked in Git/current private resume;
+this grants no main/runtime approval. SQL/native queries are **unexecuted**; no
+native counts or full admission are claimed. [Source evidence and limits](operations/2026-10-04-avatar-type-census.md).
+Next: reviewed fresh native type producer and calibrated controls, then exact
+PG17 setup from [source prerequisites](operations/2026-10-04-avatar-pg17-prerequisites.md).
+Item82/D-342, strict full-DDL veto and all HOLDs stay open/unchanged.
+
+**Completed routine slice, 2026-10-04 (Codex).** Owner: this chat, branch
 `codex/bot-inline-media-20261002`, base `8edfd6b8`. Task1 of the native coverage
 plan has three reviewed public modules, source commit `98ad9be9`. Original 63/63
 evidence stays frozen; two P2 runner guards are corrected in a fresh v2. Final
