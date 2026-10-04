@@ -22,7 +22,23 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-342, with its
    measurement. Search it before filing anything.
 
-**Current native-type checkpoint, 2026-10-04 (Codex).** Owner: this chat, branch
+**Current PG17 prerequisite checkpoint, 2026-10-04 (Codex).** Owner: this chat,
+branch `codex/bot-inline-media-20261002`, base `b5f373e5`. New action-free header
+diagnostic passes **57/57**, including13 compiled mutants; changed and adjacent
+source checks pass **302/302**. Exact typed32/4/7/26 catalog shapes and both
+IN/OUT function signatures are pinned, with bounded non-executing evidence input.
+Receipt is supplied-header-only; existing `pg17.6` recovery gate stays closed.
+[Implementation, RED controls and limits](operations/2026-10-04-avatar-pg17-header.md).
+Vendor public metadata/source researched; strict read-only SSH separately confirms
+the selected `postgres` hash identifies a wrapper and pins its underlying ELF.
+[Build provenance and remaining gaps](operations/2026-10-04-avatar-pg17-vendor-provenance.md).
+D: hit zero free bytes; new untracked test restored and verified. Only regenerable
+Gradle cache and preserved move-log bytes relocated, no old held evidence lost.
+Next: exact vendor/build/dependency closure and separately reviewed fictional PG17
+producer, not allocation from this source-only receipt. No new native/SQL/runtime
+acceptance, main deploy, R5, Android release or reclamation; item82/D-342 remains open.
+
+**Prior native-type checkpoint, 2026-10-04 (Codex).** Owner: this chat, branch
 `codex/bot-inline-media-20261002`, base `a98bf40e`. Fresh fictional PG18.4 native
 calibration passes **13/13**, focused pure/source **446/446**. Coordinator frozen
 readback verifies actual2/0/0, empty0/0/0, intact2/2/2, all15 scoped families,

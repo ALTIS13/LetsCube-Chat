@@ -25281,6 +25281,16 @@ not a production upgrade or full restore/R5 dispatch.
 [Native results and limits](operations/2026-10-04-avatar-type-native.md),
 [Runtime identity inventory](operations/2026-10-04-avatar-pg17-runtime-inventory.md).
 
+**PG17 header-source continuation, 2026-10-04:** new supplied-header prerequisite
+passes57/57 with13 compiled mutants; changed/adjacent source checks302/302.
+Exact catalog types/order/OIDs and both full IN/OUT function signatures are pinned.
+This receipt grants no native/restore/runtime authority; `pg17.6` admission stays
+closed. Vendor source/image evidence and selected wrapper/underlying ELF clarified,
+but build/dependency/bootstrap/extension/native closure remains next. No SQL or
+native allocation; D-342 stays OPEN with all full-DDL/provenance/HOLDs unchanged.
+[PG17 source boundary](operations/2026-10-04-avatar-pg17-header.md),
+[Vendor build limits](operations/2026-10-04-avatar-pg17-vendor-provenance.md).
+
 **Next / acceptance:** faithfully reconstruct the isolated copy using PostgreSQL
 typed ACL entries, preserving original grantor/grantee/privilege/options/order;
 refuse unsupported targets rather than weakening equality. Restore only vetted

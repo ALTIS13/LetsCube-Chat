@@ -4009,6 +4009,14 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     exact-image PG17 native prerequisites; all full restore/R5/main/runtime HOLDs stay.
     [Native measurements and preserved refusal](operations/2026-10-04-avatar-type-native.md),
     [PG17 runtime identity](operations/2026-10-04-avatar-pg17-runtime-inventory.md).
+    PG17 header-source prerequisite now passes **57/57** with13 compiled mutants,
+    changed/adjacent checks **302/302**; exact typed32/4/7/26 fields and complete
+    IN/OUT function signatures. Supplied-header-only receipt, not native admission;
+    existing `pg17.6` restore gate remains closed. Public vendor build evidence and
+    selected wrapper/underlying ELF are separately recorded; full provenance and
+    reviewed fictional producer remain next. No native allocation or HOLD lift.
+    [PG17 header source](operations/2026-10-04-avatar-pg17-header.md),
+    [Vendor provenance gaps](operations/2026-10-04-avatar-pg17-vendor-provenance.md).
     [Type-source checkpoint](operations/2026-10-04-avatar-type-census.md),
     [exact PG17 prerequisites](operations/2026-10-04-avatar-pg17-prerequisites.md).
     [Approved class-coverage plan](operations/2026-10-04-avatar-class-coverage-next.md#next-small-step).
