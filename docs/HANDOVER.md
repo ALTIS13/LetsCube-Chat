@@ -22,7 +22,25 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-342, with its
    measurement. Search it before filing anything.
 
-**Active type-source slice, 2026-10-04 (Codex).** Owner: this chat, branch
+**Current native-type checkpoint, 2026-10-04 (Codex).** Owner: this chat, branch
+`codex/bot-inline-media-20261002`, base `a98bf40e`. Fresh fictional PG18.4 native
+calibration passes **13/13**, focused pure/source **446/446**. Coordinator frozen
+readback verifies actual2/0/0, empty0/0/0, intact2/2/2, all15 scoped families,
+both rollback copies and13 controls/6 owned PID/path absences/jobs0/142 child pairs.
+Exact14 source/five executable/eight protected inputs are bound. V2's two P2s
+were fixed before dispatch; first native v3 correctly refused a wrong shell-kind
+oracle, preserved immutably with all6 closures. V4 asserts actualp/undefined,
+without accepting arbitrary pseudotype semantics. Independent exact source review
+passed; final independent frozen-evidence/metadata receipt gates candidate push.
+[Native results and limits](operations/2026-10-04-avatar-type-native.md).
+Next: exact-image PG17 native prerequisites. Read-only SSH observed running
+Supabase17.6.1.136/PG17.6 and pinned selected binary/extension-file metadata,
+not installed DB extension versions or PG17 compatibility acceptance.
+[Runtime identity inventory](operations/2026-10-04-avatar-pg17-runtime-inventory.md).
+Item82/D-342 and strict full-DDL/provenance veto stay open. No main/runtime,
+production SQL/R5, native/Android release, reclamation or old-HOLD cleanup here.
+
+**Prior type-source slice, 2026-10-04 (Codex).** Owner: this chat, branch
 `codex/bot-inline-media-20261002`, base `2403aa55`. Fresh direct `pg_type`
 census/refusal source passes **69/69**, including six compiled mutants;
 changed plus adjacent source checks pass **191/191**, no skips. The actual
@@ -31,9 +49,10 @@ arrays/table row types remain visible; matching nonempty sets still refuse,
 and missing namespaces cannot yield an empty-scope receipt. Independent source
 review accepted all nine source/doc inputs without P1/P2 and repeated 191/191.
 Final exact-byte candidate commit is tracked in Git/current private resume;
-this grants no main/runtime approval. SQL/native queries are **unexecuted**; no
-native counts or full admission are claimed. [Source evidence and limits](operations/2026-10-04-avatar-type-census.md).
-Next: reviewed fresh native type producer and calibrated controls, then exact
+this grants no main/runtime approval. At that source checkpoint SQL/native queries
+were **unexecuted**; the newer bounded native results are recorded above, not full
+admission. [Source evidence and limits](operations/2026-10-04-avatar-type-census.md).
+That source slice queued a fresh native producer/calibration, then exact
 PG17 setup from [source prerequisites](operations/2026-10-04-avatar-pg17-prerequisites.md).
 Item82/D-342, strict full-DDL veto and all HOLDs stay open/unchanged.
 

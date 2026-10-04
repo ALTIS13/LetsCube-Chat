@@ -25260,11 +25260,26 @@ native count or false-admission claim about the full operator. Generated arrays,
 row types, enum/range children and raw namespace bindings are retained; equal
 nonempty sets still refuse unsupported semantics. Independent nine-input source
 review accepted without P1/P2 and repeated191/191; candidate-only.
-SQL queries remain unexecuted and PG17 stays separately unaccepted. Next:
-fresh owned native producer/calibration, then independently pinned PG17 setup.
+At that source checkpoint SQL was unexecuted; PG17 remains separately unaccepted.
+The bounded native continuation is recorded next, not full operator admission.
 This defect remains open; full-DDL/provenance/HOLD boundaries are unchanged.
 [Source proof and next native gate](operations/2026-10-04-avatar-type-census.md),
 [PG17 prerequisites](operations/2026-10-04-avatar-pg17-prerequisites.md).
+
+**Native-type continuation, 2026-10-04:** fresh fictional PG18.4 **13/13** and
+focused pure/source **446/446**; independent exact input source review passed.
+Coordinator frozen readback verifies14source/5binary/8protected pins, actual
+2/0/0, empty0/0/0, intact2/2/2, all15 scoped type families, both rollback copies,
+13 controls/6 exact owned PID/path absences/jobs0/142 child pairs. V2 journal/stop
+and restored-capture P2s were fixed before dispatch. First nativev3 refused a wrong
+shell-kind literal and remains frozen with all6 closures; v4 confirms actualp and
+undefined, not arbitrary pseudotype semantics. Final independent frozen-evidence/
+metadata review gates candidate publication. No whole-type/DDL recovery or
+authenticated provenance is accepted; this defect remains OPEN. Next: exact-image
+PG17 native prerequisites using newly observed read-only runtime file/image identity,
+not a production upgrade or full restore/R5 dispatch.
+[Native results and limits](operations/2026-10-04-avatar-type-native.md),
+[Runtime identity inventory](operations/2026-10-04-avatar-pg17-runtime-inventory.md).
 
 **Next / acceptance:** faithfully reconstruct the isolated copy using PostgreSQL
 typed ACL entries, preserving original grantor/grantee/privilege/options/order;

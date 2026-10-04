@@ -3995,9 +3995,20 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     adjacent source checks **191/191**. Legacy selected-only common-loss oracle
     is RED0/1. New direct type/enum/range retention and namespace binding refuse
     matching nonempty semantics. Nine-input independent source review accepted,
-    repeated191/191, no P1/P2. Candidate-only; SQL queries unexecuted,
-    no native counts/full recovery implied. Fresh owned native producer and
-    calibration are next; PG17 is separately unexecuted, never an alias of18.
+    repeated191/191, no P1/P2. Candidate-only; at that source checkpoint SQL was
+    unexecuted, not full recovery. New bounded native continuation **13/13** plus
+    focused **446/446** verifies actual2/0/0, empty0/0/0, intact2/2/2 and15 families.
+    Coordinator frozen readback matches14source/5binary/8protected inputs,
+    both rollback copies and13controls/6 exact owned closures/jobs0/142 child pairs.
+    Two v2 P2 runner defects were corrected; nativev3 refused the erroneous shell
+    kindb assertion and remains immutable, not admitted. V4 confirms shellp/undefined.
+    Exact source review passed; final frozen-evidence/metadata review gates candidate
+    publication. PG17 compatibility and type/full-DDL semantics remain unaccepted.
+    Read-only running-image/binary/selected extension-file identity is now observed,
+    not DB extension installation or an upgrade. Next: independently reviewed
+    exact-image PG17 native prerequisites; all full restore/R5/main/runtime HOLDs stay.
+    [Native measurements and preserved refusal](operations/2026-10-04-avatar-type-native.md),
+    [PG17 runtime identity](operations/2026-10-04-avatar-pg17-runtime-inventory.md).
     [Type-source checkpoint](operations/2026-10-04-avatar-type-census.md),
     [exact PG17 prerequisites](operations/2026-10-04-avatar-pg17-prerequisites.md).
     [Approved class-coverage plan](operations/2026-10-04-avatar-class-coverage-next.md#next-small-step).
