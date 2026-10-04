@@ -25194,6 +25194,21 @@ Review P2s about mixed repair ordering and permissive error matching are correct
 all native preflight guards precede catalog mutations, and actual wrong-SQLSTATE
 errors cannot satisfy the expected refusal. Full PG17 fidelity remains unproven.
 
+**Bounded reference step, 2026-10-04:** independent source-receipt guard 18/18,
+corrected operator/lifecycle/oracle controls 38/38 and fictional PG18.4 native
+cases 4/4, final 60/60 (positive pair: 39 native checks). Independent review's
+missing-INSERT/RLS and process-status/SQL false positives have actual native
+RED -> GREEN controls. Fresh ten-input review accepted the fictional dispatch;
+the first PG17.6 pair passed 39/39 with pg_stat_statements 1.11. Producer exact-ID/
+name readback and separate coordinator name/owner-label/source-identity readback
+passed. An optional event-history ID probe was not accepted; persist lifecycle
+IDs before the next full-copy work instead of depending on Docker history.
+Source provenance, common-loss literals, native ordinal/NULL
+distinctions and exact same-copy DDL rollback remain separate from parser output.
+This selected PG17 characterization does
+not admit the full copied-schema gate or backup-alone recovery. This defect is
+still open. [New proof and limits](operations/2026-10-04-avatar-parser-reference.md).
+
 **Next / acceptance:** faithfully reconstruct the isolated copy using PostgreSQL
 typed ACL entries, preserving original grantor/grantee/privilege/options/order;
 refuse unsupported targets rather than weakening equality. Restore only vetted

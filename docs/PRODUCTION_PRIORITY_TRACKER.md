@@ -3932,6 +3932,17 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     historical extension-privilege capture. Two review P2s are corrected with
     actual mixed-plan/strict-error RED and successful native controls; full
     PG17 dispatch remains closed.
+    New bounded independent-reference guard 18/18, corrected operator/lifecycle/
+    oracle controls 38/38 and fictional PG18.4 native cases 4/4, final 60/60;
+    positive pair39 native checks. Review's missing-INSERT/RLS and process-status/
+    SQL false positives have actual native RED -> GREEN controls. Fresh frozen
+    review accepted the exact ten-input fictional dispatch; PG17.6 pair39/39
+    passed with pg_stat_statements1.11. Immediate producer ID/name cleanup and
+    separate name/owner-label/source-identity readback passed. Optional event ID
+    history is not accepted proof; persist identities before future full-copy
+    work. This does not
+    admit full restore or close backup-alone recovery.
+    [Bounded proof and current limits](operations/2026-10-04-avatar-parser-reference.md).
     Fix the isolated-copy reconstruction first, using native typed ACL entries,
     then audit the recovery procedure/backup coverage separately. Require exact
     grants/grantors/options, roles/settings and complete schema DDL readback;

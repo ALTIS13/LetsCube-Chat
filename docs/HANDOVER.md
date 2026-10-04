@@ -58,9 +58,26 @@ backups retained; two stopped startup directories remain after a tool refusal.
 Next: [D-338 epoch/intent acceptance slice](operations/2026-10-03-avatar-source-epoch-next.md),
 starting with the [closed restore/reference gate](operations/2026-10-04-avatar-restore-next.md),
 using the new read-only live catalog and preserving D-336/D-337 evidence. No
-media deletion/refund, native release or device operation is authorized here.
+media deletion/refund or native release is part of this backend proof.
 Whole-`chat-media` HOLD, Android/native HOLD and A063 exclusion remain unchanged.
 [Exact-claim implementation and rollout record](operations/2026-10-03-media-claim-token-rollout.md).
+
+**Current bounded reference step, 2026-10-04:** independent source receipt guard
+18/18, corrected operator/lifecycle/oracle controls 38/38 and fictional PG18.4
+native cases 4/4 (39 checks in the positive pair), final 60/60. Independent review
+refused two false-positive oracles (missing INSERT privilege versus RLS; process
+failure versus SQL refusal); both now have actual native RED -> GREEN controls.
+The corrected ten-input closure passed fresh review and the first fictional
+PG17.6 pair passed 39/39 (`pg_stat_statements` 1.11). Exact-ID/name readback by the
+producer and separate name/owner-label/production-identity readback passed; the
+optional event-history ID probe was not accepted. The next full-copy producer
+must persist inspected IDs before work rather than depend on event retention.
+R5/full restore remains closed. No app code or production SQL
+changed. [Source, controls and remaining limits](operations/2026-10-04-avatar-parser-reference.md).
+The owner requested independent continuation while away and named Realme plus
+rented iPhone/Samsung/comparable Android for relevant later QA. Verify access,
+bound paid sessions; do not expose personal data or overwrite release builds.
+The backend step uses no device minutes and does not lift other HOLDs.
 
 **Prior avatar/variant source gates, 2026-10-03.** Owner: this
 Codex chat; branch `codex/bot-inline-media-20261002`, start `b76cf7c5`.
