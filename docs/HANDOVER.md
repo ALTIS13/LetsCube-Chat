@@ -22,7 +22,24 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-342, with its
    measurement. Search it before filing anything.
 
-**Current PG17 installed-root checkpoint, 2026-10-04 (Codex).** Owner: this chat,
+**Current PG17 signed-reference checkpoint, 2026-10-05 (Codex).** Owner: this chat,
+branch `codex/bot-inline-media-20261002`, base `bb89fd0e`. Actual179 frozen subjects
+have valid signatures under the pinned vendor cache key and exact reachable
+reference membership.178 HTTP200 narinfos plus1 reused root; declared signed
+size1091551760, not measured installed bytes. New diagnostic23/23 plus5 compiled
+mutants; collector import-before-pin P2 reproduced and repaired in newv3, with
+offline actual179 replay and no repeated HTTP collection.
+[Signed graph, controls and limits](operations/2026-10-05-avatar-pg17-reference-closure.md).
+Actual installed178 comparison completes:177 match, PostgreSQL17.6 package
+differs; accepted closure receipt absent. Hash step8985ms/exit0/empty stderr;
+post-only tool/version/container/config-path equality, no hash replay. Reviewed
+SSH-defaults P2 repaired before dispatch with isolated per-command options and
+local18-option/3-mutant ssh-G controls. Next: bounded explanation of the single
+package difference; NEW fictional header preparation is not allocation.
+Installed closure REFUSED; NarSize/builder/recipe remain unproved. No main/SQL/native/
+full-restore dispatch or HOLD lift; item82/D-342 stays OPEN.
+
+**Prior PG17 installed-root checkpoint, 2026-10-04 (Codex).** Owner: this chat,
 branch `codex/bot-inline-media-20261002`, base `5c7e1654`. The separately reviewed
 read-only probe reports actual Nix2.34.6 and a direct-filesystem root NAR hash
 matching the prior verified signed cache assertion. Seven steps exit0 with empty

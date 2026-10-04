@@ -25323,6 +25323,21 @@ review remains separate. No SQL/allocation/main/native/full-restore/HOLD lift;
 D-342 stays OPEN.
 [Actual installed-root scope](operations/2026-10-04-avatar-pg17-installed-nar.md).
 
+**PG17 signed reference closure, 2026-10-05:** all179 frozen subject narinfos
+verify under the pinned vendor key, with exact membership and root reachability.
+178 HTTP200 reads plus1 reused root; declared signed size1091551760 is not a
+measurement of installed bytes. Diagnostic23/23 plus5 compiled omissions; newv3
+fixes a reproduced import-before-pin P2 and offline replay confirms the actual179
+records without recollection. Actual installed178 batch exits0/empty stderr:
+177 match, PostgreSQL17.6 package differs; closure REFUSED, no accepted receipt.
+Post-only tool/version/container/config-path equality, no hash replay. Local
+parser9/command5 controls and5 mutants; SSH-profile repair18 literals/3 mutants.
+Next: bounded file/recipe explanation of the package difference, not signed-oracle
+replacement or running-store repair. NarSize/builder/recipe and native PG17
+remain unaccepted; no security incident or differing ELF is inferred from NAR.
+No allocation/SQL/main/native/full-restore dispatch or HOLD lift; D-342 stays OPEN.
+[Signed graph and exact limits](operations/2026-10-05-avatar-pg17-reference-closure.md).
+
 **Next / acceptance:** faithfully reconstruct the isolated copy using PostgreSQL
 typed ACL entries, preserving original grantor/grantee/privilege/options/order;
 refuse unsupported targets rather than weakening equality. Restore only vetted

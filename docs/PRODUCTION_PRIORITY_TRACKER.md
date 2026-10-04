@@ -4045,6 +4045,19 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     not allocation. Candidate-only final evidence review remains separate;
     no SQL/main/native/full-restore dispatch or HOLD lift.
     [Installed-root measurement](operations/2026-10-04-avatar-pg17-installed-nar.md).
+    Signed-reference metadata now closes179 frozen subjects: exact signatures,
+    membership and root reachability;178 HTTP200 plus1 reused root. Declared
+    size1091551760 is not measured installed bytes. Source23/23 plus5 compiled
+    mutants; collector import-before-pin P2 reproduced and repaired, actual179
+    offline replay reuses metadata. Actual installed178 dependency comparison
+    completes177 matches/1 PostgreSQL17.6 package mismatch: closure REFUSED,
+    no accepted receipt. Post-only tool/version/container/config-path equality;
+    no hash replay. Parser9/9 and command5/5 plus5 compiled alterations; isolated
+    SSH repair has local18-option/3-mutant proof. Next: bounded explanation of
+    the one differing package, not oracle replacement or store repair.
+    No native/restore authority; no SQL/main/native/allocation/HOLD
+    lift; D-342 remains OPEN.
+    [Reference closure and remaining gates](operations/2026-10-05-avatar-pg17-reference-closure.md).
     [Type-source checkpoint](operations/2026-10-04-avatar-type-census.md),
     [exact PG17 prerequisites](operations/2026-10-04-avatar-pg17-prerequisites.md).
     [Approved class-coverage plan](operations/2026-10-04-avatar-class-coverage-next.md#next-small-step).
