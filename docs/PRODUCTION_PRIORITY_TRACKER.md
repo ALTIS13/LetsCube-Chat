@@ -3943,6 +3943,18 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     work. This does not
     admit full restore or close backup-alone recovery.
     [Bounded proof and current limits](operations/2026-10-04-avatar-parser-reference.md).
+    Next prerequisite source now has **62/62** local controls: 54 role unit tests
+    including12compiledmutants, one PG18.4 role case/14internal checks and seven
+    selected-catalog cases including4compiledmutants. Original-rank name planning
+    preserves four fictional raw default scopes; alphabetical ordering refuses.
+    New same-copy queries detect actual CHECK/internal-FK omissions in old metadata;
+    the existing complete-DDL gate is not shown to admit bad state. Exact rollback,
+    persisted before-work identities and owned cleanup pass. Independent source
+    review passed without P1/P2, catalog7/7 and accessor4/4 independently verified;
+    candidate-only, not runtime/full-PG17/production acceptance. The new closed
+    class coverage **plan** is not an implemented inventory/comparator.
+    [Name-only mechanism](operations/2026-10-04-avatar-role-bootstrap.md),
+    [selected capture and remaining classes](operations/2026-10-04-avatar-native-inventory.md).
     Fix the isolated-copy reconstruction first, using native typed ACL entries,
     then audit the recovery procedure/backup coverage separately. Require exact
     grants/grantors/options, roles/settings and complete schema DDL readback;

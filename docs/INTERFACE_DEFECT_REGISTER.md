@@ -25209,6 +25209,20 @@ This selected PG17 characterization does
 not admit the full copied-schema gate or backup-alone recovery. This defect is
 still open. [New proof and limits](operations/2026-10-04-avatar-parser-reference.md).
 
+**Next source prerequisite, 2026-10-04:** 62/62 local controls, no skips: 54 role
+unit tests, one PG18.4 role case with14internal checks, seven selected-catalog
+cases. Name-only original-rank planning preserves fictional f/r/S/schema/global
+defaults; legacy alphabetical creation refuses actual native order. Selected
+raw same-copy queries now capture CHECK and internal FK-trigger state omitted
+by old metadata. This is not a false-positive claim about the old full-DDL gate.
+Literal zero-invocation getter tests strengthen the former generic-error oracle.
+Exact rollback/owned cleanup and prior source pins pass; independent source
+reviews accepted without P1/P2 (catalog7/7, accessor4/4 independently verified).
+Candidate-only. Stable cross-copy identity, whole native-class coverage and exact PG17
+execution of this new delta remain unproved. No production change; defect open.
+[Role-name controls](operations/2026-10-04-avatar-role-bootstrap.md),
+[catalog omissions and coverage plan](operations/2026-10-04-avatar-native-inventory.md).
+
 **Next / acceptance:** faithfully reconstruct the isolated copy using PostgreSQL
 typed ACL entries, preserving original grantor/grantee/privilege/options/order;
 refuse unsupported targets rather than weakening equality. Restore only vetted

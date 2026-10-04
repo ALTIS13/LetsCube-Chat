@@ -62,7 +62,25 @@ media deletion/refund or native release is part of this backend proof.
 Whole-`chat-media` HOLD, Android/native HOLD and A063 exclusion remain unchanged.
 [Exact-claim implementation and rollout record](operations/2026-10-03-media-claim-token-rollout.md).
 
-**Current bounded reference step, 2026-10-04:** independent source receipt guard
+**Current next prerequisite, 2026-10-04:** original-rank role-name planner and
+selected same-copy catalog queries are implemented as candidate-only prototypes.
+Local evidence is **62/62**, no skips: 54 role unit tests (12 compiled mutants),
+one PG18.4 role case with 14 internal checks, and seven selected-catalog cases
+(four compiled mutants). The extra getter oracles require literal zero calls;
+an error thrown inside a getter is not sufficient refusal proof. Real legacy
+CHECK/internal-FK metadata omissions and alphabetical role/default-order drift
+are reproduced; same-copy rollback and exact owned cleanup pass. Independent
+delta review passed without P1/P2: independent catalog7/7 and accessor4/4, with
+exact current owned-copy absence and frozen input readback. Final checkpoint
+publication is candidate-only; no production acceptance. Prior parser/R5 closures
+remain unchanged.
+[Role-name scope and limits](operations/2026-10-04-avatar-role-bootstrap.md),
+[selected catalogs and complete coverage plan](operations/2026-10-04-avatar-native-inventory.md).
+Next: version-bound stable class
+identities/completeness and exact PG17 controls before full operator wiring.
+Full restore/R5, D-338/D-342 and native/reclamation HOLDs remain open.
+
+**Prior bounded reference step, 2026-10-04:** independent source receipt guard
 18/18, corrected operator/lifecycle/oracle controls 38/38 and fictional PG18.4
 native cases 4/4 (39 checks in the positive pair), final 60/60. Independent review
 refused two false-positive oracles (missing INSERT privilege versus RLS; process
