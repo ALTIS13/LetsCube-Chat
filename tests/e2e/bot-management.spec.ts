@@ -1,4 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { requireFixtureServer } from "./helpers/messageActionsFixture";
+
+test.use({ screenshot: "off", trace: "off", video: "off" });
 
 const API = "http://127.0.0.1:54322/bot/manage/v1";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -27,7 +30,15 @@ const BOT_AVATAR = `data:image/svg+xml;base64,${Buffer.from(
 ).toString("base64")}`;
 
 test.describe("authenticated bot management", () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, request }) => {
+    await requireFixtureServer(request);
+    const client = await request.get("/src/lib/botManagement.ts").then(response => response.text());
+    expect(client).toContain("http://127.0.0.1:54322");
+    await page.route(
+      (url) => (url.protocol === "http:" || url.protocol === "https:")
+        && url.hostname !== "127.0.0.1" && url.hostname !== "localhost",
+      (route) => route.abort("blockedbyclient"),
+    );
     await installSession(page);
     await installSupabaseFixture(page);
   });
@@ -590,7 +601,7 @@ test.describe("authenticated bot management", () => {
 
 /** One of the panel's settings boxes, by the heading it is labelled with. */
 const section = (page: Page, title: string) =>
-  page.locator(`section[aria-labelledby="bot-section-${title}"]`);
+  page.getByRole("region", { name: title, exact: true });
 
 /** The shared confirmation, whichever question it is asking. */
 const confirmation = (page: Page, title: string) =>

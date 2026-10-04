@@ -205,7 +205,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
 
     if (error) {
       console.error("delete group chat failed:", error);
-      setDeleteError(prefixError("Не удалось удалить сервер", error));
+      setDeleteError(prefixError("Не удалось удалить группу", error));
       return;
     }
 
@@ -440,7 +440,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
     ...(canDeleteGroup
       ? [{
           icon: "userRemove" as KubIconName,
-          label: "Удалить сервер",
+          label: "Удалить группу",
           danger: true,
           disabled: deletingChat,
           action: () => {
@@ -657,7 +657,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
                         />
                         <span className="flex min-w-0 flex-1 flex-col text-left">
                           <span className="min-w-0 truncate">
-                            {disabled && label === "Удалить сервер" ? "Удаление..." : label}
+                            {disabled && label === "Удалить группу" ? "Удаление..." : label}
                           </span>
                           {/* When a timed mute ends, on the row that would otherwise
                               say only «Включить уведомления» — the state of the
@@ -682,7 +682,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
       onClose={() => {
         if (!deletingChat) setDeleteGroupOpen(false);
       }}
-      title="Удалить сервер?"
+      title="Удалить группу?"
       description="Это действие нельзя отменить. Чат и история исчезнут у всех участников."
       icon={<KubIcon name="userRemove" size={18} tone="danger" />}
       tone="danger"
@@ -715,7 +715,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
         </div>
       ) : (
         <p className="text-sm text-[color:var(--kub-muted)]">
-          После удаления сервер исчезнет у всех участников.
+          После удаления группа исчезнет у всех участников.
         </p>
       )}
     </KubModal>

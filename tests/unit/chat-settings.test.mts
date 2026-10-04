@@ -53,7 +53,7 @@ test("a channel has no topics, and its destructive row says channel", () => {
   const channel = group({ type: "channel" });
   assert.ok(!ids(channel).includes("topics"));
   assert.equal(row(channel, "delete")?.label, "Удалить канал");
-  assert.equal(row(group(), "delete")?.label, "Удалить сервер");
+  assert.equal(row(group(), "delete")?.label, "Удалить группу");
 });
 
 test("a channel's people are its subscribers, on the row that names them", () => {

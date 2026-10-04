@@ -210,7 +210,7 @@ export function ChatRolesModal({
       title: `Удалить роль «${role.name}»?`,
       // Said plainly because the cascade is real and invisible otherwise: the
       // composite foreign key takes every assignment with the role.
-      description: "Роль исчезнет у всех, кому она выдана. Участники останутся на сервере.",
+      description: "Роль исчезнет у всех, кому она выдана. Участники останутся в группе.",
       confirmLabel: "Удалить",
       tone: "danger",
     });
@@ -234,7 +234,7 @@ export function ChatRolesModal({
       open={open}
       onClose={onClose}
       title="Роли участников"
-      description="Свои метки сервера, например «Наставник» или «Дежурный». Видны только на нём."
+      description="Свои метки группы, например «Наставник» или «Дежурный». Видны только в ней."
       icon={<KubIcon name="shield" size={18} />}
       size="md"
       scrollBody
@@ -253,12 +253,12 @@ export function ChatRolesModal({
           </KubNotice>
         )}
         {roles.failed && (
-          <KubNotice tone="danger">Не удалось прочитать роли сервера. Попробуйте ещё раз.</KubNotice>
+          <KubNotice tone="danger">Не удалось прочитать роли группы. Попробуйте ещё раз.</KubNotice>
         )}
 
         {roles.ready && roles.roles.length === 0 && !draft && (
           <p className="text-sm text-[color:var(--kub-muted)]" data-testid="chat-roles-empty">
-            На сервере пока нет ролей.
+            В группе пока нет ролей.
           </p>
         )}
 
@@ -319,7 +319,7 @@ export function ChatRolesModal({
             )}
             {nameTaken && (
               <p className="text-xs text-[color:var(--kub-danger)]" data-testid="chat-roles-name-taken">
-                Такая роль на сервере уже есть.
+                Такая роль в группе уже есть.
               </p>
             )}
 

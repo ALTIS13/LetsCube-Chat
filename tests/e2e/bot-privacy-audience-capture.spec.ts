@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+
+test.use({ screenshot: "off", trace: "off", video: "off" });
 import { openBotSettings, openBotTab } from "./helpers/botSettingsFixture";
 import {
   chat,
@@ -81,13 +83,19 @@ async function shoot(page: Page, name: string, width: number, theme: string) {
 }
 
 test.describe("bot privacy surfaces, photographed", () => {
+  test.beforeEach(async ({ request }) => {
+    await requireFixtureServer(request);
+    const client = await request.get("/src/lib/botManagement.ts").then(response => response.text());
+    expect(client).toContain("http://127.0.0.1:54322");
+  });
   for (const width of WIDTHS) {
     for (const theme of THEMES) {
       test(`the bot settings privacy section at ${width} in ${theme}`, async ({ page }) => {
         await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-        await openBotSettings(page, { theme, webFont: true });
+        await openBotSettings(page, { theme });
         await openBotTab(page, "API");
-        const section = page.locator('section[aria-labelledby="bot-section-Приватность на серверах"]');
+        const section = page.getByRole("region", { name: "Приватность в группах", exact: true });
+        await expect(section).toHaveCount(1);
         await expect(section).toBeVisible();
         await section.scrollIntoViewIfNeeded();
         await page.waitForTimeout(300);

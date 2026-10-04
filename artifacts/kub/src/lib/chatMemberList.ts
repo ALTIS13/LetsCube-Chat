@@ -107,7 +107,7 @@ export interface ChatMemberPresence {
  */
 export const MEMBERS_UNAVAILABLE = "Не удалось загрузить участников.";
 export const MEMBERS_UNAVAILABLE_DETAIL = "Список мог остаться неполным. Попробуйте ещё раз.";
-export const MEMBERS_EMPTY = "На этом сервере пока никого нет.";
+export const MEMBERS_EMPTY = "В этой группе пока никого нет.";
 export const MEMBER_NO_USERNAME = "Без имени пользователя";
 export const MEMBER_UNNAMED = "Без имени";
 export const MEMBER_JOINED_UNKNOWN = "Дата входа неизвестна";
@@ -272,5 +272,5 @@ export function formatJoinedAt(
     month: "long",
     year: "numeric",
   }).format(when);
-  return `На сервере с ${date}`;
+  return `В группе с ${date}`;
 }

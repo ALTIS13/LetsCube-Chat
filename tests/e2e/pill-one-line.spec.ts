@@ -642,10 +642,10 @@ test.describe("the people already picked for a new group", () => {
       .catch(() => false);
     if (onRail) {
       await rail.click();
-      await page.getByTestId("side-menu-row").filter({ hasText: "Новый сервер" }).click();
+      await page.getByTestId("side-menu-row").filter({ hasText: "Новая группа" }).click();
     } else {
       await page.getByRole("button", { name: "Меню" }).click();
-      await page.getByRole("menu").getByText("Новый сервер").click();
+      await page.getByRole("menu").getByText("Новая группа").click();
     }
 
     // Inside the dialog: from `md` the bar at the foot of the list (tracker

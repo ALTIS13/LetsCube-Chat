@@ -70,7 +70,7 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
     // is where the invite control already lives.
     if (!userId || !groupName.trim()) return;
     if (groupName.trim().length > CHAT_NAME_MAX_LENGTH) {
-      setError(`Название сервера не должно быть длиннее ${CHAT_NAME_MAX_LENGTH} символов.`);
+      setError(`Название группы не должно быть длиннее ${CHAT_NAME_MAX_LENGTH} символов.`);
       return;
     }
     setLoading(true);
@@ -84,7 +84,7 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
     const chat = newGroupRow({ name: groupName, createdBy: userId });
     const { error: chatErr } = await supabase.from("chats").insert(chat);
     if (chatErr) {
-      setError(prefixError("Не удалось создать сервер", chatErr));
+      setError(prefixError("Не удалось создать группу", chatErr));
       setLoading(false);
       return;
     }
@@ -103,18 +103,18 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
       // to go next, because the invite control is on a screen the person has
       // not opened yet.
       showAppAlert(
-        "Сервер создан. Пригласить участников можно в информации о сервере.",
-        "Новый сервер",
+        "Группа создана. Пригласить участников можно в информации о группе.",
+        "Новая группа",
         "checkCircle",
       );
     } else if (inviteResults.failed === 0) {
-      showAppAlert("Сервер создан. Приглашения отправлены.", "Новый сервер", "checkCircle");
+      showAppAlert("Группа создана. Приглашения отправлены.", "Новая группа", "checkCircle");
     } else if (inviteResults.migrationRequired) {
-      showAppAlert(GROUP_INVITES_MIGRATION_REQUIRED, "Новый сервер");
+      showAppAlert(GROUP_INVITES_MIGRATION_REQUIRED, "Новая группа");
     } else {
       showAppAlert(
-        `Сервер создан, но ${inviteResults.failed} из ${selected.length} приглашений не удалось отправить. Попробуйте пригласить пользователей из информации о сервере.`,
-        "Новый сервер",
+        `Группа создана, но ${inviteResults.failed} из ${selected.length} приглашений не удалось отправить. Попробуйте пригласить пользователей из информации о группе.`,
+        "Новая группа",
       );
     }
   };
@@ -123,7 +123,7 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
     <KubModal
       open={true}
       onClose={onClose}
-      title={step === "pick" ? "Пригласить участников" : "Название сервера"}
+      title={step === "pick" ? "Пригласить участников" : "Название группы"}
       description={step === "pick" ? "Выберите пользователей, которым отправить приглашение." : "Пользователи смогут принять или отклонить приглашение."}
       icon={<KubIcon name="group" size={15} />}
       size="sm"
@@ -135,7 +135,7 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
             onClick={() => setStep("name")}
           >
             {selected.length === 0
-              ? "Пропустить и назвать сервер"
+              ? "Пропустить и назвать группу"
               : `Далее (приглашений: ${selected.length})`}
           </KubButton>
         ) : (
@@ -145,7 +145,7 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
             disabled={!groupName.trim()}
             loading={loading}
           >
-            Создать сервер
+            Создать группу
           </KubButton>
         )
       }
@@ -217,7 +217,7 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
           autoFocus
           value={groupName}
           onChange={(e) => setGroupName(limitText(e.target.value, CHAT_NAME_MAX_LENGTH))}
-          placeholder="Название сервера"
+          placeholder="Название группы"
           maxLength={CHAT_NAME_MAX_LENGTH}
           className="w-full text-sm rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-text)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
         />

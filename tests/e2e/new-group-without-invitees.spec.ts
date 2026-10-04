@@ -41,7 +41,7 @@ const EXISTING = "7aaaaaaa-aaaa-4aaa-8aaa-000000000001";
 
 type Seen = { chatInserts: number };
 
-async function openNewGroup(page: Page): Promise<Seen> {
+async function openNewGroup(page: Page, theme: "light" | "dark" = "dark"): Promise<Seen> {
   const seen: Seen = { chatInserts: 0 };
 
   await openFixture(page, {
@@ -50,6 +50,7 @@ async function openNewGroup(page: Page): Promise<Seen> {
     chats: [chat(EXISTING, "group", "Команда проекта", AT)],
     memberships: [membership(EXISTING, ME, "owner", AT)] as Row[],
     messages: [],
+    theme,
   });
 
   // The invitee picker reads `profiles` straight through PostgREST, and the
@@ -82,7 +83,7 @@ async function openNewGroup(page: Page): Promise<Seen> {
   } else {
     await page.getByTestId("side-menu-button").click();
   }
-  await page.getByRole("button", { name: "Новый сервер" }).first().click();
+  await page.getByRole("button", { name: "Новая группа" }).first().click();
   return seen;
 }
 
@@ -105,22 +106,22 @@ test("the invitee step is not a blank box", async ({ page }) => {
 
 test("a person with nobody to invite can still reach the name field", async ({ page }) => {
   await openNewGroup(page);
-  const next = page.getByRole("button", { name: /Пропустить и назвать сервер/ });
+  const next = page.getByRole("button", { name: /Пропустить и назвать группу/ });
   await expect(next).toBeVisible();
   await expect(next).toBeEnabled();
   await next.click();
   // The step really changed: the modal's own title is the naming one, and the
   // create button is the one now on offer.
-  await expect(page.getByText("Название сервера", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Создать сервер" })).toBeVisible();
+  await expect(page.getByText("Название группы", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Создать группу" })).toBeVisible();
 });
 
 test("and the group is actually created, with nobody invited", async ({ page }) => {
   const seen = await openNewGroup(page);
-  await page.getByRole("button", { name: /Пропустить и назвать сервер/ }).click();
+  await page.getByRole("button", { name: /Пропустить и назвать группу/ }).click();
 
   await page.getByRole("textbox").last().fill("Команда без приглашений");
-  const create = page.getByRole("button", { name: "Создать сервер" });
+  const create = page.getByRole("button", { name: "Создать группу" });
   await expect(create).toBeEnabled();
   await create.click();
 
@@ -129,17 +130,20 @@ test("and the group is actually created, with nobody invited", async ({ page }) 
   await expect.poll(() => seen.chatInserts, { timeout: 5_000 }).toBe(1);
 
   // And nothing claims invitations that were never sent.
-  await expect(page.getByText(/Пригласить участников можно в информации о сервере/)).toBeVisible();
+  await expect(page.getByText(/Пригласить участников можно в информации о группе/)).toBeVisible();
   await expect(page.getByText("Приглашения отправлены.")).toHaveCount(0);
 });
 
 for (const theme of ["light", "dark"] as const) {
   test(`the invitee step holds in the ${theme} theme`, async ({ page }, info) => {
-    await page.addInitScript((value) => localStorage.setItem("kub-theme", value as string), theme);
-    await openNewGroup(page);
+    await openNewGroup(page, theme);
     await expect(page.getByText("Анна Тихая")).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(400);
     await page.screenshot({ path: shotPath(info, `pick-${theme}`), fullPage: false });
+    await page.getByRole("button", { name: /Пропустить и назвать группу/ }).click();
+    await expect(page.getByText("Название группы", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Создать группу" })).toBeVisible();
+    await page.screenshot({ path: shotPath(info, `name-${theme}`), fullPage: false });
   });
 }

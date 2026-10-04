@@ -162,7 +162,7 @@ export function SidebarHeader({
   };
 
   const menuItems: MenuItem[] = [
-    { icon: "group",    label: "Новый сервер", action: () => { setMenuOpen(false); setShowNewGroup(true); } },
+    { icon: "group",    label: "Новая группа", action: () => { setMenuOpen(false); setShowNewGroup(true); } },
     { icon: "bookmark", label: "Избранное",    action: openSavedMessages },
     { icon: "contact", label: "Контакты", action: () => { setMenuOpen(false); setMobileSection("contacts"); } },
     { icon: "bot",      label: "Мои боты",     action: () => { setMenuOpen(false); setLocation("/bots"); } },

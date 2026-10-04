@@ -133,7 +133,7 @@ test("the block question says what happens, and promises nothing the row does no
   // `micro_group_create` and `micro_group_add` refuse across a block.
   assert.match(prompt.description, /добавлять вас в групповые чаты/iu);
   // And the one thing it is NOT: the block does not reach a server.
-  assert.match(prompt.description, /на серверах/iu);
+  assert.match(prompt.description, /в группах/iu);
   // Nothing about hiding a profile or deleting messages, which the row cannot do.
   assert.equal(/скро|спрята|удал/iu.test(prompt.description), false);
   assert.equal(prompt.confirmLabel, "Заблокировать");

@@ -102,7 +102,7 @@ export function SideMenuLayer({ onClose, onOpenSettings, onOpenContacts, onOpenN
     },
     { icon: "bookmark", label: "Избранное", action: () => { onClose(); onOpenSaved(); } },
     { icon: "contact", label: "Контакты", action: () => { onClose(); onOpenContacts(); } },
-    { icon: "group", label: "Новый сервер", action: () => { onClose(); onOpenNewGroup(); } },
+    { icon: "group", label: "Новая группа", action: () => { onClose(); onOpenNewGroup(); } },
     // «Мои боты» and «Задачи» were here until item 41 moved them — the owner's
     // word was «перенести» — to the rows above the chat list, where Discord
     // keeps its home sections and where they open beside the lists. The phone,

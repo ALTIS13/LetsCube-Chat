@@ -143,8 +143,8 @@ export function memberCountLabel(count: number): string {
 /** A refusal from one of the link functions, as a sentence; never Postgres's words. */
 export function inviteLinkErrorText(error: unknown, fallback: string): string {
   const message = typeof error === "object" && error && "message" in error ? String((error as { message: unknown }).message) : "";
-  if (message.includes("invite_link_forbidden")) return "Недостаточно прав, чтобы приглашать на этот сервер.";
-  if (message.includes("invite_link_too_many")) return "У сервера слишком много действующих ссылок. Отзовите ненужные.";
+  if (message.includes("invite_link_forbidden")) return "Недостаточно прав, чтобы приглашать в эту группу.";
+  if (message.includes("invite_link_too_many")) return "У группы слишком много действующих ссылок. Отзовите ненужные.";
   if (message.includes("invite_link_expired")) return invitePreviewStateText("expired") as string;
   if (message.includes("invite_link_revoked")) return invitePreviewStateText("revoked") as string;
   if (message.includes("invite_link_used_up")) return invitePreviewStateText("used_up") as string;

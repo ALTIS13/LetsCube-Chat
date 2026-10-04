@@ -111,8 +111,8 @@ export const BOT_ADDED_LABEL = "Добавлен";
 export const BOT_ADDING_LABEL = "Добавляем...";
 export const BOT_REMOVE_LABEL = "Убрать";
 export const BOT_REMOVING_LABEL = "Убираем...";
-export const BOT_MEMBERS_HEADING = "Боты на сервере";
-export const BOT_MEMBERS_EMPTY = "На сервере пока нет ботов.";
+export const BOT_MEMBERS_HEADING = "Боты в группе";
+export const BOT_MEMBERS_EMPTY = "В группе пока нет ботов.";
 
 /**
  * What a bot will and will not see, said before the button is pressed.
@@ -122,7 +122,7 @@ export const BOT_MEMBERS_EMPTY = "На сервере пока нет ботов
  */
 export const BOT_VISIBILITY_NOTE =
   "Бот получит только обращённые к нему сообщения: упоминания через @никнейм, "
-  + "команды с @никнеймом и ответы на его сообщения. Остальную переписку сервера "
+  + "команды с @никнеймом и ответы на его сообщения. Остальную переписку группы "
   + "и историю до добавления он не увидит.";
 
 /**
@@ -151,7 +151,7 @@ export function readBotPrivacyMode(value: unknown): BotPrivacyMode {
  * of both and repeating it twice on every row would drown the difference.
  */
 export const BOT_ACCESS_RESTRICTED = "Видит только обращения к нему";
-export const BOT_ACCESS_FULL = "Видит все новые сообщения сервера";
+export const BOT_ACCESS_FULL = "Видит все новые сообщения группы";
 
 export function botAccessLabel(mode: BotPrivacyMode): string {
   return mode === "full" ? BOT_ACCESS_FULL : BOT_ACCESS_RESTRICTED;
@@ -205,11 +205,11 @@ export const BOT_PRIVACY_FAILED = "Не удалось изменить дост
 
 /** The same fact, once it is done, because a success is also a place to say it. */
 export function botAddedMessage(name: string): string {
-  return `${name} добавлен на сервер. Бот видит только обращённые к нему сообщения.`;
+  return `${name} добавлен в группу. Бот видит только обращённые к нему сообщения.`;
 }
 
 export function botRemovedMessage(name: string): string {
-  return `${name} больше не участвует в этом сервере.`;
+  return `${name} больше не участвует в этой группе.`;
 }
 
 /** The name a bot is shown under, matching `messageActorDisplayName`. */
@@ -283,11 +283,11 @@ export function botMembershipFailureMessage(
 ): string {
   const text = `${String(error?.code ?? "")} ${String(error?.message ?? "")} ${String(error?.details ?? "")} ${String(error?.hint ?? "")}`
     .toLocaleLowerCase("en-US");
-  if (text.includes("not_a_group")) return "Бота можно добавить только на сервер.";
-  if (text.includes("not_an_admin")) return "Добавлять и убирать ботов может только администратор сервера.";
+  if (text.includes("not_a_group")) return "Бота можно добавить только в группу.";
+  if (text.includes("not_an_admin")) return "Добавлять и убирать ботов может только администратор группы.";
   if (text.includes("bot_not_active")) return "Этот бот сейчас отключён.";
   if (text.includes("no_such_bot")) return "Такого бота больше нет.";
-  if (text.includes("no_such_chat")) return "Этого сервера больше нет.";
+  if (text.includes("no_such_chat")) return "Этой группы больше нет.";
   if (text.includes("not_authenticated")) return "Войдите в аккаунт ещё раз.";
   return fallback;
 }

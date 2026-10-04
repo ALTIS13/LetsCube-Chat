@@ -9,7 +9,11 @@
  * 2026-09-13 say «Удалить канал» — so the same object was named two ways
  * depending on which surface you opened.
  *
- * **What actually differs, established from the code rather than assumed.**
+ * Historical D-169 observations below describe the original implementation.
+ * D-341 (2026-10-04) names heavy `group` chats "Группа" again; ad-hoc
+ * `dm_group` chats remain "Групповой чат" in their separate vocabulary.
+ *
+ * **What differed then, established from the code rather than assumed.**
  * `chats.type` allows `private`, `group` and `channel` (`schema.sql:53`), and
  * that is the whole of it:
  *
@@ -40,19 +44,17 @@ export interface ChatVocabulary {
   kind: ChatKind;
   /** «Группа», «Канал» — the thing itself, opening a sentence. */
   subject: string;
-  /** «сервер», «канал» — what you leave, delete or invite somebody into. */
+  /** «группу», «канал» — what you leave, delete or invite somebody into. */
   object: string;
-  /** «сервера», «канала» — «Настройки сервера». */
+  /** «группы», «канала» — «Настройки группы». */
   possessive: string;
-  /** «сервере», «канале» — «Информация о сервере». */
+  /** «группе», «канале» — «Информация о группе». */
   locative: string;
   /**
-   * Where somebody is, with its preposition: «на сервере», «в канале». Russian
-   * is «на сервере» and «в канале», so the preposition belongs to the noun and
-   * not to the sentence (2026-09-30, when the heavy group became «сервер»).
+   * Where somebody is, including its preposition: «в группе», «в канале».
    */
   at: string;
-  /** Where somebody goes, with its preposition: «на сервер», «в канал». */
+  /** Where somebody goes, with its preposition: «в группу», «в канал». */
   into: string;
   /** «Участники» / «Подписчики»: the tab, and the row on the settings screen. */
   membersTitle: string;
@@ -106,12 +108,12 @@ export function chatKindOf(type: string | null | undefined): ChatKind {
 export function chatVocabulary(type: string | null | undefined): ChatVocabulary {
   const kind = chatKindOf(type);
   const channel = kind === "channel";
-  const subject = channel ? "Канал" : "Сервер";
-  const object = channel ? "канал" : "сервер";
-  const possessive = channel ? "канала" : "сервера";
-  const locative = channel ? "канале" : "сервере";
-  const at = channel ? "в канале" : "на сервере";
-  const into = channel ? "в канал" : "на сервер";
+  const subject = channel ? "Канал" : "Группа";
+  const object = channel ? "канал" : "группу";
+  const possessive = channel ? "канала" : "группы";
+  const locative = channel ? "канале" : "группе";
+  const at = channel ? "в канале" : "в группе";
+  const into = channel ? "в канал" : "в группу";
   const membersTitle = channel ? "Подписчики" : "Участники";
   // The genitive plural of the same noun, for the sentences that say whose
   // history stays behind.
@@ -143,7 +145,7 @@ export function chatVocabulary(type: string | null | undefined): ChatVocabulary 
     // actually needs to know, which is that deleting is not their only option.
     deleteAftermath: channel
       ? "Если вы просто хотите уйти, передайте права владельца другому подписчику — тогда канал останется."
-      : "Если вы просто хотите уйти, передайте права владельца другому участнику — тогда сервер останется.",
+      : "Если вы просто хотите уйти, передайте права владельца другому участнику — тогда группа останется.",
     deleteError: `Не удалось удалить ${object}`,
     transferLabel: "Передать права владельца",
     transferTitle: "Передать права владельца?",
@@ -153,7 +155,7 @@ export function chatVocabulary(type: string | null | undefined): ChatVocabulary 
       `${name} станет владельцем, а вы — администратором. Вернуть права сможет только новый владелец.`,
     transferAftermath: `После этого вы сможете покинуть ${object}.`,
     transferError: "Не удалось передать права владельца",
-    descriptionPlaceholder: channel ? "О чём этот канал" : "О чём этот сервер",
+    descriptionPlaceholder: channel ? "О чём этот канал" : "О чём эта группа",
   };
 }
 

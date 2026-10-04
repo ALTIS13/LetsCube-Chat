@@ -122,9 +122,9 @@ export function getChatDisplayInfo(
 
   const memberCount = chat.members?.length ?? 0;
   return {
-    title: chat.name?.trim() || "Сервер без названия",
-    subtitle: chat.description?.trim() || (memberCount > 0 ? memberCountLabel(memberCount) : "Сервер"),
-    typeLabel: "Сервер",
+    title: chat.name?.trim() || "Группа без названия",
+    subtitle: chat.description?.trim() || (memberCount > 0 ? memberCountLabel(memberCount) : "Группа"),
+    typeLabel: "Группа",
     isSaved: false,
     isBot: false,
   };

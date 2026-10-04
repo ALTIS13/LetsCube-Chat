@@ -247,7 +247,7 @@ export function UserProfileOverlay() {
               context.standing,
               context.channel
                 ? "канала"
-                : chats.find((row) => row.id === contextChatId)?.type === "dm_group" ? "группового чата" : "сервера",
+                : chats.find((row) => row.id === contextChatId)?.type === "dm_group" ? "группового чата" : "группы",
             )
             : ""}
           presenceLabel={presence?.label ?? ""}

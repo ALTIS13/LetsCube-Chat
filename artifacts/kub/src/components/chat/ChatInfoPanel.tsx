@@ -2201,7 +2201,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
     if (full) {
       const confirmed = await requestAppConfirm({
         title: `Дать боту «${botDisplayName(bot)}» полный доступ?`,
-        description: "Бот будет получать все новые сообщения и вложения на этом сервере. Сообщения до изменения доступа ему не откроются. Доступ можно снова ограничить.",
+        description: "Бот будет получать все новые сообщения и вложения в этой группе. Сообщения до изменения доступа ему не откроются. Доступ можно снова ограничить.",
         confirmLabel: "Дать доступ",
         icon: "bot",
       });

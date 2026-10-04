@@ -207,7 +207,7 @@ test("a channel's card is titled a channel's, and counts subscribers", async ({ 
 test("a group's card is unchanged, so this is a branch and not a rename", async ({ page }, info) => {
   await openInfo(page, "group");
 
-  await expect(header(page)).toContainText("Информация о сервере");
+  await expect(header(page)).toContainText("Информация о группе");
   await expect(page.getByTestId("chat-info-summary")).toContainText("3 участника");
   await expect(onRoot(page, "Участники")).toBeVisible();
 
@@ -251,7 +251,7 @@ test("deleting a channel says channel, in the row and in what it asks", async ({
   );
   // «Удалить групповой чат» was the card's own wording for the same button the
   // settings screen called «Удалить группу»; one name now, and it names this.
-  await expect(page.getByTestId("chat-info-panel")).not.toContainText("Удалить сервер");
+  await expect(page.getByTestId("chat-info-panel")).not.toContainText("Удалить группу");
 });
 
 test("the settings screen of a channel is a channel's throughout", async ({ page }, info) => {
@@ -321,14 +321,14 @@ test("somebody who accepted and left is not shown as though they were here", asy
   });
   await onRoot(page, "Участники").click();
 
-  await expect(page.getByTestId("chat-info-invite-state")).toHaveText("Уже не на сервере");
+  await expect(page.getByTestId("chat-info-invite-state")).toHaveText("Уже не в группе");
   await expect(page.getByRole("button", { name: "Пригласить снова" })).toBeVisible();
 });
 
 test("an empty list says which of the two kinds of empty it is", async ({ page }) => {
   await openInfo(page, "group", { invites: [] });
   await onRoot(page, "Участники").click();
-  await expect(page.getByTestId("chat-info-invites-empty")).toHaveText("На сервер ещё никого не приглашали.");
+  await expect(page.getByTestId("chat-info-invites-empty")).toHaveText("В группу ещё никого не приглашали.");
 });
 
 test("everybody invited having arrived is not the same as nobody invited", async ({ page }) => {
@@ -342,7 +342,7 @@ test("everybody invited having arrived is not the same as nobody invited", async
     ],
   });
   await onRoot(page, "Участники").click();
-  await expect(page.getByTestId("chat-info-invites-empty")).toHaveText("Все приглашённые уже на сервере.");
+  await expect(page.getByTestId("chat-info-invites-empty")).toHaveText("Все приглашённые уже в группе.");
 });
 
 test("a channel's empty list speaks of a channel", async ({ page }) => {

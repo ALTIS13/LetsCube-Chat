@@ -125,11 +125,11 @@ test("each refusal the door raises gets its own sentence", () => {
   // The six names are the `raise exception` strings of
   // `20260919010000_a_bot_can_be_put_in_a_group.sql`.
   const cases: Array<[string, string]> = [
-    ["not_a_group", "Бота можно добавить только на сервер."],
-    ["not_an_admin", "Добавлять и убирать ботов может только администратор сервера."],
+    ["not_a_group", "Бота можно добавить только в группу."],
+    ["not_an_admin", "Добавлять и убирать ботов может только администратор группы."],
     ["bot_not_active", "Этот бот сейчас отключён."],
     ["no_such_bot", "Такого бота больше нет."],
-    ["no_such_chat", "Этого сервера больше нет."],
+    ["no_such_chat", "Этой группы больше нет."],
     ["not_authenticated", "Войдите в аккаунт ещё раз."],
   ];
   for (const [raised, said] of cases) {
@@ -144,7 +144,7 @@ test("each refusal the door raises gets its own sentence", () => {
 test("a refusal is recognised wherever PostgREST put it", () => {
   assert.equal(
     botMembershipFailureMessage({ details: "not_an_admin" }, BOT_REMOVE_FAILED),
-    "Добавлять и убирать ботов может только администратор сервера.",
+    "Добавлять и убирать ботов может только администратор группы.",
   );
   assert.equal(
     botMembershipFailureMessage({ hint: "bot_not_active" }, BOT_REMOVE_FAILED),
@@ -287,7 +287,7 @@ test("the bot's line in the member list is its status slot: identity, then state
   // The shape a person's row has one line above — `Владелец группы · был(а)
   // недавно` — so the two read the same way.
   assert.equal(botMemberStatusLine(BOT, "restricted"), "@helper_bot · Видит только обращения к нему");
-  assert.equal(botMemberStatusLine(BOT, "full"), "@helper_bot · Видит все новые сообщения сервера");
+  assert.equal(botMemberStatusLine(BOT, "full"), "@helper_bot · Видит все новые сообщения группы");
 
   // The handle stays, and it is not decoration: this product has no mention
   // autocomplete, `@никнейм` has to be typed for the bot to be delivered

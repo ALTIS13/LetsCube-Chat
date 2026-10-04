@@ -191,7 +191,7 @@ export function MemberCard({
               />
             ))}
             {groupRoles.length === 0 && (
-              <span className="text-xs text-[color:var(--kub-muted)]">Ролей на сервере нет</span>
+              <span className="text-xs text-[color:var(--kub-muted)]">Ролей в группе нет</span>
             )}
           </div>
           {/* What is left to give. Only the roles this person does not wear, so
@@ -278,7 +278,7 @@ export function MemberCard({
               >
                 <ChatAvatar chat={row as never} size="sm" />
                 <span className="min-w-0 flex-1 truncate text-sm text-[color:var(--kub-text)]">
-                  {row.name?.trim() || (row.type === "channel" ? "Канал" : row.type === "dm_group" ? "Групповой чат" : "Сервер")}
+                  {row.name?.trim() || (row.type === "channel" ? "Канал" : row.type === "dm_group" ? "Групповой чат" : "Группа")}
                 </span>
               </button>
             ))}

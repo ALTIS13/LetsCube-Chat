@@ -98,7 +98,7 @@ export function ChatInviteLinksPanel({ chatId, currentUserId, canRevokeAny }: {
   const revoke = async (row: InviteLinkRow) => {
     const confirmed = await requestAppConfirm({
       title: "Отозвать ссылку?",
-      description: "По ней больше никто не войдёт. Те, кто уже вошёл, останутся на сервере.",
+      description: "По ней больше никто не войдёт. Те, кто уже вошёл, останутся в группе.",
       confirmLabel: "Отозвать",
       tone: "danger",
       icon: "link",

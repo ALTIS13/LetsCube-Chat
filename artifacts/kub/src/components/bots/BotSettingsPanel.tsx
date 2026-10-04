@@ -1,5 +1,5 @@
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { BotAvatar } from "@/components/bots/BotAvatar";
 import { KubBadge, KubButton, KubEmptyState, KubIcon, KubInput } from "@/components/kub";
@@ -314,7 +314,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
             </div>
           </Section>
 
-          <Section title="Приватность на серверах" description="Для каждого сервера доступ к новым сообщениям переключает его администратор в списке участников. Здесь показан текущий режим.">
+          <Section title="Приватность в группах" description="Для каждой группы доступ к новым сообщениям переключает её администратор в списке участников. Здесь показан текущий режим.">
             <div className="space-y-2">
               {detail.privacy.map((item) => (
                 <div key={item.chat_id} data-bot-privacy={item.privacy_mode} className="flex flex-col gap-2 border-b border-[color:var(--kub-rule)] py-3 sm:flex-row sm:items-center">
@@ -324,7 +324,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
                   </div>
                 </div>
               ))}
-              {detail.privacy.length === 0 && <KubEmptyState title="Бот не добавлен на серверы" description="Настройки появятся после добавления в чат." className="py-5" />}
+              {detail.privacy.length === 0 && <KubEmptyState title="Бот не добавлен в группы" description="Настройки появятся после добавления в чат." className="py-5" />}
             </div>
           </Section>
 
@@ -404,7 +404,8 @@ function Notice({ children }: { children: string }) {
  * this element was a stacking context and a containing block before.
  */
 function Section({ title, description, error, children }: { title: string; description?: string; error?: string | null; children: React.ReactNode }) {
-  return <section aria-labelledby={`bot-section-${title}`} className="@container kub-glass rounded-md border border-[color:var(--kub-border-color)] p-4"><h3 id={`bot-section-${title}`} className="text-sm font-semibold text-[color:var(--kub-text)]">{title}</h3>{description && <p className="mt-1 text-xs leading-5 text-[color:var(--kub-muted)]">{description}</p>}<div className="mt-4">{children}</div>{error && <p role="alert" data-bot-section-error={title} className="mt-3 rounded-md border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-sm leading-5 text-[color:var(--kub-danger-text)]">{error}</p>}</section>;
+  const headingId = `bot-section-${useId()}`;
+  return <section aria-labelledby={headingId} className="@container kub-glass rounded-md border border-[color:var(--kub-border-color)] p-4"><h3 id={headingId} className="text-sm font-semibold text-[color:var(--kub-text)]">{title}</h3>{description && <p className="mt-1 text-xs leading-5 text-[color:var(--kub-muted)]">{description}</p>}<div className="mt-4">{children}</div>{error && <p role="alert" data-bot-section-error={title} className="mt-3 rounded-md border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-sm leading-5 text-[color:var(--kub-danger-text)]">{error}</p>}</section>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

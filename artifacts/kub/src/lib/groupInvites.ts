@@ -125,7 +125,7 @@ export function formatGroupInviteError(error: unknown, fallback = "Не удал
   if (details.code === "42501" || text.includes("permission denied") || text.includes("admin_required")) {
     return "Недостаточно прав для приглашения.";
   }
-  if (text.includes("already_member")) return "Пользователь уже на сервере.";
+  if (text.includes("already_member")) return "Пользователь уже в группе.";
   if (text.includes("pending_exists") || text.includes("unique") || text.includes("duplicate") || text.includes("one_pending")) {
     return "Приглашение уже отправлено.";
   }
@@ -133,7 +133,7 @@ export function formatGroupInviteError(error: unknown, fallback = "Не удал
   if (text.includes("expired")) return "Срок приглашения истёк.";
   if (text.includes("cancelled")) return "Приглашение отменено.";
   if (text.includes("self_forbidden")) return "Нельзя пригласить самого себя.";
-  if (text.includes("chat_type_invalid") || text.includes("not_group_chat")) return "Приглашения доступны только для серверов.";
+  if (text.includes("chat_type_invalid") || text.includes("not_group_chat")) return "Приглашения доступны только для групп.";
   if (text.includes("invitee_not_found")) return "Пользователь не найден.";
   if (text.includes("not_found") || text.includes("unavailable")) return "Приглашение уже недоступно.";
   if (details.code === "28000" || text.includes("not_authenticated")) return "Войдите в аккаунт, чтобы продолжить.";

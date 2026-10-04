@@ -362,7 +362,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
         | "member"
         | undefined) ?? null;
     const isPinned = Boolean(chat.is_pinned);
-    const groupLabel = chat.type === "channel" ? "канал" : "сервер";
+    const groupLabel = chat.type === "channel" ? "канал" : "группу";
 
     // D-167. One row at rest, five once it has been opened — the same entries
     // the chat header and the contact card draw, from the one decision in
@@ -419,7 +419,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
           run: () => setInviteChoiceOpen(false),
         },
         ...inviteGroups.map((group): ChatAction => {
-          const name = group.name?.trim() || (group.type === "channel" ? "Канал" : "Сервер");
+          const name = group.name?.trim() || (group.type === "channel" ? "Канал" : "Группа");
           return {
             id: `invite-${group.id}`,
             icon: group.type === "channel" ? "channel" : "group",
@@ -534,7 +534,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
       actions.push({
         id: "group-info",
         icon: "info",
-        label: isMicro ? "Информация о групповом чате" : chat.type === "channel" ? "Информация о канале" : "Информация о сервере",
+        label: isMicro ? "Информация о групповом чате" : chat.type === "channel" ? "Информация о канале" : "Информация о группе",
         run: () => selectAndOpenPanel("info"),
       });
     }
@@ -600,7 +600,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
       actions.push({
         id: "invite",
         icon: "userPlus",
-        label: "Пригласить на сервер",
+        label: "Пригласить в группу",
         keepOpen: true,
         run: () => setInviteChoiceOpen(true),
       });
@@ -738,8 +738,8 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
         run: async () => {
           if (!currentUser?.id) return;
           const confirmed = await requestAppConfirm({
-            title: chat.type === "channel" ? "Покинуть канал?" : "Покинуть сервер?",
-            description: `${chat.type === "channel" ? "Канал" : "Сервер"} исчезнет из вашего списка. История у других участников останется.`,
+            title: chat.type === "channel" ? "Покинуть канал?" : "Покинуть группу?",
+            description: `${chat.type === "channel" ? "Канал" : "Группа"} исчезнет из вашего списка. История у других участников останется.`,
             confirmLabel: "Покинуть",
             tone: "danger",
             icon: "logout",
@@ -764,11 +764,11 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
       actions.push({
         id: "delete-group",
         icon: "userRemove",
-        label: chat.type === "channel" ? "Удалить канал" : isMicro ? "Удалить групповой чат" : "Удалить сервер",
+        label: chat.type === "channel" ? "Удалить канал" : isMicro ? "Удалить групповой чат" : "Удалить группу",
         danger: true,
         run: async () => {
           const confirmed = await requestAppConfirm({
-            title: chat.type === "channel" ? "Удалить канал?" : isMicro ? "Удалить групповой чат?" : "Удалить сервер?",
+            title: chat.type === "channel" ? "Удалить канал?" : isMicro ? "Удалить групповой чат?" : "Удалить группу?",
             description: "Это действие нельзя отменить.",
             confirmLabel: "Удалить",
             tone: "danger",
@@ -782,7 +782,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
             .select("id")
             .maybeSingle();
           if (error) {
-            showAppAlert(prefixError(isMicro ? "Не удалось удалить групповой чат" : "Не удалось удалить сервер", error), "Ошибка");
+            showAppAlert(prefixError(isMicro ? "Не удалось удалить групповой чат" : "Не удалось удалить группу", error), "Ошибка");
             return;
           }
           if (!data) {

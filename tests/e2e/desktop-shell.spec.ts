@@ -5,6 +5,7 @@ import {
   chat,
   membership,
   message,
+  missingFunction,
   openFixture,
   person,
   requireFixtureServer,
@@ -125,6 +126,9 @@ async function boot(
     me,
     ...fixtureRows(pinned),
     rpc: (name, body) => {
+      // This fixture exercises the legacy permission replies below, not an
+      // available snapshot with no rights. A missing RPC selects that path.
+      if (name === "current_user_access_snapshot") return missingFunction(name);
       if (name === "has_permission") {
         return { body: staff && STAFF_PERMISSIONS.has(String(body.p_permission_key)) };
       }
@@ -632,7 +636,7 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     for (const label of [
       "Мой профиль",
       "Избранное",
-      "Новый сервер",
+      "Новая группа",
       "Управление",
       "Настройки",
     ]) {

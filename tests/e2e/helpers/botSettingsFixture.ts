@@ -39,6 +39,7 @@ const COMMANDS = [
 
 export interface BotSettingsFixtureOptions {
   theme?: "dark" | "light";
+  privacy?: "restricted" | "empty";
   /** Lets Inter through, which a photograph needs and a contract must not. */
   webFont?: boolean;
 }
@@ -161,7 +162,7 @@ export async function openBotSettings(page: Page, options: BotSettingsFixtureOpt
             created_at: AT,
           },
         ],
-        privacy: [
+        privacy: options.privacy === "empty" ? [] : [
           {
             chat_id: "33333333-3333-4333-8333-00000000d222",
             chat_name: "Команда продукта",

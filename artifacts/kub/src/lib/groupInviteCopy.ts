@@ -138,7 +138,7 @@ export function invitesEmptyText({ total, visible, failed, type }: InviteEmptyIn
  */
 export function inviteDenialText(denial: ChatInviteDenial, type: string | null | undefined): string {
   const words = chatVocabulary(type);
-  if (denial === "not_group_chat") return "Приглашения есть только у серверов и каналов.";
+  if (denial === "not_group_chat") return "Приглашения есть только у групп и каналов.";
   if (denial === "member_required") return `Приглашать может только тот, кто сам ${words.at}.`;
   return `${capitalise(words.at)} приглашают только владелец и администраторы.`;
 }

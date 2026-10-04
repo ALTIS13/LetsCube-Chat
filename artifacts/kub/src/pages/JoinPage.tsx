@@ -142,7 +142,7 @@ export function JoinPage() {
               />
               <div className="min-w-0 space-y-1">
                 <h1 className="break-words text-lg font-bold text-[color:var(--kub-text)]" data-testid="join-name">
-                  {preview.name ?? "Сервер"}
+                  {preview.name ?? "Группа"}
                 </h1>
                 {preview.memberCount !== null && (
                   <p className="text-sm text-[color:var(--kub-muted)]" data-testid="join-count">
@@ -155,11 +155,11 @@ export function JoinPage() {
               )}
               {preview.state === "member" ? (
                 <KubButton className="w-full" onClick={open} data-testid="join-open">
-                  Вы уже на сервере — открыть
+                  Вы уже в группе — открыть
                 </KubButton>
               ) : (
                 <KubButton className="w-full" onClick={() => void join()} disabled={joining} data-testid="join-button">
-                  {joining ? "Присоединяемся…" : "Присоединиться к серверу"}
+                  {joining ? "Присоединяемся…" : "Присоединиться к группе"}
                 </KubButton>
               )}
               <button

@@ -248,7 +248,7 @@ test("a nickname is printed with its sign, or its absence is named", () => {
 // ---------------------------------------------------------------------------
 
 test("a join date is spelled out, and an absent one says so", () => {
-  assert.equal(formatJoinedAt("2026-05-09T10:00:00Z"), "На сервере с 9 мая 2026 г.");
+  assert.equal(formatJoinedAt("2026-05-09T10:00:00Z"), "В группе с 9 мая 2026 г.");
   assert.equal(formatJoinedAt(null), MEMBER_JOINED_UNKNOWN);
   assert.equal(formatJoinedAt(undefined), MEMBER_JOINED_UNKNOWN);
   assert.equal(formatJoinedAt("not a date"), MEMBER_JOINED_UNKNOWN);
