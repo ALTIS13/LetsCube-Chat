@@ -22,7 +22,27 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-342, with its
    measurement. Search it before filing anything.
 
-**Current PG17 prerequisite checkpoint, 2026-10-04 (Codex).** Owner: this chat,
+**Current PG17 query/identity preparation, 2026-10-04 (Codex).** Owner: this chat,
+branch `codex/bot-inline-media-20261002`, base `f8cd50ea`. New fixed, action-free
+header SQL captures extra fields/overloads and unresolved type slots rather than
+filtering evidence to fit the allowed profile. Coordinator source **59/59** with
+19 compiled mutants and changed/adjacent **361/361**; exact seven-file candidate
+requires independent source/evidence review before publication. PGlite fictional
+rows are not native PG17 acceptance.
+[Query, read-only inventory and exact limits](operations/2026-10-04-avatar-pg17-executable-query.md).
+Strict read-only SSH independently binds five tool versions, wrappers/ELFs,
+selected extensions and29 canonical linker-file hashes pre/post. All29 image-layer
+metadata entries match the hash-checked OCI config. Public descriptor-bound SLSA
+v1 claim connects the exact manifest to vendor source/workflow, but is unsigned.
+[Build/source binding and remaining trust gaps](operations/2026-10-04-avatar-pg17-build-binding.md).
+Disk space verified: D115755237376 bytes free at entry; preserved links untouched.
+Next: finish exact trusted-cache/content/recipe inputs and separately review a NEW
+fictional header-only producer before allocation. Native/full restoration,
+extension/bootstrap history and remaining prerequisite controls are not inferred
+from this source-only preparation. No main/production SQL/R5/native release/HOLD
+lift; item82/D-342 stays OPEN.
+
+**Prior PG17 prerequisite checkpoint, 2026-10-04 (Codex).** Owner: this chat,
 branch `codex/bot-inline-media-20261002`, base `b5f373e5`. New action-free header
 diagnostic passes **57/57**, including13 compiled mutants; changed and adjacent
 source checks pass **302/302**. Exact typed32/4/7/26 catalog shapes and both

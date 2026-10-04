@@ -4017,6 +4017,16 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     reviewed fictional producer remain next. No native allocation or HOLD lift.
     [PG17 header source](operations/2026-10-04-avatar-pg17-header.md),
     [Vendor provenance gaps](operations/2026-10-04-avatar-pg17-vendor-provenance.md).
+    PG17 fixed header-query preparation adds source59/59 with19 compiled
+    mutants; coordinator changed/adjacent361/361. Unknown fields/overloads/type
+    slots are retained, not filtered. Independent final review precedes publication.
+    Actual read-only inventory binds13 selected files/29 linker files pre/post;
+    all29 ordered layer metadata entries match the hash-checked OCI config.
+    Descriptor-bound SLSA source/workflow claim is unsigned; NAR content/recipe
+    binding and actual isolated PG17 calibration remain open. No native dispatch
+    or full-restore authority; D-342/item82 and all HOLDs stay OPEN.
+    [Query/identity preparation](operations/2026-10-04-avatar-pg17-executable-query.md),
+    [Unsigned build binding](operations/2026-10-04-avatar-pg17-build-binding.md).
     [Type-source checkpoint](operations/2026-10-04-avatar-type-census.md),
     [exact PG17 prerequisites](operations/2026-10-04-avatar-pg17-prerequisites.md).
     [Approved class-coverage plan](operations/2026-10-04-avatar-class-coverage-next.md#next-small-step).

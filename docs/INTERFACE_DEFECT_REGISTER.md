@@ -25291,6 +25291,18 @@ native allocation; D-342 stays OPEN with all full-DDL/provenance/HOLDs unchanged
 [PG17 source boundary](operations/2026-10-04-avatar-pg17-header.md),
 [Vendor build limits](operations/2026-10-04-avatar-pg17-vendor-provenance.md).
 
+**PG17 query/identity preparation, 2026-10-04:** fixed action-free SQL retains
+unknown positive attributes/overloads and unresolved type slots. Coordinator source
+59/59 with19 compiled mutants, changed/adjacent361/361; independent final review
+required before publication. Bundled PGlite execution refuses its actual
+PG18 header, fictional PG17 rows are not native PG17 proof. Strict read-only
+inventory independently pins13 selected executable/library/interpreter files and
+29 linker files pre/post, plus29 ordered image-layer metadata matches. Public
+hash-bound SLSA source/workflow claim is unsigned, not authenticated build closure.
+No allocation/production SQL or full-DDL relaxation; D-342 stays OPEN.
+[Prepared query and measured boundaries](operations/2026-10-04-avatar-pg17-executable-query.md),
+[Build trust gaps](operations/2026-10-04-avatar-pg17-build-binding.md).
+
 **Next / acceptance:** faithfully reconstruct the isolated copy using PostgreSQL
 typed ACL entries, preserving original grantor/grantee/privilege/options/order;
 refuse unsupported targets rather than weakening equality. Restore only vetted
