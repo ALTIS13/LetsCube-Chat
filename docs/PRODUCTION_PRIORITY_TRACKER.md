@@ -3885,6 +3885,13 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     message actions at 390/1440 in both themes. Do not conflate message sizing
     with picker target item 15/D-082, paid extras item 24 or reaction chips.
     No frontend change or visual acceptance in this intake.
+    Follow-up candidate measurement12/12 at390/1440, both themes and13/16/22px:
+    no forced jumbo reproduced. Default ordinary/single-emoji bubbles both40px;
+    an actual48px rendered subject calibrates the probe. Four fictional default
+    renders inspected; reply visibility/bounds and real hide/offset controls
+    pass. No sizing patch or installed-device acceptance. Keep
+    open until the tester's exact artifact/preference/rendering is established.
+    [Measurement and remaining work](operations/2026-10-04-emoji-message-measurement.md).
     [Requirements and limits](operations/2026-10-04-tester-feedback.md).
 
 80. `[ ]` Telegram-style publication channels, distinct from Group text topics
@@ -3900,7 +3907,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     or applied by this documentation intake.
     [Intake and source distinctions](operations/2026-10-04-tester-feedback.md).
 
-81. `[ ]` Owner-directed UI terminology: **Server -> Group** for the heavy
+81. `[~]` Owner-directed UI terminology: **Server -> Group** for the heavy
     object, **Group chats** for ad-hoc multiuser conversations created during
     joint calls. Russian UI: **Группа / Групповой чат**. **D-341**, 2026-10-04;
     intentionally supersedes item 45's old heavy Server noun, not its call or
@@ -3911,6 +3918,12 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     Do not rename infrastructure servers or unrelated category/notification
     grouping. Keep channel vocabulary distinct. Verify both entities and entry
     points at 390/1440, both themes, without ambiguous labels or overflow.
+    Candidate implementation complete: focused122/122, synthetic browser92/92,
+    final typecheck/build pass. Supporting bot heading-ID fix plus dependent
+    exact-region fixture updates preserve style/authority. Fresh exact46-path
+    source review has no P1/P2; full unit has one unchanged Android Gradle timeout. Not published
+    or device-accepted; do not close the item from focused GREEN alone.
+    [Candidate evidence and remaining gate](operations/2026-10-04-group-vocabulary.md).
     [Owner decision and boundaries](operations/2026-10-04-tester-feedback.md).
 
 82. `[ ]` Verify faithful database recovery, including extension-member ACLs
@@ -3952,7 +3965,17 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     persisted before-work identities and owned cleanup pass. Independent source
     review passed without P1/P2, catalog7/7 and accessor4/4 independently verified;
     candidate-only, not runtime/full-PG17/production acceptance. The new closed
-    class coverage **plan** is not an implemented inventory/comparator.
+    class coverage **plan** is not a complete inventory/comparator. A narrow
+    PG18.4 constraint/trigger binding subset now passes49/49 source/local,
+    independently41/41 pure; final ten owned lifetimes have exact path/PID
+    absence, one historical stopped directory remains policy-refused HOLD.
+    Complete class/provenance/PG17 fidelity is still unproved; no full operator
+    or R5 admission follows from this subset. TOAST-bearing relations are
+    explicitly unsupported, not silently normalized away.
+    [Selected implementation and limits](operations/2026-10-04-avatar-native-classes.md).
+    Next bounded task: [independent standalone-routine census/refusal](operations/2026-10-04-avatar-class-coverage-next.md#next-small-step).
+    This closes no semantic/provenance/PG17 gap by itself; strict full-DDL veto
+    remains unchanged, unenumerated classes remain unknown/refused.
     [Name-only mechanism](operations/2026-10-04-avatar-role-bootstrap.md),
     [selected capture and remaining classes](operations/2026-10-04-avatar-native-inventory.md).
     Fix the isolated-copy reconstruction first, using native typed ACL entries,

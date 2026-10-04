@@ -25129,17 +25129,23 @@ and future paid visual extras (item 24) are separate requirements.
 renderer, settle the ordinary bubble sizing, then use fictional one/multiple
 emoji, mixed text and Unicode-sequence controls, including replies/footer/actions.
 Inspect 390/1440 light/dark pixels; preserve accessible text-size choices and
-reaction geometry. No application change or visual acceptance yet.
+reaction geometry. Current candidate measurement passes12/12 at both widths,
+both themes and13/16/22px with an actual48px probe calibration. Default16px
+ordinary/single-emoji bubbles both measure40px; forced jumbo was not reproduced.
+Visible exact reply text/bounds/separation and real hidden/out-of-bounds controls
+pass. Four fictional default-size renders inspected. No sizing patch or installed
+Android/iOS acceptance; the tester's exact artifact/preference remains unknown.
+[Measurement and remaining boundary](operations/2026-10-04-emoji-message-measurement.md).
 [Bounded intake and limits](operations/2026-10-04-tester-feedback.md).
 
-## D-341 `[ ]` Heavy-object UI still says Server after the owner selected Group
+## D-341 `[~]` Heavy-object UI still says Server after the owner selected Group
 
 **Severity:** low, product terminology consistency; tracker item 81.
 Direct owner direction, 2026-10-04: heavy **Group**, call-created ad-hoc multiuser
 **Group chat**. Russian **Группа / Групповой чат**. This intentionally supersedes
 the old Server choice recorded in item 45, not an accidental regression of it.
 
-**Source evidence:** `artifacts/kub/src/lib/chatVocabulary.ts:109` returns Server
+**Initial source evidence, before the candidate patch:** `artifacts/kub/src/lib/chatVocabulary.ts:109` returns Server
 for the heavy kind; `components/sidebar/NewGroupModal.tsx:75` also uses Server
 wording. `components/chat/MicroGroupSection.tsx:115` already names Group chat.
 No production screen/device inspection is claimed.
@@ -25154,7 +25160,14 @@ heavy Server with Group, keep ad-hoc call-created objects Group chats and channe
 labels separate. Preserve `group`, `dm_group`, `channel`, all internal identifiers,
 routes/RPCs/storage paths and authority. Infrastructure servers and unrelated
 category/notification grouping are excluded. Check 390/1440 light/dark, both
-objects and all affected entry points. UI implementation remains open.
+objects and all affected entry points. Candidate implementation is complete:
+heavy **Группа**, ad-hoc **Групповой чат**, channel **Канал**, with Russian cases
+and infrastructure-server terms preserved. A supporting bot-section heading-ID
+fix changes no style/authority. Focused122/122, synthetic browser92/92 and final
+typecheck/build pass. Fresh exact46-path review has no remaining P1/P2; the full unit
+run retains one unchanged Android Gradle timeout. No production or device
+publication acceptance; this defect is not closed by candidate evidence alone.
+[Implementation, failure controls and limits](operations/2026-10-04-group-vocabulary.md).
 [Owner decision and intake](operations/2026-10-04-tester-feedback.md).
 
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings

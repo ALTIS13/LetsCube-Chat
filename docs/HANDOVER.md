@@ -22,7 +22,28 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-342, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-04 (Codex implementation continued).** Owner: this Codex
+**Active resume, 2026-10-04 (Codex).** Owner: this chat, branch
+`codex/bot-inline-media-20261002`; implementation checkpoints UI `5dd5924d`,
+selected bindings `c83ef889`, emoji guard `5be66a7a` (candidate-only).
+Stage: [D-341 candidate UI](operations/2026-10-04-group-vocabulary.md), units122/122,
+synthetic browser92/92, typecheck/build pass; exact46-path review has no P1/P2.
+[D-340 measurement](operations/2026-10-04-emoji-message-measurement.md) passes12/12,
+including visible reply/bounds failure controls, no forced jumbo reproduced or
+sizing patch; exact test/report review has no P1/P2. Tester artifact remains unknown.
+[Selected native bindings](operations/2026-10-04-avatar-native-classes.md) pass49/49
+localPG18.4, independently41/41 pure, exact final ten-lifetime path/PID absence;
+one historical stopped directory remains policy-refused HOLD. Blockers: full
+unit is not green (4948 pass/one unchanged Android Gradle timeout/13 optional),
+full class/provenance/PG17 restore proof is open. Next:
+[standalone-routine census/refusal](operations/2026-10-04-avatar-class-coverage-next.md#next-small-step),
+then source/DDL representability and PG17 prerequisites; keep strict full-DDL
+comparison unchanged. Runtime
+D-339 `8da252ad`, web/main `951eaa42` unchanged; no new deployment here. Standing
+readiness/backup/rollback/runtime gates, native/Android/reclamation HOLD and A063
+exclusion remain; Realme/rented iPhone/Samsung are for bounded relevant QA, not
+release overwrites or personal-data exposure. Paid device minutes0 in this slice.
+
+**Earlier backend checkpoint, 2026-10-04 (Codex).** Owner: this Codex
 chat; branch `codex/bot-inline-media-20261002`, base `0ac96a70`, initially clean.
 The latest owner request authorizes readiness-gated production deployment without
 another approval round; database backup/rehearsal/rollback requirements still apply.
@@ -45,7 +66,8 @@ catalog capture, so it does not prove recovery from the backup alone.
 Parallel [latest tester intake](operations/2026-10-04-tester-feedback.md) added
 items 79-81 / D-340-D-341; contacts deduplicated under item 36/D-316. Current UI
 target is heavy **Group**, call-created ad-hoc **Group chats**, replacing only
-item 45's old Server noun. Implementation remains queued, not silently applied.
+item 45's old Server noun. At that earlier checkpoint implementation was queued;
+the current candidate status is recorded above.
 D-339 exact-claim queue repair remains deployed at runtime `8da252ad`; web/worker/
 Gateway sole healthy replicas and old/new markers verified. SQL applied once
 after backup `20261003-222036`; raw catalog sort mismatch was independently
@@ -62,7 +84,7 @@ media deletion/refund or native release is part of this backend proof.
 Whole-`chat-media` HOLD, Android/native HOLD and A063 exclusion remain unchanged.
 [Exact-claim implementation and rollout record](operations/2026-10-03-media-claim-token-rollout.md).
 
-**Current next prerequisite, 2026-10-04:** original-rank role-name planner and
+**Earlier role/catalog prerequisite, 2026-10-04:** original-rank role-name planner and
 selected same-copy catalog queries are implemented as candidate-only prototypes.
 Local evidence is **62/62**, no skips: 54 role unit tests (12 compiled mutants),
 one PG18.4 role case with 14 internal checks, and seven selected-catalog cases
@@ -76,8 +98,9 @@ publication is candidate-only; no production acceptance. Prior parser/R5 closure
 remain unchanged.
 [Role-name scope and limits](operations/2026-10-04-avatar-role-bootstrap.md),
 [selected catalogs and complete coverage plan](operations/2026-10-04-avatar-native-inventory.md).
-Next: version-bound stable class
-identities/completeness and exact PG17 controls before full operator wiring.
+Follow-up: [selected PG18 class bindings](operations/2026-10-04-avatar-native-classes.md)
+are now implemented; complete class/provenance coverage and exact PG17 controls
+still precede full operator wiring.
 Full restore/R5, D-338/D-342 and native/reclamation HOLDs remain open.
 
 **Prior bounded reference step, 2026-10-04:** independent source receipt guard
