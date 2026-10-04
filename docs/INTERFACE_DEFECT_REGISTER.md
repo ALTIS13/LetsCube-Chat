@@ -25303,6 +25303,15 @@ No allocation/production SQL or full-DDL relaxation; D-342 stays OPEN.
 [Prepared query and measured boundaries](operations/2026-10-04-avatar-pg17-executable-query.md),
 [Build trust gaps](operations/2026-10-04-avatar-pg17-build-binding.md).
 
+**PG17 root-cache signature, 2026-10-04:** actual offline verification under the
+source-declared vendor key passes15 literal controls. Signed path/hash/size/ref
+changes refuse; Deriver and archive URL are demonstrated outside the signature.
+This verifies captured metadata, not installed NAR bytes,179-subject closure,
+recipe/output or authenticated OCI builder. Query/identity source59/adjacent361
+proof stays unchanged; candidate-only independent review is separate. No native
+allocation/SQL/main/HOLD lift; D-342 stays OPEN.
+[Actual cryptographic scope](operations/2026-10-04-avatar-pg17-cache-signature.md).
+
 **Next / acceptance:** faithfully reconstruct the isolated copy using PostgreSQL
 typed ACL entries, preserving original grantor/grantee/privilege/options/order;
 refuse unsupported targets rather than weakening equality. Restore only vetted

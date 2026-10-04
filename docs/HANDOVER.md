@@ -22,7 +22,21 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-342, with its
    measurement. Search it before filing anything.
 
-**Current PG17 query/identity preparation, 2026-10-04 (Codex).** Owner: this chat,
+**Current PG17 cache-signature checkpoint, 2026-10-04 (Codex).** Owner: this chat,
+branch `codex/bot-inline-media-20261002`, base `78b74678`. Actual offline Ed25519
+verification confirms the captured root narinfo under the exact vendor-declared
+cache key; all15 literal diagnostic controls pass. Source59/59 and adjacent361/361
+are unchanged prior evidence. The exact four-file documentation candidate requires
+independent evidence review before publication.
+[Verified signed fields and remaining limits](operations/2026-10-04-avatar-pg17-cache-signature.md).
+Installed NAR bytes,179-subject closure, recipe/output and authenticated image
+build binding remain UNKNOWN; a valid cache assertion does not close them.
+Next: separately reviewed read-only installed-root content comparison and new
+fictional header producer preparation. No allocation/SQL/main/native release or
+HOLD lift; item82/D-342 remains OPEN. Query/identity slice `78b74678` was published
+candidate-only with main unchanged and a clean public/index tree.
+
+**Prior PG17 query/identity preparation, 2026-10-04 (Codex).** Owner: this chat,
 branch `codex/bot-inline-media-20261002`, base `f8cd50ea`. New fixed, action-free
 header SQL captures extra fields/overloads and unresolved type slots rather than
 filtering evidence to fit the allowed profile. Coordinator source **59/59** with

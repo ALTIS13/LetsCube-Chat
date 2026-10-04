@@ -4027,6 +4027,14 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     or full-restore authority; D-342/item82 and all HOLDs stay OPEN.
     [Query/identity preparation](operations/2026-10-04-avatar-pg17-executable-query.md),
     [Unsigned build binding](operations/2026-10-04-avatar-pg17-build-binding.md).
+    Root-cache assertion now has actual offline Ed25519 verification under the
+    pinned vendor-declared key:15 literal controls pass, including signed-field
+    changes and duplicate/truncated input refusal. Deriver/archive URL mutations
+    remain signature-valid because those fields are unsigned. Installed NAR,
+    reference closure, recipe/output and authenticated OCI builder remain UNKNOWN.
+    Separate source/evidence review precedes this document-only candidate; no
+    native/header dispatch, production SQL/main or HOLD lift.
+    [Cache signature and exact scope](operations/2026-10-04-avatar-pg17-cache-signature.md).
     [Type-source checkpoint](operations/2026-10-04-avatar-type-census.md),
     [exact PG17 prerequisites](operations/2026-10-04-avatar-pg17-prerequisites.md).
     [Approved class-coverage plan](operations/2026-10-04-avatar-class-coverage-next.md#next-small-step).
