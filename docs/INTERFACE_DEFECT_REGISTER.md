@@ -25236,6 +25236,23 @@ execution of this new delta remain unproved. No production change; defect open.
 [Role-name controls](operations/2026-10-04-avatar-role-bootstrap.md),
 [catalog omissions and coverage plan](operations/2026-10-04-avatar-native-inventory.md).
 
+**Routine / CHECK continuation, 2026-10-04:** standalone enumeration/refusal has
+independently reviewed source **51/51**, candidate commit `98ad9be9`; native
+calibration **63/63** and coordinator readback prove actual2/0/0 omission,
+actual0/0/0 empty captures and six exact owned closures. Native-sidecar review
+found two P2 guards (bounded timeout settlement and complete final control set);
+fresh v2 correction passes **109/109**, with coordinator and independent frozen-
+evidence readback, 12 controls and 6 exact owned closures; originals remain frozen.
+Independent CHECK diagnostic passes public **30/30**, source **21/21**, native
+**8/8**. Both narrow INTEGER CHECK dump endpoints are byte-equal; coordinator
+verified 24 controls/7 closures/142 child terminals and inspected identities.
+Independent source/frozen-evidence reviews found no P1/P2; source `4a823f9e`.
+Both scoped stages are complete; the failed Windows-filename baseline stays separate.
+Neither census nor this one byte-exact CHECK case closes recovery
+fidelity; this defect remains open and the strict full-DDL veto is unchanged.
+[Routine proof and guard status](operations/2026-10-04-avatar-routine-census.md),
+[CHECK roundtrip scope](operations/2026-10-04-avatar-check-roundtrip.md).
+
 **Next / acceptance:** faithfully reconstruct the isolated copy using PostgreSQL
 typed ACL entries, preserving original grantor/grantee/privilege/options/order;
 refuse unsupported targets rather than weakening equality. Restore only vetted

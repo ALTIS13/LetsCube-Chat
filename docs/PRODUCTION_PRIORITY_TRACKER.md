@@ -3973,7 +3973,25 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     or R5 admission follows from this subset. TOAST-bearing relations are
     explicitly unsupported, not silently normalized away.
     [Selected implementation and limits](operations/2026-10-04-avatar-native-classes.md).
-    Next bounded task: [independent standalone-routine census/refusal](operations/2026-10-04-avatar-class-coverage-next.md#next-small-step).
+    Standalone-routine census source is implemented and independently reviewed,
+    **51/51**, candidate commit `98ad9be9`. Fresh PG18.4 calibration **63/63**
+    proves actual common loss2/0/0 and empty0/0/0; coordinator readback confirms
+    six exact owned closures. Independent native review found two P2 runner
+    guards (bounded post-kill settlement and complete final control/lifetime
+    set); fresh v2 correction passes **109/109** (51 public +46 guards +12 native).
+    Coordinator and independent frozen-evidence review verify eight source/five
+    binary/four protected pins, 12 controls and 6 exact owned closures; original
+    evidence stays frozen.
+    [Routine evidence and current guard correction](operations/2026-10-04-avatar-routine-census.md).
+    Independent CHECK diagnostic passes public **30/30**, source **21/21**, fresh
+    native **8/8**; both dump endpoints are byte-equal for the fictional INTEGER
+    CHECK. Coordinator verified 24 controls/7 exact closures/142 child terminals
+    and inspected identities. Independent source/frozen-evidence reviews have
+    no P1/P2; source commit `4a823f9e`. Failed first filename baseline is retained
+    separately, not successful evidence. Both scoped stages are complete;
+    native-type census/refusal and the exact PG17 profile are next prerequisites.
+    [CHECK endpoints and remaining controls](operations/2026-10-04-avatar-check-roundtrip.md).
+    [Approved class-coverage plan](operations/2026-10-04-avatar-class-coverage-next.md#next-small-step).
     This closes no semantic/provenance/PG17 gap by itself; strict full-DDL veto
     remains unchanged, unenumerated classes remain unknown/refused.
     [Name-only mechanism](operations/2026-10-04-avatar-role-bootstrap.md),

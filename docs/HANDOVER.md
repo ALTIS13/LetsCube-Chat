@@ -22,7 +22,27 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-342, with its
    measurement. Search it before filing anything.
 
-**Active resume, 2026-10-04 (Codex).** Owner: this chat, branch
+**Active routine slice, 2026-10-04 (Codex).** Owner: this chat, branch
+`codex/bot-inline-media-20261002`, base `8edfd6b8`. Task1 of the native coverage
+plan has three reviewed public modules, source commit `98ad9be9`. Original 63/63
+evidence stays frozen; two P2 runner guards are corrected in a fresh v2. Final
+**109/109** (51 public + 46 guards + 12 native), coordinator readback and independent
+source/frozen-evidence reviews passed. Actual counts 2/0/0 and 0/0/0, eight source/
+five binary/four protected pins and six exact owned PID/path absence/jobs0 closures
+are verified. [Routine scope and evidence](operations/2026-10-04-avatar-routine-census.md).
+Independent [CHECK diagnostic](operations/2026-10-04-avatar-check-roundtrip.md)
+passes public 30/30, source 21/21 and fresh native 8/8; source commit `4a823f9e`.
+Both native dump endpoints
+are byte-equal for one fictional INTEGER CHECK, not full recovery. Coordinator
+matched 24 controls/7 exact closures/142 child terminals and inspected identities;
+independent stationary source/frozen-evidence reviews found no P1/P2. The failed
+Windows-filename baseline remains immutable, not successful evidence. Both scoped
+diagnostic stages are complete on the candidate branch, not main/runtime approval.
+Next: separately bound native-type census/refusal and exact PG17 prerequisites.
+Strict full-DDL veto and all HOLDs below
+remain unchanged. No production, native release or paid device action here.
+
+**Prior accepted source resume, 2026-10-04 (Codex).** Owner: this chat, branch
 `codex/bot-inline-media-20261002`; implementation checkpoints UI `5dd5924d`,
 selected bindings `c83ef889`, emoji guard `5be66a7a` (candidate-only).
 Stage: [D-341 candidate UI](operations/2026-10-04-group-vocabulary.md), units122/122,
