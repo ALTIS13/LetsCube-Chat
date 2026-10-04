@@ -22,7 +22,24 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-342, with its
    measurement. Search it before filing anything.
 
-**Current PG17 cache-signature checkpoint, 2026-10-04 (Codex).** Owner: this chat,
+**Current PG17 installed-root checkpoint, 2026-10-04 (Codex).** Owner: this chat,
+branch `codex/bot-inline-media-20261002`, base `5c7e1654`. The separately reviewed
+read-only probe reports actual Nix2.34.6 and a direct-filesystem root NAR hash
+matching the prior verified signed cache assertion. Seven steps exit0 with empty
+stderr; selected tools/version and existing container identity match pre/post.
+Local literal controls13/13 plus3 compiled bypasses; fictional path controls6/6
+plus3 compiled omissions. These controls are not native PG17 or full recovery.
+[Measured installed root and exact limits](operations/2026-10-04-avatar-pg17-installed-nar.md).
+NarSize is not measured,179-subject/reference-content closure and authenticated
+builder/recipe-output binding remain UNKNOWN. Read-only intent is not a hard
+kernel write/network sandbox or atomic filesystem snapshot. No SQL/allocation/
+main/native release/HOLD lift; item82/D-342 stays OPEN. The prior query/identity
+and cache-signature candidates are closed and published; no repeat required.
+Next: separately reviewed frozen-subject closure comparison and new fictional
+header-only producer preparation, not allocation. Final evidence review and
+exact-SHA candidate-only publication are separate from the successful probe.
+
+**Prior PG17 cache-signature checkpoint, 2026-10-04 (Codex).** Owner: this chat,
 branch `codex/bot-inline-media-20261002`, base `78b74678`. Actual offline Ed25519
 verification confirms the captured root narinfo under the exact vendor-declared
 cache key; all15 literal diagnostic controls pass. Source59/59 and adjacent361/361

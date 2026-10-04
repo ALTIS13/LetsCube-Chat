@@ -25312,6 +25312,17 @@ proof stays unchanged; candidate-only independent review is separate. No native
 allocation/SQL/main/HOLD lift; D-342 stays OPEN.
 [Actual cryptographic scope](operations/2026-10-04-avatar-pg17-cache-signature.md).
 
+**PG17 installed-root comparison, 2026-10-04:** a separately reviewed existing
+Nix2.34.6 ELF reports a direct-filesystem NAR hash matching the verified root-cache
+assertion. Seven read-only steps exit0/empty stderr, selected tool/version/container
+pre/postsame. Literal13/3 and local fictional-path6/3 controls pass; no native PG17
+calibration implied. NarSize,179-subject/reference-content closure, authenticated
+builder and recipe/output remain unverified. Read-only normal path is not a hard
+kernel write/network sandbox or atomic snapshot. Final candidate-only evidence
+review remains separate. No SQL/allocation/main/native/full-restore/HOLD lift;
+D-342 stays OPEN.
+[Actual installed-root scope](operations/2026-10-04-avatar-pg17-installed-nar.md).
+
 **Next / acceptance:** faithfully reconstruct the isolated copy using PostgreSQL
 typed ACL entries, preserving original grantor/grantee/privilege/options/order;
 refuse unsupported targets rather than weakening equality. Restore only vetted

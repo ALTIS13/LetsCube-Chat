@@ -4035,6 +4035,16 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     Separate source/evidence review precedes this document-only candidate; no
     native/header dispatch, production SQL/main or HOLD lift.
     [Cache signature and exact scope](operations/2026-10-04-avatar-pg17-cache-signature.md).
+    Installed root now has an actual Nix2.34.6 direct-filesystem NAR hash matching
+    that verified signed assertion. Separately reviewed seven-step read-only
+    probe exits0/empty stderr; tool/version/container pre/postsame. Local13/3
+    and fictional-path6/3 controls are not native PG17/full recovery. NarSize,
+    179-subject/reference-content closure and authenticated builder/recipe-output
+    remain unproved; normal-path readonly intent is not a hard kernel sandbox.
+    Next is bounded frozen-subject closure and NEWfictionalheader preparation,
+    not allocation. Candidate-only final evidence review remains separate;
+    no SQL/main/native/full-restore dispatch or HOLD lift.
+    [Installed-root measurement](operations/2026-10-04-avatar-pg17-installed-nar.md).
     [Type-source checkpoint](operations/2026-10-04-avatar-type-census.md),
     [exact PG17 prerequisites](operations/2026-10-04-avatar-pg17-prerequisites.md).
     [Approved class-coverage plan](operations/2026-10-04-avatar-class-coverage-next.md#next-small-step).
