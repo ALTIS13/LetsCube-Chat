@@ -128,7 +128,7 @@
  */
 
 /**
- * The seven sounds this product makes. Nothing else may make one.
+ * The sounds this product makes. Nothing else may make one.
  *
  * Two are a telephone, one is a notification, and four are a voice channel.
  * The four were asked for on 2026-09-19, after the owner noticed that somebody
@@ -138,6 +138,7 @@ export type CallSoundName =
   | "ring"
   | "ringback"
   | "notification"
+  | "messageSent"
   | "join"
   | "leave"
   | "mute"
@@ -359,6 +360,15 @@ export const CALL_SOUNDS: Record<CallSoundName, CallSoundSpec> = {
       { tones: [], durationMs: 24 },
       { tones: [{ hz: 988, level: 1 }, { hz: 1976, level: 0.18 }], durationMs: 156 },
     ],
+    loop: false,
+  },
+  messageSent: {
+    name: "messageSent",
+    gain: 0.045,
+    attackMs: 4,
+    releaseMs: 90,
+    decay: "exponential",
+    cadence: [{ tones: [{ hz: 660, level: 1 }, { hz: 1320, level: 0.12 }], durationMs: 120 }],
     loop: false,
   },
   /**
@@ -717,6 +727,24 @@ export function notificationSoundAllowed(input: {
     return false;
   }
   return true;
+}
+
+/** An ACK is feedback only for the account and conversation still on screen. */
+export function messageSendSoundAllowed(input: {
+  readonly enabled: boolean;
+  readonly ringing: CallSoundName | null;
+  readonly documentHidden: boolean;
+  readonly captureActive: boolean;
+  readonly userId: string;
+  readonly currentUserId: string | null;
+  readonly chatId: string;
+  readonly openChatId: string | null;
+  readonly topicId: string | null;
+  readonly openTopicId: string | null;
+}): boolean {
+  return input.enabled && input.ringing === null && !input.documentHidden && !input.captureActive
+    && input.userId === input.currentUserId && input.chatId === input.openChatId
+    && input.topicId === input.openTopicId;
 }
 
 // ---------------------------------------------------------------------------

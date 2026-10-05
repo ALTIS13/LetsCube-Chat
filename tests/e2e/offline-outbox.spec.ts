@@ -98,9 +98,114 @@ async function write(page: Page, text: string) {
   await sendFromField(composer);
 }
 
+async function sendSoundAsks(page: Page) {
+  return page.evaluate(() => ((window as unknown as {
+    __letscubeCallSounds?: { asks: { ask: string; sound: string | null; bursts: number }[] };
+  }).__letscubeCallSounds?.asks ?? []).filter((ask) => ask.ask === "once" && ask.sound === "messageSent")
+    .map(({ ask, sound, bursts }) => ({ ask, sound, bursts })));
+}
+
 test.describe("messages written without a connection (item 52)", () => {
   test.beforeEach(async ({ request }) => {
     await requireFixtureServer(request);
+  });
+
+  test("send cue waits for the real ACK and sounds once after a lost response", async ({ page }) => {
+    const server = await boot(page);
+    server.server = "unreachable";
+    const asks = () => sendSoundAsks(page);
+    await write(page, "Fictional send sound check");
+    await expect(state(page, "Fictional send sound check", "Отправляется")).toBeVisible();
+    expect(await asks()).toEqual([]);
+    server.server = "lost";
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect.poll(() => server.inserts.length).toBe(1);
+    await expect.poll(asks).toEqual([{ ask: "once", sound: "messageSent", bursts: 1 }]);
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    expect(await asks()).toHaveLength(1);
+  });
+
+  for (const change of ["sound off", "capture", "other chat"] as const) {
+    test(`send cue respects ${change} changed before the ACK`, async ({ page }) => {
+      const server = await boot(page);
+      let release!: () => void;
+      const barrier = new Promise<void>((resolve) => { release = resolve; });
+      let requested = false;
+      await page.route("**/rest/v1/messages*", async (route) => {
+        if (route.request().method() === "POST") { requested = true; await barrier; }
+        await route.fallback();
+      });
+      await write(page, "Fictional delayed ACK");
+      await expect.poll(() => requested).toBe(true);
+      await page.evaluate(async (change) => {
+        if (change === "sound off") localStorage.setItem("kub:audio-settings:v1", JSON.stringify({ notificationSoundEnabled: false }));
+        if (change === "capture") {
+          const recorder = document.createElement("div");
+          recorder.dataset.recordingPhase = "recording";
+          document.body.append(recorder);
+        }
+        if (change === "other chat") {
+          const store = await import("/src/store/app.store.ts");
+          store.useAppStore.setState({ selectedChatId: null });
+        }
+      }, change);
+      release();
+      await expect.poll(() => server.inserts.length).toBe(1);
+      await expect.poll(async () => (await durableEntries(page)).length).toBe(0);
+      expect(await sendSoundAsks(page)).toEqual([]);
+    });
+  }
+
+  test("one-shot scheduling rechecks its caller after a delayed AudioContext resume", async ({ page }) => {
+    await boot(page);
+    const result = await page.evaluate(async () => {
+      let release!: () => void;
+      let resumed = false;
+      const barrier = new Promise<void>((resolve) => { release = resolve; });
+      class DelayedContext {
+        state = "suspended";
+        async resume() { resumed = true; await barrier; this.state = "running"; }
+        createOscillator() { throw new Error("a withdrawn sound may not create an oscillator"); }
+        createGain() { throw new Error("a withdrawn sound may not create a gain"); }
+      }
+      window.__letscubeAudioContext = DelayedContext as unknown as typeof AudioContext;
+      // Isolate the player's context, not its scheduling implementation.
+      const player = await import("/src/lib/callSoundPlayer.ts?delayed-send-cue");
+      let allowed = true;
+      const pending = player.playCallSoundOnce("messageSent", () => allowed);
+      await Promise.resolve();
+      if (!resumed) throw new Error("the test did not enter the resume boundary");
+      allowed = false;
+      release();
+      await pending;
+      return window.__letscubeCallSounds?.asks.filter((ask) => ask.ask === "once" && ask.sound === "messageSent")
+        .map(({ bursts }) => ({ bursts }));
+    });
+    expect(result).toEqual([{ bursts: 0 }]);
+  });
+
+  test("send cue coalesces ACKs below 100ms but permits the exact next boundary", async ({ page }) => {
+    await boot(page);
+    const params = { userId: ME.id, chatId: TEAM, topicId: null };
+    await page.evaluate(async (params) => {
+      const sounds = await import("/src/hooks/useCallSound.ts");
+      const original = performance.now.bind(performance);
+      let now = 1_000_000;
+      Object.defineProperty(performance, "now", { configurable: true, value: () => now });
+      try {
+        for (const timestamp of [1_000_000, 1_000_099, 1_000_100]) {
+          now = timestamp;
+          sounds.playMessageSentSoundFor(params);
+          // primeCallSounds and begin both yield before scheduling.
+          await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+        }
+      } finally { Object.defineProperty(performance, "now", { configurable: true, value: original }); }
+    }, params);
+    await expect.poll(() => sendSoundAsks(page)).toEqual([
+      { ask: "once", sound: "messageSent", bursts: 1 },
+      { ask: "once", sound: "messageSent", bursts: 0 },
+      { ask: "once", sound: "messageSent", bursts: 1 },
+    ]);
   });
 
   test("waits with its clock instead of turning red, and goes by itself when the connection answers", async ({ page }) => {

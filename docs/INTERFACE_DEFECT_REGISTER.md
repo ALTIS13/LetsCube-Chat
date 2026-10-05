@@ -25170,6 +25170,22 @@ publication acceptance; this defect is not closed by candidate evidence alone.
 [Implementation, failure controls and limits](operations/2026-10-04-group-vocabulary.md).
 [Owner decision and intake](operations/2026-10-04-tester-feedback.md).
 
+## D-343 `[~]` Confirmed outgoing messages have no send cue
+
+**Severity:** low interaction-feedback gap; tracker item83. New incremental
+tester intake2026-10-05, selected without printing personal content. Source
+`appOutbox.onSent` only updated bubble/summary; no outgoing sound handler existed.
+Actual unit12/browser1 RED exposed absence before implementation.
+
+**Candidate:** quiet120ms ACK cue, including lost-response confirmed reread, no
+enqueue/refusal/echo signal. Settings/DND, visible current account/chat/topic and
+call/capture state gate it, reevaluated after audio resume. Sub100ms ACKs coalesce.
+Literal unit/mutation18, adjacent sound55, actual-outbox10 and browser6 pass;
+typecheck/build and independent review accepted. Promotion/runtime verification
+pending. Not installed-device audibility/autoplay proof and not a fix for the
+separate incoming-notification absence follow-up,item76/D-335.
+[Evidence and release gates](operations/2026-10-05-send-sound-web-rollout.md).
+
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 
 **Severity:** high recovery-equivalence risk, not a current production outage;

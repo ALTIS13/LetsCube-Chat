@@ -3,12 +3,14 @@
 import { useEffect } from "react";
 import {
   notificationSoundAllowed,
+  messageSendSoundAllowed,
   voiceRingSound,
   type CallRingDirection,
   type CallRingState,
 } from "@/lib/callSounds";
 import {
   playNotificationSound,
+  playCallSoundOnce,
   playingCallSound,
   primeCallSoundsOnGesture,
   setVoiceRingSound,
@@ -16,6 +18,7 @@ import {
 } from "@/lib/callSoundPlayer";
 import { getAudioSettings } from "@/hooks/useAudioSettings";
 import { ownAlertPolicySnapshot } from "@/hooks/useOwnPresence";
+import { voiceCallSnapshot } from "@/hooks/useVoiceCall";
 import { useAppStore } from "@/store/app.store";
 
 /**
@@ -94,4 +97,35 @@ export function playNotificationSoundFor(input: {
     osToast: input.osToast,
   });
   if (allowed) void playNotificationSound();
+}
+
+let lastMessageSentSoundAt = -Infinity;
+
+export function playMessageSentSoundFor(input: {
+  readonly userId: string;
+  readonly chatId: string;
+  readonly topicId: string | null;
+}): void {
+  const allowed = () => {
+    const store = useAppStore.getState();
+    return messageSendSoundAllowed({
+      ...input,
+      enabled: getAudioSettings().notificationSoundEnabled && ownAlertPolicySnapshot(input.userId) === "allow",
+      ringing: playingCallSound(),
+      currentUserId: store.currentUser?.id ?? null,
+      openChatId: store.selectedChatId,
+      openTopicId: store.selectedTopicId,
+      documentHidden: typeof document === "undefined" || document.hidden,
+      captureActive: voiceCallSnapshot().phase !== "idle" || (typeof document !== "undefined"
+        && !!document.querySelector('[data-recording-phase], [data-testid="regular-video-recorder-modal"], [data-testid="video-message-recorder-modal"]')),
+    });
+  };
+  if (!allowed()) return;
+  // Re-evaluate after AudioContext.resume: logout, DND or navigation can win that wait.
+  void playCallSoundOnce("messageSent", () => {
+    const now = performance.now();
+    if (!allowed() || now - lastMessageSentSoundAt < 100) return false;
+    lastMessageSentSoundAt = now;
+    return true;
+  }).catch(() => undefined);
 }

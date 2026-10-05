@@ -1,5 +1,24 @@
 # LETSCUBE — handover
 
+**2026-10-05 authority update:** the owner explicitly authorizes readiness-gated
+changes and production deployment without another routine confirmation. Reuse
+completed evidence; repeat checks only for changed inputs or a concrete unresolved
+risk. This supersedes permission-only main/deploy/SQL holds below, not technical
+acceptance gates or data-safety requirements. Database changes still follow
+`CLAUDE.md` section 10; unvalidated PG17 restore, destructive media cleanup,
+native package identity/store actions and other unresolved acceptance gates are
+not approved merely by this delegation. Refresh the authorized tester intake,
+deduplicate against the queue, and continue the nearest feasible product slice.
+
+**Current product checkpoint,2026-10-05:** coordinator owns D-343/item83 send-ACK
+cue plus reviewed D-341 web promotion. Incremental read-only intake:4 texts,
+0 voices; notification follow-up stays D-335. Sound RED exposed the missing
+handler; focused unit/outbox/browser/typecheck/build evidence and review are in
+[the release record](operations/2026-10-05-send-sound-web-rollout.md). Fresh backup
+and rollback image verified; promotion/runtime proof pending. Next: contacts
+failure/retry,item36/D-316. PG17 checkpoints below are historical evidence, not
+the critical path of this independent deploy; D-338/D-342 acceptance stays open.
+
 Written 2026-09-21 by the Claude agent that ran this project from 2026-09-01, for
 the agent taking it over. **This file is the current state.** Where it disagrees
 with an older document, this file is right and the older one is stale — say so in
@@ -17,9 +36,9 @@ Read in this order:
    database safety) and §15 (deploying) apply to you exactly as written. Its §1
    «Current Stop Point» and §2 «Deployment baseline» are **stale** — this file
    replaces them;
-5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–82) and the
+5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–83) and the
    decisions log;
-6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-342, with its
+6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-343, with its
    measurement. Search it before filing anything.
 
 **Current PG17 package-difference checkpoint, 2026-10-05 (Codex).** Owner: this

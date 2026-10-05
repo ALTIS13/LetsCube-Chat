@@ -3,6 +3,18 @@
 Written 2026-09-20. Read this before writing «Discord does X» or «Telegram does
 Y» anywhere in this repository.
 
+## Outgoing sound: Telegram Android source,2026-10-05
+
+SOURCE-OBSERVED, not a device measurement: official Android
+[NotificationsController.java](https://raw.githubusercontent.com/DrKLO/Telegram/master/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java),
+moving `master` read2026-10-05, `playOutChatSound`. It refuses when in-chat sound
+is disabled, audio recording is active or the ringer is silent; on its queue it
+coalesces outgoing signals within100ms and plays `sound_out` once. No iOS,
+Desktop or Discord behavior inferred. LETSCUBE adopts an ACK-triggered quiet cue
+with settings/DND/account/chat/topic/visibility/call/capture guards; its own
+synthesized waveform, not Telegram's asset/code. Autoplay/audibility on installed
+devices remain separate. [Evidence](2026-10-05-send-sound-web-rollout.md).
+
 ## Why this file exists
 
 The owner asks us to adopt Telegram's and Discord's approaches, and on

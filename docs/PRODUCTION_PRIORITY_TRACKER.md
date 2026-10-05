@@ -4083,6 +4083,18 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     this observation, and no owner/media row was printed.
     [Restore gate and limits](operations/2026-10-04-avatar-source-observation.md).
 
+83. `[~]` Missing outgoing-message acknowledgement sound. **D-343**, new
+    incremental tester request2026-10-05. Actual shipped ACK path had no sound
+    handler; unit12/browser1 RED before the patch. Quiet120ms synthesized cue
+    only after true ACK/confirmed lost-response reread, not enqueue/refusal/echo;
+    account/chat/topic, settings/DND, visibility and call/capture guards rechecked
+    after audio resume, coalescing below100ms. Candidate verified with18 literal
+    unit/mutation controls, adjacent55, actual-outbox10, browser6, typecheck and
+    production build; independent review no high/medium findings. Runtime rollout
+    pending; device audibility remains separate. Notification absence follow-up
+    deduplicated under item76/D-335, not asserted repaired by outgoing sound.
+    [Evidence and release gate](operations/2026-10-05-send-sound-web-rollout.md).
+
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
 `main` `17a1c47` to `245e4d9`, 32 commits, on the owner's standing permission to deploy without him.

@@ -413,10 +413,11 @@ function silence(playing: Playing): void {
   if (held) held.scheduled = scheduledVoices;
 }
 
-async function begin(name: CallSoundName): Promise<{ readiness: CallSoundReadiness; bursts: number }> {
+async function begin(name: CallSoundName, stillAllowed?: () => boolean): Promise<{ readiness: CallSoundReadiness; bursts: number }> {
   const state = await primeCallSounds();
   const ctx = context;
   if (state !== "running" || !ctx) return { readiness: state, bursts: 0 };
+  if (stillAllowed && !stillAllowed()) return { readiness: state, bursts: 0 };
   const spec = CALL_SOUNDS[name];
   const playing: Playing = {
     spec,
@@ -506,12 +507,12 @@ async function resumeWantedRing(): Promise<void> {
  * sound until something unrelated stopped it. That is the single way a tone can
  * be left running in this module, and this is the door it would come through.
  */
-export async function playCallSoundOnce(name: CallSoundName): Promise<void> {
+export async function playCallSoundOnce(name: CallSoundName, stillAllowed?: () => boolean): Promise<void> {
   if (CALL_SOUNDS[name].loop) {
     record("once", name, "same", 0);
     return;
   }
-  const outcome = await begin(name);
+  const outcome = await begin(name, stillAllowed);
   record("once", name, outcome.readiness, outcome.bursts);
 }
 

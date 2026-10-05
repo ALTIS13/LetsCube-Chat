@@ -16,6 +16,7 @@ import { reportError } from "@/lib/monitoring";
 import { blockedSendRefusal } from "@/lib/personalModeration";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
+import { playMessageSentSoundFor } from "@/hooks/useCallSound";
 import type { OutboxEntry } from "./outboxRules";
 import { browserOutboxStorage } from "./outboxStorage";
 import { createOutboxRunner, type SendAttempt } from "./outboxRunner";
@@ -135,6 +136,7 @@ export const appOutbox = createOutboxRunner<MessageWithSender>({
     const store = useAppStore.getState();
     store.replaceMessage(entry.chatId, entry.tempId, row);
     store.updateChatLastMessage(entry.chatId, row);
+    playMessageSentSoundFor(entry);
     // As the send path always has, and not awaited: see `touchChatUpdatedAt`.
     void createClient()
       .from("chats")
