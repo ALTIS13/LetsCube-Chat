@@ -569,16 +569,20 @@ export function usePushNotificationNavigation() {
 
   useEffect(() => {
     if (!(isNativeAndroid() || isDesktopApp())) return undefined;
+    let cancelled = false;
     let cleanup: (() => void) | null = null;
     const targetHandler = deferredPushTargetRef.current;
     if (!targetHandler) return undefined;
     const register = isNativeAndroid()
       ? registerNativePushNavigationListeners
       : registerDesktopNotificationNavigationListener;
-    void register(targetHandler.handle).then((removeListeners) => {
-      cleanup = removeListeners;
+    void register((target) => {
+      if (!cancelled) targetHandler.handle(target);
+    }).then((removeListeners) => {
+      if (cancelled) removeListeners();
+      else cleanup = removeListeners;
     });
-    return () => cleanup?.();
+    return () => { cancelled = true; cleanup?.(); };
   }, []);
 
   useEffect(() => {
@@ -595,6 +599,9 @@ export function usePushNotificationNavigation() {
   }, [currentUserId]);
 }
 
+let pushTargetRevision = 0;
+let cancelPendingPushTarget: (() => void) | null = null;
+
 function openPushTargetInApp(rawUrl: string): void {
   if (typeof window === "undefined") return;
   let target: URL;
@@ -605,11 +612,37 @@ function openPushTargetInApp(rawUrl: string): void {
   }
   if (target.origin !== window.location.origin) return;
 
+  const owner = useAppStore.getState();
+  const ownerId = owner.currentUser?.id;
+  if (!ownerId) return;
+  const accountEpoch = owner.accountEpoch;
+  const revision = ++pushTargetRevision;
+  cancelPendingPushTarget?.();
+  const canCommit = () => {
+    const state = useAppStore.getState();
+    return state.currentUser?.id === ownerId && state.accountEpoch === accountEpoch
+      && revision === pushTargetRevision;
+  };
+
   const chatId = target.searchParams.get("chat");
   const messageId = target.searchParams.get("message");
   if (chatId) {
-    void safeOpenChat(chatId).then((opened) => {
-      if (opened) {
+    const addressBefore = window.location.href;
+    let selectionChanged = false;
+    const offSelection = useAppStore.subscribe((state, previous) => {
+      if (state.selectedChatId !== previous.selectedChatId || state.selectedTopicId !== previous.selectedTopicId) {
+        selectionChanged = true;
+      }
+    });
+    const finish = () => {
+      offSelection();
+      if (cancelPendingPushTarget === finish) cancelPendingPushTarget = null;
+    };
+    cancelPendingPushTarget = finish;
+    const canResolve = () => canCommit() && !selectionChanged && window.location.href === addressBefore;
+    void safeOpenChat(chatId, { canCommit: canResolve }).then((opened) => {
+      finish();
+      if (opened && canCommit() && useAppStore.getState().selectedChatId === chatId) {
         // The conversation's own address, rather than the path the notification
         // happened to name with the ids hanging off it as a query. A tap now
         // leaves a URL that survives a reload, and `useChatAddress` sees the
@@ -617,13 +650,21 @@ function openPushTargetInApp(rawUrl: string): void {
         // a second time. The jump stays here: this path selected the chat
         // itself, so the hook has no «open» to hang one on.
         const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-        window.history.pushState(null, "", `${base}${chatAddressPath(chatId, messageId)}${target.hash}`);
+        const route = `${base}${chatAddressPath(chatId, messageId)}${target.hash}`;
+        window.history.pushState(null, "", route);
         window.dispatchEvent(new PopStateEvent("popstate"));
         if (messageId) {
-          window.setTimeout(() => requestChatMessageJump(chatId, messageId), 150);
+          window.setTimeout(() => {
+            // A newer tap, account transition or manual navigation owns the view now.
+            const location = window.location;
+            if (canCommit() && useAppStore.getState().selectedChatId === chatId
+                && `${location.pathname}${location.search}${location.hash}` === route) {
+              requestChatMessageJump(chatId, messageId);
+            }
+          }, 150);
         }
       }
-    });
+    }, finish);
     return;
   }
 

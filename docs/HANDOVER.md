@@ -10,7 +10,28 @@ native package identity/store actions and other unresolved acceptance gates are
 not approved merely by this delegation. Refresh the authorized tester intake,
 deduplicate against the queue, and continue the nearest feasible product slice.
 
-**Current product checkpoint,2026-10-05:** coordinator owns D-343/item83 send-ACK
+**Current product checkpoint,2026-10-05:** coordinator owns D-344/D-345, adjacent
+notification activation/Windows history repairs under item76. The actual shared
+activation now fences account epoch, newer taps, pending manual chat/topic/URL
+changes and the delayed exact-message jump. Windows emitted click ownership
+survives asynchronous route reads/restoration; its per-identity card queue
+survives React remounts and retires old-owner ACKs without deleting replacements.
+Explicit42501 access denial cannot open a cached chat. Batched same-account
+replacement is guarded by accountEpoch; destructive native route reads serialize
+and retain the last consumed target, with unmounted registrations disposed.
+The read chain/route also survive registration replacement, after a reproduced
+retired-reader race. Focused97/97 (30 compiled mutants), adjacent46/46 and
+fictional browser12/12 pass; three affected epoch cases refreshed. Final
+typecheck0/build1df98f4cb632f812 and final independent review accepted (no open
+P1/P2); rollout pending; main/runtime still1f864a39.
+D-335 native rich context
+remains OPEN: Realme RMX3830 Android15 has0.1.11/build12 and notification permission,
+but no personal/system-card capture or delivery test was made. Preserve generic
+FCM/WNS text until a recipient-authenticated preview contract exists. Hard document
+reload ledger and real Windows/native receipt remain unaccepted. No APK/SQL/worker
+change. [Current record](operations/2026-10-05-notification-ownership.md).
+
+**Previous accepted product checkpoint,2026-10-05:** coordinator owns D-343/item83 send-ACK
 cue, reviewed D-341 web promotion and item36/D-316 contact recovery. Incremental read-only intake:4 texts,
 0 voices; notification follow-up stays D-335. Sound RED exposed the missing
 handler; focused unit/outbox/browser/typecheck/build evidence and review are in
@@ -48,7 +69,7 @@ Read in this order:
    replaces them;
 5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–83) and the
    decisions log;
-6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-343, with its
+6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-345, with its
    measurement. Search it before filing anything.
 
 **Current PG17 package-difference checkpoint, 2026-10-05 (Codex).** Owner: this

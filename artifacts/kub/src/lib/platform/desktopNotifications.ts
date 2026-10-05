@@ -53,7 +53,7 @@ type DesktopNotificationActionListener = {
 
 type DesktopNotificationActionApi = {
   onAction(
-    callback: (route: unknown) => void,
+    callback: (route: unknown, isCurrent?: () => boolean) => void,
   ): Promise<DesktopNotificationActionListener>;
   takePendingRoute?(): Promise<unknown>;
 };
@@ -75,26 +75,46 @@ async function loadDesktopNotificationApi(): Promise<DesktopNotificationApi> {
   };
 }
 
+// A retired listener's non-cancellable take() may consume the next listener's
+// native slot. Keep both the read chain and consumed target across registrations.
+let desktopActionReads = Promise.resolve();
+let desktopActionRoute: unknown = null;
+let desktopActionOwner = 0;
+
 async function loadDesktopNotificationActionApi(): Promise<DesktopNotificationActionApi> {
   const bridge = getDesktopBridge();
   if (typeof window === "undefined" || !bridge) throw new Error("desktop_runtime_unavailable");
   return {
     async onAction(callback) {
-      const listener = () => {
-        void bridge.takePendingNotificationRoute()
+      let active = true;
+      let latestEventRevision = 0;
+      const owner = ++desktopActionOwner;
+      const receivePendingRoute = () => {
+        // take() consumes one native slot. Serialize reads and retain a consumed
+        // route until the latest queued read; that read may legitimately be empty.
+        const eventRevision = ++latestEventRevision;
+        const isCurrent = () => active && owner === desktopActionOwner && eventRevision === latestEventRevision;
+        desktopActionReads = desktopActionReads.then(() => active ? bridge.takePendingNotificationRoute() : null)
           .then((route) => {
-            if (route != null) callback(route);
+            if (route != null) desktopActionRoute = route;
+            if (desktopActionRoute != null && isCurrent()) {
+              const target = desktopActionRoute;
+              desktopActionRoute = null;
+              callback(target, isCurrent);
+            }
           })
-          .catch(() => undefined);
+          .catch(() => { desktopActionRoute = null; });
       };
+      const listener = () => { receivePendingRoute(); };
       window.addEventListener("letscube:desktop-notification-action", listener);
+      receivePendingRoute();
       return {
         async unregister() {
+          active = false;
           window.removeEventListener("letscube:desktop-notification-action", listener);
         },
       };
     },
-    takePendingRoute: () => bridge.takePendingNotificationRoute(),
   };
 }
 
@@ -224,17 +244,24 @@ export async function registerDesktopNotificationNavigationListener(
   if (!isDesktopApp()) return () => undefined;
   try {
     const api = await loadApi();
-    const openRoute = (rawRoute: unknown) => {
+    let active = true;
+    let latestTargetRevision = 0;
+    const openRoute = (rawRoute: unknown, isCurrent: () => boolean = () => true) => {
+      if (!active || !isCurrent()) return;
       const route = safeDesktopRoute(rawRoute);
       if (!route) return;
+      const targetRevision = ++latestTargetRevision;
       void restoreMain()
-        .then(() => openTarget(route))
+        .then(() => {
+          if (active && targetRevision === latestTargetRevision && isCurrent()) openTarget(route);
+        })
         .catch(() => undefined);
     };
     const listener = await api.onAction(openRoute);
     const pendingRoute = await api.takePendingRoute?.();
     if (pendingRoute != null) openRoute(pendingRoute);
     return () => {
+      active = false;
       void listener.unregister();
     };
   } catch {

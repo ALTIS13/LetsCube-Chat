@@ -29,6 +29,44 @@ import { isSelfMessageNotification } from "@/lib/messageNotificationProjection";
 
 const PAGE_SIZE = 30;
 
+type DesktopCardIdentity = Parameters<NonNullable<ReturnType<typeof getDesktopBridge>>["removeNotification"]>[0];
+type DesktopCardQueue = {
+  identity: DesktopCardIdentity;
+  pending: Promise<void>;
+  card: { owner: Set<string>; rowId: string } | null;
+};
+
+// The bell unmounts on public/auth routes; native operations outlive that hook.
+// This ledger survives React remounts, not a hard WebView/document reload.
+const desktopCardQueues = new Map<string, DesktopCardQueue>();
+const desktopCardOwners = new Set<Set<string>>();
+
+// Windows removal has no revision/CAS: serialize it with replacements of the
+// same native identity, including notifications still awaiting their bridge ACK.
+function queueDesktopCard(
+  queues: Map<string, DesktopCardQueue>,
+  identity: DesktopCardIdentity,
+  action: (queue: DesktopCardQueue) => Promise<boolean>,
+): Promise<boolean> {
+  const key = `${identity.kind}:${identity.group}:${identity.id}`;
+  let queue = queues.get(key);
+  if (!queue) {
+    queue = {
+      identity: { id: identity.id, kind: identity.kind, group: identity.group },
+      pending: Promise.resolve(), card: null,
+    };
+    queues.set(key, queue);
+  }
+  const current = queue;
+  const operation = current.pending.then(() => action(current));
+  const pending = operation.then(() => undefined, () => undefined);
+  current.pending = pending;
+  void pending.then(() => {
+    if (current.pending === pending && !current.card) queues.delete(key);
+  });
+  return operation;
+}
+
 function payloadString(p: unknown, key: string): string | undefined {
   if (!p || typeof p !== "object") return undefined;
   const v = (p as Record<string, unknown>)[key];
@@ -58,9 +96,9 @@ function payloadString(p: unknown, key: string): string | undefined {
  */
 export function useNotifications() {
   const supabase = createClient();
-  // Узкий per-field селектор: подписываемся ТОЛЬКО на примитив userId,
-  // чтобы heartbeat-эхо не дёргало этот хук (Task #48).
+  // Narrow primitives keep heartbeat updates inert while observing session replacement.
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  const accountEpoch = useAppStore((s) => s.accountEpoch);
   const mutedChatIds = useAppStore((s) => s.mutedChatIds);
 
   const [items, setItems] = useState<Notification[]>([]);
@@ -79,7 +117,7 @@ export function useNotifications() {
     const handled = presentedDesktopIdsRef.current;
     let quiet = false;
     const mayDeliver = () => {
-      if (handled !== presentedDesktopIdsRef.current) return false;
+      if (handled !== presentedDesktopIdsRef.current || useAppStore.getState().accountEpoch !== accountEpoch) return false;
       const policy = ownAlertPolicySnapshot(userId);
       if (policy === "quiet") quiet = true;
       return policy === "allow";
@@ -94,12 +132,36 @@ export function useNotifications() {
       if (!bridge) throw new Error("desktop_runtime_unavailable");
       return {
         // Foreground resolution above this boundary may have awaited a status/account change.
-        sendNotification: (payload) => mayDeliver() ? bridge.notify(payload) : Promise.resolve(false),
+        sendNotification: (payload) => queueDesktopCard(desktopCardQueues, payload, async (queue) => {
+          if (!mayDeliver()) return false;
+          const delivered = await bridge.notify(payload);
+          if (delivered) queue.card = { owner: handled, rowId: row.id };
+          return delivered;
+        }),
       };
     }).then((delivered) => {
       if (!delivered && !quiet) handled.delete(row.id);
     });
-  }, [userId]);
+  }, [userId, accountEpoch]);
+
+  const closeDesktopNotification = useCallback((row: Notification) => {
+    const owner = presentedDesktopIdsRef.current;
+    void closeDesktopNotificationForRow(row, async () => {
+      const bridge = getDesktopBridge();
+      if (!bridge) throw new Error("desktop_runtime_unavailable");
+      return {
+        sendNotification: async () => false,
+        removeNotification: (identity) => queueDesktopCard(desktopCardQueues, identity, async (queue) => {
+          const state = useAppStore.getState();
+          if (owner !== presentedDesktopIdsRef.current || state.currentUser?.id !== row.user_id || state.accountEpoch !== accountEpoch) return false;
+          if (queue.card && (queue.card.owner !== owner || queue.card.rowId !== row.id)) return false;
+          const removed = await bridge.removeNotification(identity);
+          if (removed) queue.card = null;
+          return removed;
+        }),
+      };
+    });
+  }, [accountEpoch]);
 
   useEffect(() => {
     accountGenerationRef.current += 1;
@@ -109,8 +171,22 @@ export function useNotifications() {
     trimmedDesktopIdsRef.current = new Set();
     presentedDesktopIdsRef.current = new Set();
     desktopBaselineLoadedRef.current = false;
-    return () => { accountGenerationRef.current += 1; };
-  }, [userId]);
+    const owner = presentedDesktopIdsRef.current;
+    desktopCardOwners.add(owner);
+    return () => {
+      accountGenerationRef.current += 1;
+      desktopCardOwners.delete(owner);
+      if (presentedDesktopIdsRef.current === owner) presentedDesktopIdsRef.current = new Set();
+      for (const queue of desktopCardQueues.values()) {
+        void queueDesktopCard(desktopCardQueues, queue.identity, async (current) => {
+          if (!current.card || desktopCardOwners.has(current.card.owner)) return false;
+          const removed = await getDesktopBridge()?.removeNotification(current.identity);
+          if (removed) current.card = null;
+          return removed ?? false;
+        }).catch(() => undefined);
+      }
+    };
+  }, [userId, accountEpoch]);
 
   const markReadIds = useCallback(async (ids: string[], options: { silent?: boolean } = {}) => {
     const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
@@ -290,7 +366,7 @@ export function useNotifications() {
         if (isNativeAndroid()) void closeNativeChatNotification(previousTag);
         else void closeBrowserNotification(previousTag);
         if (isDesktopApp() && !isMessageNotification(item)) {
-          void closeDesktopNotificationForRow(item);
+          closeDesktopNotification(item);
         }
       }
     }
@@ -306,7 +382,7 @@ export function useNotifications() {
       }
       for (const [id, previousItem] of previousDesktopUnread) {
         if (!currentDesktopUnread.has(id)) {
-          void closeDesktopNotificationForRow(previousItem);
+          closeDesktopNotification(previousItem);
         }
       }
 
@@ -315,7 +391,7 @@ export function useNotifications() {
       for (const item of overflowRows) {
         if (trimmedDesktopIdsRef.current.has(item.id)) continue;
         trimmedDesktopIdsRef.current.add(item.id);
-        void closeDesktopNotificationForRow(item);
+        closeDesktopNotification(item);
       }
       for (const id of trimmedDesktopIdsRef.current) {
         if (!overflowIds.has(id)) trimmedDesktopIdsRef.current.delete(id);
@@ -323,7 +399,7 @@ export function useNotifications() {
       unreadDesktopIdsRef.current = currentDesktopUnread;
     }
     void updateBrowserAppBadge(unreadCount);
-  }, [items, unreadCount]);
+  }, [items, unreadCount, closeDesktopNotification]);
 
   useEffect(() => {
     if (userId) return;

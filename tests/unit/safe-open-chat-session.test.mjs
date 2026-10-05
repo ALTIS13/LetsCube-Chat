@@ -12,7 +12,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-function fixture({ cached = true, access = Promise.resolve({ data: { chat_id: "chat" }, error: null }), hydration } = {}) {
+function fixture({ cached = true, access = Promise.resolve({ data: { chat_id: "chat" }, error: null }), hydration, programSource = source } = {}) {
   const effects = [];
   const queries = [];
   const state = {
@@ -43,7 +43,7 @@ function fixture({ cached = true, access = Promise.resolve({ data: { chat_id: "c
     "@/lib/messageProjection": { MESSAGE_LAST_MESSAGE_SELECT: "id" },
   };
   const module = { exports: {} };
-  const program = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const program = ts.transpileModule(programSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   vm.runInNewContext(program, {
     module, exports: module.exports,
     require(name) {
@@ -127,4 +127,33 @@ test("ordinary refusal still clears that selection and reports unavailable", asy
   f.state.selectedChatId = "chat";
   assert.equal(await f.open("chat"), false);
   assert.deepEqual(f.effects, [["select", null], ["alert"]]);
+});
+
+for (const cached of [true, false]) {
+  test(`explicit permission denial refuses a ${cached ? "cached" : "missing"} chat`, async () => {
+    const f = fixture({ cached, access: Promise.resolve({ data: null, error: { code: "42501" } }) });
+    assert.equal(await f.open("chat"), false);
+    assert.deepEqual(f.effects, [["alert"]]);
+    assert.deepEqual(f.queries, ["chat_members"]);
+  });
+
+  test(`transient access failure ${cached ? "preserves cached access" : "cannot authorize an unknown chat"}`, async () => {
+    const f = fixture({ cached, access: Promise.resolve({ data: null, error: { message: "fixture network failure" } }) });
+    assert.equal(await f.open("chat"), cached);
+    assert.deepEqual(f.effects, cached ? [["select", "chat"]] : [["alert"]]);
+    assert.deepEqual(f.queries, ["chat_members"]);
+  });
+}
+
+test("compiled denial classifier mutant cannot pass cached-denial regression", async () => {
+  const target = 'if (error) return error.code === "42501" ? false : null;';
+  assert.ok(source.includes(target));
+  const f = fixture({
+    programSource: source.replace(target, "if (error) return null;"),
+    access: Promise.resolve({ data: null, error: { code: "42501" } }),
+  });
+  await assert.rejects(async () => {
+    assert.equal(await f.open("chat"), false);
+    assert.deepEqual(f.effects, [["alert"]]);
+  }, assert.AssertionError);
 });

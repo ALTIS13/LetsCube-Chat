@@ -130,7 +130,7 @@ async function canAccessChat(chatId: string, userId: string): Promise<boolean | 
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (error) return null;
+  if (error) return error.code === "42501" ? false : null;
 
   return Boolean(data?.chat_id);
 }

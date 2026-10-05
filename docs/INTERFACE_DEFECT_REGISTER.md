@@ -24912,6 +24912,12 @@ foreground/background plus locked/unlocked states. Preserve exact chat/message
 activation and chat-scoped read/history cleanup. Source tests alone do not close
 the reported system-card defect.
 
+**2026-10-05 continuation:** identified available Realme RMX3830 Android15,
+installed0.1.11/build12, notification permission granted. No actual shade,
+message contents/provider request, native upgrade or A063 access. Adjacent
+D-344/D-345 repairs do not authorize richer provider envelopes or close D-335.
+[Ownership trace and next preview contract](operations/2026-10-05-notification-ownership.md).
+
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
 
 **Severity:** high, message authority boundary. Tracker item 78. Found 2026-10-03
@@ -25202,6 +25208,49 @@ healthy exact image and public marker verification pass. Not installed-device
 audibility/autoplay proof and not a fix for the
 separate incoming-notification absence follow-up,item76/D-335.
 [Evidence and release gates](operations/2026-10-05-send-sound-web-rollout.md).
+
+## D-344 `[~]` An older notification can overwrite a newer chat/message selection
+
+**Severity:** medium interaction/ownership defect under item76. Actual shared
+`usePush` plus `safeOpenChat` reproduced seven failures/eleven initial cases,
+then manual chat/topic round-trip and42501-denial failures. Windows actual adapter
+reproduced eight failures/twelve controls for emitted events, asynchronous route
+read/window restoration and disposal. No production account was used.
+
+**Repair:** existing accountEpoch plus action revision; pending selection/address
+invalidation and delayed canonical-message guard. Explicit permission refusal is
+not a transient cache fallback. Windows event ownership begins before awaits;
+disposed/failed restores cannot reopen older routes. Ordinary canonical hash,
+cold pending route and cached transient-network behavior are retained.
+Review refused a destructive-single-slot lost target and late-registration
+disposer loss before deployment; serialized reads retain consumed routes and
+cancelled registrations release their eventual listeners. The read chain and
+retained route also span replacement registrations after a separate retired-reader
+RED. Focused activation30/access14/adapter24 and browser12 pass with literal compiled
+mutants. Final typecheck0/build1df98f4cb632f812 and independent review accepted;
+web deployment pending. Real OS-card taps
+and older embedded Android upgrades are not established by fictional routing.
+[Evidence and release checkpoint](operations/2026-10-05-notification-ownership.md).
+
+## D-345 `[~]` Windows account retirement leaves old cards or races their replacements
+
+**Severity:** medium account/history boundary under item76. Actual React hook
+and adapter with a fictional native bridge reproduced seven failures/eight
+ownership controls. A hook-local queue additionally failed two true unmount/
+remount cases with retained native operations, matching the public/auth shell
+mount boundary. This does not assert a new server/RLS exposure.
+
+**Repair:** JS-module per-native-identity serialized sends/read/retirement/removal,
+successful ACK ownership retained until confirmed removal, active-owner checks
+and failed-removal retention. New-owner same-identity cards survive old cleanup;
+logout/same-owner generation changes and iconless legacy retry are covered.
+An additional batched logout/same-account pair failed before explicit accountEpoch
+observation and immediate delivery/removal guards. Actual hook/adapter29/29
+including eleven compiled mutation refusals. Final review/typecheck/build
+accepted; web deployment pending. Hard WebView/document reload is not persisted;
+native refusal can leave a card until retry. Real Windows OS history and WNS
+killed-process receipt remain separate acceptance stages.
+[Evidence and release checkpoint](operations/2026-10-05-notification-ownership.md).
 
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 

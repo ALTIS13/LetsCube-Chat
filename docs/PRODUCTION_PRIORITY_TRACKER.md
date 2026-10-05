@@ -3781,6 +3781,20 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     boundaries. No production message/provider request was sent in this intake.
     [Evidence and limits](operations/2026-10-03-tester-feedback.md).
 
+    **2026-10-05 adjacent repair:** D-344/D-345 fence shared activation ownership,
+    Windows emitted click order and old-account card retirement, including true
+    hook remount and in-flight same-identity replacements. Explicit42501 access
+    denial cannot use cached fallback. Batched accountEpoch and destructive
+    single-slot/read-registration review refusals fixed before deployment.
+    Cross-registration retired-reader loss also reproduced and repaired.
+    Actual-source97/97 including30 mutants, adjacent46/46 and fictional browser12/12;
+    final typecheck0/build1df98f4cb632f812 and independent review accepted, no open
+    P1/P2; web rollout pending.
+    Realme metadata identifies0.1.11/build12 with notification
+    permission, not actual delivery/card/privacy acceptance. Native rich previews,
+    hard document-reload ledger and OS receipt QA remain separate; item76 stays
+    OPEN. [Boundaries and checkpoint](operations/2026-10-05-notification-ownership.md).
+
 77. `[ ]` Account-owned notification preferences for individual channels/topics.
     Same voice note: silence a busy parent chat while explicitly enabling one
     relevant channel/topic; other users keep their own choices. Current scoped
