@@ -24281,8 +24281,9 @@ unknown/cached-error/refetching state never exposes Add/Saved. Initial14 focused
 browser and4 adjacent pass; four mutations caught. Review's cached-success
 refetch window is RED2/2 before correction; changed-input GREEN10/10 and a fifth
 mutation refusal follow. Final both-theme1440/390 pixels and typecheck/build
-accepted. Hook/RLS unchanged; final independent review accepted. Web runtime
-promotion pending. This is not a native reproduction of the unspecified tester
+accepted. Hook/RLS unchanged; final independent review accepted. Web1f864a39
+deployed with exact healthy runtime, public markers/retained entry and fresh
+anonymous login0errors. This is not a native reproduction of the unspecified tester
 surface. [Evidence and limits](operations/2026-10-05-profile-contact-retry.md).
 
 ## D-317 `[x]` On the installed iPhone the contacts header sits under the status bar

@@ -1096,7 +1096,10 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     stale-success/background-refetch window has actual RED2/2 and corrected
     changed-input GREEN10/10, one additional mutation caught; no unchanged
     suite replay. Final typecheck/build and1440/390 both-theme pixels accepted.
-    Existing hook/RLS untouched; final independent review accepted, web rollout pending.
+    Existing hook/RLS untouched; final independent review accepted. Web deployed
+    through1f864a39: exact healthy image/public markers, retained previous entry
+    and fresh anonymous login0errors verified. No APK/SQL change; unspecified
+    tester artifact/native acceptance remains open.
     [Contact recovery record](operations/2026-10-05-profile-contact-retry.md).
 
     **a. «У нас пропала возможность открыть профиль пользователя не заходя в

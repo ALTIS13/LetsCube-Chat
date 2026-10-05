@@ -1,7 +1,7 @@
 # Profile contact lookup recovery
 
-Owner: Codex coordinator. Stage: independently reviewed candidate; web rollout
-awaits exact revision gates. Scope: item36/D-316 follow-up.
+Owner: Codex coordinator. Stage: web production deployed and runtime verified.
+Scope: item36/D-316 follow-up.
 
 ## Cause and change
 
@@ -74,5 +74,33 @@ The old bundle already contains the generic contacts error from another panel;
 the added loading text is absent before/present after. Do not claim both texts
 were absent in the baseline. Retain the preceding entry asset for open clients.
 
-Outcome pending. Next product intake remains D-335 notification delivery;
-no full/Gradle/PG17 suite replay in this UI-only slice.
+## Outcome / next
+
+Reviewed `1f864a39186367d5d008b4f38338285f15a933b5` pushed atomically to
+candidate/main after the own-tree guard completed exit0:1 commit,3 source/test
+files,22 resolved aliases, no SQL/server delta. Coolify deployment
+`c13s88izqan25ruc91tdt08j` finished at2026-10-05T12:05:49Z. Actual SSH observer
+confirms exactly one healthy running web container at this revision;
+image ID `sha256:89093e93364750a29d4d1d56637e143ac4b98ac9e228e0fff16a1430637b042e`.
+
+Public entry changed `/assets/index-Df-JMe-q.js` -> `/assets/index-DKl_uAXg.js`.
+Calibrated contact loading absent before/present after; send cue and Group
+markers remain present, old Server fallback absent. `/privacy`,`/support`,
+`/login` return200 with the same new entry. SW hash changed. Fresh anonymous
+Chromium mounts `/` and `/login`, actual login action visible,0 page errors,
+no session/screenshots/trace/video or provider/message mutation. The preceding
+entry stays HTTP200 with its exact SHA256, not an HTML fallback.
+
+Backup/readability evidence was reused, not rehashed: same checksum-manifest
+timestamp, age39817seconds at pre-push check; current rollback image5dfc4dcb
+still present. The private observer initially queried before the webhook had
+created its queue row and refused empty JSON. Empty queue now waits boundedly;
+no duplicate deploy or runtime/SQL change was issued to remedy that observer.
+
+Web recovery is deployed. The tester's unspecified native artifact is not
+identified or accepted by this release, and Android still embeds the older
+bundle. Next: D-335/item76, distinguish missing context from absent delivery
+at the identified client/build; preserve late-push/logout/account-switch
+redaction, OS privacy and exact activation. Do not replay the accepted web
+fixes or unrelated full/Gradle/PG17 suites. Native upgrade and faithful PG17
+recovery remain separate acceptance gates.

@@ -11,7 +11,7 @@ not approved merely by this delegation. Refresh the authorized tester intake,
 deduplicate against the queue, and continue the nearest feasible product slice.
 
 **Current product checkpoint,2026-10-05:** coordinator owns D-343/item83 send-ACK
-cue plus reviewed D-341 web promotion. Incremental read-only intake:4 texts,
+cue, reviewed D-341 web promotion and item36/D-316 contact recovery. Incremental read-only intake:4 texts,
 0 voices; notification follow-up stays D-335. Sound RED exposed the missing
 handler; focused unit/outbox/browser/typecheck/build evidence and review are in
 [the release record](operations/2026-10-05-send-sound-web-rollout.md). Fresh backup
@@ -20,7 +20,11 @@ old-new marker proof accepted. Contacts failure/retry,item36/D-316, now has a
 candidate with initial14 browser +4 adjacent pass; review's cached-success
 refetch window reproduced RED2/2 then corrected GREEN10/10 on changed inputs.
 Five mutation refusals, final typecheck/build and1440/390 both-theme pixels;
-independent final review accepted; web rollout pending.
+independent final review accepted. Main1f864a39 deployed: one exact healthy
+runtime, new/old markers, retained prior entry and anonymous login0pageErrors
+verified. Next: D-335/item76 context/delivery at an identified client/build;
+do not remove redaction or conflate an unspecified missing-alert report with
+proved provider failure. Native upgrades remain separate.
 [Contact recovery checkpoint](operations/2026-10-05-profile-contact-retry.md).
 No APK/SQL/worker/Gateway change. PG17 checkpoints below are historical evidence, not
 the critical path of this independent deploy; D-338/D-342 acceptance stays open.
