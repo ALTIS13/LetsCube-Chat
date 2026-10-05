@@ -24918,6 +24918,17 @@ message contents/provider request, native upgrade or A063 access. Adjacent
 D-344/D-345 repairs do not authorize richer provider envelopes or close D-335.
 [Ownership trace and next preview contract](operations/2026-10-05-notification-ownership.md).
 
+**2026-10-05 native source preparation:** Android v1 derives generic display
+locally; missing/blank/unsafe provider display cannot discard a valid exact
+route. Current FCM redaction remains, so this is not a demonstrated live leak.
+Actual parser RED4/13 becomes GREEN22/22 including nine compiled mutation
+refusals; actual Android debug compile/JUnit4/4 passes. D-346 independently
+repairs native JS registration retirement. Existing own-notification RLS and
+source visibility do not supply device/live-session/eligibility/consent display
+authority. Separate recipient-authenticated previews and installed card QA
+remain; no APK/SQL/provider change. D-335 stays OPEN.
+[Source evidence and next sequence](operations/2026-10-05-native-notification-display-boundary.md).
+
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
 
 **Severity:** high, message authority boundary. Tracker item 78. Found 2026-10-03
@@ -25253,6 +25264,27 @@ Hard WebView/document reload is not persisted;
 native refusal can leave a card until retry. Real Windows OS history and WNS
 killed-process receipt remain separate acceptance stages.
 [Evidence and release checkpoint](operations/2026-10-05-notification-ownership.md).
+
+## D-346 `[~]` Partial or retired Android push registrations leave live handlers
+
+**Severity:** medium listener lifecycle/activation defect, adjacent to item76.
+Actual `registerNativePushNavigationListeners` waits for both SDK registrations
+before exposing cleanup; second-listener rejection leaves the successful first
+handle alive. Captured action callbacks still route after disposal while bridge
+removal is pending/refused. Repeated disposal repeats removal operations.
+Calibrated compiled-source baseline has6 failures/10 cases, four positive
+controls; only a fictional SDK is used, not a production tap/device trace.
+
+**Source repair:** disposer resolves without waiting for SDK registration; each
+arriving handle is owned or retired, partial failure cleans successful siblings,
+retired callbacks are inert and cleanup is idempotent/error-contained. Active
+exact-message route and reserved voice handling remain unchanged. Compiled
+adapter16/16 includes four literal mutation refusals; adjacent32/32, typecheck0
+and fixture build pass. Independent JS review finds no open P1/P2, with three
+extra strict-unhandled-rejection controls passing. No APK assemble/sync/sign/
+install; installed-client acceptance remains open. This does not prove FCM
+receipt, recipient display authority or document-reload card persistence.
+[Evidence and source checkpoint](operations/2026-10-05-native-notification-display-boundary.md).
 
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 

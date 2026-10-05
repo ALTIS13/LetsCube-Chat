@@ -1,8 +1,19 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-04.
+Status: active production-hardening tracker, updated 2026-10-05.
 
-**Current continuation, 2026-10-03:** D-339 exact queue-claim settlement deployed
+**Current source continuation,2026-10-05:** item76/D-335 native context
+preparation, D-346 listener lifecycle. v1 Android display stays generic locally,
+without rejecting valid exact-message routing for absent/unsafe provider text.
+JS handles retire on partial/late registration and callbacks fence disposal.
+JS16/16 + Java22/22 include13 compiled mutants; adjacent32/32, typecheck0,
+fixture web build and actual Android debug compile/JUnit4/4 pass. Both independent
+reviews accepted, no open P1/P2; production a96a4d55 unchanged. No APK/sync/
+SQL/provider/device action. Useful native previews still require recipient-session
+authorization and consent; no old backup/source suites repeated.
+[Evidence and next sequence](operations/2026-10-05-native-notification-display-boundary.md).
+
+**Previous avatar continuation, 2026-10-03:** D-339 exact queue-claim settlement deployed
 at runtime `8da252ad`: sole healthy web/worker/Gateway, old/new worker and Gateway
 markers, public/container JS hash match and live NULL-only RPC 4/4. SQL applied
 once after verified backup `20261003-222036`; full-signature readback reconciled
@@ -3796,6 +3807,17 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     permission, not actual delivery/card/privacy acceptance. Native rich previews,
     hard document-reload ledger and OS receipt QA remain separate; item76 stays
     OPEN. [Boundaries and checkpoint](operations/2026-10-05-notification-ownership.md).
+
+    **2026-10-05 native preparation:** v1 parser now owns generic display instead
+    of accepting provider previews or dropping valid routing for missing/unsafe
+    text. D-346 retires partial/late native listeners and disposed callbacks.
+    Calibrated Java RED4/13 and JS RED6/10 become GREEN22/22 and16/16, with13
+    compiled mutants; adjacent32/32, typecheck, fixture build and actual Android
+    debug compile/JUnit4/4 pass. Source candidate only; no installed APK or OS
+    receipt proof. Existing RLS/visibility RPC does not establish unread/device/
+    live-session/eligibility/preview-consent authorization. Preserve redaction
+    and implement that separate read-only contract before richer cards. Item76
+    stays OPEN. [Native boundary and next sequence](operations/2026-10-05-native-notification-display-boundary.md).
 
 77. `[ ]` Account-owned notification preferences for individual channels/topics.
     Same voice note: silence a busy parent chat while explicitly enabling one

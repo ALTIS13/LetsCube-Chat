@@ -17,20 +17,12 @@ final class ChatPushNotificationContract {
         if (!isUuid(chatId) || !isUuid(messageId)) return null;
         String tag = "message:chat:" + chatId;
         if (!tag.equals(data.get("tag")) || !tag.equals(data.get("group_tag"))) return null;
-        String title = clean(data.get("title"), 80), body = clean(data.get("body"), 180);
-        if (title == null || body == null) return null;
-        return new Event(chatId, messageId, tag, "/?chat=" + chatId + "&message=" + messageId, title, body);
+        // v1 is a generic wake signal, not a recipient-authenticated preview.
+        return new Event(chatId, messageId, tag, "/?chat=" + chatId + "&message=" + messageId,
+            "LETSCUBE", "\u041d\u043e\u0432\u043e\u0435 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435");
     }
 
     private static boolean isUuid(String value) { return value != null && UUID.matcher(value).matches(); }
-
-    private static String clean(String value, int limit) {
-        if (value == null || value.isEmpty() || value.length() > limit || value.trim().isEmpty()) return null;
-        String lower = value.toLowerCase(java.util.Locale.ROOT);
-        if (lower.contains("/storage/v1/") || lower.contains("/object/sign/") || lower.contains("token=")
-            || lower.contains("password=") || lower.contains("authorization=") || lower.contains("signedurl")) return null;
-        return value.replace('\n', ' ').replace('\r', ' ').trim();
-    }
 
     static final class Event {
         final String chatId, messageId, tag, route, title, body;

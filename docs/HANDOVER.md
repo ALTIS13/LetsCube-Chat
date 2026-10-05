@@ -10,7 +10,23 @@ native package identity/store actions and other unresolved acceptance gates are
 not approved merely by this delegation. Refresh the authorized tester intake,
 deduplicate against the queue, and continue the nearest feasible product slice.
 
-**Current product checkpoint,2026-10-05:** coordinator owns D-344/D-345, adjacent
+**Current source checkpoint,2026-10-05:** coordinator owns item76/D-335 native
+context preparation, baseline7e88bf4f. Android v1 now derives generic display
+locally and retains validated exact routing without optional provider text;
+current producer redaction is preserved, not removed. D-346 JS registration
+exposes disposal without waiting for the SDK, retires partial/late handles and
+fences callbacks after disposal. Actual-source JS16/16 (four compiled mutants),
+Java22/22 (nine compiled mutants), adjacent32/32, typecheck0 and fixture-config
+web build1ac27f72c2b42cb8 pass. Actual Android debug Java compile/JUnit4/4 pass
+using the existing JBR; no APK assemble/sync/sign/install. Both independent
+source reviews accepted, no open P1/P2. Candidate-only slice; runtime
+stays a96a4d55; no SQL/Edge/provider/consent changes or device/rental proof.
+Next: recipient-session-bound, read-only preview authorization and explicit
+preview choice, not restoring personal text in v1. D-335 stays OPEN; D-346 is
+source-verified, not installed-client acceptance.
+[Current source evidence and next contract](operations/2026-10-05-native-notification-display-boundary.md).
+
+**Previous deployed product checkpoint,2026-10-05:** coordinator owns D-344/D-345, adjacent
 notification activation/Windows history repairs under item76. The actual shared
 activation now fences account epoch, newer taps, pending manual chat/topic/URL
 changes and the delayed exact-message jump. Windows emitted click ownership
@@ -72,7 +88,7 @@ Read in this order:
    replaces them;
 5. **`docs/PRODUCTION_PRIORITY_TRACKER.md`** — the queue (items 1–83) and the
    decisions log;
-6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-345, with its
+6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-346, with its
    measurement. Search it before filing anything.
 
 **Current PG17 package-difference checkpoint, 2026-10-05 (Codex).** Owner: this

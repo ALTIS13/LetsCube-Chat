@@ -1,4 +1,5 @@
 import { PushNotifications } from "@capacitor/push-notifications";
+import type { PluginListenerHandle } from "@capacitor/core";
 import { isNativeAndroid } from "./capabilities";
 import { ANDROID_PUSH_UNAVAILABLE, PUSH_ENABLE_FAILED } from "../plainMessages";
 import { parseMessageNotificationProjection } from "../messageNotificationProjection";
@@ -127,23 +128,37 @@ export async function registerNativePushNavigationListeners(
   if (!isNativeAndroid()) return () => undefined;
   if (!hasCallableAndroidBridge()) return () => undefined;
 
-  try {
+  let disposed = false;
+  const handles = new Set<PluginListenerHandle>();
+  const remove = (handle: PluginListenerHandle) => {
+    try { void handle.remove().catch(() => undefined); } catch { /* A retired callback remains inert. */ }
+  };
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    for (const handle of handles) remove(handle);
+    handles.clear();
+  };
+  const own = (handle: PluginListenerHandle) => {
+    if (disposed) { remove(handle); return false; }
+    handles.add(handle);
+    return true;
+  };
+
+  // Expose disposal immediately, even when the bridge is still registering.
+  void (async () => {
     const push = PushNotifications;
-    const received = await push.addListener("pushNotificationReceived", () => {
+    if (!own(await push.addListener("pushNotificationReceived", () => {
       // Foreground notifications are already represented by in-app notification state.
       // OS delivery remains a transport layer, not a second notification source.
-    });
-    const action = await push.addListener("pushNotificationActionPerformed", (event) => {
+    }))) return;
+    own(await push.addListener("pushNotificationActionPerformed", (event) => {
+      if (disposed) return;
       const target = getNotificationTarget(event.notification.data);
       if (target) openTarget(target);
-    });
-    return () => {
-      void received.remove();
-      void action.remove();
-    };
-  } catch {
-    return () => undefined;
-  }
+    }));
+  })().catch(dispose);
+  return dispose;
 }
 
 export async function closeNativeChatNotification(tag: string): Promise<void> {
