@@ -25228,7 +25228,8 @@ cancelled registrations release their eventual listeners. The read chain and
 retained route also span replacement registrations after a separate retired-reader
 RED. Focused activation30/access14/adapter24 and browser12 pass with literal compiled
 mutants. Final typecheck0/build1df98f4cb632f812 and independent review accepted;
-web deployment pending. Real OS-card taps
+web main a96a4d55 deployed and exact image/public markers/retained old entry/
+JS-SW parity/anonymous startup verified. Real OS-card taps
 and older embedded Android upgrades are not established by fictional routing.
 [Evidence and release checkpoint](operations/2026-10-05-notification-ownership.md).
 
@@ -25247,7 +25248,8 @@ logout/same-owner generation changes and iconless legacy retry are covered.
 An additional batched logout/same-account pair failed before explicit accountEpoch
 observation and immediate delivery/removal guards. Actual hook/adapter29/29
 including eleven compiled mutation refusals. Final review/typecheck/build
-accepted; web deployment pending. Hard WebView/document reload is not persisted;
+accepted; web main a96a4d55 deployed with exact image/content verification.
+Hard WebView/document reload is not persisted;
 native refusal can leave a card until retry. Real Windows OS history and WNS
 killed-process receipt remain separate acceptance stages.
 [Evidence and release checkpoint](operations/2026-10-05-notification-ownership.md).

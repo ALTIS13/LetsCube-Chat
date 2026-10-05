@@ -3789,7 +3789,9 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     Cross-registration retired-reader loss also reproduced and repaired.
     Actual-source97/97 including30 mutants, adjacent46/46 and fictional browser12/12;
     final typecheck0/build1df98f4cb632f812 and independent review accepted, no open
-    P1/P2; web rollout pending.
+    P1/P2. Web main a96a4d55 deployed and verified by one exact healthy image,
+    calibrated old/new markers, retained old entry, JS/SW public-container parity
+    and anonymous mount/login zero page errors. No APK/SQL/provider mutation.
     Realme metadata identifies0.1.11/build12 with notification
     permission, not actual delivery/card/privacy acceptance. Native rich previews,
     hard document-reload ledger and OS receipt QA remain separate; item76 stays

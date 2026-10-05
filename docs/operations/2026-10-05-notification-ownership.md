@@ -149,8 +149,42 @@ matched the unrelated direct-navigation branch; restricting it to the actual
 timer callback calibrated all three baseline guards absent. No marker was
 weakened to fabricate acceptance.
 
-Source review/build gates are accepted; release outcome is still pending
-in this record. No production SQL or package identity change is required.
+Source review/build gates are accepted. No production SQL or package identity
+change is required.
 D-335 remains open for account-authenticated native context and real-device
 preview/delivery/lock-screen acceptance; do not repeat accepted contact/sound
 or unrelated PG17/full-suite/device checks.
+
+## Production outcome
+
+Reviewed `a96a4d55e5a6598bd38cbb81cc25702a86988ae5` pushed atomically to the
+candidate branch and main, including the preceding outcome-only docs commit.
+The own-tree guard finished exit0 before push: 2 commits, 9 source/test files,
+40 resolved aliases, no SQL/server delta. Coolify's exact-commit queue finished;
+SSH observed one running healthy container at that revision, image ID
+`sha256:4f062cb4a9729dc2dae366c02c3ab78369bb2e8174283718db7848c7fa920da3`.
+
+At 2026-10-05T13:30:14Z the public entry is `/assets/index-C6Q1Gcuo.js`.
+All three calibrated activation markers were absent before and present after;
+contact loading, send cue and Group markers remain, old Server fallback absent.
+The former `/assets/index-DKl_uAXg.js` remains HTTP200 with its exact SHA256.
+`/privacy`, `/support` and `/login` serve the same new entry. Public/container
+byte parity for current JS and SW passed at 13:30:31Z:
+
+- JS: `15308ab0913b4876e82a5a47d7f7fe67a5f3572c497555a962e671bfb138a0a7`
+- SW: `6385b6fe8ab1db7811f06dfe79c2039a86444fbedba507bf783c05df278ee41e`
+
+Fresh anonymous Chromium mounted `/` and `/login`, with the real login action
+visible and zero page errors. No personal session, screenshots, traces, video,
+message/provider mutation, native signing/install or rental was used. Fixture
+Vite process on port5186 was checked by exact PID/path and stopped deliberately;
+its terminal exit1 is that intentional stop, not a failing test/build. All finite
+verification jobs and workers are finished.
+
+This accepts the deployed web/remote-Windows JS repair, not a physical Windows
+card or native Android update. D-344/D-345 remain partial only for those client
+acceptance boundaries. Next: D-335 recipient-authenticated preview policy and
+real card/delivery trace on the identified client; preserve generic fallback,
+privacy and routing. APK upgrade, hard reload ledger, WNS killed-process receipt
+and faithful PG17 recovery remain separate. Publish these outcome docs on the
+candidate branch without a needless docs-only main/application redeploy.

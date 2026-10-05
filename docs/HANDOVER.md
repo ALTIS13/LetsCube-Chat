@@ -23,7 +23,10 @@ The read chain/route also survive registration replacement, after a reproduced
 retired-reader race. Focused97/97 (30 compiled mutants), adjacent46/46 and
 fictional browser12/12 pass; three affected epoch cases refreshed. Final
 typecheck0/build1df98f4cb632f812 and final independent review accepted (no open
-P1/P2); rollout pending; main/runtime still1f864a39.
+P1/P2). Main/runtime a96a4d55 deployed: exact single healthy image, new/old
+public activation markers, retained preceding entry, JS/SW container parity
+and anonymous mount/login zero page errors verified. Next: D-335 authenticated
+native context contract and real card trace, not replay of these accepted fixes.
 D-335 native rich context
 remains OPEN: Realme RMX3830 Android15 has0.1.11/build12 and notification permission,
 but no personal/system-card capture or delivery test was made. Preserve generic
