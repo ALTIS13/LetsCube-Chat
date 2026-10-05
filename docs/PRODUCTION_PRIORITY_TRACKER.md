@@ -4058,6 +4058,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     No native/restore authority; no SQL/main/native/allocation/HOLD
     lift; D-342 remains OPEN.
     [Reference closure and remaining gates](operations/2026-10-05-avatar-pg17-reference-closure.md).
+    Package difference now explained:1290 reference objects match including1214
+    regular files; one added `timezonesets/timezonesets` link adds248 serialized
+    bytes and exactly reproduces the prior installed NAR hash offline. Key-script
+    hypothesis disproved; active share profile is `plb...`, not frozen `pf9...`.
+    New source18/18 and10 compiled refusals; reviewed metadata/hash-manifest
+    probes complete, no remote bodies/store repair/hash replay. Original signed
+    cache equality remains REFUSED, builder/profile binding unaccepted. Next:
+    source-only fictional header producer/profile binding; no HOLD lift.
+    [Package explanation and limits](operations/2026-10-05-avatar-pg17-package-difference.md).
     [Type-source checkpoint](operations/2026-10-04-avatar-type-census.md),
     [exact PG17 prerequisites](operations/2026-10-04-avatar-pg17-prerequisites.md).
     [Approved class-coverage plan](operations/2026-10-04-avatar-class-coverage-next.md#next-small-step).

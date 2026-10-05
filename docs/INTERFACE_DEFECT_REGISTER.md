@@ -25338,6 +25338,17 @@ remain unaccepted; no security incident or differing ELF is inferred from NAR.
 No allocation/SQL/main/native/full-restore dispatch or HOLD lift; D-342 stays OPEN.
 [Signed graph and exact limits](operations/2026-10-05-avatar-pg17-reference-closure.md).
 
+**PG17 package difference explained, 2026-10-05:** signed archive1290 objects
+versus installed1291; all1214 regular-file digests/lengths/executable bits and
+existing reference objects match. One additional `timezonesets/timezonesets`
+link adds248 NAR bytes and exactly reproduces the prior installed hash offline.
+Key-script hypothesis disproved; active share profile `plb...` is distinct from
+frozen `pf9...`. Diagnostic18/18 with10 compiled refusals; reviewed probes retain
+only remote metadata/digests, no bodies. No store repair or hash replay. Original
+signed equality stays REFUSED; builder/profile binding and native/full-restore
+authority remain unaccepted. All HOLDs remain; D-342 stays OPEN.
+[Exact reconstruction and remaining boundary](operations/2026-10-05-avatar-pg17-package-difference.md).
+
 **Next / acceptance:** faithfully reconstruct the isolated copy using PostgreSQL
 typed ACL entries, preserving original grantor/grantee/privilege/options/order;
 refuse unsupported targets rather than weakening equality. Restore only vetted

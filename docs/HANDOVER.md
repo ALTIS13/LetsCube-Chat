@@ -22,7 +22,23 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-342, with its
    measurement. Search it before filing anything.
 
-**Current PG17 signed-reference checkpoint, 2026-10-05 (Codex).** Owner: this chat,
+**Current PG17 package-difference checkpoint, 2026-10-05 (Codex).** Owner: this
+chat, branch `codex/bot-inline-media-20261002`, base `00fff8f8`. Public signed NAR
+has1290 objects; the selected installed package has1291. All1214 regular-file
+digests/lengths/executable bits and all other reference objects match. Only an
+additional `timezonesets/timezonesets` symlink differs. Inserting that one link
+offline adds248 bytes and exactly reproduces the prior installed NAR hash.
+The original key-script hypothesis is disproved; no store repair/hash replay.
+[Measured difference, exact reconstruction and limits](operations/2026-10-05-avatar-pg17-package-difference.md).
+New diagnostic18/18 with10 compiled refusals; two independently reviewed remote
+metadata/hash-manifest probes each complete3 steps0/empty stderr. No remote file
+bodies retained. Runtime profile share paths resolve to `plb...`, not frozen
+`pf9...`; active-profile/build binding remains unaccepted. Original cache equality
+still REFUSED177/1, unsigned builder still unsigned. Next: source-only fictional
+header producer and explicit profile/recipe binding; no allocation/main/SQL/native/
+full-restore or HOLD lift. Item82/D-342 stays OPEN.
+
+**Prior PG17 signed-reference checkpoint, 2026-10-05 (Codex).** Owner: this chat,
 branch `codex/bot-inline-media-20261002`, base `bb89fd0e`. Actual179 frozen subjects
 have valid signatures under the pinned vendor cache key and exact reachable
 reference membership.178 HTTP200 narinfos plus1 reused root; declared signed
