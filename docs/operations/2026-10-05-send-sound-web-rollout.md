@@ -1,6 +1,6 @@
 # Send acknowledgement cue and reviewed web promotion
 
-Owner: Codex coordinator. Stage: verified candidate, production promotion pending.
+Owner: Codex coordinator. Stage: web production deployed and runtime verified.
 
 ## Intake and cause
 
@@ -32,6 +32,8 @@ reference-client asset or code copied.
 - Five Chromium browser cases pass: lost-response ACK once, settings off,
   recording and navigation before ACK, withdrawn scheduling after delayed
   context resume. Additional real-hook timing case passes at99ms/100ms.
+  Post-release refused-send case also passes with no sound request (seven
+  focused browser cases in total, not a replay of the unchanged suite).
 - Independent read-only review: no actionable high/medium issues. Real device
   audibility/autoplay, full hook account/DND/topic change during suspended resume
   and installed capture lifecycle are not claimed.
@@ -62,9 +64,29 @@ webhook/queue alone do not count. Rollback: retained prior web image.
 
 ## Outcome / next
 
-Production runtime evidence pending. D-343/item83 owns missing-send cue; D-335
-remains open for notification delivery/context. D-341 native acceptance remains
+Reviewed `5dfc4dcb70a2268a0419c16821e0a1c683dfa0c4` pushed atomically to
+candidate/main after the guard completed exit0:21 commits,82 own-tree files,
+272 resolved aliases. Coolify deployment `kz5afqwjstd8h9gjln6fvmzj` finished.
+Actual SSH readback: exactly one running healthy web image at that revision,
+image ID `sha256:67e2a8bf0c267ce613e5b30372d9dc4dd075ccb033dc1498388dfde3d7e8163f`.
+Public JS changed from `/assets/index-CS8eG8Nz.js` to `/assets/index-Df-JMe-q.js`;
+`name:"messageSent"` and heavy Group fallback absent before/present after, old
+heavy Server fallback present before/absent after. Public `/privacy`,`/support`,
+`/login` return200 and same new entry. Public SW hash changed too. Fresh anonymous
+Chromium renders `/` and `/login`, actual login action visible, zero page errors;
+no session, screenshots, trace, video or messages/provider mutations.
+The previous public entry is still HTTP200 with its exact pre-deploy SHA256,
+not an HTML fallback. This checks retained assets for already-open clients,
+without interpreting it as a native old-version upgrade test.
+During rolling overlap, two replicas and different entry assets were observed;
+acceptance waited for retirement, not a softened single-replica assertion.
+Private observer query initially refused text-vs-bigint comparison and was
+corrected without a DB mutation; runtime truth came from SSH/public assets.
+
+D-343/item83 web implementation deployed; D-335 stays open for notification
+delivery/context. D-341 web implementation deployed, native acceptance remains
 open. Android embeds its bundle, so web deploy is not a new APK. Next feasible
-user boundary: contacts failure/retry,item36/D-316, reproduce before repair.
+user boundary: contacts failure/retry,item36/D-316; see
+[the separate candidate record](2026-10-05-profile-contact-retry.md).
 D-338/D-342 stay open; no full restore, media reclamation, package identity/store
 action in this web slice.

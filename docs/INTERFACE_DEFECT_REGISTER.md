@@ -24274,6 +24274,17 @@ the reported entry/tier and installed artifact, then verify the accepted full
 action and compact-to-full path before reopening this historical fix. No device
 reproduction or app edit in the [new intake](operations/2026-10-04-tester-feedback.md).
 
+**Bounded recovery follow-up, 2026-10-05:** existing full-profile happy path stays
+accepted. A failed contact read demonstrably hid the action without explanation
+or recovery. Candidate adds error/loading and disabled-while-fetching retry;
+unknown/cached-error/refetching state never exposes Add/Saved. Initial14 focused
+browser and4 adjacent pass; four mutations caught. Review's cached-success
+refetch window is RED2/2 before correction; changed-input GREEN10/10 and a fifth
+mutation refusal follow. Final both-theme1440/390 pixels and typecheck/build
+accepted. Hook/RLS unchanged; final independent review accepted. Web runtime
+promotion pending. This is not a native reproduction of the unspecified tester
+surface. [Evidence and limits](operations/2026-10-05-profile-contact-retry.md).
+
 ## D-317 `[x]` On the installed iPhone the contacts header sits under the status bar
 
 2026-09-27, tester's screenshot: «Контакты» drawn over the clock and the add
@@ -25165,8 +25176,12 @@ heavy **Группа**, ad-hoc **Групповой чат**, channel **Кана
 and infrastructure-server terms preserved. A supporting bot-section heading-ID
 fix changes no style/authority. Focused122/122, synthetic browser92/92 and final
 typecheck/build pass. Fresh exact46-path review has no remaining P1/P2; the full unit
-run retains one unchanged Android Gradle timeout. No production or device
-publication acceptance; this defect is not closed by candidate evidence alone.
+run retains one unchanged Android Gradle timeout. That pre-promotion checkpoint
+did not establish production/device acceptance; candidate evidence alone does
+not close this defect.
+**2026-10-05:** web main5dfc4dcb actually deployed and healthy single-image/
+old-new public asset markers verified after fresh backup. Native acceptance
+remains open. [Rollout](operations/2026-10-05-send-sound-web-rollout.md).
 [Implementation, failure controls and limits](operations/2026-10-04-group-vocabulary.md).
 [Owner decision and intake](operations/2026-10-04-tester-feedback.md).
 
@@ -25181,8 +25196,9 @@ Actual unit12/browser1 RED exposed absence before implementation.
 enqueue/refusal/echo signal. Settings/DND, visible current account/chat/topic and
 call/capture state gate it, reevaluated after audio resume. Sub100ms ACKs coalesce.
 Literal unit/mutation18, adjacent sound55, actual-outbox10 and browser6 pass;
-typecheck/build and independent review accepted. Promotion/runtime verification
-pending. Not installed-device audibility/autoplay proof and not a fix for the
+typecheck/build and independent review accepted. Web5dfc4dcb actually deployed,
+healthy exact image and public marker verification pass. Not installed-device
+audibility/autoplay proof and not a fix for the
 separate incoming-notification absence follow-up,item76/D-335.
 [Evidence and release gates](operations/2026-10-05-send-sound-web-rollout.md).
 

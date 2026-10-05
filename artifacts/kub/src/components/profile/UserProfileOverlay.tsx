@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 import { useAppStore } from "@/store/app.store";
-import { KubIcon, KubModal, KubNotice, KubStableSkeleton } from "@/components/kub";
+import { KubButton, KubIcon, KubModal, KubNotice, KubStableSkeleton } from "@/components/kub";
 import { KUB_ICON_NAMES } from "@/components/kub/icons";
 import { MemberCard, type MemberRow } from "@/components/chat/MemberCard";
 import { UserProfileCompact } from "@/components/profile/UserProfileCompact";
@@ -137,13 +137,13 @@ export function UserProfileOverlay() {
   const contacts = useUserContacts({ enabled: Boolean(userId) && tier === "full" });
   const savedContact = Boolean(userId && contacts.list.data?.some((row) => row.contact_user_id === userId));
   const addContact = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || userId === currentUserId || !contacts.list.isSuccess || contacts.list.isFetching) return;
     try {
       await contacts.add.mutateAsync(userId);
     } catch {
       showAppAlert("Не удалось добавить контакт. Повторите попытку.", "Контакты");
     }
-  }, [contacts.add, userId]);
+  }, [contacts.add, contacts.list.isSuccess, contacts.list.isFetching, currentUserId, userId]);
 
   const openChat = useCallback(async () => {
     if (!userId) return;
@@ -233,43 +233,65 @@ export function UserProfileOverlay() {
         />
       )}
       {!failure && member && tier === "full" && (
-        <MemberCard
-          member={member}
-          isSelf={isSelf}
-          // Said only where it is true. `chatRoleLabel` answers "" for an
-          // ordinary member, which the card already draws nothing for, so
-          // the line appears for an owner and an administrator and for
-          // nobody else.
-          // Three places now (tracker item 45): a channel, a micro-group — its
-          // crown is «Владелец группового чата» — and a server.
-          roleLabel={context.standing
-            ? chatRoleLabel(
-              context.standing,
-              context.channel
-                ? "канала"
-                : chats.find((row) => row.id === contextChatId)?.type === "dm_group" ? "группового чата" : "группы",
-            )
-            : ""}
-          presenceLabel={presence?.label ?? ""}
-          joinedLabel={context.joinedAt ? formatJoinedAt(context.joinedAt) : ""}
-          showOnlineDot={presence?.isOnline ?? false}
-          badges={strip}
-          groupRoles={[]}
-          groupVocabulary={null}
-          onToggleGroupRole={() => {}}
-          assigning={null}
-          mutualChats={mutual}
-          onOpenMutualChat={(chatId) => void openMutualChat(chatId)}
-          opening={opening}
-          onOpenChat={() => void openChat()}
-          contact={contacts.list.isSuccess
-            ? { saved: savedContact, adding: contacts.add.isPending, onAdd: () => void addContact() }
-            : null}
-          onEditProfile={() => {
-            close();
-            openSettings();
-          }}
-        />
+        <>
+          <MemberCard
+            member={member}
+            isSelf={isSelf}
+            // Said only where it is true. `chatRoleLabel` answers "" for an
+            // ordinary member, which the card already draws nothing for, so
+            // the line appears for an owner and an administrator and for
+            // nobody else.
+            // Three places now (tracker item 45): a channel, a micro-group — its
+            // crown is «Владелец группового чата» — and a server.
+            roleLabel={context.standing
+              ? chatRoleLabel(
+                context.standing,
+                context.channel
+                  ? "канала"
+                  : chats.find((row) => row.id === contextChatId)?.type === "dm_group" ? "группового чата" : "группы",
+              )
+              : ""}
+            presenceLabel={presence?.label ?? ""}
+            joinedLabel={context.joinedAt ? formatJoinedAt(context.joinedAt) : ""}
+            showOnlineDot={presence?.isOnline ?? false}
+            badges={strip}
+            groupRoles={[]}
+            groupVocabulary={null}
+            onToggleGroupRole={() => {}}
+            assigning={null}
+            mutualChats={mutual}
+            onOpenMutualChat={(chatId) => void openMutualChat(chatId)}
+            opening={opening}
+            onOpenChat={() => void openChat()}
+            contact={contacts.list.isSuccess && !contacts.list.isFetching
+              ? { saved: savedContact, adding: contacts.add.isPending, onAdd: () => void addContact() }
+              : null}
+            onEditProfile={() => {
+              close();
+              openSettings();
+            }}
+          />
+          {!isSelf && (!contacts.list.isSuccess || contacts.list.isFetching) && (contacts.list.isError || contacts.list.isFetching) && (
+            <div className="px-5 pb-6">
+              <div
+                role={contacts.list.isFetching ? "status" : "alert"}
+                className="mx-auto flex max-w-xs flex-col gap-3 text-sm text-[color:var(--kub-text)]"
+              >
+                <p>{contacts.list.isFetching ? "Загрузка контактов…" : "Не удалось загрузить контакты."}</p>
+                <KubButton
+                  variant="secondary"
+                  fullWidth
+                  loading={contacts.list.isFetching}
+                  aria-busy={contacts.list.isFetching}
+                  leftIcon={<KubIcon name="rotate" size={14} />}
+                  onClick={() => void contacts.list.refetch()}
+                >
+                  Повторить
+                </KubButton>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

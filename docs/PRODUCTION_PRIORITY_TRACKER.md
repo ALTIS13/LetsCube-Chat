@@ -1088,6 +1088,17 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     self/saved states and failed add feedback. The exact reported surface is
     not established. [New bounded intake](operations/2026-10-04-tester-feedback.md).
 
+    **Recovery follow-up, 2026-10-05:** reproduced a separate failed-read
+    boundary on the existing full card, not the tester's unknown installed
+    artifact. Candidate supplies explicit loading/error and in-flight-disabled
+    retry; cached error never guesses Add/Saved, success restores the known
+    state. Initial14 browser +4 adjacent pass, four mutations refused. Review's
+    stale-success/background-refetch window has actual RED2/2 and corrected
+    changed-input GREEN10/10, one additional mutation caught; no unchanged
+    suite replay. Final typecheck/build and1440/390 both-theme pixels accepted.
+    Existing hook/RLS untouched; final independent review accepted, web rollout pending.
+    [Contact recovery record](operations/2026-10-05-profile-contact-retry.md).
+
     **a. «У нас пропала возможность открыть профиль пользователя не заходя в
     ЛС с ним.»** Confirmed in the source before this was written:
     `ChatList.tsx:362` offers «Открыть профиль», and its `run` is
@@ -3921,8 +3932,13 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     Candidate implementation complete: focused122/122, synthetic browser92/92,
     final typecheck/build pass. Supporting bot heading-ID fix plus dependent
     exact-region fixture updates preserve style/authority. Fresh exact46-path
-    source review has no P1/P2; full unit has one unchanged Android Gradle timeout. Not published
-    or device-accepted; do not close the item from focused GREEN alone.
+    source review has no P1/P2; full unit has one unchanged Android Gradle timeout.
+    This was the pre-promotion candidate state; native device acceptance stays
+    separate and the item is not closed from focused GREEN alone.
+    **2026-10-05:** web promoted in main5dfc4dcb after verified backup/rollback
+    and own-tree guard; actual healthy image plus public old/new markers accepted.
+    Native embedded bundles/device acceptance remain open, not implied by web.
+    [Web rollout](operations/2026-10-05-send-sound-web-rollout.md).
     [Candidate evidence and remaining gate](operations/2026-10-04-group-vocabulary.md).
     [Owner decision and boundaries](operations/2026-10-04-tester-feedback.md).
 
@@ -4090,8 +4106,9 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     account/chat/topic, settings/DND, visibility and call/capture guards rechecked
     after audio resume, coalescing below100ms. Candidate verified with18 literal
     unit/mutation controls, adjacent55, actual-outbox10, browser6, typecheck and
-    production build; independent review no high/medium findings. Runtime rollout
-    pending; device audibility remains separate. Notification absence follow-up
+    production build; independent review no high/medium findings. Web main5dfc4dcb
+    deployed: exact healthy image/public markers verified; device audibility
+    remains separate. Notification absence follow-up
     deduplicated under item76/D-335, not asserted repaired by outgoing sound.
     [Evidence and release gate](operations/2026-10-05-send-sound-web-rollout.md).
 

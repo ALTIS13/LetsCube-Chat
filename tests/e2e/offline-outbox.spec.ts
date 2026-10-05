@@ -268,6 +268,7 @@ test.describe("messages written without a connection (item 52)", () => {
     await write(page, "Это не пройдёт");
     await expect(state(page, "Это не пройдёт", "Не удалось отправить")).toBeVisible();
     expect(server.inserts.length).toBe(1);
+    expect(await sendSoundAsks(page)).toEqual([]);
   });
 });
 
