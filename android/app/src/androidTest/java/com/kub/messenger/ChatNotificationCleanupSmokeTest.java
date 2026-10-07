@@ -2,6 +2,8 @@ package com.kub.messenger;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -30,8 +32,8 @@ public class ChatNotificationCleanupSmokeTest {
     private static final String TAG = "message:chat:" + CHAT;
 
     private Context context() {
-        Assume.assumeTrue("10".equals(InstrumentationRegistry.getArguments().getString("qa_user")));
-        assertEquals("Never run this fixture inside the primary Android user", 10, Process.myUid() / 100000);
+        assertTrue("Explicit non-primary QA profile must match this process", QaUserIsolation.matches(
+            InstrumentationRegistry.getArguments().getString("qa_user"), Process.myUid()));
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         assertNotNull(manager);
@@ -94,6 +96,29 @@ public class ChatNotificationCleanupSmokeTest {
         } finally {
             manager.cancel(TAG, 0); manager.cancel(voiceTag, 0); ChatNotificationCleanup.deactivate(INSTANCE);
         }
+    }
+
+    @Test public void pendingNewReadBeforeOsVisibilityReconciles() throws InterruptedException {
+        Context context = context();
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        ChatNotificationCleanup.activate(INSTANCE); ChatNotificationCleanup.bind(INSTANCE, 1, USER, 1);
+        ChatNotificationCleanup.Owner owner = ChatNotificationCleanup.matches(INSTANCE, 1, USER, 1);
+        List<ChatNotificationCleanup.Read> read = List.of(new ChatNotificationCleanup.Read(NEW, NEW));
+        try {
+            ChatPushNotifications.receive(context, message(OLD, OLD)); waitFor(manager, TAG, OLD);
+            ChatPushNotifications.receive(context, message(NEW, NEW));
+            ChatNotificationCleanup.Result result = ChatNotificationsPlugin.reconcileRead(context, manager, owner, CHAT, read);
+            Assume.assumeTrue("No pending window observed; this run is not pending-queue proof", result.pending);
+            assertEquals(0, result.removed);
+            for (int attempt = 1; attempt < 4 && result.pending; attempt++) {
+                Thread.sleep(250);
+                result = ChatNotificationsPlugin.reconcileRead(context, manager, owner, CHAT, read);
+            }
+            assertFalse("Pending cleanup did not settle inside the four-call budget", result.pending);
+            assertEquals(1, result.removed);
+            for (int attempt = 0; attempt < 60 && card(manager, TAG) != null; attempt++) Thread.sleep(50);
+            assertEquals(null, card(manager, TAG));
+        } finally { manager.cancel(TAG, 0); ChatNotificationCleanup.deactivate(INSTANCE); }
     }
 
     /** Coordinator runs post, kills only the isolated app process, then runs read. */

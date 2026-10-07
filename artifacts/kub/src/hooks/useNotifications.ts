@@ -29,6 +29,8 @@ import type { Notification } from "@/types/database";
 import { isSelfMessageNotification } from "@/lib/messageNotificationProjection";
 
 const PAGE_SIZE = 30;
+const NATIVE_READ_RETRY_MS = 5000;
+type NativeReadPairState = { status: "inflight" | "settled" | "retry"; retryAfter: number; fetchRevision: number };
 
 type DesktopCardIdentity = Parameters<NonNullable<ReturnType<typeof getDesktopBridge>>["removeNotification"]>[0];
 type DesktopCardQueue = {
@@ -112,7 +114,8 @@ export function useNotifications() {
   const readOwner = readOwnerRef.current;
   const readMountedRef = useRef(false);
   const unreadPresentationTagsRef = useRef<Map<string, string>>(new Map());
-  const nativeReadPairsRef = useRef({ owner: readOwner, pairs: new Set<string>() });
+  const nativeReadPairsRef = useRef({ owner: readOwner, pairs: new Map<string, NativeReadPairState>() });
+  const nativeReadFetchRevisionRef = useRef(0);
   const unreadDesktopIdsRef = useRef<Map<string, Notification>>(new Map());
   const trimmedDesktopIdsRef = useRef<Set<string>>(new Set());
   const presentedDesktopIdsRef = useRef<Set<string>>(new Set());
@@ -296,6 +299,7 @@ export function useNotifications() {
           }
         }
       }
+      if (isNativeAndroid()) nativeReadFetchRevisionRef.current++;
       setItems((prev) => current()
         ? filterRowsForDisplay(mergeNotificationRows(prev, nextRows, PAGE_SIZE), userId, mutedChatIds) : prev);
     } catch (error) {
@@ -417,23 +421,42 @@ export function useNotifications() {
     unreadPresentationTagsRef.current = currentUnread;
 
     if (isNativeAndroid()) {
-      const previousPairs = nativeReadPairsRef.current.owner === readOwner ? nativeReadPairsRef.current.pairs : new Set<string>();
-      const pairs = new Set<string>();
-      const byChat = new Map<string, Array<{ notificationId: string; messageId: string }>>();
+      const pairs = nativeReadPairsRef.current.owner === readOwner ? nativeReadPairsRef.current.pairs : new Map<string, NativeReadPairState>();
+      const visible = new Set<string>();
+      const byChat = new Map<string, Array<{ notificationId: string; messageId: string; key: string; entry: NativeReadPairState }>>();
       for (const item of items) {
         if (item.user_id !== userId || !item.read_at || !isMessageNotification(item)) continue;
         const chatId = payloadString(item.payload, "chat_id"), messageId = payloadString(item.payload, "message_id");
         if (!chatId || !messageId || [item.id, chatId, messageId].some(id => !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(id))) continue;
         const key = `${item.id}:${chatId}:${messageId}`;
-        pairs.add(key);
-        if (previousPairs.has(key)) continue;
+        visible.add(key);
+        const previous = pairs.get(key);
+        if (previous) {
+          if (previous.status !== "retry") continue;
+          const fetched = nativeReadFetchRevisionRef.current > previous.fetchRevision;
+          previous.fetchRevision = nativeReadFetchRevisionRef.current;
+          if (Date.now() < previous.retryAfter || !fetched) continue;
+        }
+        const entry: NativeReadPairState = { status: "inflight", retryAfter: 0, fetchRevision: nativeReadFetchRevisionRef.current };
+        pairs.set(key, entry);
         const batch = byChat.get(chatId) ?? [];
-        batch.push({ notificationId: item.id, messageId });
+        batch.push({ notificationId: item.id, messageId, key, entry });
         byChat.set(chatId, batch);
       }
+      for (const key of pairs.keys()) if (!visible.has(key)) pairs.delete(key);
       nativeReadPairsRef.current = { owner: readOwner, pairs };
       for (const [chatId, confirmed] of byChat) {
-        void closeNativeChatNotification({ chatId, confirmed: confirmed.slice(0, PAGE_SIZE) }, isCurrentReadOwner);
+        const batch = confirmed.slice(0, PAGE_SIZE);
+        const settle = (status: unknown) => {
+          if (!isCurrentReadOwner() || nativeReadPairsRef.current.owner !== readOwner || nativeReadPairsRef.current.pairs !== pairs) return;
+          for (const { key, entry } of batch) {
+            if (pairs.get(key) !== entry) continue;
+            pairs.set(key, { status: status === "settled" ? "settled" : "retry",
+              retryAfter: Date.now() + NATIVE_READ_RETRY_MS, fetchRevision: nativeReadFetchRevisionRef.current });
+          }
+        };
+        void closeNativeChatNotification({ chatId, confirmed: batch.map(({ notificationId, messageId }) => ({ notificationId, messageId })) }, isCurrentReadOwner)
+          .then(settle, () => settle("retry"));
       }
     }
 

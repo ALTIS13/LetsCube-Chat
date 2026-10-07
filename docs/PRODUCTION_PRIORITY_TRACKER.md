@@ -2,17 +2,20 @@
 
 Status: active production-hardening tracker, updated 2026-10-07.
 
-**Current continuation, 2026-10-07:** item 76 / D-335 distinct capability/account
-preview choice preparation and D-347 actual preference/subscription ownership.
-SQL 135/135, preview 37/37 plus settings 27, actual consumer 12 and mounted
-ownership 3 pass. Saving-layout and provider-deletion REDs are repaired; final
-hook 64/64 includes 24 compiled mutants. Both reviews accepted; final typecheck 0
-and build `cd49e9074b3bfa2d` pass. No installed SQL/native preview or APK acceptance.
-Main/runtime `ca0c633d` is deployed and healthy; public old/new markers, retained
-preceding entry, JS/SW parity and anonymous mount/login are accepted. Two grounded
-reported issues are items 84/85; the remaining intake coverage is still being
-validated. Next: source diagnosis of capture/read-cleanup, not repeated export.
-[Current record](operations/2026-10-07-notification-preferences-capability.md).
+**Current continuation, 2026-10-07:** item89/D-351 native cleanup accepted on
+web/main `d86975dd` and Android Stable 0.1.12 / build 13 at 14:53 Moscow. Exact pairs,
+durable latest-post ownership and retired leases pass source/mutant review;
+four selected real Realme tests, signer/Firebase/bundle and public APK checks pass.
+Temporary QA profile removed; primary data preserved, A063 untouched. Web exact
+healthy image, old/new markers, retained entry, JS/SW parity and anonymous mount
+accepted. D-335 remains active: isolated full PG17 restore ran but extension
+ACL/config/index differences refuse equivalence; clone-only supplement/review
+and real JWT/rollback are next. No production SQL or rich native preview installed.
+Additional D-353 queued already-read card RED1/controls2: narrow reconciliation
+TDD is active independently; signed follow-up and QA are not yet accepted.
+Do not replay accepted capture suites or tester exports. D-348/349 still
+have unknown client; items 86/87 remain preliminary.
+[Current native/device/release record](operations/2026-10-07-android-read-cleanup-release.md).
 
 **Current source continuation,2026-10-05:** item76/D-335 native context
 preparation, D-346 listener lifecycle. v1 Android display stays generic locally,
@@ -4212,13 +4215,16 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     unknown real permission prompt remains separate.
     [Evidence and gate](operations/2026-10-07-read-recording-ownership.md).
 
-89. `[~]` Receipt/read ownership and confirmed horizon, **D-351**. Per-owner
+89. `[x]` Receipt/read ownership and confirmed horizon, **D-351**. Per-owner
     scheduler candidate 28/28 including ten mutants, adjacent 8/8. Actual hook
     ACK/horizon/realtime rollback 51/51, chat producer 27/27, message lifetime
     27/27; D-352 prerequisite and independent reviews accepted. Final web rollout
-    accepted on main/runtime a9c84de3, 2026-10-07; native same-id/tag cancel still
-    needs its own capability, so this cross-platform item stays open.
+    accepted on main/runtime a9c84de3, 2026-10-07. Native exact read-card follow-up
+    deployed in d86975dd / Android Stable 0.1.12 / build 13: source/review accepted and
+    four selected physical Realme cases pass. No blanket tag removal, legacy
+    cleanup or universal OS/auth atomicity claim. D-349/FCM remain separate.
     [Evidence and gate](operations/2026-10-07-read-recording-ownership.md).
+    [Native/device/release evidence](operations/2026-10-07-android-read-cleanup-release.md).
 
 90. `[x]` Real auth-session ownership before profile load, **D-352**, shared web. Actual
     callback/store reproduction invalidates the assumption that accountEpoch
@@ -4228,6 +4234,16 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     build pass; main/runtime a9c84de3 accepted 2026-10-07, not installed-client
     or recipient-preview real JWT HTTP proof.
     [Evidence and gate](operations/2026-10-07-read-recording-ownership.md).
+
+91. `[~]` Pending Android read-card reconciliation, **D-353**. Additional actual-source
+    queued NEW-read case RED1, calibrated controls2 pass. Preserve newer unread
+    replacement protection; distinguish pending and terminal cleanup ACKs and
+    retain retry eligibility without per-realtime IPC. Combined GREEN3/3,
+    native17/17 plus controls19, cleaner44, adapter6, hook14 and isolation5 pass
+    with compiled mutants and typecheck. Candidate0.1.13/build14, Realme QAuser11;
+    signed follow-up/device review/publication remain required. This does not
+    invalidate the accepted 0.1.12 ownership cases or certify D-349's unknown client.
+    [Source and remaining candidate gates](operations/2026-10-07-android-pending-read-reconciliation.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

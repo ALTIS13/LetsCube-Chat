@@ -161,6 +161,57 @@ public final class ChatNotificationCleanupProbe {
     static JSObject binding(String instance, Number revision, Number epoch) {
         return new JSObject().put("instanceId", instance).put("revision", revision).put("ownerId", USER).put("accountEpoch", epoch);
     }
+    static void pending(String scenario) {
+        Context.manager = new NotificationManager();
+        Context context = new Context();
+        boolean genericOld = scenario.equals("pending-generic-old");
+        if (!scenario.equals("pending-voice")) ChatPushNotifications.receive(context, new RemoteMessage(payload(genericOld ? null : OLD, OLD)));
+        ChatNotificationsPlugin plugin = new ChatNotificationsPlugin(); plugin.load();
+        PluginCall cap = new PluginCall(new JSObject()); plugin.getCapabilities(cap);
+        String instance = cap.result.getString("instanceId");
+        PluginCall bind = new PluginCall(binding(instance, 1, 1)); plugin.setOwner(bind);
+        check(Boolean.TRUE.equals(bind.result.opt("applied")), "PENDING_OWNER_BOUND");
+        List<Runnable> queue = new ArrayList<>();
+        NotificationManager manager = new NotificationManager() {
+            @Override public synchronized void notify(String tag, int id, Notification value) { queue.add(() -> super.notify(tag, id, value)); }
+            @Override public synchronized void cancel(String tag, int id) { queue.add(() -> super.cancel(tag, id)); }
+            @Override public StatusBarNotification[] getActiveNotifications() {
+                StatusBarNotification[] snapshot = super.getActiveNotifications();
+                if (scenario.equals("pending-retire-snapshot")) ChatNotificationCleanup.bind(instance, 2, USER, 2);
+                return snapshot;
+            }
+        };
+        manager.cards.putAll(Context.manager.cards); Context.manager = manager;
+        if (genericOld) check(manager.cards.get(TAG + ":0").getNotification().extras.getString(ChatNotificationCleanup.EXTRA_NOTIFICATION) == null,
+            "GENERIC_OLD_MISSING_ID_CONTROL");
+        if (scenario.equals("pending-voice")) manager.cards.put("voice:ring:" + CHAT + ":0", new StatusBarNotification("voice:ring:" + CHAT, 0, new Notification()));
+        if (!scenario.equals("pending-voice")) ChatPushNotifications.receive(context, new RemoteMessage(payload(
+            scenario.equals("pending-missing") ? null : NEW, NEW)));
+        if (scenario.equals("pending-replaced")) ChatPushNotifications.receive(context, new RemoteMessage(payload(USER, USER)));
+        if (scenario.equals("pending-unowned")) manager.cards.get(TAG + ":0").getNotification().extras.remove(ChatNotificationCleanup.EXTRA_VERSION);
+        if (scenario.equals("pending-retired")) plugin.getCapabilities(new PluginCall(new JSObject()));
+        String readId = scenario.equals("pending-unread") || scenario.equals("pending-wrong-notification") ? OLD : NEW;
+        JSArray pairs = new JSArray(); pairs.add(new JSObject().put("notificationId", readId)
+            .put("messageId", scenario.equals("pending-wrong-message") ? OLD : scenario.equals("pending-wrong-notification") ? NEW : readId));
+        JSObject request = binding(instance, 1, 1).put("chatId", CHAT).put("confirmed", pairs);
+        if (scenario.equals("pending-after-flush")) { for (Runnable task : new ArrayList<>(queue)) task.run(); queue.clear(); }
+        PluginCall first = new PluginCall(request); plugin.removeRead(first);
+        boolean waiting = scenario.equals("pending-read") || scenario.equals("pending-unowned") || genericOld;
+        check(Boolean.valueOf(waiting).equals(first.result.opt("pending")), waiting ? "EXACT_QUEUED_READ_PENDING" : "NON_PENDING_TERMINAL");
+        check(Integer.valueOf(scenario.equals("pending-after-flush") ? 1 : 0).equals(first.result.opt("removed")), "PENDING_REMOVAL_COUNT");
+        if (waiting) {
+            check(manager.cancels == 0, "PENDING_DOES_NOT_CANCEL_OLD");
+            for (Runnable task : new ArrayList<>(queue)) task.run(); queue.clear();
+            PluginCall second = new PluginCall(request); plugin.removeRead(second);
+            check(Boolean.FALSE.equals(second.result.opt("pending")) && Integer.valueOf(1).equals(second.result.opt("removed")), "PENDING_VISIBLE_RECONCILED");
+            for (Runnable task : new ArrayList<>(queue)) task.run();
+            check(manager.cards.isEmpty(), "QUEUED_READ_EVENTUALLY_REMOVED");
+        } else if (scenario.equals("pending-unread")) {
+            for (Runnable task : new ArrayList<>(queue)) task.run();
+            check(manager.cards.size() == 1 && NEW.equals(manager.cards.get(TAG + ":0").getNotification().extras.getString(ChatNotificationCleanup.EXTRA_NOTIFICATION)),
+                "PENDING_UNREAD_REPLACEMENT_RETAINED");
+        }
+    }
     static void plugin(String scenario) {
         ChatNotificationsPlugin plugin = new ChatNotificationsPlugin(); plugin.load();
         PluginCall cap = new PluginCall(new JSObject()); plugin.getCapabilities(cap);
@@ -179,7 +230,8 @@ public final class ChatNotificationCleanupProbe {
     }
     public static void main(String[] args) {
         String scenario = args[0];
-        if (scenario.startsWith("producer-")) producer(scenario);
+        if (scenario.startsWith("pending-")) pending(scenario);
+        else if (scenario.startsWith("producer-")) producer(scenario);
         else if (scenario.startsWith("wire-")) plugin(scenario);
         else {
             ChatNotificationCleanup.Owner expected = owner();

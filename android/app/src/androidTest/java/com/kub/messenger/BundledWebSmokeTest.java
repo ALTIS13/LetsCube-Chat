@@ -20,9 +20,8 @@ import org.junit.runner.RunWith;
 @RunWith(AndroidJUnit4.class)
 public class BundledWebSmokeTest {
     @Test public void anonymousBundledWebMountsWithNativeCleanupBridge() throws Exception {
-        assertTrue("Explicit isolated QA argument required", "10".equals(
-            InstrumentationRegistry.getArguments().getString("qa_user")));
-        assertTrue("Never run this probe in the primary user", Process.myUid() / 100000 == 10);
+        assertTrue("Explicit non-primary QA profile must match this process", QaUserIsolation.matches(
+            InstrumentationRegistry.getArguments().getString("qa_user"), Process.myUid()));
         try (ActivityScenario<MainActivity> activity = ActivityScenario.launch(MainActivity.class)) {
             activity.onActivity(screen -> {
                 assertNotNull("Capacitor bridge must mount", screen.getBridge());

@@ -81,16 +81,23 @@ final class ChatNotificationCleanup {
     }
 
     static int removeRead(Owner expected, String chatId, List<Read> confirmed, Cards cards) {
-        if (!isUuid(chatId) || confirmed == null || confirmed.isEmpty() || confirmed.size() > 30) return 0;
+        return reconcileRead(expected, chatId, confirmed, cards).removed;
+    }
+
+    static Result reconcileRead(Owner expected, String chatId, List<Read> confirmed, Cards cards) {
+        if (!isUuid(chatId) || confirmed == null || confirmed.isEmpty() || confirmed.size() > 30) return Result.SETTLED;
         for (Read read : confirmed) {
-            if (read == null || !isUuid(read.notificationId) || !isUuid(read.messageId)) return 0;
+            if (read == null || !isUuid(read.notificationId) || !isUuid(read.messageId)) return Result.SETTLED;
         }
         synchronized (CARDS) {
-            if (expected == null || owner != expected) return 0;
+            if (expected == null || owner != expected) return Result.SETTLED;
             String tag = "message:chat:" + chatId;
             for (Card card : cards.active()) {
-                if (card == null || card.protocol != 1 || card.id != 0 || card.summary || !tag.equals(card.tag)
-                    || !chatId.equals(card.chatId) || !isUuid(card.notificationId) || !isUuid(card.messageId) || !matchesLatest(card, cards.intents())) continue;
+                if (card == null || card.id != 0 || !tag.equals(card.tag)) continue;
+                if (card.protocol != 1 || card.summary || !chatId.equals(card.chatId) || !isUuid(card.notificationId) || !isUuid(card.messageId)) {
+                    continue;
+                }
+                if (!matchesLatest(card, cards.intents())) continue;
                 boolean read = false;
                 for (Read receipt : confirmed) {
                     if (card.notificationId.equals(receipt.notificationId) && card.messageId.equals(receipt.messageId)) {
@@ -101,16 +108,30 @@ final class ChatNotificationCleanup {
                 synchronized (ChatNotificationCleanup.class) {
                     if (read && owner == expected) {
                         cards.cancel(card.tag, card.id);
-                        return 1;
+                        return new Result(1, false);
                     }
                 }
             }
-            return 0;
+            // Only an exact confirmed latest intent can warrant a bounded OS recheck.
+            Posted posted = latest(tag, cards.intents());
+            if (owner == expected && posted != null && posted.generation > 0
+                && isUuid(posted.notificationId) && isUuid(posted.messageId)) {
+                for (Read receipt : confirmed) {
+                    if (posted.notificationId.equals(receipt.notificationId) && posted.messageId.equals(receipt.messageId)) return new Result(0, true);
+                }
+            }
+            return Result.SETTLED;
         }
     }
 
     interface Cards { List<Card> active(); void cancel(String tag, int id); IntentStore intents(); }
     interface IntentStore { Posted read(String tag); boolean write(String tag, Posted intent); }
+    static final class Result {
+        static final Result SETTLED = new Result(0, false);
+        final int removed;
+        final boolean pending;
+        Result(int removed, boolean pending) { this.removed = removed; this.pending = pending; }
+    }
     static final class Posted {
         final String notificationId, messageId;
         final long generation;

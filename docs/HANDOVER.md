@@ -21,36 +21,34 @@ not approved merely by this delegation. Refresh the authorized tester intake,
 deduplicate against the queue, and continue the nearest feasible product slice.
 
 **Current continuation, 2026-10-07:** coordinator; branch
-`codex/bot-inline-media-20261002`, source base `f320892c`. Active: D-351 native
-replacement-aware cleanup, Android 0.1.12/build13 release QA, and isolated PG17
-functional rehearsal for D-335 RPC installation. D-342 universal recovery remains
-separate; do not replay its unchanged signed-provenance loop. Workers have separate scopes;
-coordinator owns device/build/release and docs. Web/main `a9c84de3` deployed at 13:28 Moscow:
-sole healthy exact image, calibrated before/after markers, retained old entry,
-JS/SW parity and anonymous home/login accepted. D-350/D-352 and D-351 shared-web
-repair pass actual-source RED/GREEN, compiled mutants, independent reviews,
-fresh fictional browser 21/21, final typecheck 0 and build `dc439f44f62b3b1c`.
-Previous ownership workers and fixture servers were stopped. The bounded intake
-contains 16 new messages and three local transcripts; D-348/349 remain reported
-with unidentified client/surface, task-reload/loading items 86/87 preliminary.
-No further export/model loop. Blockers: SQL preview proposal remains uninstalled;
-PG17 recovery/real JWT HTTP and native same-card/device gates are not accepted.
-Native source is frozen for independent review: exact confirmed read pairs,
-durable latest-post generation, document/account lease and write-failure generic
-fallback. Actual-source Java57 (27 compiled mutants), JS25, hook7, adjacent19,
-debug/AndroidTest compilation and JUnit4/4 accepted; native physical acceptance
-is still pending. Version metadata0.1.12/13 passes37 focused checks. Coordinator
-created isolated ephemeral Realme user10; primary data are untouched. Previous
-0.1.11 APK/AAB and stable catalog checksum are preserved. No signed candidate
-build, APK upgrade or publication yet. Next: review, signed build, exact-user
-replacement/cold-process/anonymous bridge checks, then immutable publication;
-D-335 recipient-preview rehearsal proceeds independently,
-not replay of accepted ownership suites. Outcome docs are on the candidate
-branch; main remains the accepted source revision to avoid a docs-only rebuild.
+`codex/bot-inline-media-20261002`. Web/main `d86975dd` and Android Stable
+0.1.12 / build 13 accepted at 14:53 Moscow. D-351 exact native read-card cleanup
+passes source/mutant review and four selected physical Realme tests, including
+immediate replacement and a persisted card in a fresh process. Existing signer,
+Firebase and 33 bundled runtime assets verified; public APK hash matches.
+Temporary user10/test package removed, primary user0/data preserved, A063 untouched.
+Web exact healthy image, old/new markers, retained entry, JS/SW parity and
+anonymous home/login pass. D-335 stays active: full isolated PG17 restore ran,
+but real extension ACL/config/index differences refuse acceptance. A narrowly
+sealed clone-only supplement passed in attempt4, including full effective
+security equality; strict raw comparison refused two additional extension ACL
+blocks. Their exact allowance and JWT driver require review; production SQL remains
+unmodified until actual JWT/RLS and same-copy rollback pass. D-342 universal
+recovery is separate, with no repeated provenance loop. An additional calibrated
+queued-NEW/read-before-visibility RED is D-353; bounded reconciliation is being
+source-repaired independently with bounded pending ACK/retry and focused mutants,
+not included in the 0.1.12 acceptance. Candidate0.1.13/build14 metadata is updated;
+Realme ephemeral user11 is active for QA with old build13, primary data retained.
+Source review/build/sign/device/publication remain open. Next: these
+D-335/D-353 gates, not replay of accepted recording suites or tester export. D-348/349
+client unknown; task-loading items86/87 preliminary. Outcome docs stay on the
+candidate branch to avoid a docs-only main rebuild.
 [Current scope, evidence and publication limits](operations/2026-10-07-notification-preferences-capability.md).
 [Fresh reported tasks and coverage limits](operations/2026-10-07-tester-feedback.md).
 [Follow-up source repairs and publication gate](operations/2026-10-07-read-recording-ownership.md).
 [Native cleanup, Android candidate and device gates](operations/2026-10-07-android-read-cleanup-release.md).
+[Pending reconciliation follow-up](operations/2026-10-07-android-pending-read-reconciliation.md).
+[Isolated PG17 rehearsal and exact next gate](operations/2026-10-07-native-preview-pg17-rehearsal.md).
 
 **Previous source checkpoint,2026-10-07:** coordinator owns item76/D-335 recipient
 preview authorization, based on d5edbe83. New unversioned SQL proposal supplies

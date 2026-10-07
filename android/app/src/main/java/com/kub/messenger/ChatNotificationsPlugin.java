@@ -43,17 +43,18 @@ public class ChatNotificationsPlugin extends Plugin {
         Long revision = integer(call, "revision"), epoch = integer(call, "accountEpoch");
         JSArray input = call.getArray("confirmed");
         if (!instanceId.equals(instance) || revision == null || epoch == null || input == null
-            || input.length() < 1 || input.length() > 30) { call.resolve(new JSObject().put("removed", 0)); return; }
+            || input.length() < 1 || input.length() > 30) { call.resolve(new JSObject().put("removed", 0).put("pending", false)); return; }
         List<ChatNotificationCleanup.Read> reads = new ArrayList<>();
         try {
             for (int index = 0; index < input.length(); index++) {
                 JSONObject read = input.getJSONObject(index);
                 reads.add(new ChatNotificationCleanup.Read(read.getString("notificationId"), read.getString("messageId")));
             }
-        } catch (Exception invalid) { call.resolve(new JSObject().put("removed", 0)); return; }
+        } catch (Exception invalid) { call.resolve(new JSObject().put("removed", 0).put("pending", false)); return; }
         ChatNotificationCleanup.Owner expected = ChatNotificationCleanup.matches(instance, revision, ownerId, epoch);
         try {
-            call.resolve(new JSObject().put("removed", removeRead(getContext(), getContext().getSystemService(NotificationManager.class), expected, chatId, reads)));
+            ChatNotificationCleanup.Result result = reconcileRead(getContext(), getContext().getSystemService(NotificationManager.class), expected, chatId, reads);
+            call.resolve(new JSObject().put("removed", result.removed).put("pending", result.pending));
         } catch (RuntimeException failed) { call.reject("Message card cleanup unavailable", "CHAT_CLEANUP"); }
     }
 
@@ -68,8 +69,13 @@ public class ChatNotificationsPlugin extends Plugin {
 
     static int removeRead(android.content.Context context, NotificationManager manager, ChatNotificationCleanup.Owner expected, String chatId,
         List<ChatNotificationCleanup.Read> reads) {
-        if (manager == null) return 0;
-        return ChatNotificationCleanup.removeRead(expected, chatId, reads, new ChatNotificationCleanup.Cards() {
+        return reconcileRead(context, manager, expected, chatId, reads).removed;
+    }
+
+    static ChatNotificationCleanup.Result reconcileRead(android.content.Context context, NotificationManager manager,
+        ChatNotificationCleanup.Owner expected, String chatId, List<ChatNotificationCleanup.Read> reads) {
+        if (manager == null) return ChatNotificationCleanup.Result.SETTLED;
+        return ChatNotificationCleanup.reconcileRead(expected, chatId, reads, new ChatNotificationCleanup.Cards() {
             @Override public ChatNotificationCleanup.IntentStore intents() { return new ChatNotificationIntentStore(context); }
             @Override public List<ChatNotificationCleanup.Card> active() {
                 List<ChatNotificationCleanup.Card> result = new ArrayList<>();

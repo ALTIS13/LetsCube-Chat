@@ -163,8 +163,9 @@ export async function registerNativePushNavigationListeners(
 
 let nativeChatCleaner: Promise<ReturnType<typeof createNativeChatReadCleaner>> | null = null;
 
-export async function closeNativeChatNotification(read: ConfirmedNativeChatRead, isCurrent: () => boolean): Promise<void> {
-  if (!isNativeAndroid() || !hasCallableAndroidBridge() || !supportsCapacitorPlugin("ChatNotifications") || !isCurrent()) return;
+export async function closeNativeChatNotification(read: ConfirmedNativeChatRead, isCurrent: () => boolean) {
+  if (!isCurrent()) return "retired" as const;
+  if (!isNativeAndroid() || !hasCallableAndroidBridge() || !supportsCapacitorPlugin("ChatNotifications")) return "retry" as const;
   try {
     nativeChatCleaner ??= (async () => {
       const [{ registerPlugin }, { useAppStore }] = await Promise.all([
@@ -179,10 +180,11 @@ export async function closeNativeChatNotification(read: ConfirmedNativeChatRead,
       });
     })();
     const clean = await nativeChatCleaner;
-    if (isCurrent()) await clean(read, isCurrent);
+    return isCurrent() ? await clean(read, isCurrent) : "retired" as const;
   } catch {
     nativeChatCleaner = null;
     // The server read state remains authoritative if Android card cleanup fails.
+    return isCurrent() ? "retry" as const : "retired" as const;
   }
 }
 

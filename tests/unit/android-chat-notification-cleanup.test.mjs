@@ -42,7 +42,9 @@ test.after(() => { if (directory) cleanup(directory); });
 for (const scenario of ["read", "newer", "wrong-message", "missing-id", "legacy", "summary", "voice", "wrong-chat", "wrong-id",
   "invalid-read", "retry", "retired", "stale-binding", "logout", "replace-serialized", "retire-during-take",
   "producer-read", "producer-newer", "producer-missing", "producer-malformed", "producer-serialized", "producer-os-queued", "producer-os-missing",
-  "producer-process-restart", "producer-write-failed", "producer-write-failed-same-message", "producer-rotation-read-failed", "wire-read", "wire-fractional", "wire-reload"]) {
+  "producer-process-restart", "producer-write-failed", "producer-write-failed-same-message", "producer-rotation-read-failed", "wire-read", "wire-fractional", "wire-reload",
+  "pending-read", "pending-unread", "pending-after-flush", "pending-missing", "pending-replaced", "pending-retired", "pending-voice",
+  "pending-wrong-message", "pending-wrong-notification", "pending-unowned", "pending-generic-old", "pending-retire-snapshot"]) {
   test(`compiled native cleanup: ${scenario}`, () => {
     const result = run(scenario);
     assert.equal(result.status, 0, result.stderr); assert.equal(result.stderr, ""); assert.equal(result.stdout.trim(), `PASS ${scenario}`);
@@ -50,6 +52,13 @@ for (const scenario of ["read", "newer", "wrong-message", "missing-id", "legacy"
 }
 
 const mutations = [
+  ["ChatNotificationCleanup.java", "return new Result(0, true);", "return Result.SETTLED;", "pending-read", "EXACT_QUEUED_READ_PENDING"],
+  ["ChatNotificationCleanup.java", "posted.notificationId.equals(receipt.notificationId)", "true", "pending-wrong-notification", "NON_PENDING_TERMINAL"],
+  ["ChatNotificationCleanup.java", " && posted.messageId.equals(receipt.messageId)", "", "pending-wrong-message", "NON_PENDING_TERMINAL"],
+  ["ChatNotificationCleanup.java", "if (card.protocol != 1 || card.summary || !chatId.equals(card.chatId) || !isUuid(card.notificationId) || !isUuid(card.messageId)) {\n                    continue;",
+    "if (card.protocol != 1 || card.summary || !chatId.equals(card.chatId) || !isUuid(card.notificationId) || !isUuid(card.messageId)) {\n                    return Result.SETTLED;", "pending-generic-old", "EXACT_QUEUED_READ_PENDING"],
+  ["ChatNotificationCleanup.java", "if (owner == expected && posted != null", "if (posted != null", "pending-retire-snapshot", "NON_PENDING_TERMINAL"],
+  ["ChatNotificationsPlugin.java", '.put("pending", result.pending)', '.put("pending", false)', "pending-read", "EXACT_QUEUED_READ_PENDING"],
   ["ChatNotificationCleanup.java", "synchronized (CARDS) {\n            Posted previous", "{\n            Posted previous", "replace-serialized", "REPLACEMENT_RETAINED"],
   ["ChatNotificationCleanup.java", "card.notificationId.equals(receipt.notificationId)", "true", "newer", "NEWER_RETAINED"],
   ["ChatNotificationCleanup.java", " && card.messageId.equals(receipt.messageId)", "", "wrong-message", "WRONG_MESSAGE_RETAINED"],
@@ -70,10 +79,10 @@ const mutations = [
   ["ChatPushNotifications.java", ' + "/untracked/" + nonce', "", "producer-write-failed", "UNTRACKED_EXACT_DISTINCT_TAP"],
   ["ChatPushNotifications.java", 'String fallbackTag = event.tag + ":untracked:" + nonce;', "String fallbackTag = event.tag;", "producer-write-failed", "UNPERSISTED_CARD_NOT_POSTED"],
   ["ChatPushNotifications.java", "ChatNotificationCleanup.isUuid(notificationCandidate) ? notificationCandidate : null", "notificationCandidate", "producer-malformed", "NON_UUID_NOT_PERSISTED"],
-  ["ChatNotificationCleanup.java", " || !matchesLatest(card, cards.intents())", "", "producer-os-queued", "OS_QUEUED_REPLACEMENT_RETAINED"],
+  ["ChatNotificationCleanup.java", "if (!matchesLatest(card, cards.intents())) continue;", "", "producer-os-queued", "OS_QUEUED_REPLACEMENT_RETAINED"],
   ["ChatNotificationCleanup.java", "posted = intents.read(tag);", "posted = null;", "producer-process-restart", "COLD_OWN_CARD_REMOVED"],
   ["ChatNotificationCleanup.java", "revision = 0;", "revision = 0; latestPosts.clear();", "producer-rotation-read-failed", "CONFIRMED_PRODUCER_CARD_REMOVED"],
-  ["ChatNotificationCleanup.java", " || !matchesLatest(card, cards.intents())", "", "producer-os-missing", "OS_MISSING_INTENT_RETAINED"],
+  ["ChatNotificationCleanup.java", "if (!matchesLatest(card, cards.intents())) continue;", "", "producer-os-missing", "OS_MISSING_INTENT_RETAINED"],
   ["ChatNotificationCleanup.java", "if (!intents.write(tag, intent)) return false;", "intents.write(tag, intent);", "producer-write-failed", "UNPERSISTED_CARD_NOT_POSTED"],
   ["ChatNotificationIntentStore.java", 'return preferences.edit().putString(tag + ":notification", intent.notificationId)\n                .putString(tag + ":message", intent.messageId).putLong(tag + ":generation", intent.generation).commit();',
     "return true;", "producer-process-restart", "COLD_OWN_CARD_REMOVED"],

@@ -25366,7 +25366,7 @@ a9c84de3 accepted 2026-10-07. Bundled APK/device acceptance remains separate.
 This does not close unidentified tester permission-prompt D-348.
 [Evidence and remaining gates](operations/2026-10-07-read-recording-ownership.md).
 
-## D-351 `[~]` Receipt and notification read continuations outlive their owner or horizon
+## D-351 `[x]` Receipt and notification read continuations outlive their owner or horizon
 
 **Severity:** medium; actual-source scheduler/hook reproduction, 2026-10-07,
 tracker item 89. Shared timers/watermarks cross account boundaries; held read
@@ -25378,9 +25378,15 @@ per-owner watermarks, confirmed actual-message horizon and conflict-aware rollba
 Scheduler 28/28 includes ten mutants, adjacent 8/8; read hook 51/51, producer
 27/27 and message lifetime 27/27. D-352 prerequisite, independent reviews and
 final typecheck/build and main/runtime a9c84de3 accepted 2026-10-07 for shared web.
-Native same-id/tag snapshot cancellation is not atomic and remains open. This
-does not certify tester D-349 or real OS card cleanup fixed.
+Native follow-up `d86975dd`: exact confirmed pair + durable latest-post generation,
+retired document/account lease and safe write-failure fallback; source Java 57 / JS 25 /
+hook 7 / adjacent 19, compiled mutants and independent review accepted. Android
+Stable 0.1.12 / build 13 installed and four selected real Realme tests pass without
+skips, including queued replacement and cold-process card cleanup. Legacy/missing-ID
+or untracked cards intentionally remain, and no universal OS CAS or native-auth
+atomicity is claimed. This does not certify unidentified tester D-349 or FCM transport.
 [Evidence and remaining gates](operations/2026-10-07-read-recording-ownership.md).
+[Native/device/release evidence](operations/2026-10-07-android-read-cleanup-release.md).
 
 ## D-352 `[x]` A new auth session can retain the previous profile ownership epoch
 
@@ -25398,6 +25404,25 @@ mounted ownership/race checks and final typecheck/build pass; shared-web
 main/runtime a9c84de3 accepted 2026-10-07. Bundled APK and recipient-preview real
 JWT HTTP acceptance remain separate. No new authorization or credential persistence.
 [Evidence and remaining gates](operations/2026-10-07-read-recording-ownership.md).
+
+## D-353 `[~]` An already-read Android card can become visible after queued OS posting
+
+**Severity:** medium presentation defect, no demonstrated data loss; 2026-10-07.
+One actual-source delayed-queue RED and two calibrated controls: OLD is visible,
+NEW is queued, NEW's read is confirmed before it becomes visible. Exact cleanup
+correctly refuses to cancel OLD, but the caller marks NEW seen and ignores the
+pending result. After flushing, the already-read NEW remains. OLD-read preserves
+NEW unread; NEW-read after flush removes it. This is source/queue evidence, not
+a physical OS reproduction, and is distinct from unidentified tester D-349.
+
+**Source checkpoint:** pending-versus-terminal ACK, owner-fenced bounded
+reconciliation, in-flight dedup and a retryable pending timeout are implemented.
+Combined GREEN3/3 and focused native/JS/hook/isolation checks with compiled mutants
+pass. Preserve latest-intent/card/owner checks; no broad tag cancellation or
+per-realtime polling. Candidate0.1.13/build14 still requires final review,
+signed next-build and affected Realme QA must precede follow-up publication.
+Accepted Android Stable 0.1.12/build13 remains available; do not relabel its tests
+as acceptance of this additional case.
 
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 

@@ -41,7 +41,7 @@ function notice(id = OLD, owner = "A", readAt = null) {
 
 // React scheduling and external providers are controlled; the hook, read helper,
 // row merge and notification projection execute actual transpiled source.
-function fixture({ hook = source, sync = syncSource, native = false } = {}) {
+function fixture({ hook = source, sync = syncSource, native = false, nativeResult = "settled" } = {}) {
   let state = { currentUser: { id: "A" }, accountEpoch: 1, mutedChatIds: [] };
   let cursor = 0, dirty = true, mounted = true, view;
   const slots = [], effects = new Map(), cleanups = new Map(), channels = [], calls = [], closed = [];
@@ -96,7 +96,8 @@ function fixture({ hook = source, sync = syncSource, native = false } = {}) {
       subscribe(callback) { channel.active = true; channel.status = callback; callback("SUBSCRIBED"); return channel; } }; channels.push(channel); return channel; },
     removeChannel(channel) { channel.active = false; },
   };
-  class FixedDate extends Date { constructor(...args) { super(...(args.length ? args : [ACK])); } static now() { return Date.parse(ACK); } }
+  let time = Date.parse(ACK);
+  class FixedDate extends Date { constructor(...args) { super(...(args.length ? args : [time])); } static now() { return time; } }
   const imports = {
     react, "@/store/app.store": { useAppStore: Object.assign(select => select(state), { getState: () => state }) },
     "@/lib/supabase/client": { createClient: () => client }, "@/lib/errors": { mapPgError: () => "fictional read error" },
@@ -112,6 +113,7 @@ function fixture({ hook = source, sync = syncSource, native = false } = {}) {
     "@/lib/platform/capabilities": { isNativeAndroid: () => native },
     "@/lib/platform/nativePush": { async closeNativeChatNotification(read, current) {
       assert.ok(native, "native outside fixture scope"); closed.push({ read, current });
+      return boundary("native-cleanup", nativeResult);
     } },
     "@/lib/platform/desktopNotifications": { desktopMessageOverflowRows: () => [] },
   };
@@ -121,7 +123,7 @@ function fixture({ hook = source, sync = syncSource, native = false } = {}) {
   function commit() { const work = [...effects]; effects.clear(); for (const [id] of work) cleanups.get(id)?.(); for (const [id, effect] of work) cleanups.set(id, effect()); }
   async function drain() { for (let i = 0; i < 40; i++) { await Promise.resolve(); if (mounted && dirty) render(); if (mounted && effects.size) commit(); } }
   render(); commit();
-  const f = { calls, closed, hold, drain, client, channels,
+  const f = { calls, closed, hold, drain, client, channels, advance(ms) { time += ms; },
     get view() { return view; },
     async insert(row) { rows.set(row.id, row); for (const channel of channels.filter(ch => ch.active)) for (const h of channel.handlers)
       if (h.filter.event === "INSERT" && h.filter.filter === `user_id=eq.${row.user_id}`) h.callback({ new: row }); await drain(); },
@@ -173,6 +175,46 @@ async function nativeInitialCleanup(hook = source) {
   await f.confirm(notice(NEW, "A", ACK)); assert.equal(f.closed.length, 1); f.unmount();
 }
 test("native cleanup call batches initial server-confirmed pairs without prior unread render", () => nativeInitialCleanup());
+
+async function pendingHookRetry(hook = source, rejected = false) {
+  const f = await loaded({ native: true, hook }); await f.insert(notice(NEW));
+  const held = f.hold("native-cleanup"); await f.view.markReadIds([NEW]); await f.drain();
+  await f.confirm(notice(NEW, "A", ACK)); assert.equal(f.closed.length, 1, "PENDING_HOOK_INFLIGHT_COALESCED");
+  await f.view.refresh(); await f.drain(); assert.equal(f.closed.length, 1, "PENDING_HOOK_INFLIGHT_COALESCED");
+  if (rejected) held.reject(Error("fictional native ACK rejected")); else held.resolve("retry"); await f.drain();
+  f.advance(4999); await f.view.refresh(); await f.drain();
+  assert.equal(f.closed.length, 1, "PENDING_HOOK_COOLDOWN");
+  f.advance(1); await f.confirm(notice(NEW, "A", ACK)); await f.drain();
+  assert.equal(f.closed.length, 1, "PENDING_HOOK_REALTIME_NOT_RETRY_TRIGGER");
+  const failedFetch = f.hold("refresh"); failedFetch.resolve({ data: null, error: { code: "42501" } });
+  await f.view.refresh(); await f.drain(); await f.confirm(notice(NEW, "A", ACK));
+  assert.equal(f.closed.length, 1, "PENDING_HOOK_FAILED_FETCH_NOT_RETRY_TRIGGER");
+  await f.view.refresh(); await f.drain();
+  assert.equal(f.closed.length, 2, "PENDING_HOOK_FETCH_RETRIES_UNSETTLED_PAIR");
+  f.advance(5000); await f.view.refresh(); await f.drain();
+  assert.equal(f.closed.length, 2, "PENDING_HOOK_SETTLED_PAIR_STAYS_DEDUPED"); f.unmount();
+}
+test("native cleanup pending result: timeout releases dedup only for paced successful fetch", () => pendingHookRetry());
+test("native cleanup pending result: rejected cleanup uses paced fetch recovery", () => pendingHookRetry(source, true));
+async function pendingHookRetirement(hook = source) {
+  const f = await loaded({ native: true, hook }); await f.insert(notice(NEW)); const held = f.hold("native-cleanup");
+  await f.view.markReadIds([NEW]); await f.drain(); await f.change("A");
+  assert.ok(f.closed.length >= 2, "PENDING_HOOK_NEW_EPOCH_RECONCILES_OWN_ROWS"); const before = f.closed.length;
+  held.resolve("retry"); await f.drain(); f.advance(5000); await f.view.refresh(); await f.drain();
+  assert.equal(f.closed.length, before, "PENDING_HOOK_RETIRED_ACK_CANNOT_CLOBBER_SUCCESSOR"); f.unmount();
+}
+test("native cleanup pending result: retired epoch ACK cannot release successor settled dedup", () => pendingHookRetirement());
+for (const [before, after, oracle] of [
+  ["const NATIVE_READ_RETRY_MS = 5000;", "const NATIVE_READ_RETRY_MS = 4999;", "PENDING_HOOK_COOLDOWN"],
+  [" || !fetched", "", "PENDING_HOOK_REALTIME_NOT_RETRY_TRIGGER"],
+  ['status === "settled" ? "settled" : "retry"', '"settled"', "PENDING_HOOK_FETCH_RETRIES_UNSETTLED_PAIR"],
+  ['previous.status !== "retry"', 'previous.status === "settled"', "PENDING_HOOK_INFLIGHT_COALESCED"],
+]) {
+  test(`native cleanup pending result: compiled mutation ${oracle}`, async () => {
+    assert.equal(source.split(before).length - 1, 1);
+    await assert.rejects(pendingHookRetry(source.replace(before, after)), error => error.code === "ERR_ASSERTION" && error.message.includes(oracle));
+  });
+}
 
 for (const [name, gate, run, oracle] of [
   ["browser unread gate", ' || currentUnreadTagCounts.has(notificationPresentationTag(item) ?? "")', nativeLatestCleanup, "LATEST_CONFIRMED_PAIR_FORWARDED"],
