@@ -1,11 +1,11 @@
 import { PushNotifications } from "@capacitor/push-notifications";
 import type { PluginListenerHandle } from "@capacitor/core";
-import { isNativeAndroid } from "./capabilities";
+import { isNativeAndroid, supportsCapacitorPlugin } from "./capabilities";
 import { ANDROID_PUSH_UNAVAILABLE, PUSH_ENABLE_FAILED } from "../plainMessages";
 import { parseMessageNotificationProjection } from "../messageNotificationProjection";
 import { isReservedNativeVoiceData } from "./nativeVoiceContract";
 import { waitForNativePushRegistration } from "./nativePushRegistration";
-import { closeDeliveredChatNotification } from "./nativePushReadSync";
+import { createNativeChatReadCleaner, type ConfirmedNativeChatRead, type NativeChatNotificationsClient } from "./nativePushReadSync";
 
 export type NativePushResultStatus =
   | "native_unavailable"
@@ -161,11 +161,27 @@ export async function registerNativePushNavigationListeners(
   return dispose;
 }
 
-export async function closeNativeChatNotification(tag: string): Promise<void> {
-  if (!isNativeAndroid() || !hasCallableAndroidBridge()) return;
+let nativeChatCleaner: Promise<ReturnType<typeof createNativeChatReadCleaner>> | null = null;
+
+export async function closeNativeChatNotification(read: ConfirmedNativeChatRead, isCurrent: () => boolean): Promise<void> {
+  if (!isNativeAndroid() || !hasCallableAndroidBridge() || !supportsCapacitorPlugin("ChatNotifications") || !isCurrent()) return;
   try {
-    await closeDeliveredChatNotification(PushNotifications, tag);
+    nativeChatCleaner ??= (async () => {
+      const [{ registerPlugin }, { useAppStore }] = await Promise.all([
+        import("@capacitor/core"), import("../../store/app.store"),
+      ]);
+      return createNativeChatReadCleaner(registerPlugin<NativeChatNotificationsClient>("ChatNotifications"), {
+        getOwner: () => {
+          const state = useAppStore.getState();
+          return { ownerId: state.currentUser?.id ?? null, accountEpoch: state.accountEpoch };
+        },
+        subscribe: (listener) => useAppStore.subscribe(listener),
+      });
+    })();
+    const clean = await nativeChatCleaner;
+    if (isCurrent()) await clean(read, isCurrent);
   } catch {
+    nativeChatCleaner = null;
     // The server read state remains authoritative if Android card cleanup fails.
   }
 }

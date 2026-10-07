@@ -11,10 +11,12 @@ import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
 
 import com.google.firebase.messaging.RemoteMessage;
 
 import java.util.Map;
+import java.util.UUID;
 
 final class ChatPushNotifications {
     private static final String LEGACY_CHANNEL_ID = "messages";
@@ -60,7 +62,7 @@ final class ChatPushNotifications {
 
         Intent intent = new Intent(context, MainActivity.class)
             .setAction("com.kub.messenger.CHAT_PUSH_OPEN")
-            .setData(Uri.parse("letscube://push/chat/" + event.chatId))
+            .setData(Uri.parse("letscube://push/chat/" + event.chatId + "/message/" + event.messageId))
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         String fcmId = message.getMessageId();
         intent.putExtra("google.message_id", fcmId == null ? event.messageId : fcmId);
@@ -74,10 +76,17 @@ final class ChatPushNotifications {
             String value = data.get(key);
             if (value != null) intent.putExtra(key, value);
         }
-        PendingIntent tap = PendingIntent.getActivity(context, event.chatId.hashCode(), intent,
-            PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification.Builder builder = Build.VERSION.SDK_INT >= 26
             ? new Notification.Builder(context, channelId) : new Notification.Builder(context);
+        Bundle cleanup = new Bundle();
+        String notificationCandidate = data.get("notification_id");
+        String notificationId = ChatNotificationCleanup.isUuid(notificationCandidate) ? notificationCandidate : null;
+        if (ChatNotificationCleanup.isUuid(notificationId)) {
+            cleanup.putInt(ChatNotificationCleanup.EXTRA_VERSION, 1);
+            cleanup.putString(ChatNotificationCleanup.EXTRA_CHAT, event.chatId);
+            cleanup.putString(ChatNotificationCleanup.EXTRA_NOTIFICATION, notificationId);
+            cleanup.putString(ChatNotificationCleanup.EXTRA_MESSAGE, event.messageId);
+        }
         Notification notification = builder
             .setSmallIcon(R.drawable.ic_stat_message)
             .setContentTitle(event.title)
@@ -85,9 +94,27 @@ final class ChatPushNotifications {
             .setStyle(new Notification.BigTextStyle().bigText(event.body))
             .setCategory(Notification.CATEGORY_MESSAGE)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
-            .setContentIntent(tap)
+            .addExtras(cleanup)
             .setAutoCancel(true)
             .build();
-        manager.notify(event.tag, 0, notification);
+        boolean tracked = ChatNotificationCleanup.post(new ChatNotificationIntentStore(context), event.tag, notificationId, event.messageId, generation -> {
+            notification.contentIntent = PendingIntent.getActivity(context, event.chatId.hashCode(), intent,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+            notification.extras.putLong(ChatNotificationCleanup.EXTRA_GENERATION, generation);
+            manager.notify(event.tag, 0, notification);
+        });
+        if (!tracked) {
+            // Preserve generic delivery without aliasing a tracked identity after a durable-write failure.
+            String nonce = UUID.randomUUID().toString();
+            String fallbackTag = event.tag + ":untracked:" + nonce;
+            intent.setData(Uri.parse("letscube://push/chat/" + event.chatId + "/message/" + event.messageId + "/untracked/" + nonce));
+            notification.contentIntent = PendingIntent.getActivity(context, event.chatId.hashCode(), intent,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+            for (String key : new String[] { ChatNotificationCleanup.EXTRA_VERSION, ChatNotificationCleanup.EXTRA_CHAT,
+                ChatNotificationCleanup.EXTRA_NOTIFICATION, ChatNotificationCleanup.EXTRA_MESSAGE, ChatNotificationCleanup.EXTRA_GENERATION }) {
+                notification.extras.remove(key);
+            }
+            manager.notify(fallbackTag, 0, notification);
+        }
     }
 }

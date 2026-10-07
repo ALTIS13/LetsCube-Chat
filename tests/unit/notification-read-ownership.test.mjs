@@ -41,7 +41,7 @@ function notice(id = OLD, owner = "A", readAt = null) {
 
 // React scheduling and external providers are controlled; the hook, read helper,
 // row merge and notification projection execute actual transpiled source.
-function fixture({ hook = source, sync = syncSource } = {}) {
+function fixture({ hook = source, sync = syncSource, native = false } = {}) {
   let state = { currentUser: { id: "A" }, accountEpoch: 1, mutedChatIds: [] };
   let cursor = 0, dirty = true, mounted = true, view;
   const slots = [], effects = new Map(), cleanups = new Map(), channels = [], calls = [], closed = [];
@@ -109,8 +109,10 @@ function fixture({ hook = source, sync = syncSource } = {}) {
     "@/lib/browserNotificationPresentation": { notificationPresentationTag: row => row.kind.includes("message") ? `message:chat:${row.payload.chat_id}` : null,
       async closeBrowserNotification(tag) { closed.push(tag); }, async updateBrowserAppBadge() {} },
     "@/lib/platform/desktop": { isDesktopApp: () => false, getDesktopBridge: () => null },
-    "@/lib/platform/capabilities": { isNativeAndroid: () => false },
-    "@/lib/platform/nativePush": { async closeNativeChatNotification() { throw Error("native outside fixture scope"); } },
+    "@/lib/platform/capabilities": { isNativeAndroid: () => native },
+    "@/lib/platform/nativePush": { async closeNativeChatNotification(read, current) {
+      assert.ok(native, "native outside fixture scope"); closed.push({ read, current });
+    } },
     "@/lib/platform/desktopNotifications": { desktopMessageOverflowRows: () => [] },
   };
   const events = { addEventListener() {}, removeEventListener() {} };
@@ -134,6 +136,54 @@ function fixture({ hook = source, sync = syncSource } = {}) {
   return f;
 }
 async function loaded(options) { const f = fixture(options); await f.drain(); return f; }
+
+test("native cleanup call carries exact server-confirmed notification/message pair", async () => {
+  const f = await loaded({ native: true }); await f.insert(notice());
+  await f.view.markReadIds([OLD]); await f.drain();
+  assert.deepEqual(plain(f.closed.map(call => call.read)), [{ chatId: CHAT, confirmed: [{ notificationId: OLD, messageId: OLD }] }]);
+  assert.equal(f.closed[0].current(), true);
+  await f.change("A", false); assert.equal(f.closed[0].current(), false, "retired same-owner epoch predicate");
+  f.unmount();
+});
+test("native cleanup call does not blanket-dismiss a chat containing a newer unread message", async () => {
+  const f = await loaded({ native: true }); await f.insert(notice()); await f.insert(notice(NEW));
+  await f.view.markMessageNotificationsForChatRead(CHAT, FIRST); await f.drain();
+  assert.deepEqual(plain(f.closed.map(call => call.read)), [{ chatId: CHAT, confirmed: [{ notificationId: OLD, messageId: OLD }] }]);
+  assert.equal(f.view.items.find(row => row.id === NEW).read_at, null); f.unmount();
+});
+test("native cleanup call predicate retires on hook unmount", async () => {
+  const f = await loaded({ native: true }); await f.insert(notice());
+  await f.view.markReadIds([OLD]); await f.drain();
+  const current = f.closed[0].current; f.unmount(); assert.equal(current(), false);
+});
+
+async function nativeLatestCleanup(hook = source) {
+  const f = await loaded({ native: true, hook }); await f.insert(notice()); await f.insert(notice(NEW));
+  await f.view.markReadIds([NEW]); await f.drain();
+  assert.deepEqual(plain(f.closed.map(call => call.read)), [{ chatId: CHAT, confirmed: [{ notificationId: NEW, messageId: NEW }] }], "LATEST_CONFIRMED_PAIR_FORWARDED");
+  assert.equal(f.view.items.find(row => row.id === OLD).read_at, null);
+  await f.confirm(notice(NEW, "A", ACK)); assert.equal(f.closed.length, 1, "same read pair must not repeat IPC"); f.unmount();
+}
+test("native cleanup call removes latest confirmed pair despite older unread same-chat row", () => nativeLatestCleanup());
+async function nativeInitialCleanup(hook = source) {
+  const f = fixture({ native: true, hook }), held = f.hold("refresh");
+  held.resolve({ data: [notice(OLD, "A", ACK), notice(NEW, "A", ACK)], error: null }); await f.drain();
+  assert.deepEqual(plain(f.closed.map(call => call.read)), [{ chatId: CHAT,
+    confirmed: [{ notificationId: NEW, messageId: NEW }, { notificationId: OLD, messageId: OLD }] }], "INITIAL_CONFIRMED_BATCH_FORWARDED");
+  await f.confirm(notice(NEW, "A", ACK)); assert.equal(f.closed.length, 1); f.unmount();
+}
+test("native cleanup call batches initial server-confirmed pairs without prior unread render", () => nativeInitialCleanup());
+
+for (const [name, gate, run, oracle] of [
+  ["browser unread gate", ' || currentUnreadTagCounts.has(notificationPresentationTag(item) ?? "")', nativeLatestCleanup, "LATEST_CONFIRMED_PAIR_FORWARDED"],
+  ["prior-unread gate", " || !previousUnread.has(item.id)", nativeInitialCleanup, "INITIAL_CONFIRMED_BATCH_FORWARDED"],
+]) {
+  test(`native cleanup call compiled mutation: ${name}`, async () => {
+    const before = "item.user_id !== userId || !item.read_at || !isMessageNotification(item)";
+    assert.equal(source.split(before).length - 1, 1);
+    await assert.rejects(run(source.replace(before, before + gate)), error => error.code === "ERR_ASSERTION" && error.message.includes(oracle));
+  });
+}
 
 async function retiredChat(options, aba = false) {
   const f = await loaded(options); await f.insert(notice());

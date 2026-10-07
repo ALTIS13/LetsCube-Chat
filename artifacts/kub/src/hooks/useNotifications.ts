@@ -112,6 +112,7 @@ export function useNotifications() {
   const readOwner = readOwnerRef.current;
   const readMountedRef = useRef(false);
   const unreadPresentationTagsRef = useRef<Map<string, string>>(new Map());
+  const nativeReadPairsRef = useRef({ owner: readOwner, pairs: new Set<string>() });
   const unreadDesktopIdsRef = useRef<Map<string, Notification>>(new Map());
   const trimmedDesktopIdsRef = useRef<Set<string>>(new Set());
   const presentedDesktopIdsRef = useRef<Set<string>>(new Set());
@@ -406,15 +407,35 @@ export function useNotifications() {
       if (item.user_id !== userId) continue;
       if (!item.read_at) continue;
       const previousTag = previousUnread.get(item.id);
-      if (previousTag && !currentUnreadTagCounts.has(previousTag)) {
-        if (isNativeAndroid()) void closeNativeChatNotification(previousTag);
-        else void closeBrowserNotification(previousTag);
+      if (!isNativeAndroid() && previousTag && !currentUnreadTagCounts.has(previousTag)) {
+        void closeBrowserNotification(previousTag);
         if (isDesktopApp() && !isMessageNotification(item)) {
           closeDesktopNotification(item);
         }
       }
     }
     unreadPresentationTagsRef.current = currentUnread;
+
+    if (isNativeAndroid()) {
+      const previousPairs = nativeReadPairsRef.current.owner === readOwner ? nativeReadPairsRef.current.pairs : new Set<string>();
+      const pairs = new Set<string>();
+      const byChat = new Map<string, Array<{ notificationId: string; messageId: string }>>();
+      for (const item of items) {
+        if (item.user_id !== userId || !item.read_at || !isMessageNotification(item)) continue;
+        const chatId = payloadString(item.payload, "chat_id"), messageId = payloadString(item.payload, "message_id");
+        if (!chatId || !messageId || [item.id, chatId, messageId].some(id => !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(id))) continue;
+        const key = `${item.id}:${chatId}:${messageId}`;
+        pairs.add(key);
+        if (previousPairs.has(key)) continue;
+        const batch = byChat.get(chatId) ?? [];
+        batch.push({ notificationId: item.id, messageId });
+        byChat.set(chatId, batch);
+      }
+      nativeReadPairsRef.current = { owner: readOwner, pairs };
+      for (const [chatId, confirmed] of byChat) {
+        void closeNativeChatNotification({ chatId, confirmed: confirmed.slice(0, PAGE_SIZE) }, isCurrentReadOwner);
+      }
+    }
 
     if (isDesktopApp()) {
       const previousDesktopUnread = unreadDesktopIdsRef.current;
@@ -443,7 +464,7 @@ export function useNotifications() {
       unreadDesktopIdsRef.current = currentDesktopUnread;
     }
     void updateBrowserAppBadge(unreadCount);
-  }, [items, unreadCount, closeDesktopNotification, isCurrentReadOwner, userId]);
+  }, [items, unreadCount, closeDesktopNotification, isCurrentReadOwner, readOwner, userId]);
 
   useEffect(() => {
     if (userId) return;

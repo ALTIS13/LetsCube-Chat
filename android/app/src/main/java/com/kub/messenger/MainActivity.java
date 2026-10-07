@@ -15,6 +15,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(VoiceCallsPlugin.class);
         registerPlugin(MediaExportPlugin.class);
+        registerPlugin(ChatNotificationsPlugin.class);
         Intent intent = getIntent();
         if (VoiceCallRuntime.isVoiceIntent(intent)) {
             VoiceCallRuntime.get(this).captureIntent(intent);

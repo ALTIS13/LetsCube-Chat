@@ -1,5 +1,15 @@
 # LETSCUBE — handover
 
+**2026-10-07 native/DB authority update:** the owner explicitly authorizes
+readiness-gated production changes, APK/other platform signing, upgrades,
+installation and publication without another routine confirmation. Use Realme
+or a targeted rental when needed; A063 remains assigned to Apollo. This
+supersedes permission-only Android/install-over-release restrictions, not data
+protection, package/signer continuity or device acceptance. Necessary database
+changes are also authorized, with verified fresh backup, reviewed transactional
+migration, raising self-check, byte-identical migration backup, rehearsal,
+rollback and real validation. Do not bypass unresolved technical recovery gates.
+
 **2026-10-05 authority update:** the owner explicitly authorizes readiness-gated
 changes and production deployment without another routine confirmation. Reuse
 completed evidence; repeat checks only for changed inputs or a concrete unresolved
@@ -11,22 +21,36 @@ not approved merely by this delegation. Refresh the authorized tester intake,
 deduplicate against the queue, and continue the nearest feasible product slice.
 
 **Current continuation, 2026-10-07:** coordinator; branch
-`codex/bot-inline-media-20261002`. Web/main `a9c84de3` deployed at 13:28 Moscow:
+`codex/bot-inline-media-20261002`, source base `f320892c`. Active: D-351 native
+replacement-aware cleanup, Android 0.1.12/build13 release QA, and isolated PG17
+functional rehearsal for D-335 RPC installation. D-342 universal recovery remains
+separate; do not replay its unchanged signed-provenance loop. Workers have separate scopes;
+coordinator owns device/build/release and docs. Web/main `a9c84de3` deployed at 13:28 Moscow:
 sole healthy exact image, calibrated before/after markers, retained old entry,
 JS/SW parity and anonymous home/login accepted. D-350/D-352 and D-351 shared-web
 repair pass actual-source RED/GREEN, compiled mutants, independent reviews,
 fresh fictional browser 21/21, final typecheck 0 and build `dc439f44f62b3b1c`.
-All source workers and owned fixture servers are stopped. The bounded intake
+Previous ownership workers and fixture servers were stopped. The bounded intake
 contains 16 new messages and three local transcripts; D-348/349 remain reported
 with unidentified client/surface, task-reload/loading items 86/87 preliminary.
 No further export/model loop. Blockers: SQL preview proposal remains uninstalled;
 PG17 recovery/real JWT HTTP and native same-card/device gates are not accepted.
-No APK/device change. Next: D-335 recipient-preview gates and native cleanup,
+Native source is frozen for independent review: exact confirmed read pairs,
+durable latest-post generation, document/account lease and write-failure generic
+fallback. Actual-source Java57 (27 compiled mutants), JS25, hook7, adjacent19,
+debug/AndroidTest compilation and JUnit4/4 accepted; native physical acceptance
+is still pending. Version metadata0.1.12/13 passes37 focused checks. Coordinator
+created isolated ephemeral Realme user10; primary data are untouched. Previous
+0.1.11 APK/AAB and stable catalog checksum are preserved. No signed candidate
+build, APK upgrade or publication yet. Next: review, signed build, exact-user
+replacement/cold-process/anonymous bridge checks, then immutable publication;
+D-335 recipient-preview rehearsal proceeds independently,
 not replay of accepted ownership suites. Outcome docs are on the candidate
 branch; main remains the accepted source revision to avoid a docs-only rebuild.
 [Current scope, evidence and publication limits](operations/2026-10-07-notification-preferences-capability.md).
 [Fresh reported tasks and coverage limits](operations/2026-10-07-tester-feedback.md).
 [Follow-up source repairs and publication gate](operations/2026-10-07-read-recording-ownership.md).
+[Native cleanup, Android candidate and device gates](operations/2026-10-07-android-read-cleanup-release.md).
 
 **Previous source checkpoint,2026-10-07:** coordinator owns item76/D-335 recipient
 preview authorization, based on d5edbe83. New unversioned SQL proposal supplies
