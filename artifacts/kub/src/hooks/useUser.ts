@@ -8,6 +8,7 @@ import { useAppStore } from "@/store/app.store";
 import { registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { createSingleFlight } from "@/lib/singleFlight";
 import { signedMediaUrls } from "@/lib/media/mediaUrl";
+import { readAuthSessionIdentity } from "@/lib/authSessionIdentity";
 
 const PROFILE_LOAD_ERROR = "Не удалось загрузить профиль. Проверьте соединение и попробуйте снова.";
 
@@ -19,13 +20,23 @@ export function useSignOut(): () => Promise<void> {
 
 interface ProfileChannelEntry {
   channel: RealtimeChannel;
+  name: string;
   refCount: number;
 }
 
 const activeProfileChannels = new Map<string, ProfileChannelEntry>();
+let nextObserverGeneration = 0;
+let nextProfileChannelGeneration = 0;
+
+type ProfileOwner = { userId: string; accountEpoch: number; observerGeneration: number };
+
+function isCurrentProfileOwner(userId: string, accountEpoch: number): boolean {
+  const state = useAppStore.getState();
+  return state.accountEpoch === accountEpoch && state.authSessionIdentity?.userId === userId;
+}
 
 /**
- * One profile load at a time, per user.
+ * One profile load at a time, per authenticated ownership generation.
  *
  * The profile was fetched from three places at once on a restored session: the
  * mount effect, and again for every auth event Supabase emits while recovering
@@ -39,15 +50,18 @@ const activeProfileChannels = new Map<string, ProfileChannelEntry>();
  */
 const profileLoads = createSingleFlight<boolean>();
 
-function attachProfileChannel(userId: string): () => void {
-  const existing = activeProfileChannels.get(userId);
+function attachProfileChannel(userId: string, accountEpoch: number): () => void {
+  const key = `${userId}:${accountEpoch}`;
+  const existing = activeProfileChannels.get(key);
   if (existing) {
     existing.refCount += 1;
-    return () => detachProfileChannel(userId);
+    return () => detachProfileChannel(key);
   }
 
   const supabase = createClient();
-  const name = `profile-self:${userId}`;
+  // Realtime reuses equal topics until asynchronous removal finishes.
+  const name = `profile-self:${key}:${++nextProfileChannelGeneration}`;
+  let entry: ProfileChannelEntry;
   const channel = supabase
     .channel(name)
     .on(
@@ -59,26 +73,27 @@ function attachProfileChannel(userId: string): () => void {
         filter: `id=eq.${userId}`,
       },
       (payload) => {
-        if (payload.new) {
-          useAppStore.getState().setCurrentUser(payload.new as Profile);
+        if (payload.new && activeProfileChannels.get(key) === entry && isCurrentProfileOwner(userId, accountEpoch)) {
+          useAppStore.getState().setCurrentUser(payload.new as Profile, accountEpoch);
         }
       },
     )
     .subscribe();
 
   registerChannel(name);
-  activeProfileChannels.set(userId, { channel, refCount: 1 });
-  return () => detachProfileChannel(userId);
+  entry = { channel, name, refCount: 1 };
+  activeProfileChannels.set(key, entry);
+  return () => detachProfileChannel(key);
 }
 
-function detachProfileChannel(userId: string): void {
-  const entry = activeProfileChannels.get(userId);
+function detachProfileChannel(key: string): void {
+  const entry = activeProfileChannels.get(key);
   if (!entry) return;
   entry.refCount -= 1;
   if (entry.refCount <= 0) {
+    activeProfileChannels.delete(key);
+    unregisterChannel(entry.name);
     createClient().removeChannel(entry.channel);
-    activeProfileChannels.delete(userId);
-    unregisterChannel(`profile-self:${userId}`);
   }
 }
 
@@ -88,14 +103,21 @@ export function useUser() {
   const [loadingError, setLoadingError] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
   const setCurrentUser = useAppStore((s) => s.setCurrentUser);
+  const accountEpoch = useAppStore((s) => s.accountEpoch);
   const supabase = createClient();
-  const activeUserIdRef = useRef<string | null>(null);
+  const activeOwnerRef = useRef<ProfileOwner | null>(null);
 
-  const loadProfileOnce = useCallback(async (userId: string): Promise<boolean> => {
+  const isCurrent = useCallback((owner: ProfileOwner) => activeOwnerRef.current === owner
+    && isCurrentProfileOwner(owner.userId, owner.accountEpoch), []);
+
+  const loadProfileOnce = useCallback(async (owner: ProfileOwner): Promise<boolean> => {
+    const { userId } = owner;
     let data: Profile | null = null;
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (!isCurrent(owner)) return false;
       const result = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+      if (!isCurrent(owner)) return false;
       if (result.data) {
         data = result.data as Profile;
         break;
@@ -107,14 +129,14 @@ export function useUser() {
       }
     }
 
-    if (activeUserIdRef.current !== userId) return false;
+    if (!isCurrent(owner)) return false;
     if (data) {
-      setCurrentUser(data);
+      setCurrentUser(data, owner.accountEpoch);
       return true;
     }
 
     const authUser = await supabase.auth.getUser();
-    if (activeUserIdRef.current !== userId || authUser.data.user?.id !== userId) return false;
+    if (!isCurrent(owner) || authUser.data.user?.id !== userId) return false;
     const meta = authUser.data.user?.user_metadata;
     const newProfile = {
       id: userId,
@@ -133,21 +155,32 @@ export function useUser() {
       .select("*")
       .single();
 
-    if (!inserted || activeUserIdRef.current !== userId) return false;
-    setCurrentUser(inserted as Profile);
+    if (!inserted || !isCurrent(owner)) return false;
+    setCurrentUser(inserted as Profile, owner.accountEpoch);
     return true;
-  }, [setCurrentUser, supabase]);
+  }, [isCurrent, setCurrentUser, supabase]);
 
   const fetchProfile = useCallback(
-    (userId: string): Promise<boolean> => profileLoads.run(userId, () => loadProfileOnce(userId)),
+    (owner: ProfileOwner): Promise<boolean> => profileLoads.run(
+      `${owner.userId}:${owner.accountEpoch}:${owner.observerGeneration}`, () => loadProfileOnce(owner)),
     [loadProfileOnce],
   );
-
-
 
   useEffect(() => {
     let cancelled = false;
     let authEventSeen = false;
+    const observerGeneration = ++nextObserverGeneration;
+
+    const observeSession = (session: unknown): ProfileOwner | null => {
+      const identity = readAuthSessionIdentity(session);
+      useAppStore.getState().setAuthSessionIdentity(identity);
+      if (!identity) return activeOwnerRef.current = null;
+      const epoch = useAppStore.getState().accountEpoch;
+      const current = activeOwnerRef.current;
+      if (current?.userId === identity.userId && current.accountEpoch === epoch
+        && current.observerGeneration === observerGeneration) return current;
+      return activeOwnerRef.current = { userId: identity.userId, accountEpoch: epoch, observerGeneration };
+    };
 
     const loadSession = async () => {
       setLoading(true);
@@ -157,14 +190,12 @@ export function useUser() {
         if (cancelled || authEventSeen) return;
         if (error) throw error;
 
-        activeUserIdRef.current = session?.user.id ?? null;
+        const owner = observeSession(session);
         setUser(session?.user ?? null);
-        if (session?.user) {
+        if (session?.user && owner) {
           supabase.realtime.setAuth(session.access_token);
-          const ok = await fetchProfile(session.user.id);
-          if (!cancelled && !authEventSeen && !ok) setLoadingError(PROFILE_LOAD_ERROR);
-        } else {
-          setCurrentUser(null);
+          const ok = await fetchProfile(owner);
+          if (!cancelled && !authEventSeen && isCurrent(owner) && !ok) setLoadingError(PROFILE_LOAD_ERROR);
         }
       } catch {
         if (!cancelled && !authEventSeen) setLoadingError(PROFILE_LOAD_ERROR);
@@ -178,10 +209,11 @@ export function useUser() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       // The parallel getSession() read may finish after a newer auth event.
       authEventSeen = true;
-      activeUserIdRef.current = session?.user.id ?? null;
+      if (cancelled) return;
+      const owner = observeSession(session);
       signedMediaUrls().setAccount(session?.user.id ?? null);
       setUser(session?.user ?? null);
-      if (session?.user) {
+      if (session?.user && owner) {
         supabase.realtime.setAuth(session.access_token);
         const currentProfile = useAppStore.getState().currentUser;
         const isSameLoadedUser = currentProfile?.id === session.user.id;
@@ -194,35 +226,34 @@ export function useUser() {
           setLoading(true);
           setLoadingError(null);
         }
-        void fetchProfile(session.user.id)
+        void fetchProfile(owner)
           .then((ok) => {
-            if (activeUserIdRef.current === session.user.id && !ok && shouldBlockUiForProfile) setLoadingError(PROFILE_LOAD_ERROR);
+            if (isCurrent(owner) && !ok && shouldBlockUiForProfile) setLoadingError(PROFILE_LOAD_ERROR);
           })
           .catch(() => {
-            if (activeUserIdRef.current === session.user.id && shouldBlockUiForProfile) setLoadingError(PROFILE_LOAD_ERROR);
+            if (isCurrent(owner) && shouldBlockUiForProfile) setLoadingError(PROFILE_LOAD_ERROR);
           })
           .finally(() => {
-            if (activeUserIdRef.current === session.user.id && shouldBlockUiForProfile) setLoading(false);
+            if (isCurrent(owner) && shouldBlockUiForProfile) setLoading(false);
           });
       } else {
         supabase.realtime.setAuth(null);
-        setCurrentUser(null);
         setLoading(false);
       }
     });
 
     return () => {
       cancelled = true;
-      activeUserIdRef.current = null;
+      activeOwnerRef.current = null;
       subscription.unsubscribe();
     };
-  }, [fetchProfile, retryNonce, setCurrentUser, supabase]);
+  }, [fetchProfile, isCurrent, retryNonce, supabase]);
 
   useEffect(() => {
-    if (!user?.id) return;
-    const detach = attachProfileChannel(user.id);
+    if (!user?.id || !isCurrentProfileOwner(user.id, accountEpoch)) return;
+    const detach = attachProfileChannel(user.id, accountEpoch);
     return () => detach();
-  }, [user?.id]);
+  }, [user?.id, accountEpoch]);
 
   const signOut = async () => { await supabase.auth.signOut(); };
   const retry = useCallback(() => {

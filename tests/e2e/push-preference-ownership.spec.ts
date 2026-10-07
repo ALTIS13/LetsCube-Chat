@@ -34,6 +34,7 @@ test("held previous-owner preferences cannot change a mounted Settings screen or
   });
   try {
     await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("notification-bell-button")).toBeVisible();
     await page.evaluate(async () => {
       const { useAppStore } = await import("/src/store/app.store.ts" /* @vite-ignore */);
       useAppStore.getState().openSettings();
@@ -47,6 +48,7 @@ test("held previous-owner preferences cannot change a mounted Settings screen or
     await expect(switches.messages).toBeVisible();
     await page.evaluate(async owner => {
       const { useAppStore } = await import("/src/store/app.store.ts" /* @vite-ignore */);
+      useAppStore.getState().setAuthSessionIdentity({ userId: owner.id, sessionId: null });
       useAppStore.getState().setCurrentUser(owner);
     }, B);
     await expect(switches.messages).toBeChecked();

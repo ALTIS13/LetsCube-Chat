@@ -133,8 +133,8 @@ export function useVoiceRecorder() {
    */
   const start = useCallback(async (): Promise<boolean> => {
     if (recorderRef.current) {
-      // Already running.
-      return true;
+      // A stopping recorder still owns its final data, but is not a new start.
+      return recorderRef.current.state === "recording" && !stopResolverRef.current;
     }
     if (disposedRef.current) return false;
     setError(null);
@@ -166,6 +166,7 @@ export function useVoiceRecorder() {
     } catch (err) {
       const isOverconstrained = err instanceof Error && err.name === "OverconstrainedError";
       if (isOverconstrained) {
+        if (isStale()) return false;
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             audio: buildAudioTrackConstraints({
@@ -238,6 +239,7 @@ export function useVoiceRecorder() {
     }
 
     recorder.ondataavailable = (e) => {
+      if (isStale() || recorderRef.current !== recorder) return;
       if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
     };
 
@@ -246,6 +248,7 @@ export function useVoiceRecorder() {
     };
 
     recorder.onstop = () => {
+      if (isStale() || recorderRef.current !== recorder) return;
       const finalDurationMs = Date.now() - startedAtRef.current;
       const blob = new Blob(chunksRef.current, { type: mimeRef.current });
       const resolver = stopResolverRef.current;
@@ -329,6 +332,9 @@ export function useVoiceRecorder() {
     });
   }, [teardown]);
 
+  // Consumers need this synchronously, before the render-state snapshot catches up.
+  const hasRecorder = useCallback(() => recorderRef.current !== null, []);
+
   /** Drop everything; the user wants to discard the recording. */
   const cancel = useCallback(() => {
     // Invalidate any in-flight start() that may still be awaiting permission.
@@ -356,6 +362,7 @@ export function useVoiceRecorder() {
     start,
     stop,
     cancel,
+    hasRecorder,
   };
 }
 

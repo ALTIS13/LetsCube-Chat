@@ -25317,8 +25317,85 @@ row atomicity is not claimed. This adjacent repair does not close rich-preview D
 Source accepted: 64/64 actual-hook checks, including 24 compiled mutants;
 final independent review has no P1/P2. Mounted Settings ownership 3/3,
 typecheck 0 and production-config build `cd49e9074b3bfa2d` pass. Web rollout
-acceptance remains to be recorded; installed Android is a separate upgrade.
+accepted at main/runtime `ca0c633d`: one exact healthy image, changed public
+markers, retained previous entry and JS/SW container parity. Anonymous home/login
+mount with zero page errors passes; installed Android is a separate upgrade.
 [Source, regressions and rollout checkpoint](operations/2026-10-07-notification-preferences-capability.md).
+
+## D-348 `[ ]` Recording another voice message reportedly asks for microphone access again
+
+**Severity:** medium, reported_UNVERIFIED; fresh authorized tester intake,
+2026-10-07, tracker item 84. The report has a private source anchor, but client,
+build and native/system permission dialog versus application prompt are unknown.
+No redundant permission acquisition or platform cause has been reproduced yet.
+Do not reopen push-permission D-309 or recorder-hint D-190 by association.
+
+**Acceptance:** distinguish a real repeated prompt from normal new capture after
+tracks were released; check current recorder and its actual consumer before any
+patch. No permanent microphone capture or invented persisted permission state.
+Use fictional source/browser checks first, then the identified client/device.
+[Intake, dedup and evidence limits](operations/2026-10-07-tester-feedback.md).
+
+## D-349 `[ ]` Notifications reportedly remain after the corresponding messages are read
+
+**Severity:** medium, reported_UNVERIFIED; fresh authorized tester intake,
+2026-10-07, tracker item 85. In-app centre versus OS notification history,
+client/build and read horizon are not established. This is not automatically
+D-335 preview context, D-344 activation, D-345 account retirement or D-347.
+
+**Acceptance:** reproduce the applicable read/ACK/cleanup path. It must belong to
+the current recipient/epoch and only the confirmed read horizon; neither a late
+ACK nor old-chat cleanup may remove a new owner's or unread replacement card.
+Source diagnosis is in progress; real OS/device evidence remains separate.
+[Intake, dedup and evidence limits](operations/2026-10-07-tester-feedback.md).
+
+## D-350 `[~]` Retired microphone acquisition or recording completion can alter a replacement hold
+
+**Severity:** medium; actual-source hook/consumer failures with fictional media,
+2026-10-07, tracker item 88. Cancelled OverconstrainedError requested fallback;
+same-composer replacement holds were cleared by older acquisition/stop/send
+completions. Old recorder data/stop events could affect the new recording.
+
+**Source repair:** capture-session and separate hold-intent guards before stale
+effects. Normal send/preview and release/reacquire remain; no mic caching.
+Actual-source final 43/43 includes 17 compiled mutants; gestures 23/23.
+Fictional mounted consumer Chromium 5/5 and WebKit 5/5, exact pixels at
+1440/390 both themes inspected; six final stop/Pause-Send race cases pass.
+Independent review and final typecheck/build accepted; web publication pending.
+This does not close unidentified tester permission-prompt D-348.
+[Evidence and remaining gates](operations/2026-10-07-read-recording-ownership.md).
+
+## D-351 `[~]` Receipt and notification read continuations outlive their owner or horizon
+
+**Severity:** medium; actual-source scheduler/hook reproduction, 2026-10-07,
+tracker item 89. Shared timers/watermarks cross account boundaries; held read
+ACKs could alter a new owner, mark newer messages read and start broad cleanup.
+Optimistic rollback could overwrite confirmed realtime read state.
+
+**Acceptance:** current owner/epoch before every timer, request and continuation;
+per-owner watermarks, confirmed actual-message horizon and conflict-aware rollback.
+Scheduler 28/28 includes ten mutants, adjacent 8/8; read hook 51/51, producer
+27/27 and message lifetime 27/27. D-352 prerequisite, independent reviews and
+final typecheck/build accepted; web publication pending.
+Native same-id/tag snapshot cancellation is not atomic and remains open. This
+does not certify tester D-349 or real OS card cleanup fixed.
+[Evidence and remaining gates](operations/2026-10-07-read-recording-ownership.md).
+
+## D-352 `[~]` A new auth session can retain the previous profile ownership epoch
+
+**Severity:** medium; actual auth callback/store/receipt source reproduction,
+2026-10-07, tracker item 90. Same-person new session inherits watermarks and
+accepts old ACK/fallback effects; A-to-B profile loading leaves old receipt timers
+active. Artificial fixture epoch increments had hidden this actual boundary.
+
+**Acceptance:** synchronously retire the previous auth owner before profile load;
+same-session token refresh must not reset state or block the UI. Delayed profile
+loads/realtime events cannot restore a retired owner; preserve first-load deep
+links and outbox/account reset rules. Auth 52/52 and adjacent Settings 61/61
+pass, including late avatar/save ACK; independent reviews accepted. Fresh
+mounted ownership/race checks and final typecheck/build pass; web publication
+pending. No new authorization or credential persistence.
+[Evidence and remaining gates](operations/2026-10-07-read-recording-ownership.md).
 
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 

@@ -141,7 +141,7 @@ test("a peer's join and read are subscribed to, unfiltered, on the chat_members 
  * binding is still written the way the measurement covers.
  */
 test("a peer's departure is subscribed to by the chats this reader holds", () => {
-  const departures = chatsHook.match(/const departuresKey = [\s\S]*?\}, \[userId, rt, applyEvent, departuresKey\]\);/);
+  const departures = chatsHook.match(/const departuresKey = [\s\S]*?\}, \[userId, accountEpoch, rt, applyEvent, departuresKey, captureOwner\]\);/);
   assert.ok(departures, "the departures channel could not be found in useChats");
   const block = departures[0];
   assert.match(block, /heldChatIdsKey\(chats\)/, "the channel is no longer keyed on the chats held");

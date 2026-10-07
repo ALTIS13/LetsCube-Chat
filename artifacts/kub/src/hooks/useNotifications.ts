@@ -10,7 +10,8 @@ import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrum
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import { KUB_CHAT_NOTIFICATIONS_READ_EVENT, type ChatNotificationsReadDetail } from "@/lib/notificationEvents";
 import { markChatMessageNotificationsRead } from "@/lib/notificationReadSync";
-import { mergeNotificationRows, rollbackFailedNotificationReads } from "@/lib/notificationRows";
+import { mergeNotificationRows } from "@/lib/notificationRows";
+import { isMissingRpcError } from "@/lib/rpcAvailability";
 import {
   closeBrowserNotification,
   notificationPresentationTag,
@@ -104,13 +105,28 @@ export function useNotifications() {
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const autoMarkingReadRef = useRef<Set<string>>(new Set());
+  const readOwnerRef = useRef({ userId, accountEpoch, pending: new Set<string>() });
+  if (readOwnerRef.current.userId !== userId || readOwnerRef.current.accountEpoch !== accountEpoch) {
+    readOwnerRef.current = { userId, accountEpoch, pending: new Set<string>() };
+  }
+  const readOwner = readOwnerRef.current;
+  const readMountedRef = useRef(false);
   const unreadPresentationTagsRef = useRef<Map<string, string>>(new Map());
   const unreadDesktopIdsRef = useRef<Map<string, Notification>>(new Map());
   const trimmedDesktopIdsRef = useRef<Set<string>>(new Set());
   const presentedDesktopIdsRef = useRef<Set<string>>(new Set());
   const desktopBaselineLoadedRef = useRef(false);
   const accountGenerationRef = useRef(0);
+
+  useEffect(() => {
+    readMountedRef.current = true;
+    return () => { readMountedRef.current = false; };
+  }, []);
+  const isCurrentReadOwner = useCallback(() => {
+    const state = useAppStore.getState();
+    return readMountedRef.current && readOwnerRef.current === readOwner && Boolean(readOwner.userId)
+      && state.currentUser?.id === readOwner.userId && state.accountEpoch === readOwner.accountEpoch;
+  }, [readOwner]);
 
   const presentDesktopNotification = useCallback((row: Notification) => {
     if (!userId || row.user_id !== userId) return;
@@ -166,6 +182,8 @@ export function useNotifications() {
   useEffect(() => {
     accountGenerationRef.current += 1;
     setItems([]);
+    setError(null);
+    setLoading(false);
     unreadPresentationTagsRef.current = new Map();
     unreadDesktopIdsRef.current = new Map();
     trimmedDesktopIdsRef.current = new Set();
@@ -189,37 +207,53 @@ export function useNotifications() {
   }, [userId, accountEpoch]);
 
   const markReadIds = useCallback(async (ids: string[], options: { silent?: boolean } = {}) => {
+    const generation = accountGenerationRef.current;
+    const current = () => isCurrentReadOwner() && generation === accountGenerationRef.current;
+    if (!current()) return;
     const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
     if (!uniqueIds.length) return;
 
-    const idsToMark = uniqueIds.filter((id) => !autoMarkingReadRef.current.has(id));
+    const idsToMark = uniqueIds.filter((id) => !readOwner.pending.has(id));
     if (!idsToMark.length) return;
-    for (const id of idsToMark) autoMarkingReadRef.current.add(id);
-
-    const snapshot = new Map<string, string | null>();
-    const nowIso = new Date().toISOString();
-    setItems((prev) =>
-      prev.map((n) => {
-        if (!idsToMark.includes(n.id)) return n;
-        snapshot.set(n.id, n.read_at);
-        return n.read_at ? n : { ...n, read_at: nowIso };
-      }),
-    );
-
-    const failedIds = new Set<string>();
-    for (const id of idsToMark) {
-      const { error: rpcErr } = await supabase.rpc("notifications_mark_read", { p_id: id });
-      if (rpcErr) {
-        failedIds.add(id);
-        if (!options.silent) setError(mapPgError(rpcErr));
+    for (const id of idsToMark) readOwner.pending.add(id);
+    try {
+      for (const id of idsToMark) {
+        if (!current()) return;
+        try {
+          const { error: rpcErr } = await supabase.rpc("notifications_mark_read", { p_id: id });
+          if (!current()) return;
+          if (rpcErr) {
+            if (!options.silent) setError((prev) => current() ? mapPgError(rpcErr) : prev);
+          } else {
+            const nowIso = new Date().toISOString();
+            setItems((prev) => current() ? prev.map((row) =>
+              row.id === id && row.user_id === readOwner.userId && !row.read_at
+                ? { ...row, read_at: nowIso } : row) : prev);
+          }
+        } catch (error) {
+          if (!current()) return;
+          if (!options.silent) setError((prev) => current() ? mapPgError(error) : prev);
+        }
       }
-      autoMarkingReadRef.current.delete(id);
+    } finally {
+      for (const id of idsToMark) readOwner.pending.delete(id);
     }
+  }, [isCurrentReadOwner, readOwner, supabase]);
 
-    if (failedIds.size > 0) {
-      setItems((prev) => rollbackFailedNotificationReads(prev, snapshot, failedIds));
-    }
-  }, [supabase]);
+  const applyConfirmedReadRows = useCallback(async (ids: string[], current: () => boolean) => {
+    if (!current() || !readOwner.userId || !ids.length) return;
+    const { data, error: readError } = await supabase.from("notifications")
+      .select("id, read_at").eq("user_id", readOwner.userId).in("id", ids);
+    if (!current()) return;
+    if (readError) { setError((prev) => current() ? mapPgError(readError) : prev); return; }
+    const requested = new Set(ids);
+    const confirmed = new Map((data ?? []).filter((row) => requested.has(row.id) && row.read_at)
+      .map((row) => [row.id, row.read_at as string]));
+    setItems((prev) => current() ? prev.map((row) => {
+      const readAt = confirmed.get(row.id);
+      return readAt && row.user_id === readOwner.userId && !row.read_at ? { ...row, read_at: readAt } : row;
+    }) : prev);
+  }, [readOwner, supabase]);
 
   const normalizeRowsForDisplay = useCallback((rows: Notification[]) => {
     const ownUnreadIds = rows
@@ -230,40 +264,45 @@ export function useNotifications() {
   }, [markReadIds, mutedChatIds, userId]);
 
   const refresh = useCallback(async (options: { presentNewDesktop?: boolean } = {}) => {
-    if (!userId) {
-      setItems([]);
-      return;
-    }
+    if (!isCurrentReadOwner()) return;
     const generation = accountGenerationRef.current;
-    setLoading(true);
+    const current = () => isCurrentReadOwner() && generation === accountGenerationRef.current;
+    setLoading((prev) => current() ? true : prev);
     bumpFetch("useNotifications");
-    const { data, error: err } = await supabase
-      .from("notifications")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(PAGE_SIZE);
-    if (generation !== accountGenerationRef.current || useAppStore.getState().currentUser?.id !== userId) return;
-    setLoading(false);
-    if (err) {
-      setError(mapPgError(err));
-      return;
-    }
-    setError(null);
-    const nextRows = normalizeRowsForDisplay((data ?? []) as Notification[]);
-    if (isDesktopApp()) {
-      if (!desktopBaselineLoadedRef.current) {
-        for (const row of nextRows) presentedDesktopIdsRef.current.add(row.id);
-        desktopBaselineLoadedRef.current = true;
-      } else if (options.presentNewDesktop) {
-        for (const row of nextRows) {
-          if (row.read_at || presentedDesktopIdsRef.current.has(row.id)) continue;
-          presentDesktopNotification(row);
+    try {
+      const { data, error: err } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("user_id", userId!)
+        .order("created_at", { ascending: false })
+        .limit(PAGE_SIZE);
+      if (!current()) return;
+      setLoading((prev) => current() ? false : prev);
+      if (err) {
+        setError((prev) => current() ? mapPgError(err) : prev);
+        return;
+      }
+      setError((prev) => current() ? null : prev);
+      const nextRows = normalizeRowsForDisplay((data ?? []) as Notification[]);
+      if (isDesktopApp()) {
+        if (!desktopBaselineLoadedRef.current) {
+          for (const row of nextRows) presentedDesktopIdsRef.current.add(row.id);
+          desktopBaselineLoadedRef.current = true;
+        } else if (options.presentNewDesktop) {
+          for (const row of nextRows) {
+            if (row.read_at || presentedDesktopIdsRef.current.has(row.id)) continue;
+            presentDesktopNotification(row);
+          }
         }
       }
+      setItems((prev) => current()
+        ? filterRowsForDisplay(mergeNotificationRows(prev, nextRows, PAGE_SIZE), userId, mutedChatIds) : prev);
+    } catch (error) {
+      if (!current()) return;
+      setLoading((prev) => current() ? false : prev);
+      setError((prev) => current() ? mapPgError(error) : prev);
     }
-    setItems((prev) => filterRowsForDisplay(mergeNotificationRows(prev, nextRows, PAGE_SIZE), userId, mutedChatIds));
-  }, [userId, supabase, normalizeRowsForDisplay, mutedChatIds, presentDesktopNotification]);
+  }, [userId, supabase, normalizeRowsForDisplay, mutedChatIds, presentDesktopNotification, isCurrentReadOwner]);
 
   useEffect(() => {
     if (!userId) {
@@ -271,6 +310,8 @@ export function useNotifications() {
       return;
     }
     let cancelled = false;
+    const generation = accountGenerationRef.current;
+    const current = () => !cancelled && isCurrentReadOwner() && generation === accountGenerationRef.current;
     let subscribedOnce = false;
     void refresh().then(() => {
       if (cancelled) return;
@@ -286,7 +327,7 @@ export function useNotifications() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
         (payload) => {
-          if (cancelled || useAppStore.getState().currentUser?.id !== userId) return;
+          if (!current()) return;
           const row = payload.new as Notification;
           if (row.kind === "chat_added" || row.kind === "group_invite") {
             dispatchChatsRefresh({
@@ -313,7 +354,7 @@ export function useNotifications() {
           const osToast =
             isDesktopApp() && !row.read_at && !presentedDesktopIdsRef.current.has(row.id);
           playNotificationSoundFor({ chatId: payloadString(row.payload, "chat_id") ?? null, osToast });
-          setItems((prev) => mergeNotificationRows(prev, [row], PAGE_SIZE));
+          setItems((prev) => current() ? mergeNotificationRows(prev, [row], PAGE_SIZE) : prev);
           if (osToast) {
             presentDesktopNotification(row);
           }
@@ -323,13 +364,13 @@ export function useNotifications() {
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
         (payload) => {
-          if (cancelled || useAppStore.getState().currentUser?.id !== userId) return;
+          if (!current()) return;
           const row = payload.new as Notification;
-          setItems((prev) => prev.map((n) => (n.id === row.id ? row : n)));
+          setItems((prev) => current() ? prev.map((n) => (n.id === row.id ? row : n)) : prev);
         },
       )
       .subscribe((status) => {
-        if (cancelled || useAppStore.getState().currentUser?.id !== userId) return;
+        if (!current()) return;
         if (status !== "SUBSCRIBED") return;
         if (subscribedOnce) void refresh({ presentNewDesktop: true });
         subscribedOnce = true;
@@ -340,19 +381,21 @@ export function useNotifications() {
       supabase.removeChannel(ch);
       unregisterChannel(channelName);
     };
-  }, [userId, supabase, mutedChatIds, refresh, presentDesktopNotification]);
+  }, [userId, supabase, mutedChatIds, refresh, presentDesktopNotification, isCurrentReadOwner]);
 
   useEffect(() => {
-    setItems((prev) => normalizeRowsForDisplay(prev));
-  }, [normalizeRowsForDisplay]);
+    setItems((prev) => isCurrentReadOwner() ? normalizeRowsForDisplay(prev) : prev);
+  }, [normalizeRowsForDisplay, isCurrentReadOwner]);
 
-  const unreadCount = items.reduce((acc, n) => (n.read_at ? acc : acc + 1), 0);
+  const unreadCount = items.reduce((acc, n) => (n.user_id === userId && !n.read_at ? acc + 1 : acc), 0);
 
   useEffect(() => {
+    if (!isCurrentReadOwner()) return;
     const previousUnread = unreadPresentationTagsRef.current;
     const currentUnread = new Map<string, string>();
     const currentUnreadTagCounts = new Map<string, number>();
     for (const item of items) {
+      if (item.user_id !== userId) continue;
       if (item.read_at) continue;
       const tag = notificationPresentationTag(item);
       if (!tag) continue;
@@ -360,6 +403,7 @@ export function useNotifications() {
       currentUnreadTagCounts.set(tag, (currentUnreadTagCounts.get(tag) ?? 0) + 1);
     }
     for (const item of items) {
+      if (item.user_id !== userId) continue;
       if (!item.read_at) continue;
       const previousTag = previousUnread.get(item.id);
       if (previousTag && !currentUnreadTagCounts.has(previousTag)) {
@@ -376,7 +420,7 @@ export function useNotifications() {
       const previousDesktopUnread = unreadDesktopIdsRef.current;
       const currentDesktopUnread = new Map<string, Notification>();
       for (const item of items) {
-        if (!item.read_at && isMessageNotification(item)) {
+        if (item.user_id === userId && !item.read_at && isMessageNotification(item)) {
           currentDesktopUnread.set(item.id, item);
         }
       }
@@ -399,7 +443,7 @@ export function useNotifications() {
       unreadDesktopIdsRef.current = currentDesktopUnread;
     }
     void updateBrowserAppBadge(unreadCount);
-  }, [items, unreadCount, closeDesktopNotification]);
+  }, [items, unreadCount, closeDesktopNotification, isCurrentReadOwner, userId]);
 
   useEffect(() => {
     if (userId) return;
@@ -419,39 +463,40 @@ export function useNotifications() {
   );
 
   const markMessageNotificationsForChatRead = useCallback(async (chatId: string, readUntil: string | null = null) => {
-    const matchingIds = items
-      .filter((item) => !item.read_at && isMessageNotification(item) && payloadString(item.payload, "chat_id") === chatId)
-      .map((item) => item.id);
-    const rpcError = await markChatMessageNotificationsRead(
-      supabase,
-      chatId,
-      readUntil,
-      async (markedChatId) => {
-        const tag = notificationPresentationTag({
-          kind: "message",
-          payload: { chat_id: markedChatId },
-        });
-        if (tag) {
-          if (isNativeAndroid()) await closeNativeChatNotification(tag);
-          else await closeBrowserNotification(tag);
-        }
-      },
-    );
-    if (!rpcError) {
-      const nowIso = new Date().toISOString();
-      setItems((prev) => prev.map((item) =>
-        !item.read_at && isMessageNotification(item) && payloadString(item.payload, "chat_id") === chatId
-          ? { ...item, read_at: nowIso }
-          : item
-      ));
-      return;
-    }
+    const generation = accountGenerationRef.current;
+    const current = () => isCurrentReadOwner() && generation === accountGenerationRef.current;
+    if (!current()) return;
+    const matching = items.filter((item) => item.user_id === readOwner.userId && !item.read_at
+      && isMessageNotification(item) && payloadString(item.payload, "chat_id") === chatId);
+    const matchingIds = matching.map((item) => item.id);
+    try {
+      const rpcError = await markChatMessageNotificationsRead(supabase, chatId, readUntil, undefined, current);
+      if (!current()) return;
+      if (!rpcError) {
+        await applyConfirmedReadRows(matchingIds, current);
+        return;
+      }
+      if (!isMissingRpcError(rpcError)) { setError((prev) => current() ? mapPgError(rpcError) : prev); return; }
 
-    // Compatibility fallback for deployments where the chat-scoped RPC has
-    // not been applied yet. It cannot cover rows absent from the local page,
-    // but preserves the previous per-notification behavior.
-    if (matchingIds.length) await markReadIds(matchingIds, { silent: true });
-  }, [items, markReadIds, supabase]);
+      let eligibleIds = matchingIds;
+      if (readUntil !== null) {
+        const messageIds = [...new Set(matching.map((row) => payloadString(row.payload, "message_id"))
+          .filter((id): id is string => Boolean(id && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id))))];
+        if (!messageIds.length) return;
+        // Notification creation time is not the message horizon (backfills differ).
+        const { data, error: horizonError } = await supabase.from("messages").select("id")
+          .eq("chat_id", chatId).in("id", messageIds).lte("created_at", readUntil);
+        if (!current()) return;
+        if (horizonError) { setError((prev) => current() ? mapPgError(horizonError) : prev); return; }
+        const eligibleMessages = new Set((data ?? []).map((row) => row.id));
+        eligibleIds = matching.filter((row) => eligibleMessages.has(payloadString(row.payload, "message_id") ?? ""))
+          .map((row) => row.id);
+      }
+      if (current() && eligibleIds.length) await markReadIds(eligibleIds, { silent: true });
+    } catch (error) {
+      if (current()) setError((prev) => current() ? mapPgError(error) : prev);
+    }
+  }, [items, markReadIds, supabase, isCurrentReadOwner, readOwner, applyConfirmedReadRows]);
 
   useEffect(() => {
     const handleChatNotificationsRead = (event: Event) => {
@@ -478,27 +523,19 @@ export function useNotifications() {
   }, [markMessageNotificationsForChatRead, refresh]);
 
   const markAllRead = useCallback(async () => {
-    // Snapshot per-row read_at so we can roll back precisely on RPC
-    // failure rather than losing legitimately-read state.
-    const snapshot = new Map<string, string | null>();
-    const nowIso = new Date().toISOString();
-    setItems((prev) =>
-      prev.map((n) => {
-        snapshot.set(n.id, n.read_at);
-        return n.read_at ? n : { ...n, read_at: nowIso };
-      }),
-    );
-    const { error: rpcErr } = await supabase.rpc("notifications_mark_all_read");
-    if (rpcErr) {
-      setError(mapPgError(rpcErr));
-      setItems((prev) =>
-        prev.map((n) => {
-          if (!snapshot.has(n.id)) return n;
-          return { ...n, read_at: snapshot.get(n.id) ?? null };
-        }),
-      );
+    const generation = accountGenerationRef.current;
+    const current = () => isCurrentReadOwner() && generation === accountGenerationRef.current;
+    if (!current()) return;
+    const ids = items.filter((row) => row.user_id === readOwner.userId && !row.read_at).map((row) => row.id);
+    try {
+      const { error: rpcErr } = await supabase.rpc("notifications_mark_all_read");
+      if (!current()) return;
+      if (rpcErr) { setError((prev) => current() ? mapPgError(rpcErr) : prev); return; }
+      await applyConfirmedReadRows(ids, current);
+    } catch (error) {
+      if (current()) setError((prev) => current() ? mapPgError(error) : prev);
     }
-  }, [supabase]);
+  }, [supabase, isCurrentReadOwner, items, readOwner, applyConfirmedReadRows]);
 
   return { items, unreadCount, loading, error, markRead, markReadIds, markMessageNotificationsForChatRead, markAllRead, refresh };
 }

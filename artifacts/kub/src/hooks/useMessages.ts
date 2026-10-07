@@ -90,8 +90,13 @@ const EMPTY_MESSAGES: MessageWithSender[] = [];
  */
 const fetchedMessageScopes = new Set<string>();
 
-function captureMessageAccount(userId: string | null | undefined, epoch: number): () => boolean {
-  return () => Boolean(userId && useAppStore.getState().currentUser?.id === userId &&
+function captureMessageAccount(
+  userId: string | null | undefined,
+  epoch: number,
+  lifetimeRef: { current: symbol | null },
+): () => boolean {
+  const lifetime = lifetimeRef.current;
+  return () => Boolean(lifetime && lifetimeRef.current === lifetime && userId && useAppStore.getState().currentUser?.id === userId &&
     useAppStore.getState().accountEpoch === epoch);
 }
 
@@ -212,6 +217,14 @@ export function useMessages(
   const userId = currentUser?.id ?? null;
   const accountEpoch = useAppStore((s) => s.accountEpoch);
   const verifiedAccountEpochRef = useRef<number | null>(null);
+  const hookLifetimeRef = useRef<symbol | null>(null);
+
+  // Retire async producers synchronously, even when the account and chat stay selected.
+  useLayoutEffect(() => {
+    const lifetime = Symbol();
+    hookLifetimeRef.current = lifetime;
+    return () => { if (hookLifetimeRef.current === lifetime) hookLifetimeRef.current = null; };
+  }, []);
 
   useLayoutEffect(() => {
     verifiedAccountEpochRef.current = null;
@@ -308,7 +321,7 @@ export function useMessages(
 
   const fetchMessages = useCallback(async (options: FetchMessagesOptions = {}) => {
     if (!chatId) return;
-    const sameAccount = captureMessageAccount(userId, accountEpoch);
+    const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
     if (!sameAccount() || chatIdRef.current !== chatId || topicIdRef.current !== topicId) return;
     const requestGeneration = ++historyRequestGenerationRef.current;
     const isCurrent = () => sameAccount() && chatIdRef.current === chatId &&
@@ -403,7 +416,7 @@ export function useMessages(
         let existing = useAppStore.getState().messages[chatId] ?? EMPTY_MESSAGES;
         const checkedIds = new Set(getMessageAndReplyIds([...fetched, ...existing]));
         const hiddenReadAt = Date.now();
-        const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, [...checkedIds]);
+        const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, [...checkedIds], isCurrent);
         if (!isCurrent()) return;
         if (!fetchedHiddenIds) {
           refuseHistory("Не удалось проверить скрытые сообщения.");
@@ -415,7 +428,7 @@ export function useMessages(
           existing = latest;
           const addedIds = getMessageAndReplyIds(existing).filter((id) => !checkedIds.has(id));
           if (!addedIds.length) continue;
-          const addedHiddenIds = await fetchHiddenMessageIdSet(supabase, addedIds);
+          const addedHiddenIds = await fetchHiddenMessageIdSet(supabase, addedIds, isCurrent);
           if (!isCurrent()) return;
           if (!addedHiddenIds) {
             refuseHistory("Не удалось проверить скрытые сообщения.");
@@ -467,6 +480,7 @@ export function useMessages(
         }
       }
     } catch (error) {
+      if (!isCurrent()) return;
       console.error("Messages fetch error:", error);
       reportError(error, { category: "messages_fetch_failed", chatId, background });
       if (isCurrent()) refuseHistory("Не удалось загрузить историю чата.");
@@ -486,7 +500,7 @@ export function useMessages(
   // hidden row out of the store; this conversation also stops drawing it if
   // it arrives again, and reads an unhidden one back.
   useEffect(() => {
-    const sameAccount = captureMessageAccount(userId, accountEpoch);
+    const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
     return hiddenMessagesLive.subscribe((event) => {
       if (!sameAccount() || event.chatId !== chatIdRef.current) return;
       const next = new Set(hiddenMessageIdsRef.current);
@@ -500,7 +514,7 @@ export function useMessages(
 
   useEffect(() => {
     if (!chatId || !userId) return;
-    const sameAccount = captureMessageAccount(userId, accountEpoch);
+    const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
     const cached = useAppStore.getState().messages[chatId] ?? [];
     if (!cached.length) return;
     let active = true;
@@ -517,7 +531,7 @@ export function useMessages(
       const heard = hiddenMessagesLive.canSkip(chatId, heldIds);
       const [mark, hidden] = await Promise.all([
         loadClearedAt(supabase, chatId, userId),
-        heard ? Promise.resolve(new Set<string>()) : fetchHiddenMessageIdSet(supabase, heldIds),
+        heard ? Promise.resolve(new Set<string>()) : fetchHiddenMessageIdSet(supabase, heldIds, () => active && sameAccount()),
       ]);
       if (!active || !sameAccount()) return;
       if (mark === undefined) {
@@ -594,7 +608,7 @@ export function useMessages(
 
   const refreshMessageById = useCallback(async (messageId: string) => {
     const activeChatId = chatIdRef.current;
-    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch, hookLifetimeRef);
     if (!activeChatId || !sameAccount()) return;
     const current = useAppStore.getState().messages[activeChatId] ?? [];
     if (!current.some((message) => message.id === messageId)) return;
@@ -615,7 +629,7 @@ export function useMessages(
     const localClearedAt = clearedAtRef.current;
     if (localClearedAt && new Date(nextMessage.created_at).getTime() <= new Date(localClearedAt).getTime()) return;
 
-    const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]));
+    const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]), sameAccount);
     if (!sameAccount() || chatIdRef.current !== activeChatId || !fetchedHiddenIds) return;
     rememberHiddenMessageIds(fetchedHiddenIds);
     const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
@@ -630,7 +644,7 @@ export function useMessages(
 
   const loadOlderMessages = useCallback(async () => {
     const activeChatId = chatIdRef.current;
-    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch, hookLifetimeRef);
     if (!activeChatId || !sameAccount() || loadingOlderRef.current || !hasMoreOlderRef.current) return { loaded: 0 };
     const historyGeneration = historyRequestGenerationRef.current;
     const activeTopicId = topicIdRef.current;
@@ -690,7 +704,7 @@ export function useMessages(
 
       const olderIds = getMessageAndReplyIds(fetched);
       const hiddenReadAt = Date.now();
-      const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, olderIds);
+      const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, olderIds, sameAccount);
       if (!sameAccount() || chatIdRef.current !== activeChatId || topicIdRef.current !== activeTopicId || historyRequestGenerationRef.current !== historyGeneration) return { loaded: 0 };
       if (!fetchedHiddenIds) throw new Error("hidden_message_ids_unavailable");
       rememberHiddenMessageIds(fetchedHiddenIds);
@@ -731,7 +745,7 @@ export function useMessages(
 
   const fetchMessageById = useCallback(async (messageId: string): Promise<EnsureMessageLoadedResult> => {
     const activeChatId = chatIdRef.current;
-    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch, hookLifetimeRef);
     if (!activeChatId || !sameAccount()) return { ok: false, reason: "not-found" };
     const { data } = await supabase
       .from("messages")
@@ -741,7 +755,7 @@ export function useMessages(
       .maybeSingle();
     if (!sameAccount() || chatIdRef.current !== activeChatId || !data) return { ok: false, reason: "not-found" };
     const message = data as unknown as MessageWithSender;
-    const hiddenIds = await fetchHiddenMessageIdSet(supabase, [message.id, message.reply_to_id].filter(Boolean) as string[]);
+    const hiddenIds = await fetchHiddenMessageIdSet(supabase, [message.id, message.reply_to_id].filter(Boolean) as string[], sameAccount);
     if (!sameAccount() || chatIdRef.current !== activeChatId || !hiddenIds) return { ok: false, reason: "unavailable" };
     if (hiddenIds.has(message.id)) {
       rememberHiddenMessageIds(hiddenIds);
@@ -766,7 +780,7 @@ export function useMessages(
   useEffect(() => {
     if (!chatId) return;
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
-    const sameAccount = captureMessageAccount(userId, accountEpoch);
+    const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
     let disposed = false;
     const isActive = () => !disposed && sameAccount() && chatIdRef.current === chatId && topicIdRef.current === topicId;
     let reconcileTimer: ReturnType<typeof setTimeout> | null = null;
@@ -853,7 +867,7 @@ export function useMessages(
   }, [chatId, fetchMessages]);
 
   const fetchPinnedMessages = useCallback(async () => {
-    const sameAccount = captureMessageAccount(userId, accountEpoch);
+    const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
     if (!sameAccount()) return;
     if (!chatId) {
       // Nothing to read, which is the one place an empty list is the answer.
@@ -901,7 +915,7 @@ export function useMessages(
       return;
     }
     const pinnedRows = (data ?? []) as unknown as MessageWithSender[];
-    const pinnedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(pinnedRows));
+    const pinnedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(pinnedRows), sameAccount);
     if (!sameAccount() || chatIdRef.current !== chatId) return;
     if (!pinnedHiddenIds) {
       setPinnedRead((current) => listReadRefused(current, { subject: fetchKey, message: "Не удалось проверить скрытые сообщения." }));
@@ -926,7 +940,7 @@ export function useMessages(
   // канал не пересоздавался на каждое heartbeat-echo (Task #48).
   useEffect(() => {
     if (!chatId || !userId) return;
-    const sameAccount = captureMessageAccount(userId, accountEpoch);
+    const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
     const channelName = `messages:chat:${chatId}:typing`;
     const ch = rt.channel(channelName, { config: { broadcast: { ack: false } } });
     ch.on("broadcast", { event: "typing" }, (payload: { payload?: { userId?: string; topicId?: string | null } }) => {
@@ -956,7 +970,7 @@ export function useMessages(
   const sendTyping = useCallback(() => {
     const ch = typingChannelRef.current;
     const user = currentUserRef.current;
-    const sameAccount = captureMessageAccount(user?.id, currentUserRef.accountEpoch);
+    const sameAccount = captureMessageAccount(user?.id, currentUserRef.accountEpoch, hookLifetimeRef);
     if (!chatIdRef.current || !user || !ch || !sameAccount()) return;
     ch.send({
       type: "broadcast",
@@ -976,7 +990,7 @@ export function useMessages(
     if (!chatId || !userId) return;
 
     const channelName = `messages:chat:${chatId}`;
-    const sameAccount = captureMessageAccount(userId, accountEpoch);
+    const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
     let active = true;
     const isCurrent = () => active && sameAccount() && chatIdRef.current === chatId;
     const channel = rt
@@ -1039,7 +1053,7 @@ export function useMessages(
             .maybeSingle();
           if (!isCurrent() || !data) return;
           const nextMessage = data as unknown as MessageWithSender;
-          const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]));
+          const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]), isCurrent);
           if (!isCurrent() || !fetchedHiddenIds) return;
           if (fetchedHiddenIds.size) rememberHiddenMessageIds(fetchedHiddenIds);
           const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
@@ -1068,7 +1082,7 @@ export function useMessages(
           if (data) {
             const current = useAppStore.getState().messages[payload.new.chat_id] ?? [];
             const nextMessage = data as unknown as MessageWithSender;
-            const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]));
+            const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]), isCurrent);
             if (!isCurrent() || !fetchedHiddenIds) return;
             if (fetchedHiddenIds.size) rememberHiddenMessageIds(fetchedHiddenIds);
             const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
@@ -1117,7 +1131,7 @@ export function useMessages(
   useEffect(() => {
     if (!chatId || !userId) return;
     const channelName = `reactions:chat:${chatId}`;
-    const sameAccount = captureMessageAccount(userId, accountEpoch);
+    const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
     let fallbackTimer: number | null = null;
 
     const scheduleFallbackRefetch = () => {
@@ -1160,7 +1174,7 @@ export function useMessages(
   useEffect(() => {
     if (!chatId || !userId) return;
     const channelName = `profiles:chat:${chatId}`;
-    const sameAccount = captureMessageAccount(userId, accountEpoch);
+    const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
     const handleProfileUpdate = (payload: { new?: Profile }) => {
       if (!sameAccount()) return;
       const profile = payload.new;
@@ -1202,7 +1216,7 @@ export function useMessages(
 
   useEffect(() => {
     if (!chatId || !userId) return;
-    const sameAccount = captureMessageAccount(userId, accountEpoch);
+    const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
     const markReadWhenVisible = () => {
       if (!sameAccount() || document.visibilityState !== "visible") return;
       const activeChatId = chatIdRef.current;
@@ -1400,7 +1414,7 @@ export function useMessages(
   // UPDATE the row; the realtime UPDATE handler above will replace the message
   // with the freshly-joined data, so no manual store push is needed here.
   const editMessage = useCallback(async (messageId: string, newContent: string, mentionEntities?: import("@/lib/memberMentions").MessageMentionsV1) => {
-    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch, hookLifetimeRef);
     if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     const text = trimMentionText(createMentionText(newContent, mentionEntities));
     const trimmed = text.content;
@@ -1427,7 +1441,7 @@ export function useMessages(
   // Set deleted_at; realtime UPDATE handler removes the bubble from view.
   const deleteMessage = useCallback(async (messageId: string) => {
     if (!chatId) return { ok: false, error: "Чат не выбран." };
-    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch, hookLifetimeRef);
     if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     const { error } = await supabase
       .from("messages")
@@ -1443,7 +1457,7 @@ export function useMessages(
 
   const hideMessageForMe = useCallback(async (messageId: string) => {
     if (!chatId) return { ok: false, error: "Чат не выбран." };
-    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch, hookLifetimeRef);
     if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     const { error } = await supabase.rpc("hide_message_for_me", { p_message_id: messageId });
     if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
@@ -1464,7 +1478,7 @@ export function useMessages(
 
   const hideMessagesForMe = useCallback(async (messageIds: string[]) => {
     if (!chatId) return { ok: false, error: "Чат не выбран.", failed: messageIds.length };
-    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch, hookLifetimeRef);
     if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие.", failed: messageIds.length };
     const uniqueIds = Array.from(new Set(messageIds)).filter(Boolean);
     if (!uniqueIds.length) return { ok: true, error: null, failed: 0 };
@@ -1505,7 +1519,7 @@ export function useMessages(
   const deleteMessagesForEveryone = useCallback(async (items: MessageWithSender[]) => {
     const activeChatId = chatIdRef.current;
     const user = currentUserRef.current;
-    const sameAccount = captureMessageAccount(user?.id, currentUserRef.accountEpoch);
+    const sameAccount = captureMessageAccount(user?.id, currentUserRef.accountEpoch, hookLifetimeRef);
     if (!activeChatId || !user || !sameAccount()) return { ok: false, error: "Чат не выбран." };
     const batches = deletionBatches(items.map((item) => item.id));
     if (!batches.length) return { ok: true, error: null };
@@ -1569,7 +1583,7 @@ export function useMessages(
   // ── Pin / unpin ─────────────────────────────────────────────────────────
   const togglePin = useCallback(async (messageId: string, currentlyPinned: boolean) => {
     if (!chatId) return { ok: false, error: "Чат не выбран." };
-    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch, hookLifetimeRef);
     if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     const rpcName = currentlyPinned ? "unpin_message" : "pin_message";
     const { data, error } = await supabase.rpc(rpcName, { p_message_id: messageId });
@@ -1612,7 +1626,7 @@ export function useMessages(
     targetChatId: string,
   ): Promise<ForwardMessageResult> => {
     const user = currentUserRef.current;
-    const sameAccount = captureMessageAccount(user?.id, currentUserRef.accountEpoch);
+    const sameAccount = captureMessageAccount(user?.id, currentUserRef.accountEpoch, hookLifetimeRef);
     if (!user || !sameAccount()) return { ok: false, error: "Войдите в аккаунт, чтобы пересылать сообщения." };
     const target = {
       chatId: targetChatId,
@@ -1673,7 +1687,7 @@ export function useMessages(
   // can produce; no path could reach it.
   const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
     const user = currentUserRef.current;
-    const sameAccount = captureMessageAccount(user?.id, currentUserRef.accountEpoch);
+    const sameAccount = captureMessageAccount(user?.id, currentUserRef.accountEpoch, hookLifetimeRef);
     if (!user || !sameAccount()) return;
     const activeChatId = chatId;
     const shown = activeChatId
@@ -1781,7 +1795,7 @@ export function useMessages(
 
   const clearChatForMe = useCallback(async () => {
     if (!chatId) return { ok: false, error: "Чат не выбран." };
-    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch);
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch, hookLifetimeRef);
     if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     const { error } = await supabase.rpc("clear_chat_for_me", { p_chat_id: chatId });
     if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
@@ -1958,7 +1972,9 @@ function upsertPinnedMessage(
 async function fetchHiddenMessageIdSet(
   supabase: ReturnType<typeof createClient>,
   messageIds: string[],
+  isCurrent: () => boolean,
 ): Promise<Set<string> | null> {
+  if (!isCurrent()) return null;
   const ids = Array.from(new Set(messageIds.filter(Boolean)));
   if (!ids.length) return new Set();
   const hidden = new Set<string>();
@@ -1967,6 +1983,7 @@ async function fetchHiddenMessageIdSet(
       .from("message_hidden_for_users")
       .select("message_id")
       .in("message_id", ids.slice(offset, offset + 100));
+    if (!isCurrent()) return null;
     if (error) {
       console.error("Hidden message ids fetch error:", error);
       return null;

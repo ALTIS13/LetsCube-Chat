@@ -8,8 +8,10 @@ SQL 135/135, preview 37/37 plus settings 27, actual consumer 12 and mounted
 ownership 3 pass. Saving-layout and provider-deletion REDs are repaired; final
 hook 64/64 includes 24 compiled mutants. Both reviews accepted; final typecheck 0
 and build `cd49e9074b3bfa2d` pass. No installed SQL/native preview or APK acceptance.
-Next: web rollout and grounded fresh tester-task integration. The 16 new messages
-and three voice transcripts remain private; final intake mapping is pending.
+Main/runtime `ca0c633d` is deployed and healthy; public old/new markers, retained
+preceding entry, JS/SW parity and anonymous mount/login are accepted. Two grounded
+reported issues are items 84/85; the remaining intake coverage is still being
+validated. Next: source diagnosis of capture/read-cleanup, not repeated export.
 [Current record](operations/2026-10-07-notification-preferences-capability.md).
 
 **Current source continuation,2026-10-05:** item76/D-335 native context
@@ -4174,6 +4176,55 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     remains separate. Notification absence follow-up
     deduplicated under item76/D-335, not asserted repaired by outgoing sound.
     [Evidence and release gate](operations/2026-10-05-send-sound-web-rollout.md).
+
+84. `[ ]` Another voice-message recording reportedly asks for microphone access
+    again. **D-348**, grounded reported_UNVERIFIED intake, 2026-10-07. Platform,
+    build and system/app prompt are unknown. Inspect actual recorder/consumer and
+    reproduce redundant acquisition if present; never keep capture open merely
+    to suppress permission UI. Source diagnosis is in progress, not a device fix.
+    [Intake and limits](operations/2026-10-07-tester-feedback.md).
+
+85. `[ ]` Notifications reportedly remain after reading. **D-349**, grounded
+    reported_UNVERIFIED intake, 2026-10-07. Identify in-app centre versus OS card
+    and the confirmed read horizon. Audit current recipient/epoch and delayed ACK
+    cleanup independently of D-335/344/345/347; do not remove unread replacement
+    cards. Source diagnosis is in progress, not a delivery or OS acceptance claim.
+    [Intake and limits](operations/2026-10-07-tester-feedback.md).
+
+86. `[ ]` Frequent reloads while working with tasks, preliminary
+    reported_UNVERIFIED intake, 2026-10-07. Manual versus automatic, operation,
+    client/build and expected behavior are unknown. Establish the trigger before
+    patching refresh or reopening unrelated permissions defects.
+    [Intake and limits](operations/2026-10-07-tester-feedback.md).
+
+87. `[ ]` Delayed interface/message loading, preliminary reported_UNVERIFIED
+    intake, 2026-10-07. Screen/state/client/build and cause are unknown. Closed
+    item 58 and D-089/D-320 are comparison context, not proved duplicates or
+    regressions. No presumed cache correction is authorized by this report.
+    [Intake and limits](operations/2026-10-07-tester-feedback.md).
+
+88. `[~]` Retired microphone acquisition/recording intent, **D-350**. Actual
+    source failures repaired: final 43/43 including 17 mutants, gestures 23/23,
+    fictional mounted Chromium/WebKit 10/10 with inspected 1440/390 pixels in
+    both themes and 6 final race cases. Independent review accepted, final
+    typecheck/build pass; web rollout pending. Tester D-348's
+    unknown real permission prompt remains separate.
+    [Evidence and gate](operations/2026-10-07-read-recording-ownership.md).
+
+89. `[~]` Receipt/read ownership and confirmed horizon, **D-351**. Per-owner
+    scheduler candidate 28/28 including ten mutants, adjacent 8/8. Actual hook
+    ACK/horizon/realtime rollback 51/51, chat producer 27/27, message lifetime
+    27/27; D-352 prerequisite and independent reviews accepted. Final web rollout
+    pending; native same-id/tag cancel still needs its own capability.
+    [Evidence and gate](operations/2026-10-07-read-recording-ownership.md).
+
+90. `[~]` Real auth-session ownership before profile load, **D-352**. Actual
+    callback/store reproduction invalidates the assumption that accountEpoch
+    already changes for same-person new sessions. Narrow repair preserves normal
+    refresh and pending deep links. Auth 52/52, Settings 61/61 and fresh mounted
+    ownership/race cases pass; final independent reviews accepted. Typecheck and
+    build pass; web rollout pending, not installed-client or real JWT proof.
+    [Evidence and gate](operations/2026-10-07-read-recording-ownership.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

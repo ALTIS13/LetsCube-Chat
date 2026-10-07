@@ -123,6 +123,7 @@ export function useChats() {
   const chats = useAppStore((s) => s.chats);
   const setChats = useAppStore((s) => s.setChats);
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  const accountEpoch = useAppStore((s) => s.accountEpoch);
   const supabase = createClient();
   const rt = getRealtimeClient();
   const fetchInFlightRef = useRef(false);
@@ -142,9 +143,37 @@ export function useChats() {
   const refetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const summaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const summaryChatIdsRef = useRef(new Set<string>());
+  const ownerRef = useRef<symbol | null>(null);
+
+  // A setup-specific lease also retires requests on cleanup without an auth change.
+  const captureOwner = useCallback(() => {
+    const owner = ownerRef.current;
+    return () => Boolean(owner && ownerRef.current === owner &&
+      (useAppStore.getState().currentUser?.id ?? null) === userId &&
+      useAppStore.getState().accountEpoch === accountEpoch);
+  }, [userId, accountEpoch]);
+
+  useEffect(() => {
+    const owner = Symbol();
+    ownerRef.current = owner;
+    fetchInFlightRef.current = false;
+    fetchQueuedRef.current = false;
+    queuedPreserveActiveChatRef.current = false;
+    eventsDuringFetchRef.current = null;
+    unhideInFlightRef.current.clear();
+    fetchGenerationRef.current += 1;
+    return () => {
+      if (ownerRef.current === owner) ownerRef.current = null;
+      if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
+      if (summaryTimerRef.current) clearTimeout(summaryTimerRef.current);
+      refetchTimerRef.current = null;
+      summaryTimerRef.current = null;
+      summaryChatIdsRef.current.clear();
+    };
+  }, [userId, accountEpoch]);
 
   const fetchChats = useCallback(async (options: FetchChatsOptions = {}) => {
-    const isCurrentAccount = () => (useAppStore.getState().currentUser?.id ?? null) === userId;
+    const isCurrentAccount = captureOwner();
     if (!isCurrentAccount()) return;
     const preserveActiveChat = Boolean(options.preserveActiveChat);
     if (!userId) {
@@ -237,17 +266,20 @@ export function useChats() {
             ?.find((member) => member.user_id !== userId)?.user_id)
           .filter((id): id is string => Boolean(id))));
         for (let offset = 0; offset < counterpartIds.length; offset += 100) {
+          if (!isCurrentAccount()) break;
           const { data, error } = await supabase.from("user_contacts")
             .select("contact_user_id,alias")
             .eq("owner_user_id", userId)
             .in("contact_user_id", counterpartIds.slice(offset, offset + 100));
+          if (!isCurrentAccount()) break;
           if (error) break;
           for (const row of data ?? []) if (row.alias) aliases.set(row.contact_user_id, row.alias);
         }
         return aliases;
       })();
 
-      const batchedSummaries = await fetchBatchedChatSummaries(supabase, chatIds);
+      const batchedSummaries = await fetchBatchedChatSummaries(supabase, chatIds, isCurrentAccount);
+      if (!isCurrentAccount()) return;
       // Which of these chats hold a bot (D-236). One request for the whole
       // list, because the SELECT policy on `chat_bot_members` lets a member
       // read the membership of every chat they are in — and because the
@@ -255,6 +287,7 @@ export function useChats() {
       // map on a refusal, so a list that cannot read it looks exactly like a
       // list with no bots in it, which is what it looked like yesterday.
       const botsByChat = await fetchChatBots(chatIds);
+      if (!isCurrentAccount()) return;
 
       const contactAliasByUser = await contactAliasPromise;
       if (!isCurrentAccount()) return;
@@ -263,7 +296,7 @@ export function useChats() {
         chatsData.map(async (chat) => {
           const myMembership = membershipByChat.get(chat.id) ?? null;
           const summary = batchedSummaries?.get(chat.id)
-            ?? await fetchFallbackChatSummary(supabase, chat.id, userId, myMembership);
+            ?? await fetchFallbackChatSummary(supabase, chat.id, userId, myMembership, isCurrentAccount);
           const lastMsgData = summary.lastMessage;
           const unreadCount = summary.unreadCount;
 
@@ -326,7 +359,7 @@ export function useChats() {
           try {
             await supabase.rpc("unhide_private_chat", { p_chat_id: chat.id });
           } finally {
-            unhideInFlightRef.current.delete(chat.id);
+            if (isCurrentAccount()) unhideInFlightRef.current.delete(chat.id);
           }
         })();
       }
@@ -348,42 +381,40 @@ export function useChats() {
       );
       setRead(listReadSucceeded(userId));
     } finally {
-      eventsDuringFetchRef.current = null;
-      if (isCurrentAccount()) setRead(listReadEnded);
-      fetchInFlightRef.current = false;
-      if (fetchQueuedRef.current) {
-        fetchQueuedRef.current = false;
-        const preserveQueuedActiveChat = queuedPreserveActiveChatRef.current;
-        queuedPreserveActiveChatRef.current = false;
-        window.setTimeout(() => {
-          void latestFetchChatsRef.current?.({ preserveActiveChat: preserveQueuedActiveChat });
-        }, CHAT_REFETCH_DEBOUNCE_MS);
+      if (isCurrentAccount()) {
+        eventsDuringFetchRef.current = null;
+        setRead(listReadEnded);
+        fetchInFlightRef.current = false;
+        if (fetchQueuedRef.current) {
+          fetchQueuedRef.current = false;
+          const preserveQueuedActiveChat = queuedPreserveActiveChatRef.current;
+          queuedPreserveActiveChatRef.current = false;
+          refetchTimerRef.current = setTimeout(() => {
+            if (!isCurrentAccount()) return;
+            refetchTimerRef.current = null;
+            void latestFetchChatsRef.current?.({ preserveActiveChat: preserveQueuedActiveChat });
+          }, CHAT_REFETCH_DEBOUNCE_MS);
+        }
       }
     }
-  }, [userId, supabase, setChats]);
+  }, [userId, supabase, setChats, captureOwner]);
   latestFetchChatsRef.current = fetchChats;
 
   useEffect(() => {
     void fetchChats();
   }, [fetchChats]);
 
-  // Timers belong to one signed-in user; a pending refetch must not run for the next.
-  useEffect(() => () => {
-    if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
-    if (summaryTimerRef.current) clearTimeout(summaryTimerRef.current);
-    refetchTimerRef.current = null;
-    summaryTimerRef.current = null;
-    summaryChatIdsRef.current.clear();
-  }, [userId]);
-
   /** One full fetch for however many reasons arrive together. */
   const scheduleRefetch = useCallback(() => {
+    const isCurrentAccount = captureOwner();
+    if (!isCurrentAccount()) return;
     if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
     refetchTimerRef.current = setTimeout(() => {
+      if (!isCurrentAccount()) return;
       refetchTimerRef.current = null;
       void fetchChats();
     }, CHAT_REFETCH_DEBOUNCE_MS);
-  }, [fetchChats]);
+  }, [fetchChats, captureOwner]);
 
   /**
    * One chat's preview and count from the server, for an event that could not
@@ -391,10 +422,12 @@ export function useChats() {
    * Requests made together share one call.
    */
   const scheduleSummary = useCallback((chatId: string) => {
-    if (!userId) return;
+    const isCurrentAccount = captureOwner();
+    if (!userId || !isCurrentAccount()) return;
     summaryChatIdsRef.current.add(chatId);
     if (summaryTimerRef.current) return;
     const flush = async () => {
+      if (!isCurrentAccount()) return;
       summaryTimerRef.current = null;
       // A full fetch in flight will bring every summary, but from a snapshot
       // that may predate the change this one was asked for. Wait for it.
@@ -407,10 +440,10 @@ export function useChats() {
       if (!ids.length) return;
       const generation = fetchGenerationRef.current;
       bumpFetch("useChats:summary");
-      const summaries = await fetchChatSummaries(supabase, ids, userId);
+      const summaries = await fetchChatSummaries(supabase, ids, userId, isCurrentAccount);
       // A full fetch that started meanwhile is the fresher answer.
       if (
-        (useAppStore.getState().currentUser?.id ?? null) !== userId ||
+        !isCurrentAccount() ||
         generation !== fetchGenerationRef.current ||
         fetchInFlightRef.current
       ) return;
@@ -419,11 +452,11 @@ export function useChats() {
       if (patched !== current) useAppStore.getState().setChats(sortChatsForSidebar(patched, userId));
     };
     summaryTimerRef.current = setTimeout(() => void flush(), CHAT_SUMMARY_DEBOUNCE_MS);
-  }, [supabase, userId]);
+  }, [supabase, userId, captureOwner]);
 
   /** Applies one event to the list on screen, and remembers it for a fetch in flight. */
   const applyEvent = useCallback((event: ChatListEvent): ChatListEventOutcome => {
-    if (!userId) return "ignored";
+    if (!userId || !captureOwner()()) return "ignored";
     eventsDuringFetchRef.current?.push(event);
     const state = useAppStore.getState();
     const { chats: next, outcome } = reduceChatListEvent(state.chats, event, eventContext(userId));
@@ -431,20 +464,27 @@ export function useChats() {
       state.setChats(event.kind === "peer-receipt" ? next : sortChatsForSidebar(next, userId));
     }
     return outcome;
-  }, [userId]);
+  }, [userId, captureOwner]);
 
   useEffect(() => {
     if (!userId) return;
+
+    const sameOwner = captureOwner();
+    let active = true;
+    const isCurrent = () => active && sameOwner();
 
     // A channel is live from `SUBSCRIBED` on, and nothing it missed before —
     // the gap between the fetch and the join, or the time a reconnect took —
     // will ever arrive on it. One fetch closes that, however many channels
     // report together.
     const revalidateWhenSubscribed = (status: string) => {
+      if (!isCurrent()) return;
       if (status === "SUBSCRIBED") scheduleRefetch();
     };
+    const refetchIfCurrent = () => { if (isCurrent()) scheduleRefetch(); };
 
     const handleMessageInsert = (payload: RealtimeRowPayload) => {
+      if (!isCurrent()) return;
       const row = payload.new as unknown as MessageRowLike | null;
       if (!row?.id || !row.chat_id) return;
       dispatchChatsRefresh({ reason: "message-realtime", chatId: row.chat_id, messageId: row.id });
@@ -476,7 +516,7 @@ export function useChats() {
           .select(MESSAGE_LAST_MESSAGE_SELECT)
           .eq("id", row.id)
           .maybeSingle();
-        if (!data) return;
+        if (!isCurrent() || !data) return;
         emitChannelActivity(data as unknown as MessageWithSender);
         const joined = applyEvent({ kind: "message-insert", row: data as unknown as MessageRowLike });
         if (joined === "unknown-chat") scheduleRefetch();
@@ -484,6 +524,7 @@ export function useChats() {
     };
 
     const handleMessageUpdate = (payload: RealtimeRowPayload) => {
+      if (!isCurrent()) return;
       const row = payload.new as unknown as MessageRowLike | null;
       if (!row?.id || !row.chat_id) return;
       channelPreviewCache.hearUpdate(row as unknown as MessageWithSender);
@@ -519,10 +560,11 @@ export function useChats() {
       [
         { event: "INSERT", schema: "public", table: "messages", handler: handleMessageInsert },
         { event: "UPDATE", schema: "public", table: "messages", handler: handleMessageUpdate },
-        { event: "UPDATE", schema: "public", table: "chats", handler: scheduleRefetch },
-        { event: "DELETE", schema: "public", table: "chats", handler: scheduleRefetch },
+        { event: "UPDATE", schema: "public", table: "chats", handler: refetchIfCurrent },
+        { event: "DELETE", schema: "public", table: "chats", handler: refetchIfCurrent },
       ],
       (name, status) => {
+        if (!isCurrent()) return;
         if (import.meta.env.DEV) console.debug(`[${name}]`, userId, status);
         // Only the messages channel's own status is trusted to mean «I have
         // not missed anything».
@@ -562,6 +604,7 @@ export function useChats() {
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "chat_members" },
         (payload: { new: MembershipRowLike }) => {
+          if (!isCurrent()) return;
           if (!payload.new?.chat_id || payload.new.user_id === userId) return;
           applyEvent({ kind: "peer-receipt", row: payload.new });
         },
@@ -570,6 +613,7 @@ export function useChats() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "chat_members" },
         (payload: { new: MembershipRowLike }) => {
+          if (!isCurrent()) return;
           if (!payload.new?.chat_id || payload.new.user_id === userId) return;
           // `needs-refetch` every time it lands: the appended row has the count
           // right but no profile, and the refetch is what gives it a name.
@@ -577,6 +621,7 @@ export function useChats() {
         },
       )
       .subscribe((status: string) => {
+        if (!isCurrent()) return;
         if (import.meta.env.DEV) console.debug("[chat-members:peers]", userId, status);
         revalidateWhenSubscribed(status);
       });
@@ -589,6 +634,7 @@ export function useChats() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "chat_members", filter: `user_id=eq.${userId}` },
         (payload: { new: MembershipRowLike }) => {
+          if (!isCurrent()) return;
           if (payload.new?.chat_id) clearedAtCache.evictChat(payload.new.chat_id);
           scheduleRefetch();
         },
@@ -597,6 +643,7 @@ export function useChats() {
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "chat_members", filter: `user_id=eq.${userId}` },
         (payload: { new: MembershipRowLike }) => {
+          if (!isCurrent()) return;
           if (!payload.new?.chat_id) return;
           if ("cleared_at" in payload.new) {
             const previous = useAppStore.getState().chats.find((chat) => chat.id === payload.new.chat_id);
@@ -614,11 +661,13 @@ export function useChats() {
         "postgres_changes",
         { event: "DELETE", schema: "public", table: "chat_members", filter: `user_id=eq.${userId}` },
         (payload: { old: Partial<MembershipRowLike> }) => {
+          if (!isCurrent()) return;
           if (payload.old?.chat_id) clearedAtCache.evictChat(payload.old.chat_id);
           scheduleRefetch();
         },
       )
       .subscribe((status: string) => {
+        if (!isCurrent()) return;
         if (import.meta.env.DEV) console.debug("[chat-members:user]", userId, status);
         // While this channel is joined, a change to a «cleared for me» mark
         // arrives above and evicts it, so a mark read meanwhile stays good
@@ -635,8 +684,9 @@ export function useChats() {
     const hidesChannelName = `hides:${userId}`;
     const hidesChannel = rt
       .channel(hidesChannelName, { config: { private: true } })
-      .on("broadcast", { event: "ping" }, () => hiddenMessagesLive.pingReturned())
+      .on("broadcast", { event: "ping" }, () => { if (isCurrent()) hiddenMessagesLive.pingReturned(); })
       .on("broadcast", { event: "hide" }, (message: { payload?: unknown }) => {
+        if (!isCurrent()) return;
         const event = readHideEvent(message.payload);
         if (!event) return;
         hiddenMessagesLive.heard(event);
@@ -645,6 +695,7 @@ export function useChats() {
         scheduleSummary(event.chatId);
       })
       .subscribe((status: string) => {
+        if (!isCurrent()) return;
         if (import.meta.env.DEV) console.debug("[hides]", userId, status);
         if (status !== "SUBSCRIBED") {
           hiddenMessagesLive.lost();
@@ -652,6 +703,7 @@ export function useChats() {
         }
         hiddenMessagesLive.joined();
         void supabase.rpc("hides_live_ping").then(({ error }) => {
+          if (!isCurrent()) return;
           if (error) hiddenMessagesLive.lost();
         });
       });
@@ -660,6 +712,7 @@ export function useChats() {
     // A socket found dead, or a device gone offline, has heard nothing since:
     // the marks go back to being read, until the channel joins again.
     const notLive = () => {
+      if (!isCurrent()) return;
       clearedAtCache.setLive(false);
       hiddenMessagesLive.lost();
     };
@@ -667,6 +720,7 @@ export function useChats() {
     window.addEventListener("offline", notLive);
 
     return () => {
+      active = false;
       for (const { name, channel } of channels) {
         rt.removeChannel(channel);
         unregisterChannel(name);
@@ -682,7 +736,7 @@ export function useChats() {
       window.removeEventListener("offline", notLive);
       clearedAtCache.setLive(false);
     };
-  }, [userId, rt, supabase, applyEvent, scheduleRefetch, scheduleSummary]);
+  }, [userId, accountEpoch, rt, supabase, applyEvent, scheduleRefetch, scheduleSummary, captureOwner]);
 
   // A peer's departure, heard only from the chats this reader holds (D-327).
   //
@@ -701,6 +755,9 @@ export function useChats() {
   const departuresGeneration = useRef(0);
   useEffect(() => {
     if (!userId) return;
+    const sameOwner = captureOwner();
+    let active = true;
+    const isCurrent = () => active && sameOwner();
     const filters = chatIdInFilters(departuresKey);
     if (!filters.length) return;
     departuresGeneration.current += 1;
@@ -710,6 +767,7 @@ export function useChats() {
     // columns of the replica identity, which for `chat_members` is its primary
     // key. The guard below is what makes the row whole.
     const onDeparture = (payload: { old: Partial<MembershipRowLike> }) => {
+      if (!isCurrent()) return;
       const { chat_id: chatId, user_id: memberId } = payload.old ?? {};
       if (!chatId || !memberId || memberId === userId) return;
       applyEvent({ kind: "peer-left", row: { chat_id: chatId, user_id: memberId } });
@@ -719,27 +777,33 @@ export function useChats() {
       channel = channel.on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_members", filter }, onDeparture);
     }
     channel.subscribe((status: string) => {
+      if (!isCurrent()) return;
       if (import.meta.env.DEV) console.debug("[chat-members:departures]", userId, status);
     });
     registerChannel(name);
     return () => {
+      active = false;
       rt.removeChannel(channel);
       unregisterChannel(name);
     };
-  }, [userId, rt, applyEvent, departuresKey]);
+  }, [userId, accountEpoch, rt, applyEvent, departuresKey, captureOwner]);
 
   useEffect(() => {
     if (!userId) return;
+    const sameOwner = captureOwner();
+    let active = true;
     const handleRefresh = (event: Event) => {
+      if (!active || !sameOwner()) return;
       const detail = (event as CustomEvent<ChatsRefreshDetail>).detail;
       if (detail?.reason === "message-realtime") return;
       scheduleRefetch();
     };
     window.addEventListener(KUB_CHATS_REFRESH_EVENT, handleRefresh);
     return () => {
+      active = false;
       window.removeEventListener(KUB_CHATS_REFRESH_EVENT, handleRefresh);
     };
-  }, [userId, scheduleRefetch]);
+  }, [userId, accountEpoch, scheduleRefetch, captureOwner]);
 
   useEffect(() => {
     const total = chats.reduce((sum, chat) => sum + (chat.unread_count ?? 0), 0);
@@ -750,12 +814,15 @@ export function useChats() {
   // page stayed visible, so Realtime kept delivering, and a focus is every click
   // back into the window. See `lib/resumeRevalidation.ts`.
   useEffect(() => {
+    const sameOwner = captureOwner();
+    let active = true;
     const gate = createResumeRevalidationGate({
       minHiddenMs: RESUME_REVALIDATE_AFTER_HIDDEN_MS,
       minIntervalMs: RESUME_REVALIDATE_MIN_INTERVAL_MS,
     });
     if (document.visibilityState === "hidden") gate.hidden();
     const revalidate = () => {
+      if (!active || !sameOwner()) return;
       void fetchChats({ preserveActiveChat: true });
     };
     const onVisibility = () => {
@@ -779,12 +846,13 @@ export function useChats() {
     // though the browser may never say `online` (tracker item 53).
     window.addEventListener(CONNECTION_REVIVED_EVENT, onOnline);
     return () => {
+      active = false;
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("online", onOnline);
       window.removeEventListener(CONNECTION_REVIVED_EVENT, onOnline);
     };
-  }, [fetchChats]);
+  }, [fetchChats, captureOwner]);
 
   return {
     chats,
@@ -813,13 +881,16 @@ function latestTimestamp(...values: Array<string | null | undefined>): string | 
 async function fetchHiddenMessageIdSet(
   supabase: ReturnType<typeof createClient>,
   messageIds: string[],
+  isCurrent: () => boolean,
 ): Promise<Set<string> | null> {
+  if (!isCurrent()) return null;
   const ids = Array.from(new Set(messageIds.filter(Boolean)));
   if (!ids.length) return new Set();
   const { data, error } = await supabase
     .from("message_hidden_for_users")
     .select("message_id")
     .in("message_id", ids);
+  if (!isCurrent()) return null;
   if (error) {
     console.error("Hidden chat preview ids fetch error:", error);
     return null;
@@ -837,7 +908,10 @@ async function fetchFallbackChatSummary(
   chatId: string,
   userId: string,
   membership: SummaryMembership | null,
+  isCurrent: () => boolean,
 ): Promise<ChatSummary<SidebarLastMessage>> {
+  const empty = { lastMessage: null, unreadCount: 0 };
+  if (!isCurrent()) return empty;
   const effectiveReadAt = latestTimestamp(
     membership?.last_read_at,
     membership?.joined_at,
@@ -855,11 +929,14 @@ async function fetchFallbackChatSummary(
   const { data: lastMsgRows } = await lastMessageQuery
     .order("created_at", { ascending: false })
     .limit(25);
+  if (!isCurrent()) return empty;
   const lastRows = (lastMsgRows ?? []) as SidebarLastMessage[];
   const hiddenLastIds = await fetchHiddenMessageIdSet(
     supabase,
     lastRows.map((message) => message.id),
+    isCurrent,
   );
+  if (!isCurrent()) return empty;
   const lastMessage = hiddenLastIds
     ? lastRows.find((message) => !hiddenLastIds.has(message.id)) ?? null
     : null;
@@ -874,17 +951,21 @@ async function fetchFallbackChatSummary(
     unreadQuery = unreadQuery.gt("created_at", effectiveReadAt);
   }
   const { count } = await unreadQuery.limit(1);
+  if (!isCurrent()) return empty;
   return { lastMessage, unreadCount: count ?? 0 };
 }
 
 async function fetchBatchedChatSummaries(
   supabase: ReturnType<typeof createClient>,
   chatIds: string[],
+  isCurrent: () => boolean,
 ): Promise<SidebarSummaryMap | null> {
+  if (!isCurrent()) return null;
   if (!chatIds.length || chatListSummariesCapability === "unsupported") return null;
   const { data, error } = await supabase.rpc("chat_list_summaries", {
     p_chat_ids: chatIds,
   });
+  if (!isCurrent()) return null;
   if (error) {
     if (isChatListSummariesUnavailable(error)) {
       chatListSummariesCapability = "unsupported";
@@ -908,8 +989,10 @@ async function fetchChatSummaries(
   supabase: ReturnType<typeof createClient>,
   chatIds: string[],
   userId: string,
+  isCurrent: () => boolean,
 ): Promise<SidebarSummaryMap> {
-  const batched = await fetchBatchedChatSummaries(supabase, chatIds);
+  const batched = await fetchBatchedChatSummaries(supabase, chatIds, isCurrent);
+  if (!isCurrent()) return new Map();
   if (batched) return batched;
   const summaries: SidebarSummaryMap = new Map();
   const listed = useAppStore.getState().chats;
@@ -921,7 +1004,7 @@ async function fetchChatSummaries(
       joined_at: me?.joined_at ?? null,
       last_read_at: me?.last_read_at ?? null,
       cleared_at: chat.cleared_at ?? null,
-    }));
+    }, isCurrent));
   }));
   return summaries;
 }

@@ -85,8 +85,26 @@ the final local candidate has two reads and one distinct capability call.
 Its entry is `/assets/index-CVyjXO4K.js`, SHA-256
 `d0ffbc36b55cf31c43867e5cf4b2096a9aeea3a0f5a2dbda0d6768bc93b1e5df`.
 Actual before/after markers, healthy exact revision and retained old entry are
-required after any main push. Web fixes reach the browser/Windows shell; installed
-Android still requires a separately accepted bundle upgrade.
+required after any main push.
+
+Accepted rollout, 2026-10-07 11:43 Moscow: main/candidate remote refs both match
+`ca0c633dbd909935604f633a427f4b501cb5a5a4`; the sole running healthy web image has
+that exact revision. The pre-push clean-tree guard completed successfully before
+the atomic push: four reviewed commits, 16 own-tree files and 63 resolved aliases,
+no versioned migration or worker delta. New public markers are 2 / 1 against the
+old 1 / 0; the preceding entry remains byte-identical. Public JS and service worker
+hashes match the running container. Anonymous `/` and `/login` mount with zero
+unhandled page errors, no personal session or capture.
+
+Public entry `/assets/index-DaHkKTEh.js`, SHA-256
+`a2fb399fc89c37a713b0a420210ef8f98ff482bef359a086b894b7915c599114`;
+service worker SHA-256
+`6178a8f5e03fd88e89ba722b614d17b9a2b54ca5b081f2f15bd7eed8ea6494a6`.
+The local and container builds have different emitted hashes; acceptance uses
+the actual image, calibrated markers and public/container parity, not equality
+with the local entry name. Previous image `a96a4d55` remains the rollback target.
+Web fixes reach the browser/Windows shell; installed Android still requires a
+separately accepted bundle upgrade.
 
 No production SQL, APK sync/assemble/sign/install/publication, provider send,
 package identity, signing, OS card or rented device acceptance is claimed.
@@ -96,3 +114,4 @@ epoch/current-card and lock-screen/device proof remain separate stages.
 Fresh authorized tester intake is processed in ignored storage. Only sanitized
 product observations and their deduplicated task mapping belong in tracked docs;
 raw bodies, identifiers, URLs, media, prompts and ASR text never do.
+[Reported tasks and remaining intake coverage](2026-10-07-tester-feedback.md).

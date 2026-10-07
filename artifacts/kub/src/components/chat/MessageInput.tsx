@@ -265,6 +265,8 @@ export function MessageInput({
   const touchLongPressTriggeredRef = useRef(false);
   const touchPointerMovedRef = useRef(false);
   const voiceHoldActiveRef = useRef(false);
+  const voiceHoldIntentRef = useRef(0);
+  const voicePendingStopRef = useRef<{ intent: number; scopeToken: ComposerSendToken | null } | null>(null);
   const videoHoldActiveRef = useRef(false);
   const holdRecorderStateRef = useRef<typeof holdRecorderState>(null);
   const recorderPointerStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -346,6 +348,7 @@ export function MessageInput({
   }), []);
 
   useLayoutEffect(() => {
+    voiceHoldIntentRef.current += 1;
     voiceHold.cancel();
     composerSendScope.activate(chatId);
     voiceRecordingScopeTokenRef.current = null;
@@ -370,6 +373,8 @@ export function MessageInput({
     setRecordingPreview(null);
     setShortHint(null);
     return () => {
+      voiceHoldIntentRef.current += 1;
+      voicePendingStopRef.current = null;
       composerSendScope.invalidate();
       voiceRecordingScopeTokenRef.current = null;
       videoRecordingScopeTokenRef.current = null;
@@ -414,6 +419,8 @@ export function MessageInput({
     return () => {
       if (modeFeedbackTimerRef.current) clearTimeout(modeFeedbackTimerRef.current);
       if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
+      voiceHoldIntentRef.current += 1;
+      voicePendingStopRef.current = null;
       voiceHold.cancel();
     };
   }, [voiceHold.cancel]);
@@ -446,6 +453,7 @@ export function MessageInput({
 
   useEffect(() => {
     if (!voiceHold.error) return;
+    voiceHoldIntentRef.current += 1;
     voiceHoldActiveRef.current = false;
     setVoiceHoldActive(false);
     holdRecorderStateRef.current = null;
@@ -601,7 +609,9 @@ export function MessageInput({
   }, [clearActiveHoldRecorder]);
 
   const startVoiceHoldRecording = useCallback(async () => {
-    // As above: released means sent, so nothing waits to be cleared first.
+    // A normal stop owns its final blob until onstop; a new press cannot retire it.
+    if (voicePendingStopRef.current) return;
+    const intent = ++voiceHoldIntentRef.current;
     recordingStartedAtRef.current = Date.now();
     const scopeToken = composerSendScope.capture();
     voiceRecordingScopeTokenRef.current = scopeToken;
@@ -611,7 +621,7 @@ export function MessageInput({
     setShowAttach(false);
     setShowEmoji(false);
     const started = await voiceHold.start();
-    if (!composerSendScope.isActive(scopeToken)) {
+    if (voiceHoldIntentRef.current !== intent || !voiceHoldActiveRef.current || !composerSendScope.isActive(scopeToken)) {
       return;
     }
     if (!started) {
@@ -624,12 +634,22 @@ export function MessageInput({
 
   const stopVoiceHoldRecording = useCallback(async () => {
     if (!voiceHoldActiveRef.current) return;
+    // Sending takes completion authority away from any pending locked pause.
+    voiceHoldIntentRef.current += 1;
+    const intent = voiceHoldIntentRef.current;
     const scopeToken = voiceRecordingScopeTokenRef.current;
+    const pendingStop = voiceHold.hasRecorder() ? { intent, scopeToken } : null;
+    voicePendingStopRef.current = pendingStop;
     voiceHoldActiveRef.current = false;
     setVoiceHoldActive(false);
     clearActiveHoldRecorder();
-    const result = await voiceHold.stop();
-    if (!scopeToken || !composerSendScope.isActive(scopeToken)) return;
+    let result: VoiceRecordResult | null;
+    try {
+      result = await voiceHold.stop();
+    } finally {
+      if (voicePendingStopRef.current === pendingStop) voicePendingStopRef.current = null;
+    }
+    if (voiceHoldIntentRef.current !== intent || !scopeToken || !composerSendScope.isActive(scopeToken)) return;
     // A press too short to be a recording is answered beside the button, not by
     // a dialog over the whole interface (R7); by here it has already been said.
     if (!result || result.blob.size === 0 || result.durationMs < recordingMinimumMs("voice")) {
@@ -639,8 +659,8 @@ export function MessageInput({
     await runComposerCompletionIfCurrent(composerSendScope, scopeToken, () => (
       onSendVoice?.(result.blob, result.durationMs, result.mimeType)
     ));
-    if (composerSendScope.isActive(scopeToken)) voiceRecordingScopeTokenRef.current = null;
-  }, [clearActiveHoldRecorder, composerSendScope, onSendVoice, voiceHold.cancel, voiceHold.stop]);
+    if (voiceHoldIntentRef.current === intent && composerSendScope.isActive(scopeToken)) voiceRecordingScopeTokenRef.current = null;
+  }, [clearActiveHoldRecorder, composerSendScope, onSendVoice, voiceHold.cancel, voiceHold.stop, voiceHold.hasRecorder]);
 
   const startRecorderHold = useCallback((mode: "voice" | "video") => {
     if (mode === "video") {
@@ -663,11 +683,14 @@ export function MessageInput({
    * detached, so the clip it was making is never handed on.
    */
   const cancelRecorderHold = useCallback(() => {
+    voiceHoldIntentRef.current += 1;
+    const pendingStop = voicePendingStopRef.current;
+    voicePendingStopRef.current = null;
     if (videoHoldActiveRef.current) {
       setShowVideoMessage(false);
       resetVideoRecorderFlags();
     }
-    if (voiceHoldActiveRef.current) {
+    if (voiceHoldActiveRef.current || pendingStop) {
       voiceHold.cancel();
       voiceRecordingScopeTokenRef.current = null;
       voiceHoldActiveRef.current = false;
@@ -691,7 +714,11 @@ export function MessageInput({
       stopVideoHoldRecording();
       return;
     }
+    const intent = voiceHoldIntentRef.current;
+    const scopeToken = voiceRecordingScopeTokenRef.current;
+    if (!scopeToken || !composerSendScope.isActive(scopeToken)) return;
     const result = await voiceHold.stop();
+    if (voiceHoldIntentRef.current !== intent || !composerSendScope.isActive(scopeToken)) return;
     voiceHoldActiveRef.current = false;
     setVoiceHoldActive(false);
     if (!result || result.blob.size === 0) {
@@ -706,7 +733,7 @@ export function MessageInput({
     const next = { ...current, phase: "paused" as const };
     holdRecorderStateRef.current = next;
     setHoldRecorderState(next);
-  }, [cancelRecorderHold, stopVideoHoldRecording, voiceHold.stop]);
+  }, [cancelRecorderHold, composerSendScope, stopVideoHoldRecording, voiceHold.stop]);
 
   /** The send in the locked row: what was paused, or what is still running. */
   const sendLockedRecording = useCallback(async () => {

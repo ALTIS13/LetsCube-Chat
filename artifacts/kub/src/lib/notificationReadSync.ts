@@ -10,11 +10,17 @@ export async function markChatMessageNotificationsRead(
   chatId: string,
   readUntil: string | null,
   onMarkedRead?: (chatId: string) => void | PromiseLike<void>,
+  isCurrent: () => boolean = () => true,
 ): Promise<unknown> {
-  const { error } = await client.rpc("notifications_mark_chat_messages_read", {
-    p_chat_id: chatId,
-    p_read_until: readUntil,
-  });
-  if (!error && onMarkedRead) await onMarkedRead(chatId);
-  return error;
+  if (!isCurrent()) return null;
+  try {
+    const { error } = await client.rpc("notifications_mark_chat_messages_read", {
+      p_chat_id: chatId,
+      p_read_until: readUntil,
+    });
+    if (!error && onMarkedRead && isCurrent()) await onMarkedRead(chatId);
+    return error;
+  } catch (error) {
+    return error;
+  }
 }

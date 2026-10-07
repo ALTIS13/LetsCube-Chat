@@ -7,6 +7,7 @@ import { sameData, shareById } from '@/lib/structuralSharing'
 import type { Profile, ChatWithLastMessage, MessageWithSender } from '@/types/database'
 import { sameActorClientMessage } from '@/lib/messageActor'
 import { isHeartbeatOnlyProfileChange } from '@/lib/profileChange'
+import { sameAuthSessionIdentity, type AuthSessionIdentity } from '@/lib/authSessionIdentity'
 import type { BotProfileSeed } from '@/lib/botProfile'
 import type { ProfileAnchor, ProfileOpener } from '@/lib/profileTier'
 import {
@@ -38,7 +39,9 @@ interface AppState {
   currentUser: Profile | null
   /** Changes only at an account boundary, including logout/relogin as the same person. */
   accountEpoch: number
-  setCurrentUser: (user: Profile | null) => void
+  authSessionIdentity: AuthSessionIdentity | null
+  setAuthSessionIdentity: (identity: AuthSessionIdentity | null) => void
+  setCurrentUser: (user: Profile | null, expectedAccountEpoch?: number) => void
 
   // Selected chat
   selectedChatId: string | null
@@ -375,9 +378,31 @@ function latestTimestamp(a: string | null | undefined, b: string | null | undefi
   return bMs > aMs ? b : a;
 }
 
+function retireAccountState(state: AppState) {
+  // Stop outgoing ACK publication before synchronously publishing the new owner.
+  appOutbox.stop();
+  return { accountEpoch: state.accountEpoch + 1, chats: [], messages: {},
+    replyToMessage: null, editingMessage: null, forwardingMessages: null, pendingForward: null,
+    messageSelection: null, messageDeleteRequest: null,
+    // Only the initial owner may retain a pending first-boot deep link.
+    ...(state.currentUser || state.authSessionIdentity ? { selectedChatId: null, selectedTopicId: null } : {}) };
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   currentUser: null,
   accountEpoch: 0,
+  authSessionIdentity: null,
+  setAuthSessionIdentity: (identity) => set((state) => {
+    const previous = state.authSessionIdentity
+      ?? (state.currentUser ? { userId: state.currentUser.id, sessionId: null } : null);
+    if (sameAuthSessionIdentity(previous, identity)) {
+      if (!identity) return state;
+      const sessionId = identity.sessionId ?? previous?.sessionId ?? null;
+      if (state.authSessionIdentity?.userId === identity.userId && state.authSessionIdentity.sessionId === sessionId) return state;
+      return { authSessionIdentity: { userId: identity.userId, sessionId } };
+    }
+    return { ...retireAccountState(state), authSessionIdentity: identity, currentUser: null };
+  }),
   /**
    * Shallow-compare significant fields and DROP no-op writes.
    *
@@ -401,15 +426,15 @@ export const useAppStore = create<AppState>((set, get) => ({
    * значим по умолчанию; пульс пишет только `online_at`, так что фильтр,
    * ради которого всё это писалось, остаётся закрытым.
    */
-  setCurrentUser: (user) => set((state) => {
+  setCurrentUser: (user, expectedAccountEpoch) => set((state) => {
+    if (expectedAccountEpoch !== undefined && state.accountEpoch !== expectedAccountEpoch) return state;
+    if (user && state.authSessionIdentity && state.authSessionIdentity.userId !== user.id) return state;
+    if (!user && state.authSessionIdentity) {
+      return { ...retireAccountState(state), currentUser: null, authSessionIdentity: null };
+    }
     if ((state.currentUser?.id ?? null) !== (user?.id ?? null)) {
-      // Fence ACK callbacks before the new account is published, not after a React effect.
-      appOutbox.stop();
-      return { currentUser: user, accountEpoch: state.accountEpoch + 1, chats: [], messages: {},
-        replyToMessage: null, editingMessage: null, forwardingMessages: null, pendingForward: null,
-        messageSelection: null, messageDeleteRequest: null,
-        // First profile load must keep a pending deep-link selection.
-        ...(state.currentUser ? { selectedChatId: null, selectedTopicId: null } : {}) };
+      if (user && state.authSessionIdentity?.userId === user.id) return { currentUser: user };
+      return { ...retireAccountState(state), currentUser: user, authSessionIdentity: null };
     }
     if (!user || !state.currentUser) return { currentUser: user };
     const unchanged = isHeartbeatOnlyProfileChange(

@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { Fragment, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { Theme } from "@/hooks/useTheme";
 import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
@@ -148,7 +148,7 @@ export interface SettingsScreen {
  * button that cannot see `saving` and `saved` is a button that lies.
  */
 export function useSettingsScreen({ onClose }: { onClose: () => void }): SettingsScreen {
-  const { currentUser, setCurrentUser } = useAppStore();
+  const { currentUser, setCurrentUser, accountEpoch } = useAppStore();
   const supabase = createClient();
   const { theme, resolvedTheme, setTheme } = useTheme();
   const { size: messageTextSize, setSize: setMessageTextSize } = useMessageTextSize();
@@ -205,6 +205,37 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
    */
   const [saveFailure, setSaveFailure] = useState<ProfileSaveFailure | null>(null);
   const [saved, setSaved] = useState(false);
+  const profileOwnerLeaseRef = useRef<symbol | null>(null);
+  const profileSaveGenerationRef = useRef(0);
+  const avatarGenerationRef = useRef(0);
+
+  useLayoutEffect(() => {
+    const lease = Symbol();
+    profileOwnerLeaseRef.current = lease;
+    setFullName(currentUser?.full_name ?? "");
+    setUsername(currentUser?.username ?? "");
+    setBio(currentUser?.bio ?? "");
+    setSaving(false);
+    setUploadingAvatar(false);
+    setSaved(false);
+    setSaveFailure(null);
+    setError(null);
+    return () => {
+      if (profileOwnerLeaseRef.current === lease) profileOwnerLeaseRef.current = null;
+    };
+  }, [currentUser?.id, accountEpoch]);
+
+  const captureProfileOwner = (userId: string) => {
+    const lease = profileOwnerLeaseRef.current;
+    const epoch = accountEpoch;
+    return {
+      userId,
+      accountEpoch: epoch,
+      isCurrent: () => Boolean(lease && profileOwnerLeaseRef.current === lease
+        && useAppStore.getState().currentUser?.id === userId
+        && useAppStore.getState().accountEpoch === epoch),
+    };
+  };
   // Opened on «Звук» from the panel's device menus (tracker item 40): that row
   // starts open. Read once — which row is open is the reader's from then on.
   const [openSections, setOpenSections] = useState<ReadonlySet<DisclosureId>>(() =>
@@ -321,6 +352,8 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
 
   const handleSave = async () => {
     if (!currentUser) return;
+    const owner = captureProfileOwner(currentUser.id);
+    if (!owner.isCurrent()) return;
     const fullNameError = validateFullName(fullName);
     const usernameError = validateUsername(username, { allowReserved: isAdmin });
     // Under the field that is wrong, not in the banner under the header (B5).
@@ -334,40 +367,58 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
     }
     const cleanFullName = normalizeFullName(fullName);
     const cleanUsername = normalizeUsername(username);
+    const generation = ++profileSaveGenerationRef.current;
+    const isCurrent = () => owner.isCurrent() && profileSaveGenerationRef.current === generation;
     setSaving(true);
     setError(null);
     setSaveFailure(null);
     // Phone is intentionally NOT updated here — it lives in the
     // RLS-protected `profile_contacts` table and is managed by
     // `<PhoneSection />` below after OTP verification.
-    const { data, error: err } = await supabase
-      .from("profiles")
-      .update({
-        full_name: cleanFullName,
-        username: cleanUsername || null,
-        // `normalizeBio` is this expression, moved next to the other two
-        // normalisers (D-136): what the save writes is also what decides
-        // whether the field has been edited, and one of them had no name.
-        bio: normalizeBio(bio) || null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", currentUser.id)
-      .select("*")
-      .single();
-    setSaving(false);
-    if (err) {
-      // D-132 (settings-profile C4). A taken никнейм came back as «Такая запись
-      // уже существует.» — `mapPgError`'s answer to SQLSTATE 23505, which is
-      // true of a row and says nothing about the field. The mapper belongs to
-      // another track, so the decision is refused here instead: the cause goes
-      // to the log, and what reaches the screen names the никнейм.
-      console.error("profile save error:", err);
+    try {
+      const { data, error: err } = await supabase
+        .from("profiles")
+        .update({
+          full_name: cleanFullName,
+          username: cleanUsername || null,
+          // `normalizeBio` is this expression, moved next to the other two
+          // normalisers (D-136): what the save writes is also what decides
+          // whether the field has been edited, and one of them had no name.
+          bio: normalizeBio(bio) || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", owner.userId)
+        .select("*")
+        .single();
+      if (!isCurrent()) return;
+      if (err) {
+        // D-132: a refused username belongs under that field, not in the banner.
+        console.error("profile save error:", err);
+        setSaveFailure(profileSaveFailure(err, mapPgError(err), Boolean(cleanUsername)));
+        return;
+      }
+      if (data) {
+        const liveProfile = useAppStore.getState().currentUser;
+        if (liveProfile) {
+          // This ACK owns only the edited fields, not a newer avatar or other profile state.
+          const savedProfile = {
+            ...liveProfile,
+            full_name: data.full_name,
+            username: data.username,
+            bio: data.bio,
+          };
+          setCurrentUser(savedProfile, owner.accountEpoch);
+        }
+      }
+      if (!isCurrent()) return;
+      setSaved(true);
+      setTimeout(() => { if (isCurrent()) setSaved(false); }, 2000);
+    } catch (err) {
+      if (!isCurrent()) return;
       setSaveFailure(profileSaveFailure(err, mapPgError(err), Boolean(cleanUsername)));
-      return;
+    } finally {
+      if (isCurrent()) setSaving(false);
     }
-    if (data) setCurrentUser(data);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
   };
 
   /**
@@ -413,56 +464,74 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
 
   const handleAvatarChange = async (file: File) => {
     if (!currentUser) return;
+    const owner = captureProfileOwner(currentUser.id);
+    if (!owner.isCurrent()) return;
     const validationError = validateAvatarImage(file);
     if (validationError) {
       setError(validationError);
       return;
     }
+    const generation = ++avatarGenerationRef.current;
+    const isCurrent = () => owner.isCurrent() && avatarGenerationRef.current === generation;
     setUploadingAvatar(true);
     setError(null);
-    const preparedFile = await prepareAvatarImage(file);
-    const preparedValidationError = validateAvatarUploadImage(preparedFile);
-    if (preparedValidationError) {
-      setError(preparedValidationError);
-      setUploadingAvatar(false);
-      return;
+    try {
+      const preparedFile = await prepareAvatarImage(file);
+      if (!isCurrent()) return;
+      const preparedValidationError = validateAvatarUploadImage(preparedFile);
+      if (preparedValidationError) { setError(preparedValidationError); return; }
+      const path = avatarUploadPath("user", owner.userId, preparedFile);
+      const { data, error: upErr } = await supabase.storage
+        .from("media")
+        .upload(path, preparedFile, {
+          contentType: preparedFile.type,
+          upsert: false,
+          cacheControl: cacheControlFor(path),
+        });
+      if (!isCurrent()) return;
+      if (upErr) { setError(mapPgError(upErr)); return; }
+      // D-208: recorded addresses stay public — see the note in `lib/media/mediaUrl`.
+      const publicUrl = publicMediaObjectUrl({ bucket: "media", path: data.path });
+      const { error: profileErr } = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", owner.userId);
+      if (!isCurrent()) return;
+      if (profileErr) { setError(mapPgError(profileErr)); return; }
+      const liveProfile = useAppStore.getState().currentUser;
+      if (liveProfile) setCurrentUser({ ...liveProfile, avatar_url: publicUrl }, owner.accountEpoch);
+    } catch (err) {
+      if (isCurrent()) setError(mapPgError(err));
+    } finally {
+      if (isCurrent()) setUploadingAvatar(false);
     }
-    const path = avatarUploadPath("user", currentUser.id, preparedFile);
-    const { data, error: upErr } = await supabase.storage
-      .from("media")
-      .upload(path, preparedFile, {
-        contentType: preparedFile.type,
-        upsert: false,
-        cacheControl: cacheControlFor(path),
-      });
-    if (upErr) { setError(mapPgError(upErr)); setUploadingAvatar(false); return; }
-    // D-208: recorded addresses stay public — see the note in `lib/media/mediaUrl`.
-    const publicUrl = publicMediaObjectUrl({ bucket: "media", path: data.path });
-    const { error: profileErr } = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", currentUser.id);
-    if (profileErr) { setError(mapPgError(profileErr)); setUploadingAvatar(false); return; }
-    setCurrentUser({ ...currentUser, avatar_url: publicUrl });
-    setUploadingAvatar(false);
   };
 
   const handleRemoveAvatar = async () => {
     if (!currentUser) return;
+    const owner = captureProfileOwner(currentUser.id);
+    if (!owner.isCurrent()) return;
+    const generation = ++avatarGenerationRef.current;
+    const isCurrent = () => owner.isCurrent() && avatarGenerationRef.current === generation;
     // D-133 (settings-profile C2). It removed the photograph on the press, in a
     // header where the button sits beside the person's own name.
-    const confirmed = await requestAppConfirm({
-      ...avatarRemovalPrompt(),
-      icon: "delete",
-    });
-    if (!confirmed) return;
-    setError(null);
-    const { error: err } = await supabase
-      .from("profiles")
-      .update({ avatar_url: null, updated_at: new Date().toISOString() })
-      .eq("id", currentUser.id);
-    if (err) {
-      setError(prefixError("Не удалось удалить фото", err));
-      return;
+    try {
+      const confirmed = await requestAppConfirm({
+        ...avatarRemovalPrompt(),
+        icon: "delete",
+      });
+      if (!isCurrent() || !confirmed) return;
+      setError(null);
+      const { error: err } = await supabase
+        .from("profiles")
+        .update({ avatar_url: null, updated_at: new Date().toISOString() })
+        .eq("id", owner.userId);
+      if (!isCurrent()) return;
+      if (err) { setError(prefixError("Не удалось удалить фото", err)); return; }
+      const liveProfile = useAppStore.getState().currentUser;
+      if (liveProfile) setCurrentUser({ ...liveProfile, avatar_url: null }, owner.accountEpoch);
+    } catch (err) {
+      if (isCurrent()) setError(prefixError("Не удалось удалить фото", err));
+    } finally {
+      if (isCurrent()) setUploadingAvatar(false);
     }
-    setCurrentUser({ ...currentUser, avatar_url: null });
   };
 
   // Tracker item 37. A hook, so above the early return below.

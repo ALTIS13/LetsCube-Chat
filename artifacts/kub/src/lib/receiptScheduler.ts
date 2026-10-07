@@ -37,6 +37,8 @@ export interface ReceiptSchedulerDeps {
   now: () => number;
   availability: RpcAvailability;
   isMissingRpc: (error: unknown) => boolean;
+  /** A timer/request can outlive the authenticated owner that scheduled it. */
+  isCurrent?: () => boolean;
   /** A read the server accepted, up to the string it was reported with. */
   onRead?: (detail: { chatId: string; readUntil: string | null }) => void;
   onError?: (rpcName: string, error: unknown) => void;
@@ -63,6 +65,8 @@ function emptyLane(): Lane {
 export function createReceiptScheduler(deps: ReceiptSchedulerDeps) {
   const delivered = emptyLane();
   const read = emptyLane();
+  let disposed = false;
+  const isCurrent = () => !disposed && (deps.isCurrent?.() ?? true);
 
   const watermarkOf = (value: string | null | undefined): Watermark => {
     const micros = timestampMicros(value);
@@ -70,6 +74,7 @@ export function createReceiptScheduler(deps: ReceiptSchedulerDeps) {
   };
 
   async function call(client: ReceiptRpcClient, rpcName: string, args: Record<string, unknown>): Promise<SendResult> {
+    if (!isCurrent()) return { error: null, rpcName };
     try {
       const { error } = await client.rpc(rpcName, args);
       return { error: error ?? null, rpcName };
@@ -81,6 +86,7 @@ export function createReceiptScheduler(deps: ReceiptSchedulerDeps) {
   async function sendRead(client: ReceiptRpcClient, chatId: string, raw: string | null): Promise<SendResult> {
     if (deps.availability.shouldTry(READ_THROUGH_RPC)) {
       const result = await call(client, READ_THROUGH_RPC, { p_chat_id: chatId, p_read_through: raw });
+      if (!isCurrent()) return result;
       if (!result.error) {
         deps.availability.markPresent(READ_THROUGH_RPC);
         return result;
@@ -104,7 +110,7 @@ export function createReceiptScheduler(deps: ReceiptSchedulerDeps) {
     send: (client: ReceiptRpcClient, chatId: string, raw: string | null) => Promise<SendResult>,
     onConfirmed?: (chatId: string, raw: string | null) => void,
   ): void {
-    if (!chatId) return;
+    if (!chatId || !isCurrent()) return;
     const mark = watermarkOf(value);
     const known = Math.max(lane.scheduled.get(chatId)?.micros ?? 0, lane.confirmed.get(chatId) ?? 0);
     if (mark.micros <= known) return;
@@ -115,8 +121,10 @@ export function createReceiptScheduler(deps: ReceiptSchedulerDeps) {
 
     const timer = deps.setTimer(() => {
       lane.timers.delete(chatId);
+      if (!isCurrent()) return;
       const pending = lane.scheduled.get(chatId) ?? mark;
       void send(client, chatId, pending.raw).then(({ error, rpcName }) => {
+        if (!isCurrent()) return;
         if (error) {
           if (lane.scheduled.get(chatId) === pending) lane.scheduled.delete(chatId);
           deps.onError?.(rpcName, error);
@@ -131,6 +139,16 @@ export function createReceiptScheduler(deps: ReceiptSchedulerDeps) {
   }
 
   return {
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      for (const lane of [delivered, read]) {
+        for (const timer of lane.timers.values()) deps.clearTimer(timer);
+        lane.timers.clear();
+        lane.scheduled.clear();
+        lane.confirmed.clear();
+      }
+    },
     scheduleDelivered(client: ReceiptRpcClient, chatId: string | null | undefined, latestIncomingCreatedAt?: string | null) {
       schedule(delivered, client, chatId, latestIncomingCreatedAt, DELIVERED_DEBOUNCE_MS, (c, id) => sendDelivered(c, id));
     },

@@ -44,8 +44,9 @@ test("Android read sync does not remove cards for an absent or invalid chat tag"
   assert.equal(removed, 0);
 });
 
-test("chat read reconciliation uses native cleanup on both local and remote read paths", () => {
+test("chat read reconciliation uses confirmed rows for shared native cleanup", () => {
   const hook = readFileSync(new URL("../../artifacts/kub/src/hooks/useNotifications.ts", import.meta.url), "utf8");
   assert.ok(/previousTag && !currentUnreadTagCounts\.has\(previousTag\)[\s\S]*?closeNativeChatNotification\(previousTag\)/.test(hook), "remote-read cleanup missing");
-  assert.ok(/markChatMessageNotificationsRead\([\s\S]*?closeNativeChatNotification\(tag\)/.test(hook), "local-read cleanup missing");
+  assert.ok(hook.includes("markChatMessageNotificationsRead(supabase, chatId, readUntil, undefined, current)"), "local read must not close the whole chat directly");
+  assert.ok(hook.includes("await applyConfirmedReadRows(matchingIds, current)"), "local read must reconcile exact confirmed rows before shared cleanup");
 });
