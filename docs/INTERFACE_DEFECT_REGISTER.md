@@ -24941,6 +24941,14 @@ or APK acceptance. Recovery/backup/rehearsal and current-epoch/card/OS privacy
 remain required. D-335 stays OPEN.
 [Contract, tests and remaining gates](operations/2026-10-07-native-message-preview-authorization.md).
 
+**2026-10-07 real rehearsal:** full isolated PG17 restore, candidate transaction,
+raising controls and eight equality checks passed in attempt7; actual HTTP
+controls refused without a recoverable exact request oracle. Copy7 removed
+healthy/non-OOM, production identity unchanged. Value-free HTTP trace passed
+source review. Real HTTP/session/RLS and final same-copy rollback remain open;
+no production SQL, preview setting or rich native display installed.
+[Rehearsal and next gate](operations/2026-10-07-native-preview-pg17-rehearsal.md).
+
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
 
 **Severity:** high, message authority boundary. Tracker item 78. Found 2026-10-03
@@ -25430,7 +25438,7 @@ reconciliation; natural OS queue timing, FCM transport and unknown D-349 client
 are not claimed. Previous0.1.12 catalog retained for rollback.
 [Current candidate and evidence limits](operations/2026-10-07-android-pending-read-reconciliation.md).
 
-## D-354 `[~]` Task detail refresh removes working content and mislabels transient failures
+## D-354 `[x]` Task detail refresh removes working content and mislabels transient failures
 
 **Severity:** medium; source diagnosis, 2026-10-07. Independent of the
 unidentified tester client in preliminary items86/87.
@@ -25445,13 +25453,24 @@ with a spinner, unmounting the checklist and its draft. A task read error and a
 successful missing row also share the same null-task branch: a timeout is shown
 as unavailable/deleted with no retry. An isolated actual-hook probe confirms
 loading on same-task refresh and task removal on57014; initial success and
-successful absence controls pass. Mounted draft-loss reproduction is still due.
+successful absence controls pass. Actual mounted unchanged-source RED18/control1
+subsequently reproduced draft loss and related ownership/read failures.
 
 **Current work:** separate initial loading from refresh, preserve current-owner
 content on transient errors with a compact retry, and clear confirmed
 absence/access denial. Fence task/account/session/request replacements and
-validate actual modal/checklist lifecycle with fictional backend data. No
-production mutation, deployment or claim of fixing tester items86/87 yet.
+validate actual modal/checklist lifecycle with fictional backend data. Unit40/40
+incl11 omissions, styled4/4 and both-theme1440/390 pixels accepted. Review's held
+ancillary terminal case RED4/control1 -> GREEN10, affected16/16; immediate clear
+and late-result fences accepted, no open P1/P2. Typecheck/build pass. Web/main
+4765bcad deployed and exact healthy/public marker/retained-entry/JS-SW parity plus
+anonymous mount verified2026-10-07. Nonmandatory AndroidStable0.1.14/build15 accepted
+20:15 Moscow: actual embedded asset/Firebase/signer/marker checks, Realme upgrade
+without clear, one cold anonymous WebView1/0, exact QA12 removal and public
+redownload/full verifier. Prior D353 receipt reuse is labelled unchanged-source
+evidence. No claim of fixing unidentified tester86/87 or live task permission/
+physical iPhone proof. [Android release](operations/2026-10-07-android-task-detail-release.md).
+[Evidence](operations/2026-10-07-task-detail-recovery.md).
 
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 

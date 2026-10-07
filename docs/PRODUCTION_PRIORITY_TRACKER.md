@@ -9,15 +9,15 @@ durable latest-post ownership and retired leases pass source/mutant review;
 four ordinary selected Realme tests, signer/Firebase/bundle and public APK checks pass.
 Temporary QA profile removed; primary data preserved, A063 untouched. Web exact
 healthy image, old/new markers, retained entry, JS/SW parity and anonymous mount
-accepted. D-335 remains active: isolated full PG17 restore ran but extension
-ACL/config/index supplement and19 fixed raw allowances passed full effective
-security/settings/ACL/control equality in actual attempts5/6 (not raw-byte identity).
-Invite-aware fixture repair is source-reviewed; attempt6 refused with23505 when
-the actual message trigger created a notification before the manual fixture
-INSERT. Repair both initial/album paths with exact-owned dependency guards and
-one composite actual-source preflight before another full copy. Copies5/6
-removed healthy; production unchanged. Actual JWT/rollback remain unaccepted.
-No production SQL or rich native preview installed.
+accepted. D-335 remains active: full PG17 restore, narrow extension supplement and
+19 fixed raw allowances passed effective security/settings/ACL/control equality
+(not raw-byte identity). Coupled fixture repair passed source review; attempt7
+passed restore, candidate/raising controls and eight equality checks, then refused
+at actual HTTP controls. Exact request oracle is not recoverable from the retained
+evidence. Copy7 removed healthy, production unchanged. Value-free trace delta is
+source-reviewed; the next attempt needs its own reviewed HTTP namespace/envelope.
+Actual JWT/RLS/final same-copy rollback remain unaccepted. No production SQL or
+rich native preview installed. [Current gate](operations/2026-10-07-native-preview-pg17-rehearsal.md).
 Additional D-353 queued already-read card RED1/controls2: narrow reconciliation
 source/runtime review passed; signed0.1.13/14 and four selected ordinary Realme
 checks passed. Natural timing3 skips/NOT PROVEN; separately labelled controlled
@@ -3856,6 +3856,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     backup/HTTP rehearsal and capability/credential/epoch/current-card/OS acceptance
     remain; item76 stays OPEN. [Proposal and boundaries](operations/2026-10-07-native-message-preview-authorization.md).
 
+    **2026-10-07 real rehearsal:** isolated attempt7 passed full restore, candidate,
+    raising controls and eight equality checks but refused at real HTTP controls;
+    exact request oracle was not retained. Copy removed healthy/non-OOM, production
+    unchanged. Value-free HTTP journal passed source review. Real signed session/
+    RLS and final same-copy rollback must pass before installation; default-none
+    consent and generic provider v1/voice stay unchanged. Permission is granted;
+    technical acceptance, not owner confirmation, is the remaining gate.
+    [Actual result and next envelope](operations/2026-10-07-native-preview-pg17-rehearsal.md).
+
 77. `[ ]` Account-owned notification preferences for individual channels/topics.
     Same voice note: silence a busy parent chat while explicitly enabling one
     relevant channel/topic; other users keep their own choices. Current scoped
@@ -4259,13 +4268,21 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     invalidate the accepted 0.1.12 ownership cases or certify D-349's unknown client.
     [Source and remaining candidate gates](operations/2026-10-07-android-pending-read-reconciliation.md).
 
-92. `[~]` Task-detail background refresh and recovery, **D-354**. Independent
+92. `[x]` Task-detail background refresh and recovery, **D-354**. Independent
     actual-source diagnosis found that realtime refetch replaces working content
     with loading, unmounting the checklist draft; a transient read error is
-    mislabelled unavailable/deleted with no Retry. Fictional hook state controls
-    confirm the transitions, not rendered draft loss or the unidentified tester
-    reports86/87. Narrow initial/refresh/error/owner separation and mounted
-    actual modal/checklist regression are in progress. No deploy yet.
+    mislabelled unavailable/deleted with no Retry. Actual mounted RED18/control1,
+    unit40/40 incl11 omissions, styled4/4 and coordinator1440/390 both-theme pixels
+    pass. Review's held-ancillary terminal retirement RED4/control1 -> GREEN10
+    incl omission, affected16/16; final review no open P1/P2. Final typecheck/build
+    pass. Web/main4765bcad accepted2026-10-07: exact healthy image, old/new markers,
+    retained entry, JS/SW parity and anonymous home/login0pageerrors. Nonmandatory
+    AndroidStable0.1.14/build15 accepted20:15 Moscow: fresh embedded bundle/Firebase/
+    signer/33 assets, Realme upgrade without clear, one cold guest WebView1/0,
+    exact QA12 cleanup and public redownload/full verifier. Prior D353 proof is
+    explicitly reused for unchanged native source, not counted as fresh cases.
+    Tester86/87 and physical iPhone acceptance are not claimed repaired.
+    [Evidence and publication boundary](operations/2026-10-07-task-detail-recovery.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

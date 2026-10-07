@@ -172,3 +172,32 @@ Private evidence and resume artifacts:
 `.ops-private/native-preview-pg17-rehearsal-20261007-r1.mjs` and the bounded HTTP
 adapter. They are not public Git artifacts. Keep operational history here and
 the concise active checkpoint in `docs/HANDOVER.md`.
+
+## Attempt7 Actual Result
+
+The coupled fixture repair passed actual-source causal RED2/GREEN1, eight negative
+controls, eight compiled omissions, eight preview controls and a sequence-advance
+oracle. Both notification producers and dependent cleanup remained active; no
+trigger, unique index or row/sequence equality gate was disabled. Independent
+source review accepted the frozen repair and the bounded attempt7 envelope.
+
+One changed-input copy restored successfully. The fictional fixture and candidate
+transaction exited0. The plain positive/header rollback and seven intentionally
+raising self-check mutants passed; eight retained security/raw/row equality
+checks passed. Actual PostgREST started in the isolated copy, but `http-controls`
+refused. No final candidate acceptance, JWT/RLS result or final same-copy rollback
+is claimed. The retained adapter evidence does not identify the failing HTTP
+request/status/assertion. Do not infer a migration defect or successful consent
+mutation from that absence. A bounded clock observation is not proof of a lease
+failure.
+
+The exact copy was removed healthy/non-OOM; its container and listener namespace
+are absent, production identity unchanged. No production SQL ran. Cap7 remains
+active. The next reviewed private delta adds an exclusive, value-free journal of
+request ordinal, safe route, status, SQLSTATE, response type/key names/array length
+and numeric assertion source frame. No JWT, response/message/title/body values,
+raw stack or personal rows enter that journal. Preserve the original driver and
+adapter byte-identically before the change; another copy requires a reviewed
+changed-input envelope, not blind replay. Production installation still requires
+accepted real HTTP/session/RLS, rollback/equality, a fresh verified backup and the
+transactional migration gates above.

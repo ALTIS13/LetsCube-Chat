@@ -21,30 +21,26 @@ not approved merely by this delegation. Refresh the authorized tester intake,
 deduplicate against the queue, and continue the nearest feasible product slice.
 
 **Current continuation, 2026-10-07:** coordinator; branch
-`codex/bot-inline-media-20261002`. Web/main `36f313dc` and nonmandatory Android
-Stable0.1.13/build14 accepted at16:58 Moscow. D-351/D-353 exact read-card ownership
-and bounded queued-read reconciliation pass source/mutant review. Four ordinary
-selected Realme checks and separately labelled controlled-snapshot physical
-integration1/0 pass; natural OS timing3 skips remains NOT PROVEN. Existing signer,
-Firebase/33 assets, exact public APK redownload verified. QA11/test package
-removed, primary user0/data preserved, A063 untouched. Web exact healthy image,
-before/after markers, retained entry, JS/SW parity and anonymous home/login pass.
-D-335 stays active: full isolated PG17 restore and the narrow supplement/19
-sealed raw allowances passed effective security/settings/ACL/control equality
-in attempts5/6. Raw bytes are not identical. The invite-aware fixture repair
-passed source review, but attempt6 refused with SQLSTATE23505: the actual message
-trigger had already created the notification before its explicit fixture INSERT.
-Both initial and album message paths need the same exact-owned replacement;
-keep triggers, unique indexes and full row/sequence equality active. Copies5/6
-removed healthy, production unchanged. Coordinator approved a private composite
-actual-source fixture repair/preflight; no further full copy until that changed
-input is verified. Actual JWT/RLS/final same-copy rollback remain unaccepted.
-No production SQL.
-D-342 universal recovery stays separate,
-with no repeated provenance loop. Next: D-335 gates, not replay of accepted
-recording/device suites or tester export. D-348/349
-client unknown; task-loading items86/87 preliminary. Outcome docs stay on the
-candidate branch to avoid a docs-only main rebuild.
+`codex/bot-inline-media-20261002`. Latest completed slice: D-354 task-detail
+recovery, web/main `4765bcad` accepted19:26 Moscow and nonmandatory Android
+Stable0.1.14/build15 accepted20:15. Fresh APK/Firebase/signer/33 assets, Realme
+upgrade without clear, one cold anonymous WebView1/0, QA12 removal and public
+redownload/full verifier pass. D351/353's four ordinary native checks and
+controlled-snapshot integration belong to0.1.13; reuse is explicitly hash-bound
+to unchanged native source, not new tests. Natural OS timing remains NOT PROVEN.
+A063 untouched; no personal capture/login or paid rental.
+
+Active stage: D-335 isolated DB rehearsal. Attempt7 passed full restore, candidate,
+raising controls and eight equality checks, then refused at HTTP controls without
+a recoverable exact request oracle. Copy7 removed healthy/non-OOM, production
+unchanged. Value-free HTTP journal source-reviewed; preparing a bounded attempt8
+HTTP namespace and strict reuse of unchanged actual7 proofs. No new copy or
+production SQL yet. Blocker: real HTTP/session/RLS and final same-copy rollback
+unaccepted. Next: review the changed envelope, run one finite copy, then apply the
+fresh-backup/transaction/raising-check/mirror/real-validation installation gates.
+Permission is granted, not the blocker. D-342 universal recovery and unknown
+tester86/87/client348/349 remain separate; no replay of unrelated accepted suites.
+Outcome docs stay on the candidate branch to avoid a docs-only main rebuild.
 [Current scope, evidence and publication limits](operations/2026-10-07-notification-preferences-capability.md).
 [Fresh reported tasks and coverage limits](operations/2026-10-07-tester-feedback.md).
 [Follow-up source repairs and publication gate](operations/2026-10-07-read-recording-ownership.md).
@@ -52,13 +48,21 @@ candidate branch to avoid a docs-only main rebuild.
 [Pending reconciliation follow-up](operations/2026-10-07-android-pending-read-reconciliation.md).
 [Isolated PG17 rehearsal and exact next gate](operations/2026-10-07-native-preview-pg17-rehearsal.md).
 
-**Parallel bounded work,2026-10-07:** item92/D-354 task-detail recovery. Actual
+**Latest completed product slice,2026-10-07:** item92/D-354 task-detail recovery. Actual
 hook diagnosis found that background refresh unmounts working content/drafts,
 and transient errors are mislabelled unavailable/deleted without Retry. Narrow
-source repair and actual mounted fictional regression are in progress; tester
-items86/87 remain separate. Coordinator owns docs/deployment, Lin owns only
-the task hook/modal and focused tests; no DB overlap.
+source repair, actual mounted fictional regression and independent final review
+accepted. Web/main4765bcad exact healthy image, old/new markers, retained entry,
+JS/SW parity and anonymous mount verified. Android0.1.14/build15 release and
+instrumentation builds, complete artifact/Firebase/signer/33-asset parity checks,
+actual Realme upgrade without clear, one cold anonymous WebView case1/0 and
+public redownload/full verifier pass. QA12 removed, current user0/primary package
+retained; A063 untouched. D-354's measured defect is closed. Previously accepted
+D353 native receipts are explicit unchanged-source references, not fresh cases.
+Tester items86/87
+remain separate. Coordinator owns docs/deployment; no DB overlap.
 [Current cause and acceptance gate](operations/2026-10-07-task-detail-recovery.md).
+[Android artifact/device/publication record](operations/2026-10-07-android-task-detail-release.md).
 
 **Previous source checkpoint,2026-10-07:** coordinator owns item76/D-335 recipient
 preview authorization, based on d5edbe83. New unversioned SQL proposal supplies

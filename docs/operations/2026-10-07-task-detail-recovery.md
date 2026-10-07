@@ -75,5 +75,36 @@ Final affected typecheck exit0 and fixture-config production build exit0:
 `c9f93892f75f06ca6f98daf5c8f653fe6bd7a46c41ae539883ead2768ac3fca5`.
 These are source/fictional/build observations, not authenticated RLS or installed
 client proof. Final independent changed-input review accepted the fix, with no
-open P1/P2. Actual web rollout remains due; old runtime36f313dc and public
-APK0.1.13/build14 are unchanged.
+open P1/P2. This source checkpoint preceded the separate embedded Android release
+below; it does not substitute for its artifact/device/publication checks.
+
+## Web Rollout
+
+Main/candidate `4765bcad28da3d5ad516692a9a80f82f35d0fab5` accepted at19:26 Moscow,
+2026-10-07. Own outgoing range3 commits inspected separately; all22 alias imports
+resolved in their own commit trees. Fresh backup15 checksums/readable archive and
+preceding healthy rollback image verified before push. No DB/worker mutation.
+
+One healthy running container `/l64kyyu1sysev2izzjjbizhe-162411459236`, image
+`l64kyyu1sysev2izzjjbizhe:4765bcad28da3d5ad516692a9a80f82f35d0fab5`, image ID
+`sha256:816dac72fa4016535fbf50ae665f89e7e5345535e5ded3dc2fd73d517087ff1a`.
+Public entry `/assets/index-qcGu0AEV.js`, SHA256
+`49c6ba61f7ffe038fc5ab089959dea2664242136a5dd450771089166461f951d`;
+SW SHA256 `37053e4e2bd640792ad2cfd918a2ba949e05436146439ff0f04e330b75bd9439`.
+Both task error markers changed from absent to present; existing native chat
+bridge markers2 retained. Preceding entry remains byte-identical. Public/container
+JS and SW parity pass. Fresh anonymous Chromium home/login200 mount, zero page
+errors; no stored personal session, screenshot, trace or video. This proves web
+publication/startup, not authenticated task permissions or physical iPhone pixels.
+
+## Android Rollout
+
+Stable0.1.14/build15 accepted2026-10-07 at20:15 Moscow, nonmandatory. Fresh release/
+instrumentation builds and canonical signer/Firebase/33 embedded asset parity,
+six task-read markers, actual Realme upgrade without clear and one cold anonymous
+WebView case1/0 pass. Ephemeral QA12 removed, primary user0/package retained,
+A063 untouched. Actual public APK redownload/full release verifier pass. Previous
+D353 native receipts are linked only through unchanged-source/hash evidence,
+not relabelled new tests. The measured D-354 defect is closed; unidentified
+tester86/87, actual authenticated task failure and physical iPhone pixels remain
+separate. [Artifact, device, publication and rollback evidence](2026-10-07-android-task-detail-release.md).
