@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAppStore } from "@/store/app.store";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { subscribeByTable } from "@/lib/realtimeTableChannels";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type {
-  Chat,
   Profile,
   TaskChecklistItem,
   TaskEventWithActor,
@@ -14,88 +14,169 @@ import type {
   TaskWithPeople,
 } from "@/types/database";
 
+interface TaskOwner {
+  taskId: string | null;
+  userId: string | null;
+  accountEpoch: number;
+  active: boolean;
+  request: number;
+}
+
+interface TaskDetailState {
+  owner: TaskOwner;
+  task: TaskWithPeople | null;
+  events: TaskEventWithActor[];
+  checklist: TaskChecklistItem[];
+  reminders: TaskReminder[];
+  loading: boolean;
+  refreshing: boolean;
+  error: "transient" | "denied" | null;
+}
+
+function emptyDetail(owner: TaskOwner, loading = false): TaskDetailState {
+  return { owner, task: null, events: [], checklist: [], reminders: [], loading, refreshing: false, error: null };
+}
+
+async function readPart<T>(query: PromiseLike<{ data: T; error: unknown; status?: number }>):
+  Promise<{ data: T | null; error: unknown; status?: number }> {
+  try {
+    return await query;
+  } catch (error) {
+    return { data: null, error: error || true };
+  }
+}
+
+function isAccessDenied(response: { error: unknown; status?: number }) {
+  const error = typeof response.error === "object" && response.error !== null
+    ? response.error as Record<string, unknown> : {};
+  return response.status === 401 || response.status === 403 ||
+    error.status === 401 || error.status === 403 || error.statusCode === 401 || error.statusCode === 403 ||
+    error.code === "42501" || error.code === "PGRST301" || error.code === "PGRST302" || error.code === "PGRST303";
+}
+
 /**
  * Loads a single task with its full event history and subscribes to realtime
  * changes on both the task row and its events.  Used by TaskDetailModal.
  */
 export function useTask(taskId: string | null) {
-  const [task, setTask] = useState<TaskWithPeople | null>(null);
-  const [events, setEvents] = useState<TaskEventWithActor[]>([]);
-  // Tracker item 62: the task's checklist, in its own order.
-  const [checklist, setChecklist] = useState<TaskChecklistItem[]>([]);
-  // Tracker item 66: the reminders the reader set, and those set for them as
-  // the assignee — the table's policy reads nothing else.
-  const [reminders, setReminders] = useState<TaskReminder[]>([]);
-  const [loading, setLoading] = useState(true);
+  const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  const accountEpoch = useAppStore((s) => s.accountEpoch);
+  const owner = useMemo<TaskOwner>(() => ({ taskId, userId, accountEpoch, active: false, request: 0 }),
+    [taskId, userId, accountEpoch]);
+  const ownerRef = useRef(owner);
+  ownerRef.current = owner;
+  const [state, setState] = useState(() => emptyDetail(owner, Boolean(taskId && userId)));
   const supabase = useMemo(() => createClient(), []);
   const rt = useMemo(() => getRealtimeClient(), []);
 
   const fetchTask = useCallback(async () => {
-    if (!taskId) {
-      setTask(null);
-      setEvents([]);
-      setLoading(false);
-      return;
-    }
+    const isOwner = () => owner.active && ownerRef.current === owner &&
+      useAppStore.getState().currentUser?.id === userId &&
+      useAppStore.getState().accountEpoch === accountEpoch;
+    if (!taskId || !userId || !isOwner()) return;
+    const request = ++owner.request;
+    const isCurrent = () => isOwner() && request === owner.request;
     bumpFetch("useTask");
-    setLoading(true);
-    const [taskRes, eventsRes, checklistRes, remindersRes] = await Promise.all([
-      supabase
-        .from("tasks")
-        .select(
-          `*,
-           assignee:profiles!tasks_assignee_id_fkey(*),
-           creator:profiles!tasks_created_by_fkey(*),
-           chat:chats(*),
-           coassignees:task_coassignees(user_id, profile:profiles!task_coassignees_user_id_fkey(*))`,
-        )
-        .eq("id", taskId)
-        .maybeSingle(),
-      supabase
-        .from("task_events")
-        .select("*, actor:profiles!task_events_actor_id_fkey(*)")
-        .eq("task_id", taskId)
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("task_checklist_items")
-        .select("*")
-        .eq("task_id", taskId)
-        .order("position", { ascending: true }),
-      supabase
-        .from("task_reminders")
-        .select("*")
-        .eq("task_id", taskId)
-        .order("remind_at", { ascending: true }),
-    ]);
-
-    if (taskRes.error || !taskRes.data) {
-      setTask(null);
-    } else {
-      const row = taskRes.data as TaskWithPeople;
-      setTask({
-        ...row,
-        assignee: (row as { assignee?: Profile | null }).assignee ?? null,
-        creator:  (row as { creator?: Profile | null }).creator ?? null,
-        chat: (row as { chat?: Chat | null }).chat ?? null,
+    setState((previous) => {
+      if (!isCurrent()) return previous;
+      const held = previous.owner === owner ? previous : emptyDetail(owner);
+      return { ...held, loading: !held.task, refreshing: Boolean(held.task) };
+    });
+    let terminal: "denied" | "absent" | null = null;
+    async function readOwnedPart<T>(query: PromiseLike<{ data: T; error: unknown; status?: number }>, taskRead = false) {
+      const response = await readPart(query);
+      if (!isCurrent()) return response;
+      const denied = isAccessDenied(response);
+      if (denied || (taskRead && !response.error && !response.data)) {
+        terminal = denied ? "denied" : terminal ?? "absent";
+        // A terminal answer must not wait for a slower sibling read.
+        setState((previous) => isCurrent()
+          ? { ...emptyDetail(owner), error: terminal === "denied" ? "denied" : null }
+          : previous);
+      }
+      return response;
+    }
+    try {
+      const [taskRes, eventsRes, checklistRes, remindersRes] = await Promise.all([
+        readOwnedPart(
+          supabase
+            .from("tasks")
+            .select(
+              `*,
+               assignee:profiles!tasks_assignee_id_fkey(*),
+               creator:profiles!tasks_created_by_fkey(*),
+               chat:chats(*),
+               coassignees:task_coassignees(user_id, profile:profiles!task_coassignees_user_id_fkey(*))`,
+            )
+            .eq("id", taskId)
+            .maybeSingle(),
+          true,
+        ),
+        readOwnedPart(
+          supabase
+            .from("task_events")
+            .select("*, actor:profiles!task_events_actor_id_fkey(*)")
+            .eq("task_id", taskId)
+            .order("created_at", { ascending: true }),
+        ),
+        readOwnedPart(
+          supabase
+            .from("task_checklist_items")
+            .select("*")
+            .eq("task_id", taskId)
+            .order("position", { ascending: true }),
+        ),
+        readOwnedPart(
+          supabase
+            .from("task_reminders")
+            .select("*")
+            .eq("task_id", taskId)
+            .order("remind_at", { ascending: true }),
+        ),
+      ]);
+      if (!isCurrent() || terminal) return;
+      const errors = [taskRes.error, eventsRes.error, checklistRes.error, remindersRes.error];
+      setState((previous) => {
+        if (!isCurrent() || terminal) return previous;
+        // Refusal/absence retires the entire dependent snapshot, never just its parent.
+        if ([taskRes, eventsRes, checklistRes, remindersRes].some(isAccessDenied)) {
+          return { ...emptyDetail(owner), error: "denied" };
+        }
+        if (!taskRes.error && !taskRes.data) return emptyDetail(owner);
+        const held = previous.owner === owner ? previous : emptyDetail(owner);
+        if (taskRes.error) return { ...held, loading: false, refreshing: false, error: "transient" };
+        const row = taskRes.data as TaskWithPeople;
+        return {
+          ...held,
+          task: { ...row, assignee: row.assignee ?? null, creator: row.creator ?? null, chat: row.chat ?? null },
+          events: eventsRes.error ? held.events : (eventsRes.data ?? []).map((r) => ({
+            ...(r as TaskEventWithActor), actor: (r as { actor?: Profile | null }).actor ?? null,
+          })),
+          checklist: checklistRes.error ? held.checklist : (checklistRes.data ?? []) as TaskChecklistItem[],
+          reminders: remindersRes.error ? held.reminders : (remindersRes.data ?? []) as TaskReminder[],
+          loading: false, refreshing: false, error: errors.some(Boolean) ? "transient" : null,
+        };
+      });
+    } catch {
+      // SDK query construction can also throw; never publish/log its error body.
+      setState((previous) => {
+        if (!isCurrent() || terminal) return previous;
+        const held = previous.owner === owner ? previous : emptyDetail(owner);
+        return { ...held, loading: false, refreshing: false, error: "transient" };
       });
     }
-    // A refused read keeps what was on screen rather than drawing an empty list.
-    if (!checklistRes.error) setChecklist((checklistRes.data ?? []) as TaskChecklistItem[]);
-    if (!remindersRes.error) setReminders((remindersRes.data ?? []) as TaskReminder[]);
-    setEvents(
-      (eventsRes.data ?? []).map((r) => ({
-        ...(r as TaskEventWithActor),
-        actor: (r as { actor?: Profile | null }).actor ?? null,
-      })),
-    );
-    setLoading(false);
-  }, [taskId, supabase]);
+  }, [taskId, userId, accountEpoch, owner, supabase]);
 
-  useEffect(() => { fetchTask(); }, [fetchTask]);
+  useEffect(() => {
+    owner.active = true;
+    if (!taskId || !userId) setState(emptyDetail(owner));
+    else void fetchTask();
+    return () => { owner.active = false; owner.request += 1; };
+  }, [owner, taskId, userId, fetchTask]);
 
   // Realtime — server-side filter on task_id so we only get our row's events.
   useEffect(() => {
-    if (!taskId) return;
+    if (!taskId || !userId) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const debouncedFetch = () => {
       if (timer) clearTimeout(timer);
@@ -145,7 +226,9 @@ export function useTask(taskId: string | null) {
         unregisterChannel(name);
       }
     };
-  }, [taskId, rt, fetchTask]);
+  }, [taskId, userId, rt, fetchTask]);
 
-  return { task, events, checklist, reminders, loading, refetch: fetchTask };
+  const visible = state.owner === owner ? state : emptyDetail(owner, Boolean(taskId && userId));
+  return { task: visible.task, events: visible.events, checklist: visible.checklist, reminders: visible.reminders,
+    loading: visible.loading, refreshing: visible.refreshing, error: visible.error, refetch: fetchTask };
 }

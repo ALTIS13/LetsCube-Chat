@@ -67,7 +67,14 @@ const LOCATION_RECURRENCE_MANAGE_KEYS = ["tasks.manage", "tasks.manage_admin_tas
  * action buttons.  Every state-changing button calls a SECURITY DEFINER RPC
  * — the modal never updates `tasks` directly.
  */
-export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted }: Props) {
+export function TaskDetailModal(props: Props) {
+  const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  const accountEpoch = useAppStore((s) => s.accountEpoch);
+  // Drafts and open action forms belong to one task/session, not to the modal slot.
+  return <TaskDetailContent key={JSON.stringify([props.taskId, userId, accountEpoch])} {...props} />;
+}
+
+function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: Props) {
   const supabase = createClient();
   const currentUser = useAppStore((s) => s.currentUser);
   // `public.is_manager_or_admin(auth.uid())`, which is what `task_confirm`,
@@ -77,7 +84,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
   // task RPC knows anything about permissions (D-202, and `lib/taskActionAccess.ts`).
   const { allowed: isManagerOrAdmin } = useMatchesIsManagerOrAdmin();
   const { softDeleteTask } = useTaskSoftDelete();
-  const { task, events, checklist, reminders, loading, refetch } = useTask(taskId);
+  const { task, events, checklist, reminders, loading, refreshing, error: readError, refetch } = useTask(taskId);
   const {
     recurrence,
     status: recurrenceStatus,
@@ -129,6 +136,8 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
           <div className="flex items-center justify-center">
             <KubIcon name="spinner" size={24} tone="accent" label="Загрузка" />
           </div>
+        ) : readError === "transient" ? (
+          <TaskReadError initial refreshing={refreshing} onRetry={refetch} />
         ) : (
           <div className="flex flex-col items-center justify-center gap-3 text-center">
             <KubIcon name="tasks" size={26} tone="muted" />
@@ -354,6 +363,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
         size="lg"
         contentClassName="px-5 py-4 space-y-4"
       >
+        {readError === "transient" && <TaskReadError refreshing={refreshing} onRetry={refetch} />}
         {/* meta strip */}
         <div className="flex flex-wrap gap-2 items-center">
           <KubBadge tone={status.tone} pill>{status.label}</KubBadge>
@@ -905,6 +915,23 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
         />
       )}
     </>
+  );
+}
+
+function TaskReadError({ initial = false, refreshing, onRetry }: {
+  initial?: boolean; refreshing: boolean; onRetry: () => Promise<void>;
+}) {
+  return (
+    <div data-testid="task-read-error" role="alert"
+      className="flex flex-wrap items-center justify-between gap-2 rounded-lg kub-raise px-3 py-2 text-xs text-[color:var(--kub-text)]">
+      <span className="flex min-w-0 items-center gap-2">
+        <KubIcon name="warning" size={16} tone="warn" className="shrink-0" />
+        {initial ? "Не удалось загрузить задачу." : "Не удалось обновить задачу."}
+      </span>
+      <KubButton variant="secondary" size="sm" loading={refreshing} onClick={() => void onRetry()}>
+        <KubIcon name="rotate" size={14} /> Повторить
+      </KubButton>
+    </div>
   );
 }
 
