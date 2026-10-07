@@ -119,6 +119,12 @@ async function preview(db, d = device, n = notification) {
     await db.exec("reset role");
   }
 }
+async function capability(db, d = device) {
+  await db.exec("set role authenticated");
+  try {
+    return (await db.query("select * from public.native_message_preview_capability($1)", [d])).rows;
+  } finally { await db.exec("reset role"); }
+}
 async function consent(db, level = "message", user = recipient) {
   await db.query("insert into public.notification_preview_preferences(user_id,preview_level) values($1,$2)", [user, level]);
 }
@@ -133,6 +139,94 @@ test("recipient preview capability is explicitly available, not inferred from vo
     const row = (await db.query("select to_regprocedure($1) is not null as present", [rpc])).rows[0];
     assert.equal(row.present, true, "a separate recipient-authenticated preview RPC is missing");
   } finally { await db.close(); }
+});
+
+test("device capability exists independently of message consent and discloses only its current bound choice", async () => {
+  const db = await fixture(await sourceSql());
+  try {
+    assert.equal((await db.query("select to_regprocedure('public.native_message_preview_capability(uuid)') is not null as present")).rows[0].present,
+      true, "a separately authenticated device capability is missing");
+    assert.deepEqual(await capability(db), [{ preview_v: 1, recipient_id: recipient, session_id: session,
+      device_id: device, preview_level: "none" }]);
+    assert.deepEqual(await preview(db), [], "capability alone must never grant message display");
+    await consent(db, "sender");
+    assert.equal((await capability(db))[0].preview_level, "sender");
+    await db.query("update public.notification_preview_preferences set preview_level='message' where user_id=$1", [recipient]);
+    assert.equal((await capability(db))[0].preview_level, "message");
+    await db.exec("begin read only");
+    assert.equal((await capability(db))[0].device_id, device);
+    await db.exec("rollback");
+  } finally { await db.close(); }
+});
+
+test("capability refuses stale sessions and mismatched, disabled or non-Android FCM devices", async (t) => {
+  for (const [name, change] of [
+    ["foreign owner", `update public.user_push_devices set user_id='${other}'`],
+    ["foreign session", `update public.user_push_devices set session_id='${uuid(31)}'`],
+    ["missing session", "update public.user_push_devices set session_id=null"],
+    ["revoked device", "update public.user_push_devices set revoked_at=now()"],
+    ["disabled device", "update public.user_push_devices set enabled=false"],
+    ["non Android", "update public.user_push_devices set platform='windows'"],
+    ["non FCM", "update public.user_push_devices set provider='wns'"],
+    ["revoked auth", "delete from auth.sessions"],
+    ["expired auth", "update auth.sessions set not_after=now()-interval '1 second'"],
+  ]) {
+    await t.test(name, async () => {
+      const db = await fixture(await sourceSql());
+      try {
+        assert.equal((await capability(db)).length, 1, "positive control must precede refusal");
+        await db.exec(change);
+        assert.deepEqual(await capability(db), []);
+      } finally { await db.close(); }
+    });
+  }
+});
+
+test("capability rejects absent device and anonymous, service or expired JWT contexts", async () => {
+  const db = await fixture(await sourceSql());
+  try {
+    assert.deepEqual(await capability(db, null), []);
+    assert.deepEqual(await capability(db, other), []);
+    for (const override of [{ is_anonymous: true }, { role: "service_role" }, { exp: 1 }, { session_id: other }]) {
+      await claims(db, override);
+      assert.deepEqual(await capability(db), []);
+    }
+    for (const role of ["anon", "service_role", "outsider"]) {
+      await db.exec(`set role ${role}`);
+      await assert.rejects(db.query("select * from public.native_message_preview_capability($1)", [device]), /permission denied/);
+      await db.exec("reset role");
+    }
+  } finally { await db.close(); }
+});
+
+test("compiled capability guards must refuse owner/session/device and default-choice mutations", async (t) => {
+  const original = await readFile(proposal, "utf8");
+  const start = original.indexOf("create function public.native_message_preview_capability(");
+  const end = original.indexOf("alter function public.native_message_preview_capability(", start);
+  assert.ok(start >= 0 && end > start);
+  const body = original.slice(start, end);
+  for (const [name, before, after, change, verify] of [
+    ["exact device", "d.id = p_device_id", "true", "", async db => assert.deepEqual(await capability(db, other), [])],
+    ["owner", "d.user_id = v_recipient", "true", `update public.user_push_devices set user_id='${other}'`],
+    ["session", "d.session_id = v_session", "true", `update public.user_push_devices set session_id='${other}'`],
+    ["platform", "d.platform = 'android'", "true", "update public.user_push_devices set platform='windows'"],
+    ["provider", "d.provider = 'fcm'", "true", "update public.user_push_devices set provider='wns'"],
+    ["enabled", "d.enabled is true", "true", "update public.user_push_devices set enabled=false"],
+    ["revoked", "d.revoked_at is null", "true", "update public.user_push_devices set revoked_at=now()"],
+    ["default none", "coalesce(pref.preview_level,'none')", "coalesce(pref.preview_level,'message')", "",
+      async db => assert.equal((await capability(db))[0].preview_level, "none")],
+  ]) {
+    await t.test(name, async () => {
+      assert.equal(body.split(before).length, 2, "capability mutation anchor must be unique");
+      const mutation = original.slice(0, start) + body.replace(before, after) + original.slice(end);
+      const db = await fixture(mutation);
+      try {
+        await db.exec(change);
+        await assert.rejects((verify ?? (async db => assert.deepEqual(await capability(db), [])))(db),
+          error => error instanceof assert.AssertionError, "compiled behavioral mutant must fail a literal oracle");
+      } finally { await db.close(); }
+    });
+  }
 });
 
 test("preview defaults to none; explicit sender/message choice uses fresh source and exact identities", async () => {
@@ -490,6 +584,8 @@ test("raising SQL self-check refuses weakened RLS, function mode and ACL before 
       "grant execute on function public.native_message_notification_preview(uuid,uuid) to authenticated, anon;"],
     ["grant execute on function public.native_message_preview_recipient() to authenticated;",
       "grant execute on function public.native_message_preview_recipient() to authenticated, outsider;"],
+    ["grant execute on function public.native_message_preview_capability(uuid) to authenticated;",
+      "grant execute on function public.native_message_preview_capability(uuid) to authenticated, outsider;"],
     ["grant select, insert, update, delete on public.notification_preview_preferences to authenticated;",
       "grant select, insert, update, delete on public.notification_preview_preferences to authenticated, outsider;"],
   ]) {
@@ -515,8 +611,8 @@ test("documented rollback removes only the new contract and leaves generic deliv
     assert.ok(match, "rollback header is missing");
     const rollback = `begin;\n${match[1].replace(/^-- /gm,"")}commit;`;
     await db.exec(rollback);
-    const state = (await db.query("select to_regprocedure($1) is null as no_rpc,to_regclass('public.notification_preview_preferences') is null as no_consent,to_regprocedure('public.native_message_preview_recipient()') is null as no_helper", [rpc])).rows[0];
-    assert.deepEqual(state,{no_rpc:true,no_consent:true,no_helper:true});
+    const state = (await db.query("select to_regprocedure($1) is null as no_rpc,to_regclass('public.notification_preview_preferences') is null as no_consent,to_regprocedure('public.native_message_preview_recipient()') is null as no_helper,to_regprocedure('public.native_message_preview_capability(uuid)') is null as no_capability", [rpc])).rows[0];
+    assert.deepEqual(state,{no_rpc:true,no_consent:true,no_helper:true,no_capability:true});
     assert.equal((await db.query("select count(*)::int as n from public.notifications")).rows[0].n,1);
     assert.equal((await db.query("select count(*)::int as n from public.notifications_native_push_outbox")).rows[0].n,1);
     assert.equal((await db.query("select count(*)::int as n from public.user_push_devices")).rows[0].n,1);

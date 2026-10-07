@@ -10,7 +10,20 @@ native package identity/store actions and other unresolved acceptance gates are
 not approved merely by this delegation. Refresh the authorized tester intake,
 deduplicate against the queue, and continue the nearest feasible product slice.
 
-**Current source checkpoint,2026-10-07:** coordinator owns item76/D-335 recipient
+**Current continuation, 2026-10-07:** coordinator owns item 76 / D-335 capability
+and preview-choice preparation, adjacent D-347 preference/subscription ownership,
+and fresh authorized tester intake. SQL 135/135, preview contract/hook 37/37,
+27 adjacent settings, 12 actual Settings cases and mounted ownership 3/3 pass.
+Saving-layout RED and provider-unsubscribe P2 are repaired; final provider hook
+64/64 includes 24 compiled mutants. Both independent reviews accepted. Final
+typecheck 0 and web build `cd49e9074b3bfa2d` pass. SQL is uninstalled, old native
+clients stay generic, no APK/device action. The 16-message intake and three local
+voice transcripts require final grounded task integration, not another export.
+Next: readiness-gated web promotion and sanitized intake tasks. Preserve real
+JWT/PG17/native current-card gates.
+[Current scope, evidence and publication limits](operations/2026-10-07-notification-preferences-capability.md).
+
+**Previous source checkpoint,2026-10-07:** coordinator owns item76/D-335 recipient
 preview authorization, based on d5edbe83. New unversioned SQL proposal supplies
 default-none account consent with live-session owner RLS, and a read-only lookup
 bound to exact recipient/session/device/unread notification/current source/access/

@@ -3,6 +3,7 @@
 -- rehearsal and a byte-identical migration-backup copy before installation.
 -- Rollback (only for this new contract, after consumers are disabled):
 -- BEGIN;
+-- DROP FUNCTION public.native_message_preview_capability(uuid);
 -- DROP FUNCTION public.native_message_notification_preview(uuid,uuid);
 -- DROP TABLE public.notification_preview_preferences;
 -- DROP FUNCTION public.native_message_preview_recipient();
@@ -60,6 +61,41 @@ create policy notification_preview_update_own on public.notification_preview_pre
     with check (user_id = public.native_message_preview_recipient());
 create policy notification_preview_delete_own on public.notification_preview_preferences
   for delete to authenticated using (user_id = public.native_message_preview_recipient());
+
+-- Server availability and account consent are not native display authority.
+-- The client must separately negotiate an actual preview-capable native bridge.
+create function public.native_message_preview_capability(p_device_id uuid)
+returns table (
+  preview_v smallint,
+  recipient_id uuid,
+  session_id uuid,
+  device_id uuid,
+  preview_level text
+)
+language plpgsql stable security definer
+set search_path = pg_catalog
+as $fn$
+declare
+  v_recipient uuid;
+  v_session uuid;
+begin
+  if p_device_id is null then return; end if;
+  v_recipient := public.native_message_preview_recipient();
+  if v_recipient is null then return; end if;
+  v_session := (auth.jwt()->>'session_id')::uuid;
+  return query
+  select 1::smallint, v_recipient, v_session, d.id, coalesce(pref.preview_level,'none')
+  from public.user_push_devices d
+  left join public.notification_preview_preferences pref on pref.user_id = v_recipient
+  where d.id = p_device_id and d.user_id = v_recipient and d.session_id = v_session
+    and d.platform = 'android' and d.provider = 'fcm'
+    and d.enabled is true and d.revoked_at is null;
+end
+$fn$;
+alter function public.native_message_preview_capability(uuid) owner to postgres;
+revoke all on function public.native_message_preview_capability(uuid)
+  from public, anon, authenticated, service_role;
+grant execute on function public.native_message_preview_capability(uuid) to authenticated;
 
 create function public.native_message_notification_preview(p_device_id uuid,p_notification_id uuid)
 returns table (
@@ -155,6 +191,7 @@ declare
   function_id regprocedure;
 begin
   foreach function_id in array array['public.native_message_notification_preview(uuid,uuid)'::regprocedure,
+    'public.native_message_preview_capability(uuid)'::regprocedure,
     'public.native_message_preview_recipient()'::regprocedure] loop
     select * into strict f from pg_proc where oid = function_id;
     if not f.prosecdef or f.provolatile <> 's'

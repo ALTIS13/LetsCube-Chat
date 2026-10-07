@@ -20,6 +20,8 @@ import {
 import { usePrivacyPreferences } from "@/hooks/usePrivacyPreferences";
 import { useSessionDevices } from "@/hooks/useSessionDevices";
 import { usePush } from "@/hooks/usePush";
+import { useNativeMessagePreview } from "@/hooks/useNativeMessagePreview";
+import type { MessagePreviewChoice } from "@/lib/platform/nativeMessagePreviewContract";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { useIsAdmin, useIsManagerOrAdmin } from "@/hooks/useRole";
 import { KubButton, KubIcon, KubSwitch, type KubIconName } from "@/components/kub";
@@ -112,8 +114,14 @@ const THEME_OPTIONS: ReadonlyArray<{ value: Theme; label: string; icon: KubIconN
   { value: "light", label: "Светлая", icon: "themeLight" },
 ];
 
+const MESSAGE_PREVIEW_OPTIONS: ReadonlyArray<{ value: MessagePreviewChoice; label: string }> = [
+  { value: "none", label: "Общий текст" },
+  { value: "sender", label: "Имя отправителя" },
+  { value: "message", label: "Имя и сообщение" },
+];
+
 /** The heavy sections, which stay unmounted until their row is opened. */
-type DisclosureId = "phone" | "decoration" | "audio" | "application" | "blocked" | "devices" | "status" | "phone-search";
+type DisclosureId = "phone" | "decoration" | "audio" | "application" | "blocked" | "devices" | "status" | "phone-search" | "message-preview";
 
 export interface SettingsScreen {
   ready: boolean;
@@ -175,6 +183,8 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
     disable: disablePush,
     setPreference: setPushPreference,
   } = usePush();
+  const messagePreview = useNativeMessagePreview();
+  const savedPreviewLabel = MESSAGE_PREVIEW_OPTIONS.find(option => option.value === messagePreview.savedChoice)?.label;
   const isStaff = useIsManagerOrAdmin();
   const isAdmin = useIsAdmin();
   const [, setLocation] = useLocation();
@@ -690,6 +700,48 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
           )}
           {pushStatus === "denied" && shows("push") && (
             <RowNote>{pushDeniedHelp({ nativeAndroid, desktopWindows, iosPwa: installedIosPwa })}</RowNote>
+          )}
+          {shows("push") && nativeAndroid && (
+            <div data-testid="native-message-preview-setting">
+              {messagePreview.savedChoice !== null ? (
+                <DisclosureRow
+                  id="message-preview"
+                  icon="notifications"
+                  title="Текст уведомлений"
+                  value={messagePreview.saving ? "Сохранение…" : savedPreviewLabel}
+                  open={openSections.has("message-preview")}
+                  onToggle={toggleSection}
+                >
+                  <fieldset disabled={!messagePreview.canChoose} className="min-w-0 space-y-2">
+                    <legend className="mb-2 text-xs text-[color:var(--kub-muted)]">Для аккаунта</legend>
+                    {MESSAGE_PREVIEW_OPTIONS.map(option => (
+                      <label key={option.value} className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-[color:var(--kub-text)]">
+                        <input
+                          type="radio"
+                          name={`${fieldPrefix}-message-preview`}
+                          value={option.value}
+                          checked={messagePreview.savedChoice === option.value}
+                          onChange={() => { void messagePreview.setChoice(option.value); }}
+                          className="h-4 w-4 shrink-0 accent-[var(--kub-cyan)]"
+                        />
+                        <span className="min-w-0">{option.label}</span>
+                      </label>
+                    ))}
+                  </fieldset>
+                  {messagePreview.error && <KubButton size="sm" variant="secondary" onClick={messagePreview.refresh}>Повторить</KubButton>}
+                </DisclosureRow>
+              ) : (
+                <SettingsRow
+                  icon="notifications"
+                  label="Текст уведомлений"
+                  value={messagePreview.saving ? "Сохранение…" : messagePreview.status === "loading" ? "Проверка…" : "Общий текст на этом устройстве"}
+                  hint={savedPreviewLabel ? `Последний подтверждённый выбор: ${savedPreviewLabel}` : null}
+                >
+                  {messagePreview.error && <KubButton size="sm" variant="secondary" onClick={messagePreview.refresh}>Повторить</KubButton>}
+                </SettingsRow>
+              )}
+              {messagePreview.error && <RowNote>{messagePreview.error}</RowNote>}
+            </div>
           )}
           {/* D-137. These three are **stored preferences**, not device state:
               they live in `notification_preferences` and the push gate reads

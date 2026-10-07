@@ -347,7 +347,7 @@ export const SETTINGS_ROWS: readonly SettingsRowMeta[] = [
   { id: "bio", section: "profile", label: "О себе", keywords: ["био", "bio", "описание", "обо мне"] },
   { id: "phone", section: "profile", label: "Телефон", keywords: ["номер", "phone", "смс", "sms", "подтверждение"] },
   { id: "decoration", section: "profile", label: "Оформление", keywords: ["рамка", "фон", "украшение", "аватар"] },
-  { id: "push", section: "notifications", label: "Push-уведомления", keywords: ["пуш", "push", "оповещения"] },
+  { id: "push", section: "notifications", label: "Push-уведомления", keywords: ["пуш", "push", "оповещения", "текст уведомлений", "предпросмотр", "отправитель", "preview", "содержимое"] },
   { id: "push-messages", section: "notifications", label: "Сообщения", keywords: ["пуш", "push", "чаты"] },
   { id: "push-tasks", section: "notifications", label: "Задачи", keywords: ["пуш", "push", "таски"] },
   { id: "push-invites", section: "notifications", label: "Приглашения", keywords: ["пуш", "push", "инвайты"] },

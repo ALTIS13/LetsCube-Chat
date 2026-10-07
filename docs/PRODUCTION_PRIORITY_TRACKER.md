@@ -1,6 +1,16 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-05.
+Status: active production-hardening tracker, updated 2026-10-07.
+
+**Current continuation, 2026-10-07:** item 76 / D-335 distinct capability/account
+preview choice preparation and D-347 actual preference/subscription ownership.
+SQL 135/135, preview 37/37 plus settings 27, actual consumer 12 and mounted
+ownership 3 pass. Saving-layout and provider-deletion REDs are repaired; final
+hook 64/64 includes 24 compiled mutants. Both reviews accepted; final typecheck 0
+and build `cd49e9074b3bfa2d` pass. No installed SQL/native preview or APK acceptance.
+Next: web rollout and grounded fresh tester-task integration. The 16 new messages
+and three voice transcripts remain private; final intake mapping is pending.
+[Current record](operations/2026-10-07-notification-preferences-capability.md).
 
 **Current source continuation,2026-10-05:** item76/D-335 native context
 preparation, D-346 listener lifecycle. v1 Android display stays generic locally,

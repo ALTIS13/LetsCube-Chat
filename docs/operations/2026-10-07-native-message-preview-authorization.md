@@ -27,8 +27,8 @@ flags, title/body or a native outbox payload.
 ## Source contract
 
 [Unversioned SQL proposal](../../supabase/migration-proposals/native_message_preview.sql)
-introduces two functions and one table with owner RLS: a session-aware identity
-helper, account-owned consent and recipient preview RPC. It does not alter source,
+introduces three functions and one table with owner RLS: a session-aware identity
+helper, device capability, account-owned consent and recipient preview RPC. It does not alter source,
 enqueue, worker, device registration, provider or voice contracts.
 
 - `notification_preview_preferences.preview_level`: `none` by default, or explicit
@@ -39,6 +39,11 @@ enqueue, worker, device registration, provider or voice contracts.
   normal authenticated role, explicit non-anonymous claim and bounded valid
   `exp`, matched against current session owner/creation/`not_after`. This helper
   does not validate signatures: that remains PostgREST's required responsibility.
+- `native_message_preview_capability(deviceUUID)`: current live recipient/session
+  plus exact enabled, unrevoked Android FCM device. Returns exactly one five-key
+  row: `preview_v=1`, recipient/session/device IDs and current account-wide level,
+  defaulting to `none`. This is server availability/consent, not authority to draw
+  private text, a voice capability or an installed native implementation.
 - `native_message_notification_preview(deviceUUID,notificationUUID)`: no supplied
   recipient, session, endpoint, display text, media URL or service credential.
   Derives the account; requires the exact enabled/unrevoked Android FCM device
@@ -110,6 +115,16 @@ the album P2 is closed after RED/GREEN and current-source inspection. The review
 did not repeat accepted tests or claim native, live JWT or recovery acceptance.
 No unchanged web/native/PG17 recovery suites were replayed. There is no web or
 native runtime import, so no application rebuild or visual claim is required.
+
+**Capability continuation:** absence case was RED against the preceding proposal;
+the added function and its exact-device/current-session/default-none controls are
+GREEN. Full current SQL fixture135/135 passes. Eight added compiled authority/
+default mutants and one added raising ACL self-check mutant are refused; the
+documented rollback removes the capability too. This refresh covers the changed
+proposal and its adjacent authorization rules, not unrelated product suites.
+Independent review of the added capability is recorded with the client preparation
+in [the continuation](2026-10-07-notification-preferences-capability.md); this
+section does not relabel the previous review as acceptance of new code.
 
 ## Remaining acceptance
 

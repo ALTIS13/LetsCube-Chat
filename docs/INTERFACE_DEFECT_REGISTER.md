@@ -25298,6 +25298,28 @@ install; installed-client acceptance remains open. This does not prove FCM
 receipt, recipient display authority or document-reload card persistence.
 [Evidence and source checkpoint](operations/2026-10-05-native-notification-display-boundary.md).
 
+## D-347 `[~]` Delayed push preferences and subscription work can outlive their owner
+
+**Severity:** medium; reproduced on the actual hook with fictional external
+providers, not a measured production leak or real-device delivery failure.
+Found 2026-10-07 during item 76 / D-335 preparation. Delayed account A reads could
+replace B's choices and contaminate B's next save. Whole-row optimistic rollback,
+concurrent hook saves, retired native completion and initial held reconciliation
+also had stale-state cases. Provider unsubscribe could finish after B had reused
+its disappearing endpoint and leave B falsely active.
+
+**Acceptance:** current account/epoch at every commit and provider boundary;
+latest read/draft, last confirmed rollback and same-document write ordering;
+user-scoped endpoint disable; real gesture preserved; independent native context;
+provider deletion fenced with a fresh reconciliation after settlement. Installed
+Android and real provider delivery remain separate evidence, and cross-device
+row atomicity is not claimed. This adjacent repair does not close rich-preview D-335.
+Source accepted: 64/64 actual-hook checks, including 24 compiled mutants;
+final independent review has no P1/P2. Mounted Settings ownership 3/3,
+typecheck 0 and production-config build `cd49e9074b3bfa2d` pass. Web rollout
+acceptance remains to be recorded; installed Android is a separate upgrade.
+[Source, regressions and rollout checkpoint](operations/2026-10-07-notification-preferences-capability.md).
+
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 
 **Severity:** high recovery-equivalence risk, not a current production outage;

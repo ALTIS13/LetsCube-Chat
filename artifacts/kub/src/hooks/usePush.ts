@@ -65,16 +65,67 @@ const DEFAULT_PREFERENCES: PushPreferences = {
   invite_push_enabled: true,
 };
 
+type PreferenceOwner = {
+  userId: string | null;
+  accountEpoch: number;
+  preferences: PushPreferences;
+  confirmed: PushPreferences;
+  changes: Partial<PushPreferences>;
+  ack: number;
+  loaded: boolean;
+  read: number;
+  reading: Promise<void> | null;
+  draft: number;
+  operation: number;
+  reconciling: boolean;
+  reconciledAt: number;
+};
+function preferenceOwner(userId: string | null, accountEpoch: number, preferences = DEFAULT_PREFERENCES, loaded = false): PreferenceOwner {
+  return { userId, accountEpoch, preferences, confirmed: preferences, changes: {}, ack: 0,
+    loaded, read: 0, reading: null, draft: 0, operation: 0, reconciling: false, reconciledAt: 0 };
+}
+type PreferenceSaveResult = "saved" | "failed" | "retired";
+
+// Already-issued requests cannot be cancelled. Order subsequent writes to the
+// same row even across hook instances/account epochs, and retain only the tail.
+const preferenceWrites = new Map<string, Promise<void>>();
+let browserUnsubscribes = 0;
+let browserProviderRevision = 0;
+const browserProviderObservers = new Set<() => void>();
+function notifyBrowserProviderObservers() {
+  for (const observer of browserProviderObservers) observer();
+}
+async function unsubscribeBrowser(subscription: PushSubscription): Promise<void> {
+  browserUnsubscribes += 1;
+  browserProviderRevision += 1;
+  notifyBrowserProviderObservers();
+  try { await subscription.unsubscribe(); }
+  finally {
+    browserUnsubscribes -= 1;
+    if (browserUnsubscribes === 0) notifyBrowserProviderObservers();
+  }
+}
+
 export function usePush() {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  const accountEpoch = useAppStore((s) => s.accountEpoch);
   const supabase = createClient();
   const [status, setStatus] = useState<PushStatus>("inactive");
   const [preferences, setPreferences] = useState<PushPreferences>(DEFAULT_PREFERENCES);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [loadingPreferences, setLoadingPreferences] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const browserReconcileInFlightRef = useRef(false);
-  const browserLastReconciledAtRef = useRef(0);
+  const ownerRef = useRef(preferenceOwner(userId, accountEpoch, preferences, preferencesLoaded));
+  if (ownerRef.current.userId !== userId || ownerRef.current.accountEpoch !== accountEpoch) {
+    ownerRef.current = preferenceOwner(userId, accountEpoch);
+  }
+  const owner = ownerRef.current;
+  const mountedRef = useRef(true);
+  const isCurrentOwner = useCallback((candidate: PreferenceOwner) => {
+    const actual = useAppStore.getState();
+    return mountedRef.current && ownerRef.current === candidate
+      && actual.currentUser?.id === candidate.userId && actual.accountEpoch === candidate.accountEpoch;
+  }, []);
   const browserRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
   const browserRegistrationAttemptRef = useRef(0);
   const browserRegistrationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -82,14 +133,30 @@ export function usePush() {
   const [browserRegistrationFailed, setBrowserRegistrationFailed] = useState(false);
   const [browserReconciled, setBrowserReconciled] = useState(false);
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    setPreferences(owner.preferences);
+    setPreferencesLoaded(false);
+    setLoadingPreferences(false);
+    setBrowserReconciled(false);
+    setMessage(null);
+    setStatus("inactive");
+  }, [owner]);
+
   const prepareBrowserRegistration = useCallback((retry: boolean) => {
+    if (!isCurrentOwner(owner)) return;
     if (isNativeApp() || !supportsBrowserPush() || !VAPID_PUBLIC || currentNotificationPermission() === "denied") return;
     const attempt = ++browserRegistrationAttemptRef.current;
+    const operation = owner.operation;
     if (browserRegistrationTimerRef.current !== null) clearTimeout(browserRegistrationTimerRef.current);
     setBrowserRegistrationFailed(false);
     if (retry) setMessage("Подготавливаем уведомления…");
     browserRegistrationTimerRef.current = setTimeout(() => {
-      if (browserRegistrationAttemptRef.current !== attempt) return;
+      if (!isCurrentOwner(owner) || browserRegistrationAttemptRef.current !== attempt || owner.operation !== operation) return;
       setBrowserRegistrationFailed(true);
       setMessage(BROWSER_REGISTRATION_ERROR);
     }, BROWSER_REGISTRATION_WAIT_MS);
@@ -102,21 +169,21 @@ export function usePush() {
       ? navigator.serviceWorker.register(`${scope}sw.js`, { scope }).then(() => navigator.serviceWorker.ready)
       : navigator.serviceWorker.ready;
     void ready.then((registration) => {
-      if (browserRegistrationAttemptRef.current !== attempt) return;
+      if (!isCurrentOwner(owner) || browserRegistrationAttemptRef.current !== attempt) return;
       if (browserRegistrationTimerRef.current !== null) clearTimeout(browserRegistrationTimerRef.current);
       browserRegistrationTimerRef.current = null;
       browserRegistrationRef.current = registration;
       setBrowserRegistrationReady(true);
       setBrowserRegistrationFailed(false);
-      setMessage((current) => current === BROWSER_REGISTRATION_ERROR || current === "Подготавливаем уведомления…" ? null : current);
+      if (owner.operation === operation) setMessage((current) => current === BROWSER_REGISTRATION_ERROR || current === "Подготавливаем уведомления…" ? null : current);
     }).catch(() => {
-      if (browserRegistrationAttemptRef.current !== attempt) return;
+      if (!isCurrentOwner(owner) || browserRegistrationAttemptRef.current !== attempt) return;
       if (browserRegistrationTimerRef.current !== null) clearTimeout(browserRegistrationTimerRef.current);
       browserRegistrationTimerRef.current = null;
       setBrowserRegistrationFailed(true);
-      setMessage(BROWSER_REGISTRATION_ERROR);
+      if (owner.operation === operation) setMessage(BROWSER_REGISTRATION_ERROR);
     });
-  }, []);
+  }, [isCurrentOwner, owner]);
 
   useEffect(() => {
     prepareBrowserRegistration(false);
@@ -137,47 +204,142 @@ export function usePush() {
     setMessage(PUSH_UNAVAILABLE);
   }, []);
 
-  const loadPreferences = useCallback(async () => {
-    if (!userId) {
-      setPreferencesLoaded(false);
-      setBrowserReconciled(false);
-      return;
-    }
+  const loadPreferences = useCallback((): Promise<void> => {
+    if (!owner.userId || !isCurrentOwner(owner)) return Promise.resolve();
+    const userId = owner.userId;
+    const read = ++owner.read;
+    const draft = owner.draft;
+    const ack = owner.ack;
+    const operation = owner.operation;
     setPreferencesLoaded(false);
     setBrowserReconciled(false);
     setLoadingPreferences(true);
-    const { data, error } = await supabase
-      .from("notification_preferences")
-      .select("push_enabled, message_push_enabled, task_push_enabled, invite_push_enabled")
-      .eq("user_id", userId)
-      .maybeSingle();
-    setLoadingPreferences(false);
-    setPreferencesLoaded(true);
+    const request = (async () => {
+      const { data, error } = await supabase
+        .from("notification_preferences")
+        .select("push_enabled, message_push_enabled, task_push_enabled, invite_push_enabled")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!isCurrentOwner(owner) || owner.read !== read) return;
+      setLoadingPreferences(false);
+      if (owner.draft !== draft || owner.ack !== ack || Object.keys(owner.changes).length > 0) {
+        setPreferencesLoaded(owner.loaded); return;
+      }
+      owner.loaded = !error;
+      setPreferencesLoaded(true);
 
-    if (error) {
-      setPreferencesLoaded(false);
-      if (looksLikeSchemaMissing(error)) {
-        markMigrationMissing();
+      if (error) {
+        setPreferencesLoaded(false);
+        if (owner.operation !== operation) return;
+        if (looksLikeSchemaMissing(error)) {
+          markMigrationMissing();
+          return;
+        }
+        setMessage(mapPgError(error));
         return;
       }
-      setMessage(mapPgError(error));
-      return;
-    }
 
-    setPreferences({
-      ...DEFAULT_PREFERENCES,
-      ...(data ?? {}),
+      owner.preferences = {
+        ...DEFAULT_PREFERENCES,
+        ...(data ?? {}),
+      };
+      owner.confirmed = owner.preferences;
+      setPreferences(owner.preferences);
+      if (owner.operation === operation) setMessage(null);
+    })().catch((error) => {
+      if (!isCurrentOwner(owner) || owner.read !== read) return;
+      setLoadingPreferences(false);
+      if (owner.draft !== draft || owner.ack !== ack || Object.keys(owner.changes).length > 0) return;
+      owner.loaded = false;
+      setPreferencesLoaded(false);
+      if (owner.operation !== operation) return;
+      if (looksLikeSchemaMissing(error)) markMigrationMissing();
+      else setMessage(mapPgError(error));
     });
-    setMessage(null);
-  }, [markMigrationMissing, supabase, userId]);
+    owner.reading = request;
+    return request;
+  }, [isCurrentOwner, markMigrationMissing, owner, supabase]);
+
+  const ensurePreferencesLoaded = useCallback(async () => {
+    if (!isCurrentOwner(owner)) return false;
+    if (!owner.loaded) {
+      const reading = owner.reading ?? loadPreferences();
+      await reading;
+      // A mount/refresh may have replaced the read while this command waited.
+      if (!owner.loaded && owner.reading !== reading) await owner.reading;
+    }
+    return isCurrentOwner(owner) && owner.loaded;
+  }, [isCurrentOwner, loadPreferences, owner]);
+
+  const savePreferences = useCallback((patch: Partial<PushPreferences>, canContinue: () => boolean = () => true): Promise<PreferenceSaveResult> => {
+    if (!owner.userId || !isCurrentOwner(owner) || !canContinue()) return Promise.resolve("retired");
+    if (!owner.loaded) return Promise.resolve("failed");
+    const userId = owner.userId;
+    const next = { ...owner.preferences, ...patch };
+    owner.changes = { ...owner.changes, ...patch };
+    const revision = ++owner.draft;
+    owner.preferences = next;
+    setPreferences(next);
+    const current = () => isCurrentOwner(owner) && owner.draft === revision && canContinue();
+    const write = (preferenceWrites.get(userId) ?? Promise.resolve()).then(async (): Promise<PreferenceSaveResult> => {
+      if (!current()) return "retired";
+      let error: unknown;
+      let confirmed: PushPreferences | null = null;
+      let changes: Partial<PushPreferences> = {};
+      try {
+        // Another hook may have saved a category since this draft was loaded.
+        // Merge only our unconfirmed changes into the current owner-scoped row.
+        const result = await supabase.from("notification_preferences")
+          .select("push_enabled, message_push_enabled, task_push_enabled, invite_push_enabled")
+          .eq("user_id", userId).maybeSingle();
+        if (!isCurrentOwner(owner)) return "retired";
+        error = result.error;
+        if (!error) {
+          owner.confirmed = { ...DEFAULT_PREFERENCES, ...(result.data ?? {}) };
+          if (!current()) return "retired";
+          changes = { ...owner.changes };
+          confirmed = { ...owner.confirmed, ...changes };
+          error = await persistPushPreferenceState(
+            supabase as unknown as Parameters<typeof persistPushPreferenceState>[0], userId, confirmed, confirmed.push_enabled,
+          );
+        }
+      } catch (failure) { error = failure; }
+      if (!error && confirmed && isCurrentOwner(owner)) {
+        owner.confirmed = confirmed;
+        owner.ack += 1;
+        for (const key of Object.keys(changes) as (keyof PushPreferences)[]) {
+          if (owner.changes[key] === changes[key]) delete owner.changes[key];
+        }
+      }
+      if (!current()) return "retired";
+      if (!error && confirmed) {
+        owner.preferences = confirmed;
+        setPreferences(confirmed);
+        return "saved";
+      }
+      owner.changes = {};
+      owner.draft += 1;
+      owner.preferences = owner.confirmed;
+      setPreferences(owner.confirmed);
+      if (looksLikeSchemaMissing(error)) markMigrationMissing();
+      else setMessage(mapPgError(error));
+      return "failed";
+    });
+    const tail = write.then(() => undefined, () => undefined);
+    preferenceWrites.set(userId, tail);
+    void tail.then(() => { if (preferenceWrites.get(userId) === tail) preferenceWrites.delete(userId); });
+    return write;
+  }, [isCurrentOwner, markMigrationMissing, owner, supabase]);
 
   // Detect browser support and starting state.
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const operation = owner.operation;
     if (isNativeAndroid()) {
       setStatus("native_unavailable");
       setMessage(nativePushPendingMessage());
       void getNativePushPermissionStatus().then((result) => {
+        if (!isCurrentOwner(owner) || owner.operation !== operation) return;
         const latest = nativeVoicePushSnapshot() ?? result;
         setStatus(normalizeNativeStatus(latest));
         setMessage(latest.message);
@@ -211,7 +373,7 @@ export function usePush() {
       return;
     }
     setStatus("inactive");
-  }, []);
+  }, [isCurrentOwner, owner]);
 
   useEffect(() => {
     void loadPreferences();
@@ -220,6 +382,7 @@ export function usePush() {
   useEffect(() => {
     if (!isNativeAndroid()) return;
     const update = () => {
+      if (!isCurrentOwner(owner)) return;
       const result = nativeVoicePushSnapshot();
       if (!result) return;
       setStatus(normalizeNativeStatus(result));
@@ -227,26 +390,38 @@ export function usePush() {
     };
     update();
     return subscribeNativeVoicePush(update);
-  }, []);
+  }, [isCurrentOwner, owner]);
 
-  const reconcileBrowserSubscription = useCallback(async (force = false) => {
-    if (!userId || !preferencesLoaded || isNativeApp() || !supportsBrowserPush() || !VAPID_PUBLIC) return;
-    if (browserReconcileInFlightRef.current) return;
+  const reconcileBrowserSubscription = useCallback(async (force = false, settlementRead = false): Promise<void> => {
+    if (!owner.userId || !owner.loaded || !isCurrentOwner(owner) || isNativeApp() || !supportsBrowserPush() || !VAPID_PUBLIC) return;
+    if (browserUnsubscribes !== 0) {
+      setBrowserReconciled(false);
+      setStatus("inactive");
+      return;
+    }
+    if (owner.reconciling) return;
     const now = Date.now();
-    if (!force && now - browserLastReconciledAtRef.current < 60_000) return;
+    if (!force && now - owner.reconciledAt < 60_000) return;
+    const operation = owner.operation;
+    const draft = owner.draft;
+    let providerRevision = browserProviderRevision;
+    const current = () => isCurrentOwner(owner) && owner.operation === operation && owner.draft === draft
+      && browserUnsubscribes === 0 && providerRevision === browserProviderRevision;
 
-    browserReconcileInFlightRef.current = true;
-    browserLastReconciledAtRef.current = now;
+    owner.reconciling = true;
+    owner.reconciledAt = now;
     try {
       if (Notification.permission === "denied") {
         setStatus("denied");
         return;
       }
       const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+      if (!current()) return;
       const subscription = registration ? await registration.pushManager.getSubscription() : null;
+      if (!current()) return;
       if (!subscription) {
         setStatus("inactive");
-        if (preferences.push_enabled) {
+        if (owner.preferences.push_enabled) {
           setMessage("Push-подписка этого устройства неактивна. Включите уведомления повторно.");
         }
         return;
@@ -254,18 +429,25 @@ export function usePush() {
 
       const keyMatches = applicationServerKeyMatches(subscription, VAPID_PUBLIC);
       if (keyMatches === false) {
-        await supabase
-          .from("push_subscriptions")
-          .update({ is_active: false, updated_at: new Date().toISOString() })
-          .eq("user_id", userId)
-          .eq("endpoint", subscription.endpoint);
-        await subscription.unsubscribe();
+        // A failed cleanup settlement must not bounce another deletion between hooks.
+        if (!settlementRead) {
+          await supabase
+            .from("push_subscriptions")
+            .update({ is_active: false, updated_at: new Date().toISOString() })
+            .eq("user_id", owner.userId)
+            .eq("endpoint", subscription.endpoint);
+          if (!current()) return;
+          const unsubscribing = unsubscribeBrowser(subscription);
+          providerRevision = browserProviderRevision;
+          await unsubscribing;
+          if (!current()) return;
+        }
         setStatus("inactive");
         setMessage("Ключ push-подписки обновился. Включите уведомления повторно.");
         return;
       }
 
-      if (!preferences.push_enabled) {
+      if (!owner.preferences.push_enabled) {
         setStatus("inactive");
         return;
       }
@@ -273,9 +455,10 @@ export function usePush() {
       const { error } = await supabase
         .from("push_subscriptions")
         .upsert(
-          browserSubscriptionRecord(subscription, userId, navigator.userAgent, getPlatform()),
+          browserSubscriptionRecord(subscription, owner.userId, navigator.userAgent, getPlatform()),
           { onConflict: "user_id,endpoint" },
         );
+      if (!current()) return;
       if (error) {
         if (looksLikeSchemaMissing(error)) markMigrationMissing();
         else {
@@ -287,13 +470,15 @@ export function usePush() {
       setStatus("active");
       setMessage(null);
     } catch (error) {
+      if (!current()) return;
       setStatus("inactive");
       setMessage(mapPgError(error));
     } finally {
-      browserReconcileInFlightRef.current = false;
-      setBrowserReconciled(true);
+      owner.reconciling = false;
+      if (current()) setBrowserReconciled(true);
+      else if (isCurrentOwner(owner) && browserUnsubscribes === 0) void reconcileBrowserSubscription(true, settlementRead || providerRevision !== browserProviderRevision);
     }
-  }, [markMigrationMissing, preferences.push_enabled, preferencesLoaded, supabase, userId]);
+  }, [isCurrentOwner, markMigrationMissing, owner, preferences.push_enabled, preferencesLoaded, supabase]);
 
   useEffect(() => {
     void reconcileBrowserSubscription(true);
@@ -302,6 +487,8 @@ export function usePush() {
   useEffect(() => {
     if (isNativeApp() || !supportsBrowserPush()) return;
     const reconcile = () => void reconcileBrowserSubscription(false);
+    const providerChanged = () => void reconcileBrowserSubscription(true, true);
+    browserProviderObservers.add(providerChanged);
     const handleServiceWorkerMessage = (event: MessageEvent) => {
       if (event.data?.type === "KUB_PUSH_SUBSCRIPTION_CHANGED") {
         void reconcileBrowserSubscription(true);
@@ -315,6 +502,7 @@ export function usePush() {
     document.addEventListener("visibilitychange", onVisibility);
     navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
     return () => {
+      browserProviderObservers.delete(providerChanged);
       window.removeEventListener("focus", reconcile);
       window.removeEventListener("online", reconcile);
       document.removeEventListener("visibilitychange", onVisibility);
@@ -323,39 +511,38 @@ export function usePush() {
   }, [reconcileBrowserSubscription]);
 
   const enable = useCallback(async () => {
+    if (!owner.userId || !isCurrentOwner(owner)) return;
+    const revision = ++owner.operation;
+    const current = () => isCurrentOwner(owner) && owner.operation === revision;
     if (isNativeAndroid()) {
       setStatus("native_unavailable");
       setMessage("Регистрируем Android push...");
       const operation = enableNativeVoicePush();
-      const owner = nativeVoiceContext();
+      const nativeOwner = nativeVoiceContext();
       const result = await operation;
-      if (!isCurrentNativeVoiceContext(owner)) return;
+      if (!current() || !isCurrentNativeVoiceContext(nativeOwner) || nativeOwner?.recipientId !== owner.userId) return;
       if (result.status === "native_active") {
-        const preferenceError = await persistPushPreferenceState(
-          supabase as unknown as Parameters<typeof persistPushPreferenceState>[0],
-          owner!.recipientId,
-          preferences,
-          true,
-        );
-        if (!isCurrentNativeVoiceContext(owner)) return;
-        if (preferenceError) {
+        if (!await ensurePreferencesLoaded()) {
+          if (current() && isCurrentNativeVoiceContext(nativeOwner)) void disableNativeVoicePush();
+          return;
+        }
+        if (!current() || !isCurrentNativeVoiceContext(nativeOwner)) return;
+        const saved = await savePreferences({ push_enabled: true }, () => current() && isCurrentNativeVoiceContext(nativeOwner));
+        if (!current() || !isCurrentNativeVoiceContext(nativeOwner)) return;
+        if (saved === "retired") return;
+        if (saved === "failed") {
           void disableNativeVoicePush();
-          if (looksLikeSchemaMissing(preferenceError)) markMigrationMissing();
-          else {
-            setStatus("native_unavailable");
-            setMessage(mapPgError(preferenceError));
-          }
+          setStatus((status) => status === "migration_missing" ? status : "native_unavailable");
           return;
         }
       }
       setStatus(normalizeNativeStatus(result));
       setMessage(result.message);
-      if (result.status === "native_active") {
-        setPreferences((prev) => ({ ...prev, push_enabled: true }));
-      }
       return;
     }
     if (!userId) return;
+    const providerRevision = browserProviderRevision;
+    const currentBrowser = () => current() && browserUnsubscribes === 0 && providerRevision === browserProviderRevision;
     if (isNativeApp()) {
       setStatus("native_unavailable");
       setMessage(nativePushPendingMessage());
@@ -370,7 +557,7 @@ export function usePush() {
       return;
     }
     const reg = browserRegistrationRef.current;
-    if (!reg || !browserReconciled) {
+    if (!reg || !owner.loaded || !browserReconciled || browserUnsubscribes > 0) {
       setMessage("Подготавливаем уведомления. Повторите через несколько секунд.");
       return;
     }
@@ -383,6 +570,7 @@ export function usePush() {
     try {
       const subscriptionOperation = subscribeDuringUserGesture(reg, urlBase64ToUint8Array(VAPID_PUBLIC));
       const sub = await subscriptionOperation;
+      if (!currentBrowser()) return;
 
       // Upsert on user+endpoint so re-enabling on the same device does not
       // create duplicate rows and the same browser endpoint cannot be moved
@@ -390,9 +578,10 @@ export function usePush() {
       const { error } = await supabase
         .from("push_subscriptions")
         .upsert(
-          browserSubscriptionRecord(sub, userId, navigator.userAgent, getPlatform()),
+          browserSubscriptionRecord(sub, owner.userId, navigator.userAgent, getPlatform()),
           { onConflict: "user_id,endpoint" },
         );
+      if (!currentBrowser()) return;
       if (error) {
         if (looksLikeSchemaMissing(error)) {
           markMigrationMissing();
@@ -402,61 +591,37 @@ export function usePush() {
         return;
       }
 
-      const { error: preferenceError } = await supabase
-        .from("notification_preferences")
-        .upsert(
-          {
-            user_id: userId,
-            ...preferences,
-            push_enabled: true,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id" },
-        );
-      if (preferenceError) {
-        if (looksLikeSchemaMissing(preferenceError)) {
-          markMigrationMissing();
-          return;
-        }
-        setMessage(mapPgError(preferenceError));
-        return;
-      }
+      if (await savePreferences({ push_enabled: true }, currentBrowser) !== "saved" || !currentBrowser()) return;
 
-      setPreferences((prev) => ({ ...prev, push_enabled: true }));
       setMessage("Push-уведомления включены.");
       setStatus("active");
-      browserLastReconciledAtRef.current = Date.now();
+      owner.reconciledAt = Date.now();
       window.dispatchEvent(new Event(PUSH_STATE_CHANGED_EVENT));
     } catch (e) {
+      if (!currentBrowser()) return;
       if (currentNotificationPermission() === "denied") setStatus("denied");
       setMessage(mapPgError(e));
     }
-  }, [browserReconciled, markMigrationMissing, preferences, supabase, userId]);
+  }, [browserReconciled, ensurePreferencesLoaded, isCurrentOwner, markMigrationMissing, owner, savePreferences, supabase, userId]);
 
   const disable = useCallback(async () => {
+    if (!owner.userId || !isCurrentOwner(owner)) return;
+    const revision = ++owner.operation;
+    const current = () => isCurrentOwner(owner) && owner.operation === revision;
     try {
       if (isNativeAndroid()) {
         const operation = disableNativeVoicePush();
-        const owner = nativeVoiceContext();
+        const nativeOwner = nativeVoiceContext();
         const result = await operation;
-        if (!isCurrentNativeVoiceContext(owner)) return;
-        const preferenceError = owner
-          ? await persistPushPreferenceState(
-              supabase as unknown as Parameters<typeof persistPushPreferenceState>[0],
-              owner.recipientId,
-              preferences,
-              false,
-            )
-          : null;
-        if (!isCurrentNativeVoiceContext(owner)) return;
-        setStatus(normalizeNativeStatus(result));
-        if (preferenceError) {
-          if (looksLikeSchemaMissing(preferenceError)) markMigrationMissing();
-          else setMessage(mapPgError(preferenceError));
-        } else {
+        if (!current() || !isCurrentNativeVoiceContext(nativeOwner) || nativeOwner?.recipientId !== owner.userId) return;
+        if (!await ensurePreferencesLoaded()) return;
+        if (!current() || !isCurrentNativeVoiceContext(nativeOwner)) return;
+        const saved = await savePreferences({ push_enabled: false }, () => current() && isCurrentNativeVoiceContext(nativeOwner));
+        if (!current() || !isCurrentNativeVoiceContext(nativeOwner)) return;
+        if (saved === "saved") {
+          setStatus(normalizeNativeStatus(result));
           setMessage(result.message);
         }
-        setPreferences((prev) => ({ ...prev, push_enabled: false }));
         return;
       }
       if (isNativeApp()) {
@@ -464,8 +629,12 @@ export function usePush() {
         setMessage("Native push пока настроен только для Android-приложения.");
         return;
       }
+      let providerRevision = browserProviderRevision;
+      const currentBrowser = () => current() && browserUnsubscribes === 0 && providerRevision === browserProviderRevision;
       const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+      if (!currentBrowser()) return;
       const sub = reg ? await reg.pushManager.getSubscription() : null;
+      if (!currentBrowser()) return;
       if (sub) {
         const { error } = await supabase
           .from("push_subscriptions")
@@ -473,62 +642,39 @@ export function usePush() {
             is_active: false,
             updated_at: new Date().toISOString(),
           })
+          .eq("user_id", owner.userId)
           .eq("endpoint", sub.endpoint);
+        if (!currentBrowser()) return;
         if (error && !looksLikeSchemaMissing(error)) setMessage(mapPgError(error));
-        await sub.unsubscribe();
+        const unsubscribing = unsubscribeBrowser(sub);
+        providerRevision = browserProviderRevision;
+        await unsubscribing;
+        if (!currentBrowser()) return;
       }
-      if (userId) {
-        const { error: preferenceError } = await supabase
-          .from("notification_preferences")
-          .upsert(
-            {
-              user_id: userId,
-              ...preferences,
-              push_enabled: false,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "user_id" },
-          );
-        if (preferenceError && looksLikeSchemaMissing(preferenceError)) markMigrationMissing();
-        else if (preferenceError) setMessage(mapPgError(preferenceError));
-      }
-      setPreferences((prev) => ({ ...prev, push_enabled: false }));
+      if (!await ensurePreferencesLoaded() || !currentBrowser()) return;
+      if (await savePreferences({ push_enabled: false }, currentBrowser) !== "saved" || !currentBrowser()) return;
       setMessage("Push-уведомления выключены.");
       setStatus("inactive");
       window.dispatchEvent(new Event(PUSH_STATE_CHANGED_EVENT));
     } catch (e) {
+      if (!current()) return;
       setMessage(mapPgError(e));
     }
-  }, [markMigrationMissing, preferences, supabase, userId]);
+  }, [ensurePreferencesLoaded, isCurrentOwner, owner, savePreferences, supabase]);
 
   const setPreference = useCallback(async (key: PushPreferenceKey, value: boolean) => {
-    if (!userId) return;
-    const previous = preferences;
-    const next = { ...preferences, [key]: value };
-    setPreferences(next);
-    const { error } = await supabase
-      .from("notification_preferences")
-      .upsert(
-        {
-          user_id: userId,
-          ...next,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id" },
-      );
-    if (error) {
-      setPreferences(previous);
-      if (looksLikeSchemaMissing(error)) markMigrationMissing();
-      else setMessage(mapPgError(error));
-    }
-  }, [markMigrationMissing, preferences, supabase, userId]);
+    if (!owner.userId || !isCurrentOwner(owner)) return;
+    if (!owner.loaded && !await ensurePreferencesLoaded()) return;
+    if (!isCurrentOwner(owner)) return;
+    await savePreferences({ [key]: value });
+  }, [ensurePreferencesLoaded, isCurrentOwner, owner, savePreferences]);
 
   return {
     status,
-    preferences,
+    preferences: owner.preferences,
     loadingPreferences,
     message,
-    readyForPrompt: preferencesLoaded && (status === "denied" || (browserRegistrationReady && browserReconciled)),
+    readyForPrompt: owner.loaded && (status === "denied" || (browserRegistrationReady && browserReconciled)),
     browserRegistrationFailed,
     retryBrowserRegistration: () => prepareBrowserRegistration(true),
     enable,
