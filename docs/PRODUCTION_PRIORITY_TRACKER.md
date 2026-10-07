@@ -10,11 +10,13 @@ four ordinary selected Realme tests, signer/Firebase/bundle and public APK check
 Temporary QA profile removed; primary data preserved, A063 untouched. Web exact
 healthy image, old/new markers, retained entry, JS/SW parity and anonymous mount
 accepted. D-335 remains active: isolated full PG17 restore ran but extension
-ACL/config/index differences refused equivalence; the sealed clone-only supplement
-passed full effective-security equality in attempt4. Strict raw comparison still
-refused two extension ACL serialization blocks. Exact allowance/driver review
-found two P2 fixture defects: duplicate trigger-created owner membership and
-retained fixture audit rows. Fix/re-review then real JWT/rollback are next.
+ACL/config/index supplement and19 fixed raw allowances passed full effective
+security/settings/ACL/control equality in actual attempts5/6 (not raw-byte identity).
+Invite-aware fixture repair is source-reviewed; attempt6 refused with23505 when
+the actual message trigger created a notification before the manual fixture
+INSERT. Repair both initial/album paths with exact-owned dependency guards and
+one composite actual-source preflight before another full copy. Copies5/6
+removed healthy; production unchanged. Actual JWT/rollback remain unaccepted.
 No production SQL or rich native preview installed.
 Additional D-353 queued already-read card RED1/controls2: narrow reconciliation
 source/runtime review passed; signed0.1.13/14 and four selected ordinary Realme
@@ -4256,6 +4258,14 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     This does not
     invalidate the accepted 0.1.12 ownership cases or certify D-349's unknown client.
     [Source and remaining candidate gates](operations/2026-10-07-android-pending-read-reconciliation.md).
+
+92. `[~]` Task-detail background refresh and recovery, **D-354**. Independent
+    actual-source diagnosis found that realtime refetch replaces working content
+    with loading, unmounting the checklist draft; a transient read error is
+    mislabelled unavailable/deleted with no Retry. Fictional hook state controls
+    confirm the transitions, not rendered draft loss or the unidentified tester
+    reports86/87. Narrow initial/refresh/error/owner separation and mounted
+    actual modal/checklist regression are in progress. No deploy yet.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

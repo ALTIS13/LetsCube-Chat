@@ -103,14 +103,67 @@ after entity cleanup, preventing all-table equality. Correct the exact fixture
 and audit cleanup without disabling triggers or relaxing equality, then re-review.
 These are static findings, not actual PG17 RED/JWT results. Source ACL controls
 RED1/GREEN1,7 refusals and4 compiled omission mutants do not substitute for native
-candidate acceptance. No attempt5 copy has been allocated here yet.
+candidate acceptance. Both fixture P2s were then corrected and independently
+source-accepted: actual-source PGlite RED2/GREEN1,9 refusal controls and6 compiled
+SQL mutants. Membership updates only joined_at and preserves creator owner;
+audit cleanup checks exact forms after entity removal. No triggers or equality
+checks were disabled.
 
-Next: re-review the narrow two-block allowance and repaired candidate/JWT/rollback driver,
-then run one changed-input copy with the exact supplement; require full effective
-security and bounded raw
-equivalence. Only then apply the candidate to that copy, exercise real signed
-JWT/session/RLS and dependency paths, prove raising self-check mutants and
-same-copy rollback. Production installation still requires a fresh verified
+## Attempt5 actual result
+
+One reviewed changed-input copy ran. Full archive restore passed with full
+effective security, database settings, namespace/default ACL and control
+inventory equality. Raw byte equality is false; all19 fixed explicit block
+allowances matched. This is measured bounded equivalence, not exact raw bytes
+or a general solution to D-342.
+
+The driver then refused at fictional fixture creation: SQLSTATE22023 and exact
+`invite_required`. The actual handle_new_user/registration_invite_apply_from_profile
+chain requires raw_user_meta_data.invite_code; the fictional users omitted it.
+This is a fixture defect, not a migration or production failure. No HTTP/JWT
+acceptance or final same-copy rollback is claimed from this attempt.
+
+The exact owned copy was removed healthy, without OOM; container name/listener
+namespace absent and production identity unchanged. Private logs stay private.
+Next repair supplies one isolated synthetic invite, limit3, no role/location
+assignments, exact UUID/code collision guards, metadata for the three fictional
+users and exact invite/uses/audit cleanup. Keep registration/RLS/triggers and full
+row/sequence equality active. Re-review before another changed-input copy.
+No production SQL has been applied.
+
+## Attempt6 actual result
+
+The clone-only invite/uses/audit repair passed causal source controls and focused
+independent review. One changed-input copy again passed full restore, effective
+security/settings/ACL/control equality and all19 fixed raw allowances. Its
+fictional fixture transaction then refused: SQLSTATE23505,
+`notifications_message_user_once_idx`, actual psql exit3 with the frozen SQL hash.
+The actual `enqueue_message_notifications()` trigger had already created the
+notification for the first fictional message; the deterministic fixture INSERT
+attempted to duplicate it. The album's second message has the same source path,
+but attempt6 did not reach it. This is a fixture defect, not a demonstrated
+migration or production failure.
+
+The exact copy was removed healthy/non-OOM; its container/listener namespace is
+absent and production identity unchanged. HTTP/JWT and final same-copy rollback
+are not accepted. Existing logs without explicit exit receipts remain NOT PROVEN.
+
+An independent read-only pre-install probe matched the pinned production
+container/image/cluster/database identity and found all four proposed objects
+absent. The actual postgres owner has the required auth-schema USAGE,
+auth.sessions SELECT, auth.jwt()/auth.uid() EXECUTE and RLS-bypass authority.
+These dependency checks do not prove the proposed recipient lookup or authorize
+display, and must not replace the rehearsal or fresh pre-apply guards.
+
+Next: a coupled actual-source preflight covering registration, membership/audit,
+both message/notification producers, cascade dependencies, album-only authority
+and cleanup. Replace only proved fictional trigger-created notifications before
+the deterministic INSERTs, guard the exact dependents and retain indexes/triggers.
+Exclude ordinary native authority for both fictional notifications before the
+album-only tests. No blind restore loop or broad row deletion. After focused
+review, one changed-input copy must establish real signed JWT/session/RLS and
+dependency paths, raising self-check controls and final same-copy rollback.
+Production installation still requires a fresh verified
 before-state backup, reviewed transaction, raising check, byte-identical
 migration mirror and real post-apply validation. No production SQL has run here.
 

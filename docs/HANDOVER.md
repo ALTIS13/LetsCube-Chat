@@ -29,14 +29,18 @@ integration1/0 pass; natural OS timing3 skips remains NOT PROVEN. Existing signe
 Firebase/33 assets, exact public APK redownload verified. QA11/test package
 removed, primary user0/data preserved, A063 untouched. Web exact healthy image,
 before/after markers, retained entry, JS/SW parity and anonymous home/login pass.
-D-335 stays active: full isolated PG17 restore ran,
-but real extension ACL/config/index differences refuse acceptance. A narrowly
-sealed clone-only supplement passed in attempt4, including full effective
-security equality; strict raw comparison refused two additional extension ACL
-blocks. The prepared exact allowance/driver review found two P2 fixture defects:
-duplicate trigger-created owner membership and retained fixture audit rows.
-Fix/re-review those before one changed-input copy; actual JWT/RLS and same-copy
-rollback remain UNRUN. No production SQL. D-342 universal recovery stays separate,
+D-335 stays active: full isolated PG17 restore and the narrow supplement/19
+sealed raw allowances passed effective security/settings/ACL/control equality
+in attempts5/6. Raw bytes are not identical. The invite-aware fixture repair
+passed source review, but attempt6 refused with SQLSTATE23505: the actual message
+trigger had already created the notification before its explicit fixture INSERT.
+Both initial and album message paths need the same exact-owned replacement;
+keep triggers, unique indexes and full row/sequence equality active. Copies5/6
+removed healthy, production unchanged. Coordinator approved a private composite
+actual-source fixture repair/preflight; no further full copy until that changed
+input is verified. Actual JWT/RLS/final same-copy rollback remain unaccepted.
+No production SQL.
+D-342 universal recovery stays separate,
 with no repeated provenance loop. Next: D-335 gates, not replay of accepted
 recording/device suites or tester export. D-348/349
 client unknown; task-loading items86/87 preliminary. Outcome docs stay on the
@@ -47,6 +51,14 @@ candidate branch to avoid a docs-only main rebuild.
 [Native cleanup, Android candidate and device gates](operations/2026-10-07-android-read-cleanup-release.md).
 [Pending reconciliation follow-up](operations/2026-10-07-android-pending-read-reconciliation.md).
 [Isolated PG17 rehearsal and exact next gate](operations/2026-10-07-native-preview-pg17-rehearsal.md).
+
+**Parallel bounded work,2026-10-07:** item92/D-354 task-detail recovery. Actual
+hook diagnosis found that background refresh unmounts working content/drafts,
+and transient errors are mislabelled unavailable/deleted without Retry. Narrow
+source repair and actual mounted fictional regression are in progress; tester
+items86/87 remain separate. Coordinator owns docs/deployment, Lin owns only
+the task hook/modal and focused tests; no DB overlap.
+[Current cause and acceptance gate](operations/2026-10-07-task-detail-recovery.md).
 
 **Previous source checkpoint,2026-10-07:** coordinator owns item76/D-335 recipient
 preview authorization, based on d5edbe83. New unversioned SQL proposal supplies

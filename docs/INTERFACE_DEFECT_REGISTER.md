@@ -25430,6 +25430,29 @@ reconciliation; natural OS queue timing, FCM transport and unknown D-349 client
 are not claimed. Previous0.1.12 catalog retained for rollback.
 [Current candidate and evidence limits](operations/2026-10-07-android-pending-read-reconciliation.md).
 
+## D-354 `[~]` Task detail refresh removes working content and mislabels transient failures
+
+**Severity:** medium; source diagnosis, 2026-10-07. Independent of the
+unidentified tester client in preliminary items86/87.
+
+**Surface:** `artifacts/kub/src/hooks/useTask.ts`,
+`artifacts/kub/src/pages/tasks/TaskDetailModal.tsx` and the locally held draft in
+`TaskChecklist.tsx`.
+
+**Observed cause:** every detail request, including the debounced realtime
+refetch, sets the same loading flag. The modal replaces its working subtree
+with a spinner, unmounting the checklist and its draft. A task read error and a
+successful missing row also share the same null-task branch: a timeout is shown
+as unavailable/deleted with no retry. An isolated actual-hook probe confirms
+loading on same-task refresh and task removal on57014; initial success and
+successful absence controls pass. Mounted draft-loss reproduction is still due.
+
+**Current work:** separate initial loading from refresh, preserve current-owner
+content on transient errors with a compact retry, and clear confirmed
+absence/access denial. Fence task/account/session/request replacements and
+validate actual modal/checklist lifecycle with fictional backend data. No
+production mutation, deployment or claim of fixing tester items86/87 yet.
+
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 
 **Severity:** high recovery-equivalence risk, not a current production outage;
