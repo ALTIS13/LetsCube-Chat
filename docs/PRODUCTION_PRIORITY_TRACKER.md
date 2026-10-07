@@ -1,31 +1,35 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-07.
+Status: active production-hardening tracker, updated 2026-10-08.
 
-**Current continuation, 2026-10-07:** item89/D-351 and91/D-353 native cleanup
-accepted on web/main `36f313dc` and nonmandatory AndroidStable0.1.13/build14
-at16:58 Moscow. Exact pairs,
-durable latest-post ownership and retired leases pass source/mutant review;
-four ordinary selected Realme tests, signer/Firebase/bundle and public APK checks pass.
-Temporary QA profile removed; primary data preserved, A063 untouched. Web exact
-healthy image, old/new markers, retained entry, JS/SW parity and anonymous mount
-accepted. D-335 remains active: full PG17 restore, narrow extension supplement and
-19 fixed raw allowances passed effective security/settings/ACL/control equality
-(not raw-byte identity). Coupled fixture repair passed source review; attempt7
-passed restore, candidate/raising controls and eight equality checks, then refused
-at actual HTTP controls. Exact request oracle is not recoverable from the retained
-evidence. Copy7 removed healthy, production unchanged. Value-free trace delta is
-source-reviewed; the next attempt needs its own reviewed HTTP namespace/envelope.
-Actual JWT/RLS/final same-copy rollback remain unaccepted. No production SQL or
-rich native preview installed. [Current gate](operations/2026-10-07-native-preview-pg17-rehearsal.md).
-Additional D-353 queued already-read card RED1/controls2: narrow reconciliation
-source/runtime review passed; signed0.1.13/14 and four selected ordinary Realme
-checks passed. Natural timing3 skips/NOT PROVEN; separately labelled controlled
-snapshot physical integration PASS1/0. QA11 removed. Final helper review and
-public web/APK verification accepted; Stable0.1.13/build14 published.
-Do not replay accepted capture suites or tester exports. D-348/349 still
-have unknown client; items 86/87 remain preliminary.
-[Current native/device/release record](operations/2026-10-07-android-read-cleanup-release.md).
+**Current continuation,2026-10-08 Moscow:** coordinator, branch
+`codex/bot-inline-media-20261002`. Latest product acceptance is item92/D-354:
+web/main4765bcad and nonmandatory AndroidStable0.1.14/build15. Task recovery,
+fresh bundle/Firebase/signer, Realme upgrade without clear, one cold anonymous
+WebView case and public redownload passed. Prior unchanged native receipts are
+explicit reuse; natural OS timing remains NOT PROVEN. QA12 removed; primary data
+preserved and A063 untouched.
+[Current release](operations/2026-10-07-android-task-detail-release.md).
+
+Active D-335 server stage is complete: default-none migration
+`20261007210924_native_message_preview.sql` installed once and
+verified-postchecked; SHA256
+`02681CFB8966EF7DEB362D95538DC4B787986772E4173A0777465A46DC1DE321`.
+Accepted PG17 attempt12/reused sealed raising proof, fresh verified backup,
+lock-before-check dependency guards, raising transaction, byte-identical mirror,
+exact catalog/privileges/preserved definitions and actual QA-JWT recipient/
+empty-consent/invalid-device/anon denials passed. A post-check FK pretty-printing
+mismatch was corrected only in the observer, then verification-only passed;
+sqlDispatches remains1. Do not repeat installation or accepted suites.
+
+Actual normal owned-QA sign-in/live session passed; no Android/FCM binding exists
+under that SID. This blocks native positive acceptance, not the installed inert
+schema. D-335 stays OPEN: nativePositive=false, richPreviewEnabled=false,
+canPublishRich=false, generic v1 unchanged. Next: actual acknowledged device UUID,
+then native credential/explicit choice/card/OS proof. D-342 universal recovery,
+unknown-client D-348/349 and preliminary tester86/87 remain separate.
+Chronological rehearsals, install/backup/rollback evidence and native limits:
+[Current gate](operations/2026-10-07-native-preview-pg17-rehearsal.md).
 
 **Current source continuation,2026-10-05:** item76/D-335 native context
 preparation, D-346 listener lifecycle. v1 Android display stays generic locally,
@@ -3864,6 +3868,34 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     consent and generic provider v1/voice stay unchanged. Permission is granted;
     technical acceptance, not owner confirmation, is the remaining gate.
     [Actual result and next envelope](operations/2026-10-07-native-preview-pg17-rehearsal.md).
+
+    **Attempt8:** fixed proof7 hashes/fresh baseline and restore passed. Actual
+    request19 denial401/42501 exposed a harness403 expectation for `anon`, not
+    granted access. Prior recipient/consent/preview/JWT assertions were reached.
+    Copy removed healthy; no production SQL. Remaining HTTP/RLS and final
+    same-copy rollback stay mandatory after the exact oracle correction.
+
+    **Attempt9:** strict role status/SQLSTATE denials and full restore/reuse gates
+    passed. Request55 returned an empty projection after attempted undelete: the
+    existing terminal tombstone/scrub contract correctly prevents resurrection.
+    Copy removed healthy/non-OOM; production unchanged. Repair the fixture order,
+    not deletion protections or proposal SQL. Remaining controls and final
+    same-copy rollback/equality stay mandatory; no production installation.
+
+    **Attempt10:** ordinary HTTP controls and the read-only positive passed.
+    Album preparation refused with23514/message_sender_immutable: the fixture
+    changed a protected message type. Copy removed healthy/non-OOM, production
+    unchanged. Use two new image rows; retain root text, notification producer,
+    media-job isolation, exact cleanup and all guards. Album/remaining controls
+    and final same-copy rollback remain mandatory. Saved QA session expired;
+    matching device is unobserved, not proved absent. No production SQL.
+
+    **Attempt11:** ordinary/read-only/album and three behavioral mutants passed
+    to98. Terminal precheck P0001 conflicts with actual empty-JSON default;
+    correct only the absent-media predicate, not deletion guards. Copy removed
+    healthy/non-OOM; production unchanged. Terminal/final rollback/equality remain
+    open. One saved-QA refresh was rejected by Auth without retry; device binding
+    unobserved. No production SQL or native rich-display acceptance.
 
 77. `[ ]` Account-owned notification preferences for individual channels/topics.
     Same voice note: silence a busy parent chat while explicitly enabling one

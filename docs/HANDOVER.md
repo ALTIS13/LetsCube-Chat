@@ -30,14 +30,22 @@ controlled-snapshot integration belong to0.1.13; reuse is explicitly hash-bound
 to unchanged native source, not new tests. Natural OS timing remains NOT PROVEN.
 A063 untouched; no personal capture/login or paid rental.
 
-Active stage: D-335 isolated DB rehearsal. Attempt7 passed full restore, candidate,
-raising controls and eight equality checks, then refused at HTTP controls without
-a recoverable exact request oracle. Copy7 removed healthy/non-OOM, production
-unchanged. Value-free HTTP journal source-reviewed; preparing a bounded attempt8
-HTTP namespace and strict reuse of unchanged actual7 proofs. No new copy or
-production SQL yet. Blocker: real HTTP/session/RLS and final same-copy rollback
-unaccepted. Next: review the changed envelope, run one finite copy, then apply the
-fresh-backup/transaction/raising-check/mirror/real-validation installation gates.
+Active stage,2026-10-08 Moscow: D-335 recipient-bound native previews,
+coordinator-owned. Server-only default-none schema is installed once and
+verified-postchecked: migration `20261007210924_native_message_preview.sql`,
+SHA256 `02681CFB8966EF7DEB362D95538DC4B787986772E4173A0777465A46DC1DE321`.
+Fresh backup/checksums, byte-identical mirror, guarded transaction/raising check,
+preserved existing security/dependency definitions and actual QA-JWT recipient/
+empty-consent/invalid-device/anonymous-denial checks passed. The initial
+post-check stopped on FK catalog formatting, not SQL execution; observation-only
+verification passed after canonicalizing search_path. Never re-dispatch the
+installed SQL. Accepted attempt12 rehearsal evidence is reused, not rerun.
+Actual normal QA sign-in/live session passed; that session has zero Android/FCM
+bindings. This is negative-device evidence, not native acceptance. D-335 stays
+OPEN: nativePositive=false, richPreviewEnabled=false, canPublishRich=false;
+generic v1 is unchanged. Next: acknowledge an actual device UUID after normal
+registration, then native credentials/explicit choice/card/OS acceptance.
+Chronological details and backup/rollback limits are in the linked report.
 Permission is granted, not the blocker. D-342 universal recovery and unknown
 tester86/87/client348/349 remain separate; no replay of unrelated accepted suites.
 Outcome docs stay on the candidate branch to avoid a docs-only main rebuild.

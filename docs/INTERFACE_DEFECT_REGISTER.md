@@ -24949,6 +24949,60 @@ source review. Real HTTP/session/RLS and final same-copy rollback remain open;
 no production SQL, preview setting or rich native display installed.
 [Rehearsal and next gate](operations/2026-10-07-native-preview-pg17-rehearsal.md).
 
+**Attempt8:** restore and sealed reused7 proof passed; real HTTP request19 exposed
+the exact test-oracle mismatch (`anon`401/42501 versus expected403). Earlier
+recipient/consent/preview/JWT assertions were reached. Copy removed healthy,
+production unchanged. Preserve strict denial, correct the harness rather than
+SQL grants; remaining HTTP/RLS/final rollback still unaccepted.
+
+**Attempt9:** full restore/proof7 reuse and actual strict role denials passed.
+Request55 refused on a fixture undo that conflicts with the existing irreversible
+message tombstone and notification scrub contract. The projection remained empty,
+as required. Copy removed healthy/non-OOM; production unchanged. Move deletion to
+the terminal fixture control without disabling triggers or changing proposal SQL.
+Remaining HTTP/final rollback/equality and native display acceptance stay open.
+
+**Attempt10:** ordinary HTTP assertions and the read-only positive passed, but
+album preparation refused with23514/message_sender_immutable. The exact failed
+SQL hash and trigger context show an attempted text-to-image type change in the
+fictional fixture, not a preview SQL/grant defect. Copy removed healthy/non-OOM;
+production unchanged. Prepare two new image rows without media job side effects;
+retain the text root, producer, exact notification/outbox cleanup and all guards.
+Album/final rollback/equality remain unaccepted. The legitimate saved QA session
+expired before any Auth/SSH/SQL probe; device binding remains unobserved.
+
+**Attempt11:** ordinary/read-only/album and behavioral controls passed through98.
+The terminal precheck raisedP0001 because it required NULL media_metadata; actual
+catalog default is empty JSON. Copy removed healthy/non-OOM, production unchanged.
+Only the absent-media predicate changes; tombstone/resurrection/post-deletion
+cleanup protections remain. Terminal/final rollback/equality are still pending.
+One reviewed saved-QA refresh was rejected, one POST/no retry; no live session or
+matching device result is claimed. D-335 remains OPEN, no production installation.
+
+**Attempt12 accepted:** the one-line NULL/empty metadata precheck repair passed
+actual selected-trigger RED/GREEN and a compiled omission. Full isolated PG17
+rehearsal accepted103 HTTP responses/59 controls, three behavioral mutants,
+terminal deletion/no resurrection, final rollback and complete row/sequence/raw/
+security equality. Attempt7's sealed raising proof was explicitly reused against
+the fresh baseline. Copy12 removed healthy/non-OOM; production unchanged. SQL
+rehearsal is complete; guarded install, live QA/session/device post-proof and
+native credentials/consent/card/OS acceptance remain. Source review identified
+dependency-schema drift in the install wrapper; repair before execution. No
+production SQL or rich native display installed; D-335 stays OPEN.
+
+**2026-10-08 Moscow server acceptance:** the guarded default-none migration
+`20261007210924_native_message_preview.sql` is installed once and
+verified-postchecked, SHA256
+`02681CFB8966EF7DEB362D95538DC4B787986772E4173A0777465A46DC1DE321`.
+Fresh backup/mirror, transaction/raising checks, exact catalog/grants and preserved
+old security/dependency definitions passed. Actual normal QA sign-in/live session,
+recipient/empty own consent/invalid-device projection and anon401/42501 passed.
+The post-check's FK search_path formatting mismatch was repaired in the observer;
+the migration was not repeated. That QA session has no Android/FCM binding, so
+nativePositive=false/richPreviewEnabled=false/canPublishRich=false. Generic v1
+is unchanged; actual device UUID, native credential/choice/card/OS proof remain.
+D-335 stays OPEN. See the linked rehearsal/install report above for exact limits.
+
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
 
 **Severity:** high, message authority boundary. Tracker item 78. Found 2026-10-03
