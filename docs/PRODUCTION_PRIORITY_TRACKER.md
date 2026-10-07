@@ -3819,6 +3819,18 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     and implement that separate read-only contract before richer cards. Item76
     stays OPEN. [Native boundary and next sequence](operations/2026-10-05-native-notification-display-boundary.md).
 
+    **2026-10-07 authorization proposal:** new default-none consent has owner and
+    live-session RLS; read-only recipient RPC requires exact session/device/own
+    unread notification/fresh source/visibility/current push policy. Sender-only
+    or bounded text/media labels,15-second expiry; no provider v1/voice changes.
+    Catalog-only live controls pass; actual proposal/visibility/album PGlite111/111,
+    final changed45/45, incl29 behavioral+7 self-check mutants and documented rollback.
+    Revoked-session consent and album-only association RED repaired. Final review
+    accepted, no open P1/P2. Candidate-only: no production SQL, installed-client
+    setting/card or native release. PG17 recovery/
+    backup/HTTP rehearsal and capability/credential/epoch/current-card/OS acceptance
+    remain; item76 stays OPEN. [Proposal and boundaries](operations/2026-10-07-native-message-preview-authorization.md).
+
 77. `[ ]` Account-owned notification preferences for individual channels/topics.
     Same voice note: silence a busy parent chat while explicitly enabling one
     relevant channel/topic; other users keep their own choices. Current scoped

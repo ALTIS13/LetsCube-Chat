@@ -10,7 +10,25 @@ native package identity/store actions and other unresolved acceptance gates are
 not approved merely by this delegation. Refresh the authorized tester intake,
 deduplicate against the queue, and continue the nearest feasible product slice.
 
-**Current source checkpoint,2026-10-05:** coordinator owns item76/D-335 native
+**Current source checkpoint,2026-10-07:** coordinator owns item76/D-335 recipient
+preview authorization, based on d5edbe83. New unversioned SQL proposal supplies
+default-none account consent with live-session owner RLS, and a read-only lookup
+bound to exact recipient/session/device/unread notification/current source/access/
+push eligibility. Provider v1 and voice contracts remain unchanged; Android FCM
+only, sender/text96/240 chars and15-second response. Actual proposal/visibility
+PGlite111/111, final affected refresh45/45 incl29 behavioral+7 raising self-check
+mutants and documented rollback pass. Auth.uid-only consent revocation and review's
+album-only association RED were repaired; ordinary/album authority stays exact.
+Current live catalog/ACL/helper read-only controls passed; no personal rows or
+production SQL. Final
+independent source review accepted, no open P1/P2; candidate-only, not installed
+or ready for native display. PG17 recovery/backup/HTTP acceptance and native
+capability/credential/epoch/card/OS QA remain separate. Next: native capability
+and preview-choice preparation while retaining SQL deployment gates; do not
+replay accepted suites.
+[Authorization contract and exact limits](operations/2026-10-07-native-message-preview-authorization.md).
+
+**Previous source checkpoint,2026-10-05:** coordinator owns item76/D-335 native
 context preparation, baseline7e88bf4f. Android v1 now derives generic display
 locally and retains validated exact routing without optional provider text;
 current producer redaction is preserved, not removed. D-346 JS registration

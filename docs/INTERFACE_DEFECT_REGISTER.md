@@ -24929,6 +24929,18 @@ authority. Separate recipient-authenticated previews and installed card QA
 remain; no APK/SQL/provider change. D-335 stays OPEN.
 [Source evidence and next sequence](operations/2026-10-05-native-notification-display-boundary.md).
 
+**2026-10-07 source authorization proposal:** default-none consent with live-session
+owner RLS and separate read-only recipient/session/device/unread/current-source/
+visibility/push-policy projection. Sender-only or bounded text/media labels;
+generic v1 and voice authority unchanged. PGlite111/111 plus final changed45/45
+incl36 compiled refusals and documented rollback; auth.uid-only consent and
+review's album-only association RED repaired. Current live metadata/ACL/helper
+controls passed without personal row reads. Final source review accepted,
+no open P1/P2. No production SQL, authenticated HTTP/native recipient lookup, preview UI, card
+or APK acceptance. Recovery/backup/rehearsal and current-epoch/card/OS privacy
+remain required. D-335 stays OPEN.
+[Contract, tests and remaining gates](operations/2026-10-07-native-message-preview-authorization.md).
+
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
 
 **Severity:** high, message authority boundary. Tracker item 78. Found 2026-10-03
