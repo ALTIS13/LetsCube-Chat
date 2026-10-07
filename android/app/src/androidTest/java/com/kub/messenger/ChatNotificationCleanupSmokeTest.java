@@ -121,6 +121,66 @@ public class ChatNotificationCleanupSmokeTest {
         } finally { manager.cancel(TAG, 0); ChatNotificationCleanup.deactivate(INSTANCE); }
     }
 
+    /** Real producer/store/NMS adapter and cancellation; only first visibility is controlled. */
+    @Test public void pendingReadRealCardsControlledVisibility() throws Exception {
+        Context context = context();
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        Class<?> adapterType = Class.forName(ChatNotificationsPlugin.class.getName() + "$1", true, ChatNotificationsPlugin.class.getClassLoader());
+        assertTrue("Use the existing release adapter, not a duplicated parser", ChatNotificationCleanup.Cards.class.isAssignableFrom(adapterType));
+        assertEquals(ChatNotificationsPlugin.class.getClassLoader(), adapterType.getClassLoader());
+        assertEquals(ChatNotificationsPlugin.class, adapterType.getEnclosingClass());
+        assertEquals("reconcileRead", adapterType.getEnclosingMethod().getName());
+        assertEquals("Adapter constructor drift must fail, not use a fallback", 1, adapterType.getDeclaredConstructors().length);
+        java.lang.reflect.Constructor<?> constructor = adapterType.getDeclaredConstructor(Context.class, NotificationManager.class);
+        constructor.setAccessible(true);
+        ChatNotificationCleanup.Cards realCards = (ChatNotificationCleanup.Cards) constructor.newInstance(context, manager);
+        ChatNotificationCleanup.activate(INSTANCE); ChatNotificationCleanup.bind(INSTANCE, 1, USER, 1);
+        ChatNotificationCleanup.Owner owner = ChatNotificationCleanup.matches(INSTANCE, 1, USER, 1);
+        try {
+          for (boolean generic : new boolean[] { false, true }) {
+            ChatPushNotifications.receive(context, message(generic ? null : OLD, OLD)); waitFor(manager, TAG, generic ? null : OLD);
+            List<ChatNotificationCleanup.Card> oldSnapshot = List.copyOf(realCards.active());
+            assertEquals("The isolated snapshot must contain only fictional OLD", 1, oldSnapshot.size());
+            ChatNotificationCleanup.Card old = oldSnapshot.get(0);
+            assertEquals(TAG, old.tag); assertEquals(0, old.id); assertFalse(old.summary);
+            assertTrue(old.generation > 0); assertEquals(generic ? 0 : 1, old.protocol);
+            assertEquals(generic ? null : OLD, old.notificationId);
+            assertEquals(generic ? null : OLD, old.messageId);
+            assertEquals(generic ? null : CHAT, old.chatId);
+            ChatPushNotifications.receive(context, message(NEW, NEW)); waitFor(manager, TAG, NEW);
+            List<ChatNotificationCleanup.Card> active = realCards.active(); assertEquals(1, active.size());
+            ChatNotificationCleanup.Card latest = active.get(0);
+            assertEquals(TAG, latest.tag); assertEquals(0, latest.id); assertFalse(latest.summary);
+            assertEquals(1, latest.protocol); assertEquals(CHAT, latest.chatId);
+            assertEquals(NEW, latest.notificationId); assertEquals(NEW, latest.messageId);
+            assertTrue(latest.generation > old.generation);
+            ChatNotificationCleanup.Posted intent = realCards.intents().read(TAG);
+            assertNotNull(intent); assertEquals(NEW, intent.notificationId); assertEquals(NEW, intent.messageId);
+            assertEquals(latest.generation, intent.generation);
+            int[] cancels = { 0 };
+            ChatNotificationCleanup.Cards controlled = new ChatNotificationCleanup.Cards() {
+                private boolean initial = true;
+                @Override public ChatNotificationCleanup.IntentStore intents() { return realCards.intents(); }
+                @Override public List<ChatNotificationCleanup.Card> active() {
+                    if (initial) { initial = false; return oldSnapshot; }
+                    return realCards.active();
+                }
+                @Override public void cancel(String tag, int id) { cancels[0]++; realCards.cancel(tag, id); }
+            };
+            List<ChatNotificationCleanup.Read> reads = List.of(new ChatNotificationCleanup.Read(NEW, NEW));
+            ChatNotificationCleanup.Result pending = ChatNotificationCleanup.reconcileRead(owner, CHAT, reads, controlled);
+            assertTrue("Exact latest read must remain pending against controlled generic OLD visibility", pending.pending);
+            assertEquals(0, pending.removed); assertEquals(0, cancels[0]);
+            assertNotNull("The controlled initial snapshot must not cancel the real NEW card", card(manager, TAG));
+            Thread.sleep(250);
+            ChatNotificationCleanup.Result settled = ChatNotificationCleanup.reconcileRead(owner, CHAT, reads, controlled);
+            assertFalse(settled.pending); assertEquals(1, settled.removed); assertEquals(1, cancels[0]);
+            for (int attempt = 0; attempt < 60 && card(manager, TAG) != null; attempt++) Thread.sleep(50);
+            assertEquals(null, card(manager, TAG));
+          }
+        } finally { manager.cancel(TAG, 0); ChatNotificationCleanup.deactivate(INSTANCE); }
+    }
+
     /** Coordinator runs post, kills only the isolated app process, then runs read. */
     @Test public void persistedOwnCardAfterColdProcess() throws Exception {
         String stage = InstrumentationRegistry.getArguments().getString("qa_cleanup_cold_stage");

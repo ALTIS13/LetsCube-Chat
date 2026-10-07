@@ -35,11 +35,14 @@ security equality; strict raw comparison refused two additional extension ACL
 blocks. Their exact allowance and JWT driver require review; production SQL remains
 unmodified until actual JWT/RLS and same-copy rollback pass. D-342 universal
 recovery is separate, with no repeated provenance loop. An additional calibrated
-queued-NEW/read-before-visibility RED is D-353; bounded reconciliation is being
-source-repaired independently with bounded pending ACK/retry and focused mutants,
-not included in the 0.1.12 acceptance. Candidate0.1.13/build14 metadata is updated;
-Realme ephemeral user11 is active for QA with old build13, primary data retained.
-Source review/build/sign/device/publication remain open. Next: these
+queued-NEW/read-before-visibility RED is D-353; bounded pending ACK/retry and focused
+mutants pass independent runtime review. Candidate0.1.13/build14 is signed with
+the unchanged signer; Firebase/33 runtime assets and four ordinary Realme checks
+pass. Natural OS timing attempts3 skip/NOT PROVEN; a separately labelled controlled
+snapshot physical test passes1/0 and uses the actual producer/store/adapter/NMS.
+Release APK stayed byte-identical during its QA-only rebuild. QA user11/test
+package removed, current user0/data retained. Final QA-helper review and web/APK
+publication/runtime verification remain open. Next: these
 D-335/D-353 gates, not replay of accepted recording suites or tester export. D-348/349
 client unknown; task-loading items86/87 preliminary. Outcome docs stay on the
 candidate branch to avoid a docs-only main rebuild.

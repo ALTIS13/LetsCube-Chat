@@ -51,7 +51,7 @@ refuse before writing a PASS receipt. GREEN8/8 includes a compiled omission
 mutant; independent new pure controls8/8 pass. Existing real accepted output
 was reused as controls without rerunning those device tests.
 
-## Candidate and remaining acceptance
+## Candidate and physical acceptance
 
 Version0.1.13/build14 was introduced through literal release metadata RED3 plus
 one valid malformed-input control, then GREEN4/4. Previous0.1.12 APK/AAB were
@@ -64,11 +64,40 @@ identity and old0.1.12/build13 were verified before anonymous launch. Primary
 user/data were not cleared or logged out; A063 remains excluded. Instrumentation
 requires an explicit matching non-primary user. No personal UI capture is used.
 
-The selected pending-window instrumentation must observe a real pending result;
-otherwise its assumption skips and **does not establish acceptance**. Native
-compile, pending/replacement/cold-process/guest checks, exact profile cleanup,
-independent final review, public artifact and web runtime verification remain
-open at this source checkpoint. No0.1.13 APK has been published here yet.
+The actual signed release build completed in47.244s with fresh embedded web
+marker `3f015b12c84f8ad3`. APK size7,629,759 bytes; SHA-256
+`f2f990dd0b6cd360ff152a4e3b16460951071497edf05f9d386368f8f4e20e4c`.
+The existing signer, Firebase initialization, native plugin DEX and all33 bundled
+runtime assets passed verification. There is no remote `server.url`.
+Independent runtime source review accepted the fixed capability/generic-OLD
+cases, with no remaining P1/P2.
+
+Realme's selected ordinary ownership, cold-post, fresh-process cold-read and
+anonymous bundled-web checks each passed1 test/0 skips. Natural OS queued-window
+attempts3/3 skipped because that timing was not observed; they are **NOT PROVEN**
+and have no PASS receipt. No further unchanged timing retries are scheduled.
+
+A separate deterministic physical integration test uses the actual release
+producer, durable intent store, NMS cards, release adapter parser and cancellation.
+Only its first visibility snapshot is controlled. Both ordinary OLD and generic
+missing-ID OLD preserve actual NEW with pending/removed0/cancel0, then actual NEW
+is removed with pendingfalse/removed1/cancel1 after250ms. Exact metadata and
+generations are asserted. Realme selected this method:1 test/0 skips PASS.
+This is **controlled-snapshot physical integration**, not natural NMS queue
+reproduction, FCM transport or proof of autonomous JS retries on the phone.
+The actual-source combined queue/hook fixture covers that retry behavior.
+
+Only the QA instrumentation APK was rebuilt for this test; the release APK
+remained byte-identical. The refreshed test APK has the same signer, and its
+hash/source/install linkage is sealed in private evidence. The explicit
+publication alternative requires that exact method, label, profile and linkage;
+31 pure checks refuse skips, identity/hash changes and false transport claims.
+The prior native/cold/guest/cleanup and catalog-CAS gates remain mandatory.
+
+Temporary QA user11 and test package are removed; current user0 and primary
+package/data remain. No logout, personal captures or A063 operations occurred.
+Final QA-helper review, public artifact and web runtime verification remain open
+at this packaging checkpoint. No0.1.13 APK has been published here yet.
 
 This bounded reconciliation does not promise cleanup for arbitrary OS delay:
 timeouts retain paced-fetch recovery. The native lease is a presentation fence,

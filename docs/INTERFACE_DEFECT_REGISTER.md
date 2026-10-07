@@ -25419,10 +25419,14 @@ a physical OS reproduction, and is distinct from unidentified tester D-349.
 reconciliation, in-flight dedup and a retryable pending timeout are implemented.
 Combined GREEN3/3 and focused native/JS/hook/isolation checks with compiled mutants
 pass. Preserve latest-intent/card/owner checks; no broad tag cancellation or
-per-realtime polling. Candidate0.1.13/build14 still requires final review,
-signed next-build and affected Realme QA must precede follow-up publication.
+per-realtime polling. Candidate0.1.13/build14 is signed and runtime-reviewed;
+Firebase/bundle and four ordinary selected Realme checks pass. Natural queue
+timing3 skips/NOT PROVEN is distinct from controlled-snapshot physical integration
+PASS1/0 using the real producer/store/adapter/NMS. QA profile removed, primary
+data retained. Final helper review and public web/APK verification remain open.
 Accepted Android Stable 0.1.12/build13 remains available; do not relabel its tests
 as acceptance of this additional case.
+[Current candidate and evidence limits](operations/2026-10-07-android-pending-read-reconciliation.md).
 
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 

@@ -9,10 +9,15 @@ four selected real Realme tests, signer/Firebase/bundle and public APK checks pa
 Temporary QA profile removed; primary data preserved, A063 untouched. Web exact
 healthy image, old/new markers, retained entry, JS/SW parity and anonymous mount
 accepted. D-335 remains active: isolated full PG17 restore ran but extension
-ACL/config/index differences refuse equivalence; clone-only supplement/review
-and real JWT/rollback are next. No production SQL or rich native preview installed.
+ACL/config/index differences refused equivalence; the sealed clone-only supplement
+passed full effective-security equality in attempt4. Strict raw comparison still
+refused two extension ACL serialization blocks: exact allowance/driver review and
+real JWT/rollback are next. No production SQL or rich native preview installed.
 Additional D-353 queued already-read card RED1/controls2: narrow reconciliation
-TDD is active independently; signed follow-up and QA are not yet accepted.
+source/runtime review passed; signed0.1.13/14 and four selected ordinary Realme
+checks passed. Natural timing3 skips/NOT PROVEN; separately labelled controlled
+snapshot physical integration PASS1/0. QA11 removed. Final helper review and
+public web/APK verification remain open, no follow-up publication yet.
 Do not replay accepted capture suites or tester exports. D-348/349 still
 have unknown client; items 86/87 remain preliminary.
 [Current native/device/release record](operations/2026-10-07-android-read-cleanup-release.md).
@@ -4240,8 +4245,10 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     replacement protection; distinguish pending and terminal cleanup ACKs and
     retain retry eligibility without per-realtime IPC. Combined GREEN3/3,
     native17/17 plus controls19, cleaner44, adapter6, hook14 and isolation5 pass
-    with compiled mutants and typecheck. Candidate0.1.13/build14, Realme QAuser11;
-    signed follow-up/device review/publication remain required. This does not
+    with compiled mutants and typecheck. Signed candidate0.1.13/build14 passes
+    Firebase/bundle and four ordinary selected Realme tests. Natural queue timing
+    skips3/NOT PROVEN; separate controlled physical integration passes1/0. QA11
+    removed, primary data retained. Final helper review/publication remain. This does not
     invalidate the accepted 0.1.12 ownership cases or certify D-349's unknown client.
     [Source and remaining candidate gates](operations/2026-10-07-android-pending-read-reconciliation.md).
 
