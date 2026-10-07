@@ -55,11 +55,11 @@ was reused as controls without rerunning those device tests.
 
 Version0.1.13/build14 was introduced through literal release metadata RED3 plus
 one valid malformed-input control, then GREEN4/4. Previous0.1.12 APK/AAB were
-preserved byte-identically. The server still points to0.1.12 until the candidate
-passes signing/Firebase/bundled-asset and selected physical QA checks.
+preserved byte-identically. Publication waited for signing/Firebase/bundled-asset
+and selected physical QA gates, then advanced Stable to0.1.13 as recorded below.
 Changed release metadata/build/configuration checks18/18 pass with no skips.
 
-Realme's next ephemeral QA profile is user11, not removed user10. Its exact
+Realme's ephemeral QA profile was user11, not removed user10. Its exact
 identity and old0.1.12/build13 were verified before anonymous launch. Primary
 user/data were not cleared or logged out; A063 remains excluded. Instrumentation
 requires an explicit matching non-primary user. No personal UI capture is used.
@@ -96,13 +96,41 @@ The prior native/cold/guest/cleanup and catalog-CAS gates remain mandatory.
 
 Temporary QA user11 and test package are removed; current user0 and primary
 package/data remain. No logout, personal captures or A063 operations occurred.
-Final QA-helper review, public artifact and web runtime verification remain open
-at this packaging checkpoint. No0.1.13 APK has been published here yet.
+The initial remove-user command refused during ephemeral-profile auto-removal;
+the separate read-only cleanup-finish gate confirmed actual absence, not a
+presumed success. Final independent QA/helper review is SOURCE_ACCEPTED with no
+remaining P1/P2. New independent controls:1 positive,6 negatives and3 killed
+compiled omissions; reviewed source and APK hashes remained frozen.
 
 This bounded reconciliation does not promise cleanup for arbitrary OS delay:
 timeouts retain paced-fetch recovery. The native lease is a presentation fence,
 not authentication or universal atomicity with the OS. Rich recipient previews,
 actual FCM transport and unidentified tester D-349 remain separate contracts.
+
+## Published and verified
+
+Android Stable0.1.13/build14 was published nonmandatory and verified at16:56
+Moscow,2026-10-07. Its public catalog and redownloaded APK match the reviewed
+size/hash above; the full Android artifact verifier passes. The previous0.1.12
+catalog was retained byte-identically under the publication lock. No package,
+signer, provider or database change is included in this release.
+
+[Android APK](https://api.letscube.ru/releases/files/android/0.1.13/letscube-0.1.13.apk).
+
+Runtime source is96977e72; QA-only instrumentation/docs follow-up is36f313dc.
+Web/main36f313dc was accepted at16:58 Moscow: exact sole healthy container/image,
+new pending-state markers versus the retained preceding entry, public/container
+JS and SW byte parity, and anonymous home/login mounted200 with0 page errors.
+Public JS SHA-256:
+`b04cc5c0f733d87f8b8577b2dbbb8271546c7c2d99845cfa8f5e2955c79d80ea`.
+Public SW SHA-256:
+`c301da3abb82223e2ad1b8c0d2bb1ff046cd5043154498e7643844439376a723`.
+Public web and embedded APK are separate builds; their marker/ownership behavior
+is checked without asserting that their build-specific byte hashes are identical.
+
+D-353/tracker91 is closed for this bounded reconciliation contract. Natural
+OS timing is still NOT PROVEN; this closure makes no transport, universal
+OS atomicity, rich-preview or unknown-client D-349 claim.
 
 ## Rollback
 

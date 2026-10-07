@@ -25405,7 +25405,7 @@ main/runtime a9c84de3 accepted 2026-10-07. Bundled APK and recipient-preview rea
 JWT HTTP acceptance remain separate. No new authorization or credential persistence.
 [Evidence and remaining gates](operations/2026-10-07-read-recording-ownership.md).
 
-## D-353 `[~]` An already-read Android card can become visible after queued OS posting
+## D-353 `[x]` An already-read Android card can become visible after queued OS posting
 
 **Severity:** medium presentation defect, no demonstrated data loss; 2026-10-07.
 One actual-source delayed-queue RED and two calibrated controls: OLD is visible,
@@ -25419,13 +25419,15 @@ a physical OS reproduction, and is distinct from unidentified tester D-349.
 reconciliation, in-flight dedup and a retryable pending timeout are implemented.
 Combined GREEN3/3 and focused native/JS/hook/isolation checks with compiled mutants
 pass. Preserve latest-intent/card/owner checks; no broad tag cancellation or
-per-realtime polling. Candidate0.1.13/build14 is signed and runtime-reviewed;
+per-realtime polling. AndroidStable0.1.13/build14 is signed and runtime-reviewed;
 Firebase/bundle and four ordinary selected Realme checks pass. Natural queue
 timing3 skips/NOT PROVEN is distinct from controlled-snapshot physical integration
 PASS1/0 using the real producer/store/adapter/NMS. QA profile removed, primary
-data retained. Final helper review and public web/APK verification remain open.
-Accepted Android Stable 0.1.12/build13 remains available; do not relabel its tests
-as acceptance of this additional case.
+data retained. Final helper review has no P1/P2. Public APK redownload/full
+verifier and web/main36f313dc exact healthy image/markers/retained entry/JS+SW
+parity/anonymous mount accepted16:58 Moscow. Closed only for bounded
+reconciliation; natural OS queue timing, FCM transport and unknown D-349 client
+are not claimed. Previous0.1.12 catalog retained for rollback.
 [Current candidate and evidence limits](operations/2026-10-07-android-pending-read-reconciliation.md).
 
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings

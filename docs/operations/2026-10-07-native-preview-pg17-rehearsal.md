@@ -96,7 +96,16 @@ or active local rehearsal process remains at this checkpoint. Production identit
 was unchanged; normal production row activity was not compared or claimed absent.
 The verified private backup package is retained on the host.
 
-Next: review the narrow two-block allowance and the candidate/JWT/rollback driver,
+Source review of the next frozen driver found two P2 fixture defects before any
+allocation: chat creation already triggers creator membership, so the explicit
+member INSERT conflicts; member/ban audit triggers leave fictional audit rows
+after entity cleanup, preventing all-table equality. Correct the exact fixture
+and audit cleanup without disabling triggers or relaxing equality, then re-review.
+These are static findings, not actual PG17 RED/JWT results. Source ACL controls
+RED1/GREEN1,7 refusals and4 compiled omission mutants do not substitute for native
+candidate acceptance. No attempt5 copy has been allocated here yet.
+
+Next: re-review the narrow two-block allowance and repaired candidate/JWT/rollback driver,
 then run one changed-input copy with the exact supplement; require full effective
 security and bounded raw
 equivalence. Only then apply the candidate to that copy, exercise real signed

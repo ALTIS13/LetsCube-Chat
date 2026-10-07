@@ -21,29 +21,24 @@ not approved merely by this delegation. Refresh the authorized tester intake,
 deduplicate against the queue, and continue the nearest feasible product slice.
 
 **Current continuation, 2026-10-07:** coordinator; branch
-`codex/bot-inline-media-20261002`. Web/main `d86975dd` and Android Stable
-0.1.12 / build 13 accepted at 14:53 Moscow. D-351 exact native read-card cleanup
-passes source/mutant review and four selected physical Realme tests, including
-immediate replacement and a persisted card in a fresh process. Existing signer,
-Firebase and 33 bundled runtime assets verified; public APK hash matches.
-Temporary user10/test package removed, primary user0/data preserved, A063 untouched.
-Web exact healthy image, old/new markers, retained entry, JS/SW parity and
-anonymous home/login pass. D-335 stays active: full isolated PG17 restore ran,
+`codex/bot-inline-media-20261002`. Web/main `36f313dc` and nonmandatory Android
+Stable0.1.13/build14 accepted at16:58 Moscow. D-351/D-353 exact read-card ownership
+and bounded queued-read reconciliation pass source/mutant review. Four ordinary
+selected Realme checks and separately labelled controlled-snapshot physical
+integration1/0 pass; natural OS timing3 skips remains NOT PROVEN. Existing signer,
+Firebase/33 assets, exact public APK redownload verified. QA11/test package
+removed, primary user0/data preserved, A063 untouched. Web exact healthy image,
+before/after markers, retained entry, JS/SW parity and anonymous home/login pass.
+D-335 stays active: full isolated PG17 restore ran,
 but real extension ACL/config/index differences refuse acceptance. A narrowly
 sealed clone-only supplement passed in attempt4, including full effective
 security equality; strict raw comparison refused two additional extension ACL
-blocks. Their exact allowance and JWT driver require review; production SQL remains
-unmodified until actual JWT/RLS and same-copy rollback pass. D-342 universal
-recovery is separate, with no repeated provenance loop. An additional calibrated
-queued-NEW/read-before-visibility RED is D-353; bounded pending ACK/retry and focused
-mutants pass independent runtime review. Candidate0.1.13/build14 is signed with
-the unchanged signer; Firebase/33 runtime assets and four ordinary Realme checks
-pass. Natural OS timing attempts3 skip/NOT PROVEN; a separately labelled controlled
-snapshot physical test passes1/0 and uses the actual producer/store/adapter/NMS.
-Release APK stayed byte-identical during its QA-only rebuild. QA user11/test
-package removed, current user0/data retained. Final QA-helper review and web/APK
-publication/runtime verification remain open. Next: these
-D-335/D-353 gates, not replay of accepted recording suites or tester export. D-348/349
+blocks. The prepared exact allowance/driver review found two P2 fixture defects:
+duplicate trigger-created owner membership and retained fixture audit rows.
+Fix/re-review those before one changed-input copy; actual JWT/RLS and same-copy
+rollback remain UNRUN. No production SQL. D-342 universal recovery stays separate,
+with no repeated provenance loop. Next: D-335 gates, not replay of accepted
+recording/device suites or tester export. D-348/349
 client unknown; task-loading items86/87 preliminary. Outcome docs stay on the
 candidate branch to avoid a docs-only main rebuild.
 [Current scope, evidence and publication limits](operations/2026-10-07-notification-preferences-capability.md).

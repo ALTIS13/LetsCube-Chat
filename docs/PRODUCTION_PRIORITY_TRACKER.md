@@ -2,22 +2,25 @@
 
 Status: active production-hardening tracker, updated 2026-10-07.
 
-**Current continuation, 2026-10-07:** item89/D-351 native cleanup accepted on
-web/main `d86975dd` and Android Stable 0.1.12 / build 13 at 14:53 Moscow. Exact pairs,
+**Current continuation, 2026-10-07:** item89/D-351 and91/D-353 native cleanup
+accepted on web/main `36f313dc` and nonmandatory AndroidStable0.1.13/build14
+at16:58 Moscow. Exact pairs,
 durable latest-post ownership and retired leases pass source/mutant review;
-four selected real Realme tests, signer/Firebase/bundle and public APK checks pass.
+four ordinary selected Realme tests, signer/Firebase/bundle and public APK checks pass.
 Temporary QA profile removed; primary data preserved, A063 untouched. Web exact
 healthy image, old/new markers, retained entry, JS/SW parity and anonymous mount
 accepted. D-335 remains active: isolated full PG17 restore ran but extension
 ACL/config/index differences refused equivalence; the sealed clone-only supplement
 passed full effective-security equality in attempt4. Strict raw comparison still
-refused two extension ACL serialization blocks: exact allowance/driver review and
-real JWT/rollback are next. No production SQL or rich native preview installed.
+refused two extension ACL serialization blocks. Exact allowance/driver review
+found two P2 fixture defects: duplicate trigger-created owner membership and
+retained fixture audit rows. Fix/re-review then real JWT/rollback are next.
+No production SQL or rich native preview installed.
 Additional D-353 queued already-read card RED1/controls2: narrow reconciliation
 source/runtime review passed; signed0.1.13/14 and four selected ordinary Realme
 checks passed. Natural timing3 skips/NOT PROVEN; separately labelled controlled
 snapshot physical integration PASS1/0. QA11 removed. Final helper review and
-public web/APK verification remain open, no follow-up publication yet.
+public web/APK verification accepted; Stable0.1.13/build14 published.
 Do not replay accepted capture suites or tester exports. D-348/349 still
 have unknown client; items 86/87 remain preliminary.
 [Current native/device/release record](operations/2026-10-07-android-read-cleanup-release.md).
@@ -4240,7 +4243,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     or recipient-preview real JWT HTTP proof.
     [Evidence and gate](operations/2026-10-07-read-recording-ownership.md).
 
-91. `[~]` Pending Android read-card reconciliation, **D-353**. Additional actual-source
+91. `[x]` Pending Android read-card reconciliation, **D-353**. Additional actual-source
     queued NEW-read case RED1, calibrated controls2 pass. Preserve newer unread
     replacement protection; distinguish pending and terminal cleanup ACKs and
     retain retry eligibility without per-realtime IPC. Combined GREEN3/3,
@@ -4248,7 +4251,9 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     with compiled mutants and typecheck. Signed candidate0.1.13/build14 passes
     Firebase/bundle and four ordinary selected Realme tests. Natural queue timing
     skips3/NOT PROVEN; separate controlled physical integration passes1/0. QA11
-    removed, primary data retained. Final helper review/publication remain. This does not
+    removed, primary data retained. Final helper review/public APK verifier and
+    web/main36f313dc runtime accepted; Stable0.1.13/build14 nonmandatory published.
+    This does not
     invalidate the accepted 0.1.12 ownership cases or certify D-349's unknown client.
     [Source and remaining candidate gates](operations/2026-10-07-android-pending-read-reconciliation.md).
 
