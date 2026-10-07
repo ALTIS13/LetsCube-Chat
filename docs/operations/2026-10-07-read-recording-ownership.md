@@ -133,8 +133,34 @@ exact revision and public/container JS/service-worker parity. Fresh-main range
 and clean own-commit alias/syntax guard are mandatory before an atomic main push.
 Anonymous home/login must mount without page errors after deployment.
 
-Source and independent review are accepted; calibrated candidate scheduler
-dispose marker is 1, with unchanged scheduler/read-RPC controls 1/1. Next:
-publish only this accepted web slice, then record actual runtime/public proof.
-Preserve the separate recovery/JWT/native
-gates and unresolved tester surfaces; do not replay earlier accepted suites.
+## Accepted Web Rollout
+
+2026-10-07 13:28 Moscow: source revision
+`a9c84de36de24f9c31c8331985ca124165430c4f` is on main and the candidate remote.
+The fresh-main range was read separately; the clean own-tree guard exited 0 for
+one commit, 26 JS/TS files and 178 resolved aliases. No versioned migration or
+worker delta. The atomic push completed before deployment acceptance.
+
+The sole running healthy container uses image
+`l64kyyu1sysev2izzjjbizhe:a9c84de36de24f9c31c8331985ca124165430c4f`, image ID
+`sha256:444461f2eabc0002f2f4475ecfa8c0c877d9e70ce728a08c99c8ec781c09b325`.
+The actual public entry is `/assets/index-DwddQARP.js`, SHA256
+`b7bd771d6082140b1b4ff626c4abf53f056da002511abfa15ac0f0563c35fe4f`;
+service worker SHA256
+`beae055b8879352fe4e06d95f2617d2abefbfa9b51cdb8c258c5bcbba35384cd`.
+Scheduler/dispose/read-RPC markers are 1/1/1 against before 1/0/1. The preceding
+ca0 entry is byte-identical and retained. Public JS/SW hashes match the actual
+container, not the differently emitted local entry. Anonymous home/login mount
+with zero page errors and no personal session/captures. Rollout and smoke jobs
+completed 0; owned fixture servers were stopped by verified exact Vite PIDs.
+
+Preflight verified the sole ca0 runtime, rollback image and available space,
+reusing the recent 15-checksum/readable-archive backup `20261007-034854` without
+another unchanged backup test. It is not a PG17 restore acceptance. Source
+workers are closed; no unrelated services, networking or toolchain changed.
+
+Web D-350/D-352 are accepted; D-351's shared-web repair is accepted, with native
+same-card cancellation still open. These reach browser/Windows shared web, not
+the independently bundled installed APK. Next: D-335 recipient-preview gates
+and native replacement-aware cleanup; preserve recovery/real-JWT/device limits
+and unresolved tester surfaces. Do not replay these accepted suites.

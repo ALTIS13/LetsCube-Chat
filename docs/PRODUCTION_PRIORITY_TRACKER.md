@@ -4203,11 +4203,12 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     regressions. No presumed cache correction is authorized by this report.
     [Intake and limits](operations/2026-10-07-tester-feedback.md).
 
-88. `[~]` Retired microphone acquisition/recording intent, **D-350**. Actual
-    source failures repaired: final 43/43 including 17 mutants, gestures 23/23,
+88. `[x]` Retired microphone acquisition/recording intent, **D-350**, shared web.
+    Actual source failures repaired: final 43/43 including 17 mutants, gestures 23/23,
     fictional mounted Chromium/WebKit 10/10 with inspected 1440/390 pixels in
     both themes and 6 final race cases. Independent review accepted, final
-    typecheck/build pass; web rollout pending. Tester D-348's
+    typecheck/build pass; main/runtime a9c84de3 accepted 2026-10-07. Bundled
+    APK/device acceptance is separate. Tester D-348's
     unknown real permission prompt remains separate.
     [Evidence and gate](operations/2026-10-07-read-recording-ownership.md).
 
@@ -4215,15 +4216,17 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     scheduler candidate 28/28 including ten mutants, adjacent 8/8. Actual hook
     ACK/horizon/realtime rollback 51/51, chat producer 27/27, message lifetime
     27/27; D-352 prerequisite and independent reviews accepted. Final web rollout
-    pending; native same-id/tag cancel still needs its own capability.
+    accepted on main/runtime a9c84de3, 2026-10-07; native same-id/tag cancel still
+    needs its own capability, so this cross-platform item stays open.
     [Evidence and gate](operations/2026-10-07-read-recording-ownership.md).
 
-90. `[~]` Real auth-session ownership before profile load, **D-352**. Actual
+90. `[x]` Real auth-session ownership before profile load, **D-352**, shared web. Actual
     callback/store reproduction invalidates the assumption that accountEpoch
     already changes for same-person new sessions. Narrow repair preserves normal
     refresh and pending deep links. Auth 52/52, Settings 61/61 and fresh mounted
     ownership/race cases pass; final independent reviews accepted. Typecheck and
-    build pass; web rollout pending, not installed-client or real JWT proof.
+    build pass; main/runtime a9c84de3 accepted 2026-10-07, not installed-client
+    or recipient-preview real JWT HTTP proof.
     [Evidence and gate](operations/2026-10-07-read-recording-ownership.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them

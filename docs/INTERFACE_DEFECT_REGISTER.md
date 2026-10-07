@@ -25349,7 +25349,7 @@ ACK nor old-chat cleanup may remove a new owner's or unread replacement card.
 Source diagnosis is in progress; real OS/device evidence remains separate.
 [Intake, dedup and evidence limits](operations/2026-10-07-tester-feedback.md).
 
-## D-350 `[~]` Retired microphone acquisition or recording completion can alter a replacement hold
+## D-350 `[x]` Retired microphone acquisition or recording completion can alter a replacement hold
 
 **Severity:** medium; actual-source hook/consumer failures with fictional media,
 2026-10-07, tracker item 88. Cancelled OverconstrainedError requested fallback;
@@ -25361,7 +25361,8 @@ effects. Normal send/preview and release/reacquire remain; no mic caching.
 Actual-source final 43/43 includes 17 compiled mutants; gestures 23/23.
 Fictional mounted consumer Chromium 5/5 and WebKit 5/5, exact pixels at
 1440/390 both themes inspected; six final stop/Pause-Send race cases pass.
-Independent review and final typecheck/build accepted; web publication pending.
+Independent review and final typecheck/build accepted; shared-web main/runtime
+a9c84de3 accepted 2026-10-07. Bundled APK/device acceptance remains separate.
 This does not close unidentified tester permission-prompt D-348.
 [Evidence and remaining gates](operations/2026-10-07-read-recording-ownership.md).
 
@@ -25376,12 +25377,12 @@ Optimistic rollback could overwrite confirmed realtime read state.
 per-owner watermarks, confirmed actual-message horizon and conflict-aware rollback.
 Scheduler 28/28 includes ten mutants, adjacent 8/8; read hook 51/51, producer
 27/27 and message lifetime 27/27. D-352 prerequisite, independent reviews and
-final typecheck/build accepted; web publication pending.
+final typecheck/build and main/runtime a9c84de3 accepted 2026-10-07 for shared web.
 Native same-id/tag snapshot cancellation is not atomic and remains open. This
 does not certify tester D-349 or real OS card cleanup fixed.
 [Evidence and remaining gates](operations/2026-10-07-read-recording-ownership.md).
 
-## D-352 `[~]` A new auth session can retain the previous profile ownership epoch
+## D-352 `[x]` A new auth session can retain the previous profile ownership epoch
 
 **Severity:** medium; actual auth callback/store/receipt source reproduction,
 2026-10-07, tracker item 90. Same-person new session inherits watermarks and
@@ -25393,8 +25394,9 @@ same-session token refresh must not reset state or block the UI. Delayed profile
 loads/realtime events cannot restore a retired owner; preserve first-load deep
 links and outbox/account reset rules. Auth 52/52 and adjacent Settings 61/61
 pass, including late avatar/save ACK; independent reviews accepted. Fresh
-mounted ownership/race checks and final typecheck/build pass; web publication
-pending. No new authorization or credential persistence.
+mounted ownership/race checks and final typecheck/build pass; shared-web
+main/runtime a9c84de3 accepted 2026-10-07. Bundled APK and recipient-preview real
+JWT HTTP acceptance remain separate. No new authorization or credential persistence.
 [Evidence and remaining gates](operations/2026-10-07-read-recording-ownership.md).
 
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings

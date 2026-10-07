@@ -10,29 +10,20 @@ native package identity/store actions and other unresolved acceptance gates are
 not approved merely by this delegation. Refresh the authorized tester intake,
 deduplicate against the queue, and continue the nearest feasible product slice.
 
-**Current continuation, 2026-10-07:** coordinator owns item 76 / D-335 capability
-and preview-choice preparation, adjacent D-347 preference/subscription ownership,
-and fresh authorized tester intake. SQL 135/135, preview contract/hook 37/37,
-27 adjacent settings, 12 actual Settings cases and mounted ownership 3/3 pass.
-Saving-layout RED and provider-unsubscribe P2 are repaired; final provider hook
-64/64 includes 24 compiled mutants. Both independent reviews accepted. Final
-typecheck 0 and web build `cd49e9074b3bfa2d` pass. Main/runtime `ca0c633d` deployed:
-sole healthy exact image, old/new public markers, retained old entry, JS/SW parity
-and anonymous mount/login accepted. SQL is uninstalled, old native clients stay
-generic, no APK/device action. The 16-message intake and three local transcripts
-yield two grounded reported tasks, D-348/item 84 and D-349/item 85. One bounded
-remaining pass is complete: preliminary task-reload/loading items 86/87 and
-explicit unresolved surface/gesture semantics; no further export/model loop.
-Follow-up D-350/items 88 capture and D-351/item 89 read repairs use actual-source
-RED/GREEN: mic 43/43, receipts 28/28, chat producer 27/27, message lifecycle 27/27,
-read hook 51/51, auth 52/52 and Settings 61/61. Compiled mutants and independent
-reviews cover each changed boundary. Same-user new sessions retire old work;
-normal refresh preserves UI. Late profile ACK cannot restore a signed-out owner
-or a newer removed/uploaded avatar. Fresh fictional browser 21/21 passes;
-previous exact 1440/390 both-theme pixels remain valid for the unchanged layout.
-Final typecheck 0 and web build `dc439f44f62b3b1c` (15.39s) pass. Source is
-accepted; readiness-gated web publication is next. Preserve real
-JWT/PG17/native current-card gates.
+**Current continuation, 2026-10-07:** coordinator; branch
+`codex/bot-inline-media-20261002`. Web/main `a9c84de3` deployed at 13:28 Moscow:
+sole healthy exact image, calibrated before/after markers, retained old entry,
+JS/SW parity and anonymous home/login accepted. D-350/D-352 and D-351 shared-web
+repair pass actual-source RED/GREEN, compiled mutants, independent reviews,
+fresh fictional browser 21/21, final typecheck 0 and build `dc439f44f62b3b1c`.
+All source workers and owned fixture servers are stopped. The bounded intake
+contains 16 new messages and three local transcripts; D-348/349 remain reported
+with unidentified client/surface, task-reload/loading items 86/87 preliminary.
+No further export/model loop. Blockers: SQL preview proposal remains uninstalled;
+PG17 recovery/real JWT HTTP and native same-card/device gates are not accepted.
+No APK/device change. Next: D-335 recipient-preview gates and native cleanup,
+not replay of accepted ownership suites. Outcome docs are on the candidate
+branch; main remains the accepted source revision to avoid a docs-only rebuild.
 [Current scope, evidence and publication limits](operations/2026-10-07-notification-preferences-capability.md).
 [Fresh reported tasks and coverage limits](operations/2026-10-07-tester-feedback.md).
 [Follow-up source repairs and publication gate](operations/2026-10-07-read-recording-ownership.md).
