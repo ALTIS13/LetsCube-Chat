@@ -31,6 +31,13 @@ unknown-client D-348/349 and preliminary tester86/87 remain separate.
 Chronological rehearsals, install/backup/rollback evidence and native limits:
 [Current gate](operations/2026-10-07-native-preview-pg17-rehearsal.md).
 
+The next actual-device-ID prerequisite is now source-accepted: distinct read-only
+`native_push_device_binding(text)`,53/53 focused SQL cases/23 compiled mutants,
+independent no-P1/P2 review. Existing ACKs/endpoints/consent and applied D335 SQL
+stay unchanged. Resolver PG17/JWT delta and guarded installation are next; client/
+native/device stages remain open, rich/display flags false.
+[Binding plan and tracked source proof](operations/2026-10-08-native-preview-device-binding-plan.md).
+
 **Current source continuation,2026-10-05:** item76/D-335 native context
 preparation, D-346 listener lifecycle. v1 Android display stays generic locally,
 without rejecting valid exact-message routing for absent/unsafe provider text.

@@ -25003,6 +25003,14 @@ nativePositive=false/richPreviewEnabled=false/canPublishRich=false. Generic v1
 is unchanged; actual device UUID, native credential/choice/card/OS proof remain.
 D-335 stays OPEN. See the linked rehearsal/install report above for exact limits.
 
+**2026-10-08 device-ID source prerequisite:** new distinct read-only resolver
+`native_push_device_binding(text)` supplies the actual current-session owned FCM
+row UUID without changing old registration ACKs or writing endpoint/consent.
+Focused actual SQL53/53,23 compiled mutants and independent source review
+accepted, no P1/P2. This proposal is not installed; PG17/JWT delta/fresh backup/
+install/post-check, client retirement and real native/device proof remain.
+[Source contract and evidence](operations/2026-10-08-native-preview-device-binding-plan.md).
+
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
 
 **Severity:** high, message authority boundary. Tracker item 78. Found 2026-10-03

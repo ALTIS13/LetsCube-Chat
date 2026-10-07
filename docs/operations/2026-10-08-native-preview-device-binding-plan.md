@@ -1,8 +1,8 @@
 # Native preview device binding plan - 2026-10-08
 
-Status: resolver source implemented, REVIEW_READY; client/native implementation
-and live resolver proof remain open. Next: independent source review, focused
-PG17/JWT delta and guarded installation, then bounded client integration.
+Status: resolver source SOURCE_ACCEPTED; client/native implementation and live
+resolver proof remain open. Next: focused PG17/JWT delta and guarded installation,
+then bounded client integration.
 No additional permission gate is needed; technical acceptance below is required.
 
 ## Accepted Baseline And Actual Gap
@@ -278,5 +278,7 @@ used; fictional claims/rows do not prove signatures, HTTP, native registration o
 device ownership. No old suites, numbered migration/mirror, network, live auth/production SQL
 dispatch, runtime/native edit, device, commit or delegation. D335 installed file
 and mirror still hash to `02681CFB8966EF7DEB362D95538DC4B787986772E4173A0777465A46DC1DE321`.
-All finite test jobs closed. Review-ready source only; native/rich/display flags
+All finite test jobs closed. Independent review accepted exact source range
+`f1613d13..767d9321`, no P1/P2; it reused the frozen run evidence rather than
+replaying tests. Source accepted only; native/rich/display flags
 remain false and PG17/live before-state/install acceptance remains a later stage.

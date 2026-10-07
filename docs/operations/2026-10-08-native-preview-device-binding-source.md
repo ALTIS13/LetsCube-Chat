@@ -1,7 +1,7 @@
 # Native preview device binding: source acceptance
 
 Date:2026-10-08 Moscow. Coordinator owns publication; Linnaeus implemented the
-bounded source task from BASE `f1613d13`. Status: REVIEW_READY, not installed.
+bounded source task from BASE `f1613d13`. Status: SOURCE_ACCEPTED, not installed.
 [Contract and remaining stages](2026-10-08-native-preview-device-binding-plan.md).
 
 ## Changed Scope
@@ -67,6 +67,12 @@ SQL dispatch, numbered migration/mirror, native/client edit or device allocation
 All finite test jobs/PGlite instances ended. Detailed local run report is retained
 in this plan's ignored SDD workspace; this tracked report is the Git handoff.
 
+Independent spec/code-quality review accepted `f1613d13..767d9321`, with no P1/P2
+findings. It checked the frozen diff, exact body MD5, actual SQL oracles and
+authority/preservation/rollback boundaries; accepted53/53 and23 mutants as
+reported evidence without replay. The reviewer did not use network/SQL/devices.
+This acceptance excludes the unimplemented live install wrapper and native stages.
+
 Frozen SQL SHA256:
 `DEA6A3988B7E3B4060A086FE069A2C214B294EF3AD5334B5713736A5C0C1CBBF`.
 Frozen test SHA256:
@@ -74,7 +80,7 @@ Frozen test SHA256:
 Installed D335 SQL/mirror remain unchanged:
 `02681CFB8966EF7DEB362D95538DC4B787986772E4173A0777465A46DC1DE321`.
 
-Next: independent source review, then focused PG17/JWT delta and reviewed fresh
-before-backup/install wrapper/post-check. Client ACK/epoch/token-revision fences,
+Next: focused PG17/JWT delta and reviewed fresh before-backup/install wrapper/
+post-check. Client ACK/epoch/token-revision fences,
 legitimate isolated device binding and missing MessagePreviews bridge follow.
 D335 stays OPEN; nativePositive=false/richPreviewEnabled=false/canPublishRich=false.

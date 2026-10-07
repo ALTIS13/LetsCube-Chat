@@ -46,8 +46,10 @@ OPEN: nativePositive=false, richPreviewEnabled=false, canPublishRich=false;
 generic v1 is unchanged. Next: acknowledge an actual device UUID after normal
 registration, then native credentials/explicit choice/card/OS acceptance.
 The separate read-only UUID resolver is source-implemented with focused53/53
-SQL checks/23 compiled mutants; independent review and PG17/JWT delta/install
-remain pending. It does not change registration ACKs or enable rich display.
+SQL checks/23 compiled mutants and independent source acceptance, no P1/P2.
+Next: focused PG17/JWT delta, fresh-backup guarded installation/post-check, then
+client retirement and real device binding. It does not change registration ACKs
+or enable rich display; the resolver itself is not installed.
 [Device binding contract and source evidence](operations/2026-10-08-native-preview-device-binding-plan.md).
 Chronological details and backup/rollback limits are in the linked report.
 Permission is granted, not the blocker. D-342 universal recovery and unknown
