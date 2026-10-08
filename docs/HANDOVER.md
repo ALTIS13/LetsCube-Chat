@@ -120,8 +120,9 @@ Android36 API compilation; independent review found no P1/P2. This is not actual
 Android persistence. Task6C2 fixed CE/no-backup AtomicFile backend is source-
 accepted with nine behavior/eight compiled omission controls and a real Android36
 API compile. Same-UID namespace TOCTOU remains outside the accepted boundary.
-Task6C3a read-only Keystore loading is in progress, without initialization, key
-minting, deletion, plugin integration or native/Stable promotion. A separate owned
+Task6C3a read-only Keystore loading is source-accepted with28 behavior/16 compiled
+omission controls and Android36 compilation, without initialization, key minting,
+deletion, plugin integration or native/Stable promotion. A separate owned
 app-UID platform probe is being prepared, without accounts/WebView/network or
 release-package changes; no actual build/install/run has occurred for it.
 [Checked journal scope and evidence](operations/2026-10-08-native-preview-journal-io.md).

@@ -115,3 +115,49 @@ symlink-race or cross-process protection is claimed.
 Read-only Keystore loading and a standalone owned Android platform probe are next.
 The latter uses a separate app UID with fictional metadata and no WebView/network/
 account/content access, not the primary release package or old ephemeral QA13.
+
+## Read-Only Keystore Evidence
+
+Task6C3a `MessagePreviewKeystoreReader` is independently source-accepted, no
+P1/P2. It is package-private and inactive, loading rather than creating keys.
+CE and known unlocked user are checked at construction, before lookup and before
+return. Exact lowercase installation/credential alias syntax precedes lookup.
+
+Use only platform AndroidKeyStore and its AES SecretKeyFactory/KeyInfo. Require
+an AES SecretKey, exact alias, size256, GENERATED origin, exact ENCRYPT|DECRYPT,
+GCM only, NoPadding only and no user-authentication-required policy. Missing/
+provider/policy/context failure yields fixed UNAVAILABLE without cause/stack/
+suppressed diagnostics. No key encoding/export, cache, enumeration, fallback,
+import, recreation or deletion; returned keys stay package-internal.
+
+Metadata alias: `letscube.nmpv.metadata.v1.<installation32lowerhex>`; credential
+alias: `letscube.nmpv.credential.v1.<same-installation>.<opaque32lowerhex>`.
+Those are internal formats, never public status or personal identifiers.
+
+Feature-absence RED1; initial44-case run passed43/44, with a mismatched positive
+observer for the metadata-namespace mutant. Only that observer was refined and
+its affected positive/mutant selection passed2/2. Defined coverage is28 behavior
+and16 compiled omissions, not a fresh final44/44. Actual source executes in
+isolated child JVMs with labeled Android API doubles/fictional JCA provider;
+this is not Android Keystore isolation. No prior suite replay.
+
+Android36 SDK bootclasspath compilation generated all six foundation classes,
+including backend/reader, exit0, without doubles/Gradle/APK/device. Independent
+review read the exact frozen source/fixture pins without repeating tests.
+
+| Input | SHA256 |
+| --- | --- |
+| Keystore reader | `D0B3C24E318BD1F393FD688F770F775C949CFD43D9DE3E3FFAD219BE8E7976F4` |
+| Java probe | `D943FC53E3053FDA2D3682E6AB6E1D1DC38E640046800C854E619F747027F224` |
+| Node controls | `4E2F1776DF5377C8AB71F02ED7AEA5199F8DAA520BBD906D2DEA626FC61CA4B2` |
+
+[KeyInfo](https://developer.android.com/reference/android/security/keystore/KeyInfo)
+does not expose randomizedEncryptionRequired. Do not claim a readback check for
+it; the future explicit creation spec must enforce it via
+[KeyGenParameterSpec.Builder](https://developer.android.com/reference/android/security/keystore/KeyGenParameterSpec.Builder).
+The accepted envelope already requests provider-generated IVs. No hardware-
+backing/other-validity-policy/unlocked lease or native acceptance is inferred.
+
+Next: real separate-UID platform round-trip/restart/key-loss probe and explicit
+pristine marker/key initialization, then whole generation/erasure/provision
+transitions. Task5 SDK/Auth/resolver binding remains unresolved; no rich/Stable GO.

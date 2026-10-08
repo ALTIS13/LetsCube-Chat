@@ -25028,7 +25028,8 @@ independently source-accepted after erasure/lost-ACK/numeric headroom controls;
 Task6B metadata-only authentication is independently source-accepted with actual
 JCA/14 compiled omissions/Android36 API compile. Task6C1 checked journal I/O is
 independently source-accepted with owned JVM-file fault controls/nine compiled
-omissions, not Android persistence. CE AtomicFile/key loading is in progress.
+omissions, not Android persistence. CE AtomicFile/read-only Keystore loading are
+source-accepted; actual platform probe and pristine initialization remain next.
 D-335 remains OPEN, generic v1 unchanged; no durable vault, consent, rich display
 or Stable acceptance.
 [Checked journal scope and evidence](operations/2026-10-08-native-preview-journal-io.md).

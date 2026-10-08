@@ -49,8 +49,9 @@ cleanup is reconciled, primary data retained. Inactive Task6A erasure/fence sour
 accepted, affected numeric11/11; metadata-envelope Task6B is source-accepted with
 actual JCA/14 compiled omissions/Android36 API compile. Task6C1 checked I/O is
 source-accepted with owned JVM-file fault controls/nine compiled omissions, not
-Android persistence or a durable vault. CE AtomicFile/key loading is in progress;
-no rich display/Stable promotion.
+Android persistence or a durable vault. CE AtomicFile and read-only Keystore
+loading are source-accepted; real separate-UID platform probe and explicit pristine
+initialization are next. No rich display/Stable promotion.
 [Checked journal and remaining platform gates](operations/2026-10-08-native-preview-journal-io.md).
 [Current source and device limits](operations/2026-10-08-native-preview-vault-foundation.md).
 
